@@ -4,6 +4,7 @@
         "Expt",
         "hiko",
         "luxon",
-        "raku"
+        "raku",
+        "Scroller"
     ]
 }
