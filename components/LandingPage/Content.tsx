@@ -34,9 +34,6 @@ const Content = () => {
         p="0px"
         gap={['20px', '40px']}
       >
-        {/* vvv image scroller vvv */}
-        <ImageScroller />
-        {/* ^^^ image scroller ^^^ */}
         <Text
           fontSize={['20px', '22px']}
           textAlign="center"
@@ -47,6 +44,9 @@ const Content = () => {
           Innovative Solutions in Computer Science | Typescript | React |
           Next.js | NestJS | Python FastAPI
         </Text>
+        {/* vvv image scroller vvv */}
+        <ImageScroller />
+        {/* ^^^ image scroller ^^^ */}
 
         <Accordion allowToggle width="100%" maxW="400px" mt={[4, 8]}>
           <AccordionItem>
