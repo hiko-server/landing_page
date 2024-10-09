@@ -1,0 +1,73 @@
+[
+    {
+        
+        "personalInformation":{
+            "headerName": "",
+            "firstName": "John",
+            "lastName":"Doe",
+            "email":"john.doe@gmail.com",
+            "phoneNumber":"0123456789",
+            "personalWebsite":"hiko.dev",
+            "address":"123 Main Street, Some City, Some State, 12345",
+            "introduction":"I am a Software Engineer"
+        },
+        "education":{
+            "headerName": "Education Experience",
+            "educationExperience":[
+                {            
+                "schoolName":"Some School",
+                "degree":"Some Degree",
+                "major":"Some Major",
+                "startDate":"2017-01-01",
+                "endDate":"2017-05-01",
+                "gpa":"3.5"
+            }
+            ]
+
+        },
+        "skill":{
+            "headerName": "PROGRAMMING LANGUAGES & TECHNICAL SKILLS",
+            "languages":[
+                {
+                    "language":"Java",
+                    "level": ""
+                }
+            ],
+            "technical": [
+                {
+                    "name": "networking",
+                    "description": ["", ""]
+                }
+            ]
+        },
+        "project":{
+            "headerName": "PROJECTS EXPERIENCE",
+            "projectExperience":[
+                {
+                    "title":"Some Project",
+                    "periodStart":"Aug,2023",
+                    "periodEnd":"present",
+                    "description":"some description",
+                    "features":[
+                        {
+                            "title":"Some area",
+                            "description":[
+                                "some description1",
+                                "some description2"
+                            ]
+                        }
+                    ]
+
+                }
+            ]
+        },
+        "extraSkill":{
+            "headerName": "LANGUAGES AND SKILLS",
+            "points":[
+                "some point1",
+                "some point2"
+            ]
+        }
+        
+    }
+]

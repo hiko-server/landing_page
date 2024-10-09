@@ -1,0 +1,33 @@
+version: "3.9"
+
+services:
+  cv:
+    image: hiko-easilycv-frontend-ts-staging:latest
+    container_name: hiko-easilycv-frontend-ts-staging
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    restart: on-failure
+    ports:
+      - 4000:3000
+    networks:
+      easilycv:
+        ipv4_address: 172.21.0.6
+  # reverse-proxy:
+  #   image: nginx:latest
+  #   container_name: hiko-easilycv-frontend-nginx_staging
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./docker/nginx:/etc/nginx/conf.d
+  #   depends_on:
+  #     - "cv"
+  #   networks:
+  #     easilycv:
+  #       ipv4_address: 172.21.0.5
+
+networks:
+  easilycv:
+    name: easilycv
+    external: true
