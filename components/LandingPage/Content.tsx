@@ -34,7 +34,9 @@ const Content = () => {
         p="0px"
         gap={['20px', '40px']}
       >
+        {/* vvv image scroller vvv */}
         <ImageScroller />
+        {/* ^^^ image scroller ^^^ */}
         <Text
           fontSize={['20px', '22px']}
           textAlign="center"
