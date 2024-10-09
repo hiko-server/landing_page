@@ -61,7 +61,7 @@ const PersonalInfo = () => {
             Email: liyanpei2004@outlook.com
           </Text>
           <Text fontSize={['16px', '18px']} textAlign="center">
-            Mandarin, English
+            Mandarin, Cantonese, English
           </Text>
         </Flex>
 
