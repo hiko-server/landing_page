@@ -3,7 +3,6 @@ import {
   Flex,
   Avatar,
   Button,
-  Box,
   Accordion,
   AccordionButton,
   AccordionIcon,
@@ -37,71 +36,97 @@ const PersonalInfo = () => {
 
         <Flex
           direction="column"
-          gap={['5px', '10px']}
+          gap={['10px', '20px']}
           justifyContent="center"
           alignItems="center"
         >
-          <Text fontSize={['24px', '33px']} textAlign="center">
-            <strong>Li Yanpei, Hiko</strong>
+          <Text
+            fontSize={['30px', '40px']}
+            fontWeight="bold"
+            textAlign="center"
+          >
+            Li Yanpei, Hiko
           </Text>
-          <Text fontSize={['24px', '33px']} textAlign="center">
-            <strong>李彦霈</strong>
+          <Text
+            fontSize={['30px', '40px']}
+            fontWeight="bold"
+            textAlign="center"
+          >
+            李彦霈
           </Text>
-          <Text fontSize={['14px', '15px']} textAlign="center">
+          <Text fontSize={['16px', '18px']} textAlign="center">
             Contact Phone: 852 62040827
           </Text>
-          <Text fontSize={['14px', '15px']} textAlign="center">
+          <Text fontSize={['16px', '18px']} textAlign="center">
             Email: liyanpei2004@outlook.com
           </Text>
-          <Text fontSize={['14px', '15px']} textAlign="center">
+          <Text fontSize={['16px', '18px']} textAlign="center">
             Mandarin, English
           </Text>
         </Flex>
 
-        <Box mt={4} w={['100%', '300px']}>
+        <Flex
+          mt={8}
+          w={['100%', '350px']}
+          direction="column"
+          alignItems="center"
+          justifyContent="center"
+        >
           <Button
-            size="lg"
+            size="25"
             w="100%"
-            fontSize={['18px', '22px']}
-            mb={4}
+            fontSize={['20px', '24px']}
+            mb={6}
             onClick={() => window.open('https://cv.hiko.dev')}
           >
-            My CV
+            Personal CV
           </Button>
 
           <Button
-            size="lg"
+            size="25"
             w="100%"
-            fontSize={['18px', '22px']}
-            mb={4}
+            fontSize={['20px', '24px']}
+            mb={6}
             onClick={() => window.open('https://github.com/HikoPLi')}
           >
             GitHub
           </Button>
 
           <Button
-            size="lg"
+            size="25"
             w="100%"
-            fontSize={['18px', '22px']}
+            fontSize={['20px', '24px']}
             onClick={() => window.open('https://gitlab.com/HikoPLi')}
           >
             GitLab
           </Button>
-        </Box>
+        </Flex>
       </Flex>
-      <Accordion allowToggle width="100%" maxW="400px">
+
+      <Accordion allowToggle width="100%" maxW="400px" mt={8}>
         <AccordionItem>
           <AccordionButton _expanded={{ bg: 'gray.100' }}>
-            <Box flex="1" textAlign="left" fontWeight="bold">
-              <Text fontSize="md" fontWeight="bold">
-                Linkedin
+            <Flex
+              flex="1"
+              textAlign="left"
+              fontWeight="bold"
+              alignItems="center"
+              justifyContent="center"
+            >
+              <Text fontSize="25" fontWeight="bold">
+                LinkedIn
               </Text>
-            </Box>
+            </Flex>
             <AccordionIcon />
           </AccordionButton>
 
           <AccordionPanel pb={4}>
-            <VStack spacing={2} align="stretch">
+            <VStack
+              spacing={4}
+              align="stretch"
+              alignItems="center"
+              justifyContent="center"
+            >
               <LinkedInBadge />
             </VStack>
           </AccordionPanel>

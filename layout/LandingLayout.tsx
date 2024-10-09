@@ -20,7 +20,7 @@ const StyledBase = styled.div`
   /* max-width: 414px !important; */
   position: relative;
   min-width: 414px;
-  max-width: 1500px;
+  max-width: 1000px;
   background-color: #ececec;
   padding: 20px;
 

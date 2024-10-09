@@ -3,9 +3,6 @@ import React, { useState, useEffect } from 'react'
 import { GetServerSideProps } from 'next'
 import { Flex, Spinner } from '@chakra-ui/react'
 
-import RootBaseLayout from '../layout/RootBase'
-import LandingLayout from '../layout/LandingLayout'
-
 import DisplayMobileInfo from '../components/mobileDisplay/mobileDisplay'
 import LandingContent from '../components/LandingPage/LandingContent'
 
@@ -17,12 +14,11 @@ const LandingPage = (props: any) => {
   console.log('status', status)
   console.log(session?.accessToken)
 
-  const [isHostCV, setIsHostCV] = useState<boolean>(false)
+  const [, setIsHostCV] = useState<boolean>(false)
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [isMobile, setIsMobile] = useState<boolean>(false)
 
   useEffect(() => {
-    console.log(isHostCV) // isHostCV
     if (props.host && props.host === 'cv.hiko.dev') {
       setIsHostCV(true)
     }
@@ -53,12 +49,10 @@ const LandingPage = (props: any) => {
         >
           <Spinner size="xl" />
         </Flex>
+      ) : isMobile ? (
+        <DisplayMobileInfo />
       ) : (
-        <RootBaseLayout>
-          <LandingLayout>
-            {isMobile ? <DisplayMobileInfo /> : <LandingContent />}
-          </LandingLayout>
-        </RootBaseLayout>
+        <LandingContent />
       )}
     </React.Fragment>
   )
