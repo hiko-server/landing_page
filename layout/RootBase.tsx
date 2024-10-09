@@ -15,7 +15,7 @@ const RootBaseLayout = ({
     <StyledBase
       //   style={style && forceMobileOnly ? 'max-width: 414px !important' : '100%'}
       style={style}
-    //   SforceMobileOnly={forceMobileOnly != undefined ? forceMobileOnly : false}
+      //   SforceMobileOnly={forceMobileOnly != undefined ? forceMobileOnly : false}
     >
       {children}
     </StyledBase>
@@ -28,7 +28,7 @@ const StyledBase = styled.div`
   /* max-width: 414px !important; */
   position: relative;
   /* max-width: 414px; */
-  background-color: rgb(204,204,204);
+  background-color: rgb(204, 204, 204);
 
   width: 100%;
   height: 100%;

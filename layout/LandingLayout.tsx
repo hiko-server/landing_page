@@ -11,15 +11,7 @@ const LandingLayout = ({
   children: React.ReactNode | null
   style?: React.CSSProperties
 }) => {
-  return (
-    <StyledBase
-      //   style={style && forceMobileOnly ? 'max-width: 414px !important' : '100%'}
-      style={style}
-      //   SforceMobileOnly={forceMobileOnly != undefined ? forceMobileOnly : false}
-    >
-      {children}
-    </StyledBase>
-  )
+  return <StyledBase style={style}>{children}</StyledBase>
 }
 
 const StyledBase = styled.div`
@@ -28,7 +20,7 @@ const StyledBase = styled.div`
   /* max-width: 414px !important; */
   position: relative;
   min-width: 414px;
-  max-width: 1000px;
+  max-width: 1500px;
   background-color: #ececec;
   padding: 20px;
 
