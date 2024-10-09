@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Box, Button, Flex, Text } from '@chakra-ui/react'
+import { Box, Text } from '@chakra-ui/react'
 
 import PersonalInfo from '../LandingPage/PersonalInfo'
 import LandingLayout from '../../layout/LandingLayout'
