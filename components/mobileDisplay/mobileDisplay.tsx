@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Box, Button, Flex, Text } from '@chakra-ui/react'
 
-import { useRouter } from 'next/router'
-import LinkedInBadge from '../linkedIn/linkedIn'
 import PersonalInfo from '../LandingPage/PersonalInfo'
 import LandingLayout from '../../layout/LandingLayout'
 
