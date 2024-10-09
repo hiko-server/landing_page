@@ -1,7 +1,7 @@
 version: "3.9"
 
 services:
-  cv:
+  landing-page:
     image: hiko-landing-page-frontend-ts-staging:latest
     container_name:  hiko-landing-page-frontend-ts-staging
     build:
