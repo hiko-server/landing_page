@@ -77,7 +77,7 @@ const PersonalInfo = () => {
             w="100%"
             fontSize={['20px', '24px']}
             mb={6}
-            onClick={() => window.open('/cv')}
+            onClick={() => window.open('https://cv.hiko.dev')}
           >
             Personal CV
           </Button>
@@ -121,6 +121,25 @@ const PersonalInfo = () => {
           </AccordionButton>
 
           <AccordionPanel pb={4}>
+            <VStack
+              spacing={4}
+              align="stretch"
+              alignItems="center"
+              justifyContent="center"
+            >
+              {/* https://www.linkedin.com/in/liyanpeihiko/ */}
+              <Button
+                size="25"
+                w="100%"
+                fontSize={['20px', '24px']}
+                mb={6}
+                onClick={() =>
+                  window.open('https://www.linkedin.com/in/liyanpeihiko/')
+                }
+              >
+                LinkedIn
+              </Button>
+            </VStack>
             <VStack
               spacing={4}
               align="stretch"
