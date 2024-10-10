@@ -21,10 +21,19 @@ export const exampleCvData = [
                 "schoolName": "UOW College HongKong",
                 "schoolLocation": "Hong Kong",
                 "degree": "Associate of Engineering",
-                "major": "Some Major",
-                "startDate": "2017-01-01",
+                "major": "Engineering",
+                "startDate": "2022-09-01",
                 "endDate": "2024-08-31",
                 "gpa": "3.3 / 4.3"
+            },
+            {
+                "schoolName": "Hong KOng Metopolitan University",
+                "schoolLocation": "Hong Kong",
+                "degree": "Bachelor of Science with Honours in Computer Engineering",
+                "major": "Computer Engineering",
+                "startDate": "2024-09-01",
+                "endDate": "2026-08-31",
+                "gpa": "*"
             }
         ]
     },
