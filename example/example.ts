@@ -27,7 +27,7 @@ export const exampleCvData = [
                 "gpa": "3.3 / 4.3"
             },
             {
-                "schoolName": "Hong KOng Metopolitan University",
+                "schoolName": "Hong Kong Metopolitan University",
                 "schoolLocation": "Hong Kong",
                 "degree": "Bachelor of Science with Honours in Computer Engineering",
                 "major": "Computer Engineering",
