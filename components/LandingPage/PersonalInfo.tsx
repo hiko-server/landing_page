@@ -77,7 +77,7 @@ const PersonalInfo = () => {
             w="100%"
             fontSize={['20px', '24px']}
             mb={6}
-            onClick={() => window.open('https://cv.hiko.dev')}
+            onClick={() => window.open('/cv')}
           >
             Personal CV
           </Button>
