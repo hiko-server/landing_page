@@ -11,7 +11,6 @@ export const exampleCvData = [
         "phoneNumber": "+852 0000 0000",
         "personalWebsite": "hiko.dev",
         "address": "Example Road, Hong Kong",
-        // "introduction": "I am someone who has a passion for exploration, creation, and contributing to society through innovative endeavors. I am strongly interested in Computer Science and consider myself a junior self-taught full-stack software engineer.Currently, I am focusing on learning TypeScript, React using Next.js, the NestJS framework, and Python FastAPI."
         "introduction": "Passionate Self-Taught Full-Stack Software Engineer | Exploring Innovative Solutions in Computer Science | Typescript | React | Next.js | NestJS | Python FastAPI"
     },
     {
@@ -94,7 +93,7 @@ export const exampleCvData = [
         "headerName": "PROJECTS EXPERIENCE",
         "projectExperience": [
             {
-                "title": "Project EASILY-CV: CV Generator (easily-cv.hiko.dev)",
+                "title": "Project EASILY-CV: CV Generator",
                 "startDate": "2023-08",
                 "endDate": "2023-10",
                 "projectLocation": "Hong Kong",
@@ -118,7 +117,7 @@ export const exampleCvData = [
 
             },
             {
-                "title": "Project ASA: Cloud-based robot delivery management system (asa.hiko.dev)",
+                "title": "Project ASA: Cloud-based robot delivery management system",
                 "startDate": "2023-07",
                 "endDate": "2023-08",
                 "projectLocation": "Hong Kong",
@@ -149,7 +148,7 @@ export const exampleCvData = [
 
             },
             {
-                "title": "Project RAKU: AI assistant job search system (raku.hiko.dev)",
+                "title": "Project RAKU: AI assistant job search system",
                 "startDate": "2023-03",
                 "endDate": "2023-11",
                 "projectLocation": "Hong Kong",
