@@ -31,7 +31,7 @@ const PersonalInfo = () => {
         <Avatar
           size="2xl"
           name="Hiko"
-          src="https://media.licdn.com/dms/image/v2/D5635AQGLlQgi9cXF8A/profile-framedphoto-shrink_200_200/profile-framedphoto-shrink_200_200/0/1726112864176?e=1729058400&v=beta&t=UFNILli4aBpFX89a20nP1p9T1L0wJyv3hpmmtMgpLAQ"
+          src="https://media.licdn.com/dms/image/v2/D5635AQGLlQgi9cXF8A/profile-framedphoto-shrink_200_200/profile-framedphoto-shrink_200_200/0/1726112864176?e=1731420000&v=beta&t=ICTkDAmu3Gg_ln03XPkL7l5GIoobKZKajgFocX4w8lc"
         />
 
         <Flex
@@ -77,7 +77,7 @@ const PersonalInfo = () => {
             w="100%"
             fontSize={['20px', '24px']}
             mb={6}
-            onClick={() => window.open('https://cv.hiko.dev')}
+            onClick={() => window.open('https://hiko.dev/cv')}
           >
             Personal CV
           </Button>
