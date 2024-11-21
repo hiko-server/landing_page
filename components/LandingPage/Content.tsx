@@ -19,7 +19,7 @@ import { Education, Skill, Project } from '../../types/cvProps'
 import EducationSection from '../PersonalInstruction/Education'
 import ProjectSection from '../PersonalInstruction/Project'
 import SkillSection from '../PersonalInstruction/Skill'
-import { exampleCvData } from '../../example/example'
+import { exampleCvData } from '../../example/cvdata'
 
 const Content = () => {
   const router = useRouter()

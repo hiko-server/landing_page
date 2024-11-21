@@ -2,7 +2,7 @@
 
 // import { CVData } from '../../types/cvProps'
 import CVResult from '../../components/CVViewerPage/CVResult'
-import { exampleCvData } from '../../example/example'
+import { exampleCvData } from '../../example/cvdata'
 import React from 'react'
 
 const CVPage = () => {

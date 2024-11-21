@@ -102,6 +102,33 @@ export const exampleCvData = [
         "headerName": "PROJECTS EXPERIENCE",
         "projectExperience": [
             {
+                "title": "WeGreen AI (wegreen.ltd)",
+                "startDate": "2024-10",
+                "endDate": "2026-09",
+                "projectLocation": "Hong Kong",
+                "description": "Aimed at enhancing the efficiency of waste management by reducing classification time. (planed to be finished in 2026)",
+                "features": [
+                    {
+                        "description": "Deep Learning Model for Waste Classification",
+                        "furtherExplanation": [
+                            "Utilize TensorFlow and PyTorch to build a deep learning model for efficient waste classification."
+                        ]
+                    },
+                    {
+                        "description": "Machine Vision Recognition",
+                        "furtherExplanation": [
+                            "Implement machine vision recognition to improve classification accuracy and speed."
+                        ]
+                    },
+                    {
+                        "description": "IoT Technology",
+                        "furtherExplanation": [
+                            "Leverage IoT technology for real-time data transmission and intelligent device control."
+                        ]
+                    }
+                ]
+            },
+            {
                 "title": "Project EASILY-CV: CV Generator",
                 "startDate": "2023-08",
                 "endDate": "2023-10",
