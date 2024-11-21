@@ -31,7 +31,7 @@ const PersonalInfo = () => {
         <Avatar
           size="2xl"
           name="Hiko"
-          src="https://example.com/redacted.jpg"
+          src="../../public/images/personalImage.jpg"
         />
 
         <Flex
@@ -77,7 +77,7 @@ const PersonalInfo = () => {
             w="100%"
             fontSize={['20px', '24px']}
             mb={6}
-            onClick={() => window.open('https://cv.hiko.dev')}
+            onClick={() => window.open('https://hiko.dev/cv')}
           >
             Personal CV
           </Button>
