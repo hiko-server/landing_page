@@ -4,7 +4,7 @@ import { Box, Text } from '@chakra-ui/react'
 import PersonalInfo from '../LandingPage/PersonalInfo'
 import LandingLayout from '../../layout/LandingLayout'
 
-const DisplayMobileInfo = () => {
+const DisplayMobileInfo = ({ isMobile }: { isMobile: boolean }) => {
   // const router = useRouter()
   const [screenSize, setScreenSize] = useState('')
   const [browserInfo, setBrowserInfo] = useState('')
@@ -25,7 +25,7 @@ const DisplayMobileInfo = () => {
         <Text>
           <strong>For more information, you can visit:</strong>
         </Text>
-        <PersonalInfo />
+        <PersonalInfo isMobile={isMobile} />
         <Text mt={4}>
           <strong>Current Screen Size:</strong> {screenSize}
         </Text>
@@ -39,7 +39,7 @@ const DisplayMobileInfo = () => {
           <strong>IP Info:</strong> {ipInfo}
         </Text>
       </Box>
-    </LandingLayout>
+    </LandingLayout >
   )
 }
 

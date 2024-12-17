@@ -50,9 +50,9 @@ const LandingPage = (props: any) => {
           <Spinner size="xl" />
         </Flex>
       ) : isMobile ? (
-        <DisplayMobileInfo />
+        <DisplayMobileInfo isMobile={isMobile}/>
       ) : (
-        <LandingContent />
+        <LandingContent isMobile={isMobile}/>
       )}
     </React.Fragment>
   )

@@ -13,7 +13,7 @@ import {
 import React from 'react'
 import LinkedInBadge from '../linkedIn/linkedIn'
 
-const PersonalInfo = () => {
+const PersonalInfo = ({ isMobile }: { isMobile: boolean }) => {
   return (
     <Flex
       padding={['20px', '40px']}
@@ -32,6 +32,8 @@ const PersonalInfo = () => {
           size="2xl"
           name="Hiko"
           src="../../public/images/personalImage.jpg"
+          transition="transform 0.3s ease"
+          _hover={{ transform: 'scale(1.05)' }}
         />
 
         <Flex
@@ -39,11 +41,17 @@ const PersonalInfo = () => {
           gap={['10px', '20px']}
           justifyContent="center"
           alignItems="center"
+          textAlign="center"
+          backgroundColor={'#ffffff'}
+          padding={'20px'}
+          borderRadius={'8px'}
+          boxShadow={'0 4px 8px rgba(0, 0, 0, 0.1)'}
         >
           <Text
             fontSize={['30px', '40px']}
             fontWeight="bold"
             textAlign="center"
+            color={'#333'}
           >
             Li Yanpei, Hiko
           </Text>
@@ -51,16 +59,17 @@ const PersonalInfo = () => {
             fontSize={['30px', '40px']}
             fontWeight="bold"
             textAlign="center"
+            color={'#333'}
           >
             李彦霈
           </Text>
-          <Text fontSize={['16px', '18px']} textAlign="center">
+          <Text fontSize={['16px', '18px']} textAlign="center" color={'#333'}>
             Contact Phone: 852 62040827
           </Text>
-          <Text fontSize={['16px', '18px']} textAlign="center">
+          <Text fontSize={['16px', '18px']} textAlign="center" color={'#333'}>
             Email: liyanpei2004@outlook.com
           </Text>
-          <Text fontSize={['16px', '18px']} textAlign="center">
+          <Text fontSize={['16px', '18px']} textAlign="center" color={'#333'}>
             Mandarin, Cantonese, English
           </Text>
         </Flex>
@@ -72,7 +81,11 @@ const PersonalInfo = () => {
           alignItems="center"
           justifyContent="center"
         >
-          <Button
+          {
+            isMobile ? (
+ <></>
+      ) : (
+        <Button
             size="25"
             w="100%"
             fontSize={['20px', '24px']}
@@ -81,6 +94,9 @@ const PersonalInfo = () => {
           >
             Personal CV
           </Button>
+      )
+    }
+
 
           <Button
             size="25"
