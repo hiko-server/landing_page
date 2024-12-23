@@ -15,11 +15,12 @@ import { useRouter } from 'next/router'
 import 'react-photo-view/dist/react-photo-view.css'
 import ImageScroller from '../imageScoller/imageScroller'
 import React from 'react'
-import { Education, Skill, Project } from '../../types/cvProps'
+import { Education, Skill, Project, Certification } from '../../types/cvProps'
 import EducationSection from '../PersonalInstruction/Education'
 import ProjectSection from '../PersonalInstruction/Project'
 import SkillSection from '../PersonalInstruction/Skill'
-import { exampleCvData } from '../../example/cvdata'
+import { cvData } from '../../example/cvdata'
+import CertificateSection from '../PersonalInstruction/Certificate'
 
 const Content = () => {
   const router = useRouter()
@@ -48,8 +49,8 @@ const Content = () => {
           maxW="600px"
           fontWeight="bold"
         >
-          Passionate Self-Taught Full-Stack Software Engineer | Exploring
-          Innovative Solutions in Computer Science | Typescript | React |
+          Self-Taught Full-Stack Software Engineer | Exploring
+          Innovative Solutions in Computer Science | Mechine Learning | Computer Version | Typescript | React |
           Next.js | NestJS | Python FastAPI
         </Text>
         {/* vvv image scroller vvv */}
@@ -130,13 +131,15 @@ const Content = () => {
                   marginTop: router.asPath.includes('edit') ? '400px' : '0px',
                 }}
               >
-                {exampleCvData.map((_, key) => (
+                {cvData.map((_, key) => (
                   <React.Fragment key={key}>
                     {
                       {
                         education: <EducationSection data={_ as Education} />,
                         skill: <SkillSection data={_ as Skill} />,
+                        certification: <CertificateSection data={_ as Certification} />,
                         project: <ProjectSection data={_ as Project} />,
+                        
                       }[_.sessionName]
                     }
                   </React.Fragment>
