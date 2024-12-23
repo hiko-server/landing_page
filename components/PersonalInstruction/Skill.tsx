@@ -1,75 +1,79 @@
 import {
-  Text,
-  Flex,
-  Box,
   Accordion,
-  AccordionItem,
   AccordionButton,
   AccordionIcon,
+  AccordionItem,
   AccordionPanel,
-} from '@chakra-ui/react'
-import React from 'react'
-import { Skill } from '../../types/cvProps'
-import { Row } from './PersonalInformation'
+  Box,
+  Flex,
+  Heading,
+  Text,
+} from '@chakra-ui/react';
+import React from 'react';
+import { Skill } from '../../types/cvProps';
 
 const SkillSection = ({ data }: { data: Skill }) => {
   return (
-    <React.Fragment>
-      <Accordion allowToggle width="100%" maxW="1000px" mt={[4, 8]}>
-        <AccordionItem>
+    <Accordion allowToggle width="100%" maxW="1000px" mt={[8, 16]} boxShadow="lg" borderRadius="md">
+      <AccordionItem borderWidth="1px" borderColor="gray.200" mb={4}>
+        <h2>
           <AccordionButton _expanded={{ bg: 'gray.100' }}>
-            <Flex
-              flex="1"
-              textAlign="left"
-              fontWeight="bold"
-              alignItems="center"
-              justifyContent="center"
-            >
-              <Text fontWeight={800} fontSize={'12px'}>
-                {data.headerName.toUpperCase()}
-              </Text>
-            </Flex>
+            <Box flex="1" textAlign="left" fontWeight="bold" alignItems="center" justifyContent="center" p={4}>
+              <Heading as="h3" size="md" textTransform="uppercase" color="blue.700">
+                {data.headerName}
+              </Heading>
+            </Box>
             <AccordionIcon />
           </AccordionButton>
-          <AccordionPanel pb={4}>
-            <Row style={{ borderBottom: 'none' }}>
-              <Flex direction={'column'} gap={'20px'}>
-                <Flex direction={'column'} gap={'10px'} flex={1}>
-                  {data.languages.map((lang) => (
-                    <Box
-                      display="grid"
-                      gridTemplateColumns="auto 90%"
-                      gridColumnGap="10px"
-                    >
-                      <Text fontWeight={800} fontSize={'12px'}>
-                        {lang.language}
-                      </Text>
-                      <Text textAlign="left">{lang.level}</Text>
-                    </Box>
-                  ))}
-                </Flex>
-                <Flex direction={'column'} gap={'20px'}>
-                  {data.technical.map((tech) => (
-                    <Flex direction={'column'}>
-                      <Flex fontWeight={800} fontSize={'12px'}>
-                        {tech.name.toUpperCase()}
-                      </Flex>
-                      <Flex direction={'column'}>
-                        {tech.description.map((des) => (
-                          <Flex>
-                            <Flex>•{des}</Flex>
-                          </Flex>
-                        ))}
-                      </Flex>
-                    </Flex>
-                  ))}
-                </Flex>
+        </h2>
+        <AccordionPanel px={6} py={4}>
+          <Flex direction={'column'} gap={4}>
+            {/* Languages Section */}
+            <Box>
+              <Text fontSize="lg" fontWeight="semibold" mb={2}>
+                Languages
+              </Text>
+              <Flex direction={'column'} gap={2}>
+                {data.languages.map((lang, index) => (
+                  <Box key={index} display="grid" gridTemplateColumns="auto 1fr" gridColumnGap="10px">
+                    <Text fontWeight={800} fontSize={'md'}>
+                      {lang.language}
+                    </Text>
+                    <Text textAlign="left" fontSize={'sm'} color="gray.600">
+                      {lang.level}
+                    </Text>
+                  </Box>
+                ))}
               </Flex>
-            </Row>
-          </AccordionPanel>
-        </AccordionItem>
-      </Accordion>
-    </React.Fragment>
-  )
-}
-export default SkillSection
+            </Box>
+
+            {/* Technical Skills Section */}
+            <Box>
+              <Text fontSize="lg" fontWeight="semibold" mb={2}>
+                Technical Skills
+              </Text>
+              <Flex direction={'column'} gap={4}>
+                {data.technical.map((tech, techIndex) => (
+                  <Box key={techIndex} p={4} boxShadow="inner" borderRadius="md" backgroundColor="gray.50">
+                    <Text fontWeight={800} fontSize={'md'} textTransform="uppercase" mb={2}>
+                      {tech.name}
+                    </Text>
+                    <Flex direction={'column'} gap={2}>
+                      {tech.description.map((des, desIndex) => (
+                        <Text key={desIndex} fontSize={'sm'} pl={4}>
+                          • {des}
+                        </Text>
+                      ))}
+                    </Flex>
+                  </Box>
+                ))}
+              </Flex>
+            </Box>
+          </Flex>
+        </AccordionPanel>
+      </AccordionItem>
+    </Accordion>
+  );
+};
+
+export default SkillSection;

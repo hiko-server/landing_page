@@ -3,6 +3,7 @@ import { useRouter } from 'next/router'
 import React from 'react'
 import { styled } from 'styled-components'
 import {
+  Certification,
   CVData,
   Education,
   ExtraSkill,
@@ -15,6 +16,7 @@ import EducationSection from './Education'
 import SkillSection from './Skill'
 import ExtraSkillSection from './ExtraSkill'
 import ProjectSection from './Project'
+import CertificateSection from './Certification'
 
 const CVResult = ({
   cvData,
@@ -137,6 +139,7 @@ const CVResult = ({
                     education: <EducationSection data={_ as Education} />,
                     skill: <SkillSection data={_ as Skill} />,
                     project: <ProjectSection data={_ as Project} />,
+                    certification: <CertificateSection data={_ as Certification} />,
                     extraSkill: <ExtraSkillSection data={_ as ExtraSkill} />,
                   }[_.sessionName]
                 }

@@ -1,4 +1,4 @@
-export type CVData =(PersonalInformation | Education | Skill | Project | ExtraSkill)[];
+export type CVData =(PersonalInformation | Education | Skill | Project | ExtraSkill | Certification)[];
 // export type CVData =(PersonalInformation )[];
 // export type CVData =( Education )[];
 // export type CVData =( Skill )[];
@@ -11,6 +11,18 @@ export interface CVSection {
   headerName: string
 }
 
+export interface Certification extends CVSection{
+  certifications: CertificationList[]
+}
+export interface CertificationList{
+  certificationName: string
+  issuingOrganization: string
+  organizationURL:string
+  issuedDate: string
+  expirationDate: string
+  credentialID: string
+  credentialURL: string
+}
 
 export interface PersonalInformation{
   sessionName: string
