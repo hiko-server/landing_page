@@ -8,7 +8,7 @@ export const cvData = [
         "lastName": "Li",
         "nickName": "Hiko",
         "email": "liyanpei2004@outlook.com",
-        "phoneNumber": "+852 6204 0827",
+        "phoneNumber": "852 6204 0827",
         "personalWebsite": "hiko.dev",
         "address": "Hong Hum, Kowloon, Hong Kong",
         "introduction": "Passionate Self-Taught Full-Stack Software Engineer | Exploring Innovative Solutions in Computer Science | Typescript | React | Next.js | NestJS | Python FastAPI"
@@ -248,68 +248,74 @@ export const cvData = [
         "headerName": "CERTIFICATIONS",
         "certifications": [
             {
-                "certificationName": "Getting Started with AI on Jetson Nano",
-                "issuingOrganization": "NVIDIA",
-                "organizationURL":"learn.nvidia.com",
-                "issuedDate": "2024-12",
-                "expirationDate": "",
-                "credentialID": "fQ-LE71ATl6WD5MN4yhwtQ",
-                "credentialURL": "https://learn.nvidia.com/certificates?id=fQ-LE71ATl6WD5MN4yhwtQ"
+                issuingOrganization:"NVIDIA",
+                organizationURL:"learn.nvidia.com",
+                CertificationList:[
+                    {
+                        "certificationName": "Getting Started with AI on Jetson Nano",
+                        "issuedDate": "2024-12",
+                        "expirationDate": "",
+                        "credentialID": "fQ-LE71ATl6WD5MN4yhwtQ",
+                        "credentialURL": "https://learn.nvidia.com/certificates?id=fQ-LE71ATl6WD5MN4yhwtQ"
+                    },
+                    {
+                        "certificationName": "Learn OpenUSD: Learning About Stages, Prims and Attributes",
+                        "issuedDate": "2024-12",
+                        "expirationDate": "",
+                        "credentialID": "y__S8YX7QzONWbqN12vU-g",
+                        "credentialURL": "https://learn.nvidia.com/certificates?id=y__S8YX7QzONWbqN12vU-g"
+                    },
+                    {
+                        "certificationName": "Learn OpenUSD: Traversing Stages",
+                        "issuedDate": "2024-12",
+                        "expirationDate": "",
+                        "credentialID": "IeQUvQF6S-iNMTQCCPePOA",
+                        "credentialURL": "https://learn.nvidia.com/certificates?id=IeQUvQF6S-iNMTQCCPePOA"
+                    },
+                    {
+                        "certificationName": "Learn OpenUSD: Understanding Model Kinds",
+                        "issuedDate": "2024-12",
+                        "expirationDate": "",
+                        "credentialID": "La6VqkPhSjejniAsjJSJAg",
+                        "credentialURL": "https://learn.nvidia.com/certificates?id=La6VqkPhSjejniAsjJSJAg"
+                    },
+                    {
+                        "certificationName": "Learn OpenUSD: Using Attributes",
+                        "issuedDate": "2024-12",
+                        "expirationDate": "",
+                        "credentialID": "p7pwyGVYTUq7KiXa11NcRw",
+                        "credentialURL": "https://learn.nvidia.com/certificates?id=p7pwyGVYTUq7KiXa11NcRw"
+                    },
+                    {
+                        "certificationName": "使用 Jetson Nano 开发 AI 应用",
+                        "issuedDate": "2024-12",
+                        "expirationDate": "",
+                        "credentialID": "iZTC_AWGSUG7D_Kfg13-Fg",
+                        "credentialURL": "https://learn.nvidia.com/certificates?id=iZTC_AWGSUG7D_Kfg13-Fg"
+                    },
+                    {
+                        "certificationName": "基于 Jetson Nano 构建视频 AI 的端侧应用",
+                        "issuedDate": "2024-12",
+                        "expirationDate": "",
+                        "credentialID": "Poy-Xqz_QzudkNj5YwFJqA",
+                        "credentialURL": "https://learn.nvidia.com/certificates?id=Poy-Xqz_QzudkNj5YwFJqA"
+                    }
+                ]
             },
             {
-                "certificationName": "Learn OpenUSD: Learning About Stages, Prims and Attributes",
-                "issuingOrganization": "NVIDIA",
-                "organizationURL":"learn.nvidia.com",
-                "issuedDate": "2024-12",
-                "expirationDate": "",
-                "credentialID": "y__S8YX7QzONWbqN12vU-g",
-                "credentialURL": "https://learn.nvidia.com/certificates?id=y__S8YX7QzONWbqN12vU-g"
+                issuingOrganization:"Cisco",
+                organizationURL:"netacad.com",
+                CertificationList:[
+                    {
+                        "certificationName": "Python Essentials", 
+                        "issuedDate": "2024-12",
+                        "expirationDate": "",
+                        "credentialID": "4f18dd7a-7133-48b2-8093-f3065cecaad0",
+                        "credentialURL": "https://www.credly.com/badges/4f18dd7a-7133-48b2-8093-f3065cecaad0/public_url"
+                    },
+                ]
             },
-            {
-                "certificationName": "Learn OpenUSD: Traversing Stages",
-                "issuingOrganization": "NVIDIA",
-                "organizationURL":"learn.nvidia.com",
-                "issuedDate": "2024-12",
-                "expirationDate": "",
-                "credentialID": "IeQUvQF6S-iNMTQCCPePOA",
-                "credentialURL": "https://learn.nvidia.com/certificates?id=IeQUvQF6S-iNMTQCCPePOA"
-            },
-            {
-                "certificationName": "Learn OpenUSD: Understanding Model Kinds",
-                "issuingOrganization": "NVIDIA",
-                "organizationURL":"learn.nvidia.com",
-                "issuedDate": "2024-12",
-                "expirationDate": "",
-                "credentialID": "La6VqkPhSjejniAsjJSJAg",
-                "credentialURL": "https://learn.nvidia.com/certificates?id=La6VqkPhSjejniAsjJSJAg"
-            },
-            {
-                "certificationName": "Learn OpenUSD: Using Attributes",
-                "issuingOrganization": "NVIDIA",
-                "organizationURL":"learn.nvidia.com",
-                "issuedDate": "2024-12",
-                "expirationDate": "",
-                "credentialID": "p7pwyGVYTUq7KiXa11NcRw",
-                "credentialURL": "https://learn.nvidia.com/certificates?id=p7pwyGVYTUq7KiXa11NcRw"
-            },
-            {
-                "certificationName": "使用 Jetson Nano 开发 AI 应用",
-                "issuingOrganization": "NVIDIA",
-                "organizationURL":"learn.nvidia.com",
-                "issuedDate": "2024-12",
-                "expirationDate": "",
-                "credentialID": "iZTC_AWGSUG7D_Kfg13-Fg",
-                "credentialURL": "https://learn.nvidia.com/certificates?id=iZTC_AWGSUG7D_Kfg13-Fg"
-            },
-            {
-                "certificationName": "基于 Jetson Nano 构建视频 AI 的端侧应用",
-                "issuingOrganization": "NVIDIA",
-                "organizationURL":"learn.nvidia.com",
-                "issuedDate": "2024-12",
-                "expirationDate": "",
-                "credentialID": "Poy-Xqz_QzudkNj5YwFJqA",
-                "credentialURL": "https://learn.nvidia.com/certificates?id=Poy-Xqz_QzudkNj5YwFJqA"
-            }
+
         ]
     }
 
