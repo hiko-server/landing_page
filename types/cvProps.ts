@@ -12,12 +12,17 @@ export interface CVSection {
 }
 
 export interface Certification extends CVSection{
-  certifications: CertificationList[]
+  certifications: CertificationByOrg[]
+}
+
+export interface CertificationByOrg{
+  issuingOrganization: string
+  organizationURL:string
+  CertificationList: CertificationList[]
 }
 export interface CertificationList{
   certificationName: string
-  issuingOrganization: string
-  organizationURL:string
+  
   issuedDate: string
   expirationDate: string
   credentialID: string
