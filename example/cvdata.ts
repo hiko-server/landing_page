@@ -233,6 +233,16 @@ export const cvData = [
             }
         ]
     },
+
+    {
+        "sessionName": "extraSkill",
+        "headerName": "LANGUAGES AND SKILLS",
+        "points": [
+            "Native Speaker for Mandarin",
+            "Able to listen to and speak basic Cantonese",
+            "Able to listen to and speak fluent English"
+        ]
+    },
     {
         "sessionName": "certification",
         "headerName": "CERTIFICATIONS",
@@ -300,15 +310,6 @@ export const cvData = [
                 "credentialID": "REDACTED",
                 "credentialURL": "https://learn.nvidia.com/certificates?id=REDACTED"
             }
-        ]
-    },
-    {
-        "sessionName": "extraSkill",
-        "headerName": "LANGUAGES AND SKILLS",
-        "points": [
-            "Native Speaker for Mandarin",
-            "Able to listen to and speak basic Cantonese",
-            "Able to listen to and speak fluent English"
         ]
     }
 

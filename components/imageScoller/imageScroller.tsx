@@ -6,19 +6,24 @@ import { GoArrowLeft, GoArrowRight } from 'react-icons/go'
 
 const images = [
   {
-    url: 'https://theinsatiabletraveler.com/wp-content/uploads/2015/08/Cape-Point-Day-Trip-7117.jpg',
-    describe: 'test 1',
-    redirectTo: '/some-page-1',
+    url: 'https://example.com/redacted.jpg',
+    describe: 'COT - Start-Up Saturday of HKBU - Wegreen AI',
+    redirectTo: 'https://wegreen.ltd',
   },
   {
-    url: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQiNB3Z62gMn49v5t49v-cRlLXxlmy0kA-ihQ&s',
-    describe: 'test 2',
-    redirectTo: '/some-page-2',
+    url: 'https://example.com/redacted.jpg',
+    describe: 'Stuff - Exhibition in HK - Honsenn',
+    redirectTo: 'https://honsennaudio.com/',
   },
   {
-    url: 'https://www.discoverhongkong.com/content/dam/dhk/intl/explore/attractions/the-charm-of-the-bright-city/the-charm-of-the-bright-city-1920x1080.jpg',
-    describe: 'test 3',
-    redirectTo: '/some-page-1',
+    url: 'https://example.com/redacted.jpg',
+    describe: 'Student - Prensentation of final project - UOWCHK',
+    redirectTo: 'https://www.uowchk.edu.hk/',
+  },
+  {
+    url: 'https://example.com/redacted.jpg',
+    describe: 'Student - Project Test - UOWCHK',
+    redirectTo: 'https://www.uowchk.edu.hk/',
   },
 ]
 

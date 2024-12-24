@@ -139,8 +139,10 @@ const CVResult = ({
                     education: <EducationSection data={_ as Education} />,
                     skill: <SkillSection data={_ as Skill} />,
                     project: <ProjectSection data={_ as Project} />,
-                    certification: <CertificateSection data={_ as Certification} />,
                     extraSkill: <ExtraSkillSection data={_ as ExtraSkill} />,
+                    certification: (
+                      <CertificateSection data={_ as Certification} />
+                    ),
                   }[_.sessionName]
                 }
               </React.Fragment>
