@@ -233,6 +233,16 @@ export const cvData = [
             }
         ]
     },
+
+    {
+        "sessionName": "extraSkill",
+        "headerName": "LANGUAGES AND SKILLS",
+        "points": [
+            "Native Speaker for Mandarin",
+            "Able to listen to and speak basic Cantonese",
+            "Able to listen to and speak fluent English"
+        ]
+    },
     {
         "sessionName": "certification",
         "headerName": "CERTIFICATIONS",
@@ -297,18 +307,9 @@ export const cvData = [
                 "organizationURL":"learn.nvidia.com",
                 "issuedDate": "2024-12",
                 "expirationDate": "",
-                "credentialID": "y__S8YX7QzONWbqN12vU-g",
+                "credentialID": "Poy-Xqz_QzudkNj5YwFJqA",
                 "credentialURL": "https://learn.nvidia.com/certificates?id=Poy-Xqz_QzudkNj5YwFJqA"
             }
-        ]
-    },
-    {
-        "sessionName": "extraSkill",
-        "headerName": "LANGUAGES AND SKILLS",
-        "points": [
-            "Native Speaker for Mandarin",
-            "Able to listen to and speak basic Cantonese",
-            "Able to listen to and speak fluent English"
         ]
     }
 

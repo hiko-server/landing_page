@@ -8,19 +8,38 @@ import {
   Flex,
   Heading,
   Text,
-} from '@chakra-ui/react';
-import React from 'react';
-import { Education } from '../../types/cvProps';
-import { DateTime } from 'luxon';
+} from '@chakra-ui/react'
+import React from 'react'
+import { Education } from '../../types/cvProps'
+import { DateTime } from 'luxon'
 
 const EducationSection = ({ data }: { data: Education }) => {
   return (
-    <Accordion allowToggle width="100%" maxW="1000px" mt={[8, 16]} boxShadow="lg" borderRadius="md">
+    <Accordion
+      allowToggle
+      width="100%"
+      maxW="1000px"
+      mt={[8, 16]}
+      boxShadow="lg"
+      borderRadius="md"
+    >
       <AccordionItem borderWidth="1px" borderColor="gray.200" mb={4}>
         <h2>
           <AccordionButton _expanded={{ bg: 'gray.100' }}>
-            <Box flex="1" textAlign="left" fontWeight="bold" alignItems="center" justifyContent="center" p={4}>
-              <Heading as="h3" size="md" textTransform="uppercase" color="blue.700">
+            <Box
+              flex="1"
+              textAlign="left"
+              fontWeight="bold"
+              alignItems="center"
+              justifyContent="center"
+              p={4}
+            >
+              <Heading
+                as="h3"
+                size="md"
+                textTransform="uppercase"
+                color="blue.700"
+              >
                 {data.headerName}
               </Heading>
             </Box>
@@ -30,7 +49,13 @@ const EducationSection = ({ data }: { data: Education }) => {
         <AccordionPanel px={6} py={4}>
           <Flex direction={'column'} gap={4}>
             {data.educationExperience.map((edu, index) => (
-              <Box key={index} p={4} boxShadow="inner" borderRadius="md" backgroundColor="gray.50">
+              <Box
+                key={index}
+                p={4}
+                boxShadow="inner"
+                borderRadius="md"
+                backgroundColor="gray.50"
+              >
                 <Flex justifyContent={'space-between'} alignItems={'center'}>
                   <Box>
                     <Text fontSize={'xl'} fontWeight="semibold">
@@ -60,7 +85,7 @@ const EducationSection = ({ data }: { data: Education }) => {
         </AccordionPanel>
       </AccordionItem>
     </Accordion>
-  );
-};
+  )
+}
 
-export default EducationSection;
+export default EducationSection

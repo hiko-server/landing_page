@@ -31,7 +31,7 @@ const PersonalInfo = ({ isMobile }: { isMobile: boolean }) => {
         <Avatar
           size="2xl"
           name="Hiko"
-          src="../../public/images/personalImage.jpg"
+          src="https://github.com/WeGreen-AI/Intro/blob/main/Members/hikoAvator.png?raw=true"
           transition="transform 0.3s ease"
           _hover={{ transform: 'scale(1.05)' }}
         />
@@ -81,22 +81,19 @@ const PersonalInfo = ({ isMobile }: { isMobile: boolean }) => {
           alignItems="center"
           justifyContent="center"
         >
-          {
-            isMobile ? (
- <></>
-      ) : (
-        <Button
-            size="25"
-            w="100%"
-            fontSize={['20px', '24px']}
-            mb={6}
-            onClick={() => window.open('https://hiko.dev/cv')}
-          >
-            Personal CV
-          </Button>
-      )
-    }
-
+          {isMobile ? (
+            <></>
+          ) : (
+            <Button
+              size="25"
+              w="100%"
+              fontSize={['20px', '24px']}
+              mb={6}
+              onClick={() => window.open('https://hiko.dev/cv')}
+            >
+              Personal CV
+            </Button>
+          )}
 
           <Button
             size="25"
