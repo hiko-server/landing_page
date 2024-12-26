@@ -300,7 +300,7 @@ export const cvData = [
                 ],
                 "location":"Hong Kong",
                 "startDate":"2023-08",
-                "endDate":"1014-09",
+                "endDate":"2024-09",
                 "relatedSkills":[
                     "TypeScript",
                     "React.js",
