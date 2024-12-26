@@ -23,7 +23,8 @@ const images = [
   {
     url: 'https://example.com/redacted.jpg',
     describe: 'Student - Project Test - UOWCHK',
-    redirectTo: 'https://www.uowchk.edu.hk/',
+    redirectTo:
+      'https://example.com/',
   },
 ]
 

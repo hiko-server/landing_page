@@ -235,6 +235,89 @@ export const cvData = [
     },
 
     {
+        "sessionName": "workExperience",
+        "headerName": "WORK / INTERN EXPERIENCE",
+        "experiences": [
+            {
+                "companyName": "WeGreen AI",
+                "companyURL": "wegreen.ltd",
+                "jobTitle": "COT",
+                "jobDescription": "Revolutionizing waste management through AI-powered solutions. We're making recycling smarter, faster, and more efficient for a sustainable future.",
+                "features": [
+                    {
+                        "description": "Secured $130K in funding from HKBU and HKSTP to advance product development and support sustainable growth.",
+                        "furtherExplanation": [
+                        ]
+                    },
+                    {
+                        "description": "Led the development of our smart bin technology, optimizing waste management solutions.",
+                        "furtherExplanation": [
+                        ]
+                    },
+                    {
+                        "description": "Fostered a collaborative culture that promotes innovation and empowers teams to excel.",
+                        "furtherExplanation": [
+                        ]
+                    }
+
+                ],
+                "location":"Hong Kong",
+                "startDate":"2024-11",
+                "endDate":"now",
+                "relatedSkills":[
+                    "Product Development",
+                    "Microcontrollers",
+                    "Technical Product Development",
+                    "Networking",
+                    "Machine Learning",
+                    "Computer Version"
+                ]
+                
+            },
+            {
+                "companyName": "Honsenn Technology",
+                "companyURL": "honsennaudio.com/",
+                "jobTitle": "Associate Researcher",
+                "jobDescription": "Assisting in the Development of Microcontroller Functionalities and Supporting Product Development.",
+                "features": [
+                ],
+                "location":"Dongguan",
+                "startDate":"2021-09",
+                "endDate":"now",
+                "relatedSkills":[
+                    "Product Development",
+                    "Microcontrollers",
+                    "Technical Product Development",
+                ]
+                
+            },
+            {
+                "companyName": "EventBinder",
+                "companyURL": "eventbinder.app",
+                "jobTitle": "Web Development Intern",
+                "jobDescription": "Working side-by-side with engineers who have years of experience in software engineering and be empowered to drive and develop projects under their guidance.",
+                "features": [
+                ],
+                "location":"Hong Hong",
+                "startDate":"2023-08",
+                "endDate":"1014-09",
+                "relatedSkills":[
+                    "TypeScript",
+                    "React.js",
+                    "Python",
+                    "Networking",
+                    "Networking Building",
+                    "Web Development",
+                    "Engineering"
+
+                ]
+                
+            }
+
+        ]
+    },
+
+    {
         "sessionName": "extraSkill",
         "headerName": "LANGUAGES AND SKILLS",
         "points": [

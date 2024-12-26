@@ -6,6 +6,7 @@ import {
   Certification,
   CVData,
   Education,
+  Experiences,
   ExtraSkill,
   PersonalInformation,
   Project,
@@ -17,6 +18,7 @@ import SkillSection from './Skill'
 import ExtraSkillSection from './ExtraSkill'
 import ProjectSection from './Project'
 import CertificateSection from './Certification'
+import WorkExperience from './WorkExperience'
 
 const CVResult = ({
   cvData,
@@ -139,6 +141,7 @@ const CVResult = ({
                     education: <EducationSection data={_ as Education} />,
                     skill: <SkillSection data={_ as Skill} />,
                     project: <ProjectSection data={_ as Project} />,
+                    workExperience: <WorkExperience data={_ as Experiences} />,
                     extraSkill: <ExtraSkillSection data={_ as ExtraSkill} />,
                     certification: (
                       <CertificateSection data={_ as Certification} />
