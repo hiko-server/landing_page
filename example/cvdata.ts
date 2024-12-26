@@ -298,7 +298,7 @@ export const cvData = [
                 "jobDescription": "Working side-by-side with engineers who have years of experience in software engineering and be empowered to drive and develop projects under their guidance.",
                 "features": [
                 ],
-                "location":"Hong Hong",
+                "location":"Hong Kong",
                 "startDate":"2023-08",
                 "endDate":"1014-09",
                 "relatedSkills":[
