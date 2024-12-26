@@ -20,7 +20,14 @@ import ProjectSection from '../PersonalInstruction/Project'
 import SkillSection from '../PersonalInstruction/Skill'
 import CertificateSection from '../PersonalInstruction/Certificate'
 import { cvData } from '../../example/cvdata'
-import { Certification, Education, Project, Skill } from '../../types/cvProps'
+import {
+  Certification,
+  Education,
+  Experiences,
+  Project,
+  Skill,
+} from '../../types/cvProps'
+import WorkExperience from '../PersonalInstruction/WorkExperience'
 
 const StyledBox = styled(Box)`
   background: white;
@@ -157,6 +164,11 @@ const CVSections = () => (
             [
               'certification',
               <CertificateSection data={section as Certification} />,
+            ],
+
+            [
+              'workExperience',
+              <WorkExperience data={section as Experiences} />,
             ],
             ['project', <ProjectSection data={section as Project} />],
           ].find(([type]) => section.sessionName === type)?.[1]

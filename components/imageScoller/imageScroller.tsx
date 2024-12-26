@@ -23,7 +23,8 @@ const images = [
   {
     url: 'https://media.licdn.com/dms/image/v2/D4D2DAQGMVgyO_pJcnQ/profile-treasury-image-shrink_800_800/profile-treasury-image-shrink_800_800/0/1727107249132?e=1735610400&v=beta&t=-73AVD-cYIkqgz7KfitGadde7pNIexYJ0aNVqkPsqCQ',
     describe: 'Student - Project Test - UOWCHK',
-    redirectTo: 'https://www.uowchk.edu.hk/',
+    redirectTo:
+      'https://drive.google.com/drive/folders/1AZWZR9o1Sjp-V1ky5TL2UpjtdJFmEM0q?usp=drive_link',
   },
 ]
 
