@@ -46,7 +46,9 @@ const WorkExperience = ({ data }: { data: Experiences }) => {
                     <Text>
                       {DateTime.fromISO(exp.startDate).toFormat('LLL yyyy')}
                       {' - '}
-                      {DateTime.fromISO(exp.endDate).toFormat('LLL yyyy')}
+                      {exp.endDate.toLowerCase() === 'now'
+                        ? 'Present'
+                        : DateTime.fromISO(exp.endDate).toFormat('LLL yyyy')}
                     </Text>
                     <Text fontStyle={'normal'}>{`|`}</Text>
                     <Text fontWeight={800}>{exp.location}</Text>

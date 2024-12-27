@@ -275,15 +275,15 @@ export const cvData = [
                 
             },
             {
-                "companyName": "Honsenn Technology",
+                "companyName": "Dongguan Honsenn Electronice Technology Co., Ltd.",
                 "companyURL": "honsennaudio.com/",
-                "jobTitle": "Associate Researcher",
+                "jobTitle": "Technical Researcher",
                 "jobDescription": "Assisting in the Development of Microcontroller Functionalities and Supporting Product Development.",
                 "features": [
                 ],
                 "location":"Dongguan",
-                "startDate":"2021-09",
-                "endDate":"now",
+                "startDate":"2024-07",
+                "endDate":"2024-09",
                 "relatedSkills":[
                     "Product Development",
                     "Microcontrollers",
@@ -292,8 +292,8 @@ export const cvData = [
                 
             },
             {
-                "companyName": "EventBinder",
-                "companyURL": "eventbinder.app",
+                "companyName": "GoSmart Everywhere Limited",
+                "companyURL": "gosmart-everywhere-limited.webflow.io",
                 "jobTitle": "Web Development Intern",
                 "jobDescription": "Working side-by-side with engineers who have years of experience in software engineering and be empowered to drive and develop projects under their guidance.",
                 "features": [
