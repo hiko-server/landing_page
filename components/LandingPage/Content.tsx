@@ -28,6 +28,7 @@ import {
   Skill,
 } from '../../types/cvProps'
 import WorkExperience from '../PersonalInstruction/WorkExperience'
+import LandingCVSections from './LandingCVSections'
 
 const StyledBox = styled(Box)`
   background: white;
@@ -105,7 +106,7 @@ const Content = () => {
             </VStack>
           </QuickAccessAccordionItem>
         </Accordion>
-        <CVSections />
+        <LandingCVSections />
       </StyledBox>
     </Flex>
   )
@@ -153,29 +154,5 @@ const ButtonGroup = () => (
   </Flex>
 )
 
-const CVSections = () => (
-  <>
-    {cvData.map((section, key) => (
-      <React.Fragment key={key}>
-        {
-          [
-            ['education', <EducationSection data={section as Education} />],
-            ['skill', <SkillSection data={section as Skill} />],
-            [
-              'certification',
-              <CertificateSection data={section as Certification} />,
-            ],
-
-            [
-              'workExperience',
-              <WorkExperience data={section as Experiences} />,
-            ],
-            ['project', <ProjectSection data={section as Project} />],
-          ].find(([type]) => section.sessionName === type)?.[1]
-        }
-      </React.Fragment>
-    ))}
-  </>
-)
 
 export default Content

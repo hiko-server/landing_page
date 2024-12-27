@@ -6,6 +6,7 @@ import { Flex, Spinner } from '@chakra-ui/react'
 import DisplayMobileInfo from '../components/mobileDisplay/mobileDisplay'
 import LandingContent from '../components/LandingPage/LandingContent'
 import Footer from '../components/Footer/Footer'
+import Header from '../components/Header/Header'
 
 const LandingPage = (props: any) => {
   console.log('props', props)
@@ -41,6 +42,7 @@ const LandingPage = (props: any) => {
 
   return (
     <React.Fragment>
+      <Header />
       {isLoading ? (
         <Flex
           h={'100vh'}
