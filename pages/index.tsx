@@ -42,7 +42,7 @@ const LandingPage = (props: any) => {
 
   return (
     <React.Fragment>
-      <Header />
+      
       {isLoading ? (
         <Flex
           h={'100vh'}
@@ -55,9 +55,14 @@ const LandingPage = (props: any) => {
       ) : isMobile ? (
         <DisplayMobileInfo isMobile={isMobile}/>
       ) : (
+        <>
+         <Header />
         <LandingContent isMobile={isMobile}/>
+        <Footer />
+        </>
+
       )}
-      <Footer />
+      
     </React.Fragment>
   )
 }
