@@ -53,7 +53,7 @@ const LandingPage = (props: any) => {
           <Spinner size="xl" />
         </Flex>
       ) : isMobile ? (
-        <DisplayMobileInfo isMobile={isMobile}/>
+        <DisplayMobileInfo isMobile={isMobile} setIsMobile = {setIsMobile}/>
       ) : (
         <>
          <Header />
