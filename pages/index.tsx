@@ -5,6 +5,7 @@ import { Flex, Spinner } from '@chakra-ui/react'
 
 import DisplayMobileInfo from '../components/mobileDisplay/mobileDisplay'
 import LandingContent from '../components/LandingPage/LandingContent'
+import Footer from '../components/Footer/Footer'
 
 const LandingPage = (props: any) => {
   console.log('props', props)
@@ -54,6 +55,7 @@ const LandingPage = (props: any) => {
       ) : (
         <LandingContent isMobile={isMobile}/>
       )}
+      <Footer />
     </React.Fragment>
   )
 }

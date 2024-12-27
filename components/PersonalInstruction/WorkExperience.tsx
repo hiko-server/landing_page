@@ -59,16 +59,20 @@ const WorkExperience = ({ data }: { data: Experiences }) => {
               >
                 <Flex justifyContent={'space-between'} alignItems={'center'}>
                   <Box>
-                    <Flex direction={'row'} alignItems="center">
-                      <Text fontSize={'xl'} fontWeight="semibold" mr={1}>
-                        {exp.jobTitle} at
+                    <Flex direction={'row'} alignItems="center" fontWeight={600}>
+                      <Text fontSize={'xl'} fontWeight={800} mr={1}>
+                        {exp.jobTitle} 
+                      </Text>
+                      <Text fontSize={'xl'} fontWeight={600} mr={1}>
+                        at
                       </Text>
                       <Link
+                      fontWeight={800}
                         fontSize={'xl'}
                         href={'https://' + exp.companyURL}
                         isExternal
                       >
-                        {exp.companyName}
+                         {exp.companyName}
                       </Link>
                     </Flex>
 
