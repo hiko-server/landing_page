@@ -3,22 +3,23 @@ import { Box, Text, Link } from '@chakra-ui/react';
 
 
 const Header: React.FC = () => {
+    const baseURL = 'hiko.dev'
     const quickLinks =[
         {
           "name": "Home",
-          "url": "/"
+          "url": `${baseURL}/`
         },
         {
           "name": "About",
-          "url": "/about"
+          "url": `${baseURL}/about`
         },
         {
           "name": "Contact",
-          "url": "/contact"
+          "url": `${baseURL}/contact`
         },
         {
             "name": "CV",
-            "url": "/cv"
+            "url": `${baseURL}/cv`
           }
       ]
   return (
@@ -26,7 +27,7 @@ const Header: React.FC = () => {
       <Text fontSize="xl">Welcome to HIKO DEV</Text>
       <Box mt={2}>
         {quickLinks.map((link, index) => (
-          <Link key={index} href={link.url} m={2} color="teal.200">
+          <Link key={index}  href={`https://${link.url}`} isExternal m={2} color="teal.200" >
             {link.name}
           </Link>
         ))}
