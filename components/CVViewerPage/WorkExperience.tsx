@@ -25,12 +25,15 @@ const WorkExperience = ({ data }: { data: Experiences }) => {
                   style={{ padding: '0' }}
                 >
                   <Flex direction={'column'} minW={'500px'}>
-                    <Flex direction={'row'} alignItems="center">
-                      <Text fontSize={'14px'} fontWeight="semibold" mr={1}>
+                    <Flex direction={'row'} alignItems="center" >
+                      <Text fontSize={'14px'} fontWeight={800} mr={1} >
                         {exp.jobTitle}
                       </Text>
-                      <Text fontSize={'14px'} fontWeight="semibold">
-                        at {exp.companyName}
+                      <Text fontSize={'14px'} fontWeight={600} mr={1} >
+                        at
+                      </Text>
+                      <Text fontSize={'14px'} fontWeight={800}>
+                        {exp.companyName}
                       </Text>
                     </Flex>
                     <Text fontSize={'12px'}>{exp.jobDescription}</Text>
