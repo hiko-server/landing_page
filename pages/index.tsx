@@ -1,13 +1,12 @@
 import { useSession } from 'next-auth/react'
 import React, { useState, useEffect } from 'react'
 import { GetServerSideProps } from 'next'
-import {  Flex, Spinner } from '@chakra-ui/react'
+import { Flex, Spinner, Box } from '@chakra-ui/react'
 
 import DisplayMobileInfo from '../components/mobileDisplay/mobileDisplay'
 import LandingContent from '../components/LandingPage/LandingContent'
 import Footer from '../components/Footer/Footer'
 import Header from '../components/Header/Header'
-
 
 const LandingPage = (props: any) => {
   console.log('props', props)
@@ -20,7 +19,7 @@ const LandingPage = (props: any) => {
   const [, setIsHostCV] = useState<boolean>(false)
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [isMobile, setIsMobile] = useState<boolean>(false)
-  
+
   useEffect(() => {
     if (props.host && props.host === 'cv.hiko.dev') {
       setIsHostCV(true)
@@ -42,7 +41,7 @@ const LandingPage = (props: any) => {
   }, [])
 
   return (
-    <React.Fragment>
+    <>
       {isLoading ? (
         <Flex
           h={'100vh'}
@@ -52,21 +51,16 @@ const LandingPage = (props: any) => {
         >
           <Spinner size="xl" />
         </Flex>
-      ) : isMobile ? (
-        <React.Fragment>
-        <HeaderFooter>
-        <DisplayMobileInfo isMobile={isMobile} setIsMobile = {setIsMobile}/>
-        </HeaderFooter>
-        </React.Fragment>
       ) : (
-        <HeaderFooter>
-        <LandingContent isMobile={isMobile} />
+        <HeaderFooter isMobile={isMobile}>
+          {isMobile ? (
+            <DisplayMobileInfo isMobile={isMobile} setIsMobile={setIsMobile} />
+          ) : (
+            <LandingContent isMobile={isMobile} />
+          )}
         </HeaderFooter>
-    
-        
-        
       )}
-    </React.Fragment>
+    </>
   )
 }
 
@@ -76,18 +70,24 @@ export const getServerSideProps: GetServerSideProps = async (context: any) => {
   const host = context.req.headers.host
   console.log({ host })
   return {
-    props: { host: host }, // will be passed to the page component as props
+    props: { host: host }, 
   }
 }
 
 
-const HeaderFooter = ({ children }: { children: React.ReactNode }) => {  
+const HeaderFooter = ({ children }: { children: React.ReactNode, isMobile: boolean }) => {  
   return (
-    <>
-    <Header />
-    {children}
-    <Footer />
-    </>
-
+    <Box
+      display="grid"
+      gridTemplateRows="auto 1fr auto"
+      minHeight="100vh" 
+      w="full"
+    >
+      <Header />
+      <Box > 
+        {children}
+      </Box>
+      <Footer />
+    </Box>
   )
 }

@@ -3,6 +3,7 @@ import React from 'react'
 
 import PersonalInfo from './PersonalInfo'
 import Content from './Content'
+import ContactCard from '../Contact/ConatactCard'
 
 
 const LandingContent = ({ isMobile }: { isMobile: boolean }) => {
@@ -25,6 +26,7 @@ const LandingContent = ({ isMobile }: { isMobile: boolean }) => {
     >
       <PersonalInfo isMobile={isMobile}/>
       <Content />
+      <ContactCard/>
     </Flex>
     // </LandingLayout>
   )
