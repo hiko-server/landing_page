@@ -57,6 +57,13 @@
   dependencies:
     regenerator-runtime "^0.13.4"
 
+"@babel/runtime@^7.17.9":
+  version "7.26.0"
+  resolved "https://registry.yarnpkg.com/@babel/runtime/-/runtime-7.26.0.tgz#8600c2f595f277c60815256418b85356a65173c1"
+  integrity sha512-FDSOghenHTiToteC/QRlv2q3DhPZ/oOXTBoirfWNx1Cx3TMVcGWQtMMmQcSvb/JjpNeGzx8Pq/b4fKEJuWm1sw==
+  dependencies:
+    regenerator-runtime "^0.14.0"
+
 "@babel/runtime@^7.18.3", "@babel/runtime@^7.20.13", "@babel/runtime@^7.20.7", "@babel/runtime@^7.21.0", "@babel/runtime@^7.22.5":
   version "7.22.6"
   resolved "https://registry.yarnpkg.com/@babel/runtime/-/runtime-7.22.6.tgz#57d64b9ae3cff1d67eb067ae117dac087f5bd438"
@@ -924,6 +931,11 @@
   resolved "https://registry.yarnpkg.com/@discoveryjs/json-ext/-/json-ext-0.5.7.tgz#1d572bfbbe14b7704e0ba0f39b74815b84870d70"
   integrity sha512-dBVuXR082gk3jsFp7Rd/JI4kytwGHecnCoTtXFb7DB6CNHp4rg5k1bhg0nWdLGLnOV71lmDzGQaLMy8iPLY0pw==
 
+"@emailjs/browser@^4.4.1":
+  version "4.4.1"
+  resolved "https://registry.yarnpkg.com/@emailjs/browser/-/browser-4.4.1.tgz#ad5684af5a912c0ab415202184845eb3270c4c81"
+  integrity sha512-DGSlP9sPvyFba3to2A50kDtZ+pXVp/0rhmqs2LmbMS3I5J8FSOgLwzY2Xb4qfKlOVHh29EAutLYwe5yuEZmEFg==
+
 "@emotion/babel-plugin@^11.11.0":
   version "11.11.0"
   resolved "https://registry.yarnpkg.com/@emotion/babel-plugin/-/babel-plugin-11.11.0.tgz#c2d872b6a7767a9d176d007f5b31f7d504bb5d6c"
@@ -1164,6 +1176,19 @@
   version "4.8.2"
   resolved "https://registry.yarnpkg.com/@github/tab-container-element/-/tab-container-element-4.8.2.tgz#6c28a4be3eac350c64b1f9cb7eef4eb7a7215655"
   integrity sha512-WkaM4mfs8x7dXRWEaDb5deC0OhH6sGQ5cw8i/sVw25gikl4f8C7mHj0kihL5k3eKIIqmGT1Fdswdoi+9ZLDpRA==
+
+"@hcaptcha/loader@^1.2.1":
+  version "1.2.4"
+  resolved "https://registry.yarnpkg.com/@hcaptcha/loader/-/loader-1.2.4.tgz#541714395a82e27ec0f0e8bd80ef1a0bea141cc3"
+  integrity sha512-3MNrIy/nWBfyVVvMPBKdKrX7BeadgiimW0AL/a/8TohNtJqxoySKgTJEXOQvYwlHemQpUzFrIsK74ody7JiMYw==
+
+"@hcaptcha/react-hcaptcha@^1.11.0":
+  version "1.11.0"
+  resolved "https://registry.yarnpkg.com/@hcaptcha/react-hcaptcha/-/react-hcaptcha-1.11.0.tgz#d4520dd3b7ece735bc928dedcda048be477b2dcd"
+  integrity sha512-UKHtzzVMHLTGwab5pgV96UbcXdyh5Qyq8E0G5DTyXq8txMvuDx7rSyC+BneOjWVW0a7O9VuZmkg/EznVLRE45g==
+  dependencies:
+    "@babel/runtime" "^7.17.9"
+    "@hcaptcha/loader" "^1.2.1"
 
 "@hookform/resolvers@^3.1.1":
   version "3.1.1"
@@ -3216,6 +3241,11 @@ deep-is@^0.1.3:
   resolved "https://registry.npmjs.org/deep-is/-/deep-is-0.1.4.tgz"
   integrity sha512-oIPzksmTg4/MriiaYGO+okXDT7ztn/w3Eptv/+gSIdMdKsJo0u4CfYNFJPy+4SKMuCqGw2wxnA+URMg3t8a/bQ==
 
+deepmerge@^2.1.1:
+  version "2.2.1"
+  resolved "https://registry.yarnpkg.com/deepmerge/-/deepmerge-2.2.1.tgz#5d3ff22a01c00f645405a2fbc17d0778a1801170"
+  integrity sha512-R9hc1Xa/NOBi9WRVUWg19rl1UB7Tt4kuPd+thNJgFZoxXsTz7ncaPaeIm+40oSGuP33DfMb4sZt1QIGiJzC4EA==
+
 deepmerge@^4.2.2:
   version "4.3.1"
   resolved "https://registry.yarnpkg.com/deepmerge/-/deepmerge-4.3.1.tgz#44b5f2147cd3b00d4b56137685966f26fd25dd4a"
@@ -3370,6 +3400,11 @@ electron-to-chromium@^1.4.431:
   version "1.4.468"
   resolved "https://registry.yarnpkg.com/electron-to-chromium/-/electron-to-chromium-1.4.468.tgz#3cbf64ad67d9f12bfe69fefe5eb1935ec4f6ab7a"
   integrity sha512-6M1qyhaJOt7rQtNti1lBA0GwclPH+oKCmsra/hkcWs5INLxfXXD/dtdnaKUYQu/pjOBP/8Osoe4mAcNvvzoFag==
+
+emailjs-com@^3.2.0:
+  version "3.2.0"
+  resolved "https://registry.yarnpkg.com/emailjs-com/-/emailjs-com-3.2.0.tgz#a53cb22f1bc433c701c84c53d8b56eefd5ce7111"
+  integrity sha512-Prbz3E1usiAwGjMNYRv6EsJ5c373cX7/AGnZQwOfrpNJrygQJ15+E9OOq4pU8yC977Z5xMetRfc3WmDX6RcjAA==
 
 emoji-regex@^10.2.1:
   version "10.2.1"
@@ -3961,6 +3996,20 @@ form-data@^4.0.0:
     asynckit "^0.4.0"
     combined-stream "^1.0.8"
     mime-types "^2.1.12"
+
+formik@^2.4.6:
+  version "2.4.6"
+  resolved "https://registry.yarnpkg.com/formik/-/formik-2.4.6.tgz#4da75ca80f1a827ab35b08fd98d5a76e928c9686"
+  integrity sha512-A+2EI7U7aG296q2TLGvNapDNTZp1khVt5Vk0Q/fyfSROss0V/V6+txt2aJnwEos44IxTCW/LYAi/zgWzlevj+g==
+  dependencies:
+    "@types/hoist-non-react-statics" "^3.3.1"
+    deepmerge "^2.1.1"
+    hoist-non-react-statics "^3.3.0"
+    lodash "^4.17.21"
+    lodash-es "^4.17.21"
+    react-fast-compare "^2.0.1"
+    tiny-warning "^1.0.2"
+    tslib "^2.0.0"
 
 fraction.js@^4.2.0:
   version "4.2.0"
@@ -4965,6 +5014,11 @@ locate-path@^6.0.0:
   integrity sha512-iPZK6eYjbxRu3uB4/WZ3EsEIMJFMqAoopl3R+zuq0UjcAm/MO6KCweDgPfP3elTztoKP3KtnVHxTn2NHBSDVUw==
   dependencies:
     p-locate "^5.0.0"
+
+lodash-es@^4.17.21:
+  version "4.17.21"
+  resolved "https://registry.yarnpkg.com/lodash-es/-/lodash-es-4.17.21.tgz#43e626c46e6591b7750beb2b50117390c609e3ee"
+  integrity sha512-mKnC+QJ9pWVzv+C4/U3rRsHapFfHvQFoFB92e52xeyGMcX6/OlIl78je1u8vePzYZSkkogMPJ2yjxxsb89cxyw==
 
 lodash.debounce@^4.0.8:
   version "4.0.8"
@@ -6387,6 +6441,11 @@ react-fast-compare@3.2.1:
   version "3.2.1"
   resolved "https://registry.yarnpkg.com/react-fast-compare/-/react-fast-compare-3.2.1.tgz#53933d9e14f364281d6cba24bfed7a4afb808b5f"
   integrity sha512-xTYf9zFim2pEif/Fw16dBiXpe0hoy5PxcD8+OwBnTtNLfIm3g6WxhKNurY+6OmdH1u6Ta/W/Vl6vjbYP1MFnDg==
+
+react-fast-compare@^2.0.1:
+  version "2.0.4"
+  resolved "https://registry.yarnpkg.com/react-fast-compare/-/react-fast-compare-2.0.4.tgz#e84b4d455b0fec113e0402c329352715196f81f9"
+  integrity sha512-suNP+J1VU1MWFKcyt7RtjiSWUjvidmQSlqu+eHslq+342xCbGTYmC0mEhPCOHxlW0CywylOC1u2DFAT+bv4dBw==
 
 react-fast-compare@^3.0.1:
   version "3.2.0"

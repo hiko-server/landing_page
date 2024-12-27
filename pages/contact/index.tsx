@@ -6,7 +6,8 @@ import Header from '../../components/Header/Header'
 import Footer from '../../components/Footer/Footer'
 
 import { Flex } from '@chakra-ui/react'
-import PersonalInfo from '../../components/LandingPage/PersonalInfo'
+
+import ContactCard from '../../components/Contact/ConatactCard'
 
 
 const About = (props: any) => {
@@ -19,7 +20,7 @@ const About = (props: any) => {
 
   const [, setIsHostCV] = useState<boolean>(false)
 
-  const [isMobile, setIsMobile] = useState<boolean>(false)
+  const [, setIsMobile] = useState<boolean>(false)
 
   useEffect(() => {
     if (props.host && props.host === 'cv.hiko.dev') {
@@ -52,7 +53,8 @@ const About = (props: any) => {
       p={['20px', '40px']}
       gap={['20px', '40px']}
     >
-      <PersonalInfo isMobile={isMobile}/>
+      {/* <PersonalInfo isMobile={isMobile}/> */}
+      <ContactCard/>
       </Flex>
         
       <Footer />
