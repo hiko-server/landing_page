@@ -45,18 +45,18 @@ const About = (props: any) => {
   return (
     <React.Fragment>
       <Header />
-      <Flex           
-      position={'sticky'}
-      direction={'column'}
-            h={'100vh'}
-          w={'100vw'}
-          alignItems={'center'}
-        
-          >
+    <Flex
+      direction="column"
+      alignItems="center"
+      justifyContent="center"
+      p={['20px', '40px']}
+      gap={['20px', '40px']}
+    >
       <PersonalInfo isMobile={isMobile}/>
       </Flex>
         
       <Footer />
+      
     </React.Fragment>
   )
 }
