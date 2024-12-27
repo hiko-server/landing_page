@@ -15,19 +15,7 @@ import {
 } from '@chakra-ui/react'
 import styled from 'styled-components'
 import ImageScroller from '../imageScoller/imageScroller'
-import EducationSection from '../PersonalInstruction/Education'
-import ProjectSection from '../PersonalInstruction/Project'
-import SkillSection from '../PersonalInstruction/Skill'
-import CertificateSection from '../PersonalInstruction/Certificate'
-import { cvData } from '../../example/cvdata'
-import {
-  Certification,
-  Education,
-  Experiences,
-  Project,
-  Skill,
-} from '../../types/cvProps'
-import WorkExperience from '../PersonalInstruction/WorkExperience'
+
 import LandingCVSections from './LandingCVSections'
 
 const StyledBox = styled(Box)`
