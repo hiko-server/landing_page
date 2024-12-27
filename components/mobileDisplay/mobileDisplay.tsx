@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react'
-import { Box, Text } from '@chakra-ui/react'
+import { Box, Button, Flex, Text } from '@chakra-ui/react'
 
 import PersonalInfo from '../LandingPage/PersonalInfo'
 import LandingLayout from '../../layout/LandingLayout'
 
-const DisplayMobileInfo = ({ isMobile }: { isMobile: boolean }) => {
+const DisplayMobileInfo = ({ isMobile,setIsMobile }: { isMobile: boolean,setIsMobile: React.Dispatch<React.SetStateAction<boolean>> }) => {
   // const router = useRouter()
   const [screenSize, setScreenSize] = useState('')
   const [browserInfo, setBrowserInfo] = useState('')
@@ -22,6 +22,7 @@ const DisplayMobileInfo = ({ isMobile }: { isMobile: boolean }) => {
         <Text>
           <strong>This site cannot be displayed on mobile phones.</strong>
         </Text>
+
         <Text>
           <strong>For more information, you can visit:</strong>
         </Text>
@@ -39,6 +40,18 @@ const DisplayMobileInfo = ({ isMobile }: { isMobile: boolean }) => {
           <strong>IP Info:</strong> {ipInfo}
         </Text>
       </Box>
+      <Flex direction="column" mt={4}>
+        <Text>
+        <strong>Or you can change to normal version by clicking</strong>
+        </Text>
+        <Button 
+          onClick={() => setIsMobile(false)} 
+          ml={2} 
+          size="sm"
+        >
+          Desktop Version (Not Recommended)
+        </Button>
+        </Flex>
     </LandingLayout >
   )
 }
