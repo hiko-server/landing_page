@@ -18,7 +18,7 @@ const CVPage = (props: any) => {
 
   const [, setIsHostCV] = useState<boolean>(false)
   const [isLoading, setIsLoading] = useState<boolean>(true)
-  const [isMobile, setIsMobile] = useState<boolean>(false)
+  // const [isMobile, setIsMobile] = useState<boolean>(false)
 
   useEffect(() => {
     if (props.host && props.host === 'cv.hiko.dev') {
@@ -26,18 +26,18 @@ const CVPage = (props: any) => {
     }
     setIsLoading(false)
 
-    const mediaQuery = window.matchMedia('(max-width: 767px)')
-    setIsMobile(mediaQuery.matches)
+    // const mediaQuery = window.matchMedia('(max-width: 767px)')
+    // setIsMobile(mediaQuery.matches)
 
-    const handleResize = (e: MediaQueryListEvent) => {
-      setIsMobile(e.matches)
-    }
+    // const handleResize = (e: MediaQueryListEvent) => {
+    //   setIsMobile(e.matches)
+    // }
 
-    mediaQuery.addEventListener('change', handleResize)
+    // mediaQuery.addEventListener('change', handleResize)
 
-    return () => {
-      mediaQuery.removeEventListener('change', handleResize)
-    }
+    // return () => {
+    //   mediaQuery.removeEventListener('change', handleResize)
+    // }
   }, [])
 
   return (
@@ -57,7 +57,7 @@ const CVPage = (props: any) => {
           <Spinner size="xl" />
         </Flex>
       ) : (
-        <HeaderFooter isMobile={isMobile}>
+        <HeaderFooter isMobile={false}>
           <Flex
             direction="column"
             alignItems="center"
