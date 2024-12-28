@@ -20,12 +20,12 @@ import Footer from '../Footer/Footer'
 import { FaGithub, FaGitlab, FaLinkedin, FaWhatsapp } from 'react-icons/fa'
 
 const Header = ({ isMobile }: { isMobile: boolean }) => {
-  const baseURL = 'hiko.dev'
+  // const baseURL = 'hiko.dev'
   const quickLinks = [
     { name: 'Home', url: `/` },
     { name: 'About', url: `/about` },
     { name: 'Contact', url: `/contact` },
-    { name: 'CV', url: `https://${baseURL}/cv` },
+    { name: 'CV', url: `/cv` },
     { name: 'GitHub', url: `https://github.com/HikoPLi` },
     { name: 'LinkedIn', url: `https://www.linkedin.com/in/liyanpeihiko/` },
     { name: 'WhatsApp', url: `https://wa.me/85262040827` },
