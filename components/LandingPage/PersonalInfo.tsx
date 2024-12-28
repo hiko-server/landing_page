@@ -3,16 +3,13 @@ import {
   Flex,
   Avatar,
   Button,
-  Accordion,
-  AccordionButton,
-  AccordionIcon,
-  AccordionItem,
-  AccordionPanel,
-  VStack,
+  IconButton,
+  Stack,
+  Link,
 } from '@chakra-ui/react'
 import React from 'react'
 import LinkedInBadge from '../linkedIn/linkedIn'
-
+import { FaGithub, FaGitlab, FaLinkedin, FaWhatsapp } from "react-icons/fa";
 const PersonalInfo = ({ isMobile }: { isMobile: boolean }) => {
   return (
     <Flex
@@ -64,11 +61,11 @@ const PersonalInfo = ({ isMobile }: { isMobile: boolean }) => {
             李彦霈
           </Text>
           <Text fontSize={['16px', '18px']} textAlign="center" color={'#333'}>
-            Contact Phone: 852 62040827
+            +852 62040827
           </Text>
-          <Text fontSize={['16px', '18px']} textAlign="center" color={'#333'}>
-            Email: liyanpei2004@outlook.com
-          </Text>
+          <Link href="mailto:hi@hiko.dev" fontSize={['16px', '18px']} textAlign="center" color={'#333'}>
+            hi@hiko.dev
+          </Link>
           <Text fontSize={['16px', '18px']} textAlign="center" color={'#333'}>
             Mandarin, Cantonese, English
           </Text>
@@ -77,94 +74,74 @@ const PersonalInfo = ({ isMobile }: { isMobile: boolean }) => {
         <Flex
           mt={8}
           w={['100%', '350px']}
-          direction="column"
+          direction="row"
           alignItems="center"
           justifyContent="center"
+          gap={'10px'}
         >
           {isMobile ? (
             <></>
           ) : (
             <Button
-              size="25"
-              w="100%"
+              size="lg"
               fontSize={['20px', '24px']}
               mb={6}
               onClick={() => window.open('https://hiko.dev/cv')}
+              colorScheme="gray"
+              variant="outline"
+              
             >
-              Personal CV
+              CV
             </Button>
           )}
 
-          <Button
-            size="25"
-            w="100%"
-            fontSize={['20px', '24px']}
-            mb={6}
-            onClick={() => window.open('https://github.com/HikoPLi')}
-          >
-            GitHub
-          </Button>
+          <Stack direction="row" spacing={4}>
+            <IconButton
+              size="lg"
+              fontSize={['20px', '24px']}
+              mb={6}
+              onClick={() => window.open('https://github.com/HikoPLi')}
+              icon={<FaGithub />}
+              aria-label="GitHub"
+              colorScheme="gray"
+              variant="outline"
+            />
 
-          <Button
-            size="25"
-            w="100%"
-            fontSize={['20px', '24px']}
-            onClick={() => window.open('https://gitlab.com/HikoPLi')}
-          >
-            GitLab
-          </Button>
+            <IconButton
+              size="lg"
+              fontSize={['20px', '24px']}
+              onClick={() => window.open('https://gitlab.com/HikoPLi')}
+              icon={<FaGitlab />}
+              aria-label="GitLab"
+              colorScheme="orange"
+              variant="outline"
+            />
+
+            <IconButton
+              size="lg"
+              fontSize={['20px', '24px']}
+              mb={6}
+              onClick={() => window.open('https://www.linkedin.com/in/liyanpeihiko/')}
+              icon={<FaLinkedin />}
+              aria-label="LinkedIn"
+              colorScheme="linkedin"
+              variant="outline"
+            />
+            <IconButton
+              size="lg"
+              fontSize={['20px', '24px']}
+              mb={6}
+              onClick={() => window.open('https://wa.me/85262040827')}
+              icon={<FaWhatsapp />}
+              aria-label="WhatsApp"
+              colorScheme="whatsapp"
+              variant="outline"
+            />
+          </Stack>
         </Flex>
       </Flex>
-
-      <Accordion allowToggle width="100%" maxW="400px" mt={8}>
-        <AccordionItem>
-          <AccordionButton _expanded={{ bg: 'gray.100' }}>
-            <Flex
-              flex="1"
-              textAlign="left"
-              fontWeight="bold"
-              alignItems="center"
-              justifyContent="center"
-            >
-              <Text fontSize="25" fontWeight="bold">
-                LinkedIn
-              </Text>
-            </Flex>
-            <AccordionIcon />
-          </AccordionButton>
-
-          <AccordionPanel pb={4}>
-            <VStack
-              spacing={4}
-              align="stretch"
-              alignItems="center"
-              justifyContent="center"
-            >
-              {/* https://www.linkedin.com/in/liyanpeihiko/ */}
-              <Button
-                size="25"
-                w="100%"
-                fontSize={['20px', '24px']}
-                mb={6}
-                onClick={() =>
-                  window.open('https://www.linkedin.com/in/liyanpeihiko/')
-                }
-              >
-                LinkedIn
-              </Button>
-            </VStack>
-            <VStack
-              spacing={4}
-              align="stretch"
-              alignItems="center"
-              justifyContent="center"
-            >
               <LinkedInBadge />
-            </VStack>
-          </AccordionPanel>
-        </AccordionItem>
-      </Accordion>
-    </Flex>
+      </Flex>
   )
 }
 

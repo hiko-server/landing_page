@@ -13,12 +13,13 @@ import {
   useBreakpointValue,
   Flex,
   IconButton,
-  Icon,
+
   Link,
 } from '@chakra-ui/react';
 import { useRouter } from 'next/router';
-import { FaBars } from "react-icons/fa"; 
+import {TfiAlignJustify } from "react-icons/tfi";
 import Footer from '../Footer/Footer';
+import { FaGithub, FaGitlab, FaLinkedin, FaWhatsapp } from 'react-icons/fa';
 
 const Header = () => {
   const baseURL = 'hiko.dev';
@@ -28,7 +29,8 @@ const Header = () => {
     { name: "Contact", url: `/contact` },
     { name: "CV", url: `https://${baseURL}/cv` },
     { name: "GitHub", url: `https://github.com/HikoPLi` },
-    { name: "Linkedin", url: `https://www.linkedin.com/in/liyanpeihiko/` }
+    { name: "LinkedIn", url: `https://www.linkedin.com/in/liyanpeihiko/` },
+    { name: "WhatsApp", url: `https://wa.me/85262040827` }
   ];
 
   const router = useRouter();
@@ -36,7 +38,16 @@ const Header = () => {
 
 
   const isMobile = useBreakpointValue({ base: true, md: false });
-
+  const iconMap: { [key: string]: JSX.Element } = {
+    Home: <Text>Home</Text>,
+    About: <Text>About</Text>,
+    Contact: <Text>Contact</Text>,
+    CV: <Text>CV</Text>,
+    GitHub: <FaGithub />,
+    GitLab: <FaGitlab />,
+    LinkedIn: <FaLinkedin />,
+    WhatsApp:<FaWhatsapp />
+  };
   return (
     <>
       <Box
@@ -55,18 +66,20 @@ const Header = () => {
         
         {isMobile ? (
           <IconButton
-            icon={<Icon as={FaBars} />}
-            onClick={onOpen}
-            variant="outline"
-            borderColor="teal.200"
-            _hover={{ bg: 'teal.200', color: 'gray.800' }}
-            aria-label="Open Menu"
-          />
+          icon={<TfiAlignJustify />}
+          onClick={onOpen}
+          variant="outline"
+          color="teal.500" 
+          borderColor="teal.500" 
+          _hover={{ bg: 'teal.500', color: 'white' }} 
+          aria-label="Open Menu"
+          _active={{ bg: 'teal.600', borderColor: 'teal.600' }} 
+        />
         ) : (
           
           <Flex gap={4}>
             {quickLinks.map((link) => (
-              <Button
+              <IconButton
                 key={link.name}
                 onClick={() => router.push(link.url)}
                 px={4}
@@ -76,9 +89,10 @@ const Header = () => {
                 variant="outline"
                 borderColor="teal.200"
                 _hover={{ bg: 'teal.200', color: 'gray.800' }}
-              >
-                {link.name}
-              </Button>
+                _active={{ bg: 'teal.600', borderColor: 'teal.600' }}
+                icon={iconMap[link.name]} 
+                aria-label={link.name}              
+                />
             ))}
           </Flex>
         )}
@@ -92,11 +106,11 @@ const Header = () => {
           <DrawerBody>
             <Flex direction="column" gap={2}>
             {quickLinks.map((link) => (
-              <Button
+              <IconButton
                 key={link.name}
                 onClick={() => {
                   router.push(link.url);
-                  onClose(); // Close drawer after navigation
+                  onClose();
                 }}
                 px={4}
                 py={2}
@@ -106,10 +120,10 @@ const Header = () => {
                 borderColor="teal.200"
                 mb={2}
                 _hover={{ bg: 'teal.200', color: 'gray.800' }}
-
-              >
-                {link.name}
-              </Button>
+                icon={iconMap[link.name]} 
+                aria-label={link.name}   
+              />
+             
             ))}
             
             </Flex>
