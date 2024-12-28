@@ -1,12 +1,11 @@
 import { useSession } from 'next-auth/react'
 import React, { useState, useEffect } from 'react'
 import { GetServerSideProps } from 'next'
-import { Flex, Spinner, Box } from '@chakra-ui/react'
+import { Flex, Spinner } from '@chakra-ui/react'
 
 import DisplayMobileInfo from '../components/mobileDisplay/mobileDisplay'
 import LandingContent from '../components/LandingPage/LandingContent'
-import Footer from '../components/Footer/Footer'
-import Header from '../components/Header/Header'
+import HeaderFooter from '../layout/HeaderFooter'
 
 const LandingPage = (props: any) => {
   console.log('props', props)
@@ -56,7 +55,15 @@ const LandingPage = (props: any) => {
           {isMobile ? (
             <DisplayMobileInfo isMobile={isMobile} setIsMobile={setIsMobile} />
           ) : (
-            <LandingContent isMobile={isMobile} />
+            <Flex
+              direction="column"
+              alignItems="center"
+              justifyContent="center"
+              p={['20px', '40px']}
+              gap={['20px', '40px']}
+            >
+              <LandingContent isMobile={isMobile} />
+            </Flex>
           )}
         </HeaderFooter>
       )}
@@ -70,24 +77,6 @@ export const getServerSideProps: GetServerSideProps = async (context: any) => {
   const host = context.req.headers.host
   console.log({ host })
   return {
-    props: { host: host }, 
+    props: { host: host },
   }
-}
-
-
-const HeaderFooter = ({ children }: { children: React.ReactNode, isMobile: boolean }) => {  
-  return (
-    <Box
-      display="grid"
-      gridTemplateRows="auto 1fr auto"
-      minHeight="100vh" 
-      w="full"
-    >
-      <Header />
-      <Box > 
-        {children}
-      </Box>
-      <Footer />
-    </Box>
-  )
 }

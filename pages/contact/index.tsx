@@ -1,14 +1,10 @@
 import { useSession } from 'next-auth/react'
 import React, { useEffect, useState } from 'react'
 
-
-import Header from '../../components/Header/Header'
-import Footer from '../../components/Footer/Footer'
-
-import { Flex } from '@chakra-ui/react'
+import { Flex, Spinner } from '@chakra-ui/react'
 
 import ContactCard from '../../components/Contact/ConatactCard'
-
+import HeaderFooter from '../../layout/HeaderFooter'
 
 const About = (props: any) => {
   console.log('props', props)
@@ -19,14 +15,14 @@ const About = (props: any) => {
   console.log(session?.accessToken)
 
   const [, setIsHostCV] = useState<boolean>(false)
-
-  const [, setIsMobile] = useState<boolean>(false)
+  const [isLoading, setIsLoading] = useState<boolean>(true)
+  const [isMobile, setIsMobile] = useState<boolean>(false)
 
   useEffect(() => {
     if (props.host && props.host === 'cv.hiko.dev') {
       setIsHostCV(true)
     }
-
+    setIsLoading(false)
 
     const mediaQuery = window.matchMedia('(max-width: 767px)')
     setIsMobile(mediaQuery.matches)
@@ -42,23 +38,30 @@ const About = (props: any) => {
     }
   }, [])
 
-
   return (
     <React.Fragment>
-      <Header />
-    <Flex
-      direction="column"
-      alignItems="center"
-      justifyContent="center"
-      p={['20px', '40px']}
-      gap={['20px', '40px']}
-    >
-      {/* <PersonalInfo isMobile={isMobile}/> */}
-      <ContactCard/>
-      </Flex>
-        
-      <Footer />
-      
+      {isLoading ? (
+        <Flex
+          h={'100vh'}
+          w={'100vw'}
+          alignItems={'center'}
+          justifyContent={'center'}
+        >
+          <Spinner size="xl" />
+        </Flex>
+      ) : (
+        <HeaderFooter isMobile={isMobile}>
+          <Flex
+            direction="column"
+            alignItems="center"
+            justifyContent="center"
+            p={['20px', '40px']}
+            gap={['20px', '40px']}
+          >
+            <ContactCard />
+          </Flex>
+        </HeaderFooter>
+      )}
     </React.Fragment>
   )
 }
