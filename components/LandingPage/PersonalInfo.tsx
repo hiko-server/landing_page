@@ -87,7 +87,7 @@ const PersonalInfo = ({ isMobile }: { isMobile: boolean }) => {
               fontSize={['20px', '24px']}
               mb={6}
               onClick={() => window.open('https://hiko.dev/cv')}
-              colorScheme="gray"
+              colorScheme="black"
               variant="outline"
               
             >
@@ -103,7 +103,7 @@ const PersonalInfo = ({ isMobile }: { isMobile: boolean }) => {
               onClick={() => window.open('https://github.com/HikoPLi')}
               icon={<FaGithub />}
               aria-label="GitHub"
-              colorScheme="gray"
+              colorScheme="black"
               variant="outline"
             />
 
