@@ -19,13 +19,6 @@ const DisplayMobileInfo = ({ isMobile,setIsMobile }: { isMobile: boolean,setIsMo
   return (
     <LandingLayout>
       <Box mt={4}>
-        <Text>
-          <strong>This site cannot be displayed on mobile phones.</strong>
-        </Text>
-
-        <Text>
-          <strong>For more information, you can visit:</strong>
-        </Text>
         <PersonalInfo isMobile={isMobile} />
         <Text mt={4}>
           <strong>Current Screen Size:</strong> {screenSize}
@@ -42,7 +35,7 @@ const DisplayMobileInfo = ({ isMobile,setIsMobile }: { isMobile: boolean,setIsMo
       </Box>
       <Flex direction="column" mt={4}>
         <Text>
-        <strong>Or you can change to normal version by clicking</strong>
+        <strong>You can change to Desktop Version by clicking</strong>
         </Text>
         <Button 
           onClick={() => setIsMobile(false)} 
