@@ -277,7 +277,7 @@ export const cvData = [
             {
                 "companyName": "Dongguan Honsenn Electronice Technology Co., Ltd.",
                 "companyURL": "honsennaudio.com/",
-                "jobTitle": "Technical Researcher",
+                "jobTitle": "Tech Researcher",
                 "jobDescription": "Assisting in the Development of Microcontroller Functionalities and Supporting Product Development.",
                 "features": [
                 ],
