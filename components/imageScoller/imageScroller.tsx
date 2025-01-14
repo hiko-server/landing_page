@@ -6,22 +6,22 @@ import { GoArrowLeft, GoArrowRight } from 'react-icons/go'
 
 const images = [
   {
-    url: 'https://media.licdn.com/dms/image/v2/D562DAQFK5Ha4rHPKEA/profile-treasury-image-shrink_800_800/profile-treasury-image-shrink_800_800/0/1733489855897?e=1735610400&v=beta&t=6t-DVCdO8WG5sgA5pAzCOEc1JF7fQ_L9dhps6DLfV3o',
+    url: '/images/COT.png',
     describe: 'COT - Start-Up Saturday of HKBU - Wegreen AI',
     redirectTo: 'https://wegreen.ltd',
   },
   {
-    url: 'https://media.licdn.com/dms/image/v2/D4D2DAQERZ9h-FslUiQ/profile-treasury-image-shrink_800_800/profile-treasury-image-shrink_800_800/0/1727107662819?e=1735610400&v=beta&t=SuY-LgEXtG4yCrj3r2hrWhxcPbP4hto9nif4kOlQkTg',
+    url: '/images/stuff.png',
     describe: 'Stuff - Exhibition in HK - Honsenn',
     redirectTo: 'https://honsennaudio.com/',
   },
   {
-    url: 'https://media.licdn.com/dms/image/v2/D4D2DAQFzb5Y0nWytqw/profile-treasury-image-shrink_800_800/profile-treasury-image-shrink_800_800/0/1727107163440?e=1735610400&v=beta&t=IHt_sX9nLs7o4_Vm8SxYu_D0KoSoM1UAJ6WsSs-Gm1w',
+    url: '/images/student.png',
     describe: 'Student - Prensentation of final project - UOWCHK',
     redirectTo: 'https://www.uowchk.edu.hk/',
   },
   {
-    url: 'https://media.licdn.com/dms/image/v2/D4D2DAQGMVgyO_pJcnQ/profile-treasury-image-shrink_800_800/profile-treasury-image-shrink_800_800/0/1727107249132?e=1735610400&v=beta&t=-73AVD-cYIkqgz7KfitGadde7pNIexYJ0aNVqkPsqCQ',
+    url: '/images/fyp.png',
     describe: 'Student - Project Test - UOWCHK',
     redirectTo:
       'https://drive.google.com/drive/folders/1AZWZR9o1Sjp-V1ky5TL2UpjtdJFmEM0q?usp=drive_link',

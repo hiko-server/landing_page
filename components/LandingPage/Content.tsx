@@ -17,12 +17,15 @@ import styled from 'styled-components'
 import ImageScroller from '../imageScoller/imageScroller'
 
 import LandingCVSections from './LandingCVSections'
+import ContactCard from '../Contact/ConatactCard'
 
 const StyledBox = styled(Box)`
   background: white;
   display: block;
   margin-bottom: 0.5cm;
   margin-top: 0.5cm;
+  width: 100%;
+  max-width: 21cm;
   /* Add any other styles you want for the A4 paper component */
 `
 
@@ -33,7 +36,7 @@ const QuickAccessAccordionItem = ({
 }) => (
   <AccordionItem borderWidth="1px" borderColor="gray.200" mb={4}>
     <h2>
-      <AccordionButton _expanded={{ bg: 'gray.100' }}>
+      <AccordionButton _expanded={{ bg: 'gray.100', transition: 'background-color 0.3s ease' }}>
         <Box flex="1" textAlign="center" fontWeight="bold" p={4}>
           <Heading as="h3" size="md" textTransform="uppercase" color="blue.700">
             Quick Access
@@ -42,7 +45,7 @@ const QuickAccessAccordionItem = ({
         <AccordionIcon />
       </AccordionButton>
     </h2>
-    <AccordionPanel px={6} py={4}>
+    <AccordionPanel px={6} py={4} color="white" transition="color 0.3s ease">
       {children}
     </AccordionPanel>
   </AccordionItem>
@@ -54,21 +57,27 @@ const Content = () => {
 
   return (
     <Flex
-      direction="column"
+      direction="row"
       alignItems="center"
       justifyContent="center"
       p={['20px', '40px']}
       gap={['20px', '40px']}
     >
-      <IntroductionText />
-      <ImageScroller />
+      <Flex
+        direction="column"
+        alignItems="center"
+        justifyContent="center"
+        p={['20px', '40px']}
+        gap={['20px', '40px']}
+      >
+        <ImageScroller />
+        <ContactCard />
+      </Flex>
       <StyledBox
         id="A4Paper"
         size="A4"
         p={'20px'}
         bgColor={'white'}
-        minW={'21cm'}
-        maxW={'21cm'}
         overflowY={isEditMode ? 'scroll' : 'hidden'}
         style={{
           breakInside: 'avoid',
@@ -100,18 +109,7 @@ const Content = () => {
   )
 }
 
-const IntroductionText = () => (
-  <Text
-    fontSize={['20px', '22px']}
-    textAlign="center"
-    maxW="600px"
-    fontWeight="bold"
-  >
-    Self-Taught Full-Stack Software Engineer | Exploring Innovative Solutions in
-    Computer Science | Machine Learning | Computer Vision | Typescript | React |
-    Next.js | NestJS | Python FastAPI
-  </Text>
-)
+
 
 const ButtonGroup = () => (
   <Flex
@@ -128,7 +126,7 @@ const ButtonGroup = () => (
       mb={3}
       onClick={() => window.open('https://asa.hiko-prime.com/')}
     >
-      ASA
+      <Text color="blue.700">ASA</Text>
     </Button>
     <Button
       size="lg"
@@ -137,7 +135,7 @@ const ButtonGroup = () => (
       mb={6}
       onClick={() => window.open('https://hiko.dev/cv/edit')}
     >
-      CV Generator Demo
+      <Text color="blue.700">CV Generator Demo</Text>
     </Button>
   </Flex>
 )

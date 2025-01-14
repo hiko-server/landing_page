@@ -11,7 +11,9 @@ const LandingLayout = ({
   children: React.ReactNode | null
   style?: React.CSSProperties
 }) => {
-  return <StyledBase style={style}>{children}</StyledBase>
+  return <StyledBase style={style}>
+      {children}
+    </StyledBase>
 }
 
 const StyledBase = styled.div`
@@ -29,3 +31,8 @@ const StyledBase = styled.div`
   margin: auto;
 `
 export default LandingLayout
+
+
+
+
+

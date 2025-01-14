@@ -7,6 +7,8 @@ import DisplayMobileInfo from '../components/mobileDisplay/mobileDisplay'
 import LandingContent from '../components/LandingPage/LandingContent'
 import HeaderFooter from '../layout/HeaderFooter'
 
+
+
 const LandingPage = (props: any) => {
   console.log('props', props)
 
@@ -41,6 +43,7 @@ const LandingPage = (props: any) => {
 
   return (
     <>
+ 
       {isLoading ? (
         <Flex
           h={'100vh'}
@@ -52,19 +55,25 @@ const LandingPage = (props: any) => {
         </Flex>
       ) : (
         <HeaderFooter isMobile={isMobile}>
+          
           {isMobile ? (
             <DisplayMobileInfo isMobile={isMobile} setIsMobile={setIsMobile} />
           ) : (
+            
             <Flex
               direction="column"
               alignItems="center"
               justifyContent="center"
-              p={['20px', '40px']}
+              // p={['20px', '40px']}
               gap={['20px', '40px']}
             >
+
               <LandingContent isMobile={isMobile} />
+
             </Flex>
+            
           )}
+          
         </HeaderFooter>
       )}
     </>
