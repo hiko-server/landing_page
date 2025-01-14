@@ -6,22 +6,22 @@ import { GoArrowLeft, GoArrowRight } from 'react-icons/go'
 
 const images = [
   {
-    url: 'https://example.com/redacted.jpg',
+    url: '/images/COT.png',
     describe: 'COT - Start-Up Saturday of HKBU - Wegreen AI',
     redirectTo: 'https://wegreen.ltd',
   },
   {
-    url: 'https://example.com/redacted.jpg',
+    url: '/images/stuff.png',
     describe: 'Stuff - Exhibition in HK - Honsenn',
     redirectTo: 'https://honsennaudio.com/',
   },
   {
-    url: 'https://example.com/redacted.jpg',
+    url: '/images/student.png',
     describe: 'Student - Prensentation of final project - UOWCHK',
     redirectTo: 'https://www.uowchk.edu.hk/',
   },
   {
-    url: 'https://example.com/redacted.jpg',
+    url: '/images/fyp.png',
     describe: 'Student - Project Test - UOWCHK',
     redirectTo:
       'https://example.com/',
