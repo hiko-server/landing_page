@@ -18,11 +18,28 @@ const VideoBackgroundLayOut = ({
 export default VideoBackgroundLayOut
 
 export const VideoBackground: VFC = () => {
+  const videoSources = [
+    '/videos/background.mp4',
+    '/videos/background2.mp4',
+    '/videos/background3.mp4',
+  ]
+  const [currentVideoIndex, setCurrentVideoIndex] = React.useState(0)
+
+  const handleVideoEnded = () => {
+    setCurrentVideoIndex((prevIndex) => (prevIndex + 1) % videoSources.length)
+  }
+
   return (
     <VideoBackgroundBase>
-      <video autoPlay loop muted playsInline>
-        <source src="/videos/background.mp4" />
-        
+      <video
+        autoPlay
+        loop={false}
+        muted
+        playsInline
+        onEnded={handleVideoEnded}
+        key={videoSources[currentVideoIndex]}
+      >
+        <source src={videoSources[currentVideoIndex]} />
       </video>
     </VideoBackgroundBase>
   )
@@ -36,6 +53,7 @@ const VideoBackgroundBase = styled.div`
   width: 100%;
   height: 100%;
   overflow: hidden;
+  background-color: black; /* Add this line */
 
   video {
     width: 100%;
@@ -43,4 +61,3 @@ const VideoBackgroundBase = styled.div`
     object-fit: cover;
   }
 `
-
