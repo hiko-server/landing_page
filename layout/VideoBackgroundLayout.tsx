@@ -19,9 +19,7 @@ export default VideoBackgroundLayOut
 
 export const VideoBackground: VFC = () => {
   const videoSources = [
-    '/videos/background.mp4',
-    '/videos/background2.mp4',
-    '/videos/background3.mp4',
+    '/videos/background.mp4'
   ]
   const [currentVideoIndex, setCurrentVideoIndex] = React.useState(0)
 
