@@ -23,16 +23,16 @@ export const cvData = [
                 "degree": "Associate of Engineering",
                 "major": "Engineering",
                 "startDate": "2022-09-01",
-                "endDate": "2024-08-31",
+                "endDate": "2024-06-30",
                 "gpa": "3.3 / 4.3"
             },
             {
-                "schoolName": "Hong Kong Metopolitan University",
+                "schoolName": "Hong Kong Metropolitan University",
                 "schoolLocation": "Hong Kong",
                 "degree": "Bachelor of Science with Honours in Computer Engineering",
                 "major": "Computer Engineering",
                 "startDate": "2024-09-01",
-                "endDate": "2026-08-31",
+                "endDate": "2026-06-30",
                 "gpa": "*"
             }
         ]

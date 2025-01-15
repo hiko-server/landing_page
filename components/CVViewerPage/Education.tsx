@@ -45,11 +45,11 @@ const EducationSection = ({ data }: { data: Education }) => {
                     <Text fontWeight={800}>{edu.schoolLocation}</Text>
                   </Flex>
                 </Flex>
-                {/* <Flex>
+                <Flex>
                   <Text fontSize={'12px'} fontStyle={'italic'}>
                     •GPA: {edu.gpa}
                   </Text>
-                </Flex> */}
+                </Flex>
               </Flex>
             ))}
           </Flex>
