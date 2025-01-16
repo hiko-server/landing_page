@@ -3,9 +3,12 @@ import React from 'react'
 
 import PersonalInfo from './PersonalInfo'
 import Content from './Content'
+import Brands from '../BrandShowcase/BrandShowcase'
 
 
 const LandingContent = ({ isMobile }: { isMobile: boolean }) => {
+
+
   
   return (
     
@@ -26,6 +29,8 @@ const LandingContent = ({ isMobile }: { isMobile: boolean }) => {
       borderRadius={'8px'}
     >
       <PersonalInfo isMobile={isMobile}/>
+      
+      <Brands />
       <Box 
       // bgColor={'black'} 
       w={{ base: "full", md: "1/2" }}
