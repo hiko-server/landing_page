@@ -18,7 +18,7 @@ import { useRouter } from 'next/router'
 import { TfiAlignJustify } from 'react-icons/tfi'
 import Footer from '../Footer/Footer'
 import { FaGithub, FaGitlab, FaLinkedin, FaWhatsapp } from 'react-icons/fa'
-
+import { AiOutlineStock } from 'react-icons/ai'
 const Header = ({ isMobile }: { isMobile: boolean }) => {
   // const baseURL = 'hiko.dev'
   const quickLinks = [
@@ -29,6 +29,7 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
     { name: 'GitHub', url: `https://github.com/HikoPLi` },
     { name: 'LinkedIn', url: `https://www.linkedin.com/in/liyanpeihiko/` },
     { name: 'WhatsApp', url: `https://wa.me/85262040827` },
+    { name: 'Stock', url: `/stock` },
   ]
 
   const router = useRouter()
@@ -43,6 +44,7 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
     GitLab: <FaGitlab />,
     LinkedIn: <FaLinkedin />,
     WhatsApp: <FaWhatsapp />,
+    Stock: <AiOutlineStock />,
   }
   return (
     <>

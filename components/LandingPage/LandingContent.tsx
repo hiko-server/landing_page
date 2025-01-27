@@ -3,17 +3,13 @@ import React from 'react'
 
 import PersonalInfo from './PersonalInfo'
 import Content from './Content'
-
+// import CryptoPriceTracker from '../Stock/CoinStock'
 
 const LandingContent = ({ isMobile }: { isMobile: boolean }) => {
-  
   return (
-    
-
     <Flex
-    
-      // w={{ base: "100%", md: "80%" }} 
-      // p={{ base: 4, md: 8 }} 
+      // w={{ base: "100%", md: "80%" }}
+      // p={{ base: 4, md: 8 }}
       // mx="auto"
       // direction={{ base: 'column', md: 'row' }}
       justifyContent={'center'}
@@ -25,18 +21,15 @@ const LandingContent = ({ isMobile }: { isMobile: boolean }) => {
       // boxShadow={'0 4px 8px rgba(0, 0, 0, 0.1)'}
       borderRadius={'8px'}
     >
-      <PersonalInfo isMobile={isMobile}/>
-      <Box 
-      // bgColor={'black'} 
-      w={{ base: "full", md: "1/2" }}
+      <PersonalInfo isMobile={isMobile} />
+      <Box
+        // bgColor={'black'}
+        w={{ base: 'full', md: '1/2' }}
       >
-
-      <Content />
+        <Content />
       </Box>
-      
+      {/* <CryptoPriceTracker /> */}
     </Flex>
-
-
   )
 }
 
