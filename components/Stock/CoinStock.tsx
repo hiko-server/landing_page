@@ -18,7 +18,9 @@ import {
   Grid,
   GridItem,
   useToast,
+  useMediaQuery,
 } from '@chakra-ui/react'
+import { motion } from 'framer-motion'
 
 // Define the ticker data type and API response format
 interface TickerData {
@@ -90,13 +92,14 @@ const CryptoPriceTracker: React.FC = () => {
   const [selectedPayment, setSelectedPayment] = useState<string | null>(null)
   const { onCopy, hasCopied } = useClipboard(selectedPayment || '')
   const { onOpen } = useDisclosure()
-  const [setSelectedQrCode] = useState<string | null>(null)
+
   const [amount, setAmount] = useState<number>(0)
   const [fromCurrency, setFromCurrency] = useState<string>('USD')
   const [toCurrency, setToCurrency] = useState<string>('BTC')
   const [convertedAmount, setConvertedAmount] = useState<number | null>(null)
   const [toUSDT, setToUSDT] = useState<boolean>(false)
   const toast = useToast()
+  const [isMobile] = useMediaQuery('(max-width: 768px)')
 
   // Fetch price data
   const fetchPrices = async (): Promise<Map<string, number>> => {
@@ -230,16 +233,33 @@ const CryptoPriceTracker: React.FC = () => {
   return (
     <Box p={6} minH="50vh" color="black">
       <Box mb={4}>
-        <Text fontSize="lg" mb={4}>
+        <Text
+          fontSize="lg"
+          mb={4}
+          as={motion.div}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: '1s' }}
+        >
           Current Time: {currentTime}
         </Text>
       </Box>
       <CryptoPriceTable tickers={tickers} lastPrices={lastPrices} />
       <Box mt={6}>
-        <Text fontSize="lg" mb={4}>
+        <Text
+          fontSize="lg"
+          mb={4}
+          as={motion.div}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: '1s' }}
+        >
           Quick Payment
         </Text>
-        <Grid templateColumns="repeat(5, 1fr)" gap={6}>
+        <Grid
+          templateColumns={isMobile ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)'}
+          gap={6}
+        >
           {PAYMENT_OPTIONS.map(({ name, qrCode, address }) => (
             <GridItem
               key={name}
@@ -253,6 +273,8 @@ const CryptoPriceTracker: React.FC = () => {
                 transform: 'scale(1.05)',
                 transition: 'transform 0.2s',
               }}
+              as={motion.div}
+              whileHover={{ scale: 1.1 }}
             >
               <Image src={qrCode} alt={name} />
               <Text mt={2}>{name}</Text>
@@ -272,22 +294,38 @@ const CryptoPriceTracker: React.FC = () => {
       </Box>
 
       <Box mt={6}>
-        <Text fontSize="lg" mb={4}>
+        <Text
+          fontSize="lg"
+          mb={4}
+          as={motion.div}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: '1s' }}
+        >
           Currency Converter
         </Text>
-        <Flex align="center" justify="center" gap={4}>
+        <Flex
+          align="center"
+          justify="center"
+          gap={4}
+          direction={isMobile ? 'column' : 'row'}
+        >
           <Input
             type="number"
             value={amount}
             onChange={(e) => setAmount(parseFloat(e.target.value))}
             placeholder="Amount"
             width="200px"
+            as={motion.input}
+            whileFocus={{ scale: 1.05 }}
           />
           <Select
             value={fromCurrency}
             onChange={(e) => setFromCurrency(e.target.value)}
             width="150px"
             title="Select From Currency"
+            as={motion.select}
+            whileFocus={{ scale: 1.05 }}
           >
             {SYMBOLS.map(({ symbol }) => (
               <option key={symbol} value={symbol.replace('USDT', '')}>
@@ -301,6 +339,8 @@ const CryptoPriceTracker: React.FC = () => {
             width="150px"
             title="Select To Currency"
             isDisabled={toUSDT}
+            as={motion.select}
+            whileFocus={{ scale: 1.05 }}
           >
             {SYMBOLS.map(({ symbol }) => (
               <option key={symbol} value={symbol.replace('USDT', '')}>
@@ -308,15 +348,33 @@ const CryptoPriceTracker: React.FC = () => {
               </option>
             ))}
           </Select>
-          <Button onClick={() => setToUSDT(!toUSDT)} colorScheme="blue">
+          <Button
+            onClick={() => setToUSDT(!toUSDT)}
+            colorScheme="blue"
+            as={motion.button}
+            whileHover={{ scale: 1.1 }}
+          >
             {toUSDT ? 'Convert to Currency' : 'Convert to USDT'}
           </Button>
-          <Button onClick={handleConvert} colorScheme="blue">
+          <Button
+            onClick={handleConvert}
+            colorScheme="blue"
+            as={motion.button}
+            whileHover={{ scale: 1.1 }}
+          >
             Convert
           </Button>
         </Flex>
         {convertedAmount !== null && (
-          <Text mt={4} textAlign="center" fontSize="lg">
+          <Text
+            mt={4}
+            textAlign="center"
+            fontSize="lg"
+            as={motion.div}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: '1s' }}
+          >
             {amount} {fromCurrency} = {convertedAmount.toFixed(8)}{' '}
             {toUSDT ? (
               'USDT'
@@ -353,7 +411,14 @@ export const CryptoPriceTable: React.FC<CryptoPriceTableProps> = ({
   lastPrices,
 }) => {
   return (
-    <Table variant="simple" colorScheme="gray">
+    <Table
+      variant="simple"
+      colorScheme="gray"
+      as={motion.table}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: '1s' }}
+    >
       <Thead>
         <Tr>
           <Th>Symbol</Th>
@@ -379,7 +444,7 @@ export const CryptoPriceTable: React.FC<CryptoPriceTableProps> = ({
           }
 
           return (
-            <Tr key={symbol}>
+            <Tr key={symbol} as={motion.tr} whileHover={{ scale: 1.05 }}>
               <Td>
                 {icon && (
                   <Image src={icon} alt={symbol} boxSize="20px" mr={2} />
