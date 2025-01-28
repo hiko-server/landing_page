@@ -6,5 +6,6 @@
         "luxon",
         "raku",
         "Scroller"
-    ]
+    ],
+    "Codegeex.RepoIndex": true
 }
