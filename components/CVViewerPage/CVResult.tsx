@@ -21,8 +21,6 @@ import SkillSection from './Skill'
 import WorkExperience from './WorkExperience'
 import { FaFileDownload } from 'react-icons/fa'
 
-// ... 其他导入和类型定义
-
 const CVResult = ({
   cvData,
   style,
@@ -73,7 +71,7 @@ const CVResult = ({
             {cvData.map(
               (
                 section: { sessionName: string | number },
-                key: React.Key | null | undefined,
+                key: React.Key | null | undefined
               ) => (
                 <React.Fragment key={key}>
                   {
@@ -100,7 +98,7 @@ const CVResult = ({
                     }[section.sessionName]
                   }
                 </React.Fragment>
-              ),
+              )
             )}
           </A4Paper>
         ))}
@@ -128,6 +126,14 @@ const CVResult = ({
           position: absolute;
           left: 0;
           top: 0;
+        }
+        /* Ensure Chinese characters are displayed correctly */
+        @font-face {
+          font-family: 'Noto Sans SC';
+          src: url('https://fonts.gstatic.com/s/notosanssc/v8/6xK3dSBYKcSV-LCoeQqfX1RYOo3qNa7lujY.woff2') format('woff2');
+        }
+        body {
+          font-family: 'Noto Sans SC', sans-serif;
         }
       }
     `

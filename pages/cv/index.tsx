@@ -4,11 +4,11 @@
 import { Flex, Spinner } from '@chakra-ui/react'
 import { useSession } from 'next-auth/react'
 import CVResult from '../../components/CVViewerPage/CVResult'
-import { cvData } from '../../example/cvdata'
+import { cvDataChinese, cvDataEnglish } from '../../example/cvdata'
 import React, { useEffect, useState } from 'react'
 import HeaderFooter from '../../layout/HeaderFooter'
 
-const CVPage = (props: any) => {
+const CVPage = ({ props }: { props: any }) => {
   console.log('props', props)
 
   const { data: session, status } = useSession()
@@ -21,31 +21,24 @@ const CVPage = (props: any) => {
   // const [isMobile, setIsMobile] = useState<boolean>(false)
 
   useEffect(() => {
-    if (props.host && props.host === 'cv.hiko.dev') {
+    if (props?.host && props?.host === 'cv.hiko.dev') {
       setIsHostCV(true)
     }
     setIsLoading(false)
-
-    // const mediaQuery = window.matchMedia('(max-width: 767px)')
-    // setIsMobile(mediaQuery.matches)
-
-    // const handleResize = (e: MediaQueryListEvent) => {
-    //   setIsMobile(e.matches)
-    // }
-
-    // mediaQuery.addEventListener('change', handleResize)
-
-    // return () => {
-    //   mediaQuery.removeEventListener('change', handleResize)
-    // }
   }, [])
-
+  let cvData
+  const [language, setLanguage] = useState('en')
+  switch (language) {
+    case 'en':
+      cvData = cvDataEnglish
+      break
+    case 'zh':
+      cvData = cvDataChinese
+      break
+    default:
+      cvData = cvDataEnglish
+  }
   return (
-    // <React.Fragment>
-    //   {cvData !== undefined && (
-    //     <CVResult cvData={cvData} style={{ fontSize: '12px' }} />
-    //   )}
-    // </React.Fragment>
     <React.Fragment>
       {isLoading ? (
         <Flex
@@ -65,6 +58,18 @@ const CVPage = (props: any) => {
             p={['20px', '40px']}
             gap={['20px', '40px']}
           >
+            {' '}
+            <div>
+              <label htmlFor="language-select">Select Language: </label>
+              <select
+                id="language-select"
+                value={language}
+                onChange={(e) => setLanguage(e.target.value)}
+              >
+                <option value="en">English</option>
+                <option value="zh">Chinese</option>
+              </select>
+            </div>
             <CVResult cvData={cvData} style={{ fontSize: '12px' }} />
           </Flex>
         </HeaderFooter>
