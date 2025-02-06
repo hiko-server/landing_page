@@ -1,9 +1,9 @@
-import React from 'react'
+import React, { useState } from 'react'
 import EducationSection from '../PersonalInstruction/Education'
 import ProjectSection from '../PersonalInstruction/Project'
 import SkillSection from '../PersonalInstruction/Skill'
 import CertificateSection from '../PersonalInstruction/Certificate'
-import { cvData } from '../../example/cvdata'
+import { cvDataChinese, cvDataEnglish } from '../../example/cvdata'
 import {
   Certification,
   Education,
@@ -13,10 +13,34 @@ import {
 } from '../../types/cvProps'
 import WorkExperience from '../PersonalInstruction/WorkExperience'
 
+const LandingCVSections = () => {
+  let cvData
+  const [language, setLanguage] = useState('en')
+  switch (language) {
+    case 'en':
+      cvData = cvDataEnglish
+      break
+    case 'zh':
+      cvData = cvDataChinese
+      break
+    default:
+      cvData = cvDataEnglish
+  }
 
-const LandingCVSections = () => (
+  return (
     <>
-      {cvData.map((section, key) => (
+      <div>
+        <label htmlFor="language-select">Select Language: </label>
+        <select
+          id="language-select"
+          value={language}
+          onChange={(e) => setLanguage(e.target.value)}
+        >
+          <option value="en">English</option>
+          <option value="zh">Chinese</option>
+        </select>
+      </div>
+      {cvData.map((section: any, key: number) => (
         <React.Fragment key={key}>
           {
             [
@@ -26,7 +50,7 @@ const LandingCVSections = () => (
                 'certification',
                 <CertificateSection data={section as Certification} />,
               ],
-  
+
               [
                 'workExperience',
                 <WorkExperience data={section as Experiences} />,
@@ -38,5 +62,6 @@ const LandingCVSections = () => (
       ))}
     </>
   )
+}
 
-  export default LandingCVSections
+export default LandingCVSections
