@@ -427,19 +427,19 @@ export const CryptoPriceTable: React.FC<CryptoPriceTableProps> = ({
         </Tr>
       </Thead>
       <Tbody>
-        {tickers.map(({ symbol, price, priceChangePercent }) => {
-          const lastPrice = lastPrices.get(symbol)
-          let color = 'gray.400'
-          let arrow = ''
-          const icon = SYMBOLS.find((s) => s.symbol === symbol)?.icon
+              { tickers.map(({ symbol, price, priceChangePercent }) => {
+          const lastPrice = lastPrices.get(symbol);
+          let color = 'gray.400';
+          let arrow = '';
+          const icon = SYMBOLS.find((s) => s.symbol === symbol)?.icon;
 
-          if (lastPrice) {
-            if (price > 0) {
-              color = 'green.500'
-              arrow = '↑'
-            } else if (price < 0) {
-              color = 'red.500'
-              arrow = '↓'
+          if (lastPrice && priceChangePercent !== null) {
+            if (priceChangePercent > 0) {
+              color = 'green.500';
+              arrow = '↑';
+            } else if (priceChangePercent < 0) {
+              color = 'red.500';
+              arrow = '↓';
             }
           }
 
@@ -458,7 +458,7 @@ export const CryptoPriceTable: React.FC<CryptoPriceTableProps> = ({
                   : 'N/A'}
               </Td>
             </Tr>
-          )
+          );
         })}
       </Tbody>
     </Table>
