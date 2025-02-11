@@ -13,6 +13,10 @@ import {
   Flex,
   IconButton,
   Link,
+  Menu,
+  MenuButton,
+  MenuList,
+  MenuItem,
 } from '@chakra-ui/react'
 import { useRouter } from 'next/router'
 import { TfiAlignJustify } from 'react-icons/tfi'
@@ -29,6 +33,9 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
     { name: 'GitHub', url: `https://github.com/HikoPLi` },
     { name: 'LinkedIn', url: `https://www.linkedin.com/in/liyanpeihiko/` },
     { name: 'WhatsApp', url: `https://wa.me/85262040827` },
+  ]
+  
+  const moreLinks = [
     { name: 'Stock', url: `/stock` },
   ]
 
@@ -92,13 +99,41 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                 aria-label={link.name}
               />
             ))}
+            <Menu>
+              <MenuButton
+                as={Button}
+                variant="outline"
+                color="teal.200"
+                borderColor="teal.200"
+                _hover={{ bg: 'teal.200', color: 'gray.800' }}
+                _active={{ bg: 'teal.600', borderColor: 'teal.600' }}
+              >
+                More
+              </MenuButton>
+              <MenuList>
+                {moreLinks.map((link) => (
+                  <MenuItem
+                    key={link.name}
+                    onClick={() => router.push(link.url)}
+                    icon={iconMap[link.name]}
+                    color={'teal.200'}
+                  >
+                    <Text color={'teal.200'}>{link.name}</Text>
+
+                  </MenuItem>
+                ))}
+              </MenuList>
+            </Menu>
           </Flex>
         )}
       </Box>
 
       {/* Side Drawer */}
       <Drawer isOpen={isOpen} placement="left" onClose={onClose}>
-        <DrawerOverlay />
+        <DrawerOverlay
+          bg="rgba(0, 0, 0, 0.6)"
+          zIndex="overlay"
+        />
         <DrawerContent>
           <DrawerHeader borderBottomWidth="1px">Quick Links</DrawerHeader>
           <DrawerBody>
@@ -122,6 +157,33 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                   aria-label={link.name}
                 />
               ))}
+              <Menu>
+                <MenuButton
+                  as={Button}
+                  variant="outline"
+                  color="teal.200"
+                  borderColor="teal.200"
+                  _hover={{ bg: 'teal.200', color: 'gray.800' }}
+                  _active={{ bg: 'teal.600', borderColor: 'teal.600' }}
+                >
+                  More
+                </MenuButton>
+                <MenuList>
+                  {moreLinks.map((link) => (
+                    <MenuItem
+                      key={link.name}
+                      onClick={() => {
+                        router.push(link.url)
+                        onClose()
+                      }}
+                      icon={iconMap[link.name]}
+                      color={'teal.200'}
+                    >
+                      <Text color={'teal.200'}>{link.name}</Text>
+                    </MenuItem>
+                  ))}
+                </MenuList>
+              </Menu>
             </Flex>
           </DrawerBody>
           <DrawerFooter borderTopWidth="1px">

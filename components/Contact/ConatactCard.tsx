@@ -7,6 +7,7 @@ import FormAlert from "./FormAlert";
 import EmojiValidate from "./EmojiValidate";
 import { Formik, Form, Field } from "formik";
 
+
 export const MotionBox = motion(Box);
 
 
@@ -134,6 +135,7 @@ const ContactCard = (): JSX.Element => {
 
   return (
     <VStack h="auto" w="100%" spacing={6}>
+
     <Text fontSize="2xl" color="brand.primary" fontWeight="bold">{"Contact Me"}</Text>
       <Formik
         initialValues={{ name: "", email: "", subject: "", message: "" }}
