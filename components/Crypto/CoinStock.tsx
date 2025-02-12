@@ -47,6 +47,7 @@ const CryptoPriceTracker: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [symbols, setSymbols] = useState<{ symbol: string; icon: string }[]>([])
   const [visibleCount, setVisibleCount] = useState<number>(10) // Number of tickers to display initially
+  const [lastFetchTime, setLastFetchTime] = useState<number>(0)
 
   // Fetch all available symbols
   const fetchSymbols = async () => {
@@ -102,6 +103,12 @@ const CryptoPriceTracker: React.FC = () => {
 
   // Update prices and price changes
   const updatePrices = async () => {
+    const currentTime = Date.now()
+    if (currentTime - lastFetchTime < 1000) {
+      return // Prevent excessive requests
+    }
+    setLastFetchTime(currentTime)
+
     const prices = await fetchPrices()
     const changes = await fetch24hChanges()
 
