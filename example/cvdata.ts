@@ -652,7 +652,7 @@ export const cvDataChinese = [
           ],
           "location": "香港",
           "startDate": "2024-11",
-          "endDate": "现在",
+          "endDate": "now",
           "relatedSkills": [
             "产品开发",
             "微控制器",

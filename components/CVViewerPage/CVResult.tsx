@@ -24,11 +24,23 @@ import { FaFileDownload } from 'react-icons/fa'
 const CVResult = ({
   cvData,
   style,
+  language,
 }: {
   cvData: CVData
   style?: React.CSSProperties
+  language: string
 }) => {
   const router = useRouter()
+
+  const getMessage = () => {
+    switch (language) {
+      case 'zh':
+        return '如果在打印预览页面无任何内容显示，请尝试多次。'
+      case 'en':
+      default:
+        return 'If no content is displayed in the print preview, please try again.'
+    }
+  }
 
   return (
     <Flex
@@ -45,11 +57,14 @@ const CVResult = ({
     >
       {!router.asPath.includes('edit') && (
         <PrintControl>
-          <Button onClick={() => handlePrint()}>
+          <Button onClick={() => handlePrint()} id="download-button">
             <FaFileDownload />
           </Button>
         </PrintControl>
       )}
+      <div id="print-message" style={{ display: 'none', color: 'red', marginTop: '10px' }}>
+        {getMessage()}
+      </div>
       <PrintArea id="print-area">
         {/* Render CV content here */}
         {Array.from({ length: 1 }, (_, index) => (
@@ -109,8 +124,12 @@ const CVResult = ({
   function handlePrint() {
     // Hide the download button and set up styles for printing.
     const downloadButton = document.getElementById('download-button')
+    const printMessage = document.getElementById('print-message')
     if (downloadButton) {
       downloadButton.style.display = 'none'
+    }
+    if (printMessage) {
+      printMessage.style.display = 'block'
     }
 
     // Apply print-specific styles
@@ -145,7 +164,9 @@ const CVResult = ({
 
     window.onafterprint = () => {
       document.head.removeChild(printStylesElement)
-      document.getElementById('download-button')!.style.display = 'flex'
+      if (downloadButton) {
+        downloadButton.style.display = 'flex'
+      }
     }
 
     window.print()

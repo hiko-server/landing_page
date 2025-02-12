@@ -101,6 +101,7 @@ const CVPage = ({ props }: { props: any }) => {
               >
                 <CVResult 
                   cvData={cvData} 
+                  language={language}
                   style={{ 
                     fontSize: isMobile ? '10px' : '12px',
                     minWidth: isMobile ? '800px' : 'auto'  // 保持CV最小宽度

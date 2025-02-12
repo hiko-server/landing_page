@@ -19,16 +19,23 @@ export default VideoBackgroundLayOut
 
 export const VideoBackground: VFC = () => {
   const videoSources = [
-    '/videos/background.mp4'
+    '/videos/background.mp4',
+    '/videos/coding.mp4',
+    '/videos/cryptoStock.mp4'
   ]
   const [currentVideoIndex, setCurrentVideoIndex] = React.useState(0)
+  const [fade, setFade] = React.useState(false)
 
   const handleVideoEnded = () => {
-    setCurrentVideoIndex((prevIndex) => (prevIndex + 1) % videoSources.length)
+    setFade(true)
+    setTimeout(() => {
+      setCurrentVideoIndex((prevIndex) => (prevIndex + 1) % videoSources.length)
+      setFade(false)
+    }, 500) // Duration of fade-out effect
   }
 
   return (
-    <VideoBackgroundBase>
+    <VideoBackgroundBase fade={fade}>
       <video
         autoPlay
         loop={false}
@@ -43,7 +50,7 @@ export const VideoBackground: VFC = () => {
   )
 }
 
-const VideoBackgroundBase = styled.div`
+const VideoBackgroundBase = styled.div<{ fade: boolean }>`
   position: absolute;
   top: 0;
   left: 0;
@@ -51,11 +58,13 @@ const VideoBackgroundBase = styled.div`
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background-color: black; /* Add this line */
+  background-color: black;
 
   video {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    transition: opacity 0.5s ease-in-out;
+    opacity: ${({ fade }) => (fade ? 0 : 1)};
   }
 `

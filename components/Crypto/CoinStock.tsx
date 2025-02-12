@@ -23,33 +23,12 @@ interface TickerData {
   symbol: string
   price: number
   priceChangePercent: number | null
+  symbols: { symbol: string; icon: string }[]
 }
-
-const SYMBOLS = [
-  {
-    symbol: 'BTCUSDT',
-    icon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/1.png',
-  },
-  {
-    symbol: 'ETHUSDT',
-    icon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/1027.png',
-  },
-  {
-    symbol: 'DOGEUSDT',
-    icon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/74.png',
-  },
-  {
-    symbol: 'SOLUSDT',
-    icon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/5426.png',
-  },
-  {
-    symbol: 'XRPUSDT',
-    icon: 'https://s2.coinmarketcap.com/static/img/coins/64x64/52.png',
-  },
-]
 
 const BASE_URL = 'https://api.binance.com/api/v3/ticker/price'
 const BASE_24H_URL = 'https://api.binance.com/api/v3/ticker/24hr'
+const SYMBOLS_URL = 'https://api.binance.com/api/v3/ticker/24hr'
 
 const CryptoPriceTracker: React.FC = () => {
   const [tickers, setTickers] = useState<TickerData[]>([])
@@ -65,13 +44,32 @@ const CryptoPriceTracker: React.FC = () => {
   const [toUSDT, setToUSDT] = useState<boolean>(false)
   const toast = useToast()
   const [isMobile] = useMediaQuery('(max-width: 768px)')
+  const [searchQuery, setSearchQuery] = useState<string>('')
+  const [symbols, setSymbols] = useState<{ symbol: string; icon: string }[]>([])
+
+  // Fetch all available symbols
+  const fetchSymbols = async () => {
+    try {
+      const response = await fetch(SYMBOLS_URL)
+      const data = await response.json()
+      const filteredSymbols = data
+        .filter((item: any) => item.symbol.endsWith('USDT'))
+        .map((item: any) => ({
+          symbol: item.symbol,
+          icon: `https://s2.coinmarketcap.com/static/img/coins/64x64/${item.symbol.replace('USDT', '')}.png`,
+        }))
+      setSymbols(filteredSymbols)
+    } catch (error) {
+      console.error('Error fetching symbols:', error)
+    }
+  }
 
   // Fetch price data
   const fetchPrices = async (): Promise<Map<string, number>> => {
     const priceMap = new Map<string, number>()
     try {
       const responses = await Promise.all(
-        SYMBOLS.map(({ symbol }) =>
+        symbols.map(({ symbol }) =>
           fetch(`${BASE_URL}?symbol=${symbol}`).then((res) => res.json())
         )
       )
@@ -91,7 +89,7 @@ const CryptoPriceTracker: React.FC = () => {
       const response = await fetch(BASE_24H_URL)
       const data = await response.json()
       data.forEach((item: any) => {
-        if (SYMBOLS.some(({ symbol }) => symbol === item.symbol)) {
+        if (symbols.some(({ symbol }) => symbol === item.symbol)) {
           changeMap.set(item.symbol, parseFloat(item.priceChangePercent))
         }
       })
@@ -110,7 +108,7 @@ const CryptoPriceTracker: React.FC = () => {
     let up = 0
     let down = 0
 
-    const updatedTickers: TickerData[] = SYMBOLS.map(({ symbol }) => {
+    const updatedTickers: TickerData[] = symbols.map(({ symbol }) => {
       const currentPrice = prices.get(symbol) || 0
       const lastPrice = lastPrices.get(symbol)
       const priceChangePercent = changes.get(symbol) || null
@@ -125,6 +123,7 @@ const CryptoPriceTracker: React.FC = () => {
         symbol,
         price: currentPrice,
         priceChangePercent,
+        symbols: symbols.filter(s => s.symbol === symbol),
       }
     })
 
@@ -147,6 +146,7 @@ const CryptoPriceTracker: React.FC = () => {
 
   // Initialize data and set up polling
   useEffect(() => {
+    fetchSymbols() // Fetch all available symbols
     updatePrices() // Initialize data
     const priceInterval = setInterval(updatePrices, 1000) // Update prices every second
     const timeInterval = setInterval(updateTime, 1000) // Update time every second
@@ -154,7 +154,7 @@ const CryptoPriceTracker: React.FC = () => {
       clearInterval(priceInterval)
       clearInterval(timeInterval)
     } // Clear intervals
-  }, [amount, fromCurrency, toCurrency, toUSDT]) // Add dependencies to re-run effect on changes
+  }, [amount, fromCurrency, toCurrency, toUSDT, symbols]) // Add dependencies to re-run effect on changes
 
   const handleConvert = () => {
     // Ensure tickers are available and currency symbols are uppercase
@@ -203,7 +203,15 @@ const CryptoPriceTracker: React.FC = () => {
           Current Time: {currentTime}
         </Text>
       </Box>
-      <CryptoPriceTable tickers={tickers} lastPrices={lastPrices} />
+      <Input
+        placeholder="Search Cryptocurrency"
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        mb={4}
+        as={motion.input}
+        whileFocus={{ scale: 1.05 }}
+      />
+      <CryptoPriceTable tickers={tickers} lastPrices={lastPrices} searchQuery={searchQuery} symbols={symbols} />
 
       <Box mt={6}>
         <Text
@@ -239,7 +247,7 @@ const CryptoPriceTracker: React.FC = () => {
             as={motion.select}
             whileFocus={{ scale: 1.05 }}
           >
-            {SYMBOLS.map(({ symbol }) => (
+            {symbols.map(({ symbol }) => (
               <option key={symbol} value={symbol.replace('USDT', '')}>
                 {symbol.replace('USDT', '')}
               </option>
@@ -254,7 +262,7 @@ const CryptoPriceTracker: React.FC = () => {
             as={motion.select}
             whileFocus={{ scale: 1.05 }}
           >
-            {SYMBOLS.map(({ symbol }) => (
+            {symbols.map(({ symbol }) => (
               <option key={symbol} value={symbol.replace('USDT', '')}>
                 {symbol.replace('USDT', '')}
               </option>
@@ -294,7 +302,7 @@ const CryptoPriceTracker: React.FC = () => {
               <>
                 <Image
                   src={
-                    SYMBOLS.find(
+                    symbols.find(
                       (s) => s.symbol === `${toCurrency.toUpperCase()}USDT`
                     )?.icon
                   }
@@ -316,12 +324,20 @@ const CryptoPriceTracker: React.FC = () => {
 interface CryptoPriceTableProps {
   tickers: TickerData[]
   lastPrices: Map<string, number>
+  searchQuery: string
+  symbols: { symbol: string; icon: string }[]
 }
 
 export const CryptoPriceTable: React.FC<CryptoPriceTableProps> = ({
   tickers,
   lastPrices,
+  searchQuery,
+  symbols,
 }) => {
+  const filteredTickers = tickers.filter(({ symbol }) =>
+    symbol.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
   return (
     <Table
       variant="simple"
@@ -339,11 +355,11 @@ export const CryptoPriceTable: React.FC<CryptoPriceTableProps> = ({
         </Tr>
       </Thead>
       <Tbody>
-        {tickers.map(({ symbol, price, priceChangePercent }) => {
+        {filteredTickers.map(({ symbol, price, priceChangePercent }) => {
           const lastPrice = lastPrices.get(symbol)
           let color = 'gray.400'
           let arrow = ''
-          const icon = SYMBOLS.find((s) => s.symbol === symbol)?.icon
+          const icon: string | undefined = symbols.find((s: { symbol: string }) => s.symbol === symbol)?.icon
 
           if (lastPrice && priceChangePercent !== null) {
             if (priceChangePercent > 0) {
@@ -376,4 +392,5 @@ export const CryptoPriceTable: React.FC<CryptoPriceTableProps> = ({
     </Table>
   )
 }
+
 export default CryptoPriceTracker
