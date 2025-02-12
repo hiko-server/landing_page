@@ -9,14 +9,10 @@ import {
   Td,
   Text,
   Image,
-  useClipboard,
-  useDisclosure,
   Input,
   Select,
   Button,
   Flex,
-  Grid,
-  GridItem,
   useToast,
   useMediaQuery,
 } from '@chakra-ui/react'
@@ -55,43 +51,12 @@ const SYMBOLS = [
 const BASE_URL = 'https://api.binance.com/api/v3/ticker/price'
 const BASE_24H_URL = 'https://api.binance.com/api/v3/ticker/24hr'
 
-const PAYMENT_OPTIONS = [
-  {
-    name: 'Bitcoin',
-    qrCode: 'images/payment/btc.jpg',
-    address: 'bc1ph0ug5l2h7f3yjlxuvms9td3mtzf6zq8npxgmjsq64lcnh3mws8xq6z9jl2',
-  },
-  {
-    name: 'Ethereum',
-    qrCode: 'images/payment/eth.jpg',
-    address: '0x69df4486920c48a984758c49b3033e4d89Dc0454',
-  },
-  {
-    name: 'Dogecoin',
-    qrCode: 'images/payment/doge.jpg',
-    address: 'D7XZZGy2VehXYGmpsAF6Zpf4oWL3L8BXF2',
-  },
-  {
-    name: 'WeChat Pay',
-    qrCode: 'images/payment/wechatpay.jpg',
-    address: 'https://pc.weixin.qq.com/',
-  },
-  {
-    name: 'AliPay',
-    qrCode: 'images/payment/alipay.jpg',
-    address: 'https://global.alipay.com/platform/site/ihome',
-  },
-]
-
 const CryptoPriceTracker: React.FC = () => {
   const [tickers, setTickers] = useState<TickerData[]>([])
   const [lastPrices, setLastPrices] = useState<Map<string, number>>(new Map())
   const [, setUpCount] = useState<number>(0) // Track the number of price increases
   const [, setDownCount] = useState<number>(0) // Track the number of price decreases
   const [currentTime, setCurrentTime] = useState<string>('')
-  const [selectedPayment, setSelectedPayment] = useState<string | null>(null)
-  const { onCopy, hasCopied } = useClipboard(selectedPayment || '')
-  const { onOpen } = useDisclosure()
 
   const [amount, setAmount] = useState<number>(0)
   const [fromCurrency, setFromCurrency] = useState<string>('USD')
@@ -224,12 +189,6 @@ const CryptoPriceTracker: React.FC = () => {
     })
   }
 
-  const handlePaymentClick = (address: string) => {
-    setSelectedPayment(address)
-    // setSelectedQrCode(qrCode)
-    onOpen()
-  }
-
   return (
     <Box p={6} minH="50vh" color="black">
       <Box mb={4}>
@@ -245,53 +204,6 @@ const CryptoPriceTracker: React.FC = () => {
         </Text>
       </Box>
       <CryptoPriceTable tickers={tickers} lastPrices={lastPrices} />
-      <Box mt={6}>
-        <Text
-          fontSize="lg"
-          mb={4}
-          as={motion.div}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: '1s' }}
-        >
-          Quick Payment
-        </Text>
-        <Grid
-          templateColumns={isMobile ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)'}
-          gap={6}
-        >
-          {PAYMENT_OPTIONS.map(({ name, qrCode, address }) => (
-            <GridItem
-              key={name}
-              textAlign="center"
-              cursor="pointer"
-              onClick={() => handlePaymentClick(address)}
-              border={selectedPayment === address ? '2px solid blue' : 'none'}
-              p={2}
-              borderRadius="md"
-              _hover={{
-                transform: 'scale(1.05)',
-                transition: 'transform 0.2s',
-              }}
-              as={motion.div}
-              whileHover={{ scale: 1.1 }}
-            >
-              <Image src={qrCode} alt={name} />
-              <Text mt={2}>{name}</Text>
-            </GridItem>
-          ))}
-        </Grid>
-        {selectedPayment && (
-          <Box mt={4} textAlign="center">
-            <Text fontSize="md">
-              Selected Payment Address: {selectedPayment}
-            </Text>
-            <Text mt={2} color="blue.500" cursor="pointer" onClick={onCopy}>
-              {hasCopied ? 'Copied!' : 'Copy Address'}
-            </Text>
-          </Box>
-        )}
-      </Box>
 
       <Box mt={6}>
         <Text
@@ -427,19 +339,19 @@ export const CryptoPriceTable: React.FC<CryptoPriceTableProps> = ({
         </Tr>
       </Thead>
       <Tbody>
-              { tickers.map(({ symbol, price, priceChangePercent }) => {
-          const lastPrice = lastPrices.get(symbol);
-          let color = 'gray.400';
-          let arrow = '';
-          const icon = SYMBOLS.find((s) => s.symbol === symbol)?.icon;
+        {tickers.map(({ symbol, price, priceChangePercent }) => {
+          const lastPrice = lastPrices.get(symbol)
+          let color = 'gray.400'
+          let arrow = ''
+          const icon = SYMBOLS.find((s) => s.symbol === symbol)?.icon
 
           if (lastPrice && priceChangePercent !== null) {
             if (priceChangePercent > 0) {
-              color = 'green.500';
-              arrow = '↑';
+              color = 'green.500'
+              arrow = '↑'
             } else if (priceChangePercent < 0) {
-              color = 'red.500';
-              arrow = '↓';
+              color = 'red.500'
+              arrow = '↓'
             }
           }
 
@@ -458,7 +370,7 @@ export const CryptoPriceTable: React.FC<CryptoPriceTableProps> = ({
                   : 'N/A'}
               </Td>
             </Tr>
-          );
+          )
         })}
       </Tbody>
     </Table>

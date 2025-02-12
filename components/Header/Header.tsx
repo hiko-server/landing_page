@@ -34,9 +34,10 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
     { name: 'LinkedIn', url: `https://www.linkedin.com/in/liyanpeihiko/` },
     { name: 'WhatsApp', url: `https://wa.me/85262040827` },
   ]
-  
+
   const moreLinks = [
-    { name: 'Stock', url: `/stock` },
+    { name: 'Crypto', url: `/crypto` },
+    { name: 'Quick Payment', url: `/quick-payment` },
   ]
 
   const router = useRouter()
@@ -119,7 +120,6 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                     color={'teal.200'}
                   >
                     <Text color={'teal.200'}>{link.name}</Text>
-
                   </MenuItem>
                 ))}
               </MenuList>
@@ -130,10 +130,7 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
 
       {/* Side Drawer */}
       <Drawer isOpen={isOpen} placement="left" onClose={onClose}>
-        <DrawerOverlay
-          bg="rgba(0, 0, 0, 0.6)"
-          zIndex="overlay"
-        />
+        <DrawerOverlay bg="rgba(0, 0, 0, 0.6)" zIndex="overlay" />
         <DrawerContent>
           <DrawerHeader borderBottomWidth="1px">Quick Links</DrawerHeader>
           <DrawerBody>

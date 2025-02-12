@@ -4,9 +4,9 @@ import React, { useEffect, useState } from 'react'
 import { Flex, Spinner } from '@chakra-ui/react'
 
 import HeaderFooter from '../../layout/HeaderFooter'
-import CryptoPriceTracker from '../../components/Stock/CoinStock'
+import Payment from '../../components/QuickPayment/Payment'
 
-const About = (props: any) => {
+const QuickPayment = (props: any) => {
   console.log('props', props)
 
   const { data: session, status } = useSession()
@@ -58,7 +58,7 @@ const About = (props: any) => {
             p={['20px', '40px']}
             gap={['20px', '40px']}
           >
-            <CryptoPriceTracker />
+            <Payment />
           </Flex>
         </HeaderFooter>
       )}
@@ -66,4 +66,4 @@ const About = (props: any) => {
   )
 }
 
-export default About
+export default QuickPayment
