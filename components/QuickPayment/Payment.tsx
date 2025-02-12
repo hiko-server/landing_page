@@ -6,10 +6,11 @@ import {
   useClipboard,
   useDisclosure,
   Image,
+  Tooltip,
+  useMediaQuery,
 } from '@chakra-ui/react'
 import { motion } from 'framer-motion'
 import { useState } from 'react'
-import { isMobile } from 'react-device-detect'
 
 const Payment = () => {
   const PAYMENT_OPTIONS = [
@@ -42,15 +43,19 @@ const Payment = () => {
   const [selectedPayment, setSelectedPayment] = useState<string | null>(null)
   const { onCopy, hasCopied } = useClipboard(selectedPayment || '')
   const { onOpen } = useDisclosure()
+  const [isLargerThan768] = useMediaQuery("(min-width: 768px)")
   const handlePaymentClick = (address: string) => {
     setSelectedPayment(address)
-    // setSelectedQrCode(qrCode)
     onOpen()
   }
+  const isCrypto = (address: string) => {
+    return !address.startsWith('http')
+  }
   return (
-    <Box mt={6}>
+    <Box mt={6} p={4} borderWidth="1px" borderRadius="lg" boxShadow="lg" >
       <Text
-        fontSize="lg"
+        fontSize="2xl"
+        fontWeight="bold"
         mb={4}
         as={motion.div}
         initial={{ opacity: 0 }}
@@ -60,34 +65,52 @@ const Payment = () => {
         Quick Payment
       </Text>
       <Grid
-        templateColumns={isMobile ? 'repeat(2, 1fr)' : 'repeat(5, 1fr)'}
+        templateColumns={isLargerThan768 ? 'repeat(5, 1fr)' : 'repeat(2, 1fr)'}
         gap={6}
       >
         {PAYMENT_OPTIONS.map(({ name, qrCode, address }) => (
-          <GridItem
-            key={name}
-            textAlign="center"
-            cursor="pointer"
-            onClick={() => handlePaymentClick(address)}
-            border={selectedPayment === address ? '2px solid blue' : 'none'}
-            p={2}
-            borderRadius="md"
-            _hover={{
-              transform: 'scale(1.05)',
-              transition: 'transform 0.2s',
-            }}
-            as={motion.div}
-            whileHover={{ scale: 1.1 }}
-          >
-            <Image src={qrCode} alt={name} />
-            <Text mt={2}>{name}</Text>
-          </GridItem>
+          <Tooltip label={name} key={name} hasArrow>
+            <GridItem
+              textAlign="center"
+              cursor="pointer"
+              onClick={() => handlePaymentClick(address)}
+              border={selectedPayment === address ? '2px solid blue' : '1px solid gray'}
+              p={2}
+              borderRadius="md"
+              _hover={{
+                boxShadow: 'md',
+              }}
+              as={motion.div}
+              whileHover={{ scale: 1.05 }}
+              layout
+              // width="150px"
+              // height="200px"
+            >
+              <Image src={qrCode} alt={name} borderRadius="md" objectFit="cover" />
+              <Text mt={2} fontWeight="medium">{name}</Text>
+            </GridItem>
+          </Tooltip>
         ))}
       </Grid>
-      {selectedPayment && (
+      {selectedPayment && isCrypto(selectedPayment) && (
         <Box mt={4} textAlign="center">
-          <Text fontSize="md">Selected Payment Address: {selectedPayment}</Text>
-          <Text mt={2} color="blue.500" cursor="pointer" onClick={onCopy}>
+          <Box
+            fontSize="md"
+            fontWeight="medium"
+            maxWidth="100%"
+            whiteSpace="nowrap"
+            overflow="hidden"
+            textOverflow="ellipsis"
+          >
+            {selectedPayment.slice(0, 10)}...{selectedPayment.slice(-10)}
+          </Box>
+          <Text
+            mt={2}
+            color="blue.500"
+            cursor="pointer"
+            onClick={onCopy}
+            _hover={{ textDecoration: 'underline' }}
+          >
             {hasCopied ? 'Copied!' : 'Copy Address'}
           </Text>
         </Box>

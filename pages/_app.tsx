@@ -1,7 +1,6 @@
 import { appWithTranslation } from 'next-i18next'
 
 import React, { useEffect } from 'react'
-import Script from 'next/script'
 import { useRouter } from 'next/router'
 import * as gtag from '../lib/gtag'
 
@@ -24,6 +23,8 @@ import { SessionProvider } from 'next-auth/react'
 import { MainProvider } from '../context/state'
 import { SettingsAppProvider } from '../context/settingsState'
 import { AuthProvider } from '../context/authState'
+import Head from 'next/head';
+import ScrollToTop from '../components/ScrollToTop/ScrollToTop'
 
 // const queryClient = new QueryClient()
 
@@ -38,29 +39,16 @@ const App = ({ Component, pageProps }: any) => {
       router.events.off('routeChangeComplete', handleRouteChange)
     }
   }, [router.events])
+  const formatTitle = (path: string) => {
+    if (path === '/') return 'HIKO.DEV - HOME';
+    return 'HIKO.DEV - ' + path
+      .split('/')
+      .filter(Boolean)
+      .map((segment) => segment.toUpperCase())
+      .join(' - ') ;
+  };
   return (
     <React.Fragment>
-      {/* Global Site Tag (gtag.js) - Google Analytics */}
-      <Script
-        id="set-gtagID"
-        strategy="afterInteractive"
-        src={`https://www.googletagmanager.com/gtag/js?id=${gtag.GA_TRACKING_ID}`}
-      />
-      <Script
-        id="update-gtag"
-        strategy="afterInteractive"
-        dangerouslySetInnerHTML={{
-          __html: `
-            window.dataLayer = window.dataLayer || [];
-            function gtag(){dataLayer.push(arguments);}
-            gtag('js', new Date());
-            gtag('config', '${gtag.GA_TRACKING_ID}', {
-              page_path: window.location.pathname,
-            });
-          `,
-        }}
-      />
-      <Script src="https://accounts.google.com/gsi/client"></Script>
 
       {/* <Provider store={store}>
         <QueryClientProvider client={queryClient}> */}
@@ -70,7 +58,13 @@ const App = ({ Component, pageProps }: any) => {
             <MainProvider>
               <SettingsAppProvider>
                 <CSSReset />
+                <Head>
+                  <title>{formatTitle(router.asPath)}</title>
+                  <meta name="viewport" content="width=device-width, initial-scale=1" />
+                  <link rel="icon" href="/images/favicon-32x32.png" />
+                </Head>
                 <Component {...pageProps} />
+                <ScrollToTop />
               </SettingsAppProvider>
             </MainProvider>
           </AuthProvider>

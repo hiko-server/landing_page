@@ -1,7 +1,7 @@
 // import { useEffect, useState } from 'react'
 
 // import { CVData } from '../../types/cvProps'
-import { Flex, Spinner } from '@chakra-ui/react'
+import { Box, Flex, Spinner } from '@chakra-ui/react'
 import { useSession } from 'next-auth/react'
 import CVResult from '../../components/CVViewerPage/CVResult'
 import { cvDataChinese, cvDataEnglish } from '../../example/cvdata'
@@ -18,13 +18,24 @@ const CVPage = ({ props }: { props: any }) => {
 
   const [, setIsHostCV] = useState<boolean>(false)
   const [isLoading, setIsLoading] = useState<boolean>(true)
-  // const [isMobile, setIsMobile] = useState<boolean>(false)
+  const [isMobile, setIsMobile] = useState<boolean>(false)
 
   useEffect(() => {
     if (props?.host && props?.host === 'cv.hiko.dev') {
       setIsHostCV(true)
     }
     setIsLoading(false)
+
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768)
+    }
+
+    window.addEventListener('resize', handleResize)
+    handleResize()
+
+    return () => {
+      window.removeEventListener('resize', handleResize)
+    }
   }, [])
   let cvData
   const [language, setLanguage] = useState('en')
@@ -50,7 +61,7 @@ const CVPage = ({ props }: { props: any }) => {
           <Spinner size="xl" />
         </Flex>
       ) : (
-        <HeaderFooter isMobile={false}>
+        <HeaderFooter isMobile={isMobile}>
           <Flex
             direction="column"
             alignItems="center"
@@ -70,7 +81,33 @@ const CVPage = ({ props }: { props: any }) => {
                 <option value="zh">Chinese</option>
               </select>
             </div>
-            <CVResult cvData={cvData} style={{ fontSize: '12px' }} />
+            <Box
+              w="full"
+              overflowX="scroll"
+              // position="relative"
+              minH={isMobile ? '140vh' : '100vh'}  // 增加最小高度适应缩放
+            >
+              <Box
+                w={isMobile ? '125%' : '100%'}
+                transform={isMobile ? 'scale(0.8)' : 'none'}
+                transformOrigin="top left"
+                sx={{
+                  transition: 'transform 0.3s ease',
+                  '@media print': {  // 打印时保持原始尺寸
+                    transform: 'none !important',
+                    width: '100% !important'
+                  }
+                }}
+              >
+                <CVResult 
+                  cvData={cvData} 
+                  style={{ 
+                    fontSize: isMobile ? '10px' : '12px',
+                    minWidth: isMobile ? '800px' : 'auto'  // 保持CV最小宽度
+                  }} 
+                />
+              </Box>
+            </Box>
           </Flex>
         </HeaderFooter>
       )}
