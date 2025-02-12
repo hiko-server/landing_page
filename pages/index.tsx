@@ -6,6 +6,7 @@ import { Flex, Spinner } from '@chakra-ui/react'
 import DisplayMobileInfo from '../components/mobileDisplay/mobileDisplay'
 import LandingContent from '../components/LandingPage/LandingContent'
 import HeaderFooter from '../layout/HeaderFooter'
+// import Head from 'next/head';
 
 
 
@@ -43,6 +44,10 @@ const LandingPage = (props: any) => {
 
   return (
     <>
+      {/* <Head>
+        <title>HIKO DEV - HOME</title>
+        <link rel="icon" href="/favicon.ico" />
+      </Head> */}
  
       {isLoading ? (
         <Flex

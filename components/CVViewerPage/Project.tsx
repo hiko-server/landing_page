@@ -42,7 +42,9 @@ const ProjectSection = ({ data }: { data: Project }) => {
                     <Text>
                       {DateTime.fromISO(pro.startDate).toFormat('LLL yyyy')}
                       {' - '}
-                      {DateTime.fromISO(pro.endDate).toFormat('LLL yyyy')}
+                      {DateTime.fromISO(pro.endDate) > DateTime.now()
+                        ? 'present'
+                        : DateTime.fromISO(pro.endDate).toFormat('LLL yyyy')}
                     </Text>
                     <Text fontStyle={'normal'}>{`|`}</Text>
                     <Text fontWeight={800}>{pro.projectLocation}</Text>

@@ -23,6 +23,7 @@ import { TfiAlignJustify } from 'react-icons/tfi'
 import Footer from '../Footer/Footer'
 import { FaGithub, FaGitlab, FaLinkedin, FaWhatsapp } from 'react-icons/fa'
 import { AiOutlineStock } from 'react-icons/ai'
+import { ChevronDownIcon } from '@chakra-ui/icons'
 const Header = ({ isMobile }: { isMobile: boolean }) => {
   // const baseURL = 'hiko.dev'
   const quickLinks = [
@@ -30,14 +31,18 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
     { name: 'About', url: `/about` },
     { name: 'Contact', url: `/contact` },
     { name: 'CV', url: `/cv` },
-    { name: 'GitHub', url: `https://github.com/HikoPLi` },
-    { name: 'LinkedIn', url: `https://www.linkedin.com/in/liyanpeihiko/` },
-    { name: 'WhatsApp', url: `https://wa.me/85262040827` },
+
   ]
 
   const moreLinks = [
     { name: 'Crypto', url: `/crypto` },
-    { name: 'Quick Payment', url: `/quick-payment` },
+    { name: 'QuickPayment', url: `/quick-payment` },
+  ]
+
+  const socialLink = [
+    { name: 'GitHub', url: `https://github.com/HikoPLi` },
+    { name: 'LinkedIn', url: `https://www.linkedin.com/in/liyanpeihiko/` },
+    { name: 'WhatsApp', url: `https://wa.me/85262040827` },
   ]
 
   const router = useRouter()
@@ -52,7 +57,8 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
     GitLab: <FaGitlab />,
     LinkedIn: <FaLinkedin />,
     WhatsApp: <FaWhatsapp />,
-    Stock: <AiOutlineStock />,
+    Crypto: <AiOutlineStock />,
+    QuickPayment: <AiOutlineStock />,
   }
   return (
     <>
@@ -100,6 +106,7 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                 aria-label={link.name}
               />
             ))}
+            {/* Social */}
             <Menu>
               <MenuButton
                 as={Button}
@@ -108,6 +115,33 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                 borderColor="teal.200"
                 _hover={{ bg: 'teal.200', color: 'gray.800' }}
                 _active={{ bg: 'teal.600', borderColor: 'teal.600' }}
+                rightIcon={<ChevronDownIcon />}
+              >
+                Social
+              </MenuButton>
+              <MenuList>
+                {socialLink.map((link) => (
+                  <MenuItem
+                    key={link.name}
+                    onClick={() => router.push(link.url)}
+                    icon={iconMap[link.name]}
+                    color={'teal.200'}
+                  >
+                    <Text color={'teal.200'}>{link.name}</Text>
+                  </MenuItem>
+                ))}
+              </MenuList>
+            </Menu>
+            {/* More */}
+            <Menu>
+              <MenuButton
+                as={Button}
+                variant="outline"
+                color="teal.200"
+                borderColor="teal.200"
+                _hover={{ bg: 'teal.200', color: 'gray.800' }}
+                _active={{ bg: 'teal.600', borderColor: 'teal.600' }}
+                rightIcon={<ChevronDownIcon />}
               >
                 More
               </MenuButton>
@@ -154,43 +188,69 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                   aria-label={link.name}
                 />
               ))}
-              <Menu>
-                <MenuButton
-                  as={Button}
-                  variant="outline"
-                  color="teal.200"
-                  borderColor="teal.200"
-                  _hover={{ bg: 'teal.200', color: 'gray.800' }}
-                  _active={{ bg: 'teal.600', borderColor: 'teal.600' }}
-                >
-                  More
-                </MenuButton>
-                <MenuList>
-                  {moreLinks.map((link) => (
-                    <MenuItem
-                      key={link.name}
-                      onClick={() => {
-                        router.push(link.url)
-                        onClose()
-                      }}
-                      icon={iconMap[link.name]}
-                      color={'teal.200'}
-                    >
-                      <Text color={'teal.200'}>{link.name}</Text>
-                    </MenuItem>
-                  ))}
-                </MenuList>
-              </Menu>
+            {/* Social */}
+            <Menu>
+              <MenuButton
+                as={Button}
+                variant="outline"
+                color="teal.200"
+                borderColor="teal.200"
+                _hover={{ bg: 'teal.200', color: 'gray.800' }}
+                _active={{ bg: 'teal.600', borderColor: 'teal.600' }}
+                rightIcon={<ChevronDownIcon />}
+              >
+                Social
+              </MenuButton>
+              <MenuList>
+                {socialLink.map((link) => (
+                  <MenuItem
+                    key={link.name}
+                    onClick={() => router.push(link.url)}
+                    icon={iconMap[link.name]}
+                    color={'teal.200'}
+                  >
+                    <Text color={'teal.200'}>{link.name}</Text>
+                  </MenuItem>
+                ))}
+              </MenuList>
+            </Menu>
+            {/* More */}
+            <Menu>
+              <MenuButton
+                as={Button}
+                variant="outline"
+                color="teal.200"
+                borderColor="teal.200"
+                _hover={{ bg: 'teal.200', color: 'gray.800' }}
+                _active={{ bg: 'teal.600', borderColor: 'teal.600' }}
+                rightIcon={<ChevronDownIcon />}
+              >
+                More
+              </MenuButton>
+              <MenuList>
+                {moreLinks.map((link) => (
+                  <MenuItem
+                    key={link.name}
+                    onClick={() => router.push(link.url)}
+                    icon={iconMap[link.name]}
+                    color={'teal.200'}
+                  >
+                    <Text color={'teal.200'}>{link.name}</Text>
+                  </MenuItem>
+                ))}
+              </MenuList>
+            </Menu>
             </Flex>
           </DrawerBody>
           <DrawerFooter borderTopWidth="1px">
-            <Flex direction="column" gap={2}>
+            <Flex direction="column" alignItems={'center'} gap={2}>
               <Button variant="outline" mr={3} onClick={onClose}>
                 Cancel
               </Button>
-              <Footer />
+              
             </Flex>
           </DrawerFooter>
+          <Footer />
         </DrawerContent>
       </Drawer>
     </>
