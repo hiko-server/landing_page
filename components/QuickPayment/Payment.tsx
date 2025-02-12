@@ -64,6 +64,29 @@ const Payment = () => {
       >
         Quick Payment
       </Text>
+      {selectedPayment && isCrypto(selectedPayment) && (
+        <Box mt={4} textAlign="center">
+          <Box
+            fontSize="md"
+            fontWeight="medium"
+            maxWidth="100%"
+            whiteSpace="nowrap"
+            overflow="hidden"
+            textOverflow="ellipsis"
+          >
+            {selectedPayment.slice(0, 10)}...{selectedPayment.slice(-10)}
+          </Box>
+          <Text
+            mt={2}
+            color="blue.500"
+            cursor="pointer"
+            onClick={onCopy}
+            _hover={{ textDecoration: 'underline' }}
+          >
+            {hasCopied ? 'Copied!' : 'Copy Address'}
+          </Text>
+        </Box>
+      )}
       <Grid
         templateColumns={isLargerThan768 ? 'repeat(5, 1fr)' : 'repeat(2, 1fr)'}
         gap={6}
@@ -92,29 +115,7 @@ const Payment = () => {
           </Tooltip>
         ))}
       </Grid>
-      {selectedPayment && isCrypto(selectedPayment) && (
-        <Box mt={4} textAlign="center">
-          <Box
-            fontSize="md"
-            fontWeight="medium"
-            maxWidth="100%"
-            whiteSpace="nowrap"
-            overflow="hidden"
-            textOverflow="ellipsis"
-          >
-            {selectedPayment.slice(0, 10)}...{selectedPayment.slice(-10)}
-          </Box>
-          <Text
-            mt={2}
-            color="blue.500"
-            cursor="pointer"
-            onClick={onCopy}
-            _hover={{ textDecoration: 'underline' }}
-          >
-            {hasCopied ? 'Copied!' : 'Copy Address'}
-          </Text>
-        </Box>
-      )}
+      
     </Box>
   )
 }

@@ -3,13 +3,14 @@ import { Box, Button, Flex, Heading, Link, Text, Avatar, IconButton, Stack } fro
 import { FaGithub, FaGitlab, FaLinkedin, FaWhatsapp } from "react-icons/fa";
 // import LinkedInBadge from "../linkedIn/linkedIn";
 import VideoBackgroundLayOut from "../../layout/VideoBackgroundLayout";
+import { useRouter } from "next/router";
 
 const PersonalInfo = ({ isMobile }: { isMobile: boolean }) => {
 
   const handleSubmit = (e: { preventDefault: () => void; }) => {
     e.preventDefault();
   };
-
+  const router = useRouter()
   return (
     <Box position="relative" w="full" h="full" >
       <VideoBackgroundLayOut >
@@ -139,7 +140,7 @@ const PersonalInfo = ({ isMobile }: { isMobile: boolean }) => {
                         size="lg"
                         fontSize={['20px', '24px']}
                         mb={6}
-                        onClick={() => window.open('https://hiko.dev/cv')}
+                        onClick={() => router.push('/cv')}
                         colorScheme="black"
                         variant="outline"
                         bg="black.500"
