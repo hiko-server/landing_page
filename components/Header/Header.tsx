@@ -60,6 +60,15 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
     Crypto: <AiOutlineStock />,
     QuickPayment: <AiOutlineStock />,
   }
+
+  const handleLinkClick = (url: string) => {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      window.open(url, '_blank');
+    } else {
+      router.push(url);
+    }
+  };
+
   return (
     <>
       <Box
@@ -93,7 +102,7 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
             {quickLinks.map((link) => (
               <IconButton
                 key={link.name}
-                onClick={() => router.push(link.url)}
+                onClick={() => handleLinkClick(link.url)}
                 px={4}
                 py={2}
                 whiteSpace="nowrap"
@@ -123,7 +132,7 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                 {socialLink.map((link) => (
                   <MenuItem
                     key={link.name}
-                    onClick={() => router.push(link.url)}
+                    onClick={() => handleLinkClick(link.url)}
                     icon={iconMap[link.name]}
                     color={'teal.200'}
                   >
@@ -149,7 +158,7 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                 {moreLinks.map((link) => (
                   <MenuItem
                     key={link.name}
-                    onClick={() => router.push(link.url)}
+                    onClick={() => handleLinkClick(link.url)}
                     icon={iconMap[link.name]}
                     color={'teal.200'}
                   >
@@ -173,8 +182,8 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                 <IconButton
                   key={link.name}
                   onClick={() => {
-                    router.push(link.url)
-                    onClose()
+                    handleLinkClick(link.url);
+                    onClose();
                   }}
                   px={4}
                   py={2}
@@ -205,7 +214,7 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                 {socialLink.map((link) => (
                   <MenuItem
                     key={link.name}
-                    onClick={() => router.push(link.url)}
+                    onClick={() => handleLinkClick(link.url)}
                     icon={iconMap[link.name]}
                     color={'teal.200'}
                   >
@@ -231,7 +240,7 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                 {moreLinks.map((link) => (
                   <MenuItem
                     key={link.name}
-                    onClick={() => router.push(link.url)}
+                    onClick={() => handleLinkClick(link.url)}
                     icon={iconMap[link.name]}
                     color={'teal.200'}
                   >
