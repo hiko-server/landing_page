@@ -46,6 +46,7 @@ const CryptoPriceTracker: React.FC = () => {
   const [isMobile] = useMediaQuery('(max-width: 768px)')
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [symbols, setSymbols] = useState<{ symbol: string; icon: string }[]>([])
+  const [visibleCount, setVisibleCount] = useState<number>(10) // Number of tickers to display initially
 
   // Fetch all available symbols
   const fetchSymbols = async () => {
@@ -189,6 +190,10 @@ const CryptoPriceTracker: React.FC = () => {
     })
   }
 
+  const handleShowMore = () => {
+    setVisibleCount((prevCount) => prevCount + 10)
+  }
+
   return (
     <Box p={6} minH="50vh" color="black">
       <Box mb={4}>
@@ -211,7 +216,18 @@ const CryptoPriceTracker: React.FC = () => {
         as={motion.input}
         whileFocus={{ scale: 1.05 }}
       />
-      <CryptoPriceTable tickers={tickers} lastPrices={lastPrices} searchQuery={searchQuery} symbols={symbols} />
+      <CryptoPriceTable tickers={tickers} lastPrices={lastPrices} searchQuery={searchQuery} symbols={symbols} visibleCount={searchQuery ? tickers.length : visibleCount} />
+      {!searchQuery && visibleCount < tickers.length && (
+        <Button
+          onClick={handleShowMore}
+          colorScheme="blue"
+          mt={4}
+          as={motion.button}
+          whileHover={{ scale: 1.1 }}
+        >
+          Show More
+        </Button>
+      )}
 
       <Box mt={6}>
         <Text
@@ -326,6 +342,7 @@ interface CryptoPriceTableProps {
   lastPrices: Map<string, number>
   searchQuery: string
   symbols: { symbol: string; icon: string }[]
+  visibleCount: number
 }
 
 export const CryptoPriceTable: React.FC<CryptoPriceTableProps> = ({
@@ -333,10 +350,11 @@ export const CryptoPriceTable: React.FC<CryptoPriceTableProps> = ({
   lastPrices,
   searchQuery,
   symbols,
+  visibleCount,
 }) => {
-  const filteredTickers = tickers.filter(({ symbol }) =>
-    symbol.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const filteredTickers = tickers
+    .filter(({ symbol }) => symbol.toLowerCase().includes(searchQuery.toLowerCase()))
+    .slice(0, visibleCount)
 
   return (
     <Table
