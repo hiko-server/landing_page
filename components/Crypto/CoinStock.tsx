@@ -26,9 +26,10 @@ interface TickerData {
   symbols: { symbol: string; icon: string }[]
 }
 
-const BASE_URL = 'https://api.binance.com/api/v3/ticker/price'
-const BASE_24H_URL = 'https://api.binance.com/api/v3/ticker/24hr'
+// const BASE_URL = 'https://api.binance.com/api/v3/ticker/price'
+// const BASE_24H_URL = 'https://api.binance.com/api/v3/ticker/24hr'
 const SYMBOLS_URL = 'https://api.binance.com/api/v3/ticker/24hr'
+const WEBSOCKET_URL = 'wss://stream.binance.com:9443/ws/!ticker@arr'
 
 const CryptoPriceTracker: React.FC = () => {
   const [tickers, setTickers] = useState<TickerData[]>([])
@@ -47,7 +48,6 @@ const CryptoPriceTracker: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState<string>('')
   const [symbols, setSymbols] = useState<{ symbol: string; icon: string }[]>([])
   const [visibleCount, setVisibleCount] = useState<number>(10) // Number of tickers to display initially
-  const [lastFetchTime, setLastFetchTime] = useState<number>(0)
 
   // Fetch all available symbols
   const fetchSymbols = async () => {
@@ -66,51 +66,17 @@ const CryptoPriceTracker: React.FC = () => {
     }
   }
 
-  // Fetch price data
-  const fetchPrices = async (): Promise<Map<string, number>> => {
-    const priceMap = new Map<string, number>()
-    try {
-      const responses = await Promise.all(
-        symbols.map(({ symbol }) =>
-          fetch(`${BASE_URL}?symbol=${symbol}`).then((res) => res.json())
-        )
-      )
-      responses.forEach((data) => {
-        priceMap.set(data.symbol, parseFloat(data.price))
-      })
-    } catch (error) {
-      console.error('Error fetching prices:', error)
-    }
-    return priceMap
-  }
-
-  // Fetch 24-hour price changes
-  const fetch24hChanges = async (): Promise<Map<string, number>> => {
-    const changeMap = new Map<string, number>()
-    try {
-      const response = await fetch(BASE_24H_URL)
-      const data = await response.json()
-      data.forEach((item: any) => {
-        if (symbols.some(({ symbol }) => symbol === item.symbol)) {
-          changeMap.set(item.symbol, parseFloat(item.priceChangePercent))
-        }
-      })
-    } catch (error) {
-      console.error('Error fetching 24h changes:', error)
-    }
-    return changeMap
-  }
-
   // Update prices and price changes
-  const updatePrices = async () => {
-    const currentTime = Date.now()
-    if (currentTime - lastFetchTime < 1000) {
-      return // Prevent excessive requests
-    }
-    setLastFetchTime(currentTime)
+  const updatePrices = (data: any) => {
+    const prices = new Map<string, number>()
+    const changes = new Map<string, number>()
 
-    const prices = await fetchPrices()
-    const changes = await fetch24hChanges()
+    data.forEach((item: any) => {
+      if (symbols.some(({ symbol }) => symbol === item.s)) {
+        prices.set(item.s, parseFloat(item.c))
+        changes.set(item.s, parseFloat(item.P))
+      }
+    })
 
     // Track the number of price increases and decreases
     let up = 0
@@ -152,16 +118,22 @@ const CryptoPriceTracker: React.FC = () => {
     setCurrentTime(formattedTime)
   }
 
-  // Initialize data and set up polling
+  // Initialize data and set up WebSocket connection
   useEffect(() => {
     fetchSymbols() // Fetch all available symbols
-    updatePrices() // Initialize data
-    const priceInterval = setInterval(updatePrices, 1000) // Update prices every second
+
+    const ws = new WebSocket(WEBSOCKET_URL)
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      updatePrices(data)
+    }
+
     const timeInterval = setInterval(updateTime, 1000) // Update time every second
+
     return () => {
-      clearInterval(priceInterval)
+      ws.close()
       clearInterval(timeInterval)
-    } // Clear intervals
+    } // Clean up WebSocket and interval
   }, [amount, fromCurrency, toCurrency, toUSDT, symbols]) // Add dependencies to re-run effect on changes
 
   const handleConvert = () => {
@@ -356,7 +328,7 @@ export const CryptoPriceTable: React.FC<CryptoPriceTableProps> = ({
   tickers,
   lastPrices,
   searchQuery,
-  symbols,
+  // symbols,
   visibleCount,
 }) => {
   const filteredTickers = tickers
@@ -384,7 +356,7 @@ export const CryptoPriceTable: React.FC<CryptoPriceTableProps> = ({
           const lastPrice = lastPrices.get(symbol)
           let color = 'gray.400'
           let arrow = ''
-          const icon: string | undefined = symbols.find((s: { symbol: string }) => s.symbol === symbol)?.icon
+          // const icon: string | undefined = symbols.find((s: { symbol: string }) => s.symbol === symbol)?.icon
 
           if (lastPrice && priceChangePercent !== null) {
             if (priceChangePercent > 0) {
@@ -399,9 +371,9 @@ export const CryptoPriceTable: React.FC<CryptoPriceTableProps> = ({
           return (
             <Tr key={symbol} as={motion.tr} whileHover={{ scale: 1.05 }}>
               <Td>
-                {icon && (
+                {/* {icon && (
                   <Image src={icon} alt={symbol} boxSize="20px" mr={2} />
-                )}
+                )} */}
                 {symbol}
               </Td>
               <Td color="black">{price.toFixed(4)}</Td>
