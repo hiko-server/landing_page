@@ -85,7 +85,7 @@ const CVPage = ({ props }: { props: any }) => {
               w="full"
               overflowX="scroll"
               // position="relative"
-              minH={isMobile ? '140vh' : '100vh'}  // 增加最小高度适应缩放
+              minH={isMobile ? '140vh' : '100vh'} // 增加最小高度适应缩放
             >
               <Box
                 w={isMobile ? '125%' : '100%'}
@@ -93,19 +93,19 @@ const CVPage = ({ props }: { props: any }) => {
                 transformOrigin="top left"
                 sx={{
                   transition: 'transform 0.3s ease',
-                  '@media print': {  // 打印时保持原始尺寸
+                  '@media print': {
+                    // 打印时保持原始尺寸
                     transform: 'none !important',
-                    width: '100% !important'
-                  }
+                    width: '100% !important',
+                  },
                 }}
               >
-                <CVResult 
-                  cvData={cvData} 
-                  language={language}
-                  style={{ 
+                <CVResult
+                  cvData={cvData}
+                  style={{
                     fontSize: isMobile ? '10px' : '12px',
-                    minWidth: isMobile ? '800px' : 'auto'  // 保持CV最小宽度
-                  }} 
+                    minWidth: isMobile ? '800px' : 'auto', // 保持CV最小宽度
+                  }}
                 />
               </Box>
             </Box>
