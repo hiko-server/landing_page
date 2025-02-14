@@ -30,6 +30,11 @@ const Payment = () => {
       address: 'D7XZZGy2VehXYGmpsAF6Zpf4oWL3L8BXF2',
     },
     {
+      name: 'USDT',
+      qrCode: 'images/payment/usdt.jpg',
+      address: 'TNkurGGhRqWqzccnUnjnC67sxvnZHZjbY9',
+    },
+    {
       name: 'WeChat Pay',
       qrCode: 'images/payment/wechatpay.jpg',
       address: 'https://pc.weixin.qq.com/',
@@ -43,7 +48,7 @@ const Payment = () => {
   const [selectedPayment, setSelectedPayment] = useState<string | null>(null)
   const { onCopy, hasCopied } = useClipboard(selectedPayment || '')
   const { onOpen } = useDisclosure()
-  const [isLargerThan768] = useMediaQuery("(min-width: 768px)")
+  const [isLargerThan768] = useMediaQuery('(min-width: 768px)')
   const handlePaymentClick = (address: string) => {
     setSelectedPayment(address)
     onOpen()
@@ -52,7 +57,7 @@ const Payment = () => {
     return !address.startsWith('http')
   }
   return (
-    <Box mt={6} p={4} borderWidth="1px" borderRadius="lg" boxShadow="lg" >
+    <Box mt={6} p={4} borderWidth="1px" borderRadius="lg" boxShadow="lg">
       <Text
         fontSize="2xl"
         fontWeight="bold"
@@ -97,7 +102,11 @@ const Payment = () => {
               textAlign="center"
               cursor="pointer"
               onClick={() => handlePaymentClick(address)}
-              border={selectedPayment === address ? '2px solid blue' : '1px solid gray'}
+              border={
+                selectedPayment === address
+                  ? '2px solid blue'
+                  : '1px solid gray'
+              }
               p={2}
               borderRadius="md"
               _hover={{
@@ -109,13 +118,19 @@ const Payment = () => {
               // width="150px"
               // height="200px"
             >
-              <Image src={qrCode} alt={name} borderRadius="md" objectFit="cover" />
-              <Text mt={2} fontWeight="medium">{name}</Text>
+              <Image
+                src={qrCode}
+                alt={name}
+                borderRadius="md"
+                objectFit="cover"
+              />
+              <Text mt={2} fontWeight="medium">
+                {name}
+              </Text>
             </GridItem>
           </Tooltip>
         ))}
       </Grid>
-      
     </Box>
   )
 }
