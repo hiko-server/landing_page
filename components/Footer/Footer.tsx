@@ -21,7 +21,7 @@ const socialLinks = [
 
 const Footer: React.FC = () => {
   return (
-    <Box as="footer" w="100%" p={4} bg="gray.800" color="white" textAlign="center">
+    <Box as="footer" w="100%" p={4} bg="gray.800" color="white" textAlign="center" style={{ position: 'fixed', bottom: 0, left: 0 }}>
       <VStack spacing={4}>
         <HStack spacing={4}>
           {quickLinks.map((link) => (
