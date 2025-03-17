@@ -9,10 +9,10 @@ import {
   Project,
   Experiences,
   ExtraSkill,
-  Certification,
+  // Certification,
   CVData,
 } from '../../types/cvProps'
-import CertificateSection from './Certification'
+// import CertificateSection from './Certification'
 import EducationSection from './Education'
 import ExtraSkillSection from './ExtraSkill'
 import PersonalInformationSection from './PersonalInformation'
@@ -92,9 +92,9 @@ const CVResult = ({
                       extraSkill: (
                         <ExtraSkillSection data={section as ExtraSkill} />
                       ),
-                      certification: (
-                        <CertificateSection data={section as Certification} />
-                      ),
+                      // certification: (
+                      //   <CertificateSection data={section as Certification} />
+                      // ),
                     }[section.sessionName]
                   }
                 </React.Fragment>

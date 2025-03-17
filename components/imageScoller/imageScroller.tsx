@@ -6,22 +6,27 @@ import { GoArrowLeft, GoArrowRight } from 'react-icons/go'
 
 const images = [
   {
-    url: '/images/COT.png',
+    url: '/images/imageScroller/COT.png',
     describe: 'COT - Start-Up Saturday of HKBU - Wegreen AI',
     redirectTo: 'https://wegreen.ltd',
   },
   {
-    url: '/images/stuff.png',
+    url: '/images/imageScroller/wegreenAI_hkstp.jpeg',
+    describe: 'COT - Youth Vision Breeds Green Action - Wegreen AI',
+    redirectTo: 'https://wegreen.ltd',
+  },
+  {
+    url: '/images/imageScroller/stuff.png',
     describe: 'Stuff - Exhibition in HK - Honsenn',
     redirectTo: 'https://honsennaudio.com/',
   },
   {
-    url: '/images/student.png',
+    url: '/images/imageScroller/student.png',
     describe: 'Student - Prensentation of final project - UOWCHK',
     redirectTo: 'https://www.uowchk.edu.hk/',
   },
   {
-    url: '/images/fyp.png',
+    url: '/images/imageScroller/fyp.png',
     describe: 'Student - Project Test - UOWCHK',
     redirectTo:
       'https://drive.google.com/drive/folders/1AZWZR9o1Sjp-V1ky5TL2UpjtdJFmEM0q?usp=drive_link',
