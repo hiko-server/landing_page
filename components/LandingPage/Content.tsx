@@ -132,11 +132,21 @@ const ButtonGroup = () => (
       size="lg"
       w="70%"
       fontSize={'24px'}
-      mb={6}
-      onClick={() => window.open('https://hiko.dev/cv/edit')}
+      mb={3}
+      onClick={() => window.open('https://wegreen.ltd/')}
     >
-      <Text color="blue.700">CV Generator Demo</Text>
+      <Text color="blue.700">WeGreen AI Ltd</Text>
     </Button>
+    <Button
+      size="lg"
+      w="70%"
+      fontSize={'24px'}
+      mb={3}
+      onClick={() => window.open('https://bus-search.hiko.dev/')}
+    >
+      <Text color="blue.700">KMB Bus Search</Text>
+    </Button>
+
   </Flex>
 )
 
