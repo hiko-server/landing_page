@@ -1,0 +1,37 @@
+/* Global Styles */
+
+$phone: "(max-width: 767px)";
+$tablet: "(max-width: 1200px)";
+$desktop: "(min-width: 1200px)";
+
+/* FounderHere code */
+
+$FH-yellow: #ffc800;
+$FH-purple: #250481;
+$FH-grey: #69717d;
+$grey01: #ffffff;
+$grey02: #ffffff;
+$line-color: #919496;
+$each-image-present-time: 4.5; //a
+$cross-fade-time: 1.2; //b
+$no-of-images: 5; //n
+$nav-bar-height: 6vh;
+$exit-button-height: 50px;
+$apple-store-icon: "app-store-345e4c73d4.png";
+$android-play-icon: "google-play-a537333044.png";
+$img-src: "../../assets/img/";
+
+/* MIT HK Node code */
+
+$MIT-HK-Node-purple: #29275c;
+$MIT-HK-Node-light-purple: #acadd8;
+
+/* Percentage for keyframes:
+
+0%
+a/t * 100%
+(a+b)/t * 100% = 1/n *1 00%
+100% - (b/t*100%)
+100% 
+
+*/
