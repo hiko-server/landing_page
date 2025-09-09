@@ -2,91 +2,92 @@
 import Head from 'next/head'
 import { VPColor } from '../../theme/color'
 
-const productName = process.env.NEXT_PUBLIC_PRODUCT_NAME
+const productName = process.env.NEXT_PUBLIC_PRODUCT_NAME || 'HIKO.DEV'
+
+type JsonLd = Record<string, any> | Array<Record<string, any>>
+
+type Props = {
+  title?: string
+  description?: string
+  url?: string
+  image?: string
+  type?: string
+  themeColor?: string
+  twitterCard?: 'summary' | 'summary_large_image'
+  canonical?: string
+  hreflang?: Array<{ hrefLang: string; href: string }>
+  jsonLd?: JsonLd
+}
 
 const CustomHead = ({
   title,
+  description,
+  url,
+  image,
+  type = 'website',
   themeColor,
-}: {
-  title?: string
-  themeColor?: string
-}) => {
+  twitterCard = 'summary_large_image',
+  canonical,
+  hreflang,
+  jsonLd,
+}: Props) => {
+  const pageTitle = title ? `${title} | ${productName}` : productName
+  const pageDesc = description || 'Personal site of Hiko — software engineer.'
+  const ogImage = image || '/images/hikoAvator.png'
+
   return (
-    <>
-      <Head>
-        <meta charSet="utf-8" />
-        <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-        <meta
-          name="viewport"
-          content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no"
-        />
-        <meta
-          name="theme-color"
-          content={
-            themeColor ? themeColor : VPColor ? VPColor.index.blue : '##559ec7'
-          }
-        />
+    <Head>
+      <meta charSet="utf-8" />
+      <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+      <meta
+        name="viewport"
+        content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no"
+      />
+      <meta
+        name="theme-color"
+        content={themeColor ? themeColor : VPColor ? VPColor.index.blue : '#559ec7'}
+      />
 
-        {/* For PWA use*/}
+      <title>{pageTitle}</title>
+      <meta name="description" content={pageDesc} />
+      <meta name="keywords" content="Hiko, Li Yanpei, software engineer, CV, crypto" />
+      <link rel="canonical" href={canonical || url || ''} />
+      {hreflang?.map(({ hrefLang, href }) => (
+        <link key={hrefLang} rel="alternate" hrefLang={hrefLang} href={href} />
+      ))}
 
-        <meta
-          name="application-name"
-          content={productName ? productName : 'PMark'}
-        />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <meta
-          name="apple-mobile-web-app-title"
-          content={productName ? productName : 'PMark'}
-        />
-        <meta
-          name="description"
-          content={productName ? productName : 'PMark'}
-        />
-        <meta name="keywords" content={productName ? productName : 'PMark'} />
-        {/* <meta name="format-detection" content="telephone=no" /> */}
-        <meta name="mobile-web-app-capable" content="yes" />
-        <meta name="msapplication-config" content="/icons/browserconfig.xml" />
-        <meta
-          name="msapplication-TileColor"
-          content={VPColor ? VPColor.index.blue : '#559ec7'}
-        />
-        <meta name="msapplication-tap-highlight" content="no" />
+      {/* Open Graph */}
+      {url && <meta property="og:url" content={url} />}
+      <meta property="og:type" content={type} />
+      <meta property="og:title" content={pageTitle} />
+      <meta property="og:description" content={pageDesc} />
+      <meta property="og:image" content={ogImage} />
 
-        {/* SEO */}
-        <meta name="description" content="Description" />
-        <meta name="keywords" content="Keywords" />
+      {/* Twitter Card */}
+      <meta name="twitter:card" content={twitterCard} />
+      <meta name="twitter:title" content={pageTitle} />
+      <meta name="twitter:description" content={pageDesc} />
+      <meta name="twitter:image" content={ogImage} />
 
-        {/* Can customize here*/}
-        <title>{title ? title : productName}</title>
+      {/* JSON-LD */}
+      {jsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
+      )}
 
-        <link
-          href="https://fonts.googleapis.com/css?family=Open+Sans:300,400|Oswald:600&display=optional"
-          rel="stylesheet"
-        />
-        <link
-          data-react-helmet="true"
-          rel="icon"
-          href="https://blobscdn.gitbook.com/v0/b/gitbook-28427.appspot.com/o/spaces%2F-L9iS6Wm2hynS5H9Gj7j%2Favatar.png?generation=1523462254548780&amp;alt=media"
-        />
+      {/* PWA basics */}
+      <link rel="manifest" href="/manifest.json" />
+      <link rel="icon" href="/images/favicon-32x32.png" />
+      <link rel="apple-touch-icon" href="/apple-icon.png" />
 
-        {/* For PWA icons use*/}
-        <link rel="manifest" href="/manifest.json" />
-        <link
-          href="/icons/favicon-16x16.png"
-          rel="icon"
-          type="image/png"
-          sizes="16x16"
-        />
-        <link
-          href="/icons/favicon-32x32.png"
-          rel="icon"
-          type="image/png"
-          sizes="32x32"
-        />
-        <link rel="apple-touch-icon" href="/apple-icon.png"></link>
-      </Head>
-    </>
+      {/* Fonts (optional) */}
+      <link
+        href="https://fonts.googleapis.com/css?family=Open+Sans:300,400|Oswald:600&display=optional"
+        rel="stylesheet"
+      />
+    </Head>
   )
 }
 

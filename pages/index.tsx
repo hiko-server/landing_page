@@ -1,12 +1,12 @@
 import { useSession } from 'next-auth/react'
 import React, { useState, useEffect } from 'react'
 import { GetServerSideProps } from 'next'
-import { Flex, Spinner } from '@chakra-ui/react'
+import { Flex, useMediaQuery } from '@chakra-ui/react'
 
 import DisplayMobileInfo from '../components/mobileDisplay/mobileDisplay'
 import LandingContent from '../components/LandingPage/LandingContent'
 import HeaderFooter from '../layout/HeaderFooter'
-// import Head from 'next/head';
+import CustomHead from '../components/General-UI/CustomHead'
 
 
 
@@ -19,68 +19,53 @@ const LandingPage = (props: any) => {
   console.log(session?.accessToken)
 
   const [, setIsHostCV] = useState<boolean>(false)
-  const [isLoading, setIsLoading] = useState<boolean>(true)
-  const [isMobile, setIsMobile] = useState<boolean>(false)
+  const [isMobile] = useMediaQuery('(max-width: 767px)')
 
   useEffect(() => {
     if (props.host && props.host === 'cv.hiko.dev') {
       setIsHostCV(true)
     }
-    setIsLoading(false)
-
-    const mediaQuery = window.matchMedia('(max-width: 767px)')
-    setIsMobile(mediaQuery.matches)
-
-    const handleResize = (e: MediaQueryListEvent) => {
-      setIsMobile(e.matches)
-    }
-
-    mediaQuery.addEventListener('change', handleResize)
-
-    return () => {
-      mediaQuery.removeEventListener('change', handleResize)
-    }
-  }, [])
+  }, [props.host])
 
   return (
     <>
-      {/* <Head>
-        <title>HIKO DEV - HOME</title>
-        <link rel="icon" href="/favicon.ico" />
-      </Head> */}
- 
-      {isLoading ? (
-        <Flex
-          h={'100vh'}
-          w={'100vw'}
-          alignItems={'center'}
-          justifyContent={'center'}
-        >
-          <Spinner size="xl" />
-        </Flex>
-      ) : (
-        <HeaderFooter isMobile={isMobile}>
-          
-          {isMobile ? (
-            <DisplayMobileInfo isMobile={isMobile} setIsMobile={setIsMobile} />
-          ) : (
-            
-            <Flex
-              direction="column"
-              alignItems="center"
-              justifyContent="center"
-              // p={['20px', '40px']}
-              gap={['20px', '40px']}
-            >
+      <CustomHead
+        title="Home"
+        description="Hiko — Full-stack engineer. View CV, projects, and contact."
+        url={`https://${props.host}`}
+        image="/images/hikoAvator.png"
+        type="website"
+        jsonLd={[
+          {
+            '@context': 'https://schema.org',
+            '@type': 'WebSite',
+            name: 'HIKO.DEV',
+            url: `https://${props.host}`,
+          },
+          {
+            '@context': 'https://schema.org',
+            '@type': 'Person',
+            name: 'Li Yanpei (Hiko)',
+            url: `https://${props.host}`,
+            sameAs: [
+              'https://github.com/HikoPLi',
+              'https://gitlab.com/HikoPLi',
+              'https://www.linkedin.com/in/liyanpeihiko/',
+            ],
+            jobTitle: 'Software Engineer',
+          },
+        ]}
+      />
 
-              <LandingContent isMobile={isMobile} />
-
-            </Flex>
-            
-          )}
-          
-        </HeaderFooter>
-      )}
+      <HeaderFooter isMobile={isMobile}>
+        {isMobile ? (
+          <DisplayMobileInfo isMobile={isMobile} setIsMobile={() => {}} />
+        ) : (
+          <Flex direction="column" alignItems="center" justifyContent="center" gap={['20px', '40px']}>
+            <LandingContent isMobile={isMobile} />
+          </Flex>
+        )}
+      </HeaderFooter>
     </>
   )
 }

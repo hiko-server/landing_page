@@ -2,8 +2,9 @@ import { useSession } from 'next-auth/react'
 import React, { useEffect, useState } from 'react'
 
 import LandingCVSections from '../../components/LandingPage/LandingCVSections'
-import { Flex, Spinner } from '@chakra-ui/react'
+import { Flex, useMediaQuery } from '@chakra-ui/react'
 import HeaderFooter from '../../layout/HeaderFooter'
+import CustomHead from '../../components/General-UI/CustomHead'
 
 const About = (props: any) => {
   console.log('props', props)
@@ -14,53 +15,27 @@ const About = (props: any) => {
   console.log(session?.accessToken)
 
   const [, setIsHostCV] = useState<boolean>(false)
-  const [isLoading, setIsLoading] = useState<boolean>(true)
-  const [isMobile, setIsMobile] = useState<boolean>(false)
+  const [isMobile] = useMediaQuery('(max-width: 767px)')
 
   useEffect(() => {
     if (props.host && props.host === 'cv.hiko.dev') {
       setIsHostCV(true)
     }
-    setIsLoading(false)
-
-    const mediaQuery = window.matchMedia('(max-width: 767px)')
-    setIsMobile(mediaQuery.matches)
-
-    const handleResize = (e: MediaQueryListEvent) => {
-      setIsMobile(e.matches)
-    }
-
-    mediaQuery.addEventListener('change', handleResize)
-
-    return () => {
-      mediaQuery.removeEventListener('change', handleResize)
-    }
-  }, [])
+  }, [props.host])
 
   return (
     <React.Fragment>
-      {isLoading ? (
-        <Flex
-          h={'100vh'}
-          w={'100vw'}
-          alignItems={'center'}
-          justifyContent={'center'}
-        >
-          <Spinner size="xl" />
+      <CustomHead
+        title="About"
+        description="About Hiko — background, skills, and interests."
+        url={`https://${props.host || 'hiko.dev'}/about`}
+        image="/images/hikoAvator.png"
+      />
+      <HeaderFooter isMobile={isMobile}>
+        <Flex direction="column" alignItems="center" justifyContent="center" p={['20px', '40px']} gap={['20px', '40px']}>
+          <LandingCVSections />
         </Flex>
-      ) : (
-        <HeaderFooter isMobile={isMobile}>
-          <Flex
-            direction="column"
-            alignItems="center"
-            justifyContent="center"
-            p={['20px', '40px']}
-            gap={['20px', '40px']}
-          >
-            <LandingCVSections />
-          </Flex>
-        </HeaderFooter>
-      )}
+      </HeaderFooter>
     </React.Fragment>
   )
 }

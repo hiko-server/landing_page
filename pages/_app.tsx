@@ -39,14 +39,6 @@ const App = ({ Component, pageProps }: any) => {
       router.events.off('routeChangeComplete', handleRouteChange)
     }
   }, [router.events])
-  const formatTitle = (path: string) => {
-    if (path === '/') return 'HIKO.DEV - HOME';
-    return 'HIKO.DEV - ' + path
-      .split('/')
-      .filter(Boolean)
-      .map((segment) => segment.toUpperCase())
-      .join(' - ') ;
-  };
   return (
     <React.Fragment>
 
@@ -59,7 +51,6 @@ const App = ({ Component, pageProps }: any) => {
               <SettingsAppProvider>
                 <CSSReset />
                 <Head>
-                  <title>{formatTitle(router.asPath)}</title>
                   <meta name="viewport" content="width=device-width, initial-scale=1" />
                   <link rel="icon" href="/images/favicon-32x32.png" />
                 </Head>
