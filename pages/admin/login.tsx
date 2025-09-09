@@ -9,9 +9,18 @@ export default function AdminLogin() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   useEffect(() => {
-    if (typeof document !== 'undefined' && document.cookie.includes('cv_admin_token=')) {
-      window.location.replace('/admin')
+    // Check with server if jwt cookie exists and is valid (not expired)
+    const checkSession = async () => {
+      try {
+        const res = await fetch('/api/admin/session')
+        if (res.ok) {
+          window.location.replace('/admin')
+        }
+      } catch {
+        // ignore network errors; stay on login
+      }
     }
+    checkSession()
   }, [])
 
   const onSubmit = async (e: React.FormEvent) => {
