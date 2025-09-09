@@ -15,6 +15,7 @@ import {
 } from '@chakra-ui/react'
 import styled from 'styled-components'
 import ImageScroller from '../imageScoller/imageScroller'
+import type { ScrollerImage } from '../imageScoller/imageScroller'
 
 import LandingCVSections from './LandingCVSections'
 import ContactCard from '../Contact/ConatactCard'
@@ -51,7 +52,7 @@ const QuickAccessAccordionItem = ({
   </AccordionItem>
 )
 
-const Content = () => {
+const Content = ({ quickAccess, photos, cvEn, cvZh }: { quickAccess?: { label: string; url: string }[]; photos?: ScrollerImage[]; cvEn?: any[]; cvZh?: any[] }) => {
   const router = useRouter()
   const isEditMode = router.asPath.includes('edit')
 
@@ -70,7 +71,7 @@ const Content = () => {
         p={['20px', '40px']}
         gap={['20px', '40px']}
       >
-        <ImageScroller />
+        <ImageScroller images={photos} />
         <ContactCard />
       </Flex>
       <StyledBox
@@ -99,11 +100,11 @@ const Content = () => {
               alignItems="center"
               justifyContent="center"
             >
-              <ButtonGroup />
+              <ButtonGroup quickAccess={quickAccess} />
             </VStack>
           </QuickAccessAccordionItem>
         </Accordion>
-        <LandingCVSections />
+        <LandingCVSections en={cvEn} zh={cvZh} />
       </StyledBox>
     </Flex>
   )
@@ -111,7 +112,7 @@ const Content = () => {
 
 
 
-const ButtonGroup = () => (
+const ButtonGroup = ({ quickAccess }: { quickAccess?: { label: string; url: string }[] }) => (
   <Flex
     mt={8}
     w={['100%', '350px']}
@@ -119,24 +120,14 @@ const ButtonGroup = () => (
     alignItems="center"
     justifyContent="center"
   >
-    <Button
-      size="lg"
-      w="70%"
-      fontSize={'24px'}
-      mb={3}
-      onClick={() => window.open('https://asa.hiko-prime.com/')}
-    >
-      <Text color="blue.700">ASA</Text>
-    </Button>
-    <Button
-      size="lg"
-      w="70%"
-      fontSize={'24px'}
-      mb={6}
-      onClick={() => window.open('https://hiko.dev/cv/edit')}
-    >
-      <Text color="blue.700">CV Generator Demo</Text>
-    </Button>
+    {(quickAccess && quickAccess.length ? quickAccess : [
+      { label: 'ASA', url: 'https://asa.hiko-prime.com/' },
+      { label: 'CV Generator Demo', url: 'https://hiko.dev/cv/edit' },
+    ]).map((btn) => (
+      <Button key={btn.label} size="lg" w="70%" fontSize={'24px'} mb={3} onClick={() => window.open(btn.url)}>
+        <Text color="blue.700">{btn.label}</Text>
+      </Button>
+    ))}
   </Flex>
 )
 

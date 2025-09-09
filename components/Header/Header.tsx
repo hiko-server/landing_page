@@ -198,9 +198,7 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
               </Button>
             ) : (
               <Flex gap={2}>
-                <Button variant="outline" colorScheme="teal" onClick={() => router.push('/cv/edit')}>
-                  Edit CV
-                </Button>
+                <Button variant="outline" colorScheme="teal" onClick={() => router.push('/admin/dashboard')}>Dashboard</Button>
                 <Button variant="solid" colorScheme="red" onClick={logout}>
                   Logout
                 </Button>
@@ -277,8 +275,8 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
               </Button>
             ) : (
               <>
-                <Button mt={2} variant="outline" colorScheme="teal" onClick={() => { onClose(); router.push('/cv/edit') }}>
-                  Edit CV
+                <Button mt={2} variant="outline" colorScheme="teal" onClick={() => { onClose(); router.push('/admin/dashboard') }}>
+                  Dashboard
                 </Button>
                 <Button mt={2} variant="solid" colorScheme="red" onClick={() => { onClose(); logout() }}>
                   Logout
