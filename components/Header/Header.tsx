@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   Box,
   Text,
@@ -17,6 +17,7 @@ import {
   MenuButton,
   MenuList,
   MenuItem,
+  useToast,
 } from '@chakra-ui/react'
 import { useRouter } from 'next/router'
 import { TfiAlignJustify } from 'react-icons/tfi'
@@ -46,6 +47,25 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
   ]
 
   const router = useRouter()
+  const toast = useToast()
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      setIsAdmin(document.cookie.includes('cv_admin_token='))
+    }
+  }, [])
+
+  const logout = async () => {
+    try {
+      await fetch('/api/admin/logout', { method: 'POST' })
+      setIsAdmin(false)
+      toast({ status: 'success', title: 'Logged out' })
+      router.replace('/')
+    } catch (e) {
+      toast({ status: 'error', title: 'Logout failed' })
+    }
+  }
   const { isOpen, onOpen, onClose } = useDisclosure()
 
   const iconMap: { [key: string]: JSX.Element } = {
@@ -167,6 +187,25 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                 ))}
               </MenuList>
             </Menu>
+            {/* Admin */}
+            {!isAdmin ? (
+              <Button
+                variant="solid"
+                colorScheme="teal"
+                onClick={() => router.push('/admin/login')}
+              >
+                Admin Login
+              </Button>
+            ) : (
+              <Flex gap={2}>
+                <Button variant="outline" colorScheme="teal" onClick={() => router.push('/cv/edit')}>
+                  Edit CV
+                </Button>
+                <Button variant="solid" colorScheme="red" onClick={logout}>
+                  Logout
+                </Button>
+              </Flex>
+            )}
           </Flex>
         )}
       </Box>
@@ -223,6 +262,29 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                 ))}
               </MenuList>
             </Menu>
+            {/* Admin (mobile) */}
+            {!isAdmin ? (
+              <Button
+                mt={2}
+                variant="solid"
+                colorScheme="teal"
+                onClick={() => {
+                  onClose();
+                  router.push('/admin/login')
+                }}
+              >
+                Admin Login
+              </Button>
+            ) : (
+              <>
+                <Button mt={2} variant="outline" colorScheme="teal" onClick={() => { onClose(); router.push('/cv/edit') }}>
+                  Edit CV
+                </Button>
+                <Button mt={2} variant="solid" colorScheme="red" onClick={() => { onClose(); logout() }}>
+                  Logout
+                </Button>
+              </>
+            )}
             {/* More */}
             <Menu>
               <MenuButton

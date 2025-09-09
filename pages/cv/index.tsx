@@ -4,12 +4,12 @@
 import { Box, Flex, useMediaQuery } from '@chakra-ui/react'
 import { useSession } from 'next-auth/react'
 import CVResult from '../../components/CVViewerPage/CVResult'
-import { cvDataChinese, cvDataEnglish } from '../../example/cvdata'
+// import { cvDataChinese, cvDataEnglish } from '../../example/cvdata'
 import React, { useEffect, useState } from 'react'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 
-const CVPage = ({ props }: { props: any }) => {
+const CVPage = ({ props, en, zh }: { props: any; en: any[]; zh: any[] }) => {
   console.log('props', props)
 
   const { data: session, status } = useSession()
@@ -29,13 +29,13 @@ const CVPage = ({ props }: { props: any }) => {
   const [language, setLanguage] = useState('en')
   switch (language) {
     case 'en':
-      cvData = cvDataEnglish
+      cvData = en
       break
     case 'zh':
-      cvData = cvDataChinese
+      cvData = zh
       break
     default:
-      cvData = cvDataEnglish
+      cvData = en
   }
   return (
     <React.Fragment>
@@ -90,3 +90,26 @@ const CVPage = ({ props }: { props: any }) => {
   )
 }
 export default CVPage
+export const getServerSideProps = async (context: any) => {
+  const host = context.req.headers.host || 'hiko.dev'
+  const fs = await import('fs')
+  const path = await import('path')
+  const dataPath = path.join(process.cwd(), 'data', 'cvdata.json')
+  let en: any[] = []
+  let zh: any[] = []
+  try {
+    const raw = fs.readFileSync(dataPath, 'utf-8') as unknown as string
+    const json = JSON.parse(raw)
+    en = json.en || []
+    zh = json.zh || []
+  } catch {}
+  if (!en.length || !zh.length) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const example = require('../../example/cvdata')
+      if (!en.length) en = example.cvDataEnglish
+      if (!zh.length) zh = example.cvDataChinese
+    } catch {}
+  }
+  return { props: { props: { host }, en, zh } }
+}
