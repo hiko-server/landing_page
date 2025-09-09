@@ -28,13 +28,31 @@ export default function HomeEditor() {
     load()
   }, [])
 
+  const normalizeUrl = (u?: string) => {
+    if (!u) return ''
+    if (/^https?:\/\//i.test(u)) return u
+    if (u.startsWith('/')) return u
+    return '/' + u.replace(/^\.?\/*/, '')
+  }
+
   const save = async () => {
-    const res = await fetch('/api/home', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ hero, socials, brands, quickAccess, photos }) })
+    const payload = {
+      hero: { ...hero, avatarUrl: normalizeUrl(hero.avatarUrl) },
+      socials,
+      brands: (brands || []).map(b => ({ ...b, image: normalizeUrl(b.image) })),
+      quickAccess,
+      photos: (photos || []).map(p => ({
+        ...p,
+        url: normalizeUrl(p.url),
+        redirectTo: p.redirectTo ? normalizeUrl(p.redirectTo) : undefined,
+      })),
+    }
+    const res = await fetch('/api/home', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
     if (res.ok) toast({ status: 'success', title: 'Saved' })
     else toast({ status: 'error', title: 'Save failed (login?)' })
   }
 
-  const validateUrl = (u: string) => /^\/?uploads\/.+|^https?:\/\//i.test(u)
+  const validateUrl = (u: string) => /^\//.test(u) || /^https?:\/\//i.test(u)
   const onUpload = async (file: File, setter: (url: string) => void) => {
     if (file.size > 8 * 1024 * 1024) {
       toast({ status: 'error', title: 'File too large (>8MB)' })
@@ -169,7 +187,7 @@ export default function HomeEditor() {
               onDrop={(e)=> { e.preventDefault(); const from = Number(e.dataTransfer.getData('text/plain')); if (Number.isNaN(from)) return; const arr=[...photos]; const [moved]=arr.splice(from,1); arr.splice(idx,0,moved); setPhotos(arr) }}
             >
               <Td>{idx+1}</Td>
-              <Td>{p.url ? <Image src={p.url} alt="preview" boxSize="60px" objectFit="cover" /> : null}</Td>
+              <Td>{p.url ? <Image src={normalizeUrl(p.url)} alt="preview" boxSize="60px" objectFit="cover" /> : null}</Td>
               <Td><Input value={p.url} onChange={(e)=>{ const val=e.target.value; const arr=[...photos]; arr[idx]={...arr[idx], url:val}; setPhotos(arr) }} isInvalid={!!p.url && !validateUrl(p.url)} /></Td>
               <Td><Input value={p.describe || ''} onChange={(e)=>{ const arr=[...photos]; arr[idx]={...arr[idx], describe:e.target.value}; setPhotos(arr) }} /></Td>
               <Td><Input value={p.redirectTo || ''} onChange={(e)=>{ const val=e.target.value; const arr=[...photos]; arr[idx]={...arr[idx], redirectTo:val}; setPhotos(arr) }} isInvalid={!!p.redirectTo && !validateUrl(p.redirectTo)} /></Td>
