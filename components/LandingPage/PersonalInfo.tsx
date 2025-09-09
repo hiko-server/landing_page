@@ -1,4 +1,5 @@
 "use client";
+import React from "react";
 import { Box, Button, Flex, Heading, Link, Text, Avatar, IconButton, Stack } from "@chakra-ui/react";
 import { FaGithub, FaGitlab, FaLinkedin, FaWhatsapp } from "react-icons/fa";
 // import LinkedInBadge from "../linkedIn/linkedIn";
@@ -6,6 +7,8 @@ import VideoBackgroundLayOut from "../../layout/VideoBackgroundLayout";
 import { useRouter } from "next/router";
 
 const PersonalInfo = ({ isMobile }: { isMobile: boolean }) => {
+  const [showPhone, setShowPhone] = React.useState(false)
+  const [showEmail, setShowEmail] = React.useState(false)
 
   const handleSubmit = (e: { preventDefault: () => void; }) => {
     e.preventDefault();
@@ -116,12 +119,18 @@ const PersonalInfo = ({ isMobile }: { isMobile: boolean }) => {
                     >
                       李彦霈
                     </Text>
-                    <Text fontSize={['16px', '18px']} textAlign="center"color={isMobile ? "black" : "white"}>
-                      +852 62040827
+                    <Text fontSize={['16px', '18px']} textAlign="center" color={isMobile ? "black" : "white"}>
+                      {showPhone ? '+852 62040827' : (
+                        <Button size="sm" onClick={() => setShowPhone(true)} aria-label="Reveal phone number">Click to reveal phone</Button>
+                      )}
                     </Text>
-                    <Link href="mailto:hi@hiko.dev" fontSize={['16px', '18px']} textAlign="center" color={isMobile ? "black" : "white"}>
-                      hi@hiko.dev
-                    </Link>
+                    <Text fontSize={['16px', '18px']} textAlign="center" color={isMobile ? "black" : "white"}>
+                      {showEmail ? (
+                        <Link href="mailto:hi@hiko.dev">hi@hiko.dev</Link>
+                      ) : (
+                        <Button size="sm" onClick={() => setShowEmail(true)} aria-label="Reveal email">Click to reveal email</Button>
+                      )}
+                    </Text>
                     <Text fontSize={['16px', '18px']} textAlign="center" color={isMobile ? "black" : "white"}>
                       Mandarin, Cantonese, English
                     </Text>

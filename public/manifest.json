@@ -1,0 +1,14 @@
+{
+  "name": "HIKO.DEV",
+  "short_name": "HIKO",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#559ec7",
+  "description": "Hiko — Full-stack engineer portfolio and CV.",
+  "icons": [
+    { "src": "/images/favicon-32x32.png", "sizes": "32x32", "type": "image/png" },
+    { "src": "/images/favicon-32x32.png", "sizes": "48x48", "type": "image/png" }
+  ]
+}
+
