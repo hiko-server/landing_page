@@ -33,7 +33,7 @@ const About = (props: any) => {
       />
       <HeaderFooter isMobile={isMobile}>
         <Flex direction="column" alignItems="center" justifyContent="center" p={['20px', '40px']} gap={['20px', '40px']}>
-          <LandingCVSections />
+          <LandingCVSections en={props.cv?.en} zh={props.cv?.zh} />
         </Flex>
       </HeaderFooter>
     </React.Fragment>
@@ -41,3 +41,26 @@ const About = (props: any) => {
 }
 
 export default About
+export async function getServerSideProps(context: any) {
+  const host = context.req.headers.host || 'hiko.dev'
+  let en: any[] = []
+  let zh: any[] = []
+  try {
+    const fs = await import('fs')
+    const path = await import('path')
+    const dataPath = path.join(process.cwd(), 'data', 'cvdata.json')
+    try {
+      const raw = fs.readFileSync(dataPath, 'utf-8') as unknown as string
+      const json = JSON.parse(raw)
+      en = json.en || []
+      zh = json.zh || []
+    } catch {}
+    if (!en.length || !zh.length) {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const example = require('../../example/cvdata')
+      if (!en.length) en = example.cvDataEnglish
+      if (!zh.length) zh = example.cvDataChinese
+    }
+  } catch {}
+  return { props: { host, cv: { en, zh } } }
+}

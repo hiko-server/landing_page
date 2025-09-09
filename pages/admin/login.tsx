@@ -1,20 +1,25 @@
-import { useState } from 'react'
-import { Box, Button, Flex, Heading, Input, Text, VStack, Alert, AlertIcon } from '@chakra-ui/react'
+import { useEffect, useState } from 'react'
+import { Box, Button, Flex, Heading, Input, Text, VStack, Alert, AlertIcon, Link, HStack } from '@chakra-ui/react'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 
 export default function AdminLogin() {
   const [isMobile] = [false]
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  useEffect(() => {
+    if (typeof document !== 'undefined' && document.cookie.includes('cv_admin_token=')) {
+      window.location.replace('/admin')
+    }
+  }, [])
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
-    const res = await fetch('/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) })
+    const res = await fetch('/api/auth/email-login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) })
     if (res.ok) {
-      window.location.href = '/cv/edit'
+      window.location.href = '/admin'
     } else {
       const data = await res.json().catch(() => ({}))
       setError(data?.error || 'Login failed')
@@ -33,16 +38,18 @@ export default function AdminLogin() {
             )}
             <form onSubmit={onSubmit}>
               <VStack align="stretch" spacing={3}>
-                <Input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} />
+                <Input placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
                 <Input placeholder="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
                 <Button type="submit" colorScheme="blue">Sign in</Button>
               </VStack>
             </form>
-            <Text mt={3} color="gray.500">Use credentials configured via env vars.</Text>
+            <HStack mt={3} justify="space-between">
+              <Text color="gray.500">Use env ADMIN_EMAIL/ADMIN_PASS</Text>
+              <Link href="/admin/forgot" color="blue.400">Forgot password?</Link>
+            </HStack>
           </Box>
         </Flex>
       </HeaderFooter>
     </>
   )
 }
-

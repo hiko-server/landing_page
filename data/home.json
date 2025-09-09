@@ -1,0 +1,55 @@
+{
+  "hero": {
+    "welcome": "Welcome to",
+    "brand": "HIKO.DEV",
+    "tagline": "Self-Taught Full-Stack Software Engineer | Exploring Innovative Solutions in Computer Science | Machine Learning | Computer Vision | Typescript | React | Next.js | NestJS | Python FastAPI",
+    "avatarUrl": "/images/hikoAvator.png",
+    "phone": "+852 62040827",
+    "email": "hi@hiko.dev"
+  },
+  "socials": {
+    "github": "https://github.com/HikoPLi",
+    "gitlab": "https://gitlab.com/HikoPLi",
+    "linkedin": "https://www.linkedin.com/in/liyanpeihiko/",
+    "whatsapp": "https://wa.me/85262040827"
+  },
+  "brands": [
+    {
+      "name": "UOWCHK",
+      "href": "https://www.uowchk.edu.hk/",
+      "image": "/images/brand/uowchk-logo-navy.svg"
+    },
+    {
+      "name": "HKMU",
+      "href": "https://www.hkmu.edu.hk/",
+      "image": "/images/brand/hkmu.png"
+    },
+    {
+      "name": "HONSENN",
+      "href": "https://honsennaudio.com/",
+      "image": "/images/brand/HONSENN-CEO.svg"
+    },
+    {
+      "name": "WeGreen",
+      "href": "https://wegreen.ltd/",
+      "image": "/images/brand/Wegreen.svg"
+    }
+  ],
+  "quickAccess": [
+    {
+      "label": "ASA",
+      "url": "https://asa.hiko-prime.com/"
+    },
+    {
+      "label": "Bus Search App",
+      "url": "https://bus-search.hiko.dev/"
+    }
+  ],
+  "photos": [
+    { "url": "/images/imageScroller/COT.png", "describe": "COT - Start-Up Saturday of HKBU - Wegreen AI", "redirectTo": "https://wegreen.ltd", "visible": true },
+    { "url": "/images/imageScroller/wegreenAI_hkstp.jpeg", "describe": "COT - Youth Vision Breeds Green Action - Wegreen AI", "redirectTo": "https://wegreen.ltd", "visible": true },
+    { "url": "/images/imageScroller/stuff.png", "describe": "Stuff - Exhibition in HK - Honsenn", "redirectTo": "https://honsennaudio.com/", "visible": true },
+    { "url": "/images/imageScroller/student.png", "describe": "Student - Prensentation of final project - UOWCHK", "redirectTo": "https://www.uowchk.edu.hk/", "visible": true },
+    { "url": "/images/imageScroller/fyp.png", "describe": "Student - Project Test - UOWCHK", "redirectTo": "https://drive.google.com/drive/folders/1AZWZR9o1Sjp-V1ky5TL2UpjtdJFmEM0q?usp=drive_link", "visible": true }
+  ]
+}
