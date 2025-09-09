@@ -4,8 +4,9 @@ import React from 'react'
 import PersonalInfo from './PersonalInfo'
 import Content from './Content'
 import Brands from '../BrandShowcase/BrandShowcase'
+import type { HomeData } from '../../lib/home'
 
-const LandingContent = ({ isMobile }: { isMobile: boolean }) => {
+const LandingContent = ({ isMobile, home, cv }: { isMobile: boolean; home?: HomeData | null; cv?: { en: any[]; zh: any[] } | null }) => {
   return (
     <Flex
       // w={{ base: "100%", md: "80%" }}
@@ -21,14 +22,14 @@ const LandingContent = ({ isMobile }: { isMobile: boolean }) => {
       // boxShadow={'0 4px 8px rgba(0, 0, 0, 0.1)'}
       borderRadius={'8px'}
     >
-      <PersonalInfo isMobile={isMobile} />
+      <PersonalInfo isMobile={isMobile} home={home || undefined} />
 
-      <Brands />
+      <Brands brands={home?.brands} />
       <Box
         // bgColor={'black'}
         w={{ base: 'full', md: '1/2' }}
       >
-        <Content />
+        <Content quickAccess={home?.quickAccess} photos={home?.photos as any} cvEn={cv?.en} cvZh={cv?.zh} />
       </Box>
       {/* <CryptoPriceTracker /> */}
     </Flex>

@@ -71,7 +71,10 @@ const SingleBrand = ({ brand }: { brand: Brand }) => {
   )
 }
 
-const Brands = () => {
+const Brands = ({ brands }: { brands?: { name: string; href: string; image: string }[] }) => {
+  const data: Brand[] = (brands && brands.length
+    ? brands.map((b, idx) => ({ id: idx + 1, name: b.name, href: b.href, image: b.image }))
+    : brandData)
   return (
     <>
       {/* Clients Section */}
@@ -84,7 +87,7 @@ const Brands = () => {
             alignItems="center"
             justifyContent="center"
           >
-            {brandData.map((brand) => (
+            {data.map((brand) => (
               <SingleBrand key={brand.id} brand={brand} />
             ))}
           </Grid>

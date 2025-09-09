@@ -33,7 +33,11 @@ const LandingPage = (props: any) => {
         title="Home"
         description="Hiko — Full-stack engineer. View CV, projects, and contact."
         url={`https://${props.host}`}
-        image="/images/hikoAvator.png"
+        image={(props.home?.photos && props.home.photos.find((p:any)=> p.visible !== false)?.url ?
+          ((props.home.photos.find((p:any)=> p.visible !== false)!.url as string).startsWith('http')
+            ? props.home.photos.find((p:any)=> p.visible !== false)!.url
+            : `https://${props.host}${props.home.photos.find((p:any)=> p.visible !== false)!.url}`)
+          : '/images/hikoAvator.png') as string}
         type="website"
         jsonLd={[
           {
@@ -62,7 +66,7 @@ const LandingPage = (props: any) => {
           <DisplayMobileInfo isMobile={isMobile} setIsMobile={() => {}} />
         ) : (
           <Flex direction="column" alignItems="center" justifyContent="center" gap={['20px', '40px']}>
-            <LandingContent isMobile={isMobile} />
+            <LandingContent isMobile={isMobile} home={props.home || undefined} cv={props.cv || undefined} />
           </Flex>
         )}
       </HeaderFooter>
@@ -75,7 +79,31 @@ export default LandingPage
 export const getServerSideProps: GetServerSideProps = async (context: any) => {
   const host = context.req.headers.host
   console.log({ host })
-  return {
-    props: { host: host },
-  }
+  // read home config server-side
+  let home = null
+  try {
+    const mod = await import('../lib/home')
+    home = mod.readHome()
+  } catch {}
+  // read cv data server-side (reuse logic from /cv)
+  let en: any[] = []
+  let zh: any[] = []
+  try {
+    const fs = await import('fs')
+    const path = await import('path')
+    const dataPath = path.join(process.cwd(), 'data', 'cvdata.json')
+    try {
+      const raw = fs.readFileSync(dataPath, 'utf-8') as unknown as string
+      const json = JSON.parse(raw)
+      en = json.en || []
+      zh = json.zh || []
+    } catch {}
+    if (!en.length || !zh.length) {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const example = require('../example/cvdata')
+      if (!en.length) en = example.cvDataEnglish
+      if (!zh.length) zh = example.cvDataChinese
+    }
+  } catch {}
+  return { props: { host, home, cv: { en, zh } } }
 }

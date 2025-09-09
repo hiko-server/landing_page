@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 
 const dataPath = path.join(process.cwd(), 'data', 'cvdata.json')
+const snapshotDir = path.join(process.cwd(), 'data', 'cv_snapshots')
 
 export function readCvData(): { en: any[]; zh: any[] } {
   try {
@@ -39,3 +40,30 @@ export function syncStructure(template: any, target: any): any {
   return target
 }
 
+export function saveSnapshot(): string {
+  const now = new Date()
+  const stamp = now.toISOString().replace(/[:.]/g, '-').replace('T', '_').replace('Z','')
+  const filename = `cv_${stamp}.json`
+  const filePath = path.join(snapshotDir, filename)
+  fs.mkdirSync(snapshotDir, { recursive: true })
+  const current = readCvData()
+  fs.writeFileSync(filePath, JSON.stringify(current, null, 2), 'utf-8')
+  return filename
+}
+
+export function listSnapshots(): string[] {
+  try {
+    return fs.readdirSync(snapshotDir).filter(f => f.endsWith('.json')).sort().reverse()
+  } catch {
+    return []
+  }
+}
+
+export function restoreSnapshot(filename: string): boolean {
+  const filePath = path.join(snapshotDir, filename)
+  if (!fs.existsSync(filePath)) return false
+  const raw = fs.readFileSync(filePath, 'utf-8')
+  fs.mkdirSync(path.dirname(dataPath), { recursive: true })
+  fs.writeFileSync(dataPath, raw, 'utf-8')
+  return true
+}

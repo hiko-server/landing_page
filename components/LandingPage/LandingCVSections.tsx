@@ -3,7 +3,7 @@ import EducationSection from '../PersonalInstruction/Education'
 import ProjectSection from '../PersonalInstruction/Project'
 import SkillSection from '../PersonalInstruction/Skill'
 import CertificateSection from '../PersonalInstruction/Certificate'
-import { cvDataChinese, cvDataEnglish } from '../../example/cvdata'
+// Accept cv data via props instead of static imports
 import {
   Certification,
   Education,
@@ -13,18 +13,18 @@ import {
 } from '../../types/cvProps'
 import WorkExperience from '../PersonalInstruction/WorkExperience'
 
-const LandingCVSections = () => {
-  let cvData
+const LandingCVSections = ({ en, zh }: { en?: any[]; zh?: any[] }) => {
+  let cvData: any[] = []
   const [language, setLanguage] = useState('en')
   switch (language) {
     case 'en':
-      cvData = cvDataEnglish
+      cvData = en || []
       break
     case 'zh':
-      cvData = cvDataChinese
+      cvData = zh || []
       break
     default:
-      cvData = cvDataEnglish
+      cvData = en || []
   }
 
   return (

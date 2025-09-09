@@ -4,7 +4,9 @@ import Swipe from 'react-easy-swipe'
 import { ImageCounter, ImageCounterWrapper } from './imageScrollerStyle'
 import { GoArrowLeft, GoArrowRight } from 'react-icons/go'
 
-const images = [
+export type ScrollerImage = { url: string; describe?: string; redirectTo?: string; visible?: boolean }
+
+const defaultImages: ScrollerImage[] = [
   {
     url: '/images/imageScroller/COT.png',
     describe: 'COT - Start-Up Saturday of HKBU - Wegreen AI',
@@ -33,17 +35,18 @@ const images = [
   },
 ]
 
-const ImageScroller = () => {
+const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
   const [positionx, setPositionx] = useState<number>(0)
   const [imgCount, setImgCount] = useState<number>(1)
   const [_endSwipe, setEndSwipe] = useState<boolean>(false)
+  const data = (images && images.length ? images : defaultImages).filter((i) => i.visible !== false)
 
   const onSwipeMove = (position: { x: number }) => {
     setEndSwipe(false)
-    if (images.length === 1) return
+    if (data.length === 1) return
     if (imgCount === 1 && position.x < 0) setPositionx(position.x)
-    if (imgCount > 1 && imgCount < images.length) setPositionx(position.x)
-    if (imgCount === images.length && position.x > 0) setPositionx(position.x)
+    if (imgCount > 1 && imgCount < data.length) setPositionx(position.x)
+    if (imgCount === data.length && position.x > 0) setPositionx(position.x)
   }
 
   const onSwipeEnd = () => {
@@ -54,7 +57,7 @@ const ImageScroller = () => {
   }
 
   const handleNextClick = () => {
-    if (imgCount < images.length) {
+    if (imgCount < data.length) {
       setImgCount(imgCount + 1)
     } else {
       setImgCount(1)
@@ -65,13 +68,13 @@ const ImageScroller = () => {
     if (imgCount > 1) {
       setImgCount(imgCount - 1)
     } else {
-      setImgCount(images.length)
+      setImgCount(data.length)
     }
   }
 
   useEffect(() => {
     const intervalId = setInterval(() => {
-      if (imgCount < images.length) {
+      if (imgCount < data.length) {
         setImgCount(imgCount + 1)
       } else {
         setImgCount(1)
@@ -85,7 +88,7 @@ const ImageScroller = () => {
     <Flex direction="column" alignItems="center" justifyContent="center">
       <Swipe onSwipeEnd={onSwipeEnd} onSwipeMove={onSwipeMove}>
         <Flex>
-          {images.map((image, index) => (
+          {data.map((image, index) => (
             <Link key={index} href={image.redirectTo} isExternal>
               <Img
                 src={image.url}
@@ -105,11 +108,11 @@ const ImageScroller = () => {
         </Flex>
       </Swipe>
 
-      {images.length > 1 && <Text mt={2}>{images[imgCount - 1].describe}</Text>}
+      {data.length > 1 && <Text mt={2}>{data[imgCount - 1].describe}</Text>}
 
-      {images.length > 1 && (
+      {data.length > 1 && (
         <ImageCounterWrapper>
-          {images.map((_props, index) => (
+          {data.map((_props, index) => (
             <ImageCounter key={index} index={index} imgCount={imgCount} />
           ))}
         </ImageCounterWrapper>
@@ -119,7 +122,7 @@ const ImageScroller = () => {
         <Button onClick={handlePrevClick} disabled={imgCount === 1}>
           <GoArrowLeft />
         </Button>
-        <Button onClick={handleNextClick} disabled={imgCount === images.length}>
+        <Button onClick={handleNextClick} disabled={imgCount === data.length}>
           <GoArrowRight />
         </Button>
       </Flex>
