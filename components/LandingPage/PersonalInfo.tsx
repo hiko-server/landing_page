@@ -1,12 +1,13 @@
 "use client";
 import React from "react";
+import type { HomeData } from "../../lib/home";
 import { Box, Button, Flex, Heading, Link, Text, Avatar, IconButton, Stack } from "@chakra-ui/react";
 import { FaGithub, FaGitlab, FaLinkedin, FaWhatsapp } from "react-icons/fa";
 // import LinkedInBadge from "../linkedIn/linkedIn";
 import VideoBackgroundLayOut from "../../layout/VideoBackgroundLayout";
 import { useRouter } from "next/router";
 
-const PersonalInfo = ({ isMobile }: { isMobile: boolean }) => {
+const PersonalInfo = ({ isMobile, home }: { isMobile: boolean; home?: HomeData }) => {
   const [showPhone, setShowPhone] = React.useState(false)
   const [showEmail, setShowEmail] = React.useState(false)
 
@@ -38,11 +39,11 @@ const PersonalInfo = ({ isMobile }: { isMobile: boolean }) => {
                   bg: "titlebg",
                   _dark: { bg: "titlebgdark" }
                 }}>
-                  HIKO.DEV
+                  {home?.hero?.brand || 'HIKO.DEV'}
                 </Box>
               </Heading>
               <Text color={isMobile ? "black" : "white"}>
-                Self-Taught Full-Stack Software Engineer | Exploring Innovative Solutions in Computer Science | Machine Learning | Computer Vision | Typescript | React | Next.js | NestJS | Python FastAPI
+                {home?.hero?.tagline || 'Self-Taught Full-Stack Software Engineer'}
               </Text>
 
               <Box mt="10">
@@ -84,8 +85,8 @@ const PersonalInfo = ({ isMobile }: { isMobile: boolean }) => {
                 >
                   <Avatar
                     size="2xl"
-                    name="Hiko"
-                    src="/images/hikoAvator.png"
+                    name={home?.hero?.brand || 'Hiko'}
+                    src={home?.hero?.avatarUrl || "/images/hikoAvator.png"}
                     transition="transform 0.3s ease"
                     _hover={{ transform: 'scale(1.05)' }}
                   />
@@ -120,13 +121,13 @@ const PersonalInfo = ({ isMobile }: { isMobile: boolean }) => {
                       李彦霈
                     </Text>
                     <Text fontSize={['16px', '18px']} textAlign="center" color={isMobile ? "black" : "white"}>
-                      {showPhone ? '+852 62040827' : (
+                      {showPhone ? (home?.hero?.phone || '+852 62040827') : (
                         <Button size="sm" onClick={() => setShowPhone(true)} aria-label="Reveal phone number">Click to reveal phone</Button>
                       )}
                     </Text>
                     <Text fontSize={['16px', '18px']} textAlign="center" color={isMobile ? "black" : "white"}>
                       {showEmail ? (
-                        <Link href="mailto:hi@hiko.dev">hi@hiko.dev</Link>
+                        <Link href={`mailto:${home?.hero?.email || 'hi@hiko.dev'}`}>{home?.hero?.email || 'hi@hiko.dev'}</Link>
                       ) : (
                         <Button size="sm" onClick={() => setShowEmail(true)} aria-label="Reveal email">Click to reveal email</Button>
                       )}
@@ -163,7 +164,7 @@ const PersonalInfo = ({ isMobile }: { isMobile: boolean }) => {
                         size="lg"
                         fontSize={['20px', '24px']}
                         mb={6}
-                        onClick={() => window.open('https://github.com/HikoPLi')}
+                        onClick={() => window.open(home?.socials?.github || 'https://github.com/HikoPLi')}
                         icon={<FaGithub />}
                         aria-label="GitHub"
                         colorScheme="black"
@@ -176,7 +177,7 @@ const PersonalInfo = ({ isMobile }: { isMobile: boolean }) => {
                       <IconButton
                         size="lg"
                         fontSize={['20px', '24px']}
-                        onClick={() => window.open('https://gitlab.com/HikoPLi')}
+                        onClick={() => window.open(home?.socials?.gitlab || 'https://gitlab.com/HikoPLi')}
                         icon={<FaGitlab />}
                         aria-label="GitLab"
                         colorScheme="orange"
@@ -190,7 +191,7 @@ const PersonalInfo = ({ isMobile }: { isMobile: boolean }) => {
                         size="lg"
                         fontSize={['20px', '24px']}
                         mb={6}
-                        onClick={() => window.open('https://www.linkedin.com/in/liyanpeihiko/')}
+                        onClick={() => window.open(home?.socials?.linkedin || 'https://www.linkedin.com/in/liyanpeihiko/')}
                         icon={<FaLinkedin />}
                         aria-label="LinkedIn"
                         colorScheme="linkedin"
@@ -203,7 +204,7 @@ const PersonalInfo = ({ isMobile }: { isMobile: boolean }) => {
                         size="lg"
                         fontSize={['20px', '24px']}
                         mb={6}
-                        onClick={() => window.open('https://wa.me/85262040827')}
+                        onClick={() => window.open(home?.socials?.whatsapp || 'https://wa.me/85262040827')}
                         icon={<FaWhatsapp />}
                         aria-label="WhatsApp"
                         colorScheme="whatsapp"
