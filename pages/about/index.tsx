@@ -1,18 +1,14 @@
-import { useSession } from 'next-auth/react'
 import React, { useEffect, useState } from 'react'
 
 import LandingCVSections from '../../components/LandingPage/LandingCVSections'
 import { Flex, useMediaQuery } from '@chakra-ui/react'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
+import LanguageBars from '../../components/GitHub/LanguageBars'
+import ActivityFeed from '../../components/GitHub/ActivityFeed'
+import { Box, Image } from '@chakra-ui/react'
 
 const About = (props: any) => {
-  console.log('props', props)
-
-  const { data: session, status } = useSession()
-  console.log('session', session)
-  console.log('status', status)
-  console.log(session?.accessToken)
 
   const [, setIsHostCV] = useState<boolean>(false)
   const [isMobile] = useMediaQuery('(max-width: 767px)')
@@ -34,6 +30,17 @@ const About = (props: any) => {
       <HeaderFooter isMobile={isMobile}>
         <Flex direction="column" alignItems="center" justifyContent="center" p={['20px', '40px']} gap={['20px', '40px']}>
           <LandingCVSections en={props.cv?.en} zh={props.cv?.zh} />
+          <Box w="100%" maxW="1000px">
+            <LanguageBars />
+          </Box>
+          <Box w="100%" maxW="1000px">
+            <ActivityFeed />
+          </Box>
+          {props.githubUser ? (
+            <Box mt={6} w="100%" maxW="1000px">
+              <Image src={`https://ghchart.rshah.org/${props.githubUser}`} alt="GitHub contributions" w="100%" borderRadius="md" />
+            </Box>
+          ) : null}
         </Flex>
       </HeaderFooter>
     </React.Fragment>
@@ -45,6 +52,7 @@ export async function getServerSideProps(context: any) {
   const host = context.req.headers.host || 'hiko.dev'
   let en: any[] = []
   let zh: any[] = []
+  let githubUser: string | null = null
   try {
     const fs = await import('fs')
     const path = await import('path')
@@ -55,12 +63,19 @@ export async function getServerSideProps(context: any) {
       en = json.en || []
       zh = json.zh || []
     } catch {}
-    if (!en.length || !zh.length) {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const example = require('../../example/cvdata')
-      if (!en.length) en = example.cvDataEnglish
-      if (!zh.length) zh = example.cvDataChinese
-    }
+    // No example fallback — use only real data
+    try {
+      const mod = await import('../../lib/home')
+      const home = mod.readHome()
+      const url = home?.socials?.github
+      if (url) {
+        try {
+          const u = new URL(url)
+          const parts = u.pathname.split('/').filter(Boolean)
+          githubUser = parts[0] || null
+        } catch {}
+      }
+    } catch {}
   } catch {}
-  return { props: { host, cv: { en, zh } } }
+  return { props: { host, cv: { en, zh }, githubUser } }
 }
