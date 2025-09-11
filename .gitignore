@@ -38,3 +38,6 @@ next-env.d.ts
 
 #.tar
 hiko-easilycv-frontend-ts-staging-temp.tar
+
+# local data (persisted content, credentials)
+data/

@@ -1,7 +1,7 @@
 // Brands.tsx with Chakra UI
 'use client'
 import React from 'react'
-import { Box, Grid, Image, Link } from '@chakra-ui/react'
+import { Box, Grid, Image, Link, useColorModeValue } from '@chakra-ui/react'
 import { motion } from 'framer-motion'
 
 interface Brand {
@@ -10,39 +10,14 @@ interface Brand {
   href: string
   name: string
 }
-const brandData: Brand[] = [
-  {
-    id: 1,
-    name: 'Client',
-    href: 'https://www.uowchk.edu.hk/',
-    image: '/images/brand/uowchk-logo-navy.svg',
-  },
-  {
-    id: 2,
-    name: 'Client',
-    href: 'https://www.hkmu.edu.hk/',
-    image: '/images/brand/hkmu.png',
-  },
-  {
-    id: 3,
-    name: 'Client',
-    href: 'https://honsennaudio.com/',
-    image: '/images/brand/HONSENN-CEO.svg',
-  },
-  {
-    id: 3,
-    name: 'Client',
-    href: 'https://wegreen.ltd/',
-    image: '/images/brand/Wegreen.svg',
-  },
-]
 
 const SingleBrand = ({ brand }: { brand: Brand }) => {
   const { image, href, name } = brand
 
+  const shadow = useColorModeValue('0 10px 24px rgba(0,0,0,0.08)','0 10px 24px rgba(0,0,0,0.4)')
   return (
     <motion.div
-      whileHover={{ scale: 1.05 }}
+      whileHover={{ scale: 1.06, rotateX: 6, rotateY: -6 }}
       whileTap={{ scale: 0.95 }}
       transition={{ type: 'spring', stiffness: 400, damping: 10 }}
       variants={{
@@ -54,7 +29,7 @@ const SingleBrand = ({ brand }: { brand: Brand }) => {
       viewport={{ once: true }}
     >
       <Link href={href} style={{ textDecoration: 'none' }}>
-        <Box position="relative" height="10" width="200px">
+        <Box position="relative" height="10" width="200px" style={{ perspective: 600 }}>
           <Image
             src={image}
             alt={name}
@@ -64,6 +39,8 @@ const SingleBrand = ({ brand }: { brand: Brand }) => {
             transition="opacity 0.3s ease"
             _groupHover={{ opacity: 1 }}
             loading="lazy"
+            filter={useColorModeValue('none','grayscale(20%) brightness(0.95)')}
+            style={{ boxShadow: shadow, borderRadius: 8, padding: 6, background: useColorModeValue('#fff','rgba(255,255,255,0.06)') }}
           />
         </Box>
       </Link>
@@ -72,9 +49,8 @@ const SingleBrand = ({ brand }: { brand: Brand }) => {
 }
 
 const Brands = ({ brands }: { brands?: { name: string; href: string; image: string }[] }) => {
-  const data: Brand[] = (brands && brands.length
-    ? brands.map((b, idx) => ({ id: idx + 1, name: b.name, href: b.href, image: b.image }))
-    : brandData)
+  const data: Brand[] = (brands || []).map((b, idx) => ({ id: idx + 1, name: b.name, href: b.href, image: b.image }))
+  if (!data.length) return null
   return (
     <>
       {/* Clients Section */}

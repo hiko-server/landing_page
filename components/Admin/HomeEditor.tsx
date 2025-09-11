@@ -18,7 +18,7 @@ export default function HomeEditor() {
       const res = await fetch('/api/home')
       const data = await res.json()
       if (data) {
-        setHero({ welcome: data.hero?.welcome || 'Welcome to', brand: data.hero?.brand || 'HIKO.DEV', tagline: data.hero?.tagline || '', avatarUrl: data.hero?.avatarUrl || '', phone: data.hero?.phone || '', email: data.hero?.email || '' })
+        setHero({ welcome: data.hero?.welcome || '', brand: data.hero?.brand || '', tagline: data.hero?.tagline || '', avatarUrl: data.hero?.avatarUrl || '', phone: data.hero?.phone || '', email: data.hero?.email || '' })
         setSocials({ github: data.socials?.github || '', gitlab: data.socials?.gitlab || '', linkedin: data.socials?.linkedin || '', whatsapp: data.socials?.whatsapp || '' })
         setBrands(Array.isArray(data.brands) ? data.brands : [])
         setQuick(Array.isArray(data.quickAccess) ? data.quickAccess : [])

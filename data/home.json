@@ -75,11 +75,6 @@
       "describe": "Student - Project Test - UOWCHK",
       "redirectTo": "https://example.com/",
       "visible": true
-    },
-    {
-      "url": "/uploads/IMG_5121.jpg",
-      "describe": "YDC",
-      "visible": true
     }
   ]
 }

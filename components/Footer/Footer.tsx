@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Text, Link,  VStack, HStack } from '@chakra-ui/react';
+import { Box, Text, Link,  VStack, HStack, useColorModeValue } from '@chakra-ui/react';
 
 const quickLinks = [
   { name: 'Home', url: `/` },
@@ -20,34 +20,37 @@ const socialLinks = [
 ];
 
 const Footer: React.FC = () => {
+  const bg = useColorModeValue('gray.100','gray.800')
+  const color = useColorModeValue('gray.700','gray.100')
+  const linkColor = useColorModeValue('teal.600','teal.200')
   return (
-    <Box as="footer" w="100%" p={4} bg="gray.800" color="white" textAlign="center">
+    <Box as="footer" w="100%" p={4} bg={bg} color={color} textAlign="center">
 
       <VStack spacing={4}>
         <HStack spacing={4}>
           {quickLinks.map((link) => (
-            <Link key={link.name} href={link.url} color="teal.200">
+            <Link key={link.name} href={link.url} color={linkColor}>
               {link.name}
             </Link>
           ))}
         </HStack>
         <HStack spacing={4}>
           {moreLinks.map((link) => (
-            <Link key={link.name} href={link.url} color="teal.200">
+            <Link key={link.name} href={link.url} color={linkColor}>
               {link.name}
             </Link>
           ))}
         </HStack>
         <HStack spacing={4}>
           {socialLinks.map((link) => (
-            <Link key={link.name} href={link.url} color="teal.200" isExternal>
+            <Link key={link.name} href={link.url} color={linkColor} isExternal>
               {link.name}
             </Link>
           ))}
         </HStack>
         <Text>
           &copy; {new Date().getFullYear()}{' '}
-          <Link href="https://hiko.dev" isExternal color="teal.200">
+          <Link href="https://hiko.dev" isExternal color={linkColor}>
             hiko.dev
           </Link>
           . All rights reserved.

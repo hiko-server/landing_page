@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react'
-import { Button, FormControl, FormLabel, Heading, HStack, Input, SimpleGrid, Table, Tbody, Td, Th, Thead, Tr, Textarea, useToast, IconButton, Switch, Text } from '@chakra-ui/react'
+import React, { useEffect, useState, useRef } from 'react'
+import { Button, FormControl, FormLabel, Heading, HStack, Input, SimpleGrid, Table, Tbody, Td, Th, Thead, Tr, Textarea, useToast, IconButton, Switch, Text, Select } from '@chakra-ui/react'
 import { AddIcon, DeleteIcon } from '@chakra-ui/icons'
 
 type PersonalInformation = {
@@ -26,12 +26,14 @@ export default function CVGuiEditor() {
   const [zEdu, setZEdu] = useState<EducationExperience[]>([])
   const [zExtra, setZExtra] = useState<string[]>([])
   const [bilingual, setBilingual] = useState<boolean>(false)
-  const [snapshots, setSnapshots] = useState<string[]>([])
   const [languages, setLanguages] = useState<{ language: string; level: string }[]>([])
   const [technical, setTechnical] = useState<{ name: string; description: string[] }[]>([])
   const [projects, setProjects] = useState<Array<{ title: string; startDate: string; endDate: string; projectLocation: string; description: string; features: { description: string; furtherExplanation: string[] }[] }>>([])
   const [experiences, setExperiences] = useState<Array<{ companyName: string; companyURL: string; jobTitle: string; jobDescription: string; location: string; startDate: string; endDate: string; relatedSkills: string[]; features: { description: string; furtherExplanation: string[] }[] }>>([])
   const [certs, setCerts] = useState<Array<{ issuingOrganization: string; organizationURL: string; CertificationList: { certificationName: string; issuedDate: string; expirationDate: string; credentialID: string; credentialURL: string }[] }>>([])
+  const [snapshots, setSnapshots] = useState<string[]>([])
+  const [selectedSnap, setSelectedSnap] = useState('')
+  const fileRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -65,6 +67,34 @@ export default function CVGuiEditor() {
     }
     load()
   }, [])
+
+  const listSnaps = async () => {
+    const res = await fetch('/api/cvdata?snapshots=1')
+    const data = await res.json().catch(()=>({ files: [] }))
+    if (res.ok) setSnapshots(data.files || [])
+  }
+  const makeSnapshot = async () => {
+    const res = await fetch('/api/cvdata', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'snapshot' }) })
+    const data = await res.json().catch(()=>({}))
+    if (res.ok) { toast({ status: 'success', title: `Snapshot saved: ${data.file}` }); listSnaps() }
+    else toast({ status: 'error', title: data?.error || 'Snapshot failed' })
+  }
+  const restoreSelected = async () => {
+    if (!selectedSnap) { toast({ status: 'warning', title: 'Select a snapshot' }); return }
+    const res = await fetch('/api/cvdata', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'restore', filename: selectedSnap }) })
+    const ok = res.ok
+    if (ok) { toast({ status: 'success', title: 'Restored' }); window.location.reload() } else toast({ status: 'error', title: 'Restore failed' })
+  }
+  const downloadCurrent = () => { window.location.href = '/api/cvdata?download=current' }
+  const downloadSelected = () => { if (!selectedSnap) { toast({ status: 'warning', title: 'Select a snapshot' }); return } window.location.href = '/api/cvdata?download=1&file='+encodeURIComponent(selectedSnap) }
+  const onUpload = async (file: File) => {
+    try {
+      const text = await file.text()
+      const json = JSON.parse(text)
+      const res = await fetch('/api/cvdata', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'import', data: json }) })
+      if (res.ok) { toast({ status: 'success', title: 'Imported' }); window.location.reload() } else toast({ status: 'error', title: 'Import failed' })
+    } catch { toast({ status: 'error', title: 'Invalid JSON file' }) }
+  }
 
   const save = async (syncZh: boolean, includeZh?: boolean) => {
     try {
@@ -100,6 +130,19 @@ export default function CVGuiEditor() {
 
   return (
     <>
+      <Heading size='sm' mb={2}>Snapshots</Heading>
+      <HStack mb={4} spacing={3}>
+        <Button onClick={makeSnapshot}>Make Snapshot</Button>
+        <Button onClick={downloadCurrent}>Download Current</Button>
+        <Button onClick={listSnaps}>List Snapshots</Button>
+        <Select placeholder='Select snapshot' width='auto' value={selectedSnap} onChange={(e)=> setSelectedSnap(e.target.value)}>
+          {snapshots.map((f)=> <option key={f} value={f}>{f}</option>)}
+        </Select>
+        <Button onClick={restoreSelected} colorScheme='yellow'>Restore Selected</Button>
+        <Button onClick={downloadSelected}>Download Selected</Button>
+        <Input type='file' accept='application/json' display='none' ref={fileRef} onChange={(e)=>{ const f=e.target.files?.[0]; if (f) onUpload(f); if (fileRef.current) fileRef.current.value='' }} />
+        <Button onClick={()=> fileRef.current?.click()}>Upload JSON</Button>
+      </HStack>
       <HStack mb={3} align='center'>
         <Switch isChecked={bilingual} onChange={(e)=> setBilingual(e.target.checked)} />
         <Text>双语模式（EN/ZH 对照：个人信息/教育/技能要点）</Text>

@@ -8,12 +8,7 @@ import Payment from '../../components/QuickPayment/Payment'
 import CustomHead from '../../components/General-UI/CustomHead'
 
 const QuickPayment = (props: any) => {
-  console.log('props', props)
-
-  const { data: session, status } = useSession()
-  console.log('session', session)
-  console.log('status', status)
-  console.log(session?.accessToken)
+  useSession()
 
   const [, setIsHostCV] = useState<boolean>(false)
   const [isMobile] = useMediaQuery('(max-width: 767px)')
