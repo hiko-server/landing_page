@@ -151,7 +151,22 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
               title={colorMode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
               icon={colorMode === 'light' ? <MoonIcon /> : <SunIcon />}
             />
-            {/* Social */}
+            {/* Social (expanded) */}
+            <Flex gap={2} alignItems="center">
+              {socialLink.map((link) => (
+                <IconButton
+                  key={link.name}
+                  onClick={() => handleLinkClick(link.url)}
+                  variant="outline"
+                  color="teal.200"
+                  borderColor="teal.200"
+                  _hover={{ bg: 'teal.200', color: 'gray.800' }}
+                  aria-label={link.name}
+                  icon={iconMap[link.name]}
+                />
+              ))}
+            </Flex>
+            {/* Social (legacy dropdown kept for reference)
             <Menu>
               <MenuButton
                 as={Button}
@@ -176,8 +191,24 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                   </MenuItem>
                 ))}
               </MenuList>
-            </Menu>
-            {/* More */}
+            </Menu> */}
+            {/* More (expanded) */}
+            <Flex gap={2} alignItems="center">
+              {moreLinks.map((link) => (
+                <Button
+                  key={link.name}
+                  variant="outline"
+                  color="teal.200"
+                  borderColor="teal.200"
+                  _hover={{ bg: 'teal.200', color: 'gray.800' }}
+                  leftIcon={iconMap[link.name]}
+                  onClick={() => handleLinkClick(link.url)}
+                >
+                  {link.name}
+                </Button>
+              ))}
+            </Flex>
+            {/* More (legacy dropdown kept for reference)
             <Menu>
               <MenuButton
                 as={Button}
@@ -202,7 +233,7 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                   </MenuItem>
                 ))}
               </MenuList>
-            </Menu>
+            </Menu> */}
             {/* Admin */}
             {!isAdmin ? (
               <Button
