@@ -1,16 +1,16 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { getCookie } from 'cookies-next'
 import jwt from 'jsonwebtoken'
+import { getJwtSecret } from '../../../lib/env'
 import fs from 'fs'
 import path from 'path'
-
-const JWT_SECRET = process.env.JWT_SECRET || 'change-me'
+import { rateLimit } from '../../../lib/rateLimit'
 
 function isAuthed(req: NextApiRequest, res: NextApiResponse) {
   const token = getCookie('cv_admin_token', { req, res }) as string | undefined
   if (!token) return false
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any
+    const decoded = jwt.verify(token, getJwtSecret()) as any
     return decoded?.role === 'admin'
   } catch {
     return false
@@ -20,6 +20,9 @@ function isAuthed(req: NextApiRequest, res: NextApiResponse) {
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   if (!isAuthed(req, res)) return res.status(401).json({ error: 'Unauthorized' })
+  const rl = rateLimit(req, 20, 10 * 60 * 1000)
+  res.setHeader('X-RateLimit-Remaining', String(rl.remaining))
+  if (!rl.allowed) return res.status(429).json({ error: 'Too many uploads, try later' })
   const { filename, dataUrl } = req.body || {}
   if (!filename || !dataUrl) return res.status(400).json({ error: 'Missing fields' })
 

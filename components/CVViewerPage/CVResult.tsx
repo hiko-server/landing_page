@@ -169,6 +169,7 @@ const PrintArea = styled.div`
 
 const A4Paper = styled(Box)`
   background: white;
+  color: #111;
   display: block;
   margin-bottom: 0.5cm;
   margin-top: 0.5cm;

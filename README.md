@@ -1,5 +1,38 @@
 # landing_page
 
+## Project Updates (2025-09)
+
+- Removed all hard-coded sample data and example fallbacks. UI and APIs now render only real data from `data/` or live APIs.
+- Security hardening: required `JWT_SECRET`, stricter auth cookies (`SameSite=Strict`, `Secure` in prod), global security headers via `middleware.ts`.
+- Rate limiting on sensitive endpoints (login, reset, content updates, image uploads).
+- Real-data widgets:
+  - Top GitHub Repositories (auto-detected from `home.socials.github`).
+  - Tech Stack Cloud (reads packages from your `package.json`).
+- New visuals & UX:
+  - Theme toggle (light/dark, persists; system default respected).
+  - Smooth page transitions (Framer Motion) across all routes.
+  - Recent GitHub Activity feed (live public events via GitHub API).
+  - Video background cycles on the hero with fade transitions.
+- Security & SEO:
+  - Strict Content-Security-Policy and standard security headers in `next.config.js`.
+  - Added `public/robots.txt` and improved OpenGraph/JSON-LD usage.
+- Demo gating:
+  - Demo pages are disabled by default and never serve sample data. Set `ENABLE_DEMO=true` in `.env` to enable.
+- DX/CI: Added `.env.example`, `.github/workflows/ci.yml`, and ignored `data/` in `.gitignore`.
+
+### Configure Admin & Data
+
+1. Copy `.env.example` to `.env` and set:
+   - `ADMIN_EMAIL`, `ADMIN_PASS`, `JWT_SECRET` (required)
+   - Optional SMTP settings to enable email notifications and password reset.
+   - `GITHUB_TOKEN` (optional, raises GitHub API rate limits)
+   - `ENABLE_DEMO` (optional, default `false`) to expose demo routes
+2. On first run, the app writes `data/admin.json` from env. Ensure `data/` is not committed (now ignored). Consider removing any previously committed `data/admin.json` from git history.
+3. Provide your content in:
+   - `data/home.json` (hero/socials/brands/quickAccess/photos)
+   - `data/cvdata.json` (CV sections). No example fallback is used.
+
+
 
 
 ## Getting started
