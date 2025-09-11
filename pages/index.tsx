@@ -1,4 +1,4 @@
-import { useSession } from 'next-auth/react'
+// import { useSession } from 'next-auth/react'
 import React, { useState, useEffect } from 'react'
 import { GetServerSideProps } from 'next'
 import { Flex, useMediaQuery } from '@chakra-ui/react'
@@ -11,12 +11,7 @@ import CustomHead from '../components/General-UI/CustomHead'
 
 
 const LandingPage = (props: any) => {
-  console.log('props', props)
-
-  const { data: session, status } = useSession()
-  console.log('session', session)
-  console.log('status', status)
-  console.log(session?.accessToken)
+  // const { data: session } = useSession()
 
   const [, setIsHostCV] = useState<boolean>(false)
   const [isMobile] = useMediaQuery('(max-width: 767px)')
@@ -78,7 +73,7 @@ export default LandingPage
 
 export const getServerSideProps: GetServerSideProps = async (context: any) => {
   const host = context.req.headers.host
-  console.log({ host })
+  
   // read home config server-side
   let home = null
   try {
@@ -98,12 +93,7 @@ export const getServerSideProps: GetServerSideProps = async (context: any) => {
       en = json.en || []
       zh = json.zh || []
     } catch {}
-    if (!en.length || !zh.length) {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const example = require('../example/cvdata')
-      if (!en.length) en = example.cvDataEnglish
-      if (!zh.length) zh = example.cvDataChinese
-    }
+    // No example fallback — use only real data if present
   } catch {}
   return { props: { host, home, cv: { en, zh } } }
 }

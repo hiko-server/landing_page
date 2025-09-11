@@ -3,19 +3,37 @@ const { i18n } = require('./next-i18next.config')
 const path = require('path')
 
 const nextConfig = {
-    // assetPrefix: ".", // https://github.com/vercel/next.js/issues/8158#issuecomment-687707467
-    output: 'standalone', // https://developers.redhat.com/articles/2022/11/23/how-deploy-nextjs-applications-red-hat-openshift#building_a_container_to_run_your_next_js_application
-    reactStrictMode: true,
-    productionBrowserSourceMaps: true,
-    reactStrictMode: true,
-    poweredByHeader: false,
-    // sassOptions: {
-    //     includePaths: [path.join(__dirname, 'styles')],
-    // },
-    // images: {
-    //     domains: ["www.polyu.edu.hk", "polyu.edu.hk"],
-    //     formats: ["image/webp"],
-    // },
+  output: 'standalone',
+  reactStrictMode: true,
+  productionBrowserSourceMaps: true,
+  poweredByHeader: false,
+  async headers() {
+    const csp = [
+      "default-src 'self'",
+      // Inline JSON-LD and Chakra SSR styles
+      "script-src 'self' 'unsafe-inline' https://hcaptcha.com https://*.hcaptcha.com",
+      "style-src 'self' 'unsafe-inline' https:",
+      "img-src 'self' data: blob: https:",
+      "connect-src 'self' https://api.github.com https://hcaptcha.com https://*.hcaptcha.com wss://stream.binance.com https://api.binance.com",
+      "frame-src https://hcaptcha.com https://*.hcaptcha.com",
+      "font-src 'self' https: data:",
+      "media-src 'self' https: blob:",
+      'upgrade-insecure-requests',
+    ].join('; ')
+
+    const headers = [
+      { key: 'X-Frame-Options', value: 'DENY' },
+      { key: 'X-Content-Type-Options', value: 'nosniff' },
+      { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+      { key: 'Permissions-Policy', value: 'geolocation=(), microphone=(), camera=()' },
+      { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+      { key: 'Content-Security-Policy', value: csp },
+    ]
+
+    return [
+      { source: '/:path*', headers },
+    ]
+  },
 }
 
 module.exports = nextConfig

@@ -28,3 +28,9 @@ const DemoPage = () => {
 }
 
 export default DemoPage;
+export async function getServerSideProps() {
+  if (process.env.ENABLE_DEMO !== 'true') {
+    return { notFound: true }
+  }
+  return { props: {} }
+}

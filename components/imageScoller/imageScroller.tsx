@@ -1,4 +1,4 @@
-import { Button, Flex, Img, Text, Link } from '@chakra-ui/react'
+import { Button, Flex, Img, Text, Link, useColorModeValue } from '@chakra-ui/react'
 import { useEffect, useState } from 'react'
 import Swipe from 'react-easy-swipe'
 import { ImageCounter, ImageCounterWrapper } from './imageScrollerStyle'
@@ -6,40 +6,11 @@ import { GoArrowLeft, GoArrowRight } from 'react-icons/go'
 
 export type ScrollerImage = { url: string; describe?: string; redirectTo?: string; visible?: boolean }
 
-const defaultImages: ScrollerImage[] = [
-  {
-    url: '/images/imageScroller/COT.png',
-    describe: 'COT - Start-Up Saturday of HKBU - Wegreen AI',
-    redirectTo: 'https://wegreen.ltd',
-  },
-  {
-    url: '/images/imageScroller/wegreenAI_hkstp.jpeg',
-    describe: 'COT - Youth Vision Breeds Green Action - Wegreen AI',
-    redirectTo: 'https://wegreen.ltd',
-  },
-  {
-    url: '/images/imageScroller/stuff.png',
-    describe: 'Stuff - Exhibition in HK - Honsenn',
-    redirectTo: 'https://honsennaudio.com/',
-  },
-  {
-    url: '/images/imageScroller/student.png',
-    describe: 'Student - Prensentation of final project - UOWCHK',
-    redirectTo: 'https://www.uowchk.edu.hk/',
-  },
-  {
-    url: '/images/imageScroller/fyp.png',
-    describe: 'Student - Project Test - UOWCHK',
-    redirectTo:
-      'https://drive.google.com/drive/folders/1AZWZR9o1Sjp-V1ky5TL2UpjtdJFmEM0q?usp=drive_link',
-  },
-]
-
 const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
   const [positionx, setPositionx] = useState<number>(0)
   const [imgCount, setImgCount] = useState<number>(1)
   const [_endSwipe, setEndSwipe] = useState<boolean>(false)
-  const data = (images && images.length ? images : defaultImages).filter((i) => i.visible !== false)
+  const data = (images || []).filter((i) => i.visible !== false)
 
   const onSwipeMove = (position: { x: number }) => {
     setEndSwipe(false)
@@ -84,6 +55,12 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
     return () => clearInterval(intervalId)
   }, [imgCount])
 
+  // If no images provided, render nothing (no fake defaults)
+  if (!data.length) return null
+
+  const activeDot = useColorModeValue('#2563eb', '#60a5fa')
+  const inactiveDot = useColorModeValue('#a8a8a8', '#4b5563')
+
   return (
     <Flex direction="column" alignItems="center" justifyContent="center">
       <Swipe onSwipeEnd={onSwipeEnd} onSwipeMove={onSwipeMove}>
@@ -108,12 +85,12 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
         </Flex>
       </Swipe>
 
-      {data.length > 1 && <Text mt={2}>{data[imgCount - 1].describe}</Text>}
+      {data.length > 1 && <Text mt={2} color={useColorModeValue('gray.700','gray.200')}>{data[imgCount - 1].describe}</Text>}
 
       {data.length > 1 && (
         <ImageCounterWrapper>
           {data.map((_props, index) => (
-            <ImageCounter key={index} index={index} imgCount={imgCount} />
+            <ImageCounter key={index} index={index} imgCount={imgCount} activeColor={activeDot} inactiveColor={inactiveDot} />
           ))}
         </ImageCounterWrapper>
       )}

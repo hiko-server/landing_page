@@ -29,7 +29,7 @@ const LandingContent = ({ isMobile, home, cv }: { isMobile: boolean; home?: Home
         // bgColor={'black'}
         w={{ base: 'full', md: '1/2' }}
       >
-        <Content quickAccess={home?.quickAccess} photos={home?.photos as any} cvEn={cv?.en} cvZh={cv?.zh} />
+        <Content quickAccess={home?.quickAccess} photos={home?.photos as any} cvEn={cv?.en} cvZh={cv?.zh} home={home || undefined} />
       </Box>
       {/* <CryptoPriceTracker /> */}
     </Flex>

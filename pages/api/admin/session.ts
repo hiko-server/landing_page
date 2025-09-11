@@ -1,8 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { getCookie } from 'cookies-next'
 import jwt from 'jsonwebtoken'
-
-const JWT_SECRET = process.env.JWT_SECRET || 'change-me'
+import { getJwtSecret } from '../../../lib/env'
 
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') {
@@ -14,7 +13,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!token) return res.status(401).json({ error: 'Unauthorized' })
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any
+    const decoded = jwt.verify(token, getJwtSecret()) as any
     if (decoded?.role === 'admin') {
       // Optional minimal payload so client can rely on ok
       return res.status(200).json({ ok: true })
@@ -24,4 +23,3 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 }
-

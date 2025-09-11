@@ -1,7 +1,8 @@
 "use client";
 import React from "react";
 import type { HomeData } from "../../lib/home";
-import { Box, Button, Flex, Heading, Link, Text, Avatar, IconButton, Stack } from "@chakra-ui/react";
+import { Box, Button, Flex, Link, Text, Avatar, IconButton, Stack } from "@chakra-ui/react";
+import HeroHeadline from './HeroHeadline'
 import { FaGithub, FaGitlab, FaLinkedin, FaWhatsapp } from "react-icons/fa";
 // import LinkedInBadge from "../linkedIn/linkedIn";
 import VideoBackgroundLayOut from "../../layout/VideoBackgroundLayout";
@@ -15,6 +16,8 @@ const PersonalInfo = ({ isMobile, home }: { isMobile: boolean; home?: HomeData }
     e.preventDefault();
   };
   const router = useRouter()
+  // Overlaying video: force white text for clear contrast
+  const textColor = 'white'
   return (
     <Box position="relative" w="full" h="full" >
       <VideoBackgroundLayOut >
@@ -23,28 +26,7 @@ const PersonalInfo = ({ isMobile, home }: { isMobile: boolean; home?: HomeData }
           <Flex alignItems={{  lg: "center" }} gap={{ base: "4", lg: "8", xl: "32.5" }} >
           {!isMobile && (
             <Box width={{ base: "100%", md: "50%" }}>
-              <Heading as="h4" mb="4.5" fontSize="lg" fontWeight="medium" color={isMobile ? "black" : "white"}>
-              Welcome to 
-              </Heading>
-              <Heading as="h1" mb="5" pr="16" fontSize="3xl" fontWeight="bold" color={isMobile ? "black" : "white"}>
-                
-                <Box as="span" position="relative" display="inline-block" _before={{
-                  content: '""',
-                  position: "absolute",
-                  bottom: "2.5",
-                  left: "0",
-                  zIndex: "-1",
-                  height: "3",
-                  width: "full",
-                  bg: "titlebg",
-                  _dark: { bg: "titlebgdark" }
-                }}>
-                  {home?.hero?.brand || 'HIKO.DEV'}
-                </Box>
-              </Heading>
-              <Text color={isMobile ? "black" : "white"}>
-                {home?.hero?.tagline || 'Self-Taught Full-Stack Software Engineer'}
-              </Text>
+              <HeroHeadline brand={home?.hero?.brand} tagline={home?.hero?.tagline} />
 
               <Box mt="10">
                 <form onSubmit={handleSubmit}>
@@ -85,7 +67,7 @@ const PersonalInfo = ({ isMobile, home }: { isMobile: boolean; home?: HomeData }
                 >
                   <Avatar
                     size="2xl"
-                    name={home?.hero?.brand || 'Hiko'}
+                    name={home?.hero?.brand || ''}
                     src={home?.hero?.avatarUrl || "/images/hikoAvator.png"}
                     transition="transform 0.3s ease"
                     _hover={{ transform: 'scale(1.05)' }}
@@ -108,7 +90,7 @@ const PersonalInfo = ({ isMobile, home }: { isMobile: boolean; home?: HomeData }
                       fontSize={['30px', '40px']}
                       fontWeight="bold"
                       textAlign="center"
-                      color={isMobile ? "black" : "white"}
+                      color={textColor}
                     >
                       Li Yanpei, Hiko
                     </Text>
@@ -116,23 +98,25 @@ const PersonalInfo = ({ isMobile, home }: { isMobile: boolean; home?: HomeData }
                       fontSize={['30px', '40px']}
                       fontWeight="bold"
                       textAlign="center"
-                      color={isMobile ? "black" : "white"}
+                      color={textColor}
                     >
                       李彦霈
                     </Text>
-                    <Text fontSize={['16px', '18px']} textAlign="center" color={isMobile ? "black" : "white"}>
-                      {showPhone ? (home?.hero?.phone || '+852 62040827') : (
+                    <Text fontSize={['16px', '18px']} textAlign="center" color={textColor}>
+                      {showPhone ? (home?.hero?.phone || '') : (
                         <Button size="sm" onClick={() => setShowPhone(true)} aria-label="Reveal phone number">Click to reveal phone</Button>
                       )}
                     </Text>
-                    <Text fontSize={['16px', '18px']} textAlign="center" color={isMobile ? "black" : "white"}>
+                    <Text fontSize={['16px', '18px']} textAlign="center" color={textColor}>
                       {showEmail ? (
-                        <Link href={`mailto:${home?.hero?.email || 'hi@hiko.dev'}`}>{home?.hero?.email || 'hi@hiko.dev'}</Link>
+                        home?.hero?.email ? (
+                          <Link href={`mailto:${home.hero.email}`}>{home.hero.email}</Link>
+                        ) : null
                       ) : (
                         <Button size="sm" onClick={() => setShowEmail(true)} aria-label="Reveal email">Click to reveal email</Button>
                       )}
                     </Text>
-                    <Text fontSize={['16px', '18px']} textAlign="center" color={isMobile ? "black" : "white"}>
+                    <Text fontSize={['16px', '18px']} textAlign="center" color={textColor}>
                       Mandarin, Cantonese, English
                     </Text>
                   </Flex>

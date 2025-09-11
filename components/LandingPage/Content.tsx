@@ -20,22 +20,23 @@ import ImageScroller from '../imageScoller/imageScroller'
 import type { ScrollerImage } from '../imageScoller/imageScroller'
 
 import LandingCVSections from './LandingCVSections'
-import ContactCard from '../Contact/ConatactCard'
+import ContactPro from '../Contact/ContactPro'
 import TopRepos from '../GitHub/TopRepos'
 import TechCloud from '../TechStack/TechCloud'
 import LanguageBars from '../GitHub/LanguageBars'
 import ActivityFeed from '../GitHub/ActivityFeed'
 import StatsBar from '../GitHub/StatsBar'
+import ProjectSpotlight from './ProjectSpotlight'
+import ExperienceTimeline from './ExperienceTimeline'
+import CertificationsPeek from './CertificationsPeek'
 import SectionReveal from '../General-UI/SectionReveal'
 
 const StyledBox = styled(Box)`
-  background: white;
   display: block;
   margin-bottom: 0.5cm;
   margin-top: 0.5cm;
   width: 100%;
-  max-width: 21cm;
-  /* Add any other styles you want for the A4 paper component */
+  max-width: 1100px; /* 稍微加宽，改善可读性 */
 `
 
 const QuickAccessAccordionItem = ({ children }: { children: React.ReactNode | null }) => {
@@ -62,24 +63,32 @@ const QuickAccessAccordionItem = ({ children }: { children: React.ReactNode | nu
   )
 }
 
-const Content = ({ quickAccess, photos, cvEn, cvZh }: { quickAccess?: { label: string; url: string }[]; photos?: ScrollerImage[]; cvEn?: any[]; cvZh?: any[] }) => {
+import type { HomeData } from '../../lib/home'
+
+const Content = ({ quickAccess, photos, cvEn, cvZh, home }: { quickAccess?: { label: string; url: string }[]; photos?: ScrollerImage[]; cvEn?: any[]; cvZh?: any[]; home?: HomeData | null }) => {
   const router = useRouter()
   const isEditMode = router.asPath.includes('edit')
 
   return (
     <Flex
       direction="row"
-      alignItems="center"
+      alignItems="flex-start"
       justifyContent="center"
       p={['20px', '40px']}
       gap={['20px', '40px']}
+      flexWrap="wrap"
+      w="100%"
+      maxW="1200px"
+      mx="auto"
     >
       <Flex
         direction="column"
         alignItems="center"
-        justifyContent="center"
+        justifyContent="flex-start"
         p={['20px', '40px']}
         gap={['20px', '40px']}
+        w={{ base: '100%', md: '420px' }}
+        flexShrink={0}
       >
         <SectionReveal>
           <StatsBar />
@@ -88,15 +97,18 @@ const Content = ({ quickAccess, photos, cvEn, cvZh }: { quickAccess?: { label: s
           <ImageScroller images={photos} />
         </SectionReveal>
         <SectionReveal>
-          <ContactCard />
+          <ContactPro home={home || undefined} formOnly />
         </SectionReveal>
       </Flex>
       <StyledBox
         id="A4Paper"
         size="A4"
         p={'20px'}
-        bgColor={'white'}
-        overflowY={isEditMode ? 'scroll' : 'hidden'}
+        bgColor={useColorModeValue('white','transparent')}
+        overflow={'hidden'}
+        flex={1}
+        minW={0}
+        sx={{ boxSizing: 'border-box', position: 'relative', zIndex: 0 }}
         style={{
           breakInside: 'avoid',
           marginTop: isEditMode ? '400px' : '0px',
@@ -138,6 +150,20 @@ const Content = ({ quickAccess, photos, cvEn, cvZh }: { quickAccess?: { label: s
         <SectionReveal>
           <Heading as="h3" size="md" mt={10} mb={2} textAlign="center" color={useColorModeValue('blue.700','blue.200')}>Recent GitHub Activity</Heading>
           <ActivityFeed />
+        </SectionReveal>
+
+        <SectionReveal>
+          <Heading as="h3" size="md" mt={10} mb={2} textAlign="center" color={useColorModeValue('blue.700','blue.200')}>Project Spotlight</Heading>
+          <ProjectSpotlight cvEn={cvEn} />
+        </SectionReveal>
+
+        <SectionReveal>
+          <Heading as="h3" size="md" mt={10} mb={2} textAlign="center" color={useColorModeValue('blue.700','blue.200')}>Experience Timeline</Heading>
+          <ExperienceTimeline cvEn={cvEn} />
+        </SectionReveal>
+
+        <SectionReveal>
+          <CertificationsPeek cvEn={cvEn} />
         </SectionReveal>
 
         <SectionReveal>

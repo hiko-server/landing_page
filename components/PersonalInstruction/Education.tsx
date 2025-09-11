@@ -9,11 +9,19 @@ import {
   Heading,
   Text,
 } from '@chakra-ui/react'
+import { useColorModeValue } from '@chakra-ui/react'
 import React from 'react'
 import { Education } from '../../types/cvProps'
 import { DateTime } from 'luxon'
 
 const EducationSection = ({ data }: { data: Education }) => {
+  const border = useColorModeValue('gray.200','gray.600')
+  const expandedBg = useColorModeValue('gray.100','gray.700')
+  const titleColor = useColorModeValue('blue.700','blue.200')
+  const cardBg = useColorModeValue('gray.50','gray.800')
+  const subText = useColorModeValue('gray.600','gray.300')
+  const dimText = useColorModeValue('gray.500','gray.400')
+
   return (
     <Accordion
       allowToggle
@@ -23,9 +31,9 @@ const EducationSection = ({ data }: { data: Education }) => {
       boxShadow="lg"
       borderRadius="md"
     >
-      <AccordionItem borderWidth="1px" borderColor="gray.200" mb={4}>
+      <AccordionItem borderWidth="1px" borderColor={border} mb={4}>
         <h2>
-          <AccordionButton _expanded={{ bg: 'gray.100' }}>
+          <AccordionButton _expanded={{ bg: expandedBg }}>
             <Box
               flex="1"
               textAlign="left"
@@ -38,7 +46,7 @@ const EducationSection = ({ data }: { data: Education }) => {
                 as="h3"
                 size="md"
                 textTransform="uppercase"
-                color="blue.700"
+                color={titleColor}
               >
                 {data.headerName}
               </Heading>
@@ -54,18 +62,18 @@ const EducationSection = ({ data }: { data: Education }) => {
                 p={4}
                 boxShadow="inner"
                 borderRadius="md"
-                backgroundColor="gray.50"
+                backgroundColor={cardBg}
               >
                 <Flex justifyContent={'space-between'} alignItems={'center'}>
                   <Box>
                     <Text fontSize={'xl'} fontWeight="semibold">
                       {edu.degree}
                     </Text>
-                    <Text fontSize={'sm'} color="gray.600">
+                    <Text fontSize={'sm'} color={subText}>
                       {edu.schoolName}, {edu.schoolLocation}
                     </Text>
                   </Box>
-                  <Box fontSize={'sm'} fontStyle={'italic'} color="gray.500">
+                  <Box fontSize={'sm'} fontStyle={'italic'} color={dimText}>
                     <Text>
                       {DateTime.fromISO(edu.startDate).toFormat('LLL yyyy')}
                       {' - '}

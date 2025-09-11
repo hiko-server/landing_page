@@ -115,7 +115,10 @@ const EditRouteDetailPage = (props: any) => {
 export default EditRouteDetailPage
 
 export const getServerSideProps: GetServerSideProps = async () => {
-  const data = [
+  if (process.env.ENABLE_DEMO !== 'true') {
+    return { notFound: true }
+  }
+  /* const data = [
     {
       name: 'sampleRoute01',
       description: 'for testing',
@@ -167,9 +170,9 @@ export const getServerSideProps: GetServerSideProps = async () => {
         },
       ],
     },
-  ]
+  ] */
 
-  const locationData = [
+  /* const locationData = [
     {
       createdBy: 'Max Mo',
       createdAt: '2023-09-21T03:53:36.462Z',
@@ -258,9 +261,9 @@ export const getServerSideProps: GetServerSideProps = async () => {
       displayName: 'Jackie',
       __v: 0,
     },
-  ]
+  ] */
 
   return {
-    props: { success: true, data: data, locations: locationData, auth: true },
+    props: { success: true, data: [], locations: [], auth: true },
   }
 }

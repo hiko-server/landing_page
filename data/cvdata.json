@@ -6,7 +6,7 @@
       "firstName": "Yan Pei",
       "lastName": "Li",
       "nickName": "Hiko",
-      "email": "liyanpei2004@outlook.com",
+      "email": "liyanpei2025@outlook.com",
       "phoneNumber": "852 6204 0827",
       "personalWebsite": "hiko.dev",
       "address": "Ho Man Tin, Kowloon, Hong Kong",
@@ -79,22 +79,19 @@
       ],
       "technical": [
         {
-          "name": "networking",
+          "name": "Networking",
           "description": [
-            "Implemented Basic Authentication protocols (RFC 7617) with robust security measures.",
-            "Implemented Bearer Authentication (RFC 6750) using JWT (RFC 7519) for secure access control.",
-            "Proficient in encapsulating and managing HTTP request headers.",
-            "Extensive experience in generating comprehensive API documentation utilizing OpenAPI and Swagger."
+            "Implemented Basic (RFC 7617) and Bearer (RFC 6750, JWT – RFC 7519) authenticationforsecureaccess control.",
+            "Managed HTTP request headers and generated API documentation with OpenAPI &Swagger."
           ]
         },
         {
           "name": "Infrastructure & OS",
           "description": [
-            "Skilled in managing and optimizing Cloudflare DNS configurations.",
-            "Demonstrated experience in managing both Ubuntu server and desktop environments.",
-            "Expert in configuring NGINX servers within Docker containers to support web development workflows.",
-            "Proficient in Docker, encompassing network configuration and custom shell scripting for effective container management.",
-            "Competent in the setup and management of secure SSH servers."
+            "Managed Cloudflare DNS and Ubuntu (server & desktop) environments.",
+            "Configured NGINX within Docker containers for web development workflows.",
+            "Proficient in Docker networking & custom shell scripting for container management.",
+            "Set up and maintained secure SSH servers."
           ]
         }
       ]
@@ -253,19 +250,23 @@
         {
           "companyName": "WeGreen AI",
           "companyURL": "wegreen.ltd",
-          "jobTitle": "COT",
+          "jobTitle": "COT & Co-Founder",
           "jobDescription": "Driving innovation in waste management with AI-powered solutions, enhancing recycling processes to be smarter, faster, and more efficient for a sustainable future.",
           "features": [
             {
-              "description": "Secured $130K in funding from HKBU and HKSTP to advance product development and support sustainable growth.",
+              "description": "Developed AI-powered smart bin technology to optimize waste sorting and recycling efficiency.",
               "furtherExplanation": []
             },
             {
-              "description": "Led the development of our smart bin technology, optimizing waste management solutions.",
+              "description": "Secured $30K funding from HKBU & HKSTP for product development and growth.",
               "furtherExplanation": []
             },
             {
-              "description": "Fostered a collaborative culture that promotes innovation and empowers teams to excel.",
+              "description": "Led product innovation and fostered a collaborative, high-performance teamculture",
+              "furtherExplanation": []
+            },
+            {
+              "description": "Won YDC Best Potential Startup and Innovation Award (HK$15,000) for WeGreen AI, recognizedamongtop tertiary teams in Hong Kong",
               "furtherExplanation": []
             }
           ],
@@ -301,7 +302,12 @@
           "companyURL": "gosmart-everywhere-limited.webflow.io",
           "jobTitle": "Web Development Intern",
           "jobDescription": "Collaborated closely with experienced engineers, contributing to project development and honing advanced software engineering skills.",
-          "features": [],
+          "features": [
+            {
+              "description": "Strengthened expertise in TypeScript, React.js, and Python, with experience in networkingandscalableweb application design.",
+              "furtherExplanation": []
+            }
+          ],
           "location": "Hong Kong",
           "startDate": "2023-08",
           "endDate": "2024-09",
@@ -313,6 +319,38 @@
             "Networking Building",
             "Web Development",
             "Engineering"
+          ]
+        },
+        {
+          "companyName": "Honsenn Eco Technology GmbH",
+          "companyURL": "honsennaudio.com/",
+          "jobTitle": "Remote Internship",
+          "jobDescription": "",
+          "location": "Germany",
+          "startDate": "2025-06",
+          "endDate": "2025-08",
+          "relatedSkills": [
+            "Product Development",
+            "Microcontrollers",
+            "Technical Product Development"
+          ],
+          "features": [
+            {
+              "description": "Debugged embedded software for TWS earphones, improving stability and performance.",
+              "furtherExplanation": []
+            },
+            {
+              "description": "Contributed to Bluetooth 5.2 protocol stack development for Android/iOS.",
+              "furtherExplanation": []
+            },
+            {
+              "description": "Built Python automated test scripts, streamlining QA and reducing Bluetooth audio failure rateby32%.",
+              "furtherExplanation": []
+            },
+            {
+              "description": "Recognized as Top 5% “Quarterly Technical Innovation Intern”.",
+              "furtherExplanation": []
+            }
           ]
         }
       ]
@@ -473,6 +511,10 @@
         {
           "language": "HTML/CSS",
           "level": "擅长在 React 中开发响应式且具视觉吸引力的 UI 组件，精通 HTML/CSS "
+        },
+        {
+          "language": "HTML/CSS",
+          "level": "Experienced in developing responsive and visually appealing UI components in React using HTML/CSS."
         }
       ],
       "technical": [
@@ -480,9 +522,7 @@
           "name": "网络",
           "description": [
             "实施基本认证协议（RFC 7617），确保数据传输安全 ",
-            "采用基于 JWT（RFC 7519）的 Bearer 认证（RFC 6750）机制，保障访问控制 ",
-            "熟练封装和管理 HTTP 请求头 ",
-            "拥有丰富的 OpenAPI 与 Swagger API 文档编写经验 "
+            "采用基于 JWT（RFC 7519）的 Bearer 认证（RFC 6750）机制，保障访问控制 "
           ]
         },
         {
@@ -491,8 +531,7 @@
             "熟悉 Cloudflare DNS 的配置与优化 ",
             "在 Ubuntu 服务器及桌面环境中具有丰富的管理经验 ",
             "通过 Docker 部署与配置 NGINX 服务器以支持网站开发 ",
-            "精通 Docker，通过自定义 shell 脚本实现网络配置及容器管理 ",
-            "具备 SSH 服务器设置与管理的专业能力 "
+            "精通 Docker，通过自定义 shell 脚本实现网络配置及容器管理 "
           ]
         }
       ]
@@ -665,6 +704,10 @@
             {
               "description": "培养了一种促进创新并赋予团队卓越能力的协作文化 ",
               "furtherExplanation": []
+            },
+            {
+              "description": "Won YDC Best Potential Startup and Innovation Award (HK$15,000) for WeGreen AI, recognizedamongtop tertiary teams in Hong Kong",
+              "furtherExplanation": []
             }
           ],
           "location": "香港",
@@ -699,7 +742,12 @@
           "companyURL": "gosmart-everywhere-limited.webflow.io",
           "jobTitle": "网页开发实习生",
           "jobDescription": "与资深软件工程师紧密协作，积极推动并参与项目开发，持续提升技术能力 ",
-          "features": [],
+          "features": [
+            {
+              "description": "Strengthened expertise in TypeScript, React.js, and Python, with experience in networkingandscalableweb application design.",
+              "furtherExplanation": []
+            }
+          ],
           "location": "香港",
           "startDate": "2023-08",
           "endDate": "2024-09",
@@ -711,6 +759,38 @@
             "网络建设",
             "网页开发",
             "工程"
+          ]
+        },
+        {
+          "companyName": "Honsenn Eco Technology GmbH",
+          "companyURL": "honsennaudio.com/",
+          "jobTitle": "Remote Internship",
+          "jobDescription": "",
+          "location": "Germany",
+          "startDate": "2025-06",
+          "endDate": "2025-08",
+          "relatedSkills": [
+            "Product Development",
+            "Microcontrollers",
+            "Technical Product Development"
+          ],
+          "features": [
+            {
+              "description": "Debugged embedded software for TWS earphones, improving stability and performance.",
+              "furtherExplanation": []
+            },
+            {
+              "description": "Contributed to Bluetooth 5.2 protocol stack development for Android/iOS.",
+              "furtherExplanation": []
+            },
+            {
+              "description": "Built Python automated test scripts, streamlining QA and reducing Bluetooth audio failure rateby32%.",
+              "furtherExplanation": []
+            },
+            {
+              "description": "Recognized as Top 5% “Quarterly Technical Innovation Intern”.",
+              "furtherExplanation": []
+            }
           ]
         }
       ]

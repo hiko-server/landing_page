@@ -42,13 +42,15 @@ export const Img = styled.img`
 type ImageCounterProps = {
   imgCount: number
   index: number
+  activeColor?: string
+  inactiveColor?: string
 }
 
 export const ImageCounter = styled.div<ImageCounterProps>`
   width: 6px;
   height: 6px;
-  background: ${({ index, imgCount }) =>
-    index === imgCount - 1 ? '#0095f6' : '#a8a8a8'};
+  background: ${({ index, imgCount, activeColor, inactiveColor }) =>
+    index === imgCount - 1 ? (activeColor || '#0095f6') : (inactiveColor || '#a8a8a8')};
   border-radius: 50%;
   &:not(:last-of-type) {
     margin-right: 4px;

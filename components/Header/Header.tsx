@@ -18,6 +18,8 @@ import {
   MenuList,
   MenuItem,
   useToast,
+  useColorMode,
+  useColorModeValue,
 } from '@chakra-ui/react'
 import { useRouter } from 'next/router'
 import { TfiAlignJustify } from 'react-icons/tfi'
@@ -89,14 +91,18 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
     }
   };
 
+  const { colorMode, toggleColorMode } = useColorMode()
+  const headerBg = useColorModeValue('gray.800', 'gray.900')
+  const headerColor = useColorModeValue('white', 'gray.100')
+
   return (
     <>
       <Box
         as="header"
         w="100%"
         p={4}
-        bg="gray.800"
-        color="white"
+        bg={headerBg}
+        color={headerColor}
         textAlign="center"
         display="flex"
         justifyContent="space-between"
@@ -118,7 +124,7 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
             _active={{ bg: 'teal.600', borderColor: 'teal.600' }}
           />
         ) : (
-          <Flex gap={4}>
+          <Flex gap={4} alignItems="center">
             {quickLinks.map((link) => (
               <IconButton
                 key={link.name}
@@ -135,6 +141,17 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                 aria-label={link.name}
               />
             ))}
+            <IconButton
+              aria-label="Toggle color mode"
+              onClick={toggleColorMode}
+              variant="outline"
+              color="teal.200"
+              borderColor="teal.200"
+              _hover={{ bg: 'teal.200', color: 'gray.800' }}
+              title={colorMode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+            >
+              {colorMode === 'light' ? '🌙' : '☀️'}
+            </IconButton>
             {/* Social */}
             <Menu>
               <MenuButton
@@ -215,6 +232,17 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
           <DrawerHeader borderBottomWidth="1px">Quick Links</DrawerHeader>
           <DrawerBody>
             <Flex direction="column" gap={2}>
+              <Button
+                onClick={toggleColorMode}
+                variant="outline"
+                color="teal.200"
+                borderColor="teal.200"
+                _hover={{ bg: 'teal.200', color: 'gray.800' }}
+                title={colorMode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+                mb={3}
+              >
+                {colorMode === 'light' ? 'Dark Mode 🌙' : 'Light Mode ☀️'}
+              </Button>
               {quickLinks.map((link) => (
                 <IconButton
                   key={link.name}
