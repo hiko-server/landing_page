@@ -9,17 +9,23 @@ import {
   Heading,
   Text,
 } from '@chakra-ui/react';
+import { useColorModeValue } from '@chakra-ui/react'
 import React from 'react';
 import { Skill } from '../../types/cvProps';
 
 const SkillSection = ({ data }: { data: Skill }) => {
+  const border = useColorModeValue('gray.200','gray.600')
+  const expandedBg = useColorModeValue('gray.100','gray.700')
+  const titleColor = useColorModeValue('blue.700','blue.200')
+  const cardBg = useColorModeValue('gray.50','gray.800')
+  const subText = useColorModeValue('gray.600','gray.300')
   return (
     <Accordion allowToggle width="100%" maxW="1000px" mt={[8, 16]} boxShadow="lg" borderRadius="md">
-      <AccordionItem borderWidth="1px" borderColor="gray.200" mb={4}>
+      <AccordionItem borderWidth="1px" borderColor={border} mb={4}>
         <h2>
-          <AccordionButton _expanded={{ bg: 'gray.100' }}>
+          <AccordionButton _expanded={{ bg: expandedBg }}>
             <Box flex="1" textAlign="left" fontWeight="bold" alignItems="center" justifyContent="center" p={4}>
-              <Heading as="h3" size="md" textTransform="uppercase" color="blue.700">
+              <Heading as="h3" size="md" textTransform="uppercase" color={titleColor}>
                 {data.headerName}
               </Heading>
             </Box>
@@ -39,7 +45,7 @@ const SkillSection = ({ data }: { data: Skill }) => {
                     <Text fontWeight={800} fontSize={'md'}>
                       {lang.language}
                     </Text>
-                    <Text textAlign="left" fontSize={'sm'} color="gray.600">
+                    <Text textAlign="left" fontSize={'sm'} color={subText}>
                       {lang.level}
                     </Text>
                   </Box>
@@ -54,7 +60,7 @@ const SkillSection = ({ data }: { data: Skill }) => {
               </Text>
               <Flex direction={'column'} gap={4}>
                 {data.technical.map((tech, techIndex) => (
-                  <Box key={techIndex} p={4} boxShadow="inner" borderRadius="md" backgroundColor="gray.50">
+                  <Box key={techIndex} p={4} boxShadow="inner" borderRadius="md" backgroundColor={cardBg}>
                     <Text fontWeight={800} fontSize={'md'} textTransform="uppercase" mb={2}>
                       {tech.name}
                     </Text>

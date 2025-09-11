@@ -1,15 +1,20 @@
 import React, { useEffect, useState } from 'react'
 
 import LandingCVSections from '../../components/LandingPage/LandingCVSections'
-import { Flex, useMediaQuery } from '@chakra-ui/react'
+import { Flex, useMediaQuery, Box, Image, Heading } from '@chakra-ui/react'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
-import LanguageBars from '../../components/GitHub/LanguageBars'
+// import LanguageBars from '../../components/GitHub/LanguageBars'
 import ActivityFeed from '../../components/GitHub/ActivityFeed'
-import { Box, Image } from '@chakra-ui/react'
+import StatsBar from '../../components/GitHub/StatsBar'
+import SectionReveal from '../../components/General-UI/SectionReveal'
+import AboutHero from '../../components/About/AboutHero'
+import ProjectSpotlight from '../../components/LandingPage/ProjectSpotlight'
+import ExperienceTimeline from '../../components/LandingPage/ExperienceTimeline'
+import CertificationsPeek from '../../components/LandingPage/CertificationsPeek'
+// import ContactPro from '../../components/Contact/ContactPro'
 
 const About = (props: any) => {
-
   const [, setIsHostCV] = useState<boolean>(false)
   const [isMobile] = useMediaQuery('(max-width: 767px)')
 
@@ -28,19 +33,61 @@ const About = (props: any) => {
         image="/images/hikoAvator.png"
       />
       <HeaderFooter isMobile={isMobile}>
-        <Flex direction="column" alignItems="center" justifyContent="center" p={['20px', '40px']} gap={['20px', '40px']}>
-          <LandingCVSections en={props.cv?.en} zh={props.cv?.zh} />
-          <Box w="100%" maxW="1000px">
-            <LanguageBars />
-          </Box>
-          <Box w="100%" maxW="1000px">
-            <ActivityFeed />
-          </Box>
-          {props.githubUser ? (
-            <Box mt={6} w="100%" maxW="1000px">
-              <Image src={`https://ghchart.rshah.org/${props.githubUser}`} alt="GitHub contributions" w="100%" borderRadius="md" />
+        <Flex
+          direction="column"
+          alignItems="center"
+          justifyContent="center"
+          p={['20px', '40px']}
+          gap={['20px', '40px']}
+        >
+          <SectionReveal>
+            <AboutHero
+              brand={props.home?.hero?.brand}
+              tagline={props.home?.hero?.tagline}
+            />
+          </SectionReveal>
+          <SectionReveal>
+            <StatsBar />
+          </SectionReveal>
+          <SectionReveal>
+            <ProjectSpotlight cvEn={props.cv?.en} />
+          </SectionReveal>
+          <SectionReveal>
+            <ExperienceTimeline cvEn={props.cv?.en} />
+          </SectionReveal>
+          <SectionReveal>
+            <CertificationsPeek cvEn={props.cv?.en} />
+          </SectionReveal>
+          {/* 技术语言分布（如需恢复可取消注释） */}
+          <SectionReveal>
+            <Box mt={2} w="100%" maxW="1100px">
+              <Heading as="h3" size="md" mb={2}>
+                Recent Activity
+              </Heading>
+              <ActivityFeed />
             </Box>
+          </SectionReveal>
+          {props.githubUser ? (
+            <SectionReveal>
+              <Box mt={2} w="100%" maxW="1100px">
+                <Heading as="h3" size="md" mb={2}>
+                  Contributions
+                </Heading>
+                <Image
+                  src={`https://ghchart.rshah.org/${props.githubUser}`}
+                  alt="GitHub contributions"
+                  w="100%"
+                  borderRadius="md"
+                />
+              </Box>
+            </SectionReveal>
           ) : null}
+          <SectionReveal>
+            <LandingCVSections en={props.cv?.en} zh={props.cv?.zh} />
+          </SectionReveal>
+          {/* <SectionReveal>
+            <ContactPro home={props.home} />
+          </SectionReveal> */}
         </Flex>
       </HeaderFooter>
     </React.Fragment>
@@ -53,6 +100,7 @@ export async function getServerSideProps(context: any) {
   let en: any[] = []
   let zh: any[] = []
   let githubUser: string | null = null
+  let home: any = null
   try {
     const fs = await import('fs')
     const path = await import('path')
@@ -66,7 +114,7 @@ export async function getServerSideProps(context: any) {
     // No example fallback — use only real data
     try {
       const mod = await import('../../lib/home')
-      const home = mod.readHome()
+      home = mod.readHome()
       const url = home?.socials?.github
       if (url) {
         try {
@@ -77,5 +125,5 @@ export async function getServerSideProps(context: any) {
       }
     } catch {}
   } catch {}
-  return { props: { host, cv: { en, zh }, githubUser } }
+  return { props: { host, cv: { en, zh }, githubUser, home } }
 }

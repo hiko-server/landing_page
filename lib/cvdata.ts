@@ -67,3 +67,14 @@ export function restoreSnapshot(filename: string): boolean {
   fs.writeFileSync(dataPath, raw, 'utf-8')
   return true
 }
+
+export function readSnapshot(filename: string): string | null {
+  const safe = filename.replace(/[^a-zA-Z0-9_.\-]/g, '_')
+  const filePath = path.join(snapshotDir, safe)
+  try {
+    if (!fs.existsSync(filePath)) return null
+    return fs.readFileSync(filePath, 'utf-8')
+  } catch {
+    return null
+  }
+}

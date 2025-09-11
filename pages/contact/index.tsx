@@ -3,17 +3,12 @@ import React, { useEffect, useState } from 'react'
 
 import { Flex, useMediaQuery } from '@chakra-ui/react'
 
-import ContactCard from '../../components/Contact/ConatactCard'
+import ContactPro from '../../components/Contact/ContactPro'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 
 const About = (props: any) => {
-  console.log('props', props)
-
-  const { data: session, status } = useSession()
-  console.log('session', session)
-  console.log('status', status)
-  console.log(session?.accessToken)
+  useSession()
 
   const [, setIsHostCV] = useState<boolean>(false)
   const [isMobile] = useMediaQuery('(max-width: 767px)')
@@ -34,7 +29,7 @@ const About = (props: any) => {
       />
       <HeaderFooter isMobile={isMobile}>
         <Flex direction="column" alignItems="center" justifyContent="center" p={['20px', '40px']} gap={['20px', '40px']}>
-          <ContactCard />
+          <ContactPro home={props.home || undefined} />
         </Flex>
       </HeaderFooter>
     </React.Fragment>
@@ -42,3 +37,13 @@ const About = (props: any) => {
 }
 
 export default About
+
+export async function getServerSideProps(context: any) {
+  const host = context.req.headers.host || 'hiko.dev'
+  let home = null
+  try {
+    const mod = await import('../../lib/home')
+    home = mod.readHome()
+  } catch {}
+  return { props: { host, home } }
+}

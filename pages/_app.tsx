@@ -11,7 +11,8 @@ import * as gtag from '../lib/gtag'
 // import '../styles/globals.scss'
 
 //using the chakra-ui (styled components)
-import { ChakraProvider, CSSReset } from '@chakra-ui/react'
+import { ChakraProvider, CSSReset, ColorModeScript } from '@chakra-ui/react'
+import { AnimatePresence, motion } from 'framer-motion'
 
 import { config } from '@fortawesome/fontawesome-svg-core'
 import '@fortawesome/fontawesome-svg-core/styles.css'
@@ -50,11 +51,22 @@ const App = ({ Component, pageProps }: any) => {
             <MainProvider>
               <SettingsAppProvider>
                 <CSSReset />
+                <ColorModeScript initialColorMode={(theme as any).config?.initialColorMode || 'system'} />
                 <Head>
                   <meta name="viewport" content="width=device-width, initial-scale=1" />
                   <link rel="icon" href="/images/favicon-32x32.png" />
                 </Head>
-                <Component {...pageProps} />
+                <AnimatePresence initial={false} mode="wait">
+                  <motion.div
+                    key={router.asPath}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <Component {...pageProps} />
+                  </motion.div>
+                </AnimatePresence>
                 <ScrollToTop />
               </SettingsAppProvider>
             </MainProvider>

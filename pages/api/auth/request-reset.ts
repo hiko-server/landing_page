@@ -1,11 +1,15 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { createResetToken, ensureAdminFromEnv, readAdmin } from '../../../lib/admin'
 import { sendMail, siteUrl } from '../../../lib/mailer'
+import { rateLimit } from '../../../lib/rateLimit'
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
   const { email } = req.body || {}
   if (!email) return res.status(400).json({ error: 'Missing email' })
+  const rl = rateLimit(req, 5, 10 * 60 * 1000)
+  res.setHeader('X-RateLimit-Remaining', String(rl.remaining))
+  if (!rl.allowed) return res.status(429).json({ error: 'Too many requests, try later' })
   ensureAdminFromEnv()
   const admin = readAdmin()
   if (!admin || admin.email !== email) {

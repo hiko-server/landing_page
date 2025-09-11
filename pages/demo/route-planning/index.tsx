@@ -238,6 +238,14 @@ const RouteDetailPage = (props: any) => {
             <ASALayout>
                 <Panel name={'Cruising'} willBack>
                     <Flex direction={'column'} gap={'20px'}>
+                        {(!data || data.length === 0) && (
+                          <Flex direction={'column'} gap={'10px'}>
+                            <Text fontSize={'18px'} color={'gray.600'}>No route loaded.</Text>
+                            <Text fontSize={'16px'} color={'gray.500'}>
+                              Provide real stops via the editor or link with your API to visualize an actual route.
+                            </Text>
+                          </Flex>
+                        )}
                         {data !== null && data.length > 0 && (
                             <Flex direction={'column'} fontSize={'20px'}>
                                 <Flex gap={'20px'}>
@@ -326,66 +334,9 @@ const RouteDetailPage = (props: any) => {
 export default RouteDetailPage
 
 export const getServerSideProps: GetServerSideProps = async () => {
-
-    const data = [
-        {
-            "routeID": "027de057-18a5-4133-b1fa-f6dd11abc232-R-1695268842166",
-            "name": "sampleRoute01",
-            "description": "for testing",
-            "routeOrder": [
-                {
-                    "locationID": "28c5b215-15f6-45c0-8476-6a8eb7a686b2-L-1695268447011",
-                    "name": "henry",
-                    "displayName": "Henry"
-                },
-                {
-                    "locationID": "54b9c937-1ade-4659-9a52-4e8fed809974-L-1695268532512",
-                    "name": "jackie",
-                    "displayName": "Jackie"
-                },
-                {
-                    "locationID": "55495d95-739a-474b-bc2f-a29fe3f94a50-L-1695268477478",
-                    "name": "max",
-                    "displayName": "Max"
-                },
-                {
-                    "locationID": "f86695b6-fc2a-4ecc-b2b3-5047e513aaca-L-1695268416461",
-                    "name": "office",
-                    "displayName": "Office"
-                },
-                {
-                    "locationID": "28c5b215-15f6-45c0-8476-6a8eb7a686b2-L-1695268447011",
-                    "name": "henry",
-                    "displayName": "Henry"
-                },
-                {
-                    "locationID": "54b9c937-1ade-4659-9a52-4e8fed809974-L-1695268532512",
-                    "name": "jackie",
-                    "displayName": "Jackie"
-                },
-                {
-                    "locationID": "f86695b6-fc2a-4ecc-b2b3-5047e513aaca-L-1695268416461",
-                    "name": "office",
-                    "displayName": "Office"
-                },
-                {
-                    "locationID": "55495d95-739a-474b-bc2f-a29fe3f94a50-L-1695268477478",
-                    "name": "max",
-                    "displayName": "Max"
-                },
-                {
-                    "locationID": "28c5b215-15f6-45c0-8476-6a8eb7a686b2-L-1695268447011",
-                    "name": "henry",
-                    "displayName": "Henry"
-                }
-            ]
-        }
-    ]
-
-    return {
-        props: { success: true, data: data, auth: true },
-    }
-
+  if (process.env.ENABLE_DEMO !== 'true') {
+    return { notFound: true }
+  }
+  // No static demo payload; present empty UI for real input.
+  return { props: { success: true, data: [], auth: true } }
 }
-
-

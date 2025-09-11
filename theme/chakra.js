@@ -10,8 +10,21 @@ const colors = {
 }
 
 const theme = {
-  // ...defaultTheme,
-  ...extendTheme({ colors }),
+  ...extendTheme({
+    colors,
+    config: {
+      initialColorMode: 'system',
+      useSystemColorMode: true,
+    },
+    styles: {
+      global: ({ colorMode }) => ({
+        'html, body, #__next': { height: '100%' },
+        body: {
+          bg: colorMode === 'dark' ? 'gray.900' : 'gray.50',
+        },
+      }),
+    },
+  }),
 }
 
 export default theme

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import emailjs from "@emailjs/browser";
 import Captcha from "./Captcha";
 import { Box, Button, Input, Textarea, VStack, Text, FormControl, FormErrorMessage, Alert, AlertIcon, AlertTitle } from "@chakra-ui/react";
 import { motion } from "framer-motion";
@@ -57,46 +56,24 @@ const ContactCard = (): JSX.Element => {
 
 
   const handleSubmit = async (values: { name: string; email: string; subject: string; message: string }) => {
-    console.log('Submitted values:', values);
     if (!validForm) return;
-    if (validForm) {
-      try {
-        const templateParams = {
-          name: values.name,
-          email: values.email,
-          subject: values.subject,
-          message: values.message,
-        };
-        console.log('templateParams', templateParams)
-        await emailjs.init({
-            publicKey: "O6yGkJqJY2EqYUIWl",
-            // Do not allow headless browsers
-            blockHeadless: true,
-          });
-        await emailjs.send(
-            "service_48ggywd",
-            "template_hla69tv", 
-            templateParams,
-            process.env.REACT_APP_EMAILJS_PUBLIC_KEY!,
-        ).then(
-            (response) => {
-              console.log('SUCCESS!', response.status, response.text);
-              setSendSuccess(true);
-            },
-            (error) => {
-              console.log('FAILED...', error);
-              setSendSuccess(false);
-            },
-          );
-
-        setResData({ resCode: 200, UIMessage: "Email sent successfully" });
-      } catch (error) {
-        setResData({
-          resCode: 1,
-          UIMessage: `An unknown error occurred. Please try again.\nIf the error persists contact me directly at ${process.env.REACT_APP_CONTACT_EMAIL}`,
-        });
-        console.error("Error sending email:", error);
+    try {
+      const res = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...values, token }),
+      })
+      if (res.ok) {
+        setSendSuccess(true)
+        setResData({ resCode: 200, UIMessage: 'Email sent successfully' })
+      } else {
+        const d = await res.json().catch(() => ({}))
+        setSendSuccess(false)
+        setResData({ resCode: 1, UIMessage: d?.error || 'Failed to send, please try again.' })
       }
+    } catch (error) {
+      setSendSuccess(false)
+      setResData({ resCode: 1, UIMessage: `An unknown error occurred. Please try again. If the error persists contact me directly at ${process.env.REACT_APP_CONTACT_EMAIL}` })
     }
   };
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { Box } from "@chakra-ui/react";
 import HCaptcha from "@hcaptcha/react-hcaptcha";
+import { useColorMode } from '@chakra-ui/react'
 
 interface CaptchaProps {
   updateToken: React.Dispatch<React.SetStateAction<string | null>>;
@@ -14,14 +15,14 @@ const Captcha = ({
   updateReset
 }: CaptchaProps): JSX.Element => {
   const captchaRef = useRef<HCaptcha>(null);
+  const { colorMode } = useColorMode()
 
   const onExpire = () => {
-    console.log("hCaptcha Token Expired");
     updateToken(null);
   };
 
-  const onError = (err: unknown) => {
-    console.log(`hCaptcha Error: ${err}`);
+  const onError = (_err: unknown) => {
+    // noop
   };
 
   useEffect(() => {
@@ -31,9 +32,7 @@ const Captcha = ({
     }
   }, [shouldReset, updateReset]);
 
-  useEffect(() => {
-    console.log("hCaptcha Site Key:", process.env.NEXT_PUBLIC_HCAPTCHA_KEY);
-  }, []);
+  useEffect(() => {}, []);
 
   return (
     <Box h="auto" w="auto">
@@ -46,7 +45,7 @@ const Captcha = ({
         onVerify={updateToken}
         onError={onError}
         onExpire={onExpire}
-        theme="dark"
+        theme={colorMode === 'dark' ? 'dark' : 'light'}
         ref={captchaRef}
       />
     </Box>
