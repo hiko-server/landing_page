@@ -26,7 +26,7 @@ import { TfiAlignJustify } from 'react-icons/tfi'
 import Footer from '../Footer/Footer'
 import { FaGithub, FaGitlab, FaLinkedin, FaWhatsapp } from 'react-icons/fa'
 import { AiOutlineStock } from 'react-icons/ai'
-import { ChevronDownIcon } from '@chakra-ui/icons'
+import { ChevronDownIcon, MoonIcon, SunIcon } from '@chakra-ui/icons'
 const Header = ({ isMobile }: { isMobile: boolean }) => {
   // const baseURL = 'hiko.dev'
   const quickLinks = [
@@ -149,9 +149,8 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
               borderColor="teal.200"
               _hover={{ bg: 'teal.200', color: 'gray.800' }}
               title={colorMode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
-            >
-              {colorMode === 'light' ? '🌙' : '☀️'}
-            </IconButton>
+              icon={colorMode === 'light' ? <MoonIcon /> : <SunIcon />}
+            />
             {/* Social */}
             <Menu>
               <MenuButton
@@ -240,8 +239,9 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                 _hover={{ bg: 'teal.200', color: 'gray.800' }}
                 title={colorMode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
                 mb={3}
+                leftIcon={colorMode === 'light' ? <MoonIcon /> : <SunIcon />}
               >
-                {colorMode === 'light' ? 'Dark Mode 🌙' : 'Light Mode ☀️'}
+                {colorMode === 'light' ? 'Dark Mode' : 'Light Mode'}
               </Button>
               {quickLinks.map((link) => (
                 <IconButton
