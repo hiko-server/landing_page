@@ -9,7 +9,7 @@ import ActivityFeed from '../../components/GitHub/ActivityFeed'
 import StatsBar from '../../components/GitHub/StatsBar'
 import SectionReveal from '../../components/General-UI/SectionReveal'
 import AboutHero from '../../components/About/AboutHero'
-import ProjectSpotlight from '../../components/LandingPage/ProjectSpotlight'
+// import ProjectSpotlight from '../../components/LandingPage/ProjectSpotlight'
 import ExperienceTimeline from '../../components/LandingPage/ExperienceTimeline'
 import CertificationsPeek from '../../components/LandingPage/CertificationsPeek'
 // import ContactPro from '../../components/Contact/ContactPro'
@@ -49,9 +49,9 @@ const About = (props: any) => {
           <SectionReveal>
             <StatsBar />
           </SectionReveal>
-          <SectionReveal>
+          {/* <SectionReveal>
             <ProjectSpotlight cvEn={props.cv?.en} />
-          </SectionReveal>
+          </SectionReveal> */}
           <SectionReveal>
             <ExperienceTimeline cvEn={props.cv?.en} />
           </SectionReveal>

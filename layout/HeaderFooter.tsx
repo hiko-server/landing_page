@@ -2,6 +2,8 @@ import { Box } from '@chakra-ui/react'
 import Footer from '../components/Footer/Footer'
 import Header from '../components/Header/Header'
 import React from 'react'
+import AnimatedBackground from '../components/Background/AnimatedBackground'
+import ParticlesBackground from '../components/Background/ParticlesBackground'
 
 const HeaderFooter = ({
   children,
@@ -17,10 +19,18 @@ const HeaderFooter = ({
       minHeight="100vh"
       w="full"
     >
-    {/* <React.Fragment> */}
-      <Header isMobile={isMobile} />
-      <Box>{children}</Box>
-      <Footer />
+      {/* Background layers */}
+      <AnimatedBackground />
+      <ParticlesBackground />
+
+      {/* Foreground content */}
+      <Box position="relative" zIndex={1}>
+        <Header isMobile={isMobile} />
+      </Box>
+      <Box position="relative" zIndex={1}>{children}</Box>
+      <Box position="relative" zIndex={1}>
+        <Footer />
+      </Box>
     </Box>
     // {/* </React.Fragment> */}
   )
