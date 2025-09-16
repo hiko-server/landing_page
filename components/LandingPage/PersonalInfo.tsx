@@ -39,8 +39,19 @@ const PersonalInfo = ({
     (home?.hero as { avatarTransform?: { x?: number } } | undefined)
       ?.avatarTransform?.x ?? 50 // percentage [0..100]
   const avY = ((home as any)?.hero?.avatarTransform?.y ?? 50) as number // percentage [0..100]
-  const avScale = ((home as any)?.hero?.avatarTransform?.scale ?? 50) as number // [1..3]
-  const avatarUrl = home?.hero?.avatarUrl || '/images/hikoAvator.png'
+  const avScale = ((home as any)?.hero?.avatarTransform?.scale ?? 1) as number // [0.5..3]
+
+  // Use the same avatar source for all modes
+  const avatarSrc =
+    (home?.hero?.avatarUrl && home.hero.avatarUrl.trim()) ||
+    '/images/hikoAvator.png'
+
+  // Clamp values to safe ranges for mobile rendering
+  const clamp = (v: number, min: number, max: number) =>
+    Math.max(min, Math.min(max, v))
+  const posX = clamp(Number(avX) || 50, 0, 100)
+  const posY = clamp(Number(avY) || 50, 0, 100)
+  const scale = clamp(Number(avScale) || 1, 0.5, 3)
 
   return (
     <Box position="relative" w="full" h="full">
@@ -106,19 +117,22 @@ const PersonalInfo = ({
                       position="relative"
                     >
                       <Image
-                        src={avatarUrl}
+                        src={avatarSrc}
                         alt={home?.hero?.brand || 'avatar'}
                         w="100%"
                         h="100%"
                         objectFit="cover"
-                        // object-position based on saved percentages
-                        // Ensures the chosen focal point remains visible
-                        sx={{ objectPosition: `${avX}% ${avY}%` }}
-                        // additional zoom for fine tuning
-                        transform={`scale(${avScale})`}
-                        transformOrigin={`${avX}% ${avY}%`}
+                        sx={{ objectPosition: `${posX}% ${posY}%` }}
+                        transform={`scale(${scale})`}
+                        transformOrigin={`${posX}% ${posY}%`}
                         draggable={false}
                         pointerEvents="none"
+                        // Improve mobile GPU compositing and avoid flicker
+                        style={{
+                          willChange: 'transform',
+                          backfaceVisibility: 'hidden',
+                          display: 'block',
+                        }}
                       />
                     </Box>
 
