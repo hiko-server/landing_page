@@ -5,7 +5,12 @@
     "tagline": "Self-Taught Full-Stack Software Engineer | Exploring Innovative Solutions in Computer Science | Machine Learning | Computer Vision | Typescript | React | Next.js | NestJS | Python FastAPI",
     "avatarUrl": "/uploads/69606c442b9c86ed3a089e5228d7b708.jpg",
     "phone": "+852 62040827",
-    "email": "hi@hiko.dev"
+    "email": "hi@hiko.dev",
+    "avatarTransform": {
+      "x": 11.830869558279066,
+      "y": 9.091084220181516,
+      "scale": 1
+    }
   },
   "socials": {
     "github": "https://github.com/HikoPLi",
@@ -49,13 +54,13 @@
     {
       "url": "/images/imageScroller/COT.png",
       "describe": "COT - Start-Up Saturday of HKBU - Wegreen AI",
-      "redirectTo": "https://wegreen.ltd",
+      "redirectTo": "https://wegreen.ltd/",
       "visible": true
     },
     {
       "url": "/images/imageScroller/wegreenAI_hkstp.jpeg",
       "describe": "COT - Youth Vision Breeds Green Action - Wegreen AI",
-      "redirectTo": "https://wegreen.ltd",
+      "redirectTo": "https://wegreen.ltd/",
       "visible": true
     },
     {

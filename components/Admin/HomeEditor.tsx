@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import {
   Button,
   Checkbox,
@@ -18,6 +18,9 @@ import {
   Tr,
   Textarea,
   useToast,
+  Box,
+  Text,
+  Flex,
 } from '@chakra-ui/react'
 import { AddIcon, DeleteIcon } from '@chakra-ui/icons'
 
@@ -33,6 +36,8 @@ export default function HomeEditor() {
     avatarUrl: '',
     phone: '',
     email: '',
+    // added: avatar transform control (x,y in %, scale multiplier)
+    avatarTransform: { x: 50, y: 50, scale: 1 },
   })
   const [socials, setSocials] = useState({
     github: '',
@@ -58,6 +63,11 @@ export default function HomeEditor() {
           avatarUrl: data.hero?.avatarUrl || '',
           phone: data.hero?.phone || '',
           email: data.hero?.email || '',
+          avatarTransform: {
+            x: data.hero?.avatarTransform?.x ?? 50,
+            y: data.hero?.avatarTransform?.y ?? 50,
+            scale: data.hero?.avatarTransform?.scale ?? 1,
+          },
         })
         setSocials({
           github: data.socials?.github || '',
@@ -111,7 +121,9 @@ export default function HomeEditor() {
       photos: (photos || []).map((p) => ({
         ...p,
         url: normalizeUrl(stripTs(p.url)),
-        redirectTo: p.redirectTo ? normalizeUrl(p.redirectTo) : undefined,
+        redirectTo: p.redirectTo
+          ? normalizeUrl(stripTs(p.redirectTo))
+          : undefined,
       })),
     }
     const res = await fetch('/api/home', {
@@ -180,6 +192,63 @@ export default function HomeEditor() {
     })
   }
 
+  // --- Avatar Position/Scale Editor (Grid + Drag) ---
+  const frameRef = useRef<HTMLDivElement | null>(null)
+  const dragState = useRef<{
+    startX: number
+    startY: number
+    startPosX: number
+    startPosY: number
+    dragging: boolean
+  }>({ startX: 0, startY: 0, startPosX: 50, startPosY: 50, dragging: false })
+
+  const clamp = (v: number, min: number, max: number) =>
+    Math.max(min, Math.min(max, v))
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (!frameRef.current) return
+    const { x, y } = hero.avatarTransform || { x: 50, y: 50 }
+    dragState.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startPosX: x,
+      startPosY: y,
+      dragging: true,
+    }
+    ;(e.target as Element).setPointerCapture?.(e.pointerId)
+  }
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!dragState.current.dragging || !frameRef.current) return
+    const rect = frameRef.current.getBoundingClientRect()
+    const dx = e.clientX - dragState.current.startX
+    const dy = e.clientY - dragState.current.startY
+    // translate pixel delta to % of frame
+    const nx = clamp(
+      dragState.current.startPosX + (dx / rect.width) * 100,
+      0,
+      100
+    )
+    const ny = clamp(
+      dragState.current.startPosY + (dy / rect.height) * 100,
+      0,
+      100
+    )
+    setHero((h) => ({
+      ...h,
+      avatarTransform: { ...h.avatarTransform, x: nx, y: ny },
+    }))
+  }
+
+  const onPointerUp = (e: React.PointerEvent) => {
+    dragState.current.dragging = false
+    ;(e.target as Element).releasePointerCapture?.(e.pointerId)
+  }
+
+  const resetAvatarTransform = () => {
+    setHero((h) => ({ ...h, avatarTransform: { x: 50, y: 50, scale: 1 } }))
+  }
+
   return (
     <>
       <Heading size="sm">Hero</Heading>
@@ -236,6 +305,155 @@ export default function HomeEditor() {
             }}
           />
         </FormControl>
+
+        {/* Avatar Positioning (Grid + Drag + Scale) */}
+        <FormControl gridColumn="1 / -1">
+          <FormLabel>Avatar Position (Drag inside frame) · Scale</FormLabel>
+          <HStack align="start" spacing={6} flexWrap="wrap">
+            <Box>
+              <Box
+                ref={frameRef}
+                position="relative"
+                w={['220px', '240px']}
+                h={['220px', '240px']}
+                borderRadius="full"
+                overflow="hidden"
+                border="1px solid"
+                borderColor="gray.300"
+                // Grid overlay (industry standard alignment aid)
+                _before={{
+                  content: '""',
+                  position: 'absolute',
+                  inset: 0,
+                  backgroundImage: `
+                    repeating-linear-gradient(
+                      0deg,
+                      rgba(255,255,255,0.15) 0,
+                      rgba(255,255,255,0.15) 1px,
+                      transparent 1px,
+                      transparent 20px
+                    ),
+                    repeating-linear-gradient(
+                      90deg,
+                      rgba(255,255,255,0.15) 0,
+                      rgba(255,255,255,0.15) 1px,
+                      transparent 1px,
+                      transparent 20px
+                    )
+                  `,
+                  pointerEvents: 'none',
+                }}
+                onPointerDown={onPointerDown}
+                onPointerMove={onPointerMove}
+                onPointerUp={onPointerUp}
+                onPointerCancel={onPointerUp}
+                cursor="grab"
+                bg="black"
+              >
+                {hero.avatarUrl ? (
+                  <Image
+                    src={normalizeUrl(hero.avatarUrl)}
+                    alt="avatar-position-preview"
+                    w="100%"
+                    h="100%"
+                    objectFit="cover"
+                    sx={{
+                      objectPosition: `${hero.avatarTransform.x}% ${hero.avatarTransform.y}%`,
+                    }}
+                    transform={`scale(${hero.avatarTransform.scale})`}
+                    transformOrigin={`${hero.avatarTransform.x}% ${hero.avatarTransform.y}%`}
+                    draggable={false}
+                    pointerEvents="none"
+                  />
+                ) : (
+                  <Flex
+                    w="full"
+                    h="full"
+                    align="center"
+                    justify="center"
+                    color="gray.400"
+                    bg="gray.50"
+                  >
+                    <Text>No avatar</Text>
+                  </Flex>
+                )}
+              </Box>
+              <HStack mt={3} spacing={3}>
+                <Button size="sm" onClick={resetAvatarTransform}>
+                  Reset
+                </Button>
+                <Text fontSize="sm" color="gray.600">
+                  X: {Math.round(hero.avatarTransform.x)}% · Y:{' '}
+                  {Math.round(hero.avatarTransform.y)}% · Scale:{' '}
+                  {hero.avatarTransform.scale.toFixed(2)}
+                </Text>
+              </HStack>
+            </Box>
+
+            <Box minW="260px">
+              <FormLabel mb={1}>Scale</FormLabel>
+              <Input
+                type="range"
+                min={1}
+                max={3}
+                step={0.01}
+                value={hero.avatarTransform.scale}
+                onChange={(e) =>
+                  setHero((h) => ({
+                    ...h,
+                    avatarTransform: {
+                      ...h.avatarTransform,
+                      scale: Number(e.target.value),
+                    },
+                  }))
+                }
+              />
+              <HStack mt={3} spacing={3}>
+                <Box>
+                  <FormLabel mb={1}>X (%)</FormLabel>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={Math.round(hero.avatarTransform.x)}
+                    onChange={(e) =>
+                      setHero((h) => ({
+                        ...h,
+                        avatarTransform: {
+                          ...h.avatarTransform,
+                          x: clamp(Number(e.target.value), 0, 100),
+                        },
+                      }))
+                    }
+                    width="100px"
+                  />
+                </Box>
+                <Box>
+                  <FormLabel mb={1}>Y (%)</FormLabel>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={Math.round(hero.avatarTransform.y)}
+                    onChange={(e) =>
+                      setHero((h) => ({
+                        ...h,
+                        avatarTransform: {
+                          ...h.avatarTransform,
+                          y: clamp(Number(e.target.value), 0, 100),
+                        },
+                      }))
+                    }
+                    width="100px"
+                  />
+                </Box>
+              </HStack>
+            </Box>
+          </HStack>
+        </FormControl>
+
         <FormControl>
           <FormLabel>Phone</FormLabel>
           <Input
