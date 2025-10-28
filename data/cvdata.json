@@ -356,6 +356,41 @@
       ]
     },
     {
+      "sessionName": "competitionAwards",
+      "headerName": "COMPETITIONS & AWARDS",
+      "awards": [
+        {
+          "contestName": "YDC Entrepreneurial Program",
+          "award": "Best Potential Startup & Innovation Award",
+          "organization": "Young Entrepreneurs Development Council",
+          "date": "2024-11",
+          "location": "Hong Kong",
+          "description": [
+            "Won HK$15,000 with WeGreen AI among top tertiary teams in Hong Kong.",
+            "Recognized for applying AI to accelerate smart recycling and waste sorting."
+          ]
+        },
+        {
+          "contestName": "Honsenn Eco Technology GmbH",
+          "award": "Quarterly Technical Innovation Intern – Top 5%",
+          "organization": "Honsenn Eco Technology GmbH",
+          "date": "2025-08",
+          "location": "Remote / Germany",
+          "description": [
+            "Selected in the top 5% of interns for contributions to embedded audio firmware, Bluetooth 5.2 stack development, and automated QA tooling."
+          ]
+        },
+        {
+          "contestName": "IEEE Xtreme 19.0",
+          "award": "QS No.11 HK No.1",
+          "organization": "IEEE",
+          "date": "2025-10",
+          "location": "Hong Kong",
+          "description": []
+        }
+      ]
+    },
+    {
       "sessionName": "extraSkill",
       "headerName": "LANGUAGES AND SKILLS",
       "points": [
@@ -792,6 +827,41 @@
               "furtherExplanation": []
             }
           ]
+        }
+      ]
+    },
+    {
+      "sessionName": "competitionAwards",
+      "headerName": "比赛与奖项",
+      "awards": [
+        {
+          "contestName": "青年企业发展局创业计划",
+          "award": "最佳潜力初创与创新奖",
+          "organization": "青年企业发展局（YDC）",
+          "date": "2024-11",
+          "location": "香港",
+          "description": [
+            "以 WeGreen AI 项目获得港币 15,000 元现金奖励，入选香港本地大专院校团队前列。",
+            "方案展示了运用人工智能加速智能回收与废物分类的潜力。"
+          ]
+        },
+        {
+          "contestName": "Honsenn Eco Technology GmbH",
+          "award": "季度技术创新实习生前 5%",
+          "organization": "Honsenn Eco Technology GmbH",
+          "date": "2025-08",
+          "location": "远程 / 德国",
+          "description": [
+            "因优化 TWS 耳机嵌入式固件、蓝牙 5.2 协议栈与自动化测试脚本而获得表彰。"
+          ]
+        },
+        {
+          "contestName": "IEEE Xtreme 19.0",
+          "award": "QS No.11 HK No.1",
+          "organization": "IEEE",
+          "date": "2025-10",
+          "location": "Hong Kong",
+          "description": []
         }
       ]
     },

@@ -45,6 +45,15 @@ type EducationExperience = {
   gpa?: string
 }
 
+type CompetitionAward = {
+  contestName: string
+  award: string
+  organization?: string
+  date: string
+  location?: string
+  description: string[]
+}
+
 export default function CVGuiEditor() {
   const toast = useToast()
   const [pi, setPi] = useState<PersonalInformation | null>(null)
@@ -96,6 +105,8 @@ export default function CVGuiEditor() {
       }[]
     }>
   >([])
+  const [awards, setAwards] = useState<CompetitionAward[]>([])
+  const [zAwards, setZAwards] = useState<CompetitionAward[]>([])
   const [snapshots, setSnapshots] = useState<string[]>([])
   const [selectedSnap, setSelectedSnap] = useState('')
   const fileRef = useRef<HTMLInputElement | null>(null)
@@ -126,6 +137,9 @@ export default function CVGuiEditor() {
       const certification = en.find(
         (s: any) => s.sessionName === 'certification'
       ) || { certifications: [] }
+      const competition = en.find(
+        (s: any) => s.sessionName === 'competitionAwards'
+      ) || { awards: [] }
       setPi(personal)
       setEdu(education.educationExperience || [])
       setExtra(extraSkill.points || [])
@@ -134,6 +148,7 @@ export default function CVGuiEditor() {
       setProjects(project.projectExperience || [])
       setExperiences(work.experiences || [])
       setCerts(certification.certifications || [])
+      setAwards(competition.awards || [])
 
       const zpersonal =
         data.zh.find((s: any) => s.sessionName === 'personalInformation') ||
@@ -144,9 +159,13 @@ export default function CVGuiEditor() {
       const zextraSkill = data.zh.find(
         (s: any) => s.sessionName === 'extraSkill'
       ) || { points: [] }
+      const zcompetition = data.zh.find(
+        (s: any) => s.sessionName === 'competitionAwards'
+      ) || { awards: [] }
       setZPi(zpersonal)
       setZEdu(zeducation.educationExperience || [])
       setZExtra(zextraSkill.points || [])
+      setZAwards(zcompetition.awards || [])
 
       try {
         const sres = await fetch('/api/cvdata?snapshots=1')
@@ -235,6 +254,8 @@ export default function CVGuiEditor() {
         if (s.sessionName === 'project')
           return { ...s, projectExperience: projects }
         if (s.sessionName === 'workExperience') return { ...s, experiences }
+        if (s.sessionName === 'competitionAwards')
+          return { ...s, awards }
         if (s.sessionName === 'certification')
           return { ...s, certifications: certs }
         return s
@@ -246,6 +267,8 @@ export default function CVGuiEditor() {
           if (s.sessionName === 'education')
             return { ...s, educationExperience: zEdu }
           if (s.sessionName === 'extraSkill') return { ...s, points: zExtra }
+          if (s.sessionName === 'competitionAwards')
+            return { ...s, awards: zAwards }
           return s
         })
       }
@@ -1239,6 +1262,240 @@ export default function CVGuiEditor() {
           Add Feature (last)
         </Button>
       </HStack>
+
+      <Heading size="sm" mt={6} mb={2}>
+        Competition Awards
+      </Heading>
+      <Table size="sm" variant="simple">
+        <Thead>
+          <Tr>
+            <Th>Contest</Th>
+            <Th>Award</Th>
+            <Th>Organization</Th>
+            <Th>Date</Th>
+            <Th>Location</Th>
+            <Th>Description (one per line)</Th>
+            <Th></Th>
+          </Tr>
+        </Thead>
+        <Tbody>
+          {awards.map((award, i) => (
+            <Tr key={i}>
+              <Td>
+                <Input
+                  value={award.contestName || ''}
+                  onChange={(ev) => {
+                    const arr = [...awards]
+                    arr[i] = { ...arr[i], contestName: ev.target.value }
+                    setAwards(arr)
+                  }}
+                />
+              </Td>
+              <Td>
+                <Input
+                  value={award.award || ''}
+                  onChange={(ev) => {
+                    const arr = [...awards]
+                    arr[i] = { ...arr[i], award: ev.target.value }
+                    setAwards(arr)
+                  }}
+                />
+              </Td>
+              <Td>
+                <Input
+                  value={award.organization || ''}
+                  onChange={(ev) => {
+                    const arr = [...awards]
+                    arr[i] = { ...arr[i], organization: ev.target.value }
+                    setAwards(arr)
+                  }}
+                />
+              </Td>
+              <Td>
+                <Input
+                  value={award.date || ''}
+                  onChange={(ev) => {
+                    const arr = [...awards]
+                    arr[i] = { ...arr[i], date: ev.target.value }
+                    setAwards(arr)
+                  }}
+                />
+              </Td>
+              <Td>
+                <Input
+                  value={award.location || ''}
+                  onChange={(ev) => {
+                    const arr = [...awards]
+                    arr[i] = { ...arr[i], location: ev.target.value }
+                    setAwards(arr)
+                  }}
+                />
+              </Td>
+              <Td>
+                <Textarea
+                  value={(award.description || []).join('\n')}
+                  onChange={(ev) => {
+                    const arr = [...awards]
+                    arr[i] = {
+                      ...arr[i],
+                      description: ev.target.value.split('\n'),
+                    }
+                    setAwards(arr)
+                  }}
+                />
+              </Td>
+              <Td>
+                <IconButton
+                  aria-label="delete"
+                  icon={<DeleteIcon />}
+                  onClick={() =>
+                    setAwards(awards.filter((_, index) => index !== i))
+                  }
+                />
+              </Td>
+            </Tr>
+          ))}
+        </Tbody>
+      </Table>
+      <Button
+        leftIcon={<AddIcon />}
+        size="sm"
+        mt={2}
+        onClick={() =>
+          setAwards([
+            ...awards,
+            {
+              contestName: '',
+              award: '',
+              organization: '',
+              date: '',
+              location: '',
+              description: [],
+            },
+          ])
+        }
+      >
+        Add Award
+      </Button>
+
+      {bilingual && (
+        <>
+          <Heading size="sm" mt={6} mb={2}>
+            比赛与奖项（ZH）
+          </Heading>
+          <Table size="sm" variant="simple">
+            <Thead>
+              <Tr>
+                <Th>比赛名称</Th>
+                <Th>奖项</Th>
+                <Th>主办机构</Th>
+                <Th>日期</Th>
+                <Th>地点</Th>
+                <Th>描述（每行一条）</Th>
+                <Th></Th>
+              </Tr>
+            </Thead>
+            <Tbody>
+              {zAwards.map((award, i) => (
+                <Tr key={`zh-${i}`}>
+                  <Td>
+                    <Input
+                      value={award.contestName || ''}
+                      onChange={(ev) => {
+                        const arr = [...zAwards]
+                        arr[i] = { ...arr[i], contestName: ev.target.value }
+                        setZAwards(arr)
+                      }}
+                    />
+                  </Td>
+                  <Td>
+                    <Input
+                      value={award.award || ''}
+                      onChange={(ev) => {
+                        const arr = [...zAwards]
+                        arr[i] = { ...arr[i], award: ev.target.value }
+                        setZAwards(arr)
+                      }}
+                    />
+                  </Td>
+                  <Td>
+                    <Input
+                      value={award.organization || ''}
+                      onChange={(ev) => {
+                        const arr = [...zAwards]
+                        arr[i] = { ...arr[i], organization: ev.target.value }
+                        setZAwards(arr)
+                      }}
+                    />
+                  </Td>
+                  <Td>
+                    <Input
+                      value={award.date || ''}
+                      onChange={(ev) => {
+                        const arr = [...zAwards]
+                        arr[i] = { ...arr[i], date: ev.target.value }
+                        setZAwards(arr)
+                      }}
+                    />
+                  </Td>
+                  <Td>
+                    <Input
+                      value={award.location || ''}
+                      onChange={(ev) => {
+                        const arr = [...zAwards]
+                        arr[i] = { ...arr[i], location: ev.target.value }
+                        setZAwards(arr)
+                      }}
+                    />
+                  </Td>
+                  <Td>
+                    <Textarea
+                      value={(award.description || []).join('\n')}
+                      onChange={(ev) => {
+                        const arr = [...zAwards]
+                        arr[i] = {
+                          ...arr[i],
+                          description: ev.target.value.split('\n'),
+                        }
+                        setZAwards(arr)
+                      }}
+                    />
+                  </Td>
+                  <Td>
+                    <IconButton
+                      aria-label="delete"
+                      icon={<DeleteIcon />}
+                      onClick={() =>
+                        setZAwards(zAwards.filter((_, index) => index !== i))
+                      }
+                    />
+                  </Td>
+                </Tr>
+              ))}
+            </Tbody>
+          </Table>
+          <Button
+            leftIcon={<AddIcon />}
+            size="sm"
+            mt={2}
+            onClick={() =>
+              setZAwards([
+                ...zAwards,
+                {
+                  contestName: '',
+                  award: '',
+                  organization: '',
+                  date: '',
+                  location: '',
+                  description: [],
+                },
+              ])
+            }
+          >
+            添加奖项 (ZH)
+          </Button>
+        </>
+      )}
 
       <Heading size="sm" mt={6} mb={2}>
         Certifications

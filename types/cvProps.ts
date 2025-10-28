@@ -1,4 +1,13 @@
-export type CVData =(PersonalInformation | Education | Skill | Project | ExtraSkill | Certification | Experiences)[];
+export type CVData = (
+  | PersonalInformation
+  | Education
+  | Skill
+  | Project
+  | ExtraSkill
+  | Certification
+  | Experiences
+  | CompetitionAwards
+)[];
 // export type CVData =(PersonalInformation )[];
 // export type CVData =( Education )[];
 // export type CVData =( Skill )[];
@@ -29,6 +38,19 @@ export interface Experience{
 export interface Feature {
   description: string
   furtherExplanation: string[]
+}
+
+export interface CompetitionAwards extends CVSection {
+  awards: CompetitionAwardItem[]
+}
+
+export interface CompetitionAwardItem {
+  contestName: string
+  award: string
+  organization?: string
+  date: string
+  location?: string
+  description: string[]
 }
 
 export interface Certification extends CVSection{
