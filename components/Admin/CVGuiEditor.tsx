@@ -225,7 +225,15 @@ export default function CVGuiEditor() {
   const onUpload = async (file: File) => {
     try {
       const text = await file.text()
-      const json = JSON.parse(text)
+      // Normalize common CN punctuation and trailing commas for robustness
+      const normalized = text
+        .replace(/^\uFEFF/, '')
+        .replace(/[“”]/g, '"')
+        .replace(/[‘’]/g, "'")
+        .replace(/\/\*[^]*?\*\//g, '')
+        .replace(/(^|\n)\s*\/\/.*(?=\n|$)/g, '$1')
+        .replace(/,\s*(\}|\])/g, '$1')
+      const json = JSON.parse(normalized)
       const res = await fetch('/api/cvdata', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
