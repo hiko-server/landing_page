@@ -17,15 +17,6 @@
       "headerName": "EDUCATION EXPERIENCE",
       "educationExperience": [
         {
-          "schoolName": "UOW College HongKong",
-          "schoolLocation": "Hong Kong",
-          "degree": "Associate of Engineering",
-          "major": "Engineering",
-          "startDate": "2022-09-01",
-          "endDate": "2024-06-30",
-          "gpa": "3.3 / 4.3"
-        },
-        {
           "schoolName": "Hong Kong Metropolitan University",
           "schoolLocation": "Hong Kong",
           "degree": "Bachelor of Science with Honours in Computer Engineering",
@@ -33,6 +24,15 @@
           "startDate": "2024-09-01",
           "endDate": "2026-06-30",
           "gpa": "3.15 / 4.0"
+        },
+        {
+          "schoolName": "UOW College HongKong",
+          "schoolLocation": "Hong Kong",
+          "degree": "Associate of Engineering",
+          "major": "Engineering",
+          "startDate": "2022-09-01",
+          "endDate": "2024-06-30",
+          "gpa": "3.3 / 4.3"
         }
       ]
     },
@@ -128,6 +128,60 @@
           ]
         },
         {
+          "title": "Project RAKU: AI assistant job search system",
+          "startDate": "2023-03",
+          "endDate": "2023-11",
+          "projectLocation": "Hong Kong",
+          "description": "Developed an AI-powered job query chatbot integrating OpenAI's API, enabling users to conduct job searches using natural language queries.",
+          "features": [
+            {
+              "description": "Developed website scraping capabilities to scrape and extract data from various famous online employment companies in Hong Kong",
+              "furtherExplanation": [
+                "Engineered web scraping functionality to extract and consolidate data from leading online employment platforms in Hong Kong."
+              ]
+            },
+            {
+              "description": "Used Python (FastAPI) as the backend programming language for the project framework",
+              "furtherExplanation": [
+                "Utilized Python (FastAPI) to construct a robust backend framework for the application."
+              ]
+            },
+            {
+              "description": "Leveraged the experience from Project Gaia to design a solid data structure and used MongoDB for building the database",
+              "furtherExplanation": [
+                "Applied insights from Project GAIA to design a resilient data structure and implemented MongoDB for effective database management."
+              ]
+            }
+          ]
+        },
+        {
+          "title": "Project GAIA: Design data structure",
+          "startDate": "2022-11",
+          "endDate": "2023-11",
+          "projectLocation": "Hong Kong",
+          "description": "Focused on designing an optimized NoSQL data structure for efficient storage of geostatic data.",
+          "features": [
+            {
+              "description": "Designed database using MongoDB to store non-structural geostatic data for efficient data storage and retrieval",
+              "furtherExplanation": [
+                "Engineered a MongoDB-based database solution to store and retrieve non-structural geostatic data with optimal efficiency."
+              ]
+            },
+            {
+              "description": "Learnt the use of hashing for data content comparison and history management",
+              "furtherExplanation": [
+                "Gained proficiency in applying hashing techniques for accurate data comparison and historical data management."
+              ]
+            },
+            {
+              "description": "Learnt how to reformat and restructure raw data (dictionary/JSON) by using python",
+              "furtherExplanation": [
+                "Mastered techniques for reformatting and restructuring raw data (dictionary/JSON) using Python."
+              ]
+            }
+          ]
+        },
+        {
           "title": "Project EASILY-CV: CV Generator",
           "startDate": "2023-08",
           "endDate": "2023-10",
@@ -186,60 +240,6 @@
               ]
             }
           ]
-        },
-        {
-          "title": "Project RAKU: AI assistant job search system",
-          "startDate": "2023-03",
-          "endDate": "2023-11",
-          "projectLocation": "Hong Kong",
-          "description": "Developed an AI-powered job query chatbot integrating OpenAI's API, enabling users to conduct job searches using natural language queries.",
-          "features": [
-            {
-              "description": "Developed website scraping capabilities to scrape and extract data from various famous online employment companies in Hong Kong",
-              "furtherExplanation": [
-                "Engineered web scraping functionality to extract and consolidate data from leading online employment platforms in Hong Kong."
-              ]
-            },
-            {
-              "description": "Used Python (FastAPI) as the backend programming language for the project framework",
-              "furtherExplanation": [
-                "Utilized Python (FastAPI) to construct a robust backend framework for the application."
-              ]
-            },
-            {
-              "description": "Leveraged the experience from Project Gaia to design a solid data structure and used MongoDB for building the database",
-              "furtherExplanation": [
-                "Applied insights from Project GAIA to design a resilient data structure and implemented MongoDB for effective database management."
-              ]
-            }
-          ]
-        },
-        {
-          "title": "Project GAIA: Design data structure",
-          "startDate": "2022-11",
-          "endDate": "2023-11",
-          "projectLocation": "Hong Kong",
-          "description": "Focused on designing an optimized NoSQL data structure for efficient storage of geostatic data.",
-          "features": [
-            {
-              "description": "Designed database using MongoDB to store non-structural geostatic data for efficient data storage and retrieval",
-              "furtherExplanation": [
-                "Engineered a MongoDB-based database solution to store and retrieve non-structural geostatic data with optimal efficiency."
-              ]
-            },
-            {
-              "description": "Learnt the use of hashing for data content comparison and history management",
-              "furtherExplanation": [
-                "Gained proficiency in applying hashing techniques for accurate data comparison and historical data management."
-              ]
-            },
-            {
-              "description": "Learnt how to reformat and restructure raw data (dictionary/JSON) by using python",
-              "furtherExplanation": [
-                "Mastered techniques for reformatting and restructuring raw data (dictionary/JSON) using Python."
-              ]
-            }
-          ]
         }
       ]
     },
@@ -283,6 +283,38 @@
           ]
         },
         {
+          "companyName": "Honsenn Eco Technology GmbH",
+          "companyURL": "honsennaudio.com/",
+          "jobTitle": "Remote Internship",
+          "jobDescription": "",
+          "location": "Germany",
+          "startDate": "2025-06",
+          "endDate": "2025-08",
+          "relatedSkills": [
+            "Product Development",
+            "Microcontrollers",
+            "Technical Product Development"
+          ],
+          "features": [
+            {
+              "description": "Debugged embedded software for TWS earphones, improving stability and performance.",
+              "furtherExplanation": []
+            },
+            {
+              "description": "Contributed to Bluetooth 5.2 protocol stack development for Android/iOS.",
+              "furtherExplanation": []
+            },
+            {
+              "description": "Built Python automated test scripts, streamlining QA and reducing Bluetooth audio failure rateby32%.",
+              "furtherExplanation": []
+            },
+            {
+              "description": "Recognized as Top 5% 'Quarterly Technical Innovation Intern'.",
+              "furtherExplanation": []
+            }
+          ]
+        },
+        {
           "companyName": "Dongguan Honsenn Electronice Technology Co., Ltd.",
           "companyURL": "honsennaudio.com/",
           "jobTitle": "Tech Researcher",
@@ -320,38 +352,6 @@
             "Web Development",
             "Engineering"
           ]
-        },
-        {
-          "companyName": "Honsenn Eco Technology GmbH",
-          "companyURL": "honsennaudio.com/",
-          "jobTitle": "Remote Internship",
-          "jobDescription": "",
-          "location": "Germany",
-          "startDate": "2025-06",
-          "endDate": "2025-08",
-          "relatedSkills": [
-            "Product Development",
-            "Microcontrollers",
-            "Technical Product Development"
-          ],
-          "features": [
-            {
-              "description": "Debugged embedded software for TWS earphones, improving stability and performance.",
-              "furtherExplanation": []
-            },
-            {
-              "description": "Contributed to Bluetooth 5.2 protocol stack development for Android/iOS.",
-              "furtherExplanation": []
-            },
-            {
-              "description": "Built Python automated test scripts, streamlining QA and reducing Bluetooth audio failure rateby32%.",
-              "furtherExplanation": []
-            },
-            {
-              "description": "Recognized as Top 5% “Quarterly Technical Innovation Intern”.",
-              "furtherExplanation": []
-            }
-          ]
         }
       ]
     },
@@ -360,14 +360,15 @@
       "headerName": "COMPETITIONS & AWARDS",
       "awards": [
         {
-          "contestName": "YDC Entrepreneurial Program",
-          "award": "Best Potential Startup & Innovation Award",
-          "organization": "Young Entrepreneurs Development Council",
-          "date": "2024-11",
+          "contestName": " IEEE Xtreme 19.0 – Global Programming Competition",
+          "award": "QS No.11 HK No.1",
+          "organization": "IEEE",
+          "date": "2025-10",
           "location": "Hong Kong",
           "description": [
-            "Won HK$15,000 with WeGreen AI among top tertiary teams in Hong Kong.",
-            "Recognized for applying AI to accelerate smart recycling and waste sorting."
+            "Achieved 18th place worldwide and 1st in Hong Kong among thousands of teams",
+            "Solved algorithmic challenges using Python and C++, with a final score of 1715.71 (penalty: 1372)",
+            "Demonstrated advanced problem-solving, time management, and teamwork under pressure"
           ]
         },
         {
@@ -381,12 +382,15 @@
           ]
         },
         {
-          "contestName": "IEEE Xtreme 19.0",
-          "award": "QS No.11 HK No.1",
-          "organization": "IEEE",
-          "date": "2025-10",
+          "contestName": "YDC Entrepreneurial Program",
+          "award": "Best Potential Startup & Innovation Award",
+          "organization": "Young Entrepreneurs Development Council",
+          "date": "2024-11",
           "location": "Hong Kong",
-          "description": []
+          "description": [
+            "Won HK$15,000 with WeGreen AI among top tertiary teams in Hong Kong.",
+            "Recognized for applying AI to accelerate smart recycling and waste sorting."
+          ]
         }
       ]
     },
@@ -492,15 +496,6 @@
       "headerName": "教育经历",
       "educationExperience": [
         {
-          "schoolName": "香港伍伦贡学院",
-          "schoolLocation": "香港",
-          "degree": "工程副学士",
-          "major": "工程",
-          "startDate": "2022-09-01",
-          "endDate": "2024-06-30",
-          "gpa": "3.3 / 4.3"
-        },
-        {
           "schoolName": "香港都会大学",
           "schoolLocation": "香港",
           "degree": "计算机工程荣誉理学士",
@@ -508,6 +503,15 @@
           "startDate": "2024-09-01",
           "endDate": "2026-06-30",
           "gpa": "3.15 / 4.0"
+        },
+        {
+          "schoolName": "香港伍伦贡学院",
+          "schoolLocation": "香港",
+          "degree": "工程副学士",
+          "major": "工程",
+          "startDate": "2022-09-01",
+          "endDate": "2024-06-30",
+          "gpa": "3.3 / 4.3"
         }
       ]
     },
@@ -549,7 +553,7 @@
         },
         {
           "language": "HTML/CSS",
-          "level": "Experienced in developing responsive and visually appealing UI components in React using HTML/CSS."
+          "level": "擅长在 React 中使用 HTML/CSS 开发响应式且视觉美观的 UI 组件。"
         }
       ],
       "technical": [
@@ -598,6 +602,60 @@
               "description": "物联网技术",
               "furtherExplanation": [
                 "借助物联网技术实现实时数据传输和智能设备控制 "
+              ]
+            }
+          ]
+        },
+        {
+          "title": "项目RAKU：AI助手求职系统",
+          "startDate": "2023-03",
+          "endDate": "2023-11",
+          "projectLocation": "香港",
+          "description": "开发了一个集成 OpenAI API 的 AI 助手求职系统，允许用户通过自然语言进行工作查询 ",
+          "features": [
+            {
+              "description": "开发了网站抓取功能，从香港的各种知名在线就业公司抓取和提取数据",
+              "furtherExplanation": [
+                "设计并实现了网站抓取功能，有效从香港主要在线招聘平台提取数据 "
+              ]
+            },
+            {
+              "description": "使用Python (FastAPI)作为项目框架的后端编程语言",
+              "furtherExplanation": [
+                "采用 Python（FastAPI）构建项目后端，确保系统高效运行 "
+              ]
+            },
+            {
+              "description": "利用Project Gaia的经验设计了一个稳固的数据结构，并使用MongoDB构建数据库",
+              "furtherExplanation": [
+                "借鉴 Project GAIA 的经验，设计了稳固的数据结构，并采用 MongoDB 构建数据库 "
+              ]
+            }
+          ]
+        },
+        {
+          "title": "项目GAIA：设计数据结构",
+          "startDate": "2022-11",
+          "endDate": "2023-11",
+          "projectLocation": "香港",
+          "description": "本项目致力于设计高效的 NoSQL 数据结构，以优化地理静态数据的存储和检索 ",
+          "features": [
+            {
+              "description": "使用MongoDB设计数据库，以存储非结构化地理静态数据，实现高效的数据存储和检索",
+              "furtherExplanation": [
+                "利用 MongoDB 构建数据库方案，实现非结构化地理静态数据的高效存储与检索 "
+              ]
+            },
+            {
+              "description": "学习了使用哈希进行数据内容比较和历史管理",
+              "furtherExplanation": [
+                "掌握了哈希技术在数据内容比较及历史管理中的应用 "
+              ]
+            },
+            {
+              "description": "学习了如何使用Python重新格式化和重构原始数据（字典/JSON）",
+              "furtherExplanation": [
+                "精通使用 Python 对原始数据（字典/JSON）进行重新格式化和结构重构 "
               ]
             }
           ]
@@ -661,60 +719,6 @@
               ]
             }
           ]
-        },
-        {
-          "title": "项目RAKU：AI助手求职系统",
-          "startDate": "2023-03",
-          "endDate": "2023-11",
-          "projectLocation": "香港",
-          "description": "开发了一个集成 OpenAI API 的 AI 助手求职系统，允许用户通过自然语言进行工作查询 ",
-          "features": [
-            {
-              "description": "开发了网站抓取功能，从香港的各种知名在线就业公司抓取和提取数据",
-              "furtherExplanation": [
-                "设计并实现了网站抓取功能，有效从香港主要在线招聘平台提取数据 "
-              ]
-            },
-            {
-              "description": "使用Python (FastAPI)作为项目框架的后端编程语言",
-              "furtherExplanation": [
-                "采用 Python（FastAPI）构建项目后端，确保系统高效运行 "
-              ]
-            },
-            {
-              "description": "利用Project Gaia的经验设计了一个稳固的数据结构，并使用MongoDB构建数据库",
-              "furtherExplanation": [
-                "借鉴 Project GAIA 的经验，设计了稳固的数据结构，并采用 MongoDB 构建数据库 "
-              ]
-            }
-          ]
-        },
-        {
-          "title": "项目GAIA：设计数据结构",
-          "startDate": "2022-11",
-          "endDate": "2023-11",
-          "projectLocation": "香港",
-          "description": "本项目致力于设计高效的 NoSQL 数据结构，以优化地理静态数据的存储和检索 ",
-          "features": [
-            {
-              "description": "使用MongoDB设计数据库，以存储非结构化地理静态数据，实现高效的数据存储和检索",
-              "furtherExplanation": [
-                "利用 MongoDB 构建数据库方案，实现非结构化地理静态数据的高效存储与检索 "
-              ]
-            },
-            {
-              "description": "学习了使用哈希进行数据内容比较和历史管理",
-              "furtherExplanation": [
-                "掌握了哈希技术在数据内容比较及历史管理中的应用 "
-              ]
-            },
-            {
-              "description": "学习了如何使用Python重新格式化和重构原始数据（字典/JSON）",
-              "furtherExplanation": [
-                "精通使用 Python 对原始数据（字典/JSON）进行重新格式化和结构重构 "
-              ]
-            }
-          ]
         }
       ]
     },
@@ -725,23 +729,23 @@
         {
           "companyName": "WeGreen AI",
           "companyURL": "wegreen.ltd",
-          "jobTitle": "COT",
+          "jobTitle": "COT & 联合创始人",
           "jobDescription": "通过人工智能解决方案革新废物管理流程，提升回收效率，打造更智能、更快速、更高效的可持续未来 ",
           "features": [
             {
-              "description": "从HKBU和HKSTP获得了$130K的资金，以推进产品开发并支持可持续增长 ",
+              "description": "开发 AI 赋能的智能垃圾桶技术，优化废物分类与回收效率。",
               "furtherExplanation": []
             },
             {
-              "description": "领导了智能垃圾桶技术的开发，优化废物管理解决方案 ",
+              "description": "从 HKBU 与 HKSTP 获得 $30K 资金支持，用于产品研发与增长。",
               "furtherExplanation": []
             },
             {
-              "description": "培养了一种促进创新并赋予团队卓越能力的协作文化 ",
+              "description": "主导产品创新，营造协作且高绩效的团队文化。",
               "furtherExplanation": []
             },
             {
-              "description": "Won YDC Best Potential Startup and Innovation Award (HK$15,000) for WeGreen AI, recognizedamongtop tertiary teams in Hong Kong",
+              "description": "凭 WeGreen AI 获 YDC「最佳潜力初创与创新奖」（HK$15,000），入选香港大专院校顶尖团队。",
               "furtherExplanation": []
             }
           ],
@@ -755,6 +759,38 @@
             "网络",
             "机器学习",
             "计算机视觉"
+          ]
+        },
+        {
+          "companyName": "Honsenn Eco Technology GmbH",
+          "companyURL": "honsennaudio.com/",
+          "jobTitle": "Remote Internship",
+          "jobDescription": "",
+          "location": "Germany",
+          "startDate": "2025-06",
+          "endDate": "2025-08",
+          "relatedSkills": [
+            "Product Development",
+            "Microcontrollers",
+            "Technical Product Development"
+          ],
+          "features": [
+            {
+              "description": "调试 TWS 耳机的嵌入式软件，提升稳定性与性能。",
+              "furtherExplanation": []
+            },
+            {
+              "description": "参与 Android/iOS 的蓝牙 5.2 协议栈开发。",
+              "furtherExplanation": []
+            },
+            {
+              "description": "编写 Python 自动化测试脚本，优化 QA 流程，使蓝牙音频故障率下降 32%。",
+              "furtherExplanation": []
+            },
+            {
+              "description": "获评「季度技术创新实习生」前 5%。",
+              "furtherExplanation": []
+            }
           ]
         },
         {
@@ -779,7 +815,7 @@
           "jobDescription": "与资深软件工程师紧密协作，积极推动并参与项目开发，持续提升技术能力 ",
           "features": [
             {
-              "description": "Strengthened expertise in TypeScript, React.js, and Python, with experience in networkingandscalableweb application design.",
+              "description": "强化了 TypeScript、React.js 与 Python 的实战能力，并具备网络与可扩展 Web 应用设计经验。",
               "furtherExplanation": []
             }
           ],
@@ -795,38 +831,6 @@
             "网页开发",
             "工程"
           ]
-        },
-        {
-          "companyName": "Honsenn Eco Technology GmbH",
-          "companyURL": "honsennaudio.com/",
-          "jobTitle": "Remote Internship",
-          "jobDescription": "",
-          "location": "Germany",
-          "startDate": "2025-06",
-          "endDate": "2025-08",
-          "relatedSkills": [
-            "Product Development",
-            "Microcontrollers",
-            "Technical Product Development"
-          ],
-          "features": [
-            {
-              "description": "Debugged embedded software for TWS earphones, improving stability and performance.",
-              "furtherExplanation": []
-            },
-            {
-              "description": "Contributed to Bluetooth 5.2 protocol stack development for Android/iOS.",
-              "furtherExplanation": []
-            },
-            {
-              "description": "Built Python automated test scripts, streamlining QA and reducing Bluetooth audio failure rateby32%.",
-              "furtherExplanation": []
-            },
-            {
-              "description": "Recognized as Top 5% “Quarterly Technical Innovation Intern”.",
-              "furtherExplanation": []
-            }
-          ]
         }
       ]
     },
@@ -835,14 +839,15 @@
       "headerName": "比赛与奖项",
       "awards": [
         {
-          "contestName": "青年企业发展局创业计划",
-          "award": "最佳潜力初创与创新奖",
-          "organization": "青年企业发展局（YDC）",
-          "date": "2024-11",
+          "contestName": "IEEE Xtreme 19.0",
+          "award": "QS No.11 HK No.1",
+          "organization": "IEEE",
+          "date": "2025-10",
           "location": "香港",
           "description": [
-            "以 WeGreen AI 项目获得港币 15,000 元现金奖励，入选香港本地大专院校团队前列。",
-            "方案展示了运用人工智能加速智能回收与废物分类的潜力。"
+            "在全球数千支队伍中获得第 18 名、香港第 1 名。",
+            "使用 Python 与 C++ 解决算法挑战，最终得分 1715.71（罚时：1372）。",
+            "在高压环境下展现出卓越的算法问题解决、时间管理与团队协作能力。"
           ]
         },
         {
@@ -856,12 +861,15 @@
           ]
         },
         {
-          "contestName": "IEEE Xtreme 19.0",
-          "award": "QS No.11 HK No.1",
-          "organization": "IEEE",
-          "date": "2025-10",
-          "location": "Hong Kong",
-          "description": []
+          "contestName": "青年企业发展局创业计划",
+          "award": "最佳潜力初创与创新奖",
+          "organization": "青年企业发展局（YDC）",
+          "date": "2024-11",
+          "location": "香港",
+          "description": [
+            "以 WeGreen AI 项目获得港币 15,000 元现金奖励，入选香港本地大专院校团队前列。",
+            "方案展示了运用人工智能加速智能回收与废物分类的潜力。"
+          ]
         }
       ]
     },
