@@ -7,11 +7,13 @@ import CVResult from '../../components/CVViewerPage/CVResult'
 import React, { useEffect, useState } from 'react'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
+import Head from 'next/head'
 
 const CVPage = ({ props, en, zh }: { props: any; en: any[]; zh: any[] }) => {
 
   const [, setIsHostCV] = useState<boolean>(false)
-  const [isMobile] = useMediaQuery('(max-width: 768px)')
+  // Stabilize SSR/CSR layout to avoid flicker when landing directly on /cv
+  const [isMobile] = useMediaQuery('(max-width: 768px)', { ssr: true, fallback: false })
 
   useEffect(() => {
     if (props?.host && props?.host === 'cv.hiko.dev') {
@@ -32,6 +34,15 @@ const CVPage = ({ props, en, zh }: { props: any; en: any[]; zh: any[] }) => {
   }
   return (
     <React.Fragment>
+      {/* Preload Chinese font to keep layout stable and print crisp */}
+      <Head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap"
+          rel="stylesheet"
+        />
+      </Head>
       <CustomHead
         title="CV / Resume"
         description="Hiko’s CV with skills matrix, timeline, and downloadable PDF."

@@ -47,7 +47,7 @@ const CVResult = ({
     >
       {!router.asPath.includes('edit') && (
         <PrintControl>
-          <Button onClick={() => handlePrint()}>
+          <Button id="download-button" onClick={() => handlePrint()}>
             <FaFileDownload />
           </Button>
         </PrintControl>
@@ -122,26 +122,44 @@ const CVResult = ({
 
     // Apply print-specific styles
     const printStyles = `
+      @page { size: 210mm 297mm; margin: 0; }
       @media print {
-        body * {
-          visibility: hidden;
+        html, body, #__next {
+          width: 210mm !important;
+          height: auto !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          background: #fff !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+          overflow: visible !important;
         }
-        #print-area, #print-area * {
-          visibility: visible;
-        }
+        /* Only print the CV area */
+        body * { visibility: hidden !important; }
+        #print-area, #print-area * { visibility: visible !important; }
         #print-area {
-          position: absolute;
-          left: 0;
-          top: 0;
+          position: static !important;
+          display: block !important;
+          width: 210mm !important;
+          margin: 0 auto !important;
+          padding: 0 !important;
+          transform: none !important;
         }
-        /* Ensure Chinese characters are displayed correctly */
+        #A4Paper {
+          width: 210mm !important;
+          min-height: 297mm !important;
+          margin: 0 !important;
+          box-shadow: none !important;
+          transform: none !important;
+          page-break-after: always;
+          break-inside: avoid;
+        }
+        /* Ensure consistent fonts */
         @font-face {
           font-family: 'Noto Sans SC';
           src: url('https://fonts.gstatic.com/s/notosanssc/v8/6xK3dSBYKcSV-LCoeQqfX1RYOo3qNa7lujY.woff2') format('woff2');
         }
-        body {
-          font-family: 'Noto Sans SC', sans-serif;
-        }
+        body { font-family: 'Noto Sans SC', sans-serif; }
       }
     `
     const printStylesElement = document.createElement('style')
@@ -168,18 +186,39 @@ const PrintControl = styled(Flex)`
   flex: 1;
   align-items: center;
   justify-content: center;
+  @media print { display: none !important; }
 `
 
 const PrintArea = styled.div`
   /* Ensure this div contains all the content that should be printed */
+  @media print {
+    width: 210mm !important;
+    margin: 0 auto !important;
+  }
 `
 
 const A4Paper = styled(Box)`
   background: white;
   color: #111;
+  font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji',
+    'Segoe UI Symbol', 'Noto Color Emoji', sans-serif;
   display: block;
   margin-bottom: 0.5cm;
   margin-top: 0.5cm;
+  box-sizing: border-box;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+  page-break-inside: avoid;
+  break-inside: avoid;
+
+  @media print {
+    width: 210mm !important;
+    min-height: 297mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+  }
 
   /* Add any other styles you want for the A4 paper component */
 `

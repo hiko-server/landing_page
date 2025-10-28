@@ -7,6 +7,9 @@ const nextConfig = {
   reactStrictMode: true,
   productionBrowserSourceMaps: true,
   poweredByHeader: false,
+  // Ensure styled-components renders consistently on SSR to avoid layout
+  // mismatches when landing directly on routes like /cv.
+  compiler: { styledComponents: true },
   async headers() {
     const csp = [
       "default-src 'self'",

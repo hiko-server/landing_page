@@ -8,8 +8,9 @@ export function readCvData(): { en: any[]; zh: any[] } {
   try {
     const raw = fs.readFileSync(dataPath, 'utf-8')
     const json = JSON.parse(raw)
-    if (!json.en || !json.zh) throw new Error('invalid structure')
-    return json
+    const en = Array.isArray(json.en) ? json.en : (Array.isArray(json) ? json : [])
+    const zh = Array.isArray(json.zh) ? json.zh : []
+    return { en, zh }
   } catch {
     // fallback to example static if file missing or invalid
     // use require to avoid bundler trying to parse TS at runtime; provide empty arrays instead
