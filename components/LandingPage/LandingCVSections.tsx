@@ -10,8 +10,10 @@ import {
   Experiences,
   Project,
   Skill,
+  CompetitionAwards,
 } from '../../types/cvProps'
 import WorkExperience from '../PersonalInstruction/WorkExperience'
+import CompetitionAwardsSection from '../PersonalInstruction/CompetitionAwards'
 
 const LandingCVSections = ({ en, zh }: { en?: any[]; zh?: any[] }) => {
   let cvData: any[] = []
@@ -54,6 +56,12 @@ const LandingCVSections = ({ en, zh }: { en?: any[]; zh?: any[] }) => {
               [
                 'workExperience',
                 <WorkExperience data={section as Experiences} />,
+              ],
+              [
+                'competitionAwards',
+                <CompetitionAwardsSection
+                  data={section as CompetitionAwards}
+                />,
               ],
               ['project', <ProjectSection data={section as Project} />],
             ].find(([type]) => section.sessionName === type)?.[1]

@@ -9,6 +9,7 @@ import {
   Project,
   Experiences,
   ExtraSkill,
+  CompetitionAwards,
   // Certification,
   CVData,
 } from '../../types/cvProps'
@@ -19,6 +20,7 @@ import PersonalInformationSection from './PersonalInformation'
 import ProjectSection from './Project'
 import SkillSection from './Skill'
 import WorkExperience from './WorkExperience'
+import CompetitionAwardsSection from './CompetitionAwards'
 import { FaFileDownload } from 'react-icons/fa'
 
 const CVResult = ({
@@ -88,6 +90,11 @@ const CVResult = ({
                       project: <ProjectSection data={section as Project} />,
                       workExperience: (
                         <WorkExperience data={section as Experiences} />
+                      ),
+                      competitionAwards: (
+                        <CompetitionAwardsSection
+                          data={section as CompetitionAwards}
+                        />
                       ),
                       extraSkill: (
                         <ExtraSkillSection data={section as ExtraSkill} />
