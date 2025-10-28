@@ -228,7 +228,7 @@ export default function CVGuiEditor() {
       // Normalize common CN punctuation and trailing commas for robustness
       const normalized = text
         .replace(/^\uFEFF/, '')
-        .replace(/[“”]/g, '"')
+        .replace(/[“”]/g, "'")
         .replace(/[‘’]/g, "'")
         .replace(/\/\*[^]*?\*\//g, '')
         .replace(/(^|\n)\s*\/\/.*(?=\n|$)/g, '$1')
@@ -285,7 +285,10 @@ export default function CVGuiEditor() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ en, zh, syncZh }),
       })
-      if (!r.ok) throw new Error('save failed')
+      if (!r.ok) {
+        const data = await r.json().catch(() => ({}))
+        throw new Error(data?.error || `Save failed (${r.status})`)
+      }
       toast({
         status: 'success',
         title: syncZh ? 'Saved (ZH synced)' : 'Saved',
