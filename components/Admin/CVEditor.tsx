@@ -32,7 +32,7 @@ export default function CVEditor() {
         // Trim BOM and normalize common full-width quotes used in CN input
         let s = txt.replace(/^\uFEFF/, '')
         s = s
-          .replace(/[“”]/g, '"')
+          .replace(/[“”]/g, "'")
           .replace(/[‘’]/g, "'")
         // Remove simple comments if pasted from JS-like sources
         s = s.replace(/\/\*[^]*?\*\//g, '').replace(/(^|\n)\s*\/\/.*(?=\n|$)/g, '$1')
@@ -44,7 +44,10 @@ export default function CVEditor() {
       const en = parseRelaxed(enText)
       const zh = parseRelaxed(zhText)
       const res = await fetch('/api/cvdata', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ en, zh, syncZh }) })
-      if (!res.ok) throw new Error('save failed')
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data?.error || `Save failed (${res.status})`)
+      }
       toast({ status: 'success', title: syncZh ? 'Saved with ZH synced' : 'Saved' })
     } catch (e: any) {
       const msg = typeof e?.message === 'string' ? e.message : ''
@@ -102,7 +105,7 @@ export default function CVEditor() {
       const text = await file.text()
       const normalized = text
         .replace(/^\uFEFF/, '')
-        .replace(/[“”]/g, '"')
+        .replace(/[“”]/g, "'")
         .replace(/[‘’]/g, "'")
         .replace(/\/\*[^]*?\*\//g, '')
         .replace(/(^|\n)\s*\/\/.*(?=\n|$)/g, '$1')

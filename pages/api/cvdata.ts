@@ -56,7 +56,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       if (typeof v !== 'string') return v
       try {
         let s = v.replace(/^\uFEFF/, '')
-        s = s.replace(/[“”]/g, '"').replace(/[‘’]/g, "'")
+        s = s.replace(/[“”]/g, "'").replace(/[‘’]/g, "'")
         s = s.replace(/\/\*[^]*?\*\//g, '').replace(/(^|\n)\s*\/\/.*(?=\n|$)/g, '$1')
         s = s.replace(/,\s*(\}|\])/g, '$1')
         return JSON.parse(s)
@@ -102,7 +102,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
         if (typeof v !== 'string') return v
         try {
           let s = v.replace(/^\uFEFF/, '')
-          s = s.replace(/[“”]/g, '"').replace(/[‘’]/g, "'")
+          s = s.replace(/[“”]/g, "'").replace(/[‘’]/g, "'")
           s = s.replace(/\/\*[^]*?\*\//g, '').replace(/(^|\n)\s*\/\/.*(?=\n|$)/g, '$1')
           s = s.replace(/,\s*(\}|\])/g, '$1')
           return JSON.parse(s)
