@@ -50,13 +50,27 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const rl = rateLimit(req, 30, 10 * 60 * 1000)
     res.setHeader('X-RateLimit-Remaining', String(rl.remaining))
     if (!rl.allowed) return res.status(429).json({ error: 'Too many updates, try later' })
-    const { en, zh, syncZh } = req.body || {}
+    let { en, zh, syncZh } = (req.body || {}) as any
+    // Accept stringified JSON as well, for robustness
+    const parseLoose = (v: any) => {
+      if (typeof v !== 'string') return v
+      try {
+        let s = v.replace(/^\uFEFF/, '')
+        s = s.replace(/[“”]/g, '"').replace(/[‘’]/g, "'")
+        s = s.replace(/\/\*[^]*?\*\//g, '').replace(/(^|\n)\s*\/\/.*(?=\n|$)/g, '$1')
+        s = s.replace(/,\s*(\}|\])/g, '$1')
+        return JSON.parse(s)
+      } catch { return undefined }
+    }
+    en = parseLoose(en)
+    zh = parseLoose(zh)
     if (!en && !zh) return res.status(400).json({ error: 'Missing payload' })
     const current = readCvData()
     // save snapshot before write
     try { saveSnapshot() } catch {}
-    const newEn = en ?? current.en
-    const newZh = syncZh ? syncStructure(newEn, zh ?? current.zh) : (zh ?? current.zh)
+    const newEn = Array.isArray(en) ? en : current.en
+    const baseZh = Array.isArray(zh) ? zh : current.zh
+    const newZh = syncZh ? syncStructure(newEn, baseZh) : baseZh
     writeCvData({ en: newEn, zh: newZh })
     try {
       const actor = (() => {
@@ -84,11 +98,34 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     }
     if (action === 'import') {
       // overwrite with provided JSON structure
-      if (!data || typeof data !== 'object') return res.status(400).json({ error: 'Missing data' })
-      const { en, zh } = data as any
-      if (!Array.isArray(en) || !Array.isArray(zh)) return res.status(400).json({ error: 'Invalid structure' })
+      const parseLoose = (v: any) => {
+        if (typeof v !== 'string') return v
+        try {
+          let s = v.replace(/^\uFEFF/, '')
+          s = s.replace(/[“”]/g, '"').replace(/[‘’]/g, "'")
+          s = s.replace(/\/\*[^]*?\*\//g, '').replace(/(^|\n)\s*\/\/.*(?=\n|$)/g, '$1')
+          s = s.replace(/,\s*(\}|\])/g, '$1')
+          return JSON.parse(s)
+        } catch { return undefined }
+      }
+      let payload = parseLoose(data) ?? data
+      if (!payload) return res.status(400).json({ error: 'Missing data' })
+      // Accept either { en, zh } or a single array meaning EN only
+      let enIn: any[] | undefined
+      let zhIn: any[] | undefined
+      if (Array.isArray(payload)) {
+        enIn = payload
+        zhIn = []
+      } else if (typeof payload === 'object') {
+        enIn = Array.isArray((payload as any).en) ? (payload as any).en : undefined
+        zhIn = Array.isArray((payload as any).zh) ? (payload as any).zh : undefined
+      }
+      if (!enIn && !zhIn) return res.status(400).json({ error: 'Invalid structure' })
+      const current = readCvData()
+      const newEn = enIn ?? current.en
+      const newZh = zhIn ? syncStructure(newEn, zhIn) : current.zh
       try { saveSnapshot() } catch {}
-      writeCvData({ en, zh })
+      writeCvData({ en: newEn, zh: newZh })
       return res.status(200).json({ ok: true })
     }
     return res.status(400).json({ error: 'Unknown action' })
@@ -96,4 +133,12 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
   res.setHeader('Allow', 'GET,PUT,POST')
   return res.status(405).json({ error: 'Method not allowed' })
+}
+
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '2mb',
+    },
+  },
 }

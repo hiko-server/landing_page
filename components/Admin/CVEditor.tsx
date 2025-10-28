@@ -28,13 +28,27 @@ export default function CVEditor() {
 
   const save = async (syncZh: boolean) => {
     try {
-      const en = JSON.parse(enText)
-      const zh = JSON.parse(zhText)
+      const parseRelaxed = (txt: string) => {
+        // Trim BOM and normalize common full-width quotes used in CN input
+        let s = txt.replace(/^\uFEFF/, '')
+        s = s
+          .replace(/[“”]/g, '"')
+          .replace(/[‘’]/g, "'")
+        // Remove simple comments if pasted from JS-like sources
+        s = s.replace(/\/\*[^]*?\*\//g, '').replace(/(^|\n)\s*\/\/.*(?=\n|$)/g, '$1')
+        // Remove trailing commas before } or ]
+        s = s.replace(/,\s*(\}|\])/g, '$1')
+        return JSON.parse(s)
+      }
+
+      const en = parseRelaxed(enText)
+      const zh = parseRelaxed(zhText)
       const res = await fetch('/api/cvdata', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ en, zh, syncZh }) })
       if (!res.ok) throw new Error('save failed')
       toast({ status: 'success', title: syncZh ? 'Saved with ZH synced' : 'Saved' })
-    } catch (e) {
-      toast({ status: 'error', title: 'Invalid JSON or unauthorized' })
+    } catch (e: any) {
+      const msg = typeof e?.message === 'string' ? e.message : ''
+      toast({ status: 'error', title: msg || 'Invalid JSON or unauthorized' })
     }
   }
 
@@ -86,7 +100,14 @@ export default function CVEditor() {
   const onUpload = async (file: File) => {
     try {
       const text = await file.text()
-      const json = JSON.parse(text)
+      const normalized = text
+        .replace(/^\uFEFF/, '')
+        .replace(/[“”]/g, '"')
+        .replace(/[‘’]/g, "'")
+        .replace(/\/\*[^]*?\*\//g, '')
+        .replace(/(^|\n)\s*\/\/.*(?=\n|$)/g, '$1')
+        .replace(/,\s*(\}|\])/g, '$1')
+      const json = JSON.parse(normalized)
       const res = await fetch('/api/cvdata', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'import', data: json }) })
       const data = await res.json().catch(()=>({}))
       if (res.ok) { toast({ status: 'success', title: 'Imported from file' }); refresh() }
