@@ -20,7 +20,7 @@ const CompetitionAwardsSection = ({
 }) => {
   return (
     <CVSection bgColor={devColor('#fde3b6')} flex={'flex'}>
-      <Row style={{ paddingBottom: '0px' }}>
+      <Row style={{ paddingBottom: '0px', breakAfter: 'avoid' }}>
         <Text fontWeight={800} fontSize={'12px'}>
           {data.headerName.toUpperCase()}
         </Text>
@@ -28,7 +28,7 @@ const CompetitionAwardsSection = ({
       <Row style={{ borderBottom: 'none' }}>
         <Flex direction={'column'} gap={'16px'} flex={1}>
           {data.awards.map((item, index) => (
-            <Flex key={index} direction={'column'} gap={'6px'}>
+            <Flex key={index} direction={'column'} gap={'6px'} style={{ breakInside: 'avoid' }}>
               <Flex
                 justifyContent={'space-between'}
                 alignItems={'baseline'}
