@@ -20,15 +20,17 @@ const HeaderFooter = ({
       w="full"
     >
       {/* Background layers */}
-      <AnimatedBackground />
-      <ParticlesBackground />
+      <div className="no-print">
+        <AnimatedBackground />
+        <ParticlesBackground />
+      </div>
 
       {/* Foreground content */}
-      <Box position="relative" zIndex={1}>
+      <Box position="relative" zIndex={1} className="no-print">
         <Header isMobile={isMobile} />
       </Box>
-      <Box position="relative" zIndex={1}>{children}</Box>
-      <Box position="relative" zIndex={1}>
+      <Box position="relative" zIndex={1} className="print-parent">{children}</Box>
+      <Box position="relative" zIndex={1} className="no-print">
         <Footer />
       </Box>
     </Box>
