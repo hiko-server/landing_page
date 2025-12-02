@@ -65,7 +65,7 @@ const CVPage = ({ props, en, zh }: { props: any; en: any[]; zh: any[] }) => {
 
       <HeaderFooter isMobile={isMobile}>
         <Flex direction="column" alignItems="center" justifyContent="center" p={['20px', '40px']} gap={['20px', '40px']}>
-          <div>
+          <div className="no-print">
             <label htmlFor="language-select">Select Language: </label>
             <select id="language-select" value={language} onChange={(e) => setLanguage(e.target.value)}>
               <option value="en">English</option>
@@ -79,7 +79,7 @@ const CVPage = ({ props, en, zh }: { props: any; en: any[]; zh: any[] }) => {
               transformOrigin="top left"
               sx={{
                 transition: 'transform 0.3s ease',
-                '@media print': { transform: 'none !important', width: '100% !important' },
+                '@media print': { transform: 'none !important', width: '100% !important', position: 'static !important' },
               }}
             >
               <CVResult

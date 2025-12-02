@@ -40,7 +40,7 @@ const CVResult = ({
       alignItems="center"
       justifyContent="center"
       h="100%"
-      overflowY={router.asPath.includes('edit') ? 'scroll' : 'hidden'}
+      overflowY={router.asPath.includes('edit') ? 'scroll' : 'visible'}
       p="0px"
       style={style}
       gap="20px"
@@ -64,9 +64,7 @@ const CVResult = ({
             minW="21cm"
             maxW="21cm"
             minH="29.7cm"
-            overflowY="hidden"
             style={{
-              breakInside: 'avoid',
               marginTop: router.asPath.includes('edit') ? '400px' : '0px',
             }}
           >
@@ -122,9 +120,9 @@ const CVResult = ({
 
     // Apply print-specific styles
     const printStyles = `
-      @page { size: 210mm 297mm; margin: 0; }
+      @page { size: A4; margin: 0; }
       @media print {
-        html, body, #__next {
+        html, body {
           width: 210mm !important;
           height: auto !important;
           margin: 0 !important;
@@ -134,25 +132,28 @@ const CVResult = ({
           print-color-adjust: exact !important;
           overflow: visible !important;
         }
+
+        .no-print { display: none !important; }
+        .print-parent { position: static !important; }
+
         /* Only print the CV area */
         body * { visibility: hidden !important; }
         #print-area, #print-area * { visibility: visible !important; }
         #print-area {
-          position: static !important;
-          display: block !important;
+          position: absolute !important;
+          top: 0 !important;
+          left: 0 !important;
           width: 210mm !important;
-          margin: 0 auto !important;
+          margin: 0 !important;
           padding: 0 !important;
-          transform: none !important;
         }
         #A4Paper {
           width: 210mm !important;
           min-height: 297mm !important;
           margin: 0 !important;
           box-shadow: none !important;
-          transform: none !important;
           page-break-after: always;
-          break-inside: avoid;
+          break-inside: auto;
         }
         /* Ensure consistent fonts */
         @font-face {
@@ -170,7 +171,9 @@ const CVResult = ({
 
     window.onafterprint = () => {
       document.head.removeChild(printStylesElement)
-      document.getElementById('download-button')!.style.display = 'flex'
+      if (downloadButton) {
+        downloadButton.style.removeProperty('display')
+      }
     }
 
     window.print()
@@ -188,12 +191,14 @@ const PrintControl = styled(Flex)`
   justify-content: center;
   @media print { display: none !important; }
 `
-
 const PrintArea = styled.div`
   /* Ensure this div contains all the content that should be printed */
   @media print {
     width: 210mm !important;
-    margin: 0 auto !important;
+    margin: 0 !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
   }
 `
 
@@ -209,8 +214,8 @@ const A4Paper = styled(Box)`
   box-sizing: border-box;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
-  page-break-inside: avoid;
-  break-inside: avoid;
+  page-break-inside: auto;
+  break-inside: auto;
 
   @media print {
     width: 210mm !important;
