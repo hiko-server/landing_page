@@ -9,7 +9,7 @@ const EducationSection = ({ data }: { data: Education }) => {
   return (
     <React.Fragment>
       <CVSection bgColor={devColor('#fde3b6')}>
-        <Row style={{ paddingBottom: '0px' }}>
+        <Row style={{ paddingBottom: '0px', breakAfter: 'avoid' }}>
           <Text fontWeight={800} fontSize={'12px'}>
             {data.headerName.toUpperCase()}
           </Text>
@@ -17,7 +17,7 @@ const EducationSection = ({ data }: { data: Education }) => {
         <Row style={{ borderBottom: 'none' }}>
           <Flex direction={'column'} gap={'20px'} flex={1}>
             {data.educationExperience.map((edu, k) => (
-              <Flex direction={'column'}>
+              <Flex direction={'column'} style={{ breakInside: 'avoid' }}>
                 <Flex
                   key={k}
                   justifyContent={'space-between'}

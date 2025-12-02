@@ -8,7 +8,7 @@ const ExtraSkillSection = ({ data }: { data: ExtraSkill }) => {
   return (
     <React.Fragment>
       <CVSection bgColor={devColor('#fde3b6')}>
-        <Row style={{ paddingBottom: '0px' }}>
+        <Row style={{ paddingBottom: '0px', breakAfter: 'avoid' }}>
           <Text fontWeight={800} fontSize={'12px'}>
             {data.headerName.toUpperCase()}
           </Text>
