@@ -9,7 +9,7 @@ const ProjectSection = ({ data }: { data: Project }) => {
   return (
     <React.Fragment>
       <CVSection bgColor={devColor('#fde3b6')} flex={'flex'}>
-        <Row style={{ paddingBottom: '0px' }}>
+        <Row style={{ paddingBottom: '0px', breakAfter: 'avoid' }}>
           <Text fontWeight={800} fontSize={'12px'}>
             {data.headerName.toUpperCase()}
           </Text>
@@ -17,7 +17,7 @@ const ProjectSection = ({ data }: { data: Project }) => {
         <Row style={{ borderBottom: 'none' }}>
           <Flex direction={'column'} gap={'20px'} flex={1}>
             {data.projectExperience.map((pro, k) => (
-              <Flex direction={'column'}>
+              <Flex direction={'column'} style={{ breakInside: 'avoid' }}>
                 <Flex
                   key={k}
                   justifyContent={'space-between'}
