@@ -9,7 +9,7 @@ const WorkExperience = ({ data }: { data: Experiences }) => {
   return (
     <React.Fragment>
       <CVSection bgColor={devColor('#fde3b6')} flex={'flex'}>
-        <Row style={{ paddingBottom: '0px' }}>
+        <Row style={{ paddingBottom: '0px', breakAfter: 'avoid' }}>
           <Text fontWeight={800} fontSize={'12px'}>
             {data.headerName.toUpperCase()}
           </Text>
@@ -17,7 +17,7 @@ const WorkExperience = ({ data }: { data: Experiences }) => {
         <Row style={{ borderBottom: 'none' }}>
           <Flex direction={'column'} gap={'20px'} flex={1}>
             {data.experiences.map((exp, k) => (
-              <Flex key={k} direction={'column'}>
+              <Flex key={k} direction={'column'} style={{ breakInside: 'avoid' }}>
                 {' '}
                 <Flex
                   justifyContent={'space-between'}

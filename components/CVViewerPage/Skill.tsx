@@ -8,7 +8,7 @@ const SkillSection = ({ data }: { data: Skill }) => {
   return (
     <React.Fragment>
       <CVSection bgColor={devColor('#fde3b6')}>
-        <Row style={{ paddingBottom: '0px' }}>
+        <Row style={{ paddingBottom: '0px', breakAfter: 'avoid' }}>
           <Text fontWeight={800} fontSize={'12px'}>
             {data.headerName.toUpperCase()}
           </Text>
@@ -32,7 +32,7 @@ const SkillSection = ({ data }: { data: Skill }) => {
             </Flex>
             <Flex direction={'column'} gap={'20px'}>
               {data.technical.map((tech) => (
-                <Flex direction={'column'}>
+                <Flex direction={'column'} style={{ breakInside: 'avoid' }}>
                   <Flex fontWeight={800} fontSize={'12px'}>
                     {tech.name.toUpperCase()}
                   </Flex>
