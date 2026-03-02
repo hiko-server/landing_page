@@ -68,7 +68,9 @@ const CVResult = ({
               marginTop: router.asPath.includes('edit') ? '400px' : '0px',
             }}
           >
-            {cvData.map(
+            {cvData
+              .filter((section) => section.isVisible !== false)
+              .map(
               (
                 section: { sessionName: string | number },
                 key: React.Key | null | undefined
