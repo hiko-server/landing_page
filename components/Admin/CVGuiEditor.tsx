@@ -19,8 +19,11 @@ import {
   Switch,
   Text,
   Select,
+  Box,
+  VStack,
+  Flex,
 } from '@chakra-ui/react'
-import { AddIcon, DeleteIcon } from '@chakra-ui/icons'
+import { AddIcon, DeleteIcon, ArrowUpIcon, ArrowDownIcon } from '@chakra-ui/icons'
 
 type PersonalInformation = {
   sessionName: string
@@ -33,6 +36,7 @@ type PersonalInformation = {
   personalWebsite: string
   address: string
   introduction: string
+  hiddenFields?: string[]
 }
 
 type EducationExperience = {
@@ -109,6 +113,7 @@ export default function CVGuiEditor() {
   const [zAwards, setZAwards] = useState<CompetitionAward[]>([])
   const [snapshots, setSnapshots] = useState<string[]>([])
   const [selectedSnap, setSelectedSnap] = useState('')
+  const [structure, setStructure] = useState<any[]>([])
   const fileRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
@@ -116,6 +121,7 @@ export default function CVGuiEditor() {
       const res = await fetch('/api/cvdata')
       const data = await res.json()
       const en = Array.isArray(data.en) ? data.en : []
+      setStructure(en)
       const personal =
         en.find((s: any) => s.sessionName === 'personalInformation') || null
       const education = en.find((s: any) => s.sessionName === 'education') || {
@@ -251,24 +257,24 @@ export default function CVGuiEditor() {
   const save = async (syncZh: boolean, includeZh?: boolean) => {
     try {
       const res = await fetch('/api/cvdata')
-      const payload = await res.json()
-      let en = Array.isArray(payload.en) ? payload.en : []
-      en = en.map((s: any) => {
-        if (s.sessionName === 'personalInformation') return pi
+      const remote = await res.json()
+      // Use local structure order and visibility
+      let en = structure.map((s: any) => {
+        if (s.sessionName === 'personalInformation') return { ...s, ...pi, isVisible: s.isVisible !== false, hiddenFields: pi?.hiddenFields }
         if (s.sessionName === 'education')
-          return { ...s, educationExperience: edu }
-        if (s.sessionName === 'extraSkill') return { ...s, points: extra }
-        if (s.sessionName === 'skill') return { ...s, languages, technical }
+          return { ...s, educationExperience: edu, isVisible: s.isVisible !== false }
+        if (s.sessionName === 'extraSkill') return { ...s, points: extra, isVisible: s.isVisible !== false }
+        if (s.sessionName === 'skill') return { ...s, languages, technical, isVisible: s.isVisible !== false }
         if (s.sessionName === 'project')
-          return { ...s, projectExperience: projects }
-        if (s.sessionName === 'workExperience') return { ...s, experiences }
+          return { ...s, projectExperience: projects, isVisible: s.isVisible !== false }
+        if (s.sessionName === 'workExperience') return { ...s, experiences, isVisible: s.isVisible !== false }
         if (s.sessionName === 'competitionAwards')
-          return { ...s, awards }
+          return { ...s, awards, isVisible: s.isVisible !== false }
         if (s.sessionName === 'certification')
-          return { ...s, certifications: certs }
+          return { ...s, certifications: certs, isVisible: s.isVisible !== false }
         return s
       })
-      let zh = payload.zh
+      let zh = remote.zh
       if (includeZh) {
         zh = zh.map((s: any) => {
           if (s.sessionName === 'personalInformation') return zPi
@@ -414,6 +420,85 @@ export default function CVGuiEditor() {
           </Tbody>
         </Table>
       )}
+
+      <Heading size="sm">Structure</Heading>
+      <Box p={4} border="1px" borderColor="gray.200" borderRadius="md" mb={6}>
+        <VStack align="stretch" spacing={2}>
+          {structure.map((section: any, index: number) => (
+            <Flex direction="column" key={index} p={2} bg="gray.50" borderRadius="md" gap={2}>
+              <HStack justify="space-between">
+                <HStack>
+                  <Switch
+                    isChecked={section.isVisible !== false}
+                    onChange={(e) => {
+                      const newStructure = [...structure]
+                      newStructure[index] = { ...newStructure[index], isVisible: e.target.checked }
+                      setStructure(newStructure)
+                    }}
+                  />
+                  <Text fontWeight="bold">{section.headerName}</Text>
+                  <Text fontSize="sm" color="gray.500">({section.sessionName})</Text>
+                </HStack>
+                <HStack>
+                  <IconButton
+                    aria-label="Move Up"
+                    icon={<ArrowUpIcon />}
+                    size="xs"
+                    isDisabled={index === 0}
+                    onClick={() => {
+                      const newStructure = [...structure]
+                      const temp = newStructure[index - 1]
+                      newStructure[index - 1] = newStructure[index]
+                      newStructure[index] = temp
+                      setStructure(newStructure)
+                    }}
+                  />
+                  <IconButton
+                    aria-label="Move Down"
+                    icon={<ArrowDownIcon />}
+                    size="xs"
+                    isDisabled={index === structure.length - 1}
+                    onClick={() => {
+                      const newStructure = [...structure]
+                      const temp = newStructure[index + 1]
+                      newStructure[index + 1] = newStructure[index]
+                      newStructure[index] = temp
+                      setStructure(newStructure)
+                    }}
+                  />
+                </HStack>
+              </HStack>
+              {section.sessionName === 'personalInformation' && pi && (
+                <Flex wrap="wrap" gap={4} pl={8} pt={2} borderTop="1px" borderColor="gray.200">
+                  {['firstName', 'lastName', 'nickName', 'email', 'phoneNumber', 'personalWebsite', 'address', 'introduction'].map(field => {
+                    const isHidden = pi.hiddenFields?.includes(field)
+                    return (
+                      <HStack key={field}>
+                        <Switch
+                          size="sm"
+                          isChecked={!isHidden}
+                          onChange={(e) => {
+                            const currentHidden = pi.hiddenFields || []
+                            let newHidden
+                            if (e.target.checked) {
+                              newHidden = currentHidden.filter(f => f !== field)
+                            } else {
+                              newHidden = [...currentHidden, field]
+                            }
+                            setPi({ ...pi, hiddenFields: newHidden })
+                          }}
+                        />
+                        <Text fontSize="xs">{field}</Text>
+                      </HStack>
+                    )
+                  })}
+                </Flex>
+              )}
+            </Flex>
+          ))}
+        </VStack>
+      </Box>
+
       <Heading size="sm" mb={3}>
         Personal Information
       </Heading>

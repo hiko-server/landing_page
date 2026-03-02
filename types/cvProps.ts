@@ -18,6 +18,7 @@ export type CVData = (
 export interface CVSection {
   sessionName: string
   headerName: string
+  isVisible?: boolean
 }
 
 export interface Experiences extends CVSection{
@@ -71,9 +72,7 @@ export interface CertificationList{
   credentialURL: string
 }
 
-export interface PersonalInformation{
-  sessionName: string
-  headerName: string
+export interface PersonalInformation extends CVSection {
   firstName: string
   lastName: string
   nickName: string
@@ -82,6 +81,7 @@ export interface PersonalInformation{
   personalWebsite:string
   address: string
   introduction: string
+  hiddenFields?: string[]
 }
 
 export interface Education extends CVSection{
