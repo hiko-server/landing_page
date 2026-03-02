@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { Button, Flex, Heading, HStack, Tab, TabList, TabPanel, TabPanels, Tabs, Textarea, useToast, Select, Input } from '@chakra-ui/react'
+import { Button, Flex, Heading, HStack, Tab, TabList, TabPanel, TabPanels, Tabs, Textarea, useToast, Select, Input, Box, Text, VStack, Switch, IconButton } from '@chakra-ui/react'
+import { ArrowUpIcon, ArrowDownIcon } from '@chakra-ui/icons'
 
 export default function CVEditor() {
   const toast = useToast()
@@ -141,6 +142,99 @@ export default function CVEditor() {
         <Input type='file' accept='application/json' display='none' ref={fileRef} onChange={(e)=>{ const f=e.target.files?.[0]; if (f) onUpload(f); if (fileRef.current) fileRef.current.value='' }} />
         <Button onClick={()=> fileRef.current?.click()}>Upload JSON</Button>
       </HStack>
+
+      <Heading size="sm">Structure</Heading>
+      <Box p={4} border="1px" borderColor="gray.200" borderRadius="md">
+        <VStack align="stretch" spacing={2}>
+          {(() => {
+            try {
+              if (!enText) return <Text>Loading...</Text>
+              const sections = JSON.parse(enText)
+              if (!Array.isArray(sections)) return <Text>Root must be an array</Text>
+              
+              const handleChange = (newSections: any[]) => setEnText(JSON.stringify(newSections, null, 2))
+
+              return sections.map((section: any, index: number) => (
+                <Flex direction="column" key={index} p={2} bg="gray.50" borderRadius="md" gap={2}>
+                  <HStack justify="space-between">
+                    <HStack>
+                      <Switch
+                        isChecked={section.isVisible !== false}
+                        onChange={(e) => {
+                          const newSections = [...sections]
+                          newSections[index].isVisible = e.target.checked
+                          handleChange(newSections)
+                        }}
+                      />
+                      <Text fontWeight="bold">{section.headerName}</Text>
+                      <Text fontSize="sm" color="gray.500">({section.sessionName})</Text>
+                    </HStack>
+                    <HStack>
+                      <IconButton
+                        aria-label="Move Up"
+                        icon={<ArrowUpIcon />}
+                        size="xs"
+                        isDisabled={index === 0}
+                        onClick={() => {
+                          const newSections = [...sections]
+                          const temp = newSections[index - 1]
+                          newSections[index - 1] = newSections[index]
+                          newSections[index] = temp
+                          handleChange(newSections)
+                        }}
+                      />
+                      <IconButton
+                        aria-label="Move Down"
+                        icon={<ArrowDownIcon />}
+                        size="xs"
+                        isDisabled={index === sections.length - 1}
+                        onClick={() => {
+                          const newSections = [...sections]
+                          const temp = newSections[index + 1]
+                          newSections[index + 1] = newSections[index]
+                          newSections[index] = temp
+                          handleChange(newSections)
+                        }}
+                      />
+                    </HStack>
+                  </HStack>
+                  {section.sessionName === 'personalInformation' && (
+                    <Flex wrap="wrap" gap={4} pl={8} pt={2} borderTop="1px" borderColor="gray.200">
+                      {['firstName', 'lastName', 'nickName', 'email', 'phoneNumber', 'personalWebsite', 'address', 'introduction'].map(field => {
+                        const isHidden = section.hiddenFields?.includes(field)
+                        return (
+                          <HStack key={field}>
+                            <Switch
+                              size="sm"
+                              isChecked={!isHidden}
+                              onChange={(e) => {
+                                const newSections = [...sections]
+                                const currentHidden = newSections[index].hiddenFields || []
+                                if (e.target.checked) {
+                                  // Unhide: remove from hiddenFields
+                                  newSections[index].hiddenFields = currentHidden.filter((f: string) => f !== field)
+                                } else {
+                                  // Hide: add to hiddenFields
+                                  newSections[index].hiddenFields = [...currentHidden, field]
+                                }
+                                handleChange(newSections)
+                              }}
+                            />
+                            <Text fontSize="xs">{field}</Text>
+                          </HStack>
+                        )
+                      })}
+                    </Flex>
+                  )}
+                </Flex>
+              ))
+            } catch (e) {
+              return <Text color="red.500">Cannot parse JSON to manage structure</Text>
+            }
+          })()}
+        </VStack>
+      </Box>
+
       <Tabs isFitted variant="enclosed">
         <TabList>
           <Tab>English (EN)</Tab>

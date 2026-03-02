@@ -11,6 +11,15 @@ const PersonalInformationSection = ({
   data: PersonalInformation
 }) => {
   console.log({ data })
+  const isVisible = (field: keyof PersonalInformation) => !data.hiddenFields?.includes(field)
+
+  const name = [
+    isVisible('nickName') ? data.nickName : null,
+    isVisible('lastName') ? data.lastName.toUpperCase() : null
+  ].filter(Boolean).join(' ')
+  
+  const fullName = [name, isVisible('firstName') ? data.firstName : null].filter(Boolean).join(', ')
+
   return (
     <React.Fragment>
       {data.lastName && (
@@ -24,15 +33,15 @@ const PersonalInformationSection = ({
               justifyContent={'center'}
               alignItems={'flex-start'}
             >
-              <Text fontSize={'24px'} fontWeight={600}>{`${
-                data.nickName
-              } ${data.lastName.toUpperCase()}, ${data.firstName}`}</Text>
-              <Text color={'blue'}>
-                <Link
-                  href={`https://${data.personalWebsite}`}
-                  isExternal
-                >{`https://${data.personalWebsite}`}</Link>
-              </Text>
+              <Text fontSize={'24px'} fontWeight={600}>{fullName}</Text>
+              {isVisible('personalWebsite') && (
+                <Text color={'blue'}>
+                  <Link
+                    href={`https://${data.personalWebsite}`}
+                    isExternal
+                  >{`https://${data.personalWebsite}`}</Link>
+                </Text>
+              )}
             </Flex>
 
             <Flex
@@ -43,15 +52,15 @@ const PersonalInformationSection = ({
               justifyContent={'center'}
               alignItems={'flex-end'}
             >
-              <Text fontSize={'12px'}>{`${data.address}`}</Text>
+              {isVisible('address') && <Text fontSize={'12px'}>{`${data.address}`}</Text>}
               <Flex direction={'row'} gap={`calc(12px / 3)`}>
-                <Text>{`M:${data.phoneNumber}`}</Text>
-                <Text>{`|`}</Text>
-                <Text>{`E: ${data.email}`}</Text>
+                {isVisible('phoneNumber') && <Text>{`M:${data.phoneNumber}`}</Text>}
+                {isVisible('phoneNumber') && isVisible('email') && <Text>{`|`}</Text>}
+                {isVisible('email') && <Text>{`E: ${data.email}`}</Text>}
               </Flex>
             </Flex>
           </Row>
-          {data.introduction !== '' && (
+          {data.introduction !== '' && isVisible('introduction') && (
             <Row style={{ borderBottom: 'none' }}>
               <Text>{data.introduction}</Text>
             </Row>
