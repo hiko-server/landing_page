@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react'
-import { Flex, Heading, Tabs, TabList, Tab, TabPanels, TabPanel, Button, useToast } from '@chakra-ui/react'
+import { Flex, Heading, Tabs, TabList, Tab, TabPanels, TabPanel, Button, useToast, HStack } from '@chakra-ui/react'
+import { SettingsIcon } from '@chakra-ui/icons'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 import CVEditor from '../../components/Admin/CVEditor'
-import CVGuiEditor from '../../components/Admin/CVGuiEditor'
+import CVGuiEditor from '../../components/Admin/CVGuiEditorV2'
 import HomeEditor from '../../components/Admin/HomeEditor'
 import { useRouter } from 'next/router'
+import Link from 'next/link'
 
 export default function AdminDashboard() {
   const [isMobile] = [false]
@@ -35,8 +37,16 @@ export default function AdminDashboard() {
       <CustomHead title="Admin Dashboard" />
       <HeaderFooter isMobile={isMobile}>
         <Flex direction="column" p={6} gap={6}>
-          <Heading size="md">Admin Dashboard</Heading>
-          <Button alignSelf="start" onClick={sendTest}>Send test email</Button>
+          <Flex justify="space-between" align="center">
+            <Heading size="md">Admin Dashboard</Heading>
+            <HStack>
+               <Button alignSelf="start" size="sm" onClick={sendTest}>Test Email</Button>
+               <Link href="/admin/db-config">
+                  <Button size="sm" leftIcon={<SettingsIcon />} colorScheme="purple">DB & Backup</Button>
+               </Link>
+            </HStack>
+          </Flex>
+
           <Tabs variant="enclosed" isFitted index={tabIndex} onChange={(i)=> setTabIndex(i)}>
             <TabList>
               <Tab>Home</Tab>

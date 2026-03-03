@@ -17,9 +17,8 @@ const ProjectSection = ({ data }: { data: Project }) => {
         <Row style={{ borderBottom: 'none' }}>
           <Flex direction={'column'} gap={'20px'} flex={1}>
             {data.projectExperience.map((pro, k) => (
-              <Flex direction={'column'} style={{ breakInside: 'avoid' }}>
+              <Flex key={k} direction={'column'} style={{ breakInside: 'avoid' }}>
                 <Flex
-                  key={k}
                   justifyContent={'space-between'}
                   alignItems={'center'}
                   style={{ padding: '0' }}
@@ -52,15 +51,15 @@ const ProjectSection = ({ data }: { data: Project }) => {
                 </Flex>
 
                 <Flex direction={'column'}>
-                  {pro.features.map((fea) => (
-                    <Flex direction={'column'}>
+                  {pro.features.map((fea, i) => (
+                    <Flex key={i} direction={'column'}>
                       <Flex fontWeight={600} fontSize={'12px'}>
                         •{fea.description}
                       </Flex>
                       {fea.furtherExplanation.length > 0 && (
                         <Flex direction={'column'}>
-                          {fea.furtherExplanation.map((des) => (
-                            <Flex>
+                          {fea.furtherExplanation.map((des, j) => (
+                            <Flex key={j}>
                               <Text fontWeight={400} fontSize={'12px'}>
                                 {'->'}
                                 {des}

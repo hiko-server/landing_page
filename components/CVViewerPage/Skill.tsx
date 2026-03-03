@@ -17,8 +17,9 @@ const SkillSection = ({ data }: { data: Skill }) => {
         <Row style={{ borderBottom: 'none' }}>
           <Flex direction={'column'} gap={'20px'}>
             <Flex direction={'column'} gap={'10px'} flex={1}>
-              {data.languages.map((lang) => (
+              {data.languages.map((lang, index) => (
                 <Box
+                  key={index}
                   display="grid"
                   gridTemplateColumns="auto 90%"
                   gridColumnGap="10px"
@@ -31,14 +32,14 @@ const SkillSection = ({ data }: { data: Skill }) => {
               ))}
             </Flex>
             <Flex direction={'column'} gap={'20px'}>
-              {data.technical.map((tech) => (
-                <Flex direction={'column'} style={{ breakInside: 'avoid' }}>
+              {data.technical.map((tech, i) => (
+                <Flex key={i} direction={'column'} style={{ breakInside: 'avoid' }}>
                   <Flex fontWeight={800} fontSize={'12px'}>
                     {tech.name.toUpperCase()}
                   </Flex>
                   <Flex direction={'column'}>
-                    {tech.description.map((des) => (
-                      <Flex>
+                    {tech.description.map((des, j) => (
+                      <Flex key={j}>
                         <Flex>•{des}</Flex>
                       </Flex>
                     ))}

@@ -10,7 +10,6 @@ const PersonalInformationSection = ({
 }: {
   data: PersonalInformation
 }) => {
-  console.log({ data })
   const isVisible = (field: keyof PersonalInformation) => !data.hiddenFields?.includes(field)
 
   const name = [
