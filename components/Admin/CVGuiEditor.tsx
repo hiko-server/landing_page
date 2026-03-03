@@ -37,6 +37,7 @@ type PersonalInformation = {
   address: string
   introduction: string
   hiddenFields?: string[]
+  separatorColor?: string
 }
 
 type EducationExperience = {
@@ -617,6 +618,23 @@ export default function CVGuiEditor() {
               />
             </FormControl>
           )}
+          <FormControl>
+            <FormLabel>Separator Color</FormLabel>
+            <HStack>
+              <Input
+                type="color"
+                w="50px"
+                p={1}
+                value={pi.separatorColor || '#0000ff'}
+                onChange={(e) => setPi({ ...pi, separatorColor: e.target.value })}
+              />
+              <Input
+                value={pi.separatorColor || ''}
+                onChange={(e) => setPi({ ...pi, separatorColor: e.target.value })}
+                placeholder="CSS Color (e.g. blue, #123456)"
+              />
+            </HStack>
+          </FormControl>
         </SimpleGrid>
       )}
 

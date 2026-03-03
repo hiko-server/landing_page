@@ -82,6 +82,7 @@ export interface PersonalInformation extends CVSection {
   address: string
   introduction: string
   hiddenFields?: string[]
+  separatorColor?: string
 }
 
 export interface Education extends CVSection{

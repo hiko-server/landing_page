@@ -31,6 +31,8 @@ const CVResult = ({
   style?: React.CSSProperties
 }) => {
   const router = useRouter()
+  const pi = cvData.find(s => s.sessionName === 'personalInformation') as PersonalInformation | undefined
+  const sepColor = pi?.separatorColor || 'blue'
 
   return (
     <Flex
@@ -66,6 +68,7 @@ const CVResult = ({
             minH="29.7cm"
             style={{
               marginTop: router.asPath.includes('edit') ? '400px' : '0px',
+              ['--cv-separator-color' as any]: sepColor,
             }}
           >
             {cvData
