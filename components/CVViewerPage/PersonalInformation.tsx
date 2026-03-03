@@ -90,7 +90,7 @@ export const Row = styled(Flex)`
   justify-content: space-between;
   padding: 0 10px;
   padding-bottom: 20px;
-  border-bottom: 3px solid blue;
+  border-bottom: 3px solid var(--cv-separator-color, blue);
 `
 export const CVSection = styled(Flex)`
   flex-direction: column;
