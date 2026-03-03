@@ -58,15 +58,15 @@ const WorkExperience = ({ data }: { data: Experiences }) => {
                   </Flex>
                 </Flex>
                 <Flex direction={'column'}>
-                  {exp.features.map((fea) => (
-                    <Flex direction={'column'}>
+                  {exp.features.map((fea, i) => (
+                    <Flex key={i} direction={'column'}>
                       <Flex fontWeight={600} fontSize={'12px'}>
                         •{fea.description}
                       </Flex>
                       {fea.furtherExplanation.length > 0 && (
                         <Flex direction={'column'}>
-                          {fea.furtherExplanation.map((des) => (
-                            <Flex>
+                          {fea.furtherExplanation.map((des, j) => (
+                            <Flex key={j}>
                               <Text fontWeight={400} fontSize={'12px'}>
                                 {'->'}
                                 {des}
