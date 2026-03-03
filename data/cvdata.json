@@ -10,7 +10,10 @@
       "phoneNumber": "852 6204 0827",
       "personalWebsite": "hiko.dev",
       "address": "Ho Man Tin, Kowloon, Hong Kong",
-      "introduction": "A driven and self-educated Full-Stack Software Engineer committed to delivering innovative technological solutions in computer science. Demonstrates extensive expertise in TypeScript, React, Next.js, NestJS, and Python FastAPI."
+      "introduction": "A driven and self-educated Full-Stack Software Engineer committed to delivering innovative technological solutions in computer science. Demonstrates extensive expertise in TypeScript, React, Next.js, NestJS, and Python FastAPI.",
+      "hiddenFields": [
+        "introduction"
+      ]
     },
     {
       "sessionName": "education",
@@ -94,7 +97,8 @@
             "Set up and maintained secure SSH servers."
           ]
         }
-      ]
+      ],
+      "isVisible": false
     },
     {
       "sessionName": "project",
