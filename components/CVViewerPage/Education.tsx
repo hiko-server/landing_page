@@ -17,9 +17,8 @@ const EducationSection = ({ data }: { data: Education }) => {
         <Row style={{ borderBottom: 'none' }}>
           <Flex direction={'column'} gap={'20px'} flex={1}>
             {data.educationExperience.map((edu, k) => (
-              <Flex direction={'column'} style={{ breakInside: 'avoid' }}>
+              <Flex key={k} direction={'column'} style={{ breakInside: 'avoid' }}>
                 <Flex
-                  key={k}
                   justifyContent={'space-between'}
                   alignItems={'center'}
                 >

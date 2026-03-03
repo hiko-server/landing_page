@@ -11,9 +11,7 @@
       "personalWebsite": "hiko.dev",
       "address": "Ho Man Tin, Kowloon, Hong Kong",
       "introduction": "A driven and self-educated Full-Stack Software Engineer committed to delivering innovative technological solutions in computer science. Demonstrates extensive expertise in TypeScript, React, Next.js, NestJS, and Python FastAPI.",
-      "hiddenFields": [
-        "introduction"
-      ],
+      "hiddenFields": [],
       "separatorColor": "#030303",
       "isVisible": true
     },
@@ -101,7 +99,7 @@
           ]
         }
       ],
-      "isVisible": false
+      "isVisible": true
     },
     {
       "sessionName": "project",
@@ -501,7 +499,10 @@
       "phoneNumber": "852 6204 0827",
       "personalWebsite": "hiko.dev",
       "address": "香港九龙红磡",
-      "introduction": "一位充满热情且自我驱动的全栈软件工程师，致力于在计算机科学领域提供创新性的技术解决方案，熟练掌握 TypeScript、React、Next.js、NestJS 和 Python FastAPI "
+      "introduction": "一位充满热情且自我驱动的全栈软件工程师，致力于在计算机科学领域提供创新性的技术解决方案，熟练掌握 TypeScript、React、Next.js、NestJS 和 Python FastAPI ",
+      "hiddenFields": [],
+      "separatorColor": "#030303",
+      "isVisible": true
     },
     {
       "sessionName": "education",
@@ -525,7 +526,8 @@
           "endDate": "2024-06-30",
           "gpa": "3.3 / 4.3"
         }
-      ]
+      ],
+      "isVisible": true
     },
     {
       "sessionName": "skill",
@@ -585,7 +587,8 @@
             "精通 Docker，通过自定义 shell 脚本实现网络配置及容器管理 "
           ]
         }
-      ]
+      ],
+      "isVisible": false
     },
     {
       "sessionName": "project",
@@ -732,7 +735,8 @@
             }
           ]
         }
-      ]
+      ],
+      "isVisible": true
     },
     {
       "sessionName": "workExperience",
@@ -844,7 +848,8 @@
             "工程"
           ]
         }
-      ]
+      ],
+      "isVisible": true
     },
     {
       "sessionName": "competitionAwards",
@@ -883,7 +888,8 @@
             "方案展示了运用人工智能加速智能回收与废物分类的潜力。"
           ]
         }
-      ]
+      ],
+      "isVisible": true
     },
     {
       "sessionName": "extraSkill",
@@ -892,7 +898,8 @@
         "普通话：母语水平",
         "粤语：具备基础听说能力",
         "英语：流利听说"
-      ]
+      ],
+      "isVisible": true
     },
     {
       "sessionName": "certification",
@@ -966,7 +973,8 @@
             }
           ]
         }
-      ]
+      ],
+      "isVisible": true
     }
   ]
 }
