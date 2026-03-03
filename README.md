@@ -1,126 +1,218 @@
-# landing_page
+# 🚀 Next.js Personal Portfolio & CV Builder
 
-## Project Updates (2025-09)
+![License](https://img.shields.io/github/license/hiko/next-ts)
+![Next.js](https://img.shields.io/badge/Next.js-13.4-black?style=flat&logo=next.js)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?style=flat&logo=typescript)
+![MongoDB](https://img.shields.io/badge/MongoDB-GridFS-green?style=flat&logo=mongodb)
+![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat&logo=docker)
 
-- Removed all hard-coded sample data and example fallbacks. UI and APIs now render only real data from `data/` or live APIs.
-- Security hardening: required `JWT_SECRET`, stricter auth cookies (`SameSite=Strict`, `Secure` in prod), global security headers via `middleware.ts`.
-- Rate limiting on sensitive endpoints (login, reset, content updates, image uploads).
-- Real-data widgets:
-  - Top GitHub Repositories (auto-detected from `home.socials.github`).
-  - Tech Stack Cloud (reads packages from your `package.json`).
-- New visuals & UX:
-  - Theme toggle (light/dark, persists; system default respected).
-  - Smooth page transitions (Framer Motion) across all routes.
-  - Recent GitHub Activity feed (live public events via GitHub API).
-  - Video background cycles on the hero with fade transitions.
-- Security & SEO:
-  - Strict Content-Security-Policy and standard security headers in `next.config.js`.
-  - Added `public/robots.txt` and improved OpenGraph/JSON-LD usage.
-- Demo gating:
-  - Demo pages are disabled by default and never serve sample data. Set `ENABLE_DEMO=true` in `.env` to enable.
-- DX/CI: Added `.env.example`, `.github/workflows/ci.yml`, and ignored `data/` in `.gitignore`.
+A high-performance, secure, and fully customizable personal landing page and CV management system built with Next.js and TypeScript. This project features a robust Admin Dashboard, a drag-and-drop CV editor, real-time data integration (GitHub, Crypto), and a comprehensive MongoDB backup/restore system.
 
-### Configure Admin & Data
+---
 
-1. Copy `.env.example` to `.env` and set:
-   - `ADMIN_EMAIL`, `ADMIN_PASS`, `JWT_SECRET` (required)
-   - Optional SMTP settings to enable email notifications and password reset.
-   - `GITHUB_TOKEN` (optional, raises GitHub API rate limits)
-   - `ENABLE_DEMO` (optional, default `false`) to expose demo routes
-2. On first run, the app writes `data/admin.json` from env. Ensure `data/` is not committed (now ignored). Consider removing any previously committed `data/admin.json` from git history.
-3. Provide your content in:
-   - `data/home.json` (hero/socials/brands/quickAccess/photos)
-   - `data/cvdata.json` (CV sections). No example fallback is used.
+## 📑 Table of Contents
 
+- [✨ Key Features](#-key-features)
+- [🛠️ Tech Stack](#️-tech-stack)
+- [📂 Project Structure](#-project-structure)
+- [⚙️ Prerequisites](#️-prerequisites)
+- [🚀 Getting Started](#-getting-started)
+- [🔧 Configuration](#-configuration)
+- [🐳 Docker Deployment](#-docker-deployment)
+- [🛡️ Security](#️-security)
+- [📄 License](#-license)
 
+---
 
+## ✨ Key Features
 
-## Getting started
+### 🎨 Core Frontend
+- **Modern UI/UX**: Built with **Chakra UI** and **Tailwind CSS** for responsive design.
+- **Dynamic Content**: All content is driven by JSON configuration files (`cvdata.json`, `home.json`) or database entries.
+- **Animations**: Smooth page transitions and interactive elements powered by **Framer Motion**.
+- **Internationalization (i18n)**: Native support for multiple languages (e.g., English, Chinese).
+- **Theme Support**: Dark/Light mode toggle with persistence.
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+### 🛠️ Admin & CV Builder
+- **GUI Editor V2**: A powerful drag-and-drop interface to edit your CV structure, skills, and experience in real-time.
+- **Admin Dashboard**: Centralized control panel for site settings, user management, and content updates.
+- **Database Integration**:
+  - **Full Site Backup**: One-click backup of all configurations (CV, Home, Admin) and media files (images) to MongoDB.
+  - **Restore Capability**: Seamlessly restore your site to a previous state from the database.
+  - **GridFS Support**: Efficient storage and retrieval of large media files directly from MongoDB.
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+### 🔌 Integrations & Widgets
+- **GitHub Activity**: Real-time feed of your public GitHub contributions and top repositories using the GitHub API.
+- **Crypto Ticker**: Live cryptocurrency price updates (e.g., Binance WebSocket integration).
+- **Tech Stack Cloud**: Visual representation of your skills based on `package.json` or manual input.
 
-## Add your files
+### 🛡️ Enterprise-Grade Security
+- **Authentication**: Secure JWT-based authentication for admin access.
+- **Security Headers**: Strict **Content-Security-Policy (CSP)**, `X-Frame-Options`, and `HSTS` configured in `next.config.js`.
+- **Rate Limiting**: Protection against abuse on sensitive endpoints (login, API routes).
+- **Input Validation**: Robust validation using `formik` and `zod` (or similar schemas) to prevent injection attacks.
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+---
 
+## 🛠️ Tech Stack
+
+- **Framework**: [Next.js 13+](https://nextjs.org/) (React)
+- **Language**: [TypeScript](https://www.typescriptlang.org/)
+- **Styling**: [Chakra UI](https://chakra-ui.com/), [Tailwind CSS](https://tailwindcss.com/), [Sass](https://sass-lang.com/)
+- **Database**: [MongoDB](https://www.mongodb.com/) (using native driver & GridFS)
+- **State Management**: React Context API (`authState`, `cvDataState`)
+- **Forms**: React Hook Form / Formik
+- **Utilities**: `axios`, `moment`, `luxon`, `framer-motion`
+- **Deployment**: Docker, Docker Compose
+
+---
+
+## 📂 Project Structure
+
+```bash
+.
+├── api/                # Backend API logic (extracted handlers)
+├── components/         # Reusable React components
+│   ├── Admin/          # Admin dashboard & CV Editor components
+│   ├── LandingPage/    # Main landing page widgets
+│   └── ...
+├── context/            # Global state (Auth, CV Data)
+├── data/               # JSON Configuration files (Source of Truth)
+│   ├── cvdata.json     # Resume content
+│   ├── home.json       # Landing page settings
+│   └── admin.json      # Admin user credentials
+├── docker/             # Docker configuration files
+├── pages/              # Next.js Pages & API Routes
+│   ├── admin/          # Protected admin routes
+│   ├── api/            # Serverless API endpoints
+│   └── ...
+├── public/             # Static assets (images, locales)
+├── services/           # API service layers (Auth, REST)
+└── styles/             # Global styles (CSS/SCSS)
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/hiko-prime/landing_page.git
-git branch -M main
-git push -uf origin main
+
+---
+
+## ⚙️ Prerequisites
+
+Before you begin, ensure you have the following installed:
+
+- **Node.js** (v18 or higher)
+- **Yarn** (v1.22+) or **npm**
+- **MongoDB** (Local instance or Atlas URI)
+- **Docker** (Optional, for containerized deployment)
+
+---
+
+## 🚀 Getting Started
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/your-username/next-ts.git
+cd next-ts
 ```
 
-## Integrate with your tools
+### 2. Install Dependencies
 
-- [ ] [Set up project integrations](https://gitlab.com/hiko-prime/landing_page/-/settings/integrations)
+```bash
+yarn install
+# or
+npm install
+```
 
-## Collaborate with your team
+### 3. Environment Configuration
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+Create a `.env` file in the root directory based on `.env.example`:
 
-## Test and Deploy
+```env
+# Required
+ADMIN_EMAIL=admin@example.com
+ADMIN_PASS=your_secure_password
+JWT_SECRET=complex_secret_key_here
 
-Use the built-in continuous integration in GitLab.
+# MongoDB Configuration
+MONGODB_URI=mongodb://localhost:27017/your_db_name
+MONGODB_DB=your_db_name
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+# Optional
+GITHUB_TOKEN=your_github_personal_access_token # For higher API rate limits
+ENABLE_DEMO=false # Set to true to enable demo routes
+```
 
-***
+### 4. Run Development Server
 
-# Editing this README
+```bash
+yarn dev
+```
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+Visit `http://localhost:3000` to see your application.
+Access the Admin Panel at `http://localhost:3000/admin` (Login with credentials from `.env`).
 
-## Suggestions for a good README
+---
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+## 🔧 Configuration
 
-## Name
-Choose a self-explaining name for your project.
+The application allows extensive configuration via JSON files in the `data/` directory.
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+### `data/cvdata.json`
+Controls the content of your CV/Resume page.
+- **Structure**: Sections like `experience`, `education`, `skills`.
+- **Bilingual**: Supports multi-language fields if configured.
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+### `data/home.json`
+Controls the landing page appearance.
+- **Hero Section**: Title, subtitle, background settings.
+- **Social Links**: GitHub, LinkedIn, Email urls.
+- **Feature Toggles**: Enable/disable widgets like the Crypto ticker or GitHub feed.
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+### `data/mongo_config.json`
+Generated by the application to store active database connection settings if dynamic switching is enabled.
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+---
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+## 🐳 Docker Deployment
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+The project includes a production-ready `Dockerfile` and `docker-compose.yml`.
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+### Build and Run with Docker Compose
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+```bash
+# Build the image
+docker-compose build
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+# Start the services
+docker-compose up -d
+```
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+### Manual Docker Build
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+```bash
+# Build image
+docker build -t next-ts-app .
 
-## License
-For open source projects, say how it is licensed.
+# Run container
+docker run -p 3000:3000 --env-file .env next-ts-app
+```
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+### Helper Scripts
+- `./build.sh`: Compiles the project locally.
+- `./deploy.sh`: Generic deployment script.
+- `./docker_compose.sh`: Helper for docker-compose operations.
+
+---
+
+## 🛡️ Security
+
+This project takes security seriously:
+
+1.  **JWT Authentication**: Stateless authentication for the admin panel.
+2.  **Middleware Protection**: `middleware.ts` handles route protection and redirection.
+3.  **CSP Headers**: Strict Content Security Policy blocks unauthorized scripts and styles.
+4.  **Secure Cookies**: Cookies are set with `HttpOnly`, `Secure`, and `SameSite` attributes in production.
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
