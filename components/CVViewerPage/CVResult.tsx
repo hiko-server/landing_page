@@ -76,9 +76,9 @@ const CVResult = ({
               .map(
               (
                 section: { sessionName: string | number },
-                key: React.Key | null | undefined
+                index: number
               ) => (
-                <React.Fragment key={key}>
+                <React.Fragment key={section.sessionName || index}>
                   {
                     {
                       personalInformation: (

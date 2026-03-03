@@ -16,8 +16,8 @@ const ExtraSkillSection = ({ data }: { data: ExtraSkill }) => {
 
         <Row style={{ borderBottom: 'none' }}>
           <Flex direction={'column'}>
-            {data.points.map((point) => (
-              <Flex>•{point}</Flex>
+            {data.points.map((point, i) => (
+              <Flex key={i}>•{point}</Flex>
             ))}
           </Flex>
         </Row>
