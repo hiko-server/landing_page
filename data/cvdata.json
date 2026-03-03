@@ -13,7 +13,9 @@
       "introduction": "A driven and self-educated Full-Stack Software Engineer committed to delivering innovative technological solutions in computer science. Demonstrates extensive expertise in TypeScript, React, Next.js, NestJS, and Python FastAPI.",
       "hiddenFields": [
         "introduction"
-      ]
+      ],
+      "separatorColor": "#030303",
+      "isVisible": true
     },
     {
       "sessionName": "education",
@@ -37,7 +39,8 @@
           "endDate": "2024-06-30",
           "gpa": "3.3 / 4.3"
         }
-      ]
+      ],
+      "isVisible": true
     },
     {
       "sessionName": "skill",
@@ -245,7 +248,8 @@
             }
           ]
         }
-      ]
+      ],
+      "isVisible": true
     },
     {
       "sessionName": "workExperience",
@@ -357,7 +361,8 @@
             "Engineering"
           ]
         }
-      ]
+      ],
+      "isVisible": true
     },
     {
       "sessionName": "competitionAwards",
@@ -396,7 +401,8 @@
             "Recognized for applying AI to accelerate smart recycling and waste sorting."
           ]
         }
-      ]
+      ],
+      "isVisible": true
     },
     {
       "sessionName": "extraSkill",
@@ -405,7 +411,8 @@
         "Native Mandarin speaker",
         "Basic proficiency in Cantonese for listening and speaking",
         "Fluent in English for both listening and speaking"
-      ]
+      ],
+      "isVisible": true
     },
     {
       "sessionName": "certification",
@@ -479,7 +486,8 @@
             }
           ]
         }
-      ]
+      ],
+      "isVisible": true
     }
   ],
   "zh": [
