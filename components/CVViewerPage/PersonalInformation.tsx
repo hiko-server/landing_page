@@ -20,11 +20,14 @@ const PersonalInformationSection = ({
   
   const fullName = [name, isVisible('firstName') ? data.firstName : null].filter(Boolean).join(', ')
 
+  // Only show the bottom border (separator) if there is an introduction to separate from
+  const showIntro = data.introduction !== '' && isVisible('introduction')
+
   return (
     <React.Fragment>
       {data.lastName && (
         <CVSection bgColor={devColor('#fde3b6')}>
-          <Row style={{ alignItems: 'flex-end' }}>
+          <Row style={{ alignItems: 'flex-end', borderBottom: showIntro ? undefined : 'none' }}>
             <Flex
               p={0}
               m={0}
@@ -60,7 +63,7 @@ const PersonalInformationSection = ({
               </Flex>
             </Flex>
           </Row>
-          {data.introduction !== '' && isVisible('introduction') && (
+          {showIntro && (
             <Row style={{ borderBottom: 'none' }}>
               <Text>{data.introduction}</Text>
             </Row>
