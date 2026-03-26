@@ -7,47 +7,30 @@ import {
   DrawerOverlay,
   DrawerContent,
   DrawerHeader,
+  DrawerCloseButton,
   DrawerBody,
   DrawerFooter,
   useDisclosure,
   Flex,
   IconButton,
   Link,
-  Menu,
-  MenuButton,
-  MenuList,
-  MenuItem,
+  Stack,
   useToast,
   useColorMode,
   useColorModeValue,
 } from '@chakra-ui/react'
 import { useRouter } from 'next/router'
 import { TfiAlignJustify } from 'react-icons/tfi'
-import Footer from '../Footer/Footer'
-import { FaGithub, FaGitlab, FaLinkedin, FaWhatsapp } from 'react-icons/fa'
+import { FaGithub, FaLinkedin, FaWhatsapp } from 'react-icons/fa'
 import { AiOutlineStock } from 'react-icons/ai'
-import { ChevronDownIcon, MoonIcon, SunIcon } from '@chakra-ui/icons'
+import { MoonIcon, SunIcon } from '@chakra-ui/icons'
+import {
+  primaryNavigationLinks,
+  secondaryNavigationLinks,
+  socialNavigationLinks,
+} from '../../lib/siteNavigation'
+
 const Header = ({ isMobile }: { isMobile: boolean }) => {
-  // const baseURL = 'hiko.dev'
-  const quickLinks = [
-    { name: 'Home', url: `/` },
-    { name: 'About', url: `/about` },
-    { name: 'Contact', url: `/contact` },
-    { name: 'CV', url: `/cv` },
-
-  ]
-
-  const moreLinks = [
-    { name: 'Crypto', url: `/crypto` },
-    { name: 'QuickPayment', url: `/quick-payment` },
-  ]
-
-  const socialLink = [
-    { name: 'GitHub', url: `https://github.com/HikoPLi` },
-    { name: 'LinkedIn', url: `https://www.linkedin.com/in/liyanpeihiko/` },
-    { name: 'WhatsApp', url: `https://wa.me/85262040827` },
-  ]
-
   const router = useRouter()
   const toast = useToast()
   const [isAdmin, setIsAdmin] = useState(false)
@@ -71,29 +54,36 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
   const { isOpen, onOpen, onClose } = useDisclosure()
 
   const iconMap: { [key: string]: JSX.Element } = {
-    Home: <Text>Home</Text>,
-    About: <Text>About</Text>,
-    Contact: <Text>Contact</Text>,
-    CV: <Text>CV</Text>,
     GitHub: <FaGithub />,
-    GitLab: <FaGitlab />,
     LinkedIn: <FaLinkedin />,
     WhatsApp: <FaWhatsapp />,
     Crypto: <AiOutlineStock />,
-    QuickPayment: <AiOutlineStock />,
+    'Quick Payment': <AiOutlineStock />,
   }
 
-  const handleLinkClick = (url: string) => {
+  const isCurrentPath = (href: string) =>
+    href === '/' ? router.pathname === '/' : router.pathname.startsWith(href)
+
+  const handleLinkClick = (url: string, external?: boolean) => {
     if (url.startsWith('http://') || url.startsWith('https://')) {
-      window.open(url, '_blank');
+      window.open(url, '_blank', 'noopener,noreferrer')
     } else {
-      router.push(url);
+      router.push(url)
     }
-  };
+    if (external) {
+      onClose()
+    }
+  }
 
   const { colorMode, toggleColorMode } = useColorMode()
   const headerBg = useColorModeValue('gray.800', 'gray.900')
   const headerColor = useColorModeValue('white', 'gray.100')
+  const navButtonColor = useColorModeValue('teal.200', 'teal.100')
+  const drawerBg = useColorModeValue('white', 'gray.800')
+  const drawerButtonColor = useColorModeValue('gray.700', 'gray.100')
+  const drawerBorderColor = useColorModeValue('gray.200', 'gray.600')
+  const drawerMuted = useColorModeValue('gray.500', 'gray.400')
+  const drawerHoverBg = useColorModeValue('blackAlpha.50', 'whiteAlpha.100')
 
   return (
     <>
@@ -109,7 +99,9 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
         alignItems="center"
       >
         <Link href="/">
-          <Text fontSize={{ base: 'lg', md: 'xl' }}>HIKO DEV</Text>
+          <Text fontSize={{ base: 'lg', md: 'xl' }} fontWeight="bold" letterSpacing="0.08em">
+            HIKO DEV
+          </Text>
         </Link>
 
         {isMobile ? (
@@ -124,117 +116,65 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
             _active={{ bg: 'teal.600', borderColor: 'teal.600' }}
           />
         ) : (
-          <Flex gap={4} alignItems="center">
-            {quickLinks.map((link) => (
-              <IconButton
-                key={link.name}
-                onClick={() => handleLinkClick(link.url)}
-                px={4}
-                py={2}
-                whiteSpace="nowrap"
-                color="teal.200"
-                variant="outline"
-                borderColor="teal.200"
-                _hover={{ bg: 'teal.200', color: 'gray.800' }}
-                _active={{ bg: 'teal.600', borderColor: 'teal.600' }}
-                icon={iconMap[link.name]}
-                aria-label={link.name}
-              />
-            ))}
+          <Flex gap={3} alignItems="center" flexWrap="wrap" justifyContent="flex-end">
+            {primaryNavigationLinks.map((link) => {
+              const active = isCurrentPath(link.href)
+              return (
+                <Button
+                  key={link.label}
+                  onClick={() => handleLinkClick(link.href)}
+                  variant={active ? 'solid' : 'outline'}
+                  colorScheme="teal"
+                  color={active ? 'gray.800' : navButtonColor}
+                  borderColor={navButtonColor}
+                  _hover={{ bg: 'teal.200', color: 'gray.800' }}
+                  aria-current={active ? 'page' : undefined}
+                >
+                  {link.label}
+                </Button>
+              )
+            })}
             <IconButton
               aria-label="Toggle color mode"
               onClick={toggleColorMode}
               variant="outline"
-              color="teal.200"
-              borderColor="teal.200"
+              color={navButtonColor}
+              borderColor={navButtonColor}
               _hover={{ bg: 'teal.200', color: 'gray.800' }}
               title={colorMode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
               icon={colorMode === 'light' ? <MoonIcon /> : <SunIcon />}
             />
-            {/* Social (expanded) */}
             <Flex gap={2} alignItems="center">
-              {socialLink.map((link) => (
+              {socialNavigationLinks.map((link) => (
                 <IconButton
-                  key={link.name}
-                  onClick={() => handleLinkClick(link.url)}
+                  key={link.label}
+                  onClick={() => handleLinkClick(link.href, link.external)}
                   variant="outline"
-                  color="teal.200"
-                  borderColor="teal.200"
+                  color={navButtonColor}
+                  borderColor={navButtonColor}
                   _hover={{ bg: 'teal.200', color: 'gray.800' }}
-                  aria-label={link.name}
-                  icon={iconMap[link.name]}
+                  aria-label={link.label}
+                  icon={iconMap[link.label]}
                 />
               ))}
             </Flex>
-            {/* Social (legacy dropdown kept for reference)
-            <Menu>
-              <MenuButton
-                as={Button}
-                variant="outline"
-                color="teal.200"
-                borderColor="teal.200"
-                _hover={{ bg: 'teal.200', color: 'gray.800' }}
-                _active={{ bg: 'teal.600', borderColor: 'teal.600' }}
-                rightIcon={<ChevronDownIcon />}
-              >
-                Social
-              </MenuButton>
-              <MenuList>
-                {socialLink.map((link) => (
-                  <MenuItem
-                    key={link.name}
-                    onClick={() => handleLinkClick(link.url)}
-                    icon={iconMap[link.name]}
-                    color={'teal.200'}
-                  >
-                    <Text color={'teal.200'}>{link.name}</Text>
-                  </MenuItem>
-                ))}
-              </MenuList>
-            </Menu> */}
-            {/* More (expanded) */}
             <Flex gap={2} alignItems="center">
-              {moreLinks.map((link) => (
+              {secondaryNavigationLinks.map((link) => (
                 <Button
-                  key={link.name}
-                  variant="outline"
-                  color="teal.200"
-                  borderColor="teal.200"
+                  key={link.label}
+                  variant={isCurrentPath(link.href) ? 'solid' : 'outline'}
+                  colorScheme="teal"
+                  color={isCurrentPath(link.href) ? 'gray.800' : navButtonColor}
+                  borderColor={navButtonColor}
                   _hover={{ bg: 'teal.200', color: 'gray.800' }}
-                  leftIcon={iconMap[link.name]}
-                  onClick={() => handleLinkClick(link.url)}
+                  leftIcon={iconMap[link.label]}
+                  onClick={() => handleLinkClick(link.href)}
+                  aria-current={isCurrentPath(link.href) ? 'page' : undefined}
                 >
-                  {link.name}
+                  {link.label}
                 </Button>
               ))}
             </Flex>
-            {/* More (legacy dropdown kept for reference)
-            <Menu>
-              <MenuButton
-                as={Button}
-                variant="outline"
-                color="teal.200"
-                borderColor="teal.200"
-                _hover={{ bg: 'teal.200', color: 'gray.800' }}
-                _active={{ bg: 'teal.600', borderColor: 'teal.600' }}
-                rightIcon={<ChevronDownIcon />}
-              >
-                More
-              </MenuButton>
-              <MenuList>
-                {moreLinks.map((link) => (
-                  <MenuItem
-                    key={link.name}
-                    onClick={() => handleLinkClick(link.url)}
-                    icon={iconMap[link.name]}
-                    color={'teal.200'}
-                  >
-                    <Text color={'teal.200'}>{link.name}</Text>
-                  </MenuItem>
-                ))}
-              </MenuList>
-            </Menu> */}
-            {/* Admin */}
             {!isAdmin ? (
               <Button
                 variant="solid"
@@ -258,127 +198,144 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
       {/* Side Drawer */}
       <Drawer isOpen={isOpen} placement="left" onClose={onClose}>
         <DrawerOverlay bg="rgba(0, 0, 0, 0.6)" zIndex="overlay" />
-        <DrawerContent>
-          <DrawerHeader borderBottomWidth="1px">Quick Links</DrawerHeader>
+        <DrawerContent bg={drawerBg}>
+          <DrawerCloseButton />
+          <DrawerHeader borderBottomWidth="1px">Navigation</DrawerHeader>
           <DrawerBody>
-            <Flex direction="column" gap={2}>
-              <Button
-                onClick={toggleColorMode}
-                variant="outline"
-                color="teal.200"
-                borderColor="teal.200"
-                _hover={{ bg: 'teal.200', color: 'gray.800' }}
-                title={colorMode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
-                mb={3}
-                leftIcon={colorMode === 'light' ? <MoonIcon /> : <SunIcon />}
-              >
-                {colorMode === 'light' ? 'Dark Mode' : 'Light Mode'}
-              </Button>
-              {quickLinks.map((link) => (
-                <IconButton
-                  key={link.name}
-                  onClick={() => {
-                    handleLinkClick(link.url);
-                    onClose();
-                  }}
-                  px={4}
-                  py={2}
-                  whiteSpace="nowrap"
-                  color="teal.200"
+            <Stack spacing={6}>
+              <Box>
+                <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" letterSpacing="0.08em" color={drawerMuted} mb={3}>
+                  Theme
+                </Text>
+                <Button
+                  onClick={toggleColorMode}
                   variant="outline"
-                  borderColor="teal.200"
-                  mb={2}
-                  _hover={{ bg: 'teal.200', color: 'gray.800' }}
-                  icon={iconMap[link.name]}
-                  aria-label={link.name}
-                />
-              ))}
-            {/* Social */}
-            <Menu>
-              <MenuButton
-                as={Button}
-                variant="outline"
-                color="teal.200"
-                borderColor="teal.200"
-                _hover={{ bg: 'teal.200', color: 'gray.800' }}
-                _active={{ bg: 'teal.600', borderColor: 'teal.600' }}
-                rightIcon={<ChevronDownIcon />}
-              >
-                Social
-              </MenuButton>
-              <MenuList>
-                {socialLink.map((link) => (
-                  <MenuItem
-                    key={link.name}
-                    onClick={() => handleLinkClick(link.url)}
-                    icon={iconMap[link.name]}
-                    color={'teal.200'}
-                  >
-                    <Text color={'teal.200'}>{link.name}</Text>
-                  </MenuItem>
-                ))}
-              </MenuList>
-            </Menu>
-            {/* Admin (mobile) */}
-            {!isAdmin ? (
-              <Button
-                mt={2}
-                variant="solid"
-                colorScheme="teal"
-                onClick={() => {
-                  onClose();
-                  router.push('/admin/login')
-                }}
-              >
-                Admin Login
-              </Button>
-            ) : (
-              <>
-                <Button mt={2} variant="outline" colorScheme="teal" onClick={() => { onClose(); router.push('/admin/dashboard') }}>
-                  Dashboard
+                  color={drawerButtonColor}
+                  borderColor={drawerBorderColor}
+                  _hover={{ bg: drawerHoverBg }}
+                  title={colorMode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+                  leftIcon={colorMode === 'light' ? <MoonIcon /> : <SunIcon />}
+                  w="full"
+                  justifyContent="flex-start"
+                >
+                  {colorMode === 'light' ? 'Dark Mode' : 'Light Mode'}
                 </Button>
-                <Button mt={2} variant="solid" colorScheme="red" onClick={() => { onClose(); logout() }}>
-                  Logout
-                </Button>
-              </>
-            )}
-            {/* More */}
-            <Menu>
-              <MenuButton
-                as={Button}
-                variant="outline"
-                color="teal.200"
-                borderColor="teal.200"
-                _hover={{ bg: 'teal.200', color: 'gray.800' }}
-                _active={{ bg: 'teal.600', borderColor: 'teal.600' }}
-                rightIcon={<ChevronDownIcon />}
-              >
-                More
-              </MenuButton>
-              <MenuList>
-                {moreLinks.map((link) => (
-                  <MenuItem
-                    key={link.name}
-                    onClick={() => handleLinkClick(link.url)}
-                    icon={iconMap[link.name]}
-                    color={'teal.200'}
-                  >
-                    <Text color={'teal.200'}>{link.name}</Text>
-                  </MenuItem>
-                ))}
-              </MenuList>
-            </Menu>
-            </Flex>
+              </Box>
+
+              <Box>
+                <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" letterSpacing="0.08em" color={drawerMuted} mb={3}>
+                  Explore
+                </Text>
+                <Stack spacing={2}>
+                  {primaryNavigationLinks.map((link) => {
+                    const active = isCurrentPath(link.href)
+                    return (
+                      <Button
+                        key={link.label}
+                        onClick={() => {
+                          handleLinkClick(link.href)
+                          onClose()
+                        }}
+                        justifyContent="flex-start"
+                        variant={active ? 'solid' : 'outline'}
+                        colorScheme="teal"
+                        color={active ? 'gray.800' : drawerButtonColor}
+                        borderColor={drawerBorderColor}
+                        aria-current={active ? 'page' : undefined}
+                      >
+                        {link.label}
+                      </Button>
+                    )
+                  })}
+                </Stack>
+              </Box>
+
+              <Box>
+                <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" letterSpacing="0.08em" color={drawerMuted} mb={3}>
+                  More
+                </Text>
+                <Stack spacing={2}>
+                  {secondaryNavigationLinks.map((link) => {
+                    const active = isCurrentPath(link.href)
+                    return (
+                      <Button
+                        key={link.label}
+                        onClick={() => {
+                          handleLinkClick(link.href)
+                          onClose()
+                        }}
+                        justifyContent="flex-start"
+                        variant={active ? 'solid' : 'outline'}
+                        colorScheme="teal"
+                        color={active ? 'gray.800' : drawerButtonColor}
+                        borderColor={drawerBorderColor}
+                        leftIcon={iconMap[link.label]}
+                        aria-current={active ? 'page' : undefined}
+                      >
+                        {link.label}
+                      </Button>
+                    )
+                  })}
+                </Stack>
+              </Box>
+
+              <Box>
+                <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" letterSpacing="0.08em" color={drawerMuted} mb={3}>
+                  Connect
+                </Text>
+                <Flex gap={3}>
+                  {socialNavigationLinks.map((link) => (
+                    <IconButton
+                      key={link.label}
+                      onClick={() => handleLinkClick(link.href, link.external)}
+                      variant="outline"
+                      color={drawerButtonColor}
+                      borderColor={drawerBorderColor}
+                      _hover={{ bg: drawerHoverBg }}
+                      aria-label={link.label}
+                      icon={iconMap[link.label]}
+                    />
+                  ))}
+                </Flex>
+              </Box>
+
+              <Box>
+                <Text fontSize="xs" fontWeight="bold" textTransform="uppercase" letterSpacing="0.08em" color={drawerMuted} mb={3}>
+                  Admin
+                </Text>
+                <Stack spacing={2}>
+                  {!isAdmin ? (
+                    <Button
+                      variant="solid"
+                      colorScheme="teal"
+                      onClick={() => {
+                        onClose()
+                        router.push('/admin/login')
+                      }}
+                    >
+                      Admin Login
+                    </Button>
+                  ) : (
+                    <>
+                      <Button variant="outline" colorScheme="teal" onClick={() => { onClose(); router.push('/admin/dashboard') }}>
+                        Dashboard
+                      </Button>
+                      <Button variant="solid" colorScheme="red" onClick={() => { onClose(); logout() }}>
+                        Logout
+                      </Button>
+                    </>
+                  )}
+                </Stack>
+              </Box>
+            </Stack>
           </DrawerBody>
           <DrawerFooter borderTopWidth="1px">
-            <Flex direction="column" alignItems={'center'} gap={2}>
-              <Button variant="outline" mr={3} onClick={onClose}>
+            <Flex direction="column" alignItems={'center'} gap={2} w="full">
+              <Button variant="outline" onClick={onClose} w="full">
                 Cancel
               </Button>
-              
             </Flex>
           </DrawerFooter>
-          <Footer />
         </DrawerContent>
       </Drawer>
     </>
