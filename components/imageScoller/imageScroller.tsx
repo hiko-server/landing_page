@@ -53,20 +53,21 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
     }, 5000)
 
     return () => clearInterval(intervalId)
-  }, [imgCount])
-
-  // If no images provided, render nothing (no fake defaults)
-  if (!data.length) return null
+  }, [data.length, imgCount])
 
   const activeDot = useColorModeValue('#2563eb', '#60a5fa')
   const inactiveDot = useColorModeValue('#a8a8a8', '#4b5563')
+  const descriptionColor = useColorModeValue('gray.700','gray.200')
+
+  // If no images provided, render nothing (no fake defaults)
+  if (!data.length) return null
 
   return (
     <Flex direction="column" alignItems="center" justifyContent="center">
       <Swipe onSwipeEnd={onSwipeEnd} onSwipeMove={onSwipeMove}>
         <Flex>
           {data.map((image, index) => (
-            <Link key={index} href={image.redirectTo} isExternal>
+            <Link key={`${image.url}-${index}`} href={image.redirectTo} isExternal>
               <Img
                 src={image.url}
                 alt={`Image ${index}`}
@@ -85,7 +86,7 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
         </Flex>
       </Swipe>
 
-      {data.length > 1 && <Text mt={2} color={useColorModeValue('gray.700','gray.200')}>{data[imgCount - 1].describe}</Text>}
+      {data.length > 1 && <Text mt={2} color={descriptionColor}>{data[imgCount - 1].describe}</Text>}
 
       {data.length > 1 && (
         <ImageCounterWrapper>

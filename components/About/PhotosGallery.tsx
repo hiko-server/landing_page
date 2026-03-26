@@ -5,9 +5,10 @@ type Photo = { url: string; describe?: string; redirectTo?: string; visible?: bo
 
 export default function PhotosGallery({ photos }: { photos?: Photo[] }) {
   const data = (photos || []).filter((p) => p.visible !== false)
-  if (!data.length) return null
   const bg = useColorModeValue('white','gray.800')
   const border = useColorModeValue('gray.200','gray.700')
+  if (!data.length) return null
+
   return (
     <SimpleGrid columns={{ base: 1, sm: 2, md: 3 }} spacing={3} w="100%" maxW="1000px">
       {data.map((p, i) => (
@@ -18,4 +19,3 @@ export default function PhotosGallery({ photos }: { photos?: Photo[] }) {
     </SimpleGrid>
   )
 }
-

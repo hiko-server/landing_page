@@ -32,6 +32,7 @@ function colorFor(lang: string): string {
 
 export default function LanguageBars() {
   const [data, setData] = useState<LangData | null>(null)
+  const headingColor = useColorModeValue('blue.700','blue.200')
 
   useEffect(() => {
     let alive = true
@@ -64,7 +65,7 @@ export default function LanguageBars() {
 
   return (
     <Box>
-      <Heading as="h4" size="sm" mb={3} color={useColorModeValue('blue.700','blue.200')}>GitHub Languages</Heading>
+      <Heading as="h4" size="sm" mb={3} color={headingColor}>GitHub Languages</Heading>
       <Flex direction="column" gap={2}>
         {items.map(({ name, pct, bytes }) => (
           <Box key={name}>

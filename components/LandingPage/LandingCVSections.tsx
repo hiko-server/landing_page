@@ -29,6 +29,29 @@ const LandingCVSections = ({ en, zh }: { en?: any[]; zh?: any[] }) => {
       cvData = en || []
   }
 
+  const renderSection = (section: any) => {
+    switch (section.sessionName) {
+      case 'education':
+        return <EducationSection data={section as Education} />
+      case 'skill':
+        return <SkillSection data={section as Skill} />
+      case 'certification':
+        return <CertificateSection data={section as Certification} />
+      case 'workExperience':
+        return <WorkExperience data={section as Experiences} />
+      case 'competitionAwards':
+        return (
+          <CompetitionAwardsSection
+            data={section as CompetitionAwards}
+          />
+        )
+      case 'project':
+        return <ProjectSection data={section as Project} />
+      default:
+        return null
+    }
+  }
+
   return (
     <>
       <div>
@@ -43,30 +66,7 @@ const LandingCVSections = ({ en, zh }: { en?: any[]; zh?: any[] }) => {
         </select>
       </div>
       {cvData.map((section: any, key: number) => (
-        <React.Fragment key={key}>
-          {
-            [
-              ['education', <EducationSection data={section as Education} />],
-              ['skill', <SkillSection data={section as Skill} />],
-              [
-                'certification',
-                <CertificateSection data={section as Certification} />,
-              ],
-
-              [
-                'workExperience',
-                <WorkExperience data={section as Experiences} />,
-              ],
-              [
-                'competitionAwards',
-                <CompetitionAwardsSection
-                  data={section as CompetitionAwards}
-                />,
-              ],
-              ['project', <ProjectSection data={section as Project} />],
-            ].find(([type]) => section.sessionName === type)?.[1]
-          }
-        </React.Fragment>
+        <React.Fragment key={key}>{renderSection(section)}</React.Fragment>
       ))}
     </>
   )
