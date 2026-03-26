@@ -17,7 +17,7 @@ import { KeyboardArrowDown, KeyboardArrowUp } from '@mui/icons-material'
 const EditLayout = ({
   children,
   style,
-  auth,
+  auth: _auth,
 }: {
   children: React.ReactNode | null
   style?: React.CSSProperties
@@ -25,7 +25,6 @@ const EditLayout = ({
   headerWontBack?: boolean
   backURL?: string
 }) => {
-  console.log({ auth })
   // const [isLoading, setIsLoading] = useState(false)
   const isMobileDevice = useMediaQuery({ query: '(max-width: 900px)' })
 

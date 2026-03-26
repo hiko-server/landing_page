@@ -37,8 +37,8 @@ import { useMediaQuery } from 'react-responsive'
 
 // const Navbar = ({ user }: NavProps) => {
 const Navbar = ({
-  backURL,
-  willBack = false,
+  backURL: _backURL,
+  willBack: _willBack = false,
 }: // auth,
 {
   title?: string
@@ -77,14 +77,6 @@ const Navbar = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appData.state.sidebarCollapsed])
-
-  console.log('isCollapsed', isCollapsed)
-
-  if (willBack) {
-    console.log('willBack is exist, backURL is', backURL)
-  } else {
-    console.log('no willBack button')
-  }
 
   return (
     <Flex

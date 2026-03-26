@@ -13,7 +13,7 @@ import { navbarHeight } from '../theme/constant'
 const ASALayout = ({
   children,
   style,
-  auth,
+  auth: _auth,
 }: {
   children: React.ReactNode | null
   style?: React.CSSProperties
@@ -100,8 +100,6 @@ const ASALayout = ({
   //   /* Only for the first mount, DO NOT Delete line below, it will tell eslint to skip checking */
   //   // eslint-disable-next-line react-hooks/exhaustive-deps
   // }, [])
-
-  console.log(auth)
 
   const [ContentContainerRef, _ContentContainerSize] = useElementSize()
 

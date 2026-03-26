@@ -1,5 +1,5 @@
 import { useSession } from 'next-auth/react'
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 
 import { Flex, useMediaQuery } from '@chakra-ui/react'
 
@@ -7,17 +7,10 @@ import ContactPro from '../../components/Contact/ContactPro'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 
-const About = (props: any) => {
+const ContactPage = (props: any) => {
   useSession()
 
-  const [, setIsHostCV] = useState<boolean>(false)
   const [isMobile] = useMediaQuery('(max-width: 767px)')
-
-  useEffect(() => {
-    if (props.host && props.host === 'cv.hiko.dev') {
-      setIsHostCV(true)
-    }
-  }, [props.host])
 
   return (
     <React.Fragment>
@@ -36,7 +29,7 @@ const About = (props: any) => {
   )
 }
 
-export default About
+export default ContactPage
 
 export async function getServerSideProps(context: any) {
   const host = context.req.headers.host || 'hiko.dev'

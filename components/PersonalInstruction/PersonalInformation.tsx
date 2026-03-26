@@ -10,7 +10,6 @@ const PersonalInformationSection = ({
 }: {
   data: PersonalInformation
 }) => {
-  console.log({ data })
   return (
     <React.Fragment>
       {data.lastName && (
