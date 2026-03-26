@@ -1,63 +1,31 @@
-import React, { useEffect } from 'react'
-import styled from '@emotion/styled'
-import { useRouter } from 'next/router'
-import { Box, useToast } from '@chakra-ui/react'
-import LoadingScreen from '../components/General-UI/LoadingScreen'
+import React from 'react'
+import { useMediaQuery } from '@chakra-ui/react'
+import CustomHead from '../components/General-UI/CustomHead'
+import ErrorPageState from '../components/General-UI/ErrorPageState'
+import HeaderFooter from '../layout/HeaderFooter'
 
 const Custom404 = () => {
-  const router = useRouter()
-  const toast = useToast()
-
-  useEffect(() => {
-    toast({
-      title: 'Page Not Found',
-      description: 'Will back to home page after 3 seconds',
-      status: 'error',
-      duration: 3000,
-      isClosable: true,
-    })
-    setTimeout(() => {
-      // router.back()
-      router.replace('/')
-    }, 3000)
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  const [isMobile] = useMediaQuery('(max-width: 767px)')
 
   return (
-    <Wrapper>
-      {/* <HeaderContainer>
-          <HeaderTitle>404 Error</HeaderTitle>
-        </HeaderContainer> */}
-      <React.Fragment>
-        <h1>404 - Page Not Found</h1>
-        <LoadingScreen />
-        {/* <Button onClick={() => {}}>Back</Button> */}
-      </React.Fragment>
-    </Wrapper>
+    <>
+      <CustomHead
+        title="Page Not Found"
+        description="The page you requested could not be found."
+        url="https://hiko.dev/404"
+        image="/images/hikoAvator.png"
+        type="website"
+      />
+      <HeaderFooter isMobile={isMobile}>
+        <ErrorPageState
+          code="404"
+          title="This page isn’t here anymore"
+          description="The link may be outdated, the address may be mistyped, or the content may have moved."
+          guidance="Try heading back to the homepage, opening the CV, or contacting Hiko if you were following an old shared link."
+        />
+      </HeaderFooter>
+    </>
   )
 }
 
 export default Custom404
-
-const Wrapper = styled(Box)`
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
-  width: 100%;
-  max-height: calc(100vh - 70px);
-  /* justify-content: center;
-  align-content: center; */
-`
-
-// const HeaderContainer = styled.div`
-//   background-color: #559ec7;
-// `
-
-// const HeaderTitle = styled.h1`
-//   display: flex;
-//   color: white;
-//   padding: 20px;
-//   font-size: 20px;
-//   font-weight: bold;
-// `

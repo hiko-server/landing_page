@@ -4,6 +4,10 @@ import { sendMail } from '../../lib/mailer'
 
 async function verifyHCaptcha(token?: string) {
   const secret = process.env.HCAPTCHA_SECRET
+  const siteKey =
+    process.env.NEXT_PUBLIC_HCAPTCHA_SITE_KEY ||
+    process.env.NEXT_PUBLIC_HCAPTCHA_KEY ||
+    ''
   if (!secret || !token) return false
 
   try {
@@ -16,7 +20,7 @@ async function verifyHCaptcha(token?: string) {
       body: new URLSearchParams({
         secret: secret,
         response: token,
-        sitekey: process.env.NEXT_PUBLIC_HCAPTCHA_SITE_KEY || ''
+        sitekey: siteKey
       }).toString()
     })
 

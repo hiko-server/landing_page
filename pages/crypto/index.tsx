@@ -1,23 +1,13 @@
-import { useSession } from 'next-auth/react'
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import type { GetStaticProps } from 'next'
-import { Flex, Text, useMediaQuery } from '@chakra-ui/react'
+import { Box, Flex, Heading, Text, useMediaQuery } from '@chakra-ui/react'
 
 import HeaderFooter from '../../layout/HeaderFooter'
 import CryptoPriceTracker from '../../components/Crypto/CoinStock'
 import CustomHead from '../../components/General-UI/CustomHead'
 
 const Crypto = (props: { host?: string; builtAt?: string }) => {
-  useSession()
-
-  const [, setIsHostCV] = useState<boolean>(false)
   const [isMobile] = useMediaQuery('(max-width: 767px)')
-
-  useEffect(() => {
-    if (props.host && props.host === 'cv.hiko.dev') {
-      setIsHostCV(true)
-    }
-  }, [props.host])
 
   return (
     <React.Fragment>
@@ -36,13 +26,17 @@ const Crypto = (props: { host?: string; builtAt?: string }) => {
         }}
       />
       <HeaderFooter isMobile={isMobile}>
-        <Flex direction="column" alignItems="center" justifyContent="center" p={['20px', '40px']} gap={['10px', '20px']}>
-          <Text fontSize="sm" color="gray.600">
-            Source: Binance 24hr ticker. This page uses client updates; initial build: {props.builtAt} (ISR ~60s).
-          </Text>
-          <Text fontSize="xs" color="gray.500">
-            Disclaimer: Not financial advice. Data may be delayed or inaccurate.
-          </Text>
+        <Flex direction="column" alignItems="center" justifyContent="center" p={['20px', '40px']} gap={['16px', '24px']} w="full">
+          <Box maxW="4xl" textAlign="center" px={{ base: 2, md: 0 }}>
+            <Heading size="lg">Live Crypto Snapshot</Heading>
+            <Text mt={3} fontSize="md" color="gray.600">
+              Explore frequently updated USDT pairs, search fast, and make quick indicative conversions from the same market reference.
+            </Text>
+            <Text mt={3} fontSize="sm" color="gray.500">
+              Source: Binance 24hr ticker and live stream. Initial build: {props.builtAt} with ISR around 60 seconds.
+              {' '}This page is for reference only, not financial advice.
+            </Text>
+          </Box>
           <CryptoPriceTracker />
         </Flex>
       </HeaderFooter>
