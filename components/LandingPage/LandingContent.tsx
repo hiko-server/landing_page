@@ -6,28 +6,24 @@ import Content from './Content'
 import Brands from '../BrandShowcase/BrandShowcase'
 import type { HomeData } from '../../lib/home'
 
-const LandingContent = ({ isMobile, home, cv }: { isMobile: boolean; home?: HomeData | null; cv?: { en: any[]; zh: any[] } | null }) => {
+const LandingContent = ({ home, cv }: { home?: HomeData | null; cv?: { en: any[]; zh: any[] } | null }) => {
   return (
     <Flex
-      // w={{ base: "100%", md: "80%" }}
-      // p={{ base: 4, md: 8 }}
-      // mx="auto"
-      // direction={{ base: 'column', md: 'row' }}
+      direction="column"
       justifyContent={'center'}
       alignItems={'center'}
-      // gap={{ base: '20px', md: '40px' }}
+      gap={{ base: '6', md: '10' }}
       flexWrap="wrap"
-      // zIndex={-2}
-      // backgroundColor={'black'}
-      // boxShadow={'0 4px 8px rgba(0, 0, 0, 0.1)'}
       borderRadius={'8px'}
+      w="full"
+      px={{ base: 0, md: 4 }}
+      pb={{ base: 10, md: 14 }}
     >
-      <PersonalInfo isMobile={isMobile} home={home || undefined} />
+      <PersonalInfo home={home || undefined} />
 
       <Brands brands={home?.brands} />
       <Box
-        // bgColor={'black'}
-        w={{ base: 'full', md: '1/2' }}
+        w="full"
       >
         <Content quickAccess={home?.quickAccess} photos={home?.photos as any} cvEn={cv?.en} cvZh={cv?.zh} home={home || undefined} />
       </Box>

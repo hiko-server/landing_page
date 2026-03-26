@@ -18,10 +18,8 @@ import VideoBackgroundLayOut from '../../layout/VideoBackgroundLayout'
 import { useRouter } from 'next/router'
 
 const PersonalInfo = ({
-  isMobile,
   home,
 }: {
-  isMobile: boolean
   home?: HomeData
 }) => {
   const [showPhone, setShowPhone] = React.useState(false)
@@ -56,22 +54,42 @@ const PersonalInfo = ({
   return (
     <Box position="relative" w="full" h="full">
       <VideoBackgroundLayOut>
-        <Box overflow="hidden" pb={['20', '25']} pt={['35', '40', '46']}>
+        <Box overflow="hidden" pb={['14', '20', '25']} pt={['20', '28', '46']} w="full">
           <Box mx="auto" maxW="1390px" px={['4', '8', '0']}>
             <Flex
+              direction={{ base: 'column', lg: 'row' }}
               alignItems={{ lg: 'center' }}
-              gap={{ base: '4', lg: '8', xl: '32.5' }}
+              justifyContent="space-between"
+              gap={{ base: '8', lg: '8', xl: '32.5' }}
             >
-              {!isMobile && (
-                <Box width={{ base: '100%', md: '50%' }}>
+              <Box
+                width={{ base: '100%', md: '100%', lg: '50%' }}
+                textAlign={{ base: 'center', lg: 'left' }}
+              >
+                <Box
+                  maxW={{ base: 'xl', lg: '2xl' }}
+                  mx={{ base: 'auto', lg: '0' }}
+                >
                   <HeroHeadline
                     brand={home?.hero?.brand}
                     tagline={home?.hero?.tagline}
                   />
 
-                  <Box mt="10">
+                  <Text
+                    mt={{ base: 4, lg: 6 }}
+                    color={textColor}
+                    fontSize={{ base: 'md', md: 'lg' }}
+                  >
+                    Self-taught full-stack engineer building practical products across web, AI, and developer tooling.
+                  </Text>
+
+                  <Box mt={{ base: '6', lg: '10' }}>
                     <form onSubmit={handleSubmit}>
-                      <Flex flexWrap="wrap" gap="5">
+                      <Flex
+                        flexWrap="wrap"
+                        gap="5"
+                        justifyContent={{ base: 'center', lg: 'flex-start' }}
+                      >
                         <Link
                           href="/contact"
                           aria-label="Contact Us"
@@ -86,31 +104,46 @@ const PersonalInfo = ({
                         >
                           Contact Me
                         </Link>
+                        <Link
+                          href="/cv"
+                          aria-label="View CV"
+                          rounded="full"
+                          borderWidth="1px"
+                          borderColor="whiteAlpha.700"
+                          px="7.5"
+                          py="2.5"
+                          color="white"
+                          transition="background-color 300ms ease-in-out, border-color 300ms ease-in-out"
+                          _hover={{ bg: 'whiteAlpha.200', borderColor: 'white' }}
+                        >
+                          View CV
+                        </Link>
                       </Flex>
                     </form>
                   </Box>
                 </Box>
-              )}
+              </Box>
 
-              <Box w={{ base: 'full', md: '1/2' }}>
+              <Box w={{ base: 'full', lg: '1/2' }}>
                 <Flex
-                  padding={['20px', '40px']}
+                  padding={['12px', '20px', '40px']}
                   direction="column"
                   justifyContent="center"
                   alignItems="center"
-                  gap={['20px', '40px']}
+                  gap={['16px', '28px', '40px']}
                 >
                   <Flex
                     justifyContent="center"
                     alignItems="center"
-                    gap={['20px', '40px']}
+                    gap={['16px', '28px', '40px']}
                     direction="column"
+                    w="full"
                   >
                     {/* Replace Avatar with precision-cropped circular container */}
                     <Box
                       // avatar frame sized for homepage; responsive sizes
-                      w={['180px', '220px']}
-                      h={['180px', '220px']}
+                      w={['170px', '220px']}
+                      h={['170px', '220px']}
                       borderRadius="full"
                       overflow="hidden"
                       boxShadow="lg"
@@ -138,15 +171,16 @@ const PersonalInfo = ({
 
                     <Flex
                       direction="column"
-                      gap={['10px', '20px']}
+                      gap={['10px', '16px', '20px']}
                       justifyContent="center"
                       alignItems="center"
                       textAlign="center"
-                      padding={'20px'}
+                      padding={{ base: '10px', md: '20px' }}
                       borderRadius={'8px'}
+                      maxW="xl"
                     >
                       <Text
-                        fontSize={['30px', '40px']}
+                        fontSize={['28px', '40px']}
                         fontWeight="bold"
                         textAlign="center"
                         color={textColor}
@@ -154,7 +188,7 @@ const PersonalInfo = ({
                         Li Yanpei, Hiko
                       </Text>
                       <Text
-                        fontSize={['30px', '40px']}
+                        fontSize={['28px', '40px']}
                         fontWeight="bold"
                         textAlign="center"
                         color={textColor}
@@ -209,17 +243,17 @@ const PersonalInfo = ({
                     </Flex>
 
                     <Flex
-                      mt={8}
+                      mt={{ base: 2, md: 8 }}
                       w={['100%', '350px']}
                       direction="row"
+                      flexWrap="wrap"
                       alignItems="center"
                       justifyContent="center"
                       gap={'10px'}
                     >
                       <Button
                         size="lg"
-                        fontSize={['20px', '24px']}
-                        mb={6}
+                        fontSize={['18px', '24px']}
                         onClick={() => router.push('/cv')}
                         colorScheme="black"
                         variant="outline"
@@ -229,11 +263,10 @@ const PersonalInfo = ({
                       >
                         CV
                       </Button>
-                      <Stack direction="row" spacing={4}>
+                      <Stack direction="row" spacing={4} flexWrap="wrap" justify="center">
                         <IconButton
                           size="lg"
                           fontSize={['20px', '24px']}
-                          mb={6}
                           onClick={() =>
                             window.open(
                               home?.socials?.github ||
@@ -270,7 +303,6 @@ const PersonalInfo = ({
                         <IconButton
                           size="lg"
                           fontSize={['20px', '24px']}
-                          mb={6}
                           onClick={() =>
                             window.open(
                               home?.socials?.linkedin ||
@@ -288,7 +320,6 @@ const PersonalInfo = ({
                         <IconButton
                           size="lg"
                           fontSize={['20px', '24px']}
-                          mb={6}
                           onClick={() =>
                             window.open(
                               home?.socials?.whatsapp ||
