@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import {
   Box,
   Table,
@@ -50,7 +50,7 @@ const CryptoPriceTracker: React.FC = () => {
   const [visibleCount, setVisibleCount] = useState<number>(10) // Number of tickers to display initially
 
   // Fetch all available symbols
-  const fetchSymbols = async () => {
+  const fetchSymbols = useCallback(async () => {
     try {
       const response = await fetch(SYMBOLS_URL)
       const data = await response.json()
@@ -64,63 +64,76 @@ const CryptoPriceTracker: React.FC = () => {
     } catch (error) {
       console.error('Error fetching symbols:', error)
     }
-  }
+  }, [])
 
   // Update prices and price changes
-  const updatePrices = (data: any) => {
+  const updatePrices = useCallback((data: any[]) => {
     const prices = new Map<string, number>()
     const changes = new Map<string, number>()
+    const validSymbols = new Set(symbols.map(({ symbol }) => symbol))
 
     data.forEach((item: any) => {
-      if (symbols.some(({ symbol }) => symbol === item.s)) {
+      if (validSymbols.has(item.s)) {
         prices.set(item.s, parseFloat(item.c))
         changes.set(item.s, parseFloat(item.P))
       }
     })
+    setLastPrices((previousPrices) => {
+      let up = 0
+      let down = 0
 
-    // Track the number of price increases and decreases
-    let up = 0
-    let down = 0
+      const updatedTickers: TickerData[] = symbols.map(({ symbol }) => {
+        const currentPrice = prices.get(symbol) || 0
+        const lastPrice = previousPrices.get(symbol)
+        const priceChangePercent = changes.get(symbol) || null
 
-    const updatedTickers: TickerData[] = symbols.map(({ symbol }) => {
-      const currentPrice = prices.get(symbol) || 0
-      const lastPrice = lastPrices.get(symbol)
-      const priceChangePercent = changes.get(symbol) || null
+        if (lastPrice !== undefined) {
+          if (currentPrice > lastPrice) up++
+          else if (currentPrice < lastPrice) down++
+        }
 
-      // Determine price changes
-      if (lastPrice !== undefined) {
-        if (currentPrice > lastPrice) up++
-        else if (currentPrice < lastPrice) down++
-      }
+        return {
+          symbol,
+          price: currentPrice,
+          priceChangePercent,
+          symbols: symbols.filter((entry) => entry.symbol === symbol),
+        }
+      })
 
-      return {
-        symbol,
-        price: currentPrice,
-        priceChangePercent,
-        symbols: symbols.filter(s => s.symbol === symbol),
-      }
+      setTickers(updatedTickers)
+      setUpCount(up)
+      setDownCount(down)
+
+      return new Map(prices)
     })
+  }, [symbols])
 
-    setTickers(updatedTickers)
-    setLastPrices(new Map(prices))
-    setUpCount(up)
-    setDownCount(down)
-  }
+  useEffect(() => {
+    fetchSymbols()
+  }, [fetchSymbols])
 
-  // Update the current time
-  const updateTime = () => {
-    const now = new Date()
-    const formattedTime = now.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    })
-    setCurrentTime(formattedTime)
-  }
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date()
+      const formattedTime = now.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      })
+      setCurrentTime(formattedTime)
+    }
+
+    updateTime()
+    const timeInterval = setInterval(updateTime, 1000)
+
+    return () => {
+      clearInterval(timeInterval)
+    }
+  }, [])
 
   // Initialize data and set up WebSocket connection
   useEffect(() => {
-    fetchSymbols() // Fetch all available symbols
+    if (!symbols.length) return
 
     const ws = new WebSocket(WEBSOCKET_URL)
     ws.onmessage = (event) => {
@@ -128,13 +141,10 @@ const CryptoPriceTracker: React.FC = () => {
       updatePrices(data)
     }
 
-    const timeInterval = setInterval(updateTime, 1000) // Update time every second
-
     return () => {
       ws.close()
-      clearInterval(timeInterval)
-    } // Clean up WebSocket and interval
-  }, [amount, fromCurrency, toCurrency, toUSDT, symbols]) // Add dependencies to re-run effect on changes
+    }
+  }, [symbols, updatePrices])
 
   const handleConvert = () => {
     // Ensure tickers are available and currency symbols are uppercase

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import {
   Box,
   Button,
@@ -675,8 +675,16 @@ export default function CVGuiEditorV2() {
     name: 'sections',
   })
 
+  const listSnaps = useCallback(async () => {
+    const res = await fetch('/api/cvdata?snapshots=1').catch(() => null)
+    if (res?.ok) {
+      const d = await res.json()
+      setSnapshots(d.files || [])
+    }
+  }, [])
+
   // Load
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true)
       const res = await fetch('/api/cvdata')
@@ -697,15 +705,15 @@ export default function CVGuiEditorV2() {
       })
       
       replaceSections(merged)
-      listSnaps()
+      await listSnaps()
     } catch (e: any) {
       toast({ status: 'error', title: 'Load Failed', description: e.message })
     } finally {
       setLoading(false)
     }
-  }
+  }, [listSnaps, replaceSections, toast])
 
-  useEffect(() => { loadData() }, [])
+  useEffect(() => { loadData() }, [loadData])
 
   // Save
   const onSubmit = async (data: { sections: any[] }, syncZh: boolean) => {
@@ -741,14 +749,6 @@ export default function CVGuiEditorV2() {
       }
   }
 
-  // Snapshots
-  const listSnaps = async () => {
-    const res = await fetch('/api/cvdata?snapshots=1').catch(()=>null)
-    if (res?.ok) {
-        const d = await res.json()
-        setSnapshots(d.files || [])
-    }
-  }
   const makeSnapshot = async () => {
      await fetch('/api/cvdata', { method: 'POST', body: JSON.stringify({ action: 'snapshot' }) })
      toast({ status: 'success', title: 'Snapshot created' })

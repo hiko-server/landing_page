@@ -124,7 +124,15 @@ export default function ParticlesBackground(): JSX.Element {
       cancelAnimationFrame(animId)
       window.removeEventListener('resize', onResize)
     }
-  }, [prefersReducedMotion, dot, line])
+  }, [
+    prefersReducedMotion,
+    dot,
+    dotRadius,
+    line,
+    lineAlphaScale,
+    maxDistFactor,
+    strokeWidth,
+  ])
 
   return (
     <Box position="fixed" inset={0} zIndex={0} pointerEvents="none" aria-hidden>
