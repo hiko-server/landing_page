@@ -16,20 +16,36 @@ import { FiClock, FiMessageCircle, FiShield } from 'react-icons/fi'
 import HeaderFooter from '../../layout/HeaderFooter'
 import Payment from '../../components/QuickPayment/Payment'
 import CustomHead from '../../components/General-UI/CustomHead'
+import { getDefaultSeoImage, getSiteUrl } from '../../lib/seo'
 
 const QuickPayment = (props: any) => {
   const [isMobile] = useMediaQuery('(max-width: 767px)')
   const panelBg = useColorModeValue('whiteAlpha.880', 'blackAlpha.500')
   const borderColor = useColorModeValue('blackAlpha.100', 'whiteAlpha.200')
   const mutedText = useColorModeValue('gray.600', 'gray.300')
+  const siteUrl = getSiteUrl(props.host)
 
   return (
     <React.Fragment>
       <CustomHead
         title="Quick Payment"
         description="Fast, verified payment instructions with supported crypto and wallet channels, confirmation guidance, and clear safety notes."
-        url={`https://${props.host || 'hiko.dev'}/quick-payment`}
-        image="/images/hikoAvator.png"
+        url={`${siteUrl}/quick-payment`}
+        image={getDefaultSeoImage(props.host)}
+        imageAlt="Quick payment preview"
+        jsonLd={{
+          '@context': 'https://schema.org',
+          '@type': 'WebPage',
+          name: 'Quick Payment',
+          url: `${siteUrl}/quick-payment`,
+          description:
+            'Payment instructions with supported crypto and wallet channels, manual verification, and safety guidance.',
+          isPartOf: {
+            '@type': 'WebSite',
+            name: 'HIKO.DEV',
+            url: siteUrl,
+          },
+        }}
       />
       <HeaderFooter isMobile={isMobile}>
         <Flex

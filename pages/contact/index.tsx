@@ -5,18 +5,44 @@ import { Badge, Flex, Heading, Stack, Text, useColorModeValue, useMediaQuery } f
 import ContactPro from '../../components/Contact/ContactPro'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
+import { getDefaultSeoImage, getSiteUrl } from '../../lib/seo'
 
 const ContactPage = (props: any) => {
   const [isMobile] = useMediaQuery('(max-width: 767px)')
   const mutedText = useColorModeValue('gray.600', 'gray.300')
+  const siteUrl = getSiteUrl(props.host)
 
   return (
     <React.Fragment>
       <CustomHead
         title="Contact"
         description="Get in touch with Hiko. Protected by hCaptcha."
-        url={`https://${props.host || 'hiko.dev'}/contact`}
-        image="/images/hikoAvator.png"
+        url={`${siteUrl}/contact`}
+        image={getDefaultSeoImage(props.host)}
+        imageAlt="Contact Hiko preview"
+        jsonLd={[
+          {
+            '@context': 'https://schema.org',
+            '@type': 'ContactPage',
+            name: 'Contact Hiko',
+            url: `${siteUrl}/contact`,
+            description: 'Contact page for project inquiries, hiring, consulting, and collaboration requests.',
+          },
+          {
+            '@context': 'https://schema.org',
+            '@type': 'Person',
+            name: 'Li Yanpei (Hiko)',
+            url: siteUrl,
+            email: props.home?.hero?.email ? `mailto:${props.home.hero.email}` : undefined,
+            sameAs: [
+              props.home?.socials?.github,
+              props.home?.socials?.gitlab,
+              props.home?.socials?.linkedin,
+              props.home?.socials?.whatsapp,
+            ].filter(Boolean),
+            jobTitle: 'Full-stack Engineer',
+          },
+        ]}
       />
       <HeaderFooter isMobile={isMobile}>
         <Flex

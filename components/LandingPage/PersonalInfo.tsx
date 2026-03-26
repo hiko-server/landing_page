@@ -29,6 +29,9 @@ const PersonalInfo = ({
     e.preventDefault()
   }
   const router = useRouter()
+  const openExternal = (url: string) => {
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
   // Overlaying video: force white text for clear contrast
   const textColor = 'white'
 
@@ -268,7 +271,7 @@ const PersonalInfo = ({
                           size="lg"
                           fontSize={['20px', '24px']}
                           onClick={() =>
-                            window.open(
+                            openExternal(
                               home?.socials?.github ||
                                 'https://github.com/HikoPLi'
                             )
@@ -286,7 +289,7 @@ const PersonalInfo = ({
                           size="lg"
                           fontSize={['20px', '24px']}
                           onClick={() =>
-                            window.open(
+                            openExternal(
                               home?.socials?.gitlab ||
                                 'https://gitlab.com/HikoPLi'
                             )
@@ -304,7 +307,7 @@ const PersonalInfo = ({
                           size="lg"
                           fontSize={['20px', '24px']}
                           onClick={() =>
-                            window.open(
+                            openExternal(
                               home?.socials?.linkedin ||
                                 'https://www.linkedin.com/in/liyanpeihiko/'
                             )
@@ -321,7 +324,7 @@ const PersonalInfo = ({
                           size="lg"
                           fontSize={['20px', '24px']}
                           onClick={() =>
-                            window.open(
+                            openExternal(
                               home?.socials?.whatsapp ||
                                 'https://wa.me/85262040827'
                             )

@@ -34,7 +34,7 @@ export default function AdminDashboard() {
   }
   return (
     <>
-      <CustomHead title="Admin Dashboard" />
+      <CustomHead title="Admin Dashboard" robots="noindex,nofollow" />
       <HeaderFooter isMobile={isMobile}>
         <Flex direction="column" p={6} gap={6}>
           <Flex justify="space-between" align="center">

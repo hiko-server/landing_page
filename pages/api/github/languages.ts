@@ -1,27 +1,22 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { readHome } from '../../../lib/home'
+import { extractGitHubUser, RemoteDataStatus } from '../../../lib/github'
 
 type LangMap = Record<string, number>
-
-let cache: { data: { total: number; breakdown: LangMap } | null; ts: number } | null = null
-const TTL = 6 * 60 * 60 * 1000 // 6 hours
-
-function extractUser(url?: string): string | null {
-  if (!url) return null
-  try {
-    const u = new URL(url)
-    const parts = u.pathname.split('/').filter(Boolean)
-    return parts[0] || null
-  } catch {
-    return null
-  }
+type ResponseBody = {
+  status: RemoteDataStatus
+  total: number
+  breakdown: LangMap
 }
+
+let cache: { data: ResponseBody | null; ts: number } | null = null
+const TTL = 6 * 60 * 60 * 1000 // 6 hours
 
 export default async function handler(_req: NextApiRequest, res: NextApiResponse) {
   try {
     const home = readHome()
-    const user = extractUser(home?.socials?.github)
-    if (!user) return res.status(200).json({ total: 0, breakdown: {} })
+    const user = extractGitHubUser(home?.socials?.github)
+    if (!user) return res.status(200).json({ status: 'unconfigured', total: 0, breakdown: {} })
 
     const now = Date.now()
     if (cache && now - cache.ts < TTL) {
@@ -37,13 +32,17 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
 
     // fetch up to 100 repos (public), then pick top by stargazers to limit language calls
     const repoRes = await fetch(`https://api.github.com/users/${user}/repos?per_page=100&sort=updated`, { headers })
-    if (!repoRes.ok) return res.status(200).json({ total: 0, breakdown: {} })
+    if (!repoRes.ok) return res.status(200).json({ status: 'error', total: 0, breakdown: {} })
     const repos: any[] = await repoRes.json()
     // Select top 30 by stars (then updated)
     const chosen = repos
       .filter(r => !r.fork) // own work
       .sort((a, b) => (b.stargazers_count - a.stargazers_count) || (Date.parse(b.updated_at) - Date.parse(a.updated_at)))
       .slice(0, 30)
+
+    if (!chosen.length) {
+      return res.status(200).json({ status: 'empty', total: 0, breakdown: {} })
+    }
 
     const breakdown: LangMap = {}
     let total = 0
@@ -61,10 +60,14 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
       }
     }
 
-    cache = { data: { total, breakdown }, ts: now }
-    return res.status(200).json({ total, breakdown })
+    const data: ResponseBody = {
+      status: total > 0 ? 'ok' : 'empty',
+      total,
+      breakdown,
+    }
+    cache = { data, ts: now }
+    return res.status(200).json(data)
   } catch {
-    return res.status(200).json({ total: 0, breakdown: {} })
+    return res.status(200).json({ status: 'error', total: 0, breakdown: {} })
   }
 }
-

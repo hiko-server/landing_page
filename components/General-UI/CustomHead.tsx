@@ -11,12 +11,16 @@ type Props = {
   description?: string
   url?: string
   image?: string
+  imageAlt?: string
   type?: string
   themeColor?: string
   twitterCard?: 'summary' | 'summary_large_image'
   canonical?: string
   hreflang?: Array<{ hrefLang: string; href: string }>
   jsonLd?: JsonLd
+  robots?: string
+  locale?: string
+  siteName?: string
 }
 
 const CustomHead = ({
@@ -24,16 +28,22 @@ const CustomHead = ({
   description,
   url,
   image,
+  imageAlt,
   type = 'website',
   themeColor,
   twitterCard = 'summary_large_image',
   canonical,
   hreflang,
   jsonLd,
+  robots = 'index,follow,max-image-preview:large',
+  locale = 'en_US',
+  siteName = productName,
 }: Props) => {
   const pageTitle = title ? `${title} | ${productName}` : productName
   const pageDesc = description || 'Personal site of Hiko — software engineer.'
   const ogImage = image || '/images/hikoAvator.png'
+  const resolvedCanonical = canonical || url
+  const resolvedImageAlt = imageAlt || pageTitle
 
   return (
     <Head>
@@ -51,7 +61,9 @@ const CustomHead = ({
       <title>{pageTitle}</title>
       <meta name="description" content={pageDesc} />
       <meta name="keywords" content="Hiko, Li Yanpei, software engineer, CV, crypto" />
-      <link rel="canonical" href={canonical || url || ''} />
+      <meta name="robots" content={robots} />
+      <meta name="googlebot" content={robots} />
+      {resolvedCanonical ? <link rel="canonical" href={resolvedCanonical} /> : null}
       {hreflang?.map(({ hrefLang, href }) => (
         <link key={hrefLang} rel="alternate" hrefLang={hrefLang} href={href} />
       ))}
@@ -59,15 +71,19 @@ const CustomHead = ({
       {/* Open Graph */}
       {url && <meta property="og:url" content={url} />}
       <meta property="og:type" content={type} />
+      <meta property="og:site_name" content={siteName} />
+      <meta property="og:locale" content={locale} />
       <meta property="og:title" content={pageTitle} />
       <meta property="og:description" content={pageDesc} />
       <meta property="og:image" content={ogImage} />
+      <meta property="og:image:alt" content={resolvedImageAlt} />
 
       {/* Twitter Card */}
       <meta name="twitter:card" content={twitterCard} />
       <meta name="twitter:title" content={pageTitle} />
       <meta name="twitter:description" content={pageDesc} />
       <meta name="twitter:image" content={ogImage} />
+      <meta name="twitter:image:alt" content={resolvedImageAlt} />
 
       {/* JSON-LD */}
       {jsonLd && (

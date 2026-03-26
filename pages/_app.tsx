@@ -11,7 +11,7 @@ import * as gtag from '../lib/gtag'
 // import '../styles/globals.scss'
 
 //using the chakra-ui (styled components)
-import { ChakraProvider, CSSReset, ColorModeScript } from '@chakra-ui/react'
+import { ChakraProvider, CSSReset, ColorModeScript, usePrefersReducedMotion } from '@chakra-ui/react'
 import { AnimatePresence, motion } from 'framer-motion'
 
 import { config } from '@fortawesome/fontawesome-svg-core'
@@ -31,6 +31,7 @@ import ScrollToTop from '../components/ScrollToTop/ScrollToTop'
 
 const App = ({ Component, pageProps }: any) => {
   const router = useRouter()
+  const prefersReducedMotion = usePrefersReducedMotion()
   useEffect(() => {
     const handleRouteChange = (url: any) => {
       gtag.pageview(url)
@@ -59,10 +60,10 @@ const App = ({ Component, pageProps }: any) => {
                 <AnimatePresence initial={false} mode="wait">
                   <motion.div
                     key={router.asPath}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    transition={{ duration: 0.2 }}
+                    initial={prefersReducedMotion ? undefined : { opacity: 0, y: 8 }}
+                    animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
+                    exit={prefersReducedMotion ? undefined : { opacity: 0, y: -8 }}
+                    transition={prefersReducedMotion ? undefined : { duration: 0.2 }}
                   >
                     <Component {...pageProps} />
                   </motion.div>

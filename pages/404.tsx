@@ -15,6 +15,7 @@ const Custom404 = () => {
         url="https://hiko.dev/404"
         image="/images/hikoAvator.png"
         type="website"
+        robots="noindex,nofollow"
       />
       <HeaderFooter isMobile={isMobile}>
         <ErrorPageState

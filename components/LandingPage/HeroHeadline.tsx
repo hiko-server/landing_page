@@ -1,21 +1,30 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Box, Heading, Text, useColorModeValue } from '@chakra-ui/react'
+import { Box, Heading, Text, useColorModeValue, usePrefersReducedMotion } from '@chakra-ui/react'
 import { motion } from 'framer-motion'
 
 export default function HeroHeadline({ brand, tagline }: { brand?: string; tagline?: string }) {
   const accent = useColorModeValue('linear-gradient(90deg,#60a5fa,#34d399,#f472b6)','linear-gradient(90deg,#93c5fd,#6ee7b7,#f9a8d4)')
+  const prefersReducedMotion = usePrefersReducedMotion()
   const [cursor, setCursor] = useState(true)
   const [idx, setIdx] = useState(0)
   const [text, setText] = useState('')
   const phrases = useMemo(() => (tagline ? tagline.split('|').map(s => s.trim()).filter(Boolean) : []), [tagline])
 
   useEffect(() => {
+    if (prefersReducedMotion) {
+      setCursor(false)
+      return
+    }
     const blink = setInterval(() => setCursor(v => !v), 550)
     return () => clearInterval(blink)
-  }, [])
+  }, [prefersReducedMotion])
 
   useEffect(() => {
     if (!phrases.length) return
+    if (prefersReducedMotion) {
+      setText(phrases[0])
+      return
+    }
     setText('')
     let i = 0
     const chars = phrases[idx % phrases.length]
@@ -28,7 +37,7 @@ export default function HeroHeadline({ brand, tagline }: { brand?: string; tagli
       }
     }, 35)
     return () => clearInterval(timer)
-  }, [idx, phrases])
+  }, [idx, phrases, prefersReducedMotion])
 
   return (
     <Box>
@@ -39,8 +48,8 @@ export default function HeroHeadline({ brand, tagline }: { brand?: string; tagli
           fontWeight="extrabold"
           bgImage={accent}
           bgClip="text"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={prefersReducedMotion ? undefined : { opacity: 0, y: 10 }}
+          animate={prefersReducedMotion ? undefined : { opacity: 1, y: 0 }}
         >
           {brand}
         </Heading>

@@ -1,9 +1,17 @@
 import React, { useState } from 'react'
+import {
+  Badge,
+  Box,
+  Button,
+  ButtonGroup,
+  Stack,
+  Text,
+  useColorModeValue,
+} from '@chakra-ui/react'
 import EducationSection from '../PersonalInstruction/Education'
 import ProjectSection from '../PersonalInstruction/Project'
 import SkillSection from '../PersonalInstruction/Skill'
 import CertificateSection from '../PersonalInstruction/Certificate'
-// Accept cv data via props instead of static imports
 import {
   Certification,
   Education,
@@ -14,20 +22,14 @@ import {
 } from '../../types/cvProps'
 import WorkExperience from '../PersonalInstruction/WorkExperience'
 import CompetitionAwardsSection from '../PersonalInstruction/CompetitionAwards'
+import SectionStatusCard from '../General-UI/SectionStatusCard'
 
 const LandingCVSections = ({ en, zh }: { en?: any[]; zh?: any[] }) => {
-  let cvData: any[] = []
   const [language, setLanguage] = useState('en')
-  switch (language) {
-    case 'en':
-      cvData = en || []
-      break
-    case 'zh':
-      cvData = zh || []
-      break
-    default:
-      cvData = en || []
-  }
+  const labelColor = useColorModeValue('gray.600', 'gray.300')
+
+  const cvData = language === 'zh' ? zh || [] : en || []
+  const hasChinese = Array.isArray(zh) && zh.length > 0
 
   const renderSection = (section: any) => {
     switch (section.sessionName) {
@@ -40,11 +42,7 @@ const LandingCVSections = ({ en, zh }: { en?: any[]; zh?: any[] }) => {
       case 'workExperience':
         return <WorkExperience data={section as Experiences} />
       case 'competitionAwards':
-        return (
-          <CompetitionAwardsSection
-            data={section as CompetitionAwards}
-          />
-        )
+        return <CompetitionAwardsSection data={section as CompetitionAwards} />
       case 'project':
         return <ProjectSection data={section as Project} />
       default:
@@ -53,22 +51,48 @@ const LandingCVSections = ({ en, zh }: { en?: any[]; zh?: any[] }) => {
   }
 
   return (
-    <>
-      <div>
-        <label htmlFor="language-select">Select Language: </label>
-        <select
-          id="language-select"
-          value={language}
-          onChange={(e) => setLanguage(e.target.value)}
-        >
-          <option value="en">English</option>
-          <option value="zh">Chinese</option>
-        </select>
-      </div>
-      {cvData.map((section: any, key: number) => (
-        <React.Fragment key={key}>{renderSection(section)}</React.Fragment>
-      ))}
-    </>
+    <Stack spacing={5} w="100%">
+      <Stack spacing={3} alignItems="flex-start">
+        <Badge colorScheme="teal" px={3} py={1} borderRadius="full">
+          CV sections
+        </Badge>
+        <Text color={labelColor}>
+          Switch languages to browse the available resume sections without leaving the page.
+        </Text>
+        <ButtonGroup>
+          <Button
+            colorScheme={language === 'en' ? 'teal' : 'gray'}
+            variant={language === 'en' ? 'solid' : 'outline'}
+            onClick={() => setLanguage('en')}
+          >
+            English
+          </Button>
+          <Button
+            colorScheme={language === 'zh' ? 'teal' : 'gray'}
+            variant={language === 'zh' ? 'solid' : 'outline'}
+            onClick={() => setLanguage('zh')}
+            isDisabled={!hasChinese}
+          >
+            中文
+          </Button>
+        </ButtonGroup>
+      </Stack>
+
+      {cvData.length ? (
+        cvData.map((section: any, key: number) => (
+          <React.Fragment key={section.sessionName || key}>
+            {renderSection(section)}
+          </React.Fragment>
+        ))
+      ) : (
+        <Box w="100%">
+          <SectionStatusCard
+            title="CV sections are not available yet"
+            description="Resume data for this language has not been added yet. You can still use the main contact page to request the latest version."
+          />
+        </Box>
+      )}
+    </Stack>
   )
 }
 

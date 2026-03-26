@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react'
-import { Box, Flex, HStack, Skeleton, Text, Badge } from '@chakra-ui/react'
+import { Badge, Box, Flex, HStack, Skeleton, Text, useColorModeValue } from '@chakra-ui/react'
+import SectionStatusCard from '../General-UI/SectionStatusCard'
+import { RemoteDataStatus } from '../../lib/github'
 
 type Event = {
   id: string
@@ -9,62 +11,123 @@ type Event = {
   payload?: any
 }
 
-function formatEvent(e: Event): { title: string; url?: string } {
-  const repo = e.repo?.name || ''
-  switch (e.type) {
+function formatEvent(event: Event): { title: string } {
+  const repo = event.repo?.name || 'the repository'
+
+  switch (event.type) {
     case 'PushEvent': {
-      const count = e.payload?.commits?.length || 1
+      const count = event.payload?.commits?.length || 1
       return { title: `Pushed ${count} commit${count > 1 ? 's' : ''} to ${repo}` }
     }
     case 'PullRequestEvent': {
-      const action = e.payload?.action
-      const num = e.payload?.number
-      return { title: `${action === 'opened' ? 'Opened' : 'Updated'} PR #${num} in ${repo}` }
+      const action = event.payload?.action
+      const number = event.payload?.number
+      return { title: `${action === 'opened' ? 'Opened' : 'Updated'} PR #${number} in ${repo}` }
     }
     case 'IssuesEvent': {
-      const action = e.payload?.action
-      const num = e.payload?.issue?.number
-      return { title: `${action === 'opened' ? 'Opened' : 'Updated'} issue #${num} in ${repo}` }
+      const action = event.payload?.action
+      const number = event.payload?.issue?.number
+      return { title: `${action === 'opened' ? 'Opened' : 'Updated'} issue #${number} in ${repo}` }
     }
     case 'CreateEvent': {
-      const refType = e.payload?.ref_type
+      const refType = event.payload?.ref_type
       return { title: `Created ${refType} in ${repo}` }
     }
     default:
-      return { title: `${e.type.replace(/Event$/, '')} in ${repo}` }
+      return { title: `${event.type.replace(/Event$/, '')} in ${repo}` }
   }
 }
 
 export default function ActivityFeed() {
   const [events, setEvents] = useState<Event[] | null>(null)
+  const [status, setStatus] = useState<RemoteDataStatus>('ok')
+  const [reloadKey, setReloadKey] = useState(0)
+  const mutedText = useColorModeValue('gray.500', 'gray.400')
 
   useEffect(() => {
     let alive = true
+    setStatus('ok')
+    setEvents(null)
+
     fetch('/api/github/events')
-      .then(r => r.json())
-      .then(d => { if (alive) setEvents(d.events || []) })
-      .catch(() => { if (alive) setEvents([]) })
-    return () => { alive = false }
-  }, [])
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error('Request failed')
+        }
+        const data = await response.json()
+        if (alive) {
+          setStatus((data.status as RemoteDataStatus) || 'ok')
+          setEvents(Array.isArray(data.events) ? data.events : [])
+        }
+      })
+      .catch(() => {
+        if (alive) {
+          setStatus('error')
+          setEvents([])
+        }
+      })
+
+    return () => {
+      alive = false
+    }
+  }, [reloadKey])
 
   if (events === null) {
     return (
       <Flex direction="column" gap={3}>
-        {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} height="18px" />)}
+        {Array.from({ length: 6 }).map((_, index) => (
+          <Skeleton key={index} height="20px" borderRadius="md" />
+        ))}
       </Flex>
     )
   }
-  if (!events.length) return null
+
+  if (status === 'error') {
+    return (
+      <SectionStatusCard
+        title="Recent GitHub activity is unavailable"
+        description="The latest public activity feed could not be loaded right now."
+        actionLabel="Retry"
+        onAction={() => setReloadKey((value) => value + 1)}
+      />
+    )
+  }
+
+  if (status === 'unconfigured') {
+    return (
+      <SectionStatusCard
+        title="Recent GitHub activity is not configured"
+        description="Add a GitHub profile to show recent public activity here."
+      />
+    )
+  }
+
+  if (!events.length) {
+    return (
+      <SectionStatusCard
+        title="No recent public activity found"
+        description="This feed will update when recent GitHub events are available."
+      />
+    )
+  }
 
   return (
     <Box>
-      <Flex direction="column" gap={2}>
-        {events.map((e) => {
-          const { title } = formatEvent(e)
+      <Flex direction="column" gap={3}>
+        {events.map((event) => {
+          const { title } = formatEvent(event)
+
           return (
-            <HStack key={e.id} spacing={3} align="center">
-              <Badge colorScheme="blue">{new Date(e.created_at).toLocaleDateString()}</Badge>
-              <Text fontSize="sm">{title}</Text>
+            <HStack key={event.id} spacing={3} align="flex-start">
+              <Badge colorScheme="blue" minW="92px" textAlign="center">
+                {new Date(event.created_at).toLocaleDateString()}
+              </Badge>
+              <Box>
+                <Text fontSize="sm">{title}</Text>
+                <Text fontSize="xs" color={mutedText}>
+                  Public GitHub event
+                </Text>
+              </Box>
             </HStack>
           )
         })}

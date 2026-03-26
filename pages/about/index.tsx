@@ -1,29 +1,58 @@
 import React from 'react'
 
 import LandingCVSections from '../../components/LandingPage/LandingCVSections'
-import { Flex, useMediaQuery, Box, Image, Heading } from '@chakra-ui/react'
+import { Flex, useMediaQuery, Box, Heading } from '@chakra-ui/react'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 // import LanguageBars from '../../components/GitHub/LanguageBars'
 import ActivityFeed from '../../components/GitHub/ActivityFeed'
+import ContributionChart from '../../components/GitHub/ContributionChart'
 import StatsBar from '../../components/GitHub/StatsBar'
 import SectionReveal from '../../components/General-UI/SectionReveal'
 import AboutHero from '../../components/About/AboutHero'
+import PhotosGallery from '../../components/About/PhotosGallery'
 // import ProjectSpotlight from '../../components/LandingPage/ProjectSpotlight'
 import ExperienceTimeline from '../../components/LandingPage/ExperienceTimeline'
 import CertificationsPeek from '../../components/LandingPage/CertificationsPeek'
 // import ContactPro from '../../components/Contact/ContactPro'
+import { extractGitHubUser } from '../../lib/github'
+import { getHomeSeoImage, getSiteUrl } from '../../lib/seo'
 
 const About = (props: any) => {
   const [isMobile] = useMediaQuery('(max-width: 767px)')
+  const siteUrl = getSiteUrl(props.host)
+  const imageUrl = getHomeSeoImage(props.home, props.host)
 
   return (
     <React.Fragment>
       <CustomHead
         title="About"
         description="About Hiko — background, skills, and interests."
-        url={`https://${props.host || 'hiko.dev'}/about`}
-        image="/images/hikoAvator.png"
+        url={`${siteUrl}/about`}
+        image={imageUrl}
+        imageAlt="About Hiko preview"
+        jsonLd={[
+          {
+            '@context': 'https://schema.org',
+            '@type': 'AboutPage',
+            name: 'About Hiko',
+            url: `${siteUrl}/about`,
+            description: props.home?.hero?.tagline || 'Background, skills, projects, and recent activity from Hiko.',
+          },
+          {
+            '@context': 'https://schema.org',
+            '@type': 'Person',
+            name: 'Li Yanpei (Hiko)',
+            url: siteUrl,
+            description: props.home?.hero?.tagline || 'Full-stack engineer',
+            sameAs: [
+              props.home?.socials?.github,
+              props.home?.socials?.gitlab,
+              props.home?.socials?.linkedin,
+            ].filter(Boolean),
+            jobTitle: 'Full-stack Engineer',
+          },
+        ]}
       />
       <HeaderFooter isMobile={isMobile}>
         <Flex
@@ -51,6 +80,14 @@ const About = (props: any) => {
           <SectionReveal>
             <CertificationsPeek cvEn={props.cv?.en} />
           </SectionReveal>
+          <SectionReveal>
+            <Box mt={2} w="100%" maxW="1100px">
+              <Heading as="h3" size="md" mb={2}>
+                Selected Milestones
+              </Heading>
+              <PhotosGallery photos={props.home?.photos} />
+            </Box>
+          </SectionReveal>
           {/* 技术语言分布（如需恢复可取消注释） */}
           <SectionReveal>
             <Box mt={2} w="100%" maxW="1100px">
@@ -66,12 +103,7 @@ const About = (props: any) => {
                 <Heading as="h3" size="md" mb={2}>
                   Contributions
                 </Heading>
-                <Image
-                  src={`https://ghchart.rshah.org/${props.githubUser}`}
-                  alt="GitHub contributions"
-                  w="100%"
-                  borderRadius="md"
-                />
+                <ContributionChart githubUser={props.githubUser} />
               </Box>
             </SectionReveal>
           ) : null}
@@ -108,14 +140,7 @@ export async function getServerSideProps(context: any) {
     try {
       const mod = await import('../../lib/home')
       home = mod.readHome()
-      const url = home?.socials?.github
-      if (url) {
-        try {
-          const u = new URL(url)
-          const parts = u.pathname.split('/').filter(Boolean)
-          githubUser = parts[0] || null
-        } catch {}
-      }
+      githubUser = extractGitHubUser(home?.socials?.github)
     } catch {}
   } catch {}
   return { props: { host, cv: { en, zh }, githubUser, home } }

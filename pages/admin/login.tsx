@@ -37,7 +37,7 @@ export default function AdminLogin() {
 
   return (
     <>
-      <CustomHead title="Admin Login" description="Authenticate to edit CV data" />
+      <CustomHead title="Admin Login" description="Authenticate to edit CV data" robots="noindex,nofollow" />
       <HeaderFooter isMobile={isMobile}>
         <Flex align="center" justify="center" p={10}>
           <Box maxW="md" w="full">
