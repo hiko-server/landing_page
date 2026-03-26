@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 // import { delete_route, get_route_detail } from '../../../api/route'
 import { useRouter } from 'next/router'
 import { Flex, Text, Button, useDisclosure } from '@chakra-ui/react'
@@ -123,13 +123,9 @@ const RouteDetailPage = (props: any) => {
         description?: string
         routeOrder: string[] | LocationDetail[]
     }
-    const [fetchNewData, setFetchNewData] = useState<boolean>(false)
-    const [data, setData] = useState<RouteDetail[] | null>(null)
+    const [data] = useState<RouteDetail[] | null>(props.data || null)
     const router = useRouter()
-
-
-    const [isGoing2Delete, setIsGoing2Delete] = useState(false)
-    console.log(fetchNewData, isGoing2Delete)
+    const [, setIsGoing2Delete] = useState(false)
 
     // const payload = {
     //     filter: {
@@ -163,12 +159,6 @@ const RouteDetailPage = (props: any) => {
     //     // eslint-disable-next-line react-hooks/exhaustive-deps
     // }, [fetchNewData])
 
-    useEffect(() => {
-        // console.log({ props })
-        setData(props.data)
-        setFetchNewData(true)
-    }, [])
-
     //View route detail (user + admin can view)
 
     // const authAppData = useContext(AuthAppContext)
@@ -176,21 +166,6 @@ const RouteDetailPage = (props: any) => {
     // const toast = useToast()
 
     const { isOpen, onOpen, onClose } = useDisclosure()
-    const [displayConfirmDeleteDialog, setDisplayConfirmDeleteDialog] =
-        useState(false)
-
-    useEffect(() => {
-        if (displayConfirmDeleteDialog) {
-            console.log('isOpen', isOpen)
-            console.log('will trigger delete dialog')
-
-            onOpen()
-
-            // setDisplayConfirmDeleteDialog(false)
-        }
-        /* Only for the first mount, DO NOT Delete line below, it will tell eslint to skip checking */
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [displayConfirmDeleteDialog])
 
     // useEffect(() => {
     //     if (isGoing2Delete && data !== null) {
@@ -306,10 +281,7 @@ const RouteDetailPage = (props: any) => {
                                         </Button>
                                         <Button
                                             colorScheme="red"
-                                            onClick={() => {
-                                                console.log('setDisplayConfirmDeleteDialog true')
-                                                setDisplayConfirmDeleteDialog?.(true)
-                                            }}
+                                            onClick={onOpen}
                                         >
                                             Delete
                                         </Button>

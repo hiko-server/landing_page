@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { Flex } from '@chakra-ui/react'
 import ASALayout from '../../../../layout/ASA'
 import { QueryRouteList, RouteDetail } from '../../../../types/route'
@@ -9,9 +9,9 @@ import { GetServerSideProps } from 'next'
 
 const EditRouteDetailPage = (props: any) => {
   const [isGoing2Edit, setIsGoing2Edit] = useState(false)
-  const [routeDetail, setRouteDetail] = useState<RouteDetail | null>(null)
+  const [routeDetail] = useState<RouteDetail | null>(props.data || null)
 
-  const [allLocation, setAllLocation] = useState([])
+  const [allLocation] = useState(props.locations || [])
 
   const [selectedOptions, setSelectedOptions] = useState<QueryRouteList[]>([])
 
@@ -68,12 +68,6 @@ const EditRouteDetailPage = (props: any) => {
   //     }
   //     // eslint-disable-next-line react-hooks/exhaustive-deps
   // }, [fetchNewData])
-
-  useEffect(() => {
-    // setFetchNewData(true)
-    setRouteDetail(props.data)
-    setAllLocation(props.locations)
-  }, [])
 
   return (
     <React.Fragment>

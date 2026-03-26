@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   Box,
   Button,
@@ -164,29 +164,26 @@ export default function ContactPro({
     }
   }
 
-  const EmailPhone = useMemo(() => {
-    const items: Array<{
-      label: string
-      value?: string
-      onClick?: () => void
-      icon?: React.ReactNode
-    }> = []
-    if (home?.hero?.email)
-      items.push({
-        label: home.hero.email,
-        value: home.hero.email,
-        onClick: () => onCopy(home.hero?.email || '', 'Email copied'),
-        icon: <FaEnvelope />,
-      })
-    if (home?.hero?.phone)
-      items.push({
-        label: home.hero.phone,
-        value: home.hero.phone,
-        onClick: () => onCopy(home.hero?.phone || '', 'Phone copied'),
-        icon: <FaCopy />,
-      })
-    return items
-  }, [home?.hero?.email, home?.hero?.phone])
+  const emailPhone: Array<{
+    label: string
+    value?: string
+    onClick?: () => void
+    icon?: React.ReactNode
+  }> = []
+  if (home?.hero?.email)
+    emailPhone.push({
+      label: home.hero.email,
+      value: home.hero.email,
+      onClick: () => onCopy(home.hero?.email || '', 'Email copied'),
+      icon: <FaEnvelope />,
+    })
+  if (home?.hero?.phone)
+    emailPhone.push({
+      label: home.hero.phone,
+      value: home.hero.phone,
+      onClick: () => onCopy(home.hero?.phone || '', 'Phone copied'),
+      icon: <FaCopy />,
+    })
 
   return (
     <Flex
@@ -223,7 +220,7 @@ export default function ContactPro({
             </HStack>
             <Divider />
             <VStack align="stretch" spacing={2}>
-              {EmailPhone.map((it, idx) => (
+              {emailPhone.map((it, idx) => (
                 <HStack key={idx} justify="space-between">
                   <HStack>
                     <Box>{it.icon}</Box>
