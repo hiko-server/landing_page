@@ -68,15 +68,16 @@ import type { HomeData } from '../../lib/home'
 const Content = ({ quickAccess, photos, cvEn, cvZh, home }: { quickAccess?: { label: string; url: string }[]; photos?: ScrollerImage[]; cvEn?: any[]; cvZh?: any[]; home?: HomeData | null }) => {
   const router = useRouter()
   const isEditMode = router.asPath.includes('edit')
+  const sectionTitleColor = useColorModeValue('blue.700', 'blue.200')
+  const paperBg = useColorModeValue('white', 'transparent')
 
   return (
     <Flex
-      direction="row"
-      alignItems="flex-start"
+      direction={{ base: 'column', xl: 'row' }}
+      alignItems="stretch"
       justifyContent="center"
-      p={['20px', '40px']}
-      gap={['20px', '40px']}
-      flexWrap="wrap"
+      p={{ base: '16px', md: '40px' }}
+      gap={{ base: '8', md: '10' }}
       w="100%"
       maxW="1200px"
       mx="auto"
@@ -85,9 +86,9 @@ const Content = ({ quickAccess, photos, cvEn, cvZh, home }: { quickAccess?: { la
         direction="column"
         alignItems="center"
         justifyContent="flex-start"
-        p={['20px', '40px']}
-        gap={['20px', '40px']}
-        w={{ base: '100%', md: '420px' }}
+        p={{ base: '0', md: '40px' }}
+        gap={{ base: '6', md: '10' }}
+        w={{ base: '100%', xl: '420px' }}
         flexShrink={0}
       >
         <SectionReveal>
@@ -103,8 +104,8 @@ const Content = ({ quickAccess, photos, cvEn, cvZh, home }: { quickAccess?: { la
       <StyledBox
         id="A4Paper"
         size="A4"
-        p={'20px'}
-        bgColor={useColorModeValue('white','transparent')}
+        p={{ base: '16px', md: '20px' }}
+        bgColor={paperBg}
         overflow={'hidden'}
         flex={1}
         minW={0}
@@ -135,12 +136,12 @@ const Content = ({ quickAccess, photos, cvEn, cvZh, home }: { quickAccess?: { la
         </Accordion>
 
         <SectionReveal>
-          <Heading as="h3" size="md" mt={8} mb={2} textAlign="center" color={useColorModeValue('blue.700','blue.200')}>Top GitHub Repositories</Heading>
+          <Heading as="h2" size="md" mt={8} mb={2} textAlign="center" color={sectionTitleColor}>Top GitHub Repositories</Heading>
           <TopRepos />
         </SectionReveal>
 
         <SectionReveal>
-          <Heading as="h3" size="md" mt={10} mb={2} textAlign="center" color={useColorModeValue('blue.700','blue.200')}>Tech Stack</Heading>
+          <Heading as="h2" size="md" mt={10} mb={2} textAlign="center" color={sectionTitleColor}>Tech Stack</Heading>
           <TechCloud />
           <Box mt={8}>
             <LanguageBars />
@@ -148,17 +149,17 @@ const Content = ({ quickAccess, photos, cvEn, cvZh, home }: { quickAccess?: { la
         </SectionReveal>
 
         <SectionReveal>
-          <Heading as="h3" size="md" mt={10} mb={2} textAlign="center" color={useColorModeValue('blue.700','blue.200')}>Recent GitHub Activity</Heading>
+          <Heading as="h2" size="md" mt={10} mb={2} textAlign="center" color={sectionTitleColor}>Recent GitHub Activity</Heading>
           <ActivityFeed />
         </SectionReveal>
 
         <SectionReveal>
-          <Heading as="h3" size="md" mt={10} mb={2} textAlign="center" color={useColorModeValue('blue.700','blue.200')}>Project Spotlight</Heading>
+          <Heading as="h2" size="md" mt={10} mb={2} textAlign="center" color={sectionTitleColor}>Project Spotlight</Heading>
           <ProjectSpotlight cvEn={cvEn} />
         </SectionReveal>
 
         <SectionReveal>
-          <Heading as="h3" size="md" mt={10} mb={2} textAlign="center" color={useColorModeValue('blue.700','blue.200')}>Experience Timeline</Heading>
+          <Heading as="h2" size="md" mt={10} mb={2} textAlign="center" color={sectionTitleColor}>Experience Timeline</Heading>
           <ExperienceTimeline cvEn={cvEn} />
         </SectionReveal>
 
@@ -174,33 +175,36 @@ const Content = ({ quickAccess, photos, cvEn, cvZh, home }: { quickAccess?: { la
   )
 }
 
+const ButtonGroup = ({ quickAccess }: { quickAccess?: { label: string; url: string }[] }) => {
+  const buttonTextColor = useColorModeValue('blue.700', 'blue.200')
 
-
-const ButtonGroup = ({ quickAccess }: { quickAccess?: { label: string; url: string }[] }) => (
-  <Flex
-    mt={8}
-    w={['100%', '350px']}
-    direction="column"
-    alignItems="center"
-    justifyContent="center"
-  >
-    {(quickAccess || []).map((btn) => (
-      <Button
-        key={btn.label}
-        size="lg"
-        w="70%"
-        fontSize={'24px'}
-        mb={3}
-        onClick={() => window.open(btn.url)}
-        as={motion.button}
-        whileHover={{ scale: 1.03 }}
-        whileTap={{ scale: 0.98 }}
-      >
-        <Text color={useColorModeValue('blue.700','blue.200')}>{btn.label}</Text>
-      </Button>
-    ))}
-  </Flex>
-)
+  return (
+    <Flex
+      mt={8}
+      w="100%"
+      maxW="360px"
+      direction="column"
+      alignItems="center"
+      justifyContent="center"
+    >
+      {(quickAccess || []).map((btn) => (
+        <Button
+          key={btn.label}
+          size="lg"
+          w="100%"
+          fontSize={{ base: 'lg', md: '2xl' }}
+          mb={3}
+          onClick={() => window.open(btn.url)}
+          as={motion.button}
+          whileHover={{ scale: 1.03 }}
+          whileTap={{ scale: 0.98 }}
+        >
+          <Text color={buttonTextColor}>{btn.label}</Text>
+        </Button>
+      ))}
+    </Flex>
+  )
+}
 
 
 export default Content

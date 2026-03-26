@@ -1,26 +1,15 @@
 // import { useSession } from 'next-auth/react'
-import React, { useState, useEffect } from 'react'
+import React from 'react'
 import { GetServerSideProps } from 'next'
 import { Flex, useMediaQuery } from '@chakra-ui/react'
 
-import DisplayMobileInfo from '../components/mobileDisplay/mobileDisplay'
 import LandingContent from '../components/LandingPage/LandingContent'
 import HeaderFooter from '../layout/HeaderFooter'
 import CustomHead from '../components/General-UI/CustomHead'
 
-
-
 const LandingPage = (props: any) => {
   // const { data: session } = useSession()
-
-  const [, setIsHostCV] = useState<boolean>(false)
   const [isMobile] = useMediaQuery('(max-width: 767px)')
-
-  useEffect(() => {
-    if (props.host && props.host === 'cv.hiko.dev') {
-      setIsHostCV(true)
-    }
-  }, [props.host])
 
   return (
     <>
@@ -57,13 +46,9 @@ const LandingPage = (props: any) => {
       />
 
       <HeaderFooter isMobile={isMobile}>
-        {isMobile ? (
-          <DisplayMobileInfo isMobile={isMobile} setIsMobile={() => {}} />
-        ) : (
-          <Flex direction="column" alignItems="center" justifyContent="center" gap={['20px', '40px']}>
-            <LandingContent isMobile={isMobile} home={props.home || undefined} cv={props.cv || undefined} />
-          </Flex>
-        )}
+        <Flex direction="column" alignItems="center" justifyContent="center" gap={['20px', '40px']} w="full">
+          <LandingContent home={props.home || undefined} cv={props.cv || undefined} />
+        </Flex>
       </HeaderFooter>
     </>
   )
