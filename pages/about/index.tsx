@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 
 import LandingCVSections from '../../components/LandingPage/LandingCVSections'
 import { Flex, useMediaQuery, Box, Image, Heading } from '@chakra-ui/react'
@@ -15,14 +15,7 @@ import CertificationsPeek from '../../components/LandingPage/CertificationsPeek'
 // import ContactPro from '../../components/Contact/ContactPro'
 
 const About = (props: any) => {
-  const [, setIsHostCV] = useState<boolean>(false)
   const [isMobile] = useMediaQuery('(max-width: 767px)')
-
-  useEffect(() => {
-    if (props.host && props.host === 'cv.hiko.dev') {
-      setIsHostCV(true)
-    }
-  }, [props.host])
 
   return (
     <React.Fragment>

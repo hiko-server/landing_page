@@ -72,9 +72,6 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
                 src={image.url}
                 alt={`Image ${index}`}
                 display={imgCount === index + 1 ? 'block' : 'none'}
-                onClick={() =>
-                  console.log(`Navigating to: ${image.redirectTo}`)
-                }
                 w="600px"
                 h="400px"
                 objectFit="cover"

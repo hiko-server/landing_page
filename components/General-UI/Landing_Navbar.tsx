@@ -49,7 +49,7 @@ const developementMode =
 // const Navbar = ({ user }: NavProps) => {
 const Landing_Navbar = ({
   title,
-  backURL,
+  backURL: _backURL,
   willBack = false,
   style,
 }: // auth,
@@ -101,12 +101,6 @@ const Landing_Navbar = ({
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isCollapsed])
-
-  if (willBack) {
-    console.log('willBack is exist, backURL is', backURL)
-  } else {
-    console.log('no willBack button')
-  }
 
   return (
     // <Container>

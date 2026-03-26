@@ -86,10 +86,6 @@ const Landing_BaseLayout = ({
         })
         router.replace('/scan')
       } else {
-        if (!localStorage.hasOwnProperty('orgName')) {
-          console.log('>>>> get org name')
-        }
-
         // if (authAppData.state.userUUID == '') {
         //   console.log('update userInfo for the context')
         //   console.log(t.authUserUserName)
