@@ -16,7 +16,7 @@ export default function AdminIndex() {
 
   return (
     <>
-      <CustomHead title="Admin" description="Admin portal" />
+      <CustomHead title="Admin" description="Admin portal" robots="noindex,nofollow" />
       <HeaderFooter isMobile={isMobile}>
         <Flex direction="column" gap={6} p={6}>
           <Heading size="md">Admin Portal</Heading>
@@ -34,4 +34,3 @@ export default function AdminIndex() {
     </>
   )
 }
-

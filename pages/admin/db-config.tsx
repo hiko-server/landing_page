@@ -16,6 +16,7 @@ import {
 } from '@chakra-ui/react'
 import { useRouter } from 'next/router'
 import { ArrowBackIcon, CheckCircleIcon, WarningIcon } from '@chakra-ui/icons'
+import CustomHead from '../../components/General-UI/CustomHead'
 
 // -----------------------------------------------------------------------------
 // Database Configuration Page
@@ -195,7 +196,9 @@ export default function DbConfigPage() {
   }
 
   return (
-    <Flex direction="column" minH="100vh" bg="gray.50" p={8}>
+    <>
+      <CustomHead title="DB Config" description="Database configuration and backup tools" robots="noindex,nofollow" />
+      <Flex direction="column" minH="100vh" bg="gray.50" p={8}>
         
         {/* Header */}
         <Flex justify="space-between" align="center" mb={8}>
@@ -311,6 +314,7 @@ export default function DbConfigPage() {
 
         </SimpleGrid>
 
-    </Flex>
+      </Flex>
+    </>
   )
 }

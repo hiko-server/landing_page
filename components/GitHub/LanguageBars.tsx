@@ -1,11 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Box, Flex, Heading, HStack, Skeleton, Text, useColorModeValue } from '@chakra-ui/react'
+import SectionStatusCard from '../General-UI/SectionStatusCard'
+import { RemoteDataStatus } from '../../lib/github'
 
-type LangData = { total: number; breakdown: Record<string, number> }
+type LangData = {
+  status: RemoteDataStatus
+  total: number
+  breakdown: Record<string, number>
+}
 
 function colorFor(lang: string): string {
-  // quick color map for common languages; fallback blue
-  const m: Record<string, string> = {
+  const map: Record<string, string> = {
     TypeScript: '#3178c6',
     JavaScript: '#f1e05a',
     Python: '#3572A5',
@@ -27,53 +32,105 @@ function colorFor(lang: string): string {
     Ruby: '#701516',
     Solidity: '#3c3c3d',
   }
-  return m[lang] || '#3b82f6'
+  return map[lang] || '#3b82f6'
 }
 
 export default function LanguageBars() {
   const [data, setData] = useState<LangData | null>(null)
-  const headingColor = useColorModeValue('blue.700','blue.200')
+  const [reloadKey, setReloadKey] = useState(0)
+  const headingColor = useColorModeValue('blue.700', 'blue.200')
+  const mutedText = useColorModeValue('gray.500', 'gray.400')
+  const trackBg = useColorModeValue('gray.100', 'whiteAlpha.200')
 
   useEffect(() => {
     let alive = true
+    setData(null)
+
     fetch('/api/github/languages')
-      .then(r => r.json())
-      .then(d => { if (alive) setData(d) })
-      .catch(() => { if (alive) setData({ total: 0, breakdown: {} }) })
-    return () => { alive = false }
-  }, [])
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error('Request failed')
+        }
+        const result = await response.json()
+        if (alive) {
+          setData(result)
+        }
+      })
+      .catch(() => {
+        if (alive) {
+          setData({ status: 'error', total: 0, breakdown: {} })
+        }
+      })
+
+    return () => {
+      alive = false
+    }
+  }, [reloadKey])
 
   const items = useMemo(() => {
     if (!data || !data.total) return [] as Array<{ name: string; bytes: number; pct: number }>
-    const entries = Object.entries(data.breakdown)
+    return Object.entries(data.breakdown)
       .map(([name, bytes]) => ({ name, bytes, pct: (bytes / data.total) * 100 }))
       .sort((a, b) => b.bytes - a.bytes)
-    return entries.slice(0, 10)
+      .slice(0, 10)
   }, [data])
 
   if (!data) {
     return (
       <HStack spacing={4} w="100%">
-        <Skeleton height="20px" flex="1" />
-        <Skeleton height="20px" flex="1" />
-        <Skeleton height="20px" flex="1" />
+        <Skeleton height="20px" flex="1" borderRadius="md" />
+        <Skeleton height="20px" flex="1" borderRadius="md" />
+        <Skeleton height="20px" flex="1" borderRadius="md" />
       </HStack>
     )
   }
 
-  if (!data.total || items.length === 0) return null
+  if (data.status === 'error') {
+    return (
+      <SectionStatusCard
+        title="Language breakdown is unavailable"
+        description="GitHub language statistics could not be loaded right now."
+        actionLabel="Retry"
+        onAction={() => setReloadKey((value) => value + 1)}
+      />
+    )
+  }
+
+  if (data.status === 'unconfigured') {
+    return (
+      <SectionStatusCard
+        title="Language breakdown is not configured"
+        description="Add a GitHub profile to show repository language usage here."
+      />
+    )
+  }
+
+  if (!data.total || items.length === 0) {
+    return (
+      <SectionStatusCard
+        title="No language data available"
+        description="This section will show a GitHub-based language breakdown when repository data is available."
+      />
+    )
+  }
 
   return (
     <Box>
-      <Heading as="h4" size="sm" mb={3} color={headingColor}>GitHub Languages</Heading>
+      <Heading as="h4" size="sm" mb={3} color={headingColor}>
+        GitHub Languages
+      </Heading>
       <Flex direction="column" gap={2}>
         {items.map(({ name, pct, bytes }) => (
           <Box key={name}>
             <Flex align="center" justify="space-between" mb={1}>
-              <Text fontSize="sm" fontWeight="medium">{name}</Text>
-              <Text fontSize="xs" color="gray.500">{pct.toFixed(1)}% · {bytes.toLocaleString()} bytes</Text>
+              <Text fontSize="sm" fontWeight="medium">
+                {name}
+              </Text>
+              <Text fontSize="xs" color={mutedText}>
+                {pct.toFixed(1)}% · {bytes.toLocaleString()} bytes
+              </Text>
             </Flex>
-            <Box w="100%" h="8px" bg="gray.100" borderRadius="md" overflow="hidden">
+            <Box w="100%" h="8px" bg={trackBg} borderRadius="md" overflow="hidden">
               <Box w={`${pct}%`} h="100%" bg={colorFor(name)} />
             </Box>
           </Box>

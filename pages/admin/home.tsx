@@ -8,7 +8,7 @@ export default function AdminHomeEditor() {
   const [isMobile] = [false]
   return (
     <>
-      <CustomHead title="Admin Home" />
+      <CustomHead title="Admin Home" robots="noindex,nofollow" />
       <HeaderFooter isMobile={isMobile}>
         <Flex direction="column" p={6} gap={6}>
           <Heading size="md">Homepage Editor</Heading>

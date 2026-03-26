@@ -29,7 +29,7 @@ export default function ResetPassword() {
 
   return (
     <>
-      <CustomHead title="Reset Password" />
+      <CustomHead title="Reset Password" robots="noindex,nofollow" />
       <HeaderFooter isMobile={isMobile}>
         <Flex align="center" justify="center" p={10}>
           <VStack spacing={4} maxW="md" w="full">
@@ -51,4 +51,3 @@ export default function ResetPassword() {
     </>
   )
 }
-

@@ -6,35 +6,35 @@ import { Flex, useMediaQuery } from '@chakra-ui/react'
 import LandingContent from '../components/LandingPage/LandingContent'
 import HeaderFooter from '../layout/HeaderFooter'
 import CustomHead from '../components/General-UI/CustomHead'
+import { getHomeSeoImage, getSiteUrl } from '../lib/seo'
 
 const LandingPage = (props: any) => {
   // const { data: session } = useSession()
   const [isMobile] = useMediaQuery('(max-width: 767px)')
+  const siteUrl = getSiteUrl(props.host)
+  const imageUrl = getHomeSeoImage(props.home, props.host)
 
   return (
     <>
       <CustomHead
         title="Home"
         description="Hiko — Full-stack engineer. View CV, projects, and contact."
-        url={`https://${props.host}`}
-        image={(props.home?.photos && props.home.photos.find((p:any)=> p.visible !== false)?.url ?
-          ((props.home.photos.find((p:any)=> p.visible !== false)!.url as string).startsWith('http')
-            ? props.home.photos.find((p:any)=> p.visible !== false)!.url
-            : `https://${props.host}${props.home.photos.find((p:any)=> p.visible !== false)!.url}`)
-          : '/images/hikoAvator.png') as string}
+        url={siteUrl}
+        image={imageUrl}
+        imageAlt={props.home?.hero?.brand ? `${props.home.hero.brand} featured preview` : 'HIKO.DEV featured preview'}
         type="website"
         jsonLd={[
           {
             '@context': 'https://schema.org',
             '@type': 'WebSite',
             name: 'HIKO.DEV',
-            url: `https://${props.host}`,
+            url: siteUrl,
           },
           {
             '@context': 'https://schema.org',
             '@type': 'Person',
             name: 'Li Yanpei (Hiko)',
-            url: `https://${props.host}`,
+            url: siteUrl,
             sameAs: [
               'https://github.com/HikoPLi',
               'https://gitlab.com/HikoPLi',
@@ -57,7 +57,7 @@ const LandingPage = (props: any) => {
 export default LandingPage
 
 export const getServerSideProps: GetServerSideProps = async (context: any) => {
-  const host = context.req.headers.host
+  const host = context.req.headers.host || 'hiko.dev'
   
   // read home config server-side
   let home = null

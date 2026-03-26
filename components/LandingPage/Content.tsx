@@ -12,6 +12,7 @@ import {
   Button,
   Box,
   Heading,
+  Stack,
 } from '@chakra-ui/react'
 import styled from 'styled-components'
 import { motion } from 'framer-motion'
@@ -65,10 +66,34 @@ const QuickAccessAccordionItem = ({ children }: { children: React.ReactNode | nu
 
 import type { HomeData } from '../../lib/home'
 
+const SectionBlock = ({
+  title,
+  description,
+  children,
+}: {
+  title: string
+  description: string
+  children: React.ReactNode
+}) => {
+  const sectionTitleColor = useColorModeValue('blue.700', 'blue.200')
+  const descriptionColor = useColorModeValue('gray.600', 'gray.300')
+
+  return (
+    <Stack spacing={4} w="100%">
+      <Box textAlign="center" maxW="3xl" mx="auto">
+        <Heading as="h2" size="md" mb={2} color={sectionTitleColor}>
+          {title}
+        </Heading>
+        <Text color={descriptionColor}>{description}</Text>
+      </Box>
+      <Box>{children}</Box>
+    </Stack>
+  )
+}
+
 const Content = ({ quickAccess, photos, cvEn, cvZh, home }: { quickAccess?: { label: string; url: string }[]; photos?: ScrollerImage[]; cvEn?: any[]; cvZh?: any[]; home?: HomeData | null }) => {
   const router = useRouter()
   const isEditMode = router.asPath.includes('edit')
-  const sectionTitleColor = useColorModeValue('blue.700', 'blue.200')
   const paperBg = useColorModeValue('white', 'transparent')
 
   return (
@@ -136,31 +161,51 @@ const Content = ({ quickAccess, photos, cvEn, cvZh, home }: { quickAccess?: { la
         </Accordion>
 
         <SectionReveal>
-          <Heading as="h2" size="md" mt={8} mb={2} textAlign="center" color={sectionTitleColor}>Top GitHub Repositories</Heading>
-          <TopRepos />
+          <SectionBlock
+            title="Top GitHub Repositories"
+            description="A quick snapshot of public repositories that best represent ongoing work, adoption signals, and recent maintenance."
+          >
+            <TopRepos />
+          </SectionBlock>
         </SectionReveal>
 
         <SectionReveal>
-          <Heading as="h2" size="md" mt={10} mb={2} textAlign="center" color={sectionTitleColor}>Tech Stack</Heading>
-          <TechCloud />
-          <Box mt={8}>
-            <LanguageBars />
-          </Box>
+          <SectionBlock
+            title="Tech Stack"
+            description="A package-level view of the frameworks and tools currently used across this project, plus a GitHub-based language breakdown."
+          >
+            <TechCloud />
+            <Box mt={8}>
+              <LanguageBars />
+            </Box>
+          </SectionBlock>
         </SectionReveal>
 
         <SectionReveal>
-          <Heading as="h2" size="md" mt={10} mb={2} textAlign="center" color={sectionTitleColor}>Recent GitHub Activity</Heading>
-          <ActivityFeed />
+          <SectionBlock
+            title="Recent GitHub Activity"
+            description="Recent public commits, pull requests, and issue activity to give a sense of current momentum."
+          >
+            <ActivityFeed />
+          </SectionBlock>
         </SectionReveal>
 
         <SectionReveal>
-          <Heading as="h2" size="md" mt={10} mb={2} textAlign="center" color={sectionTitleColor}>Project Spotlight</Heading>
-          <ProjectSpotlight cvEn={cvEn} />
+          <SectionBlock
+            title="Project Spotlight"
+            description="Selected projects pulled from the resume, chosen to show product scope, technical depth, and delivery context."
+          >
+            <ProjectSpotlight cvEn={cvEn} />
+          </SectionBlock>
         </SectionReveal>
 
         <SectionReveal>
-          <Heading as="h2" size="md" mt={10} mb={2} textAlign="center" color={sectionTitleColor}>Experience Timeline</Heading>
-          <ExperienceTimeline cvEn={cvEn} />
+          <SectionBlock
+            title="Experience Timeline"
+            description="A concise view of recent roles, responsibilities, and the environments where key work was delivered."
+          >
+            <ExperienceTimeline cvEn={cvEn} />
+          </SectionBlock>
         </SectionReveal>
 
         <SectionReveal>
@@ -177,6 +222,14 @@ const Content = ({ quickAccess, photos, cvEn, cvZh, home }: { quickAccess?: { la
 
 const ButtonGroup = ({ quickAccess }: { quickAccess?: { label: string; url: string }[] }) => {
   const buttonTextColor = useColorModeValue('blue.700', 'blue.200')
+  const handleQuickAccess = (url: string) => {
+    if (/^https?:\/\//i.test(url)) {
+      window.open(url, '_blank', 'noopener,noreferrer')
+      return
+    }
+
+    window.location.href = url
+  }
 
   return (
     <Flex
@@ -194,7 +247,7 @@ const ButtonGroup = ({ quickAccess }: { quickAccess?: { label: string; url: stri
           w="100%"
           fontSize={{ base: 'lg', md: '2xl' }}
           mb={3}
-          onClick={() => window.open(btn.url)}
+          onClick={() => handleQuickAccess(btn.url)}
           as={motion.button}
           whileHover={{ scale: 1.03 }}
           whileTap={{ scale: 0.98 }}

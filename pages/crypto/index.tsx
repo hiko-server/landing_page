@@ -5,22 +5,26 @@ import { Box, Flex, Heading, Text, useMediaQuery } from '@chakra-ui/react'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CryptoPriceTracker from '../../components/Crypto/CoinStock'
 import CustomHead from '../../components/General-UI/CustomHead'
+import { getDefaultSeoImage, getSiteUrl } from '../../lib/seo'
 
 const Crypto = (props: { host?: string; builtAt?: string }) => {
   const [isMobile] = useMediaQuery('(max-width: 767px)')
+  const siteUrl = getSiteUrl(props.host)
 
   return (
     <React.Fragment>
       <CustomHead
         title="Crypto Prices"
         description="Live cryptocurrency prices and converter. Data from Binance. Updated frequently."
-        url={`https://${props.host || 'hiko.dev'}/crypto`}
-        image="/images/hikoAvator.png"
+        url={`${siteUrl}/crypto`}
+        image={getDefaultSeoImage(props.host)}
+        imageAlt="Crypto prices preview"
         type="website"
         jsonLd={{
           '@context': 'https://schema.org',
           '@type': 'WebPage',
           name: 'Crypto Prices',
+          url: `${siteUrl}/crypto`,
           description: 'Live cryptocurrency prices and converter. Data from Binance.',
           dateModified: props.builtAt,
         }}

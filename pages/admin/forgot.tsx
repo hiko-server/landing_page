@@ -19,7 +19,7 @@ export default function Forgot() {
 
   return (
     <>
-      <CustomHead title="Forgot Password" />
+      <CustomHead title="Forgot Password" robots="noindex,nofollow" />
       <HeaderFooter isMobile={isMobile}>
         <Flex align="center" justify="center" p={10}>
           <VStack spacing={4} maxW="md" w="full">
@@ -41,4 +41,3 @@ export default function Forgot() {
     </>
   )
 }
-

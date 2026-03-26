@@ -15,6 +15,7 @@ export default function Custom500() {
         url="https://hiko.dev/500"
         image="/images/hikoAvator.png"
         type="website"
+        robots="noindex,nofollow"
       />
       <HeaderFooter isMobile={isMobile}>
         <ErrorPageState
