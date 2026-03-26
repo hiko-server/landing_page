@@ -1,55 +1,45 @@
-import React, { useEffect, useRef } from "react";
-import { Box } from "@chakra-ui/react";
-import HCaptcha from "@hcaptcha/react-hcaptcha";
-import { useColorMode } from '@chakra-ui/react'
+import React, { useEffect, useRef } from 'react'
+import { Box, useColorMode } from '@chakra-ui/react'
+import HCaptcha from '@hcaptcha/react-hcaptcha'
 
 interface CaptchaProps {
-  updateToken: React.Dispatch<React.SetStateAction<string | null>>;
-  shouldReset: boolean;
-  updateReset: React.Dispatch<React.SetStateAction<boolean>>;
+  updateToken: React.Dispatch<React.SetStateAction<string | null>>
+  shouldReset: boolean
+  updateReset: React.Dispatch<React.SetStateAction<boolean>>
 }
 
 const Captcha = ({
   updateToken,
   shouldReset,
-  updateReset
+  updateReset,
 }: CaptchaProps): JSX.Element => {
-  const captchaRef = useRef<HCaptcha>(null);
+  const captchaRef = useRef<HCaptcha>(null)
   const { colorMode } = useColorMode()
-
-  const onExpire = () => {
-    updateToken(null);
-  };
-
-  const onError = (_err: unknown) => {
-    // noop
-  };
+  const siteKey =
+    process.env.NEXT_PUBLIC_HCAPTCHA_SITE_KEY ||
+    process.env.NEXT_PUBLIC_HCAPTCHA_KEY ||
+    ''
 
   useEffect(() => {
-    if (shouldReset) {
-      updateReset(false);
-      captchaRef.current?.resetCaptcha();
-    }
-  }, [shouldReset, updateReset]);
+    if (!shouldReset) return
 
-  useEffect(() => {}, []);
+    updateReset(false)
+    updateToken(null)
+    captchaRef.current?.resetCaptcha()
+  }, [shouldReset, updateReset, updateToken])
 
   return (
     <Box h="auto" w="auto">
       <HCaptcha
-        sitekey={
-          process.env.NEXT_PUBLIC_HCAPTCHA_KEY
-            ? process.env.NEXT_PUBLIC_HCAPTCHA_KEY
-            : ""
-        }
+        sitekey={siteKey}
         onVerify={updateToken}
-        onError={onError}
-        onExpire={onExpire}
+        onError={() => updateToken(null)}
+        onExpire={() => updateToken(null)}
         theme={colorMode === 'dark' ? 'dark' : 'light'}
         ref={captchaRef}
       />
     </Box>
-  );
-};
+  )
+}
 
-export default Captcha;
+export default Captcha

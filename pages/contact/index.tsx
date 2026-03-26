@@ -1,16 +1,14 @@
-import { useSession } from 'next-auth/react'
 import React from 'react'
 
-import { Flex, useMediaQuery } from '@chakra-ui/react'
+import { Badge, Flex, Heading, Stack, Text, useColorModeValue, useMediaQuery } from '@chakra-ui/react'
 
 import ContactPro from '../../components/Contact/ContactPro'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 
 const ContactPage = (props: any) => {
-  useSession()
-
   const [isMobile] = useMediaQuery('(max-width: 767px)')
+  const mutedText = useColorModeValue('gray.600', 'gray.300')
 
   return (
     <React.Fragment>
@@ -21,7 +19,25 @@ const ContactPage = (props: any) => {
         image="/images/hikoAvator.png"
       />
       <HeaderFooter isMobile={isMobile}>
-        <Flex direction="column" alignItems="center" justifyContent="center" p={['20px', '40px']} gap={['20px', '40px']}>
+        <Flex
+          direction="column"
+          alignItems="center"
+          justifyContent="center"
+          px={['20px', '32px', '40px']}
+          py={['24px', '32px', '44px']}
+          gap={['20px', '28px']}
+        >
+          <Stack spacing={4} alignItems="center" textAlign="center" maxW="3xl">
+            <Badge colorScheme="teal" px={3} py={1} borderRadius="full">
+              Contact and collaboration
+            </Badge>
+            <Heading size={isMobile ? 'lg' : 'xl'}>Start the conversation with the right context</Heading>
+            <Text color={mutedText} fontSize={['md', 'lg']}>
+              Share what you are building, what kind of help you need, and any important timing
+              details. The form below keeps a local draft, includes captcha protection, and gives
+              clear feedback after submission.
+            </Text>
+          </Stack>
           <ContactPro home={props.home || undefined} />
         </Flex>
       </HeaderFooter>
