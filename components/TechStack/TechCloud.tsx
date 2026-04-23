@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Skeleton, Tag, Wrap, WrapItem } from '@chakra-ui/react'
 import SectionStatusCard from '../General-UI/SectionStatusCard'
 import { RemoteDataStatus } from '../../lib/github'

@@ -1,4 +1,4 @@
-import React, { useContext, useState } from 'react'
+import { useContext, useState } from 'react'
 import styled from '@emotion/styled'
 import { Flex, IconButton, Switch, Text, Button } from '@chakra-ui/react'
 

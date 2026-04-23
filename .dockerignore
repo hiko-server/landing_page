@@ -1,6 +1,10 @@
 .git
 .github
 .next
+!.next/standalone
+!.next/standalone/**
+!.next/static
+!.next/static/**
 .vscode
 node_modules
 coverage
@@ -23,3 +27,4 @@ tmp-cv.json
 sample.json
 tsconfig.tsbuildinfo
 Dockerfile-2
+certbot

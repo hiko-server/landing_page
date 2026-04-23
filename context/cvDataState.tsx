@@ -1,4 +1,4 @@
-import React, { useState, createContext } from 'react';
+import { useState, createContext } from 'react';
 import { CVData, defaultCVData } from '../types/cvProps';
 
 const CVDataContext = createContext<[CVData, React.Dispatch<React.SetStateAction<CVData>>] | undefined>(undefined);

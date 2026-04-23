@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 // import { delete_route, get_route_detail } from '../../../api/route'
 import { useRouter } from 'next/router'
 import { Flex, Text, Button, useDisclosure } from '@chakra-ui/react'

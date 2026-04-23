@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Flex, Heading, Tabs, TabList, Tab, TabPanels, TabPanel, Button, useToast, HStack } from '@chakra-ui/react'
 import { SettingsIcon } from '@chakra-ui/icons'
 import HeaderFooter from '../../layout/HeaderFooter'

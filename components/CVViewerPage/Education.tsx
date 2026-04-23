@@ -1,5 +1,4 @@
 import { Flex, Text } from '@chakra-ui/react'
-import React from 'react'
 import { Education } from '../../types/cvProps'
 import { CVSection, Row } from './PersonalInformation'
 import { devColor } from '../../helpers/devColor'

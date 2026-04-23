@@ -1,5 +1,4 @@
 import { Flex, Text } from '@chakra-ui/react'
-import React from 'react'
 // import { CustomComponentStyle } from "../theme/customComponentStyle"
 interface ContentBoxProps {
   children: React.ReactNode

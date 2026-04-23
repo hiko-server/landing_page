@@ -1,4 +1,4 @@
-import React, { useRef } from 'react'
+import { useRef } from 'react'
 import styled from 'styled-components'
 import { Box, Flex, Text, Image } from '@chakra-ui/react'
 import { footerHeight, sidebarWidth } from '../../theme/constant'

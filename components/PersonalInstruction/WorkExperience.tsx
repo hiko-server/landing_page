@@ -11,7 +11,6 @@ import {
   Text,
 } from '@chakra-ui/react'
 import { useColorModeValue } from '@chakra-ui/react'
-import React from 'react'
 import { Experiences } from '../../types/cvProps'
 import { DateTime } from 'luxon'
 

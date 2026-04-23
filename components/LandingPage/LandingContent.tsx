@@ -1,5 +1,4 @@
 import { Box, Flex } from '@chakra-ui/react'
-import React from 'react'
 
 import PersonalInfo from './PersonalInfo'
 import Content from './Content'

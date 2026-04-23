@@ -1,7 +1,6 @@
 import { Flex, Input, useToast, Button, Text, Box } from '@chakra-ui/react'
 import { Dispatch, SetStateAction, useEffect, useState } from 'react'
 import { QueryRouteList, RouteDetail } from '../../types/route'
-import React from 'react'
 import CustomInput from '../CustomInput'
 // import { faSearch } from '@fortawesome/free-solid-svg-icons'
 import {

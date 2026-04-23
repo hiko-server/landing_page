@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import { useEffect } from 'react'
 import axios from 'axios'
 import url from 'url'
 import qs from 'qs'

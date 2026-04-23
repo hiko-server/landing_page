@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from 'react'
+import { useContext, useEffect, useState } from 'react'
 import styled from '@emotion/styled'
 import { Flex, useToast } from '@chakra-ui/react'
 

@@ -1,5 +1,4 @@
 'use client'
-import React from 'react'
 import type { HomeData } from '../../lib/home'
 import {
   Box,

@@ -1,5 +1,5 @@
 import { Box } from "@chakra-ui/react";
-import React, { useState, HTMLAttributes } from "react";
+import { useState, HTMLAttributes } from "react";
 
 interface AnimatedBoxProps extends HTMLAttributes<HTMLDivElement> {
     children: React.ReactNode;

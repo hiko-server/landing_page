@@ -1,5 +1,5 @@
 #NEW
-FROM node:18-alpine AS build
+FROM node:22-alpine AS build
 
 RUN apk add --no-cache libc6-compat
 
@@ -14,7 +14,7 @@ COPY . .
 RUN yarn build
 
 
-FROM node:18-alpine AS release
+FROM node:22-alpine AS release
 # FROM node:18-slim AS release
 
 ENV NODE_ENV=production

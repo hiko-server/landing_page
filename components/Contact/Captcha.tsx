@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { Box, useColorMode } from '@chakra-ui/react'
 import HCaptcha from '@hcaptcha/react-hcaptcha'
 

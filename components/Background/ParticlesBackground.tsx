@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { Box, useColorModeValue, usePrefersReducedMotion } from '@chakra-ui/react'
 
 type Vec = { x: number; y: number; vx: number; vy: number }

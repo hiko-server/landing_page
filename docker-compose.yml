@@ -5,15 +5,12 @@ services:
     container_name: hiko-landing-page-frontend-ts-staging
     build:
       context: .
-      dockerfile: ./Dockerfile
+      dockerfile: ./Dockerfile.prebuilt
     env_file:
       - .env
     restart: on-failure
     ports:
-      - 8000:3000
-    networks:
-      easilycv:
-        ipv4_address: 172.18.0.9
+      - "${LANDING_PAGE_HOST_PORT:-3002}:3000"
   # reverse-proxy:
   #   image: nginx:latest
   #   container_name: hiko-easilycv-frontend-nginx_staging
@@ -27,8 +24,3 @@ services:
   #   networks:
   #     easilycv:
   #       ipv4_address: 172.18.0.5 
-
-networks:
-  easilycv:
-    name: easilycv
-    external: true

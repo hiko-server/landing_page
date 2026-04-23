@@ -1,4 +1,4 @@
-import React, { useRef } from 'react'
+import { useRef } from 'react'
 import styled from 'styled-components'
 import { Flex, Text } from '@chakra-ui/react'
 import { useRouter } from 'next/router'

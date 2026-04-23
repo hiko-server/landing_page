@@ -1,7 +1,6 @@
 import { Box } from '@chakra-ui/react'
 import Footer from '../components/Footer/Footer'
 import Header from '../components/Header/Header'
-import React from 'react'
 import AnimatedBackground from '../components/Background/AnimatedBackground'
 import ParticlesBackground from '../components/Background/ParticlesBackground'
 

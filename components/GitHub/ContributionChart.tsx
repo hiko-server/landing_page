@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Box, Image, Skeleton, Text, useColorModeValue } from '@chakra-ui/react'
 import SectionStatusCard from '../General-UI/SectionStatusCard'
 

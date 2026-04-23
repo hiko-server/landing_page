@@ -1,5 +1,4 @@
 import { Text, Flex, Box } from '@chakra-ui/react'
-import React from 'react'
 import { Skill } from '../../types/cvProps'
 import { devColor } from '../../helpers/devColor'
 import { CVSection, Row } from './PersonalInformation'

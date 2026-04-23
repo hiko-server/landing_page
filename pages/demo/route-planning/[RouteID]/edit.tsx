@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Flex } from '@chakra-ui/react'
 import ASALayout from '../../../../layout/ASA'
 import { QueryRouteList, RouteDetail } from '../../../../types/route'

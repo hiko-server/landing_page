@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import { useMemo } from 'react'
 import { Box, Flex, Heading, Text, useColorModeValue } from '@chakra-ui/react'
 import { motion } from 'framer-motion'
 

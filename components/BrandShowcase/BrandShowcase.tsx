@@ -1,6 +1,5 @@
 // Brands.tsx with Chakra UI
 'use client'
-import React from 'react'
 import { Box, Grid, Image, Link, useColorModeValue } from '@chakra-ui/react'
 import { motion } from 'framer-motion'
 

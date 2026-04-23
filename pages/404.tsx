@@ -1,4 +1,3 @@
-import React from 'react'
 import { useMediaQuery } from '@chakra-ui/react'
 import CustomHead from '../components/General-UI/CustomHead'
 import ErrorPageState from '../components/General-UI/ErrorPageState'

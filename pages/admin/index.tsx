@@ -1,4 +1,3 @@
-import React from 'react'
 import { Box, Button, Flex, Heading, SimpleGrid, Text } from '@chakra-ui/react'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'

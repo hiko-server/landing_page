@@ -1,4 +1,3 @@
-import React from 'react'
 import { Box, useColorModeValue, usePrefersReducedMotion } from '@chakra-ui/react'
 import { motion } from 'framer-motion'
 
