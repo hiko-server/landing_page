@@ -4,7 +4,6 @@ import { useElementSize } from 'usehooks-ts'
 import { navbarHeight } from '../../theme/constant'
 import { useRouter } from 'next/router'
 import { ChevronLeft } from '@mui/icons-material'
-import React from 'react'
 // import { useElementSize } from 'usehooks-ts'
 
 const Panel = ({

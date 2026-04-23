@@ -10,7 +10,6 @@ import {
   Text,
 } from '@chakra-ui/react'
 import { useColorModeValue } from '@chakra-ui/react'
-import React from 'react'
 import { DateTime } from 'luxon'
 
 import { CompetitionAwards } from '../../types/cvProps'

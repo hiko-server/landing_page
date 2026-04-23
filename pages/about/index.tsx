@@ -1,4 +1,3 @@
-import React from 'react'
 
 import LandingCVSections from '../../components/LandingPage/LandingCVSections'
 import { Flex, useMediaQuery, Box, Heading } from '@chakra-ui/react'

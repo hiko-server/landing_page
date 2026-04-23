@@ -1,4 +1,3 @@
-import React from 'react'
 import type { GetStaticProps } from 'next'
 import { Box, Flex, Heading, Text, useMediaQuery } from '@chakra-ui/react'
 

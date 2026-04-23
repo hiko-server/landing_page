@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import Captcha from "./Captcha";
 import { Box, Button, Input, Textarea, VStack, Text, FormControl, FormErrorMessage, Alert, AlertIcon, AlertTitle } from "@chakra-ui/react";
 import { motion } from "framer-motion";

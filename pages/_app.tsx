@@ -1,6 +1,6 @@
 import { appWithTranslation } from 'next-i18next'
 
-import React, { useEffect } from 'react'
+import { useEffect } from 'react'
 import { useRouter } from 'next/router'
 import * as gtag from '../lib/gtag'
 

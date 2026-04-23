@@ -15,7 +15,7 @@ import {
 } from '@chakra-ui/react'
 import CVResult from '../../components/CVViewerPage/CVResult'
 // import { cvDataChinese, cvDataEnglish } from '../../example/cvdata'
-import React, { useState } from 'react'
+import { useState } from 'react'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 import { getDefaultSeoImage, getSiteUrl } from '../../lib/seo'

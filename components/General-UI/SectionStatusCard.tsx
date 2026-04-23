@@ -1,4 +1,3 @@
-import React from 'react'
 import { Box, Button, HStack, Text, useColorModeValue } from '@chakra-ui/react'
 
 export default function SectionStatusCard({

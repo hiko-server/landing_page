@@ -1,4 +1,3 @@
-import React from 'react'
 
 import { Badge, Flex, Heading, Stack, Text, useColorModeValue, useMediaQuery } from '@chakra-ui/react'
 

@@ -1,5 +1,4 @@
 import { Flex, Box, Text } from '@chakra-ui/react'
-import React from 'react'
 
 // const productionMode = process.env.NEXT_PUBLIC_PRODUCTION_MODE === 'production'
 const productionMode = true

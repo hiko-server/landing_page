@@ -1,5 +1,4 @@
 // import { useSession } from 'next-auth/react'
-import React from 'react'
 import { GetServerSideProps } from 'next'
 import { Flex, useMediaQuery } from '@chakra-ui/react'
 

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import { useMemo } from 'react'
 import { Box, Flex, Heading, Link, Tag, TagLabel, useColorModeValue } from '@chakra-ui/react'
 
 type CertItem = { certificationName: string; credentialURL: string }
