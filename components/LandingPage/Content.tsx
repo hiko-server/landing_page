@@ -13,7 +13,6 @@ import {
   Box,
   Heading,
   Badge,
-  Divider,
   useColorModeValue,
 } from '@chakra-ui/react'
 import styled from 'styled-components'
@@ -61,8 +60,26 @@ const SurfaceCard = ({ children }: { children: React.ReactNode }) => {
   )
 }
 
-const QuickAccessAccordionItem = ({ children }: { children: React.ReactNode | null }) => {
-  const expandedBg = useColorModeValue('orange.50', 'gray.700')
+const SectionHeading = ({ icon, children }: { icon?: string; children: React.ReactNode }) => {
+  const headingColor = useColorModeValue('gray.800', 'orange.100')
+  const accentLine = useColorModeValue(
+    'linear-gradient(90deg, #dd6b20, #f59e0b)',
+    'linear-gradient(90deg, #f97316, #fbbf24)'
+  )
+  return (
+    <Box mb={4}>
+      <Flex align="center" gap={2} mb={2}>
+        {icon && <Box fontSize="lg">{icon}</Box>}
+        <Heading as="h3" size="md" color={headingColor} fontFamily="'Sora', sans-serif" letterSpacing="0.01em">
+          {children}
+        </Heading>
+      </Flex>
+      <Box h="2px" w="40px" bgImage={accentLine} borderRadius="2px" />
+    </Box>
+  )
+}
+
+const QuickAccessAccordionItem = ({ children }: { children: React.ReactNode | null }) => {  const expandedBg = useColorModeValue('orange.50', 'gray.700')
   const titleColor = useColorModeValue('gray.800', 'orange.200')
   const panelColor = useColorModeValue('gray.800', 'gray.100')
   const border = useColorModeValue('orange.100', 'gray.600')
@@ -105,7 +122,6 @@ const Content = ({
   const router = useRouter()
   const isEditMode = router.asPath.includes('edit')
   const panelBg = useColorModeValue('linear-gradient(180deg, rgba(255,255,255,0.85), rgba(255,250,242,0.72))', 'linear-gradient(180deg, rgba(30,41,59,0.6), rgba(15,23,42,0.5))')
-  const headingColor = useColorModeValue('gray.800', 'orange.100')
 
   return (
     <Flex
@@ -174,18 +190,12 @@ const Content = ({
         </SurfaceCard>
 
         <SurfaceCard>
-          <Heading as="h3" size="md" mb={2} color={headingColor}>
-            Top GitHub Repositories
-          </Heading>
-          <Divider mb={4} />
+          <SectionHeading icon="🐙">Top GitHub Repositories</SectionHeading>
           <TopRepos />
         </SurfaceCard>
 
         <SurfaceCard>
-          <Heading as="h3" size="md" mb={2} color={headingColor}>
-            Tech Stack
-          </Heading>
-          <Divider mb={4} />
+          <SectionHeading icon="⚙️">Tech Stack</SectionHeading>
           <TechCloud />
           <Box mt={8}>
             <LanguageBars />
@@ -193,30 +203,22 @@ const Content = ({
         </SurfaceCard>
 
         <SurfaceCard>
-          <Heading as="h3" size="md" mb={2} color={headingColor}>
-            Recent GitHub Activity
-          </Heading>
-          <Divider mb={4} />
+          <SectionHeading icon="📈">Recent GitHub Activity</SectionHeading>
           <ActivityFeed />
         </SurfaceCard>
 
         <SurfaceCard>
-          <Heading as="h3" size="md" mb={2} color={headingColor}>
-            Project Spotlight
-          </Heading>
-          <Divider mb={4} />
+          <SectionHeading icon="🚀">Project Spotlight</SectionHeading>
           <ProjectSpotlight cvEn={cvEn} />
         </SurfaceCard>
 
         <SurfaceCard>
-          <Heading as="h3" size="md" mb={2} color={headingColor}>
-            Experience Timeline
-          </Heading>
-          <Divider mb={4} />
+          <SectionHeading icon="💼">Experience Timeline</SectionHeading>
           <ExperienceTimeline cvEn={cvEn} />
         </SurfaceCard>
 
         <SurfaceCard>
+          <SectionHeading icon="🏅">Certifications</SectionHeading>
           <CertificationsPeek cvEn={cvEn} />
         </SurfaceCard>
 
