@@ -10,7 +10,10 @@ import {
   /* Avatar, */ IconButton,
   Stack,
   Image,
+  useColorMode,
+  Tooltip,
 } from '@chakra-ui/react'
+import { FaSun, FaMoon } from 'react-icons/fa'
 import HeroHeadline from './HeroHeadline'
 import { FaGithub, FaGitlab, FaLinkedin, FaWhatsapp } from 'react-icons/fa'
 // import LinkedInBadge from "../linkedIn/linkedIn";
@@ -26,6 +29,7 @@ const PersonalInfo = ({
 }) => {
   const [showPhone, setShowPhone] = React.useState(false)
   const [showEmail, setShowEmail] = React.useState(false)
+  const { colorMode, toggleColorMode } = useColorMode()
 
   const handleSubmit = (e: { preventDefault: () => void }) => {
     e.preventDefault()
@@ -229,6 +233,20 @@ const PersonalInfo = ({
                       >
                         CV
                       </Button>
+                      <Tooltip label={colorMode === 'light' ? 'Dark mode' : 'Light mode'} placement="top">
+                        <IconButton
+                          size="lg"
+                          mb={6}
+                          onClick={toggleColorMode}
+                          icon={colorMode === 'light' ? <FaMoon /> : <FaSun />}
+                          aria-label="Toggle color mode"
+                          variant="outline"
+                          bg="rgba(0,0,0,0.4)"
+                          color="white"
+                          borderColor="rgba(255,255,255,0.3)"
+                          _hover={{ bg: 'rgba(0,0,0,0.6)' }}
+                        />
+                      </Tooltip>
                       <Stack direction="row" spacing={4}>
                         <IconButton
                           size="lg"

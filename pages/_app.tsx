@@ -26,6 +26,7 @@ import { SettingsAppProvider } from '../context/settingsState'
 import { AuthProvider } from '../context/authState'
 import Head from 'next/head';
 import ScrollToTop from '../components/ScrollToTop/ScrollToTop'
+import ScrollProgressBar from '../components/General-UI/ScrollProgressBar'
 
 // const queryClient = new QueryClient()
 
@@ -68,6 +69,7 @@ const App = ({ Component, pageProps }: any) => {
                   </motion.div>
                 </AnimatePresence>
                 <ScrollToTop />
+                <ScrollProgressBar />
               </SettingsAppProvider>
             </MainProvider>
           </AuthProvider>
