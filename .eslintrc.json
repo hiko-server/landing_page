@@ -1,57 +1,57 @@
 {
-  "parser": "@typescript-eslint/parser",
-  "parserOptions": {
-    "ecmaVersion": 2024,
-    "sourceType": "module",
-    "ecmaFeatures": {
-      "jsx": true
-    }
-  },
-  "extends": [
-    "next/core-web-vitals",
-    "plugin:@typescript-eslint/recommended",
-    "plugin:react/recommended"
-  ],
-  "plugins": [
-    "@typescript-eslint",
-    "react"
-  ],
-  "rules": {
-    "react/react-in-jsx-scope": "off",
-    "react/prop-types": "off",
-    "@typescript-eslint/explicit-module-boundary-types": "off",
-    "@typescript-eslint/no-explicit-any": "off",
-    "@typescript-eslint/no-unused-vars": "warn",
-    "@typescript-eslint/no-var-requires": "warn",
-    "no-console": "off",
-    "no-empty": "warn",
-    "no-empty-pattern": "warn",
-    "no-extra-semi": "warn",
-    "no-useless-escape": "warn",
-    "no-unused-labels": "warn",
-    "prefer-const": "warn",
-    "no-var": "error",
-    "react/jsx-key": "warn",
-    "react/no-unescaped-entities": "warn",
-    "react-hooks/rules-of-hooks": "warn",
-    "react-hooks/exhaustive-deps": "warn",
-    "@typescript-eslint/ban-ts-comment": "warn"
-  },
-  "settings": {
-    "react": {
-      "version": "detect"
-    }
-  },
-  "env": {
-    "browser": true,
-    "es2024": true,
-    "node": true
-  },
-  "ignorePatterns": [
-    "node_modules",
-    ".next",
-    "out",
-    "build",
-    "dist"
-  ]
+    "parser": "@typescript-eslint/parser",
+    "parserOptions": {
+        "ecmaVersion": 2024,
+        "sourceType": "module",
+        "ecmaFeatures": {
+            "jsx": true
+        }
+    },
+    "extends": [
+        "next/core-web-vitals",
+        "plugin:@typescript-eslint/recommended",
+        "plugin:react/recommended"
+    ],
+    "plugins": [
+        "@typescript-eslint",
+        "react"
+    ],
+    "rules": {
+        "react/react-in-jsx-scope": "off",
+        "react/prop-types": "off",
+        "@typescript-eslint/explicit-module-boundary-types": "off",
+        "@typescript-eslint/no-explicit-any": "off",
+        "@typescript-eslint/no-unused-vars": "warn",
+        "@typescript-eslint/no-var-requires": "warn",
+        "no-console": "off",
+        "no-empty": "warn",
+        "no-empty-pattern": "warn",
+        "no-extra-semi": "warn",
+        "no-useless-escape": "warn",
+        "no-unused-labels": "warn",
+        "prefer-const": "warn",
+        "no-var": "error",
+        "react/jsx-key": "warn",
+        "react/no-unescaped-entities": "warn",
+        "react-hooks/rules-of-hooks": "warn",
+        "react-hooks/exhaustive-deps": "warn",
+        "@typescript-eslint/ban-ts-comment": "warn"
+    },
+    "settings": {
+        "react": {
+            "version": "detect"
+        }
+    },
+    "env": {
+        "browser": true,
+        "es2024": true,
+        "node": true
+    },
+    "ignorePatterns": [
+        "node_modules",
+        ".next",
+        "out",
+        "build",
+        "dist"
+    ]
 }
