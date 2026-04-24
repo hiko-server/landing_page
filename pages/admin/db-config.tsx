@@ -7,6 +7,7 @@ import {
   Input,
   SimpleGrid,
   Text,
+  useColorModeValue,
   useToast,
   VStack,
   HStack,
@@ -194,23 +195,66 @@ export default function DbConfigPage() {
       }
   }
 
+  const pageBg = useColorModeValue('gray.50', 'gray.900')
+  const cardBg = useColorModeValue('rgba(255,255,255,0.9)', 'rgba(30,41,59,0.7)')
+  const borderColor = useColorModeValue('rgba(0,0,0,0.07)', 'rgba(255,255,255,0.1)')
+  const dim = useColorModeValue('gray.600', 'gray.400')
+
   return (
-    <Flex direction="column" minH="100vh" bg="gray.50" p={8}>
-        
+    <Flex direction="column" minH="100vh" bg={pageBg} p={{ base: 5, md: 9 }}>
+
         {/* Header */}
-        <Flex justify="space-between" align="center" mb={8}>
+        <Flex justify="space-between" align="center" mb={8} flexWrap="wrap" gap={3}>
             <HStack>
-                <Button leftIcon={<ArrowBackIcon />} onClick={() => router.push('/admin/dashboard')}>Back to Dashboard</Button>
-                <Heading size="lg">Database Management</Heading>
+                <Button
+                  leftIcon={<ArrowBackIcon />}
+                  onClick={() => router.push('/admin/dashboard')}
+                  borderRadius="10px"
+                  variant="ghost"
+                >
+                  Back
+                </Button>
+                <Box>
+                  <Heading
+                    size="lg"
+                    fontFamily="'Sora', sans-serif"
+                    bgGradient="linear(to-r, purple.500, blue.400)"
+                    bgClip="text"
+                  >
+                    Database Management
+                  </Heading>
+                  <Text fontSize="xs" color={dim}>MongoDB backup, restore, and configuration</Text>
+                </Box>
             </HStack>
-            <Badge colorScheme={dbVerified ? 'green' : 'red'} p={2} borderRadius="md" fontSize="md">
-                {dbVerified ? 'Connected' : 'Disconnected'}
+            <Badge
+              colorScheme={dbVerified ? 'green' : 'red'}
+              borderRadius="full"
+              px={4}
+              py={2}
+              fontSize="sm"
+              display="flex"
+              alignItems="center"
+              gap={1}
+            >
+              {dbVerified ? <CheckCircleIcon mr={1} /> : <WarningIcon mr={1} />}
+              {dbVerified ? 'Connected' : 'Disconnected'}
             </Badge>
         </Flex>
 
         {/* Configuration Panel */}
-        <Box bg="white" p={6} borderRadius="lg" shadow="sm" mb={8}>
-            <Heading size="md" mb={4}>Connection Settings</Heading>
+        <Box
+          bg={cardBg}
+          border="1px solid"
+          borderColor={borderColor}
+          p={7}
+          borderRadius="20px"
+          backdropFilter="blur(14px)"
+          mb={7}
+          position="relative"
+          overflow="hidden"
+        >
+          <Box position="absolute" top={0} left={0} right={0} h="3px" bgImage="linear-gradient(135deg,#7c3aed,#3b82f6)" />
+            <Heading size="md" mb={5} fontFamily="'Sora', sans-serif">Connection Settings</Heading>
             <SimpleGrid columns={[1, 2]} gap={6}>
                  <FormControl>
                     <FormLabel>Database URL</FormLabel>
@@ -254,56 +298,86 @@ export default function DbConfigPage() {
                  </FormControl>
             </SimpleGrid>
             <Flex mt={6} justify="flex-end">
-                <Button colorScheme="blue" onClick={testConnection} isLoading={loading} leftIcon={dbVerified ? <CheckCircleIcon /> : undefined}>
+                <Button
+                  colorScheme="purple"
+                  borderRadius="10px"
+                  onClick={testConnection}
+                  isLoading={loading}
+                  leftIcon={dbVerified ? <CheckCircleIcon /> : undefined}
+                >
                     Test Connection & Save
                 </Button>
             </Flex>
         </Box>
 
         {/* Operations Panel */}
-        <SimpleGrid columns={[1, 2]} gap={8}>
-            
+        <SimpleGrid columns={[1, 2]} gap={7}>
+
             {/* Backup */}
-            <Box bg="white" p={6} borderRadius="lg" shadow="sm" position="relative" opacity={dbVerified ? 1 : 0.6} pointerEvents={dbVerified ? 'all' : 'none'}>
-                <Heading size="md" mb={4} color="blue.600">Backup (Site -{'>'} DB)</Heading>
-                <Text mb={6} color="gray.500">Save current site content, settings, and files to the database.</Text>
-                
-                <VStack align="stretch" spacing={4}>
-                    <Button onClick={() => performBackup('all')} colorScheme="blue" size="lg" isLoading={loading}>
+            <Box
+              bg={cardBg}
+              border="1px solid"
+              borderColor={borderColor}
+              p={7}
+              borderRadius="20px"
+              backdropFilter="blur(14px)"
+              position="relative"
+              overflow="hidden"
+              opacity={dbVerified ? 1 : 0.55}
+              pointerEvents={dbVerified ? 'all' : 'none'}
+            >
+              <Box position="absolute" top={0} left={0} right={0} h="3px" bgImage="linear-gradient(135deg,#1d4ed8,#3b82f6)" />
+                <Heading size="md" mb={2} color="blue.500" fontFamily="'Sora', sans-serif">Backup</Heading>
+                <Text mb={6} color={dim} fontSize="sm">Site → Database: save current content to MongoDB.</Text>
+
+                <VStack align="stretch" spacing={3}>
+                    <Button onClick={() => performBackup('all')} colorScheme="blue" size="lg" borderRadius="12px" isLoading={loading}>
                         Backup Everything
                     </Button>
                     <HStack>
-                        <Button flex={1} onClick={() => performBackup('cv')} isLoading={loading}>Backup CV Data</Button>
-                        <Button flex={1} onClick={() => performBackup('home')} isLoading={loading}>Backup Home Settings</Button>
+                        <Button flex={1} onClick={() => performBackup('cv')} borderRadius="10px" isLoading={loading}>CV Data</Button>
+                        <Button flex={1} onClick={() => performBackup('home')} borderRadius="10px" isLoading={loading}>Home Settings</Button>
                     </HStack>
-                    <Button onClick={() => performBackup('images')} isLoading={loading}>Backup Images Only</Button>
+                    <Button onClick={() => performBackup('images')} borderRadius="10px" isLoading={loading}>Images Only</Button>
 
                     {backupStatus && (
-                        <Box p={3} bg="blue.50" borderRadius="md">
-                            <Text fontSize="sm" fontWeight="bold">Status: {backupStatus}</Text>
+                        <Box p={3} bg="blue.50" borderRadius="12px" border="1px solid" borderColor="blue.100">
+                            <Text fontSize="sm" fontWeight="bold" color="blue.700">Status: {backupStatus}</Text>
                         </Box>
                     )}
                 </VStack>
             </Box>
 
             {/* Restore */}
-            <Box bg="white" p={6} borderRadius="lg" shadow="sm" position="relative" opacity={dbVerified ? 1 : 0.6} pointerEvents={dbVerified ? 'all' : 'none'}>
-                <HStack mb={4}><WarningIcon color="orange.500"/><Heading size="md" color="orange.600">Restore (DB -{'>'} Site)</Heading></HStack>
-                <Text mb={6} color="gray.500">Overwrite local site files with data from the database.</Text>
-                
-                <VStack align="stretch" spacing={4}>
-                    <Button onClick={() => performRestore('all')} colorScheme="orange" size="lg" isLoading={loading}>
+            <Box
+              bg={cardBg}
+              border="1px solid"
+              borderColor={borderColor}
+              p={7}
+              borderRadius="20px"
+              backdropFilter="blur(14px)"
+              position="relative"
+              overflow="hidden"
+              opacity={dbVerified ? 1 : 0.55}
+              pointerEvents={dbVerified ? 'all' : 'none'}
+            >
+              <Box position="absolute" top={0} left={0} right={0} h="3px" bgImage="linear-gradient(135deg,#dd6b20,#f59e0b)" />
+              <HStack mb={2}><WarningIcon color="orange.400"/><Heading size="md" color="orange.500" fontFamily="'Sora', sans-serif">Restore</Heading></HStack>
+                <Text mb={6} color={dim} fontSize="sm">Database → Site: overwrite local files with stored backup.</Text>
+
+                <VStack align="stretch" spacing={3}>
+                    <Button onClick={() => performRestore('all')} colorScheme="orange" size="lg" borderRadius="12px" isLoading={loading}>
                         Restore Everything
                     </Button>
                     <HStack>
-                        <Button flex={1} onClick={() => performRestore('cv')} isLoading={loading}>Restore CV Data</Button>
-                        <Button flex={1} onClick={() => performRestore('home')} isLoading={loading}>Restore Home Settings</Button>
+                        <Button flex={1} onClick={() => performRestore('cv')} borderRadius="10px" isLoading={loading}>CV Data</Button>
+                        <Button flex={1} onClick={() => performRestore('home')} borderRadius="10px" isLoading={loading}>Home Settings</Button>
                     </HStack>
-                    <Button onClick={() => performRestore('images')} isLoading={loading}>Restore Images Only</Button>
+                    <Button onClick={() => performRestore('images')} borderRadius="10px" isLoading={loading}>Images Only</Button>
 
                     {restoreStatus && (
-                        <Box p={3} bg="orange.50" borderRadius="md">
-                            <Text fontSize="sm" fontWeight="bold">Status: {restoreStatus}</Text>
+                        <Box p={3} bg="orange.50" borderRadius="12px" border="1px solid" borderColor="orange.100">
+                            <Text fontSize="sm" fontWeight="bold" color="orange.700">Status: {restoreStatus}</Text>
                         </Box>
                     )}
                 </VStack>
