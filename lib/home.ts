@@ -22,6 +22,7 @@ export type HomeData = {
 }
 
 const homePath = path.join(process.cwd(), 'data', 'home.json')
+const homeSnapshotDir = path.join(process.cwd(), 'data', 'home_snapshots')
 
 export function readHome(): HomeData | null {
   try {
@@ -36,3 +37,44 @@ export function writeHome(data: HomeData) {
   fs.mkdirSync(path.dirname(homePath), { recursive: true })
   fs.writeFileSync(homePath, JSON.stringify(data, null, 2), 'utf-8')
 }
+
+export function saveHomeSnapshot(): string {
+  const now = new Date()
+  const stamp = now.toISOString().replace(/[:.]/g, '-').replace('T', '_').replace('Z', '')
+  const filename = `home_${stamp}.json`
+  const filePath = path.join(homeSnapshotDir, filename)
+  fs.mkdirSync(homeSnapshotDir, { recursive: true })
+  const current = readHome()
+  fs.writeFileSync(filePath, JSON.stringify(current, null, 2), 'utf-8')
+  return filename
+}
+
+export function listHomeSnapshots(): string[] {
+  try {
+    return fs.readdirSync(homeSnapshotDir).filter(f => f.endsWith('.json')).sort().reverse()
+  } catch {
+    return []
+  }
+}
+
+export function restoreHomeSnapshot(filename: string): boolean {
+  const safe = filename.replace(/[^a-zA-Z0-9_.\-]/g, '_')
+  const filePath = path.join(homeSnapshotDir, safe)
+  if (!fs.existsSync(filePath)) return false
+  const raw = fs.readFileSync(filePath, 'utf-8')
+  fs.mkdirSync(path.dirname(homePath), { recursive: true })
+  fs.writeFileSync(homePath, raw, 'utf-8')
+  return true
+}
+
+export function readHomeSnapshot(filename: string): string | null {
+  const safe = filename.replace(/[^a-zA-Z0-9_.\-]/g, '_')
+  const filePath = path.join(homeSnapshotDir, safe)
+  try {
+    if (!fs.existsSync(filePath)) return null
+    return fs.readFileSync(filePath, 'utf-8')
+  } catch {
+    return null
+  }
+}
+
