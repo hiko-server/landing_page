@@ -4,7 +4,7 @@
     "module": "esnext",
     "jsx": "preserve",
     "lib": ["dom", "dom.iterable", "esnext"],
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "allowJs": true,
     "noEmit": true,
     "strict": true,
