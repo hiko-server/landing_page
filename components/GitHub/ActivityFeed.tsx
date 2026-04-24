@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react'
-import { Box, Flex, HStack, Skeleton, Text, Badge } from '@chakra-ui/react'
+import { Box, Flex, Skeleton, Text, useColorModeValue } from '@chakra-ui/react'
+import { motion } from 'framer-motion'
+import { FaCode, FaCodeBranch, FaExclamationCircle, FaPlus, FaBolt } from 'react-icons/fa'
 
 type Event = {
   id: string
@@ -9,7 +11,7 @@ type Event = {
   payload?: any
 }
 
-function formatEvent(e: Event): { title: string; url?: string } {
+function formatEvent(e: Event): { title: string } {
   const repo = e.repo?.name || ''
   switch (e.type) {
     case 'PushEvent': {
@@ -35,8 +37,27 @@ function formatEvent(e: Event): { title: string; url?: string } {
   }
 }
 
+function eventIcon(type: string) {
+  if (type === 'PushEvent') return <FaCode size={12} />
+  if (type === 'PullRequestEvent') return <FaCodeBranch size={12} />
+  if (type === 'IssuesEvent') return <FaExclamationCircle size={12} />
+  if (type === 'CreateEvent') return <FaPlus size={12} />
+  return <FaBolt size={12} />
+}
+
+function eventGradient(type: string) {
+  if (type === 'PushEvent') return 'linear-gradient(135deg,#dd6b20,#f59e0b)'
+  if (type === 'PullRequestEvent') return 'linear-gradient(135deg,#0f766e,#14b8a6)'
+  if (type === 'IssuesEvent') return 'linear-gradient(135deg,#dc2626,#f87171)'
+  if (type === 'CreateEvent') return 'linear-gradient(135deg,#7c3aed,#a78bfa)'
+  return 'linear-gradient(135deg,#2563eb,#60a5fa)'
+}
+
 export default function ActivityFeed() {
   const [events, setEvents] = useState<Event[] | null>(null)
+  const lineColor = useColorModeValue('gray.100', 'gray.700')
+  const textColor = useColorModeValue('gray.700', 'gray.300')
+  const metaColor = useColorModeValue('gray.400', 'gray.500')
 
   useEffect(() => {
     let alive = true
@@ -50,22 +71,68 @@ export default function ActivityFeed() {
   if (events === null) {
     return (
       <Flex direction="column" gap={3}>
-        {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} height="18px" />)}
+        {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} height="36px" borderRadius="12px" />)}
       </Flex>
     )
   }
   if (!events.length) return null
 
   return (
-    <Box>
-      <Flex direction="column" gap={2}>
-        {events.map((e) => {
+    <Box position="relative" pl={7}>
+      <Box
+        position="absolute"
+        left="13px"
+        top={2}
+        bottom={2}
+        w="2px"
+        bg={lineColor}
+        borderRadius="2px"
+      />
+      <Flex direction="column" gap={3}>
+        {events.map((e, i) => {
           const { title } = formatEvent(e)
+          const gradient = eventGradient(e.type)
+          const date = new Date(e.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
           return (
-            <HStack key={e.id} spacing={3} align="center">
-              <Badge colorScheme="blue">{new Date(e.created_at).toLocaleDateString()}</Badge>
-              <Text fontSize="sm">{title}</Text>
-            </HStack>
+            <Box
+              as={motion.div as any}
+              key={e.id}
+              initial={{ opacity: 0, x: -12 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.3, delay: i * 0.04 } as any}
+              position="relative"
+            >
+              <Box
+                position="absolute"
+                left="-22px"
+                top="50%"
+                transform="translateY(-50%)"
+                w="8px"
+                h="8px"
+                borderRadius="full"
+                bgImage={gradient}
+                zIndex={1}
+              />
+              <Flex align="center" gap={2}>
+                <Box
+                  p={1}
+                  borderRadius="6px"
+                  bgImage={gradient}
+                  color="white"
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="center"
+                  flexShrink={0}
+                >
+                  {eventIcon(e.type)}
+                </Box>
+                <Flex direction="column" flex={1} minW={0}>
+                  <Text fontSize="sm" color={textColor} noOfLines={1} lineHeight="1.4">{title}</Text>
+                  <Text fontSize="xs" color={metaColor}>{date}</Text>
+                </Flex>
+              </Flex>
+            </Box>
           )
         })}
       </Flex>

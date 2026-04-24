@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Box, Flex, Heading, HStack, Skeleton, Text, useColorModeValue } from '@chakra-ui/react'
+import { Box, Flex, Skeleton, Text, useColorModeValue } from '@chakra-ui/react'
+import { motion } from 'framer-motion'
 
 type LangData = { total: number; breakdown: Record<string, number> }
 
@@ -32,6 +33,9 @@ function colorFor(lang: string): string {
 
 export default function LanguageBars() {
   const [data, setData] = useState<LangData | null>(null)
+  const trackBg = useColorModeValue('rgba(0,0,0,0.06)', 'rgba(255,255,255,0.07)')
+  const textColor = useColorModeValue('gray.700', 'gray.300')
+  const metaColor = useColorModeValue('gray.500', 'gray.500')
 
   useEffect(() => {
     let alive = true
@@ -52,11 +56,9 @@ export default function LanguageBars() {
 
   if (!data) {
     return (
-      <HStack spacing={4} w="100%">
-        <Skeleton height="20px" flex="1" />
-        <Skeleton height="20px" flex="1" />
-        <Skeleton height="20px" flex="1" />
-      </HStack>
+      <Flex direction="column" gap={3}>
+        {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} height="20px" borderRadius="full" />)}
+      </Flex>
     )
   }
 
@@ -64,16 +66,34 @@ export default function LanguageBars() {
 
   return (
     <Box>
-      <Heading as="h4" size="sm" mb={3} color={useColorModeValue('blue.700','blue.200')}>GitHub Languages</Heading>
-      <Flex direction="column" gap={2}>
-        {items.map(({ name, pct, bytes }) => (
-          <Box key={name}>
+      <Flex direction="column" gap={3}>
+        {items.map(({ name, pct }, idx) => (
+          <Box
+            as={motion.div as any}
+            key={name}
+            initial={{ opacity: 0, x: -10 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.35, delay: idx * 0.06 } as any}
+          >
             <Flex align="center" justify="space-between" mb={1}>
-              <Text fontSize="sm" fontWeight="medium">{name}</Text>
-              <Text fontSize="xs" color="gray.500">{pct.toFixed(1)}% · {bytes.toLocaleString()} bytes</Text>
+              <Flex align="center" gap={2}>
+                <Box w="10px" h="10px" borderRadius="full" bg={colorFor(name)} flexShrink={0} />
+                <Text fontSize="sm" fontWeight="600" color={textColor}>{name}</Text>
+              </Flex>
+              <Text fontSize="xs" color={metaColor} sx={{ fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(1)}%</Text>
             </Flex>
-            <Box w="100%" h="8px" bg="gray.100" borderRadius="md" overflow="hidden">
-              <Box w={`${pct}%`} h="100%" bg={colorFor(name)} />
+            <Box w="100%" h="6px" bg={trackBg} borderRadius="full" overflow="hidden">
+              <Box
+                as={motion.div as any}
+                initial={{ width: '0%' }}
+                whileInView={{ width: `${pct}%` }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.7, delay: idx * 0.06, ease: 'easeOut' } as any}
+                h="100%"
+                bg={colorFor(name)}
+                borderRadius="full"
+              />
             </Box>
           </Box>
         ))}
