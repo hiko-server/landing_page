@@ -6,32 +6,42 @@ import Content from './Content'
 import Brands from '../BrandShowcase/BrandShowcase'
 import type { HomeData } from '../../lib/home'
 
-const LandingContent = ({ isMobile, home, cv }: { isMobile: boolean; home?: HomeData | null; cv?: { en: any[]; zh: any[] } | null }) => {
+const LandingContent = ({
+  isMobile,
+  home,
+  cv,
+}: {
+  isMobile: boolean
+  home?: HomeData | null
+  cv?: { en: any[]; zh: any[] } | null
+}) => {
   return (
     <Flex
-      // w={{ base: "100%", md: "80%" }}
-      // p={{ base: 4, md: 8 }}
-      // mx="auto"
-      // direction={{ base: 'column', md: 'row' }}
-      justifyContent={'center'}
-      alignItems={'center'}
-      // gap={{ base: '20px', md: '40px' }}
+      justifyContent="center"
+      alignItems="center"
       flexWrap="wrap"
-      // zIndex={-2}
-      // backgroundColor={'black'}
-      // boxShadow={'0 4px 8px rgba(0, 0, 0, 0.1)'}
-      borderRadius={'8px'}
+      borderRadius="20px"
+      w="100%"
+      bg="transparent"
+      className="premium-home-shell"
+      px={{ base: 2, md: 4 }}
+      pb={{ base: 10, md: 16 }}
     >
       <PersonalInfo isMobile={isMobile} home={home || undefined} />
 
-      <Brands brands={home?.brands} />
-      <Box
-        // bgColor={'black'}
-        w={{ base: 'full', md: '1/2' }}
-      >
-        <Content quickAccess={home?.quickAccess} photos={home?.photos as any} cvEn={cv?.en} cvZh={cv?.zh} home={home || undefined} />
+      <Box w="100%" mt={{ base: 4, md: 8 }}>
+        <Brands brands={home?.brands} />
       </Box>
-      {/* <CryptoPriceTracker /> */}
+
+      <Box w="100%" mt={{ base: 4, md: 10 }}>
+        <Content
+          quickAccess={home?.quickAccess}
+          photos={home?.photos as any}
+          cvEn={cv?.en}
+          cvZh={cv?.zh}
+          home={home || undefined}
+        />
+      </Box>
     </Flex>
   )
 }
