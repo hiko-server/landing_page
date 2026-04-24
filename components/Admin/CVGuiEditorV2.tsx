@@ -23,7 +23,7 @@ import {
   AccordionIcon,
 } from '@chakra-ui/react'
 import { AddIcon, DeleteIcon, DragHandleIcon, ArrowUpIcon, ArrowDownIcon } from '@chakra-ui/icons'
-import { useForm, useFieldArray, Controller, useWatch, Control } from 'react-hook-form'
+import { useForm, useFieldArray, Controller, useWatch } from 'react-hook-form'
 import {
   DndContext,
   closestCenter,
@@ -44,7 +44,7 @@ import { CSS } from '@dnd-kit/utilities'
 // Structure Overview (Compact)
 // -----------------------------------------------------------------------------
 
-const StructureOverview = ({ control, fields, move }: { control: Control<any>, fields: any[], move: (from:number, to:number)=>void }) => {
+const StructureOverview = ({ control, fields, move }: { control: any, fields: any[], move: (from:number, to:number)=>void }) => {
     // We watch 'sections' to get live values for toggles, names
     const sections = useWatch({ control, name: 'sections' }) || []
 
@@ -181,7 +181,7 @@ function SortableItem({ id, children, handleProps, style: customStyle }: { id: s
 // Section Component
 // -----------------------------------------------------------------------------
 
-const SectionEditor = ({ section, index, control, bilingual }: { section: any, index: number, control: Control<any>, bilingual: boolean }) => {
+const SectionEditor = ({ section, index, control, bilingual }: { section: any, index: number, control: any, bilingual: boolean }) => {
     const {
         attributes,
         listeners,

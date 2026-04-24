@@ -1,5 +1,5 @@
 #NEW
-FROM node:18-alpine AS build
+FROM node:20-alpine AS build
 
 RUN apk add --no-cache libc6-compat
 
@@ -14,8 +14,8 @@ COPY . .
 RUN yarn build
 
 
-FROM node:18-alpine AS release
-# FROM node:18-slim AS release
+FROM node:20-alpine AS release
+# FROM node:20-slim AS release
 
 ENV NODE_ENV=production
 
@@ -45,7 +45,7 @@ EXPOSE 3000
 ENV PORT 3000
 ENV HOSTNAME localhost
 
-CMD ["node", "server.js"]
+CMD ["dumb-init", "node", "server.js"]
 
 
 #OLD
