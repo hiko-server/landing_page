@@ -40,12 +40,13 @@ const StyledBox = styled(Box)`
   max-width: 1100px;
 `
 
-const SurfaceCard = ({ children }: { children: React.ReactNode }) => {
+const SurfaceCard = ({ children, id }: { children: React.ReactNode; id?: string }) => {
   const bg = useColorModeValue('rgba(255,255,255,0.9)', 'rgba(22,28,36,0.72)')
   const border = useColorModeValue('rgba(15,23,42,0.08)', 'rgba(226,232,240,0.14)')
 
   return (
     <Box
+      id={id}
       bg={bg}
       border="1px solid"
       borderColor={border}
@@ -189,12 +190,12 @@ const Content = ({
           </Accordion>
         </SurfaceCard>
 
-        <SurfaceCard>
+        <SurfaceCard id="section-github">
           <SectionHeading icon="🐙">Top GitHub Repositories</SectionHeading>
           <TopRepos />
         </SurfaceCard>
 
-        <SurfaceCard>
+        <SurfaceCard id="section-tech">
           <SectionHeading icon="⚙️">Tech Stack</SectionHeading>
           <TechCloud />
           <Box mt={8}>
@@ -202,22 +203,22 @@ const Content = ({
           </Box>
         </SurfaceCard>
 
-        <SurfaceCard>
+        <SurfaceCard id="section-activity">
           <SectionHeading icon="📈">Recent GitHub Activity</SectionHeading>
           <ActivityFeed />
         </SurfaceCard>
 
-        <SurfaceCard>
+        <SurfaceCard id="section-projects">
           <SectionHeading icon="🚀">Project Spotlight</SectionHeading>
           <ProjectSpotlight cvEn={cvEn} />
         </SurfaceCard>
 
-        <SurfaceCard>
+        <SurfaceCard id="section-experience">
           <SectionHeading icon="💼">Experience Timeline</SectionHeading>
           <ExperienceTimeline cvEn={cvEn} />
         </SurfaceCard>
 
-        <SurfaceCard>
+        <SurfaceCard id="section-certs">
           <SectionHeading icon="🏅">Certifications</SectionHeading>
           <CertificationsPeek cvEn={cvEn} />
         </SurfaceCard>
