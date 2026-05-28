@@ -28,7 +28,6 @@ import {
   FaCopy,
 } from 'react-icons/fa'
 import { motion } from 'framer-motion'
-import Captcha from './Captcha'
 
 type HomeData = {
   hero?: { phone?: string; email?: string; avatarUrl?: string; brand?: string }
@@ -56,19 +55,21 @@ const monoFont = 'var(--font-geist-mono), monospace'
 /**
  * v6 ContactPro.
  *
- * All v5 functionality preserved:
+ * v5 functionality preserved:
  *   - localStorage autosaved draft (clears on send)
- *   - hCaptcha gating
  *   - POST /api/contact submission with toast feedback
  *   - 'Use Mail App' fallback opens mailto:
  *   - Click-to-copy email/phone helpers
  *   - Live validation + char counter
  *
- * Visual changes:
- *   - Transparent panels with thin borders (no white card / no shadow)
- *   - Monospace section eyebrows + form labels
- *   - Indigo accent on primary submit + progress
- *   - 'tel/email' rows use the same '[label] value [copy]' rhythm as Hero
+ * v6 changes:
+ *   - hCaptcha replaced with three-layer human check:
+ *       1. Signed nonce from /api/contact/nonce (server-verified, ≥ 2s elapsed)
+ *       2. Math captcha (visible UX deterrent)
+ *       3. Honeypot 'hp' hidden field (catches dumb form-fillers)
+ *     Server enforces (1) + (3); (2) is for human-visible reassurance.
+ *   - No external dep, no HCAPTCHA_SECRET required.
+ *   - Transparent panels, monospace eyebrows, indigo accent on primary submit.
  */
 export default function ContactPro({
   home,
@@ -88,9 +89,38 @@ export default function ContactPro({
   const [reason, setReason] = useState<string>('Project Inquiry')
   const [subject, setSubject] = useState('')
   const [message, setMessage] = useState('')
-  const [token, setToken] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
   const [valid, setValid] = useState(false)
+
+  // v6 human check — replaces hCaptcha. Stateless: a 2-number addition
+  // (UX deterrent) + a signed nonce fetched from /api/contact/nonce
+  // (real verification) + an invisible 'hp' honeypot field.
+  const [mathA, mathB] = useMemo(
+    () => [Math.floor(Math.random() * 9) + 1, Math.floor(Math.random() * 9) + 1],
+    [],
+  )
+  const expectedMath = mathA + mathB
+  const [mathAnswer, setMathAnswer] = useState('')
+  const [honeypot, setHoneypot] = useState('')
+  const [nonce, setNonce] = useState<string | null>(null)
+  const [nonceErr, setNonceErr] = useState<string | null>(null)
+
+  // Fetch a fresh nonce on mount (and once per page load)
+  useEffect(() => {
+    let alive = true
+    setNonceErr(null)
+    fetch('/api/contact/nonce')
+      .then((r) => (r.ok ? r.json() : Promise.reject(r)))
+      .then((d) => {
+        if (alive) setNonce(d.token)
+      })
+      .catch(() => {
+        if (alive) setNonceErr('Verification could not initialize — refresh the page')
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
 
   // autosave draft (preserved from v5)
   useEffect(() => {
@@ -126,19 +156,22 @@ export default function ContactPro({
     setReason('Project Inquiry')
     setSubject('')
     setMessage('')
-    setToken(null)
+    setMathAnswer('')
+    setHoneypot('')
   }
 
   // validation
   useEffect(() => {
+    const mathOk = mathAnswer.trim() === String(expectedMath)
     const ok =
       name.trim().length > 0 &&
       /.+@.+\..+/.test(email) &&
       (subject.trim().length > 0 || Boolean(reason)) &&
       message.trim().length > 0 &&
-      Boolean(token)
+      mathOk &&
+      Boolean(nonce)
     setValid(!!ok)
-  }, [name, email, subject, message, token, reason])
+  }, [name, email, subject, message, mathAnswer, expectedMath, nonce, reason])
 
   const chars = message.length
   const pct = Math.min(100, Math.floor((chars / 1000) * 100))
@@ -165,7 +198,9 @@ export default function ContactPro({
           email,
           subject: fullSubject,
           message: body,
-          token,
+          nonce,
+          mathAnswer: Number(mathAnswer),
+          hp: honeypot, // expected to be ''
         }),
       })
       if (res.ok) {
@@ -506,11 +541,76 @@ export default function ContactPro({
               {!message.trim() && <FormErrorMessage fontSize="11px">Required</FormErrorMessage>}
             </FormControl>
 
-            <Captcha
-              updateToken={setToken}
-              shouldReset={false}
-              updateReset={() => {}}
-            />
+            {/* v6 three-layer human check. Honeypot 'hp' is hidden via aria
+                + tab-index + clip-path so screen readers and humans skip it. */}
+            <Box>
+              <Flex
+                align="center"
+                gap={3}
+                p={3}
+                border="1px solid"
+                borderColor={border}
+                borderRadius="md"
+                flexWrap="wrap"
+              >
+                <Text
+                  fontFamily={monoFont}
+                  fontSize="11px"
+                  color={dim}
+                  letterSpacing="0.04em"
+                >
+                  human check
+                </Text>
+                <Text fontSize="14px" color={fg}>
+                  What is <strong>{mathA}</strong> + <strong>{mathB}</strong>?
+                </Text>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  value={mathAnswer}
+                  onChange={(e) => setMathAnswer(e.target.value)}
+                  placeholder="?"
+                  w="80px"
+                  size="sm"
+                  borderColor={border}
+                  _focus={{
+                    borderColor: 'var(--accent)',
+                    boxShadow: '0 0 0 1px var(--accent)',
+                  }}
+                  aria-label="Human check answer"
+                />
+                {mathAnswer && mathAnswer.trim() === String(expectedMath) && (
+                  <Text fontFamily={monoFont} fontSize="11px" color="green.400">
+                    ✓ ok
+                  </Text>
+                )}
+                {nonceErr && (
+                  <Text fontFamily={monoFont} fontSize="11px" color="red.400">
+                    {nonceErr}
+                  </Text>
+                )}
+              </Flex>
+              {/* Honeypot (must stay empty). Hidden visually + from a11y. */}
+              <Box
+                aria-hidden
+                tabIndex={-1}
+                position="absolute"
+                left="-9999px"
+                top="auto"
+                width="1px"
+                height="1px"
+                overflow="hidden"
+              >
+                <Input
+                  type="text"
+                  name="website"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={honeypot}
+                  onChange={(e) => setHoneypot(e.target.value)}
+                />
+              </Box>
+            </Box>
 
             <HStack justify="space-between" flexWrap="wrap" gap={3} pt={2}>
               <HStack>
