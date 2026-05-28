@@ -116,8 +116,6 @@ export default function CommandPalette({
       { group: 'Pages', label: 'Now', shortcut: 'G N', href: '/now', keywords: 'status current focus' },
       { group: 'Pages', label: 'Uses', shortcut: 'G U', href: '/uses', keywords: 'tools gear setup' },
       { group: 'Pages', label: 'Contact', href: '/contact', keywords: 'email message' },
-      { group: 'Pages', label: 'Crypto', href: '/crypto', keywords: 'binance ticker prices' },
-      { group: 'Pages', label: 'Quick Payment', href: '/quick-payment', keywords: 'btc eth usdt alipay wechat' },
       // Actions
       {
         group: 'Actions',
