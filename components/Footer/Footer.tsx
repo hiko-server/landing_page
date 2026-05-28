@@ -39,7 +39,7 @@ const Footer: React.FC = () => {
   const bg = useColorModeValue('rgba(253,253,253,0.5)', 'rgba(5,5,5,0.5)')
   const border = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
   const fg = useColorModeValue('gray.700', 'gray.300')
-  const subtle = useColorModeValue('gray.500', 'gray.500')
+  const subtle = useColorModeValue('gray.600', 'gray.500')
   const linkHover = useColorModeValue('black', 'white')
   const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 

@@ -35,7 +35,7 @@ export default function LanguageBars() {
   const [data, setData] = useState<LangData | null>(null)
   const trackBg = useColorModeValue('rgba(0,0,0,0.06)', 'rgba(255,255,255,0.07)')
   const textColor = useColorModeValue('gray.700', 'gray.300')
-  const metaColor = useColorModeValue('gray.500', 'gray.500')
+  const metaColor = useColorModeValue('gray.600', 'gray.500')
 
   useEffect(() => {
     let alive = true
