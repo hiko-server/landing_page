@@ -2,15 +2,35 @@ import { appWithTranslation } from 'next-i18next'
 
 import React, { useEffect } from 'react'
 import { useRouter } from 'next/router'
+import { Inter, JetBrains_Mono } from 'next/font/google'
 import * as gtag from '../lib/gtag'
 
-// using the tailwind css
-// import '../styles/globals.css'
+// v6 global design layer (CSS variables, dot grid, helper classes,
+// reduced-motion, print). Loaded once for the entire app.
+import '../styles/globals.css'
 
-//using sass
-// import '../styles/globals.scss'
+// v6 typography. Inter is the design-DNA ancestor of Geist; we use it directly
+// because Next 13.5's bundled font list predates Geist's Google Fonts release.
+// Switch to self-hosted Geist later (Phase F) if desired.
+const sans = Inter({
+  subsets: ['latin'],
+  display: 'swap',
+  weight: ['300', '400', '500', '600', '700', '800'],
+  variable: '--font-geist-sans',
+  preload: true,
+  fallback: ['system-ui', 'arial'],
+})
 
-//using the chakra-ui (styled components)
+const mono = JetBrains_Mono({
+  subsets: ['latin'],
+  display: 'swap',
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-geist-mono',
+  preload: true,
+  fallback: ['ui-monospace', 'monospace'],
+})
+
+// using the chakra-ui (styled components)
 import { ChakraProvider, CSSReset, ColorModeScript } from '@chakra-ui/react'
 import { AnimatePresence, motion } from 'framer-motion'
 
@@ -43,8 +63,7 @@ const App = ({ Component, pageProps }: any) => {
     }
   }, [router.events])
   return (
-    <React.Fragment>
-
+    <div className={`${sans.variable} ${mono.variable}`} style={{ minHeight: '100%' }}>
       {/* <Provider store={store}>
         <QueryClientProvider client={queryClient}> */}
       <SessionProvider>
@@ -79,7 +98,7 @@ const App = ({ Component, pageProps }: any) => {
       </SessionProvider>
       {/* </QueryClientProvider>
       </Provider> */}
-    </React.Fragment>
+    </div>
   )
 }
 
