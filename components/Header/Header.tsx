@@ -54,16 +54,15 @@ import CommandPalette from '../General-UI/CommandPalette'
 const primaryLinks = [
   { name: 'Home', url: '/' },
   { name: 'About', url: '/about' },
-  { name: 'Work', url: '/work' },         // new in v6 (case studies — Phase D)
-  { name: 'Writing', url: '/blog' },      // new in v6 (blog — Phase D)
+  { name: 'Work', url: '/work' },
+  { name: 'Writing', url: '/blog' },
   { name: 'CV', url: '/cv' },
+  { name: 'Now', url: '/now' },
+  { name: 'Uses', url: '/uses' },
   { name: 'Contact', url: '/contact' },
 ]
 
-const utilityLinks = [
-  { name: 'Crypto', url: '/crypto' },
-  { name: 'Quick Payment', url: '/quick-payment' },
-]
+const utilityLinks: { name: string; url: string }[] = []
 
 const socialLinks = [
   { name: 'GitHub', url: 'https://github.com/HikoPLi', icon: <FaGithub /> },

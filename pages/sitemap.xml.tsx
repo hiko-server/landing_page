@@ -18,8 +18,6 @@ export const getServerSideProps: GetServerSideProps = async ({ res }) => {
     '/now',
     '/uses',
     '/contact',
-    '/crypto',
-    '/quick-payment',
   ]
 
   const dynamicPages = [

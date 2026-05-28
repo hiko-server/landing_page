@@ -23,9 +23,9 @@ const navLinks = [
   { name: 'Work', url: '/work' },
   { name: 'Writing', url: '/blog' },
   { name: 'CV', url: '/cv' },
+  { name: 'Now', url: '/now' },
+  { name: 'Uses', url: '/uses' },
   { name: 'Contact', url: '/contact' },
-  { name: 'Crypto', url: '/crypto' },
-  { name: 'Quick Payment', url: '/quick-payment' },
 ]
 
 const socialLinks = [
