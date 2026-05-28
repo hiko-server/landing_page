@@ -1,63 +1,127 @@
-import React from 'react';
-import { Box, Text, Link,  VStack, HStack, useColorModeValue } from '@chakra-ui/react';
+import React from 'react'
+import {
+  Box,
+  Flex,
+  Text,
+  Link,
+  useColorModeValue,
+  Divider,
+} from '@chakra-ui/react'
 
-const quickLinks = [
-  { name: 'Home', url: `/` },
-  { name: 'About', url: `/about` },
-  { name: 'Contact', url: `/contact` },
-  { name: 'CV', url: `/cv` },
-];
+/**
+ * v6 Footer
+ *
+ * Minimal three-row layout:
+ *   1. Navigation links (text, hover-underline)
+ *   2. Social + external links
+ *   3. Copyright + version pill (engineer signature)
+ */
 
-const moreLinks = [
-  { name: 'Crypto', url: `/crypto` },
-  { name: 'Quick Payment', url: `/quick-payment` },
-];
+const navLinks = [
+  { name: 'Home', url: '/' },
+  { name: 'About', url: '/about' },
+  { name: 'Work', url: '/work' },
+  { name: 'Writing', url: '/blog' },
+  { name: 'CV', url: '/cv' },
+  { name: 'Contact', url: '/contact' },
+  { name: 'Crypto', url: '/crypto' },
+  { name: 'Quick Payment', url: '/quick-payment' },
+]
 
 const socialLinks = [
-  { name: 'GitHub', url: `https://github.com/HikoPLi` },
-  { name: 'LinkedIn', url: `https://www.linkedin.com/in/liyanpeihiko/` },
-  { name: 'WhatsApp', url: `https://wa.me/85262040827` },
-];
+  { name: 'GitHub', url: 'https://github.com/HikoPLi' },
+  { name: 'GitLab', url: 'https://gitlab.com/HikoPLi' },
+  { name: 'LinkedIn', url: 'https://www.linkedin.com/in/liyanpeihiko/' },
+  { name: 'WhatsApp', url: 'https://wa.me/85262040827' },
+]
+
+const APP_VERSION = 'v6.0.0'
 
 const Footer: React.FC = () => {
-  const bg = useColorModeValue('gray.100','gray.800')
-  const color = useColorModeValue('gray.700','gray.100')
-  const linkColor = useColorModeValue('teal.600','teal.200')
+  const bg = useColorModeValue('rgba(253,253,253,0.5)', 'rgba(5,5,5,0.5)')
+  const border = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
+  const fg = useColorModeValue('gray.700', 'gray.300')
+  const subtle = useColorModeValue('gray.500', 'gray.500')
+  const linkHover = useColorModeValue('black', 'white')
+  const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
+
   return (
-    <Box as="footer" w="100%" p={4} bg={bg} color={color} textAlign="center">
+    <Box
+      as="footer"
+      w="100%"
+      bg={bg}
+      backdropFilter="blur(8px)"
+      borderTop="1px solid"
+      borderColor={border}
+      mt={16}
+      className="no-print"
+    >
+      <Box maxW="var(--container-content)" mx="auto" px={{ base: 4, md: 6, lg: 8 }} py={10}>
+        <Flex direction="column" gap={6}>
+          {/* Row 1: nav links */}
+          <Flex
+            wrap="wrap"
+            gap={{ base: 4, md: 6 }}
+            justifyContent={{ base: 'center', md: 'flex-start' }}
+            fontSize="13px"
+            color={fg}
+          >
+            {navLinks.map((l) => (
+              <Link
+                key={l.name}
+                href={l.url}
+                className="link-underline"
+                _hover={{ color: linkHover, textDecoration: 'none' }}
+              >
+                {l.name}
+              </Link>
+            ))}
+          </Flex>
 
-      <VStack spacing={4}>
-        <HStack spacing={4}>
-          {quickLinks.map((link) => (
-            <Link key={link.name} href={link.url} color={linkColor}>
-              {link.name}
-            </Link>
-          ))}
-        </HStack>
-        <HStack spacing={4}>
-          {moreLinks.map((link) => (
-            <Link key={link.name} href={link.url} color={linkColor}>
-              {link.name}
-            </Link>
-          ))}
-        </HStack>
-        <HStack spacing={4}>
-          {socialLinks.map((link) => (
-            <Link key={link.name} href={link.url} color={linkColor} isExternal>
-              {link.name}
-            </Link>
-          ))}
-        </HStack>
-        <Text>
-          &copy; {new Date().getFullYear()}{' '}
-          <Link href="https://hiko.dev" isExternal color={linkColor}>
-            hiko.dev
-          </Link>
-          . All rights reserved.
-        </Text>
-      </VStack>
+          <Divider borderColor={border} />
+
+          {/* Row 2: social + version + copyright */}
+          <Flex
+            direction={{ base: 'column', md: 'row' }}
+            justifyContent="space-between"
+            alignItems={{ base: 'flex-start', md: 'center' }}
+            gap={4}
+          >
+            <Flex gap={5} wrap="wrap" fontFamily={monoFont} fontSize="11px" color={subtle}>
+              {socialLinks.map((s) => (
+                <Link
+                  key={s.name}
+                  href={s.url}
+                  isExternal
+                  className="link-underline"
+                  _hover={{ color: linkHover, textDecoration: 'none' }}
+                >
+                  {s.name} ↗
+                </Link>
+              ))}
+            </Flex>
+
+            <Flex
+              gap={3}
+              alignItems="center"
+              fontFamily={monoFont}
+              fontSize="11px"
+              color={subtle}
+            >
+              <Text as="span">
+                © {new Date().getFullYear()}{' '}
+                <Link href="https://hiko.dev" isExternal _hover={{ color: linkHover, textDecoration: 'none' }}>
+                  hiko.dev
+                </Link>
+              </Text>
+              <Text as="span">·</Text>
+              <Text as="span">{APP_VERSION} · Next.js</Text>
+            </Flex>
+          </Flex>
+        </Flex>
+      </Box>
     </Box>
-  );
-};
+  )
+}
 
-export default Footer;
+export default Footer

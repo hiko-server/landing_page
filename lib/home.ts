@@ -9,6 +9,14 @@ export type HomeData = {
     avatarUrl: string
     phone?: string
     email?: string
+    /** Object-position (x,y in %) + scale, set by the admin Home GUI's
+     *  drag-to-position avatar editor. Used by PersonalInfo and the home
+     *  card. Stored as JSON in data/home.json. */
+    avatarTransform?: {
+      x?: number
+      y?: number
+      scale?: number
+    }
   }
   socials: {
     github?: string
