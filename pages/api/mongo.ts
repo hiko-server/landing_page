@@ -6,6 +6,7 @@ import fs from 'fs'
 import path from 'path'
 import dns from 'node:dns'
 import { getJwtSecret } from '../../lib/env'
+import { resolveMongoSrvUrl } from '../../lib/srvResolve'
 
 // Atlas mongodb+srv URLs require a working SRV-record lookup. On Windows /
 // some ISPs / VPNs the local DNS resolver refuses SRV queries
@@ -130,10 +131,24 @@ export default async function handler(
   let client: MongoClient | null = null
 
   try {
+    // mongodb+srv:// requires a working DNS SRV lookup. On networks that
+    // refuse outbound port 53 (corporate / VPN / China ISPs), this fails
+    // with 'querySrv ECONNREFUSED'. Resolve via DNS-over-HTTPS first and
+    // hand the driver the explicit mongodb:// form so it never touches the
+    // local resolver.
+    let effectiveUrl = url
+    try {
+      effectiveUrl = await resolveMongoSrvUrl(url)
+    } catch (srvErr: any) {
+      // Re-throw with a clearer message so the toast surfaces the right hint.
+      const msg = srvErr?.message || String(srvErr)
+      throw new Error(`SRV resolution failed (${msg}). Use the non-SRV connection string from Atlas (Connect → Drivers → URL format).`)
+    }
+
     // Connect with explicit short timeouts so the UI fails fast instead of
-    // hanging for the driver's 30s default. The most common Atlas failure is
-    // an IP that hasn't been allowlisted — we want that error in seconds.
-    client = new MongoClient(url, {
+    // hanging for the driver's 30s default. The most common Atlas failure
+    // after this point is an IP that hasn't been allowlisted.
+    client = new MongoClient(effectiveUrl, {
       serverSelectionTimeoutMS: 8000,
       socketTimeoutMS: 10000,
       connectTimeoutMS: 8000,
