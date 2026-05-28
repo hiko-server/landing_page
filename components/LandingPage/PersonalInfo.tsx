@@ -11,31 +11,31 @@ import {
   Image,
   IconButton,
   Tooltip,
+  useColorModeValue,
 } from '@chakra-ui/react'
 import { FaGithub, FaGitlab, FaLinkedin, FaWhatsapp } from 'react-icons/fa'
 import { useRouter } from 'next/router'
 
 import HeroHeadline from './HeroHeadline'
-import VideoBackgroundLayOut from '../../layout/VideoBackgroundLayout'
+import HeroAmbient from '../Background/HeroAmbient'
 import SectionLabel from '../General-UI/SectionLabel'
 
 /**
- * v6 Hero — preserves every v5 capability:
- *   - VideoBackgroundLayOut (rotating background reels)
- *   - HeroHeadline (typewriter tagline from home.json)
- *   - Avatar with x/y/scale transform from home.json admin GUI
- *   - Phone reveal (click-to-reveal pattern intact)
- *   - Email reveal (click-to-reveal pattern intact)
+ * v6 Hero — preserves every v5 capability EXCEPT the video reel background
+ * (replaced with HeroAmbient — CSS aurora orbs + dot grid + vignettes).
+ *
+ * Preserved:
+ *   - HeroHeadline typewriter tagline from home.json
+ *   - Avatar with x/y/scale transform from admin GUI
+ *   - Phone / email click-to-reveal pattern
  *   - CV button (router.push('/cv'))
  *   - GitHub / GitLab / LinkedIn / WhatsApp social row
  *
- * Visual upgrades (v6 "Indigo Precision"):
- *   - [01] INTRODUCTION section marker (replaces gradient welcome)
- *   - Cleaner type hierarchy using Inter/Geist
- *   - Mono meta line under name (location, languages, availability)
- *   - Tighter avatar frame + restrained social row
- *   - Indigo accent only on primary CTA + brand mark in tagline
- *   - Theme toggle removed here (now lives in Header)
+ * Visual upgrades:
+ *   - [01] INTRODUCTION section marker
+ *   - Theme-aware text colors (works in both dark and light mode now;
+ *     v5 was effectively dark-only because of the always-dark video bg)
+ *   - Indigo accent only on primary CTA + brand suffix
  */
 
 const PersonalInfo = ({
@@ -49,9 +49,15 @@ const PersonalInfo = ({
   const [showPhone, setShowPhone] = React.useState(false)
   const [showEmail, setShowEmail] = React.useState(false)
 
-  // Overlaying video → always white text for AAA contrast.
-  const textColor = 'white'
-  const mutedOnVideo = 'rgba(255,255,255,0.7)'
+  // Theme-aware tokens (was hard-coded white because of v5 video overlay)
+  const fg = useColorModeValue('gray.900', 'white')
+  const fgMuted = useColorModeValue('gray.600', 'rgba(255,255,255,0.7)')
+  const ctaBorder = useColorModeValue('rgba(0,0,0,0.12)', 'rgba(255,255,255,0.18)')
+  const ctaBorderHover = useColorModeValue('rgba(0,0,0,0.30)', 'rgba(255,255,255,0.40)')
+  const socialBg = useColorModeValue('rgba(255,255,255,0.6)', 'rgba(0,0,0,0.25)')
+  const socialBgHover = useColorModeValue('rgba(255,255,255,0.9)', 'rgba(0,0,0,0.45)')
+  const avatarBorder = useColorModeValue('rgba(0,0,0,0.10)', 'rgba(255,255,255,0.14)')
+  const avatarFrameBg = useColorModeValue('rgba(245,245,245,0.6)', 'rgba(0,0,0,0.25)')
 
   // Avatar transform (preserved from v5 admin GUI)
   const clamp = (v: number, min: number, max: number) =>
@@ -73,22 +79,10 @@ const PersonalInfo = ({
 
   const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
-  // Subtle accent for hover states layered over video (still readable)
-  const ctaBorder = 'rgba(255,255,255,0.18)'
-  const ctaBorderHover = 'rgba(255,255,255,0.40)'
-
   return (
-    <Box position="relative" w="full" h="full">
-      <VideoBackgroundLayOut>
-        {/* Faint vignette so type sits cleanly on busy video frames. */}
-        <Box
-          position="absolute"
-          inset={0}
-          pointerEvents="none"
-          bgGradient="linear(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 40%, rgba(0,0,0,0.55) 100%)"
-        />
-
-        <Box position="relative" overflow="hidden" pb={[16, 20]} pt={[28, 32, 40]}>
+    <Box position="relative" w="full">
+      <HeroAmbient>
+        <Box position="relative" overflow="visible" pb={[16, 20]} pt={[24, 28, 36]}>
           <Box mx="auto" maxW="var(--container-content)" px={[4, 6, 8]}>
             <Flex
               direction={isMobile ? 'column' : 'row'}
@@ -98,7 +92,7 @@ const PersonalInfo = ({
             >
               {/* Left column: section label + tagline + meta + CTAs */}
               <Box flex={1} minW={0}>
-                <Box mb={8} sx={{ '& *': { color: mutedOnVideo + ' !important' } }}>
+                <Box mb={8}>
                   <SectionLabel n={1}>Introduction</SectionLabel>
                 </Box>
 
@@ -118,10 +112,10 @@ const PersonalInfo = ({
                     fontWeight={500}
                     lineHeight="1.05"
                     letterSpacing="-0.02em"
-                    color={textColor}
+                    color={fg}
                   >
                     Li Yanpei
-                    <Text as="span" color={mutedOnVideo} fontWeight={300}>
+                    <Text as="span" color={fgMuted} fontWeight={300}>
                       {' '}
                       / 李彦霈
                     </Text>
@@ -131,7 +125,7 @@ const PersonalInfo = ({
                     wrap="wrap"
                     fontFamily={monoFont}
                     fontSize="11px"
-                    color={mutedOnVideo}
+                    color={fgMuted}
                     letterSpacing="0.04em"
                     gap={3}
                     mt={1}
@@ -147,11 +141,11 @@ const PersonalInfo = ({
                 {/* Reveal: phone + email (logic preserved from v5) */}
                 <Flex direction="column" gap={2} mb={8} fontSize="14px">
                   <Box>
-                    <Text as="span" color={mutedOnVideo} fontFamily={monoFont} fontSize="11px" mr={2}>
+                    <Text as="span" color={fgMuted} fontFamily={monoFont} fontSize="11px" mr={2}>
                       tel
                     </Text>
                     {showPhone ? (
-                      <Text as="span" color={textColor}>
+                      <Text as="span" color={fg}>
                         {home?.hero?.phone || ''}
                       </Text>
                     ) : (
@@ -169,14 +163,14 @@ const PersonalInfo = ({
                     )}
                   </Box>
                   <Box>
-                    <Text as="span" color={mutedOnVideo} fontFamily={monoFont} fontSize="11px" mr={2}>
+                    <Text as="span" color={fgMuted} fontFamily={monoFont} fontSize="11px" mr={2}>
                       email
                     </Text>
                     {showEmail ? (
                       home?.hero?.email ? (
                         <Link
                           href={`mailto:${home.hero.email}`}
-                          color={textColor}
+                          color={fg}
                           _hover={{ color: 'var(--accent)' }}
                         >
                           {home.hero.email}
@@ -227,9 +221,9 @@ const PersonalInfo = ({
                           h="44px"
                           w="44px"
                           borderColor={ctaBorder}
-                          color={textColor}
-                          bg="rgba(0,0,0,0.25)"
-                          _hover={{ borderColor: ctaBorderHover, bg: 'rgba(0,0,0,0.4)' }}
+                          color={fg}
+                          bg={socialBg}
+                          _hover={{ borderColor: ctaBorderHover, bg: socialBgHover }}
                         />
                       </Tooltip>
                     ))}
@@ -248,10 +242,11 @@ const PersonalInfo = ({
                   h={['200px', '220px', '260px']}
                   borderRadius="20px"
                   overflow="hidden"
-                  border="1px solid rgba(255,255,255,0.14)"
-                  boxShadow="0 24px 60px rgba(0,0,0,0.45)"
+                  border="1px solid"
+                  borderColor={avatarBorder}
+                  boxShadow="0 24px 60px rgba(0,0,0,0.30)"
                   position="relative"
-                  bg="rgba(0,0,0,0.25)"
+                  bg={avatarFrameBg}
                 >
                   <Image
                     src={avatarSrc}
@@ -279,12 +274,12 @@ const PersonalInfo = ({
                   fontFamily={monoFont}
                   fontSize="10px"
                   letterSpacing="0.04em"
-                  color={mutedOnVideo}
+                  color={fgMuted}
                   textAlign={['center', 'left']}
                   gap={0.5}
                 >
                   <Text as="span">currently coding</Text>
-                  <Text as="span" color={textColor}>
+                  <Text as="span" color={fg}>
                     WeGreen AI · COT
                   </Text>
                   <Text as="span" opacity={0.6}>
@@ -305,7 +300,7 @@ const PersonalInfo = ({
             )}
           </Box>
         </Box>
-      </VideoBackgroundLayOut>
+      </HeroAmbient>
     </Box>
   )
 }

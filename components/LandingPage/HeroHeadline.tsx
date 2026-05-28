@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Box, Heading, Text } from '@chakra-ui/react'
+import { Box, Heading, Text, useColorModeValue } from '@chakra-ui/react'
 import { motion } from 'framer-motion'
 
 /**
@@ -48,6 +48,10 @@ export default function HeroHeadline({
     return () => clearInterval(timer)
   }, [idx, phrases])
 
+  // Theme-aware colors (was hard-white because of v5's always-dark video bg)
+  const brandColor = useColorModeValue('gray.900', 'white')
+  const taglineColor = useColorModeValue('gray.600', 'rgba(255,255,255,0.78)')
+
   // Split brand on "." so we can paint only the TLD-like suffix with accent,
   // matching the header's "hiko.dev" treatment. If there's no dot, the whole
   // brand becomes accent.
@@ -64,7 +68,7 @@ export default function HeroHeadline({
           fontWeight={700}
           letterSpacing="-0.025em"
           lineHeight="1"
-          color="white"
+          color={brandColor}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 } as any}
@@ -82,7 +86,7 @@ export default function HeroHeadline({
           mt={3}
           fontSize={{ base: 'sm', md: 'md' }}
           fontFamily="var(--font-geist-mono), monospace"
-          color="rgba(255,255,255,0.78)"
+          color={taglineColor}
           letterSpacing="0.01em"
           maxW="640px"
         >
