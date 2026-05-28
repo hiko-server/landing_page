@@ -238,7 +238,7 @@ function SortableSidebarItem({
 
   const border = useColorModeValue('rgba(0,0,0,0.10)', 'rgba(255,255,255,0.12)')
   const activeBg = useColorModeValue('rgba(99,102,241,0.10)', 'rgba(99,102,241,0.16)')
-  const dim = useColorModeValue('gray.500', 'gray.500')
+  const dim = useColorModeValue('gray.600', 'gray.500')
   const def = SECTION_DEFS[section.sessionName]
 
   const style: React.CSSProperties = {
@@ -316,7 +316,7 @@ function FieldRow({
   label: string
   children: React.ReactNode
 }) {
-  const dim = useColorModeValue('gray.500', 'gray.500')
+  const dim = useColorModeValue('gray.600', 'gray.500')
   return (
     <Box>
       <Text
@@ -352,7 +352,7 @@ function ArrayItemFrame({
   children: React.ReactNode
 }) {
   const border = useColorModeValue('rgba(0,0,0,0.10)', 'rgba(255,255,255,0.12)')
-  const dim = useColorModeValue('gray.500', 'gray.500')
+  const dim = useColorModeValue('gray.600', 'gray.500')
   return (
     <Box
       border="1px solid"
@@ -1180,7 +1180,7 @@ export default function CVEditorStudio() {
   // Tokens — all hooks must run before any conditional return
   const bg = useColorModeValue('rgba(255,255,255,0.6)', 'rgba(8,8,8,0.6)')
   const border = useColorModeValue('rgba(0,0,0,0.10)', 'rgba(255,255,255,0.12)')
-  const dim = useColorModeValue('gray.500', 'gray.500')
+  const dim = useColorModeValue('gray.600', 'gray.500')
   const previewSurface = useColorModeValue('gray.100', 'gray.900')
   const dndSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),

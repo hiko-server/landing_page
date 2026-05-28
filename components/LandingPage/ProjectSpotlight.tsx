@@ -27,7 +27,7 @@ const ProjectCard = ({ p, i }: { p: Project; i: number }) => {
   const borderHover = useColorModeValue('rgba(0,0,0,0.20)', 'rgba(255,255,255,0.24)')
   const fg = useColorModeValue('gray.800', 'gray.100')
   const dim = useColorModeValue('gray.600', 'gray.400')
-  const muted = useColorModeValue('gray.500', 'gray.500')
+  const muted = useColorModeValue('gray.600', 'gray.500')
   const monoFont = 'var(--font-geist-mono), monospace'
 
   return (

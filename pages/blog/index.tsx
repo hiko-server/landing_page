@@ -20,7 +20,7 @@ type Props = {
 }
 
 export default function BlogIndex({ posts, host }: Props) {
-  const muted = useColorModeValue('gray.500', 'gray.500')
+  const muted = useColorModeValue('gray.600', 'gray.500')
   const border = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
   const fg = useColorModeValue('gray.800', 'gray.100')
   const hover = useColorModeValue('black', 'white')

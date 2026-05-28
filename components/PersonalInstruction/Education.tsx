@@ -1,98 +1,46 @@
-import {
-  Accordion,
-  AccordionButton,
-  AccordionIcon,
-  AccordionItem,
-  AccordionPanel,
-  Box,
-  Flex,
-  Heading,
-  Text,
-} from '@chakra-ui/react'
-import { useColorModeValue } from '@chakra-ui/react'
 import React from 'react'
-import { Education } from '../../types/cvProps'
+import { Box, Flex } from '@chakra-ui/react'
 import { DateTime } from 'luxon'
+import { Education } from '../../types/cvProps'
+import CVSectionShell, { CVRow } from './_CVSectionShell'
 
-const EducationSection = ({ data }: { data: Education }) => {
-  const border = useColorModeValue('gray.200','gray.600')
-  const expandedBg = useColorModeValue('gray.100','gray.700')
-  const titleColor = useColorModeValue('blue.700','blue.200')
-  const cardBg = useColorModeValue('gray.50','gray.800')
-  const subText = useColorModeValue('gray.600','gray.300')
-  const dimText = useColorModeValue('gray.500','gray.400')
+const fmt = (iso?: string) =>
+  iso && DateTime.fromISO(iso).isValid
+    ? DateTime.fromISO(iso).toFormat('LLL yyyy')
+    : iso || ''
 
+const EducationSection = ({
+  index,
+  data,
+}: {
+  index?: number
+  data: Education
+}) => {
+  const items = data?.educationExperience || []
   return (
-    <Accordion
-      allowToggle
-      width="100%"
-      maxW="1000px"
-      mt={[8, 16]}
-      boxShadow="lg"
-      borderRadius="md"
+    <CVSectionShell
+      index={index}
+      label={data?.headerName || 'Education'}
+      count={items.length}
     >
-      <AccordionItem borderWidth="1px" borderColor={border} mb={4}>
-        <h2>
-          <AccordionButton _expanded={{ bg: expandedBg }}>
-            <Box
-              flex="1"
-              textAlign="left"
-              fontWeight="bold"
-              alignItems="center"
-              justifyContent="center"
-              p={4}
-            >
-              <Heading
-                as="h3"
-                size="md"
-                textTransform="uppercase"
-                color={titleColor}
-              >
-                {data.headerName}
-              </Heading>
-            </Box>
-            <AccordionIcon />
-          </AccordionButton>
-        </h2>
-        <AccordionPanel px={6} py={4}>
-          <Flex direction={'column'} gap={4}>
-            {data.educationExperience.map((edu, index) => (
-              <Box
-                key={index}
-                p={4}
-                boxShadow="inner"
-                borderRadius="md"
-                backgroundColor={cardBg}
-              >
-                <Flex justifyContent={'space-between'} alignItems={'center'}>
-                  <Box>
-                    <Text fontSize={'xl'} fontWeight="semibold">
-                      {edu.degree}
-                    </Text>
-                    <Text fontSize={'sm'} color={subText}>
-                      {edu.schoolName}, {edu.schoolLocation}
-                    </Text>
-                  </Box>
-                  <Box fontSize={'sm'} fontStyle={'italic'} color={dimText}>
-                    <Text>
-                      {DateTime.fromISO(edu.startDate).toFormat('LLL yyyy')}
-                      {' - '}
-                      {DateTime.fromISO(edu.endDate).toFormat('LLL yyyy')}
-                    </Text>
-                  </Box>
-                </Flex>
-
-                <Box mt={2}>
-                  <Text fontSize={'sm'} fontStyle={'italic'}>
-                    • GPA: {edu.gpa}
-                  </Text>
-                </Box>
+      <Flex direction="column">
+        {items.map((edu, i) => (
+          <CVRow
+            key={i}
+            isFirst={i === 0}
+            title={edu.degree}
+            subtitle={`${edu.schoolName}${edu.schoolLocation ? ` · ${edu.schoolLocation}` : ''}`}
+            period={`${fmt(edu.startDate)} — ${fmt(edu.endDate)}`}
+          >
+            {edu.gpa && (
+              <Box fontSize="13px" color="gray.500" fontStyle="normal">
+                GPA: {edu.gpa}
               </Box>
-            ))}
-          </Flex>
-        </AccordionPanel>
-      </AccordionItem>
-    </Accordion>
+            )}
+          </CVRow>
+        ))}
+      </Flex>
+    </CVSectionShell>
   )
 }
 

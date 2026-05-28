@@ -21,7 +21,7 @@ type Props = {
 }
 
 export default function WorkIndex({ items, host }: Props) {
-  const muted = useColorModeValue('gray.500', 'gray.500')
+  const muted = useColorModeValue('gray.600', 'gray.500')
   const border = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
   const hover = useColorModeValue('rgba(0,0,0,0.20)', 'rgba(255,255,255,0.20)')
   const cardBg = useColorModeValue('rgba(255,255,255,0.6)', 'rgba(20,20,20,0.4)')

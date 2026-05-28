@@ -76,7 +76,7 @@ export default function CommandPalette({
   // Theme tokens
   const bg = useColorModeValue('white', 'gray.900')
   const border = useColorModeValue('rgba(0,0,0,0.10)', 'rgba(255,255,255,0.12)')
-  const dim = useColorModeValue('gray.500', 'gray.500')
+  const dim = useColorModeValue('gray.600', 'gray.500')
   const fg = useColorModeValue('gray.800', 'gray.100')
   const activeBg = useColorModeValue('rgba(99,102,241,0.10)', 'rgba(99,102,241,0.18)')
 

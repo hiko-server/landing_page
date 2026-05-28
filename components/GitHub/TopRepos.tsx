@@ -44,7 +44,7 @@ export default function TopRepos() {
   const cardBorderHover = useColorModeValue('rgba(0,0,0,0.20)', 'rgba(255,255,255,0.24)')
   const nameColor = useColorModeValue('gray.800', 'gray.100')
   const descColor = useColorModeValue('gray.600', 'gray.400')
-  const metaColor = useColorModeValue('gray.500', 'gray.500')
+  const metaColor = useColorModeValue('gray.600', 'gray.500')
   const monoFont = 'var(--font-geist-mono), monospace'
 
   useEffect(() => {

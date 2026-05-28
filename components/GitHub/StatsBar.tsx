@@ -42,7 +42,7 @@ const StatItem = ({
   value: number
   delay: number
 }) => {
-  const dim = useColorModeValue('gray.500', 'gray.500')
+  const dim = useColorModeValue('gray.600', 'gray.500')
   const count = useCountUp(value)
 
   return (

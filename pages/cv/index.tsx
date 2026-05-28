@@ -10,7 +10,6 @@ import {
 } from '@chakra-ui/react'
 import { FaPrint } from 'react-icons/fa'
 import React, { useEffect, useState } from 'react'
-import Head from 'next/head'
 
 import CVResult from '../../components/CVViewerPage/CVResult'
 import HeaderFooter from '../../layout/HeaderFooter'
@@ -52,21 +51,11 @@ const CVPage = ({
   const cvData = language === 'zh' ? zh : en
 
   const border = useColorModeValue('rgba(0,0,0,0.10)', 'rgba(255,255,255,0.12)')
-  const dim = useColorModeValue('gray.500', 'gray.500')
+  const dim = useColorModeValue('gray.600', 'gray.500')
   const monoFont = 'var(--font-geist-mono), monospace'
 
   return (
     <React.Fragment>
-      {/* Preload Noto Sans SC for crisp Chinese print + stable layout */}
-      <Head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap"
-          rel="stylesheet"
-        />
-      </Head>
-
       <CustomHead
         title="CV / Resume"
         description="Hiko's CV with skills matrix, timeline, and downloadable PDF."

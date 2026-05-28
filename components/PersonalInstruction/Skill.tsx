@@ -1,85 +1,152 @@
-import {
-  Accordion,
-  AccordionButton,
-  AccordionIcon,
-  AccordionItem,
-  AccordionPanel,
-  Box,
-  Flex,
-  Heading,
-  Text,
-} from '@chakra-ui/react';
-import { useColorModeValue } from '@chakra-ui/react'
-import React from 'react';
-import { Skill } from '../../types/cvProps';
+import React from 'react'
+import { Box, Flex, Text, useColorModeValue } from '@chakra-ui/react'
+import { Skill } from '../../types/cvProps'
+import CVSectionShell from './_CVSectionShell'
 
-const SkillSection = ({ data }: { data: Skill }) => {
-  const border = useColorModeValue('gray.200','gray.600')
-  const expandedBg = useColorModeValue('gray.100','gray.700')
-  const titleColor = useColorModeValue('blue.700','blue.200')
-  const cardBg = useColorModeValue('gray.50','gray.800')
-  const subText = useColorModeValue('gray.600','gray.300')
+/**
+ * Skill section — different shape from the other CV sections:
+ *   - Top half:  "Languages" list (lang + proficiency)
+ *   - Bottom:    "Technical Skills" grid (tech category + bullets)
+ *
+ * We bypass <CVRow> here because skills are categorised, not chronological,
+ * and want a tighter two-column layout instead of date-on-right.
+ */
+
+const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
+
+const SkillSection = ({
+  index,
+  data,
+}: {
+  index?: number
+  data: Skill
+}) => {
+  const subColor = useColorModeValue('gray.600', 'gray.400')
+  const labelColor = useColorModeValue('gray.600', 'gray.500')
+  const divider = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.08)')
+  const bulletColor = useColorModeValue('gray.700', 'gray.300')
+  const techBg = useColorModeValue('rgba(0,0,0,0.025)', 'rgba(255,255,255,0.03)')
+  const techBorder = useColorModeValue('rgba(0,0,0,0.06)', 'rgba(255,255,255,0.07)')
+
+  const langs = data?.languages || []
+  const techs = data?.technical || []
+  const totalCount = langs.length + techs.length
+
   return (
-    <Accordion allowToggle width="100%" maxW="1000px" mt={[8, 16]} boxShadow="lg" borderRadius="md">
-      <AccordionItem borderWidth="1px" borderColor={border} mb={4}>
-        <h2>
-          <AccordionButton _expanded={{ bg: expandedBg }}>
-            <Box flex="1" textAlign="left" fontWeight="bold" alignItems="center" justifyContent="center" p={4}>
-              <Heading as="h3" size="md" textTransform="uppercase" color={titleColor}>
-                {data.headerName}
-              </Heading>
-            </Box>
-            <AccordionIcon />
-          </AccordionButton>
-        </h2>
-        <AccordionPanel px={6} py={4}>
-          <Flex direction={'column'} gap={4}>
-            {/* Languages Section */}
-            <Box>
-              <Text fontSize="lg" fontWeight="semibold" mb={2}>
+    <CVSectionShell
+      index={index}
+      label={data?.headerName || 'Skills'}
+      count={totalCount}
+      countSuffix="ITEMS"
+    >
+      <Flex direction="column" gap={8}>
+        {/* Languages */}
+        {langs.length > 0 && (
+          <Box>
+            <Flex align="center" gap={3} mb={3}>
+              <Text
+                fontFamily={monoFont}
+                fontSize="11px"
+                letterSpacing="0.08em"
+                color={labelColor}
+                textTransform="uppercase"
+              >
                 Languages
               </Text>
-              <Flex direction={'column'} gap={2}>
-                {data.languages.map((lang, index) => (
-                  <Box key={index} display="grid" gridTemplateColumns="auto 1fr" gridColumnGap="10px">
-                    <Text fontWeight={800} fontSize={'md'}>
-                      {lang.language}
-                    </Text>
-                    <Text textAlign="left" fontSize={'sm'} color={subText}>
-                      {lang.level}
-                    </Text>
-                  </Box>
-                ))}
-              </Flex>
-            </Box>
+              <Box flex="1" h="1px" bg={divider} />
+            </Flex>
+            <Flex direction="column" gap={2}>
+              {langs.map((lang, i) => (
+                <Flex
+                  key={i}
+                  justify="space-between"
+                  align="baseline"
+                  borderBottom={i === langs.length - 1 ? undefined : '1px solid'}
+                  borderColor={divider}
+                  pb={2}
+                >
+                  <Text fontSize="14px" fontWeight={500}>
+                    {lang.language}
+                  </Text>
+                  <Text
+                    fontFamily={monoFont}
+                    fontSize="11px"
+                    color={subColor}
+                    letterSpacing="0.04em"
+                  >
+                    {lang.level}
+                  </Text>
+                </Flex>
+              ))}
+            </Flex>
+          </Box>
+        )}
 
-            {/* Technical Skills Section */}
-            <Box>
-              <Text fontSize="lg" fontWeight="semibold" mb={2}>
-                Technical Skills
+        {/* Technical */}
+        {techs.length > 0 && (
+          <Box>
+            <Flex align="center" gap={3} mb={3}>
+              <Text
+                fontFamily={monoFont}
+                fontSize="11px"
+                letterSpacing="0.08em"
+                color={labelColor}
+                textTransform="uppercase"
+              >
+                Technical
               </Text>
-              <Flex direction={'column'} gap={4}>
-                {data.technical.map((tech, techIndex) => (
-                  <Box key={techIndex} p={4} boxShadow="inner" borderRadius="md" backgroundColor={cardBg}>
-                    <Text fontWeight={800} fontSize={'md'} textTransform="uppercase" mb={2}>
-                      {tech.name}
-                    </Text>
-                    <Flex direction={'column'} gap={2}>
-                      {tech.description.map((des, desIndex) => (
-                        <Text key={desIndex} fontSize={'sm'} pl={4}>
-                          • {des}
+              <Box flex="1" h="1px" bg={divider} />
+            </Flex>
+            <Box
+              display="grid"
+              gridTemplateColumns={['1fr', '1fr 1fr']}
+              gap={3}
+            >
+              {techs.map((tech, i) => (
+                <Box
+                  key={i}
+                  p={4}
+                  border="1px solid"
+                  borderColor={techBorder}
+                  bg={techBg}
+                  borderRadius="4px"
+                >
+                  <Text
+                    fontFamily={monoFont}
+                    fontSize="11px"
+                    letterSpacing="0.08em"
+                    color="var(--accent)"
+                    textTransform="uppercase"
+                    mb={2}
+                  >
+                    {tech.name}
+                  </Text>
+                  <Flex direction="column" gap={1}>
+                    {tech.description.map((des, j) => (
+                      <Flex key={j} gap={2} align="flex-start">
+                        <Box
+                          w="3px"
+                          h="3px"
+                          mt="9px"
+                          borderRadius="full"
+                          bg={bulletColor}
+                          opacity={0.5}
+                          flexShrink={0}
+                        />
+                        <Text fontSize="13px" color={bulletColor} lineHeight="1.55">
+                          {des}
                         </Text>
-                      ))}
-                    </Flex>
-                  </Box>
-                ))}
-              </Flex>
+                      </Flex>
+                    ))}
+                  </Flex>
+                </Box>
+              ))}
             </Box>
-          </Flex>
-        </AccordionPanel>
-      </AccordionItem>
-    </Accordion>
-  );
-};
+          </Box>
+        )}
+      </Flex>
+    </CVSectionShell>
+  )
+}
 
-export default SkillSection;
+export default SkillSection

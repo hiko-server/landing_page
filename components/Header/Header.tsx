@@ -73,7 +73,7 @@ const socialLinks = [
 
 function LiveStatus() {
   const [text, setText] = useState<string | null>(null)
-  const muted = useColorModeValue('gray.500', 'gray.400')
+  const muted = useColorModeValue('gray.600', 'gray.400')
 
   useEffect(() => {
     let cancelled = false
@@ -174,7 +174,7 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
   const borderColor = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
   const linkColor = useColorModeValue('gray.700', 'gray.300')
   const linkHover = useColorModeValue('black', 'white')
-  const subtle = useColorModeValue('gray.500', 'gray.400')
+  const subtle = useColorModeValue('gray.600', 'gray.400')
 
   return (
     <>

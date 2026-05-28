@@ -69,7 +69,7 @@ const Brands = ({
     href: b.href,
     image: b.image,
   }))
-  const labelColor = useColorModeValue('gray.500', 'gray.500')
+  const labelColor = useColorModeValue('gray.600', 'gray.500')
 
   if (!data.length) return null
 

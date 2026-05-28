@@ -26,7 +26,7 @@ export default function SectionLabel({
   mb?: number | string
   id?: string
 }) {
-  const muted = useColorModeValue('gray.500', 'gray.500')
+  const muted = useColorModeValue('gray.600', 'gray.500')
   const padded = typeof n === 'number' ? String(n).padStart(2, '0') : n
 
   return (

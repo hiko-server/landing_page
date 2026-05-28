@@ -56,7 +56,7 @@ const VersionRow = ({
 }) => {
   const cardBg = useColorModeValue('rgba(255,255,255,0.7)', 'rgba(30,41,59,0.6)')
   const border = useColorModeValue('rgba(0,0,0,0.07)', 'rgba(255,255,255,0.1)')
-  const dim = useColorModeValue('gray.500', 'gray.400')
+  const dim = useColorModeValue('gray.600', 'gray.400')
   const gradient = v.type === 'home' ? GRADIENT_HOME : GRADIENT_CV
 
   const formattedDate = v.date
