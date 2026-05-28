@@ -113,8 +113,14 @@ export default async function handler(
   let client: MongoClient | null = null
 
   try {
-    // Connect
-    client = new MongoClient(url)
+    // Connect with explicit short timeouts so the UI fails fast instead of
+    // hanging for the driver's 30s default. The most common Atlas failure is
+    // an IP that hasn't been allowlisted — we want that error in seconds.
+    client = new MongoClient(url, {
+      serverSelectionTimeoutMS: 8000,
+      socketTimeoutMS: 10000,
+      connectTimeoutMS: 8000,
+    })
     await client.connect()
 
     const db = client.db(dbName || 'site_backup_db')
@@ -276,10 +282,30 @@ export default async function handler(
 
   } catch (error: any) {
     console.error('Mongo Error:', error)
-    return res.status(500).json({ 
-      message: 'Database operation failed', 
-      error: error.message,
-      ok: false
+
+    // Surface the most useful piece of the driver error so the admin GUI can
+    // show actionable text (and not just 'Database operation failed').
+    const raw = error?.message || String(error)
+    const code = error?.code || error?.codeName || error?.name
+    let hint: string | undefined
+    if (/ENOTFOUND|EAI_AGAIN|getaddrinfo/i.test(raw)) {
+      hint = 'DNS lookup failed — check the host portion of the connection string.'
+    } else if (/ECONNREFUSED|ECONNRESET|ETIMEDOUT/i.test(raw)) {
+      hint = 'Network blocked — add this IP to your Atlas allowlist, or set 0.0.0.0/0 for testing.'
+    } else if (/Authentication failed|bad auth|password|user/i.test(raw)) {
+      hint = 'Authentication failed — verify the user and password in the connection string.'
+    } else if (/Server selection timed out|ServerSelection/i.test(raw)) {
+      hint = 'Atlas did not accept the connection in time — IP allowlist is the most common cause.'
+    } else if (/TLS|SSL/i.test(raw)) {
+      hint = 'TLS handshake failed — make sure mongodb+srv is used and the cluster is running.'
+    }
+
+    return res.status(500).json({
+      ok: false,
+      message: hint || raw,
+      error: raw,
+      code,
+      hint,
     })
   } finally {
     if (client) {
