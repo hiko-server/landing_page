@@ -1,5 +1,6 @@
 import {
   Box,
+  Button,
   Flex,
   HStack,
   Select,
@@ -7,6 +8,7 @@ import {
   useColorModeValue,
   useMediaQuery,
 } from '@chakra-ui/react'
+import { FaPrint } from 'react-icons/fa'
 import React, { useEffect, useState } from 'react'
 import Head from 'next/head'
 
@@ -90,7 +92,9 @@ const CVPage = ({
               CV / Resume
             </SectionLabel>
             <Flex
+              justify="space-between"
               align="center"
+              flexWrap="wrap"
               gap={3}
               borderBottom="1px solid"
               borderColor={border}
@@ -120,14 +124,21 @@ const CVPage = ({
                   <option value="zh">中文</option>
                 </Select>
               </HStack>
-              <Text
+
+              <Button
+                size="sm"
+                variant="outline"
+                leftIcon={<FaPrint />}
+                onClick={() => window.print()}
+                borderColor={border}
+                color={dim}
                 fontFamily={monoFont}
                 fontSize="11px"
-                color={dim}
-                ml="auto"
+                letterSpacing="0.04em"
+                _hover={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
               >
-                ↓ download / print button is on the CV sheet itself
-              </Text>
+                Print / Save as PDF
+              </Button>
             </Flex>
           </Box>
 

@@ -1,4 +1,4 @@
-import { Box, Button, Flex } from '@chakra-ui/react'
+import { Box, Flex } from '@chakra-ui/react'
 import { useRouter } from 'next/router'
 import React from 'react'
 import styled from 'styled-components'
@@ -21,8 +21,16 @@ import ProjectSection from './Project'
 import SkillSection from './Skill'
 import WorkExperience from './WorkExperience'
 import CompetitionAwardsSection from './CompetitionAwards'
-import { FaFileDownload } from 'react-icons/fa'
 
+/**
+ * CVResult — renders the A4 sheet.
+ *
+ * v6: the original FaFileDownload button (which sat sticky-top with handlePrint)
+ * has been removed. The /cv page now owns the print/download chrome via the
+ * 'Print / Save as PDF' button in its toolbar, which simply calls
+ * window.print(). The A4-specific print rules live in styles/globals.css so
+ * window.print() produces a clean single-page document.
+ */
 const CVResult = ({
   cvData,
   style,
@@ -37,7 +45,6 @@ const CVResult = ({
   return (
     <Flex
       direction="column"
-      // bgColor="rgb(204,204,204)"
       flex={1}
       alignItems="center"
       justifyContent="center"
@@ -47,13 +54,6 @@ const CVResult = ({
       style={style}
       gap="20px"
     >
-      {!router.asPath.includes('edit') && (
-        <PrintControl>
-          <Button id="download-button" onClick={() => handlePrint()}>
-            <FaFileDownload />
-          </Button>
-        </PrintControl>
-      )}
       <PrintArea id="print-area">
         {/* Render CV content here */}
         {Array.from({ length: 1 }, (_, index) => (
@@ -115,87 +115,10 @@ const CVResult = ({
       </PrintArea>
     </Flex>
   )
-
-  function handlePrint() {
-    // Hide the download button and set up styles for printing.
-    const downloadButton = document.getElementById('download-button')
-    if (downloadButton) {
-      downloadButton.style.display = 'none'
-    }
-
-    // Apply print-specific styles
-    const printStyles = `
-      @page { size: A4; margin: 0; }
-      @media print {
-        html, body {
-          width: 210mm !important;
-          height: auto !important;
-          margin: 0 !important;
-          padding: 0 !important;
-          background: #fff !important;
-          -webkit-print-color-adjust: exact !important;
-          print-color-adjust: exact !important;
-          overflow: visible !important;
-        }
-
-        .no-print { display: none !important; }
-        .print-parent { position: static !important; }
-
-        /* Only print the CV area */
-        body * { visibility: hidden !important; }
-        #print-area, #print-area * { visibility: visible !important; }
-        #print-area {
-          position: absolute !important;
-          top: 0 !important;
-          left: 0 !important;
-          width: 210mm !important;
-          margin: 0 !important;
-          padding: 0 !important;
-        }
-        #A4Paper {
-          width: 210mm !important;
-          min-height: 297mm !important;
-          margin: 0 !important;
-          box-shadow: none !important;
-          page-break-after: always;
-          break-inside: auto;
-        }
-        /* Ensure consistent fonts */
-        @font-face {
-          font-family: 'Noto Sans SC';
-          src: url('https://fonts.gstatic.com/s/notosanssc/v8/6xK3dSBYKcSV-LCoeQqfX1RYOo3qNa7lujY.woff2') format('woff2');
-        }
-        body { font-family: 'Noto Sans SC', sans-serif; }
-      }
-    `
-    const printStylesElement = document.createElement('style')
-    printStylesElement.type = 'text/css'
-    printStylesElement.media = 'print'
-    printStylesElement.appendChild(document.createTextNode(printStyles))
-    document.head.appendChild(printStylesElement)
-
-    window.onafterprint = () => {
-      document.head.removeChild(printStylesElement)
-      if (downloadButton) {
-        downloadButton.style.removeProperty('display')
-      }
-    }
-
-    window.print()
-  }
 }
 
 export default CVResult
 
-const PrintControl = styled(Flex)`
-  position: sticky;
-  top: 0;
-  z-index: 999;
-  flex: 1;
-  align-items: center;
-  justify-content: center;
-  @media print { display: none !important; }
-`
 const PrintArea = styled.div`
   /* Ensure this div contains all the content that should be printed */
   @media print {

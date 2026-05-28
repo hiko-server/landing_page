@@ -5,7 +5,6 @@ import { Box, Flex, useColorModeValue } from '@chakra-ui/react'
 import ImageScroller from '../imageScoller/imageScroller'
 import type { ScrollerImage } from '../imageScoller/imageScroller'
 
-import LandingCVSections from './LandingCVSections'
 import ContactPro from '../Contact/ContactPro'
 import TopRepos from '../GitHub/TopRepos'
 import TechCloud from '../TechStack/TechCloud'
@@ -39,11 +38,11 @@ import type { HomeData } from '../../lib/home'
 const Content = ({
   photos,
   cvEn,
-  cvZh,
   home,
 }: {
-  // `quickAccess` no longer rendered here (Hero CTAs cover it) but the prop
-  // is kept for backward-compat with the parent LandingContent component.
+  // `quickAccess` and `cvZh` no longer rendered here (Hero CTAs cover quick
+  // access; full bilingual CV lives at /cv) but the props are kept for
+  // backward-compat with the parent LandingContent component.
   quickAccess?: { label: string; url: string }[]
   photos?: ScrollerImage[]
   cvEn?: any[]
@@ -130,16 +129,6 @@ const Content = ({
         </Box>
       </SectionReveal>
 
-      {/* [08] CV — full inline view; printable via /cv */}
-      <SectionReveal>
-        <Box mb={{ base: 16, md: 24 }}>
-          <SectionLabel n={8} mb={6}>
-            CV / Resume
-          </SectionLabel>
-          <LandingCVSections en={cvEn} zh={cvZh} />
-        </Box>
-      </SectionReveal>
-
       {/* Photos + Contact (side by side on desktop, stacked on mobile) */}
       <Flex
         direction={{ base: 'column', md: 'row' }}
@@ -150,13 +139,13 @@ const Content = ({
         borderColor={border}
       >
         <Box flex={{ base: 'none', md: '0 0 380px' }} w={{ base: '100%', md: '380px' }}>
-          <SectionLabel n={9} mb={6}>
+          <SectionLabel n={8} mb={6}>
             Field Notes
           </SectionLabel>
           <ImageScroller images={photos} />
         </Box>
         <Box flex="1" minW={0} w="100%">
-          <SectionLabel n={10} mb={6}>
+          <SectionLabel n={9} mb={6}>
             Get In Touch
           </SectionLabel>
           <ContactPro home={home || undefined} formOnly />
