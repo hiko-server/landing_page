@@ -57,7 +57,7 @@ export default function ActivityFeed() {
   const [events, setEvents] = useState<Event[] | null>(null)
   const lineColor = useColorModeValue('gray.100', 'gray.700')
   const textColor = useColorModeValue('gray.700', 'gray.300')
-  const metaColor = useColorModeValue('gray.400', 'gray.500')
+  const metaColor = useColorModeValue('gray.600', 'gray.500')
 
   useEffect(() => {
     let alive = true

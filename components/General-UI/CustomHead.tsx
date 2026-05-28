@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-page-custom-font */
 import Head from 'next/head'
 import { VPColor } from '../../theme/color'
 
@@ -81,12 +80,12 @@ const CustomHead = ({
       <link rel="manifest" href="/manifest.json" />
       <link rel="icon" href="/images/favicon-32x32.png" />
       <link rel="apple-touch-icon" href="/apple-icon.png" />
-
-      {/* Fonts (optional) */}
-      <link
-        href="https://fonts.googleapis.com/css?family=Open+Sans:300,400|Oswald:600&display=optional"
-        rel="stylesheet"
-      />
+      {/*
+        v6: typography is now driven by next/font/local (Inter Variable +
+        JetBrains Mono Variable, see pages/_app.tsx). No Google Fonts <link>
+        — that triggered Next's no-page-custom-font warning and made the
+        page wait on fonts.googleapis.com.
+      */}
     </Head>
   )
 }

@@ -19,7 +19,7 @@ export default function CertificationsPeek({ cvEn }: { cvEn?: any[] }) {
   const border = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
   const borderHover = useColorModeValue('rgba(0,0,0,0.20)', 'rgba(255,255,255,0.24)')
   const fg = useColorModeValue('gray.700', 'gray.300')
-  const dim = useColorModeValue('gray.500', 'gray.500')
+  const dim = useColorModeValue('gray.600', 'gray.500')
   const monoFont = 'var(--font-geist-mono), monospace'
 
   const orgs: CertOrg[] = useMemo(() => {

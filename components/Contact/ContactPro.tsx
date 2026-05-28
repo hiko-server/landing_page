@@ -81,7 +81,7 @@ export default function ContactPro({
   const toast = useToast()
   const border = useColorModeValue('rgba(0,0,0,0.10)', 'rgba(255,255,255,0.12)')
   const borderStrong = useColorModeValue('rgba(0,0,0,0.20)', 'rgba(255,255,255,0.20)')
-  const dim = useColorModeValue('gray.500', 'gray.500')
+  const dim = useColorModeValue('gray.600', 'gray.500')
   const fg = useColorModeValue('gray.800', 'gray.100')
 
   const [name, setName] = useState('')

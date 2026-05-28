@@ -20,7 +20,7 @@ type Props = {
 }
 
 export default function NowPage({ source, updated, host }: Props) {
-  const muted = useColorModeValue('gray.500', 'gray.500')
+  const muted = useColorModeValue('gray.600', 'gray.500')
 
   return (
     <>

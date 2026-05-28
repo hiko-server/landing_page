@@ -2,29 +2,46 @@ import { appWithTranslation } from 'next-i18next'
 
 import React, { useEffect } from 'react'
 import { useRouter } from 'next/router'
-import { Inter, JetBrains_Mono } from 'next/font/google'
+import localFont from 'next/font/local'
 import * as gtag from '../lib/gtag'
 
 // v6 global design layer (CSS variables, dot grid, helper classes,
 // reduced-motion, print). Loaded once for the entire app.
 import '../styles/globals.css'
 
-// v6 typography. Inter is the design-DNA ancestor of Geist; we use it directly
-// because Next 13.5's bundled font list predates Geist's Google Fonts release.
-// Switch to self-hosted Geist later (Phase F) if desired.
-const sans = Inter({
-  subsets: ['latin'],
+// v6 typography — self-hosted variable fonts so the build never depends on
+// Google Fonts being reachable (some networks throttle / block fonts.gstatic.com,
+// which previously caused `next dev` to log AbortError on every boot).
+// Inter Variable covers 300-800 in one file; JetBrains Mono Variable covers
+// 400-700 in one file.
+const sans = localFont({
+  src: [
+    {
+      path: '../public/fonts/InterVariable.woff2',
+      style: 'normal',
+      weight: '300 800',
+    },
+    {
+      path: '../public/fonts/InterVariable-Italic.woff2',
+      style: 'italic',
+      weight: '300 800',
+    },
+  ],
   display: 'swap',
-  weight: ['300', '400', '500', '600', '700', '800'],
   variable: '--font-geist-sans',
   preload: true,
   fallback: ['system-ui', 'arial'],
 })
 
-const mono = JetBrains_Mono({
-  subsets: ['latin'],
+const mono = localFont({
+  src: [
+    {
+      path: '../public/fonts/JetBrainsMono-Variable.woff2',
+      style: 'normal',
+      weight: '400 700',
+    },
+  ],
   display: 'swap',
-  weight: ['400', '500', '600', '700'],
   variable: '--font-geist-mono',
   preload: true,
   fallback: ['ui-monospace', 'monospace'],

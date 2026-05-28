@@ -20,7 +20,7 @@ type Exp = {
  */
 
 export default function ExperienceTimeline({ cvEn }: { cvEn?: any[] }) {
-  const dim = useColorModeValue('gray.500', 'gray.500')
+  const dim = useColorModeValue('gray.600', 'gray.500')
   const fg = useColorModeValue('gray.800', 'gray.100')
   const border = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
   const rail = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
