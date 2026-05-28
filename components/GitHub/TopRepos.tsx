@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { Box, Grid, Link, Text, Flex, Skeleton, useColorModeValue } from '@chakra-ui/react'
 import { motion } from 'framer-motion'
-import { FaStar, FaCodeBranch, FaExternalLinkAlt } from 'react-icons/fa'
+import { FaStar, FaCodeBranch } from 'react-icons/fa'
 
 type Repo = {
   id: number
@@ -15,34 +15,58 @@ type Repo = {
 }
 
 const LANG_COLORS: Record<string, string> = {
-  TypeScript: '#3178c6', JavaScript: '#f1e05a', Python: '#3572A5',
-  Go: '#00ADD8', Rust: '#dea584', HTML: '#e34c26', CSS: '#563d7c',
-  Shell: '#89e051', Java: '#b07219', 'C++': '#f34b7d', Vue: '#41B883',
-  Dart: '#00B4AB', Swift: '#ffac45', Kotlin: '#A97BFF',
+  TypeScript: '#3178c6',
+  JavaScript: '#f1e05a',
+  Python: '#3572A5',
+  Go: '#00ADD8',
+  Rust: '#dea584',
+  HTML: '#e34c26',
+  CSS: '#563d7c',
+  Shell: '#89e051',
+  Java: '#b07219',
+  'C++': '#f34b7d',
+  Vue: '#41B883',
+  Dart: '#00B4AB',
+  Swift: '#ffac45',
+  Kotlin: '#A97BFF',
 }
 
+/**
+ * v6 TopRepos.
+ *
+ * Replaces v5's gradient-bar glass cards with a flat 3-up grid of
+ * minimal repo tiles. Border becomes accent on focus/hover, language
+ * indicator is a single dot in canonical GitHub language colour.
+ */
 export default function TopRepos() {
   const [repos, setRepos] = useState<Repo[] | null>(null)
-  const cardBg = useColorModeValue('rgba(255,255,255,0.65)', 'rgba(30,41,59,0.55)')
-  const cardBorder = useColorModeValue('rgba(0,0,0,0.07)', 'rgba(255,255,255,0.09)')
-  const nameColor = useColorModeValue('gray.800', 'white')
+  const cardBorder = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
+  const cardBorderHover = useColorModeValue('rgba(0,0,0,0.20)', 'rgba(255,255,255,0.24)')
+  const nameColor = useColorModeValue('gray.800', 'gray.100')
   const descColor = useColorModeValue('gray.600', 'gray.400')
   const metaColor = useColorModeValue('gray.500', 'gray.500')
+  const monoFont = 'var(--font-geist-mono), monospace'
 
   useEffect(() => {
     let alive = true
     fetch('/api/github/top-repos')
-      .then(r => r.json())
-      .then(d => { if (alive) setRepos(d.repos || []) })
-      .catch(() => { if (alive) setRepos([]) })
-    return () => { alive = false }
+      .then((r) => r.json())
+      .then((d) => {
+        if (alive) setRepos(d.repos || [])
+      })
+      .catch(() => {
+        if (alive) setRepos([])
+      })
+    return () => {
+      alive = false
+    }
   }, [])
 
   if (repos === null) {
     return (
       <Grid templateColumns={['1fr', 'repeat(2, 1fr)', 'repeat(3, 1fr)']} gap={4} w="100%">
         {Array.from({ length: 6 }).map((_, i) => (
-          <Skeleton key={i} height="120px" borderRadius="16px" />
+          <Skeleton key={i} height="120px" borderRadius="lg" />
         ))}
       </Grid>
     )
@@ -53,76 +77,82 @@ export default function TopRepos() {
   return (
     <Grid templateColumns={['1fr', 'repeat(2, 1fr)', 'repeat(3, 1fr)']} gap={4} w="100%">
       {repos.map((r, i) => {
-        const langColor = r.language ? (LANG_COLORS[r.language] || '#6366f1') : '#6366f1'
+        const langColor = r.language ? LANG_COLORS[r.language] || 'var(--accent)' : 'var(--accent)'
         return (
-          <Box
-            as={motion.div as any}
+          <Link
             key={r.id}
-            initial={{ opacity: 0, y: 16 }}
+            href={r.html_url}
+            isExternal
+            _hover={{ textDecoration: 'none' }}
+            as={motion.a as any}
+            initial={{ opacity: 0, y: 12 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
-            transition={{ duration: 0.35, delay: i * 0.05 } as any}
-            whileHover={{ y: -4, boxShadow: '0 16px 36px rgba(0,0,0,0.15)' } as any}
-            bg={cardBg}
+            transition={{ duration: 0.3, delay: i * 0.04 } as any}
+            display="block"
             border="1px solid"
             borderColor={cardBorder}
-            borderRadius="16px"
+            borderRadius="lg"
             p={4}
-            backdropFilter="blur(8px)"
             position="relative"
-            overflow="hidden"
-            sx={{ transition: 'all 0.2s ease' }}
+            sx={{
+              transition:
+                'border-color 250ms var(--ease-out-quart), transform 250ms var(--ease-out-quart)',
+              '&:hover': { borderColor: cardBorderHover, transform: 'translateY(-2px)' },
+              '&:focus-visible': { borderColor: 'var(--accent)' },
+            }}
           >
-            {/* Language color top bar */}
-            <Box
-              position="absolute"
-              top={0} left={0} right={0}
-              h="3px"
-              bg={langColor}
-              borderTopRadius="16px"
-            />
-            <Flex justify="space-between" align="flex-start" mb={2} mt={1}>
-              <Link
-                href={r.html_url}
-                isExternal
-                fontWeight="700"
-                fontSize="sm"
+            <Flex justify="space-between" align="baseline" mb={2}>
+              <Text
+                fontWeight={500}
+                fontSize="14px"
                 color={nameColor}
-                fontFamily="'Sora', sans-serif"
-                _hover={{ color: 'orange.400' }}
                 noOfLines={1}
-                maxW="85%"
+                fontFamily={monoFont}
               >
                 {r.name}
-              </Link>
-              <Link href={r.html_url} isExternal color="gray.400" _hover={{ color: 'orange.400' }}>
-                <FaExternalLinkAlt size={11} />
-              </Link>
+              </Text>
+              <Text fontFamily={monoFont} fontSize="10px" color={metaColor}>
+                ↗
+              </Text>
             </Flex>
             {r.description && (
-              <Text fontSize="xs" color={descColor} noOfLines={2} lineHeight="1.6" mb={3}>
+              <Text
+                fontSize="13px"
+                color={descColor}
+                noOfLines={2}
+                lineHeight="1.55"
+                mb={3}
+                minH="38px"
+              >
                 {r.description}
               </Text>
             )}
-            <Flex align="center" justify="space-between" mt="auto">
+            <Flex
+              align="center"
+              justify="space-between"
+              fontFamily={monoFont}
+              fontSize="11px"
+              color={metaColor}
+            >
               <Flex align="center" gap={3}>
                 <Flex align="center" gap={1}>
-                  <FaStar size={11} color="#f59e0b" />
-                  <Text fontSize="xs" color={metaColor}>{r.stargazers_count}</Text>
+                  <FaStar size={10} />
+                  <Text>{r.stargazers_count}</Text>
                 </Flex>
                 <Flex align="center" gap={1}>
-                  <FaCodeBranch size={11} />
-                  <Text fontSize="xs" color={metaColor}>{r.forks_count}</Text>
+                  <FaCodeBranch size={10} />
+                  <Text>{r.forks_count}</Text>
                 </Flex>
               </Flex>
               {r.language && (
-                <Flex align="center" gap={1}>
-                  <Box w="8px" h="8px" borderRadius="full" bg={langColor} />
-                  <Text fontSize="xs" color={metaColor}>{r.language}</Text>
+                <Flex align="center" gap={1.5}>
+                  <Box w="6px" h="6px" borderRadius="full" bg={langColor} />
+                  <Text>{r.language}</Text>
                 </Flex>
               )}
             </Flex>
-          </Box>
+          </Link>
         )
       })}
     </Grid>

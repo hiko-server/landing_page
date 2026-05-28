@@ -1,84 +1,131 @@
 import React, { useMemo, useState } from 'react'
-import { Box, Flex, Heading, Text, useColorModeValue, Badge, Tag, TagLabel } from '@chakra-ui/react'
+import { Box, Flex, Text, useColorModeValue } from '@chakra-ui/react'
 import { motion } from 'framer-motion'
 import { FaChevronDown, FaChevronUp } from 'react-icons/fa'
 
 type Feature = { description: string; furtherExplanation: string[] }
-type Project = { title: string; startDate: string; endDate: string; projectLocation: string; description: string; features: Feature[] }
+type Project = {
+  title: string
+  startDate: string
+  endDate: string
+  projectLocation: string
+  description: string
+  features: Feature[]
+}
+
+/**
+ * v6 ProjectSpotlight.
+ *
+ * Replaces v5's rainbow-rotating gradient cards with a single style:
+ * subtle border, monospace metadata header, accent only on hover/expand.
+ * Same horizontal-scroll layout, same click-to-expand interaction.
+ */
 
 const ProjectCard = ({ p, i }: { p: Project; i: number }) => {
   const [expanded, setExpanded] = useState(false)
-  const cardBg = useColorModeValue('rgba(255,255,255,0.7)', 'rgba(30,41,59,0.6)')
-  const cardBorder = useColorModeValue('rgba(221,107,32,0.15)', 'rgba(249,115,22,0.18)')
+  const border = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
+  const borderHover = useColorModeValue('rgba(0,0,0,0.20)', 'rgba(255,255,255,0.24)')
+  const fg = useColorModeValue('gray.800', 'gray.100')
   const dim = useColorModeValue('gray.600', 'gray.400')
-  const accentColors = ['orange', 'teal', 'blue', 'purple', 'cyan', 'pink']
-  const color = accentColors[i % accentColors.length]
+  const muted = useColorModeValue('gray.500', 'gray.500')
+  const monoFont = 'var(--font-geist-mono), monospace'
 
   return (
     <Box
       as={motion.div as any}
-      minW={{ base: '270px', md: '300px' }}
-      maxW="360px"
-      bg={cardBg}
+      minW={{ base: '270px', md: '320px' }}
+      maxW="380px"
       border="1px solid"
-      borderColor={cardBorder}
-      borderRadius="18px"
+      borderColor={border}
+      borderRadius="lg"
       p={5}
-      backdropFilter="blur(8px)"
       cursor="pointer"
       flexShrink={0}
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 12 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
-      transition={{ duration: 0.4, delay: i * 0.07 } as any}
-      whileHover={{ y: -6, boxShadow: '0 20px 40px rgba(221,107,32,0.15)' } as any}
-      onClick={() => setExpanded(v => !v)}
+      transition={{ duration: 0.35, delay: i * 0.05 } as any}
+      onClick={() => setExpanded((v) => !v)}
       position="relative"
-      overflow="hidden"
+      sx={{
+        '&:hover': { borderColor: borderHover },
+        '&:focus-visible': { borderColor: 'var(--accent)', outline: 'none' },
+      }}
     >
-      {/* Accent top bar */}
-      <Box
-        position="absolute"
-        top={0}
-        left={0}
-        right={0}
-        h="3px"
-        bgGradient={`linear(to-r, ${color}.400, ${color}.200)`}
-        borderTopRadius="18px"
-      />
-      <Flex justify="space-between" align="flex-start" mt={2}>
-        <Badge colorScheme={color} variant="subtle" px={2} py={0.5} borderRadius="full" fontSize="xs" mb={2}>
-          Project
-        </Badge>
-        <Tag size="sm" colorScheme="gray" variant="outline" borderRadius="full">
-          <TagLabel>{p.startDate}{p.endDate && p.endDate !== p.startDate ? ` — ${p.endDate}` : ''}</TagLabel>
-        </Tag>
+      {/* Metadata header */}
+      <Flex
+        justify="space-between"
+        align="baseline"
+        mb={3}
+        fontFamily={monoFont}
+        fontSize="11px"
+        color={muted}
+        letterSpacing="0.04em"
+      >
+        <Text>
+          {p.startDate}
+          {p.endDate && p.endDate !== p.startDate ? ` — ${p.endDate}` : ''}
+        </Text>
+        <Text>Project</Text>
       </Flex>
-      <Heading size="sm" mb={2} fontFamily="'Sora', sans-serif" lineHeight="1.4">
+
+      {/* Title */}
+      <Text fontWeight={500} fontSize="17px" lineHeight="1.3" color={fg} mb={2}>
         {p.title}
-      </Heading>
+      </Text>
+
+      {/* Description */}
       {p.description && (
-        <Text fontSize="sm" color={dim} noOfLines={expanded ? undefined : 3} lineHeight="1.7">
+        <Text fontSize="13px" color={dim} noOfLines={expanded ? undefined : 3} lineHeight="1.65">
           {p.description}
         </Text>
       )}
+
+      {/* Location (no emoji decoration) */}
       {p.projectLocation && (
-        <Text fontSize="xs" color={dim} mt={2} opacity={0.7}>
-          📍 {p.projectLocation}
+        <Text
+          fontFamily={monoFont}
+          fontSize="11px"
+          color={muted}
+          mt={3}
+          letterSpacing="0.04em"
+        >
+          {p.projectLocation}
         </Text>
       )}
+
+      {/* Expanded features */}
       {expanded && p.features?.length > 0 && (
-        <Box mt={3}>
+        <Box mt={4} pt={3} borderTop="1px solid" borderColor={border}>
           {p.features.slice(0, 3).map((f, fi) => (
-            <Text key={fi} fontSize="xs" color={dim} pl={3} borderLeft="2px solid" borderColor={`${color}.300`} mb={1} lineHeight="1.6">
+            <Text
+              key={fi}
+              fontSize="12px"
+              color={dim}
+              pl={3}
+              borderLeft="2px solid"
+              borderColor="var(--accent)"
+              mb={2}
+              lineHeight="1.55"
+            >
               {f.description}
             </Text>
           ))}
         </Box>
       )}
-      <Flex align="center" justify="flex-end" mt={3} gap={1} opacity={0.6}>
-        {expanded ? <FaChevronUp size={12} /> : <FaChevronDown size={12} />}
-        <Text fontSize="xs">{expanded ? 'Less' : 'More'}</Text>
+
+      {/* Expand control */}
+      <Flex
+        align="center"
+        justify="flex-end"
+        mt={3}
+        gap={1}
+        fontFamily={monoFont}
+        fontSize="11px"
+        color={muted}
+      >
+        {expanded ? <FaChevronUp size={10} /> : <FaChevronDown size={10} />}
+        <Text>{expanded ? 'less' : 'more'}</Text>
       </Flex>
     </Box>
   )
@@ -104,4 +151,3 @@ export default function ProjectSpotlight({ cvEn }: { cvEn?: any[] }) {
     </Box>
   )
 }
-
