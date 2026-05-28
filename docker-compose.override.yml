@@ -1,0 +1,6 @@
+services:
+  landing-page:
+    ports: !override
+      - "3002:3000"
+    networks: !override
+      - default
