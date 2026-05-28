@@ -21,6 +21,7 @@ import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 import CVEditor from '../../components/Admin/CVEditor'
 import CVGuiEditor from '../../components/Admin/CVGuiEditorV2'
+import CVEditorStudio from '../../components/Admin/CVEditorStudio'
 import HomeEditor from '../../components/Admin/HomeEditor'
 import VersionHistory from '../../components/Admin/VersionHistory'
 import { useRouter } from 'next/router'
@@ -150,14 +151,19 @@ export default function AdminDashboard() {
                 <HomeEditor />
               </TabPanel>
 
-              {/* CV */}
+              {/* CV — Studio is the primary v6 editor; JSON & GUI v2 are
+                  kept as legacy power-user tabs for raw editing / debugging. */}
               <TabPanel p={0}>
-                <Tabs variant="enclosed">
+                <Tabs variant="enclosed" colorScheme="purple">
                   <TabList>
+                    <Tab>Studio</Tab>
                     <Tab>JSON</Tab>
-                    <Tab>GUI</Tab>
+                    <Tab>GUI (legacy)</Tab>
                   </TabList>
                   <TabPanels>
+                    <TabPanel p={0}>
+                      <CVEditorStudio />
+                    </TabPanel>
                     <TabPanel>
                       <CVEditor />
                     </TabPanel>
