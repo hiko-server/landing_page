@@ -73,28 +73,39 @@ const LandingCVSections = ({ en, zh }: { en?: any[]; zh?: any[] }) => {
         </Flex>
       </Flex>
 
-      {cvData.map((section: any, key: number) => {
-        const idx = key + 1
-        const sessionName = section?.sessionName
-        switch (sessionName) {
-          case 'education':
-            return <EducationSection key={key} index={idx} data={section} />
-          case 'skill':
-            return <SkillSection key={key} index={idx} data={section} />
-          case 'certification':
-            return <CertificateSection key={key} index={idx} data={section} />
-          case 'workExperience':
-            return <WorkExperience key={key} index={idx} data={section} />
-          case 'competitionAwards':
-            return (
-              <CompetitionAwardsSection key={key} index={idx} data={section} />
-            )
-          case 'project':
-            return <ProjectSection key={key} index={idx} data={section} />
-          default:
-            return null
-        }
-      })}
+      {/*
+        cvdata can contain section types the public /about view doesn't render
+        (personalInformation, extraSkill, patents). Filter those out first so
+        the `[NN]` index chips count from 1 with no gaps, regardless of the
+        order they sit at in cvdata.json.
+      */}
+      {cvData
+        .filter((s: any) =>
+          ['education', 'skill', 'certification', 'workExperience', 'competitionAwards', 'project'].includes(
+            s?.sessionName,
+          ),
+        )
+        .map((section: any, key: number) => {
+          const idx = key + 1
+          switch (section.sessionName) {
+            case 'education':
+              return <EducationSection key={key} index={idx} data={section} />
+            case 'skill':
+              return <SkillSection key={key} index={idx} data={section} />
+            case 'certification':
+              return <CertificateSection key={key} index={idx} data={section} />
+            case 'workExperience':
+              return <WorkExperience key={key} index={idx} data={section} />
+            case 'competitionAwards':
+              return (
+                <CompetitionAwardsSection key={key} index={idx} data={section} />
+              )
+            case 'project':
+              return <ProjectSection key={key} index={idx} data={section} />
+            default:
+              return null
+          }
+        })}
     </Box>
   )
 }

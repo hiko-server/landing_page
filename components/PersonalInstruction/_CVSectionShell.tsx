@@ -261,7 +261,14 @@ export function CVRow({
         gap={[2, 6]}
       >
         <Box flex="1" minW={0}>
-          <Text
+          {/*
+            Title is a <div> (Box), not <Text>/<p>, because callers pass JSX
+            with block-level children (e.g. WorkExperience renders <Flex>
+            inside the title to lay out `{jobTitle} at {companyLink}`).
+            A <div> inside <p> is invalid HTML and trips React hydration.
+          */}
+          <Box
+            as="div"
             fontSize={['15px', '17px']}
             fontWeight={600}
             lineHeight="1.3"
@@ -269,14 +276,15 @@ export function CVRow({
             letterSpacing="-0.01em"
           >
             {title}
-          </Text>
+          </Box>
           {subtitle && (
-            <Text mt={1} fontSize="14px" color={subColor} lineHeight="1.45">
+            <Box as="div" mt={1} fontSize="14px" color={subColor} lineHeight="1.45">
               {subtitle}
-            </Text>
+            </Box>
           )}
           {meta && (
-            <Text
+            <Box
+              as="div"
               mt={1}
               fontFamily={monoFont}
               fontSize="11px"
@@ -284,7 +292,7 @@ export function CVRow({
               letterSpacing="0.04em"
             >
               {meta}
-            </Text>
+            </Box>
           )}
         </Box>
 
