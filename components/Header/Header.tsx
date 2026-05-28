@@ -17,7 +17,6 @@ import {
   useColorMode,
   useColorModeValue,
   Kbd,
-  Tooltip,
 } from '@chakra-ui/react'
 import { useRouter } from 'next/router'
 import { TfiAlignJustify } from 'react-icons/tfi'
@@ -29,6 +28,7 @@ import {
 } from 'react-icons/fa'
 import { MoonIcon, SunIcon, SearchIcon } from '@chakra-ui/icons'
 import Footer from '../Footer/Footer'
+import CommandPalette from '../General-UI/CommandPalette'
 
 /**
  * v6 Header
@@ -128,6 +128,11 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
   const toast = useToast()
   const [isAdmin, setIsAdmin] = useState(false)
   const { isOpen, onOpen, onClose } = useDisclosure()
+  const {
+    isOpen: cmdkOpen,
+    onOpen: openCmdk,
+    onClose: closeCmdk,
+  } = useDisclosure()
   const { colorMode, toggleColorMode } = useColorMode()
 
   useEffect(() => {
@@ -135,6 +140,19 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
       setIsAdmin(document.cookie.includes('cv_admin_token='))
     }
   }, [])
+
+  // Global ⌘K / Ctrl+K to open the command palette from any page.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        if (cmdkOpen) closeCmdk()
+        else openCmdk()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [cmdkOpen, openCmdk, closeCmdk])
 
   const logout = async () => {
     try {
@@ -236,35 +254,34 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
             />
           ) : (
             <Flex alignItems="center" gap={2}>
-              {/* ⌘K search trigger — full palette will be wired in a later phase.
-                  For now, scrolls to the search-able section (no-op). */}
-              <Tooltip label="Search (⌘K) — full palette coming soon" placement="bottom" hasArrow>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  h="32px"
-                  px={2.5}
+              {/* ⌘K search trigger — opens the full CommandPalette */}
+              <Button
+                size="sm"
+                variant="outline"
+                h="32px"
+                px={2.5}
+                borderColor={borderColor}
+                color={subtle}
+                fontFamily="var(--font-geist-mono), monospace"
+                fontSize="11px"
+                fontWeight={500}
+                letterSpacing="0.02em"
+                _hover={{ borderColor: linkColor, color: linkHover }}
+                leftIcon={<SearchIcon boxSize="10px" />}
+                onClick={openCmdk}
+                aria-label="Open command palette"
+              >
+                <Text display={{ base: 'none', xl: 'inline' }} mr={2}>Search</Text>
+                <Kbd
+                  fontSize="10px"
+                  bg="transparent"
+                  border="1px solid"
                   borderColor={borderColor}
                   color={subtle}
-                  fontFamily="var(--font-geist-mono), monospace"
-                  fontSize="11px"
-                  fontWeight={500}
-                  letterSpacing="0.02em"
-                  _hover={{ borderColor: linkColor, color: linkHover }}
-                  leftIcon={<SearchIcon boxSize="10px" />}
                 >
-                  <Text display={{ base: 'none', xl: 'inline' }} mr={2}>Search</Text>
-                  <Kbd
-                    fontSize="10px"
-                    bg="transparent"
-                    border="1px solid"
-                    borderColor={borderColor}
-                    color={subtle}
-                  >
-                    ⌘K
-                  </Kbd>
-                </Button>
-              </Tooltip>
+                  ⌘K
+                </Kbd>
+              </Button>
 
               {/* Theme toggle */}
               <IconButton
@@ -481,6 +498,9 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
           </DrawerFooter>
         </DrawerContent>
       </Drawer>
+
+      {/* Global ⌘K command palette (lazy-fetched dynamic items on first open) */}
+      <CommandPalette isOpen={cmdkOpen} onClose={closeCmdk} />
     </>
   )
 }
