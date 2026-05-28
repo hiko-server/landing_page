@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken'
 import fs from 'fs'
 import path from 'path'
 import dns from 'node:dns'
-import { getJwtSecret } from '../../lib/env'
+import { getJwtSecret, getMongoConfig } from '../../lib/env'
 import { resolveMongoSrvUrl } from '../../lib/srvResolve'
 
 // Atlas mongodb+srv URLs require a working SRV-record lookup. On Windows /
@@ -29,6 +29,20 @@ const CV_DATA_Path = path.join(process.cwd(), 'data', 'cvdata.json')
 const HOME_DATA_Path = path.join(process.cwd(), 'data', 'home.json')
 const ADMIN_DATA_Path = path.join(process.cwd(), 'data', 'admin.json')
 const IMAGE_DIR = path.join(process.cwd(), 'public', 'images')
+// MDX content tree — now.mdx, uses.mdx, blog/*.mdx, work/*.mdx.
+// Backed up as plain UTF-8 documents in the `mdx_content` collection so the
+// /now, /uses, /blog and /work routes survive a clean redeploy.
+const CONTENT_DIR = path.join(process.cwd(), 'content')
+// Version-history snapshots written by lib/cvdata.ts, lib/home.ts and
+// lib/mdx-admin.ts. Backed up so the /admin/dashboard?tab=versions UI can
+// roll back to any prior state after a clean redeploy.
+const SNAPSHOT_DIRS = [
+  path.join(process.cwd(), 'data', 'cv_snapshots'),
+  path.join(process.cwd(), 'data', 'home_snapshots'),
+  path.join(process.cwd(), 'data', 'blog_snapshots'),
+  path.join(process.cwd(), 'data', 'work_snapshots'),
+  path.join(process.cwd(), 'data', 'page_snapshots'),
+]
 
 // Admin guard (same scheme as pages/api/cvdata.ts / home.ts)
 function isAuthed(req: NextApiRequest, res: NextApiResponse): boolean {
@@ -82,13 +96,22 @@ export default async function handler(
   }
 
   if (req.method === 'GET') {
-     // Config retrieval (GET alias for action=get_config for simplicity)
+     // Config retrieval (GET alias for action=get_config for simplicity).
+     // Priority: env (MONGODB_URI) > data/mongo_config.json > null.
      try {
+        const env = getMongoConfig()
+        if (env.fromEnv) {
+            return res.status(200).json({
+                ok: true,
+                fromEnv: true,
+                config: { url: env.uri, username: '', password: '', dbName: env.dbName }
+            })
+        }
         if (fs.existsSync(CONFIG_PATH)) {
             const fileData = fs.readFileSync(CONFIG_PATH, 'utf-8')
-            return res.status(200).json({ ok: true, config: JSON.parse(fileData) })
+            return res.status(200).json({ ok: true, fromEnv: false, config: JSON.parse(fileData) })
         }
-        return res.status(200).json({ ok: true, config: null }) // No config yet
+        return res.status(200).json({ ok: true, fromEnv: false, config: null }) // No config yet
      } catch (e) {
         return res.status(500).json({ ok: false, message: 'Failed to read config' })
      }
@@ -98,9 +121,24 @@ export default async function handler(
     return res.status(405).json({ message: 'Method not allowed' })
   }
 
-  const { action, config, type, data } = req.body
+  const { action, config: bodyConfig, type, data } = req.body
+
+  // When MONGODB_URI is set in .env, env wins: ignore any url/dbName the
+  // client tries to push and never persist a file copy. This is the core of
+  // the "防呆 / fool-proof" guard — the admin GUI cannot silently change the
+  // production connection string from the browser.
+  const env = getMongoConfig()
+  const config = env.fromEnv
+    ? { ...(bodyConfig || {}), url: env.uri, dbName: env.dbName }
+    : bodyConfig
 
   if (action === 'save_config') {
+      if (env.fromEnv) {
+          return res.status(403).json({
+              ok: false,
+              message: 'MongoDB connection is managed by .env (MONGODB_URI). Edit the env file to change it.'
+          })
+      }
       if (!config) return res.status(400).json({ message: 'No config provided' })
       try {
           fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2))
@@ -112,11 +150,18 @@ export default async function handler(
 
   if (action === 'get_config') {
       try {
+        if (env.fromEnv) {
+            return res.status(200).json({
+                ok: true,
+                fromEnv: true,
+                config: { url: env.uri, username: '', password: '', dbName: env.dbName }
+            })
+        }
         if (fs.existsSync(CONFIG_PATH)) {
             const fileData = fs.readFileSync(CONFIG_PATH, 'utf-8')
-            return res.status(200).json({ ok: true, config: JSON.parse(fileData) })
+            return res.status(200).json({ ok: true, fromEnv: false, config: JSON.parse(fileData) })
         }
-        return res.status(200).json({ ok: true, config: null })
+        return res.status(200).json({ ok: true, fromEnv: false, config: null })
      } catch (e) {
         return res.status(500).json({ ok: false, message: 'Failed to read config' })
      }
@@ -211,6 +256,49 @@ export default async function handler(
             }
         }
 
+        // 3. MDX content (now.mdx, uses.mdx, blog/*.mdx, work/*.mdx).
+        // Stored as one document per file in `mdx_content`. We drop the
+        // collection first so deleted local files don't reappear on restore.
+        if (['all', 'content'].includes(type)) {
+            try { await db.collection('mdx_content').drop() } catch(e){}
+            if (fs.existsSync(CONTENT_DIR)) {
+                const files = getAllFiles(CONTENT_DIR).filter((f) => /\.(mdx|md)$/i.test(f))
+                const docs = files.map((file) => ({
+                    relPath: path.relative(CONTENT_DIR, file).replace(/\\/g, '/'),
+                    body: fs.readFileSync(file, 'utf-8'),
+                    backupDate: timestamp,
+                }))
+                if (docs.length > 0) {
+                    await db.collection('mdx_content').insertMany(docs)
+                }
+            }
+        }
+
+        // 4. Version-history snapshots (data/{cv,home,blog,work,page}_snapshots/**).
+        // Stored as { dir, relPath, body, backupDate } in `snapshots`. dir is
+        // the snapshot folder name (e.g. "cv_snapshots") so restore can route
+        // back to the correct directory under data/.
+        if (['all', 'snapshots'].includes(type)) {
+            try { await db.collection('snapshots').drop() } catch(e){}
+            const docs: any[] = []
+            for (const snapDir of SNAPSHOT_DIRS) {
+                if (!fs.existsSync(snapDir)) continue
+                const dirName = path.basename(snapDir)
+                const files = getAllFiles(snapDir)
+                for (const file of files) {
+                    docs.push({
+                        dir: dirName,
+                        relPath: path.relative(snapDir, file).replace(/\\/g, '/'),
+                        body: fs.readFileSync(file, 'utf-8'),
+                        backupDate: timestamp,
+                    })
+                }
+            }
+            if (docs.length > 0) {
+                await db.collection('snapshots').insertMany(docs)
+            }
+        }
+
         return res.status(200).json({ ok: true, message: 'Backup successful' })
     }
 
@@ -246,6 +334,23 @@ export default async function handler(
                 if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true })
 
                 const downloadStream = bucket.openDownloadStream(file._id)
+        // 4. Snapshots (cv/home/blog/work history)
+        if (['all', 'snapshots'].includes(type)) {
+            const allowedDirs = new Set(SNAPSHOT_DIRS.map((d) => path.basename(d)))
+            const docs = await db.collection('snapshots').find({}).toArray()
+            for (const doc of docs) {
+                const dir = String(doc.dir || '')
+                const rel = String(doc.relPath || '').replace(/\\/g, '/')
+                // 防呆: only restore into known snapshot dirs, no traversal.
+                if (!allowedDirs.has(dir)) continue
+                if (!rel || rel.includes('..') || path.isAbsolute(rel)) continue
+                const destPath = path.join(process.cwd(), 'data', dir, rel)
+                const destDir = path.dirname(destPath)
+                if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true })
+                fs.writeFileSync(destPath, String(doc.body ?? ''), 'utf-8')
+            }
+        }
+
                 const fileStream = fs.createWriteStream(destPath)
                 
                 await new Promise((resolve, reject) => {
@@ -255,6 +360,22 @@ export default async function handler(
                 })
             }
         }
+
+        // 3. MDX content
+        if (['all', 'content'].includes(type)) {
+            const docs = await db.collection('mdx_content').find({}).toArray()
+            for (const doc of docs) {
+                const rel = String(doc.relPath || '').replace(/\\/g, '/')
+                // 防呆: refuse path traversal — keep restores inside content/.
+                if (!rel || rel.includes('..') || path.isAbsolute(rel)) continue
+                if (!/\.(mdx|md)$/i.test(rel)) continue
+                const destPath = path.join(CONTENT_DIR, rel)
+                const destDir = path.dirname(destPath)
+                if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true })
+                fs.writeFileSync(destPath, String(doc.body ?? ''), 'utf-8')
+            }
+        }
+
         return res.status(200).json({ ok: true, message: 'Restore successful' })
     }
 

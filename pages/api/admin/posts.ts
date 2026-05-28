@@ -23,7 +23,7 @@ function isAuthed(req: NextApiRequest, res: NextApiResponse): boolean {
  *   PUT    /api/admin/posts                → { slug, frontmatter, body } write/overwrite
  *   DELETE /api/admin/posts?slug=foo       → delete (auto-snapshots first)
  */
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!isAuthed(req, res)) return res.status(401).json({ error: 'Unauthorized' })
 
   if (req.method === 'GET') {
@@ -50,17 +50,17 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       return res.status(400).json({ error: 'Missing frontmatter' })
     if (!frontmatter.title) return res.status(400).json({ error: 'frontmatter.title required' })
     if (!frontmatter.date) return res.status(400).json({ error: 'frontmatter.date required' })
-    const result = writeOne('blog', slug, frontmatter, body || '')
+    const result = await writeOne('blog', slug, frontmatter, body || '')
     if (!result.ok) return res.status(400).json({ error: result.error })
-    return res.status(200).json({ ok: true })
+    return res.status(200).json(result)
   }
 
   if (req.method === 'DELETE') {
     const slug = req.query.slug as string | undefined
     if (!slug) return res.status(400).json({ error: 'Missing slug' })
-    return deleteOne('blog', slug)
-      ? res.status(200).json({ ok: true })
-      : res.status(404).json({ error: 'Not found' })
+    const result = await deleteOne('blog', slug)
+    if (!result.ok) return res.status(404).json({ error: result.error })
+    return res.status(200).json(result)
   }
 
   res.setHeader('Allow', 'GET,PUT,DELETE')

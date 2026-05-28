@@ -13,7 +13,7 @@ import {
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 import { useRouter } from 'next/router'
-import { FaHome, FaFileAlt, FaDatabase, FaHistory, FaLayerGroup, FaPenNib, FaBriefcase } from 'react-icons/fa'
+import { FaHome, FaFileAlt, FaDatabase, FaHistory, FaLayerGroup, FaPenNib, FaBriefcase, FaClock, FaToolbox } from 'react-icons/fa'
 
 const cards = [
   {
@@ -78,6 +78,24 @@ const cards = [
     gradient: 'linear-gradient(135deg,#0ea5e9,#67e8f9)',
     badge: 'Work',
     badgeColor: 'cyan',
+  },
+  {
+    title: 'Now Page',
+    desc: 'Edit /now — current focus, projects, location',
+    href: '/admin/now',
+    icon: FaClock,
+    gradient: 'linear-gradient(135deg,#16a34a,#86efac)',
+    badge: 'Now',
+    badgeColor: 'green',
+  },
+  {
+    title: 'Uses Page',
+    desc: 'Edit /uses — hardware, editor, stack',
+    href: '/admin/uses',
+    icon: FaToolbox,
+    gradient: 'linear-gradient(135deg,#db2777,#f9a8d4)',
+    badge: 'Uses',
+    badgeColor: 'pink',
   },
 ]
 

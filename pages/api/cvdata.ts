@@ -17,7 +17,7 @@ function isAuthed(req: NextApiRequest, res: NextApiResponse) {
   }
 }
 
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') {
     // snapshots list (admin only)
     if (req.query.snapshots === '1') {
@@ -71,7 +71,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const newEn = Array.isArray(en) ? en : current.en
     const baseZh = Array.isArray(zh) ? zh : current.zh
     const newZh = syncZh ? syncStructure(newEn, baseZh) : baseZh
-    writeCvData({ en: newEn, zh: newZh })
+    const writeResult = await writeCvData({ en: newEn, zh: newZh })
+    if (!writeResult.ok) return res.status(500).json({ error: writeResult.error })
     try {
       const actor = (() => {
         const token = getCookie('cv_admin_token', { req, res }) as string | undefined
@@ -80,7 +81,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       })()
       sendMail({ to: process.env.NOTIFY_EMAIL || process.env.ADMIN_EMAIL || 'hi@hiko.dev', subject: 'CV updated', text: `CV updated by ${actor} at ${new Date().toISOString()}\nSyncZh=${!!syncZh}` })
     } catch {}
-    return res.status(200).json({ ok: true })
+    return res.status(200).json(writeResult)
   }
 
   // manual snapshot/import/restore ops
@@ -93,8 +94,9 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     }
     if (action === 'restore') {
       if (!filename) return res.status(400).json({ error: 'Missing filename' })
-      const ok = restoreSnapshot(filename)
-      return ok ? res.status(200).json({ ok: true }) : res.status(404).json({ error: 'Not found' })
+      const result = await restoreSnapshot(filename)
+      if (!result.ok) return res.status(404).json({ error: result.error })
+      return res.status(200).json(result)
     }
     if (action === 'import') {
       // overwrite with provided JSON structure
@@ -125,8 +127,9 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       const newEn = enIn ?? current.en
       const newZh = zhIn ? syncStructure(newEn, zhIn) : current.zh
       try { saveSnapshot() } catch {}
-      writeCvData({ en: newEn, zh: newZh })
-      return res.status(200).json({ ok: true })
+      const importResult = await writeCvData({ en: newEn, zh: newZh })
+      if (!importResult.ok) return res.status(500).json({ error: importResult.error })
+      return res.status(200).json(importResult)
     }
     return res.status(400).json({ error: 'Unknown action' })
   }

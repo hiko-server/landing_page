@@ -32,6 +32,9 @@ function formatEvent(e: Event): { title: string } {
       const refType = e.payload?.ref_type
       return { title: `Created ${refType} in ${repo}` }
     }
+    case 'RepoUpdateEvent': {
+      return { title: `Updated ${repo}` }
+    }
     default:
       return { title: `${e.type.replace(/Event$/, '')} in ${repo}` }
   }
@@ -42,6 +45,7 @@ function eventIcon(type: string) {
   if (type === 'PullRequestEvent') return <FaCodeBranch size={12} />
   if (type === 'IssuesEvent') return <FaExclamationCircle size={12} />
   if (type === 'CreateEvent') return <FaPlus size={12} />
+  if (type === 'RepoUpdateEvent') return <FaCodeBranch size={12} />
   return <FaBolt size={12} />
 }
 
@@ -50,6 +54,7 @@ function eventGradient(type: string) {
   if (type === 'PullRequestEvent') return 'linear-gradient(135deg,#0f766e,#14b8a6)'
   if (type === 'IssuesEvent') return 'linear-gradient(135deg,#dc2626,#f87171)'
   if (type === 'CreateEvent') return 'linear-gradient(135deg,#7c3aed,#a78bfa)'
+  if (type === 'RepoUpdateEvent') return 'linear-gradient(135deg,#0ea5e9,#38bdf8)'
   return 'linear-gradient(135deg,#2563eb,#60a5fa)'
 }
 
@@ -75,7 +80,13 @@ export default function ActivityFeed() {
       </Flex>
     )
   }
-  if (!events.length) return null
+  if (!events.length) {
+    return (
+      <Text fontSize="sm" color={metaColor}>
+        No recent GitHub activity to show.
+      </Text>
+    )
+  }
 
   return (
     <Box position="relative" pl={7}>

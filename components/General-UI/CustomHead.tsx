@@ -76,6 +76,14 @@ const CustomHead = ({
         />
       )}
 
+      {/* RSS auto-discovery — readers like NetNewsWire/Feedly look for this */}
+      <link
+        rel="alternate"
+        type="application/rss+xml"
+        title={`${productName} — Writing`}
+        href="/feed.xml"
+      />
+
       {/* PWA basics */}
       <link rel="manifest" href="/manifest.json" />
       <link rel="icon" href="/images/favicon-32x32.png" />

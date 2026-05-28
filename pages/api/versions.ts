@@ -45,7 +45,7 @@ function parseFilename(name: string): { date: string; label: string } {
   return { date: '', label: name }
 }
 
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!isAuthed(req, res)) return res.status(401).json({ error: 'Unauthorized' })
 
   const type = (req.query.type as string) || 'cv'
@@ -91,10 +91,9 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
 
     if (action === 'restore') {
       if (!filename) return res.status(400).json({ error: 'Missing filename' })
-      const ok = type === 'home' ? restoreHomeSnapshot(filename) : restoreSnapshot(filename)
-      return ok
-        ? res.status(200).json({ ok: true })
-        : res.status(404).json({ error: 'Snapshot not found' })
+      const result = type === 'home' ? await restoreHomeSnapshot(filename) : await restoreSnapshot(filename)
+      if (!result.ok) return res.status(404).json({ error: result.error })
+      return res.status(200).json(result)
     }
 
     return res.status(400).json({ error: 'Unknown action' })
