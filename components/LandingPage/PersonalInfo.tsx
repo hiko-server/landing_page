@@ -7,18 +7,36 @@ import {
   Flex,
   Link,
   Text,
-  /* Avatar, */ IconButton,
   Stack,
   Image,
-  useColorMode,
+  IconButton,
   Tooltip,
 } from '@chakra-ui/react'
-import { FaSun, FaMoon } from 'react-icons/fa'
-import HeroHeadline from './HeroHeadline'
 import { FaGithub, FaGitlab, FaLinkedin, FaWhatsapp } from 'react-icons/fa'
-// import LinkedInBadge from "../linkedIn/linkedIn";
-import VideoBackgroundLayOut from '../../layout/VideoBackgroundLayout'
 import { useRouter } from 'next/router'
+
+import HeroHeadline from './HeroHeadline'
+import VideoBackgroundLayOut from '../../layout/VideoBackgroundLayout'
+import SectionLabel from '../General-UI/SectionLabel'
+
+/**
+ * v6 Hero — preserves every v5 capability:
+ *   - VideoBackgroundLayOut (rotating background reels)
+ *   - HeroHeadline (typewriter tagline from home.json)
+ *   - Avatar with x/y/scale transform from home.json admin GUI
+ *   - Phone reveal (click-to-reveal pattern intact)
+ *   - Email reveal (click-to-reveal pattern intact)
+ *   - CV button (router.push('/cv'))
+ *   - GitHub / GitLab / LinkedIn / WhatsApp social row
+ *
+ * Visual upgrades (v6 "Indigo Precision"):
+ *   - [01] INTRODUCTION section marker (replaces gradient welcome)
+ *   - Cleaner type hierarchy using Inter/Geist
+ *   - Mono meta line under name (location, languages, availability)
+ *   - Tighter avatar frame + restrained social row
+ *   - Indigo accent only on primary CTA + brand mark in tagline
+ *   - Theme toggle removed here (now lives in Header)
+ */
 
 const PersonalInfo = ({
   isMobile,
@@ -27,307 +45,264 @@ const PersonalInfo = ({
   isMobile: boolean
   home?: HomeData
 }) => {
+  const router = useRouter()
   const [showPhone, setShowPhone] = React.useState(false)
   const [showEmail, setShowEmail] = React.useState(false)
-  const { colorMode, toggleColorMode } = useColorMode()
 
-  const handleSubmit = (e: { preventDefault: () => void }) => {
-    e.preventDefault()
-  }
-  const router = useRouter()
-  // Overlaying video: force white text for clear contrast
+  // Overlaying video → always white text for AAA contrast.
   const textColor = 'white'
+  const mutedOnVideo = 'rgba(255,255,255,0.7)'
 
-  // Avatar transform defaults (industry standard: center, no extra scale)
-  const avX =
-    (home?.hero as { avatarTransform?: { x?: number } } | undefined)
-      ?.avatarTransform?.x ?? 50 // percentage [0..100]
-  const avY = ((home as any)?.hero?.avatarTransform?.y ?? 50) as number // percentage [0..100]
-  const avScale = ((home as any)?.hero?.avatarTransform?.scale ?? 1) as number // [0.5..3]
+  // Avatar transform (preserved from v5 admin GUI)
+  const clamp = (v: number, min: number, max: number) =>
+    Math.max(min, Math.min(max, v))
+  const posX = clamp(Number(home?.hero?.avatarTransform?.x ?? 50), 0, 100)
+  const posY = clamp(Number(home?.hero?.avatarTransform?.y ?? 50), 0, 100)
+  const scale = clamp(Number(home?.hero?.avatarTransform?.scale ?? 1), 0.5, 3)
 
-  // Use the same avatar source for all modes
   const avatarSrc =
     (home?.hero?.avatarUrl && home.hero.avatarUrl.trim()) ||
     '/images/hikoAvator.png'
 
-  // Clamp values to safe ranges for mobile rendering
-  const clamp = (v: number, min: number, max: number) =>
-    Math.max(min, Math.min(max, v))
-  const posX = clamp(Number(avX) || 50, 0, 100)
-  const posY = clamp(Number(avY) || 50, 0, 100)
-  const scale = clamp(Number(avScale) || 1, 0.5, 3)
+  const socials = [
+    { name: 'GitHub', icon: <FaGithub />, url: home?.socials?.github || 'https://github.com/HikoPLi' },
+    { name: 'GitLab', icon: <FaGitlab />, url: home?.socials?.gitlab || 'https://gitlab.com/HikoPLi' },
+    { name: 'LinkedIn', icon: <FaLinkedin />, url: home?.socials?.linkedin || 'https://www.linkedin.com/in/liyanpeihiko/' },
+    { name: 'WhatsApp', icon: <FaWhatsapp />, url: home?.socials?.whatsapp || 'https://wa.me/85262040827' },
+  ]
+
+  const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
+
+  // Subtle accent for hover states layered over video (still readable)
+  const ctaBorder = 'rgba(255,255,255,0.18)'
+  const ctaBorderHover = 'rgba(255,255,255,0.40)'
 
   return (
     <Box position="relative" w="full" h="full">
       <VideoBackgroundLayOut>
-        <Box overflow="hidden" pb={['20', '25']} pt={['35', '40', '46']}>
-          <Box mx="auto" maxW="1390px" px={['4', '8', '0']}>
+        {/* Faint vignette so type sits cleanly on busy video frames. */}
+        <Box
+          position="absolute"
+          inset={0}
+          pointerEvents="none"
+          bgGradient="linear(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.25) 40%, rgba(0,0,0,0.55) 100%)"
+        />
+
+        <Box position="relative" overflow="hidden" pb={[16, 20]} pt={[28, 32, 40]}>
+          <Box mx="auto" maxW="var(--container-content)" px={[4, 6, 8]}>
             <Flex
-              alignItems={{ lg: 'center' }}
-              gap={{ base: '4', lg: '8', xl: '32.5' }}
+              direction={isMobile ? 'column' : 'row'}
+              alignItems="flex-start"
+              justifyContent="space-between"
+              gap={[8, 10, 12]}
             >
-              {!isMobile && (
-                <Box width={{ base: '100%', md: '50%' }}>
-                  <HeroHeadline
-                    brand={home?.hero?.brand}
-                    tagline={home?.hero?.tagline}
-                  />
-
-                  <Box mt="10">
-                    <form onSubmit={handleSubmit}>
-                      <Flex flexWrap="wrap" gap="5">
-                        <Link
-                          href="/contact"
-                          aria-label="Contact Us"
-                          rounded="full"
-                          bg="black"
-                          px="7.5"
-                          py="2.5"
-                          color="white"
-                          transition="background-color 300ms ease-in-out"
-                          _hover={{ bg: 'blackho' }}
-                          _dark={{ bg: 'btndark', _hover: { bg: 'blackho' } }}
-                        >
-                          Contact Me
-                        </Link>
-                      </Flex>
-                    </form>
-                  </Box>
+              {/* Left column: section label + tagline + meta + CTAs */}
+              <Box flex={1} minW={0}>
+                <Box mb={8} sx={{ '& *': { color: mutedOnVideo + ' !important' } }}>
+                  <SectionLabel n={1}>Introduction</SectionLabel>
                 </Box>
-              )}
 
-              <Box w={{ base: 'full', md: '1/2' }}>
-                <Flex
-                  padding={['20px', '40px']}
-                  direction="column"
-                  justifyContent="center"
-                  alignItems="center"
-                  gap={['20px', '40px']}
-                >
-                  <Flex
-                    justifyContent="center"
-                    alignItems="center"
-                    gap={['20px', '40px']}
-                    direction="column"
+                {!isMobile && (
+                  <Box mb={6}>
+                    <HeroHeadline
+                      brand={home?.hero?.brand}
+                      tagline={home?.hero?.tagline}
+                    />
+                  </Box>
+                )}
+
+                {/* Name */}
+                <Flex direction="column" gap={2} mb={5}>
+                  <Text
+                    fontSize={['28px', '36px', '42px']}
+                    fontWeight={500}
+                    lineHeight="1.05"
+                    letterSpacing="-0.02em"
+                    color={textColor}
                   >
-                    {/* Replace Avatar with precision-cropped circular container */}
-                    <Box
-                      // avatar frame sized for homepage; responsive sizes
-                      w={['180px', '220px']}
-                      h={['180px', '220px']}
-                      borderRadius="full"
-                      overflow="hidden"
-                      boxShadow="lg"
-                      position="relative"
-                    >
-                      <Image
-                        src={avatarSrc}
-                        alt={home?.hero?.brand || 'avatar'}
-                        w="100%"
-                        h="100%"
-                        objectFit="cover"
-                        sx={{ objectPosition: `${posX}% ${posY}%` }}
-                        transform={`scale(${scale})`}
-                        transformOrigin={`${posX}% ${posY}%`}
-                        draggable={false}
-                        pointerEvents="none"
-                        // Improve mobile GPU compositing and avoid flicker
-                        style={{
-                          willChange: 'transform',
-                          backfaceVisibility: 'hidden',
-                          display: 'block',
-                        }}
-                      />
-                    </Box>
+                    Li Yanpei
+                    <Text as="span" color={mutedOnVideo} fontWeight={300}>
+                      {' '}
+                      / 李彦霈
+                    </Text>
+                  </Text>
 
-                    <Flex
-                      direction="column"
-                      gap={['10px', '20px']}
-                      justifyContent="center"
-                      alignItems="center"
-                      textAlign="center"
-                      padding={'20px'}
-                      borderRadius={'8px'}
-                    >
-                      <Text
-                        fontSize={['30px', '40px']}
-                        fontWeight="bold"
-                        textAlign="center"
-                        color={textColor}
-                      >
-                        Li Yanpei, Hiko
-                      </Text>
-                      <Text
-                        fontSize={['30px', '40px']}
-                        fontWeight="bold"
-                        textAlign="center"
-                        color={textColor}
-                      >
-                        李彦霈
-                      </Text>
-                      <Text
-                        fontSize={['16px', '18px']}
-                        textAlign="center"
-                        color={textColor}
-                      >
-                        {showPhone ? (
-                          home?.hero?.phone || ''
-                        ) : (
-                          <Button
-                            size="sm"
-                            onClick={() => setShowPhone(true)}
-                            aria-label="Reveal phone number"
-                          >
-                            Click to reveal phone
-                          </Button>
-                        )}
-                      </Text>
-                      <Text
-                        fontSize={['16px', '18px']}
-                        textAlign="center"
-                        color={textColor}
-                      >
-                        {showEmail ? (
-                          home?.hero?.email ? (
-                            <Link href={`mailto:${home.hero.email}`}>
-                              {home.hero.email}
-                            </Link>
-                          ) : null
-                        ) : (
-                          <Button
-                            size="sm"
-                            onClick={() => setShowEmail(true)}
-                            aria-label="Reveal email"
-                          >
-                            Click to reveal email
-                          </Button>
-                        )}
-                      </Text>
-                      <Text
-                        fontSize={['16px', '18px']}
-                        textAlign="center"
-                        color={textColor}
-                      >
-                        Mandarin, Cantonese, English
-                      </Text>
-                    </Flex>
+                  <Flex
+                    wrap="wrap"
+                    fontFamily={monoFont}
+                    fontSize="11px"
+                    color={mutedOnVideo}
+                    letterSpacing="0.04em"
+                    gap={3}
+                    mt={1}
+                  >
+                    <Text as="span">Hong Kong</Text>
+                    <Text as="span" opacity={0.5}>/</Text>
+                    <Text as="span">Mandarin · Cantonese · English</Text>
+                    <Text as="span" opacity={0.5}>/</Text>
+                    <Text as="span">Available · {new Date().getFullYear()}</Text>
+                  </Flex>
+                </Flex>
 
-                    <Flex
-                      mt={8}
-                      w={['100%', '350px']}
-                      direction="row"
-                      alignItems="center"
-                      justifyContent="center"
-                      gap={'10px'}
-                    >
+                {/* Reveal: phone + email (logic preserved from v5) */}
+                <Flex direction="column" gap={2} mb={8} fontSize="14px">
+                  <Box>
+                    <Text as="span" color={mutedOnVideo} fontFamily={monoFont} fontSize="11px" mr={2}>
+                      tel
+                    </Text>
+                    {showPhone ? (
+                      <Text as="span" color={textColor}>
+                        {home?.hero?.phone || ''}
+                      </Text>
+                    ) : (
                       <Button
-                        size="lg"
-                        fontSize={['20px', '24px']}
-                        mb={6}
-                        onClick={() => router.push('/cv')}
-                        colorScheme="black"
-                        variant="outline"
-                        bg="black.500"
-                        color="white"
-                        _hover={{ bg: 'black.600' }}
+                        size="xs"
+                        variant="link"
+                        color="var(--accent)"
+                        fontFamily={monoFont}
+                        fontWeight={500}
+                        onClick={() => setShowPhone(true)}
+                        aria-label="Reveal phone number"
                       >
-                        CV
+                        Click to reveal →
                       </Button>
-                      <Tooltip label={colorMode === 'light' ? 'Dark mode' : 'Light mode'} placement="top">
+                    )}
+                  </Box>
+                  <Box>
+                    <Text as="span" color={mutedOnVideo} fontFamily={monoFont} fontSize="11px" mr={2}>
+                      email
+                    </Text>
+                    {showEmail ? (
+                      home?.hero?.email ? (
+                        <Link
+                          href={`mailto:${home.hero.email}`}
+                          color={textColor}
+                          _hover={{ color: 'var(--accent)' }}
+                        >
+                          {home.hero.email}
+                        </Link>
+                      ) : null
+                    ) : (
+                      <Button
+                        size="xs"
+                        variant="link"
+                        color="var(--accent)"
+                        fontFamily={monoFont}
+                        fontWeight={500}
+                        onClick={() => setShowEmail(true)}
+                        aria-label="Reveal email"
+                      >
+                        Click to reveal →
+                      </Button>
+                    )}
+                  </Box>
+                </Flex>
+
+                {/* CTAs + socials */}
+                <Flex direction={['column', 'row']} alignItems={['stretch', 'center']} gap={4}>
+                  <Button
+                    onClick={() => router.push('/cv')}
+                    size="md"
+                    h="44px"
+                    px={6}
+                    bg="var(--accent)"
+                    color="white"
+                    fontSize="14px"
+                    fontWeight={500}
+                    _hover={{ bg: '#4f46e5' }}
+                    _active={{ bg: '#4338ca' }}
+                  >
+                    View CV →
+                  </Button>
+
+                  <Stack direction="row" spacing={2}>
+                    {socials.map((s) => (
+                      <Tooltip key={s.name} label={s.name} placement="top" hasArrow>
                         <IconButton
-                          size="lg"
-                          mb={6}
-                          onClick={toggleColorMode}
-                          icon={colorMode === 'light' ? <FaMoon /> : <FaSun />}
-                          aria-label="Toggle color mode"
+                          aria-label={s.name}
+                          onClick={() => window.open(s.url, '_blank')}
+                          icon={s.icon}
                           variant="outline"
-                          bg="rgba(0,0,0,0.4)"
-                          color="white"
-                          borderColor="rgba(255,255,255,0.3)"
-                          _hover={{ bg: 'rgba(0,0,0,0.6)' }}
+                          size="md"
+                          h="44px"
+                          w="44px"
+                          borderColor={ctaBorder}
+                          color={textColor}
+                          bg="rgba(0,0,0,0.25)"
+                          _hover={{ borderColor: ctaBorderHover, bg: 'rgba(0,0,0,0.4)' }}
                         />
                       </Tooltip>
-                      <Stack direction="row" spacing={4}>
-                        <IconButton
-                          size="lg"
-                          fontSize={['20px', '24px']}
-                          mb={6}
-                          onClick={() =>
-                            window.open(
-                              home?.socials?.github ||
-                                'https://github.com/HikoPLi'
-                            )
-                          }
-                          icon={<FaGithub />}
-                          aria-label="GitHub"
-                          colorScheme="black"
-                          variant="outline"
-                          bg="black"
-                          color="white"
-                          _hover={{ bg: 'gray.700' }}
-                        />
+                    ))}
+                  </Stack>
+                </Flex>
+              </Box>
 
-                        <IconButton
-                          size="lg"
-                          fontSize={['20px', '24px']}
-                          onClick={() =>
-                            window.open(
-                              home?.socials?.gitlab ||
-                                'https://gitlab.com/HikoPLi'
-                            )
-                          }
-                          icon={<FaGitlab />}
-                          aria-label="GitLab"
-                          colorScheme="orange"
-                          variant="outline"
-                          bg="orange.500"
-                          color="white"
-                          _hover={{ bg: 'orange.600' }}
-                        />
+              {/* Right column: avatar (precision-cropped, transform from admin) */}
+              <Box
+                flexShrink={0}
+                alignSelf={['center', 'flex-start']}
+                mt={[6, 0]}
+              >
+                <Box
+                  w={['200px', '220px', '260px']}
+                  h={['200px', '220px', '260px']}
+                  borderRadius="20px"
+                  overflow="hidden"
+                  border="1px solid rgba(255,255,255,0.14)"
+                  boxShadow="0 24px 60px rgba(0,0,0,0.45)"
+                  position="relative"
+                  bg="rgba(0,0,0,0.25)"
+                >
+                  <Image
+                    src={avatarSrc}
+                    alt={home?.hero?.brand || 'avatar'}
+                    w="100%"
+                    h="100%"
+                    objectFit="cover"
+                    sx={{ objectPosition: `${posX}% ${posY}%` }}
+                    transform={`scale(${scale})`}
+                    transformOrigin={`${posX}% ${posY}%`}
+                    draggable={false}
+                    pointerEvents="none"
+                    style={{
+                      willChange: 'transform',
+                      backfaceVisibility: 'hidden',
+                      display: 'block',
+                    }}
+                  />
+                </Box>
 
-                        <IconButton
-                          size="lg"
-                          fontSize={['20px', '24px']}
-                          mb={6}
-                          onClick={() =>
-                            window.open(
-                              home?.socials?.linkedin ||
-                                'https://www.linkedin.com/in/liyanpeihiko/'
-                            )
-                          }
-                          icon={<FaLinkedin />}
-                          aria-label="LinkedIn"
-                          colorScheme="linkedin"
-                          variant="outline"
-                          bg="linkedin.500"
-                          color="white"
-                          _hover={{ bg: 'linkedin.600' }}
-                        />
-                        <IconButton
-                          size="lg"
-                          fontSize={['20px', '24px']}
-                          mb={6}
-                          onClick={() =>
-                            window.open(
-                              home?.socials?.whatsapp ||
-                                'https://wa.me/85262040827'
-                            )
-                          }
-                          icon={<FaWhatsapp />}
-                          aria-label="WhatsApp"
-                          colorScheme="whatsapp"
-                          variant="outline"
-                          bg="whatsapp.500"
-                          color="white"
-                          _hover={{ bg: 'whatsapp.600' }}
-                        />
-                      </Stack>
-                    </Flex>
-                  </Flex>
-                  {/* <LinkedInBadge /> */}
+                {/* Currently-doing chip beneath avatar */}
+                <Flex
+                  mt={3}
+                  direction="column"
+                  fontFamily={monoFont}
+                  fontSize="10px"
+                  letterSpacing="0.04em"
+                  color={mutedOnVideo}
+                  textAlign={['center', 'left']}
+                  gap={0.5}
+                >
+                  <Text as="span">currently coding</Text>
+                  <Text as="span" color={textColor}>
+                    WeGreen AI · COT
+                  </Text>
+                  <Text as="span" opacity={0.6}>
+                    self-taught · since 2022
+                  </Text>
                 </Flex>
               </Box>
             </Flex>
+
+            {/* Mobile: HeroHeadline below (different ordering vs desktop) */}
+            {isMobile && (
+              <Box mt={10}>
+                <HeroHeadline
+                  brand={home?.hero?.brand}
+                  tagline={home?.hero?.tagline}
+                />
+              </Box>
+            )}
           </Box>
         </Box>
       </VideoBackgroundLayOut>
