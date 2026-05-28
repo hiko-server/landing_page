@@ -244,7 +244,10 @@ export function CVRow({
 }: CVRowProps) {
   const divider = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.08)')
   const titleColor = useColorModeValue('gray.900', 'gray.50')
-  const subColor = useColorModeValue('gray.600', 'gray.400')
+  // Subtitle (school name, company name, project description) carries real
+  // content — bump light-side to gray.700 (~6.5:1) so it's clearly readable,
+  // not just barely-AA at gray.600.
+  const subColor = useColorModeValue('gray.700', 'gray.400')
   const metaColor = useColorModeValue('gray.600', 'gray.500')
 
   return (

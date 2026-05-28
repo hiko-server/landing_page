@@ -1,5 +1,5 @@
 import React from 'react'
-import { Flex, Link, Box } from '@chakra-ui/react'
+import { Flex, Link, Box, useColorModeValue } from '@chakra-ui/react'
 import { DateTime } from 'luxon'
 import { Experiences } from '../../types/cvProps'
 import CVSectionShell, { CVRow, CVBullets, CVTagList } from './_CVSectionShell'
@@ -19,6 +19,10 @@ const WorkExperience = ({
   data: Experiences
 }) => {
   const items = data?.experiences || []
+  // "at" connector word inside the title — needs theme-aware color so it
+  // stays readable on white (was hard-coded "gray.500" which is 2.4:1 on
+  // light bg, fails WCAG AA).
+  const conjColor = useColorModeValue('gray.600', 'gray.500')
   return (
     <CVSectionShell
       index={index}
@@ -33,7 +37,7 @@ const WorkExperience = ({
             title={
               <Flex align="baseline" wrap="wrap" gap={2}>
                 <Box as="span">{exp.jobTitle}</Box>
-                <Box as="span" color="gray.500" fontWeight={400} fontSize="14px">
+                <Box as="span" color={conjColor} fontWeight={400} fontSize="14px">
                   at
                 </Box>
                 {exp.companyURL ? (
