@@ -4,7 +4,24 @@ import { getCookie } from 'cookies-next'
 import jwt from 'jsonwebtoken'
 import fs from 'fs'
 import path from 'path'
+import dns from 'node:dns'
 import { getJwtSecret } from '../../lib/env'
+
+// Atlas mongodb+srv URLs require a working SRV-record lookup. On Windows /
+// some ISPs / VPNs the local DNS resolver refuses SRV queries
+// (ECONNREFUSED querySrv). Force the resolve* API to use Google + Cloudflare
+// public DNS so /admin/db-config works regardless of the host DNS state.
+// Also prefer IPv4 for getaddrinfo to avoid IPv6 timeouts on hosts that
+// announce AAAA records but can't reach them.
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4', '1.0.0.1'])
+} catch {
+  // setServers is fine to call repeatedly; ignore if the platform refuses
+}
+try {
+  const setOrder = (dns as any).setDefaultResultOrder
+  if (typeof setOrder === 'function') setOrder('ipv4first')
+} catch {}
 
 const CONFIG_PATH = path.join(process.cwd(), 'data', 'mongo_config.json')
 const CV_DATA_Path = path.join(process.cwd(), 'data', 'cvdata.json')
