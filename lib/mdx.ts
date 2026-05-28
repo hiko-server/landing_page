@@ -93,6 +93,12 @@ function readRaw(filePath: string): string | null {
 async function serializeMdx(raw: string) {
   return serialize(raw, {
     mdxOptions: {
+      // Force the production JSX runtime. Default is `development: true`
+      // which compiles to `_jsxDEV(...)` calls — Next 13.5's client bundle
+      // doesn't expose that symbol, so /now, /uses, /blog/[slug] and
+      // /work/[slug] all crashed at hydrate with
+      //   TypeError: _jsxDEV is not a function
+      development: false,
       rehypePlugins: [
         [
           rehypePrettyCode,
