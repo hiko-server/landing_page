@@ -119,13 +119,27 @@ export default function DbConfigPage() {
               setDbVerified(true)
               toast({ status: 'success', title: 'Connected!', description: 'Database is reachable.' })
               saveConfigToServer(dbConfig)
-          } else {
-              setDbVerified(false)
-              throw new Error(data.message)
+              setLoading(false)
+              return
           }
+          // Failure: server returns { ok: false, message, error, code, hint }
+          setDbVerified(false)
+          const description =
+              [data.hint, data.error, data.code && `code: ${data.code}`]
+                  .filter(Boolean)
+                  .join('  ·  ') ||
+              data.message ||
+              `HTTP ${res.status}`
+          toast({
+              status: 'error',
+              title: 'Connection Failed',
+              description,
+              duration: 9000,
+              isClosable: true,
+          })
       } catch (e: any) {
           setDbVerified(false)
-          toast({ status: 'error', title: 'Connection Failed', description: e.message })
+          toast({ status: 'error', title: 'Connection Failed', description: e?.message || 'Network error' })
       } finally {
           setLoading(false)
       }
