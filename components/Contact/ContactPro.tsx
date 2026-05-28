@@ -95,15 +95,24 @@ export default function ContactPro({
   // v6 human check — replaces hCaptcha. Stateless: a 2-number addition
   // (UX deterrent) + a signed nonce fetched from /api/contact/nonce
   // (real verification) + an invisible 'hp' honeypot field.
-  const [mathA, mathB] = useMemo(
-    () => [Math.floor(Math.random() * 9) + 1, Math.floor(Math.random() * 9) + 1],
-    [],
-  )
-  const expectedMath = mathA + mathB
+  //
+  // The math pair must be generated AFTER mount (in useEffect), otherwise SSR
+  // and the client hydration produce different random numbers and React
+  // throws 'Text content does not match server-rendered HTML'.
+  const [mathPair, setMathPair] = useState<{ a: number; b: number } | null>(null)
+  const expectedMath = mathPair ? mathPair.a + mathPair.b : null
   const [mathAnswer, setMathAnswer] = useState('')
   const [honeypot, setHoneypot] = useState('')
   const [nonce, setNonce] = useState<string | null>(null)
   const [nonceErr, setNonceErr] = useState<string | null>(null)
+
+  // Generate the math pair only on the client to keep SSR markup deterministic.
+  useEffect(() => {
+    setMathPair({
+      a: Math.floor(Math.random() * 9) + 1,
+      b: Math.floor(Math.random() * 9) + 1,
+    })
+  }, [])
 
   // Fetch a fresh nonce on mount (and once per page load)
   useEffect(() => {
@@ -162,7 +171,8 @@ export default function ContactPro({
 
   // validation
   useEffect(() => {
-    const mathOk = mathAnswer.trim() === String(expectedMath)
+    const mathOk =
+      expectedMath !== null && mathAnswer.trim() === String(expectedMath)
     const ok =
       name.trim().length > 0 &&
       /.+@.+\..+/.test(email) &&
@@ -542,7 +552,9 @@ export default function ContactPro({
             </FormControl>
 
             {/* v6 three-layer human check. Honeypot 'hp' is hidden via aria
-                + tab-index + clip-path so screen readers and humans skip it. */}
+                + tab-index + clip-path so screen readers and humans skip it.
+                The math pair renders only after mount (mathPair !== null)
+                so SSR and CSR markup match. */}
             <Box>
               <Flex
                 align="center"
@@ -552,6 +564,7 @@ export default function ContactPro({
                 borderColor={border}
                 borderRadius="md"
                 flexWrap="wrap"
+                minH="56px"
               >
                 <Text
                   fontFamily={monoFont}
@@ -561,27 +574,36 @@ export default function ContactPro({
                 >
                   human check
                 </Text>
-                <Text fontSize="14px" color={fg}>
-                  What is <strong>{mathA}</strong> + <strong>{mathB}</strong>?
-                </Text>
-                <Input
-                  type="number"
-                  inputMode="numeric"
-                  value={mathAnswer}
-                  onChange={(e) => setMathAnswer(e.target.value)}
-                  placeholder="?"
-                  w="80px"
-                  size="sm"
-                  borderColor={border}
-                  _focus={{
-                    borderColor: 'var(--accent)',
-                    boxShadow: '0 0 0 1px var(--accent)',
-                  }}
-                  aria-label="Human check answer"
-                />
-                {mathAnswer && mathAnswer.trim() === String(expectedMath) && (
-                  <Text fontFamily={monoFont} fontSize="11px" color="green.400">
-                    ✓ ok
+                {mathPair ? (
+                  <>
+                    <Text fontSize="14px" color={fg}>
+                      What is <strong>{mathPair.a}</strong> +{' '}
+                      <strong>{mathPair.b}</strong>?
+                    </Text>
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      value={mathAnswer}
+                      onChange={(e) => setMathAnswer(e.target.value)}
+                      placeholder="?"
+                      w="80px"
+                      size="sm"
+                      borderColor={border}
+                      _focus={{
+                        borderColor: 'var(--accent)',
+                        boxShadow: '0 0 0 1px var(--accent)',
+                      }}
+                      aria-label="Human check answer"
+                    />
+                    {mathAnswer && mathAnswer.trim() === String(expectedMath) && (
+                      <Text fontFamily={monoFont} fontSize="11px" color="green.400">
+                        ✓ ok
+                      </Text>
+                    )}
+                  </>
+                ) : (
+                  <Text fontFamily={monoFont} fontSize="11px" color={dim}>
+                    loading…
                   </Text>
                 )}
                 {nonceErr && (
