@@ -1,20 +1,13 @@
-import React from 'react'
-import { Flex, Heading } from '@chakra-ui/react'
-import HeaderFooter from '../../layout/HeaderFooter'
-import CustomHead from '../../components/General-UI/CustomHead'
-import HomeEditor from '../../components/Admin/HomeEditor'
+import type { GetServerSideProps } from 'next'
 
-export default function AdminHomeEditor() {
-  const [isMobile] = [false]
-  return (
-    <>
-      <CustomHead title="Admin Home" />
-      <HeaderFooter isMobile={isMobile}>
-        <Flex direction="column" p={6} gap={6}>
-          <Heading size="md">Homepage Editor</Heading>
-          <HomeEditor />
-        </Flex>
-      </HeaderFooter>
-    </>
-  )
+// /admin/home was the original standalone homepage editor. It now lives as a
+// tab inside /admin/dashboard so all admin surfaces share one shell. Keep the
+// route as a redirect so any bookmarks still land on the live editor.
+
+export default function AdminHomeRedirect() {
+  return null
 }
+
+export const getServerSideProps: GetServerSideProps = async () => ({
+  redirect: { destination: '/admin/dashboard?tab=home', permanent: false },
+})

@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useMemo, useState } from 'react'
 import type { GetStaticProps } from 'next'
 import {
   Box,
@@ -7,6 +7,8 @@ import {
   Text,
   Link,
   useColorModeValue,
+  HStack,
+  Button,
 } from '@chakra-ui/react'
 import NextLink from 'next/link'
 import HeaderFooter from '../../layout/HeaderFooter'
@@ -24,7 +26,28 @@ export default function BlogIndex({ posts, host }: Props) {
   const border = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
   const fg = useColorModeValue('gray.800', 'gray.100')
   const hover = useColorModeValue('black', 'white')
+  const activeBg = useColorModeValue('black', 'white')
+  const activeFg = useColorModeValue('white', 'black')
   const monoFont = 'var(--font-geist-mono), monospace'
+
+  const [activeTag, setActiveTag] = useState<string | null>(null)
+
+  // Collect tags with counts; keep deterministic order (alphabetical) so the
+  // chip row doesn't reshuffle between renders.
+  const tags = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const p of posts) {
+      for (const t of p.frontmatter.tags || []) {
+        counts.set(t, (counts.get(t) || 0) + 1)
+      }
+    }
+    return Array.from(counts.entries()).sort(([a], [b]) => a.localeCompare(b))
+  }, [posts])
+
+  const visible = useMemo(
+    () => (activeTag ? posts.filter((p) => (p.frontmatter.tags || []).includes(activeTag)) : posts),
+    [posts, activeTag],
+  )
 
   return (
     <>
@@ -32,6 +55,19 @@ export default function BlogIndex({ posts, host }: Props) {
         title="Writing"
         description="Essays, notes, and technical write-ups by Li Yanpei (Hiko)."
         url={`https://${host}/blog`}
+        image={`https://${host}/api/og?title=Writing&kind=blog&subtitle=Essays%2C%20notes%2C%20and%20write-ups`}
+        jsonLd={{
+          '@context': 'https://schema.org',
+          '@type': 'Blog',
+          name: 'HIKO.DEV — Writing',
+          url: `https://${host}/blog`,
+          blogPost: posts.slice(0, 10).map((p) => ({
+            '@type': 'BlogPosting',
+            headline: p.frontmatter.title,
+            url: `https://${host}${p.permalink}`,
+            datePublished: p.frontmatter.date,
+          })),
+        }}
       />
       <HeaderFooter isMobile={false}>
         <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[16, 24]}>
@@ -52,7 +88,41 @@ export default function BlogIndex({ posts, host }: Props) {
             New posts land here when they&rsquo;re ready — no drafts, no fluff.
           </Text>
 
-          {posts.length === 0 ? (
+          {tags.length > 0 && (
+            <HStack mb={8} spacing={2} flexWrap="wrap" rowGap={2}>
+              <Button
+                size="xs"
+                variant={activeTag === null ? 'solid' : 'outline'}
+                bg={activeTag === null ? activeBg : 'transparent'}
+                color={activeTag === null ? activeFg : muted}
+                borderColor={border}
+                fontFamily={monoFont}
+                fontWeight={500}
+                onClick={() => setActiveTag(null)}
+                _hover={{ borderColor: hover }}
+              >
+                all ({posts.length})
+              </Button>
+              {tags.map(([t, n]) => (
+                <Button
+                  key={t}
+                  size="xs"
+                  variant={activeTag === t ? 'solid' : 'outline'}
+                  bg={activeTag === t ? activeBg : 'transparent'}
+                  color={activeTag === t ? activeFg : muted}
+                  borderColor={border}
+                  fontFamily={monoFont}
+                  fontWeight={500}
+                  onClick={() => setActiveTag(t)}
+                  _hover={{ borderColor: hover }}
+                >
+                  #{t} ({n})
+                </Button>
+              ))}
+            </HStack>
+          )}
+
+          {visible.length === 0 ? (
             <Box
               border="1px dashed"
               borderColor={border}
@@ -73,7 +143,7 @@ export default function BlogIndex({ posts, host }: Props) {
             </Box>
           ) : (
             <Box borderTop="1px solid" borderColor={border}>
-              {posts.map((p) => (
+              {visible.map((p) => (
                 <Link
                   key={p.slug}
                   as={NextLink}

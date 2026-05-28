@@ -16,7 +16,7 @@ function isAuthed(req: NextApiRequest, res: NextApiResponse): boolean {
 }
 
 /** Admin CRUD for project case studies (content/work/*.mdx). Mirror of /api/admin/posts. */
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!isAuthed(req, res)) return res.status(401).json({ error: 'Unauthorized' })
 
   if (req.method === 'GET') {
@@ -40,17 +40,17 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     }
     if (!slug) return res.status(400).json({ error: 'Missing slug' })
     if (!frontmatter?.title) return res.status(400).json({ error: 'frontmatter.title required' })
-    const result = writeOne('work', slug, frontmatter, body || '')
+    const result = await writeOne('work', slug, frontmatter, body || '')
     if (!result.ok) return res.status(400).json({ error: result.error })
-    return res.status(200).json({ ok: true })
+    return res.status(200).json(result)
   }
 
   if (req.method === 'DELETE') {
     const slug = req.query.slug as string | undefined
     if (!slug) return res.status(400).json({ error: 'Missing slug' })
-    return deleteOne('work', slug)
-      ? res.status(200).json({ ok: true })
-      : res.status(404).json({ error: 'Not found' })
+    const result = await deleteOne('work', slug)
+    if (!result.ok) return res.status(404).json({ error: result.error })
+    return res.status(200).json(result)
   }
 
   res.setHeader('Allow', 'GET,PUT,DELETE')

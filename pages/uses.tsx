@@ -28,6 +28,15 @@ export default function UsesPage({ source, updated, host }: Props) {
         title="Uses"
         description="Tools, hardware, and software I rely on daily — Li Yanpei (Hiko)."
         url={`https://${host}/uses`}
+        image={`https://${host}/api/og?title=Uses&kind=page&subtitle=Tools%20%26%20setup`}
+        jsonLd={{
+          '@context': 'https://schema.org',
+          '@type': 'WebPage',
+          name: 'Uses',
+          url: `https://${host}/uses`,
+          dateModified: updated || undefined,
+          author: { '@type': 'Person', name: 'Li Yanpei' },
+        }}
       />
       <HeaderFooter isMobile={false}>
         <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[12, 16]}>
@@ -59,10 +68,17 @@ export default function UsesPage({ source, updated, host }: Props) {
 
 export const getStaticProps: GetStaticProps<Props> = async () => {
   const page = await getStaticMdxPage('uses')
+  const raw = page?.frontmatter.updated as unknown
+  const updated =
+    raw instanceof Date
+      ? raw.toISOString().slice(0, 10)
+      : raw
+        ? String(raw).slice(0, 10)
+        : null
   return {
     props: {
       source: page?.source ?? null,
-      updated: page?.frontmatter.updated ? String(page.frontmatter.updated).slice(0, 10) : null,
+      updated,
       host: process.env.NEXT_PUBLIC_SITE_HOST || 'hiko.dev',
     },
     revalidate: 60,

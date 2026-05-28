@@ -19,10 +19,12 @@ interface Brand {
 
 const SingleBrand = ({ brand }: { brand: Brand }) => {
   const { image, href, name } = brand
-  const filter = useColorModeValue(
-    'grayscale(15%)',
-    'grayscale(30%) brightness(0.92) opacity(0.85)',
-  )
+  const filter = useColorModeValue('grayscale(15%)', 'grayscale(20%) opacity(0.95)')
+  // In dark mode, give the logo a subtle light chip behind it so partner
+  // marks that ship as solid black on transparent backgrounds stay legible
+  // without us touching their colors.
+  const chipBg = useColorModeValue('transparent', 'rgba(255,255,255,0.88)')
+  const chipBorder = useColorModeValue('transparent', 'rgba(255,255,255,0.12)')
 
   return (
     <motion.div
@@ -40,12 +42,18 @@ const SingleBrand = ({ brand }: { brand: Brand }) => {
           display="flex"
           alignItems="center"
           justifyContent="center"
+          bg={chipBg}
+          border="1px solid"
+          borderColor={chipBorder}
+          borderRadius="8px"
+          px={3}
+          transition="background 200ms var(--ease-out-quart)"
         >
           <Image
             src={image}
             alt={name}
             objectFit="contain"
-            maxH="36px"
+            maxH="28px"
             maxW="100%"
             loading="lazy"
             filter={filter}

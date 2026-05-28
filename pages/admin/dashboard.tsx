@@ -89,17 +89,16 @@ export default function AdminDashboard() {
               <Button size="sm" borderRadius="10px" variant="ghost" onClick={sendTest}>
                 Test Email
               </Button>
-              <Link href="/admin/db-config" passHref>
-                <Button
-                  as="a"
-                  size="sm"
-                  leftIcon={<SettingsIcon />}
-                  colorScheme="purple"
-                  borderRadius="10px"
-                >
-                  DB & Backup
-                </Button>
-              </Link>
+              <Button
+                as={Link}
+                href="/admin/db-config"
+                size="sm"
+                leftIcon={<SettingsIcon />}
+                colorScheme="purple"
+                borderRadius="10px"
+              >
+                DB & Backup
+              </Button>
             </HStack>
           </Flex>
 

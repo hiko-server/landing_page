@@ -1,26 +1,19 @@
 import fs from 'fs'
 import path from 'path'
+import { getKv, putKv, type StoreError } from './contentStore'
 
-const dataPath = path.join(process.cwd(), 'data', 'cvdata.json')
 const snapshotDir = path.join(process.cwd(), 'data', 'cv_snapshots')
 
 export function readCvData(): { en: any[]; zh: any[] } {
-  try {
-    const raw = fs.readFileSync(dataPath, 'utf-8')
-    const json = JSON.parse(raw)
-    const en = Array.isArray(json.en) ? json.en : (Array.isArray(json) ? json : [])
-    const zh = Array.isArray(json.zh) ? json.zh : []
-    return { en, zh }
-  } catch {
-    // fallback to example static if file missing or invalid
-    // use require to avoid bundler trying to parse TS at runtime; provide empty arrays instead
-    return { en: [], zh: [] }
-  }
+  const json = getKv<any>('cvdata')
+  if (!json) return { en: [], zh: [] }
+  const en = Array.isArray(json.en) ? json.en : Array.isArray(json) ? json : []
+  const zh = Array.isArray(json.zh) ? json.zh : []
+  return { en, zh }
 }
 
-export function writeCvData(data: { en: any[]; zh: any[] }) {
-  fs.mkdirSync(path.dirname(dataPath), { recursive: true })
-  fs.writeFileSync(dataPath, JSON.stringify(data, null, 2), 'utf-8')
+export async function writeCvData(data: { en: any[]; zh: any[] }): Promise<StoreError> {
+  return await putKv('cvdata', data)
 }
 
 export function syncStructure(template: any, target: any): any {
@@ -60,13 +53,15 @@ export function listSnapshots(): string[] {
   }
 }
 
-export function restoreSnapshot(filename: string): boolean {
+export async function restoreSnapshot(filename: string): Promise<StoreError> {
   const filePath = path.join(snapshotDir, filename)
-  if (!fs.existsSync(filePath)) return false
-  const raw = fs.readFileSync(filePath, 'utf-8')
-  fs.mkdirSync(path.dirname(dataPath), { recursive: true })
-  fs.writeFileSync(dataPath, raw, 'utf-8')
-  return true
+  if (!fs.existsSync(filePath)) return { ok: false, error: 'Snapshot not found' }
+  try {
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
+    return await putKv('cvdata', data)
+  } catch (err: any) {
+    return { ok: false, error: err?.message || 'Failed to restore' }
+  }
 }
 
 export function readSnapshot(filename: string): string | null {
