@@ -35,8 +35,6 @@ const socialLinks = [
   { name: 'WhatsApp', url: 'https://wa.me/85262040827' },
 ]
 
-const APP_VERSION = 'v6.0.0'
-
 const Footer: React.FC = () => {
   const bg = useColorModeValue('rgba(253,253,253,0.5)', 'rgba(5,5,5,0.5)')
   const border = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
@@ -115,7 +113,7 @@ const Footer: React.FC = () => {
                 </Link>
               </Text>
               <Text as="span">·</Text>
-              <Text as="span">{APP_VERSION} · Next.js</Text>
+              <Text as="span">All rights reserved</Text>
             </Flex>
           </Flex>
         </Flex>
