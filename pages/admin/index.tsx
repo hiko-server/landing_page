@@ -13,7 +13,7 @@ import {
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 import { useRouter } from 'next/router'
-import { FaHome, FaFileAlt, FaDatabase, FaHistory, FaLayerGroup } from 'react-icons/fa'
+import { FaHome, FaFileAlt, FaDatabase, FaHistory, FaLayerGroup, FaPenNib, FaBriefcase } from 'react-icons/fa'
 
 const cards = [
   {
@@ -60,6 +60,24 @@ const cards = [
     gradient: 'linear-gradient(135deg,#0f172a,#334155)',
     badge: 'DB',
     badgeColor: 'gray',
+  },
+  {
+    title: 'Blog Posts',
+    desc: 'Write and manage MDX blog posts at /blog',
+    href: '/admin/blog',
+    icon: FaPenNib,
+    gradient: 'linear-gradient(135deg,#6366f1,#a5b4fc)',
+    badge: 'Blog',
+    badgeColor: 'purple',
+  },
+  {
+    title: 'Case Studies',
+    desc: 'Write and manage project case studies at /work',
+    href: '/admin/work',
+    icon: FaBriefcase,
+    gradient: 'linear-gradient(135deg,#0ea5e9,#67e8f9)',
+    badge: 'Work',
+    badgeColor: 'cyan',
   },
 ]
 
