@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { getKv, putKv, type StoreError } from './contentStore'
 
 export type HomeData = {
   hero: {
@@ -29,21 +30,14 @@ export type HomeData = {
   photos?: { url: string; describe?: string; redirectTo?: string; visible?: boolean }[]
 }
 
-const homePath = path.join(process.cwd(), 'data', 'home.json')
 const homeSnapshotDir = path.join(process.cwd(), 'data', 'home_snapshots')
 
 export function readHome(): HomeData | null {
-  try {
-    const raw = fs.readFileSync(homePath, 'utf-8')
-    return JSON.parse(raw)
-  } catch {
-    return null
-  }
+  return getKv<HomeData>('home')
 }
 
-export function writeHome(data: HomeData) {
-  fs.mkdirSync(path.dirname(homePath), { recursive: true })
-  fs.writeFileSync(homePath, JSON.stringify(data, null, 2), 'utf-8')
+export async function writeHome(data: HomeData): Promise<StoreError> {
+  return await putKv('home', data)
 }
 
 export function saveHomeSnapshot(): string {
@@ -65,14 +59,16 @@ export function listHomeSnapshots(): string[] {
   }
 }
 
-export function restoreHomeSnapshot(filename: string): boolean {
+export function restoreHomeSnapshot(filename: string): Promise<StoreError> {
   const safe = filename.replace(/[^a-zA-Z0-9_.\-]/g, '_')
   const filePath = path.join(homeSnapshotDir, safe)
-  if (!fs.existsSync(filePath)) return false
-  const raw = fs.readFileSync(filePath, 'utf-8')
-  fs.mkdirSync(path.dirname(homePath), { recursive: true })
-  fs.writeFileSync(homePath, raw, 'utf-8')
-  return true
+  if (!fs.existsSync(filePath)) return Promise.resolve({ ok: false, error: 'Snapshot not found' })
+  try {
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as HomeData
+    return putKv('home', data)
+  } catch (err: any) {
+    return Promise.resolve({ ok: false, error: err?.message || 'Failed to restore' })
+  }
 }
 
 export function readHomeSnapshot(filename: string): string | null {

@@ -28,6 +28,15 @@ export default function NowPage({ source, updated, host }: Props) {
         title="Now"
         description="What I'm focused on right now — Li Yanpei (Hiko)."
         url={`https://${host}/now`}
+        image={`https://${host}/api/og?title=Now&kind=page&subtitle=What%20I%27m%20focused%20on`}
+        jsonLd={{
+          '@context': 'https://schema.org',
+          '@type': 'WebPage',
+          name: 'Now',
+          url: `https://${host}/now`,
+          dateModified: updated || undefined,
+          author: { '@type': 'Person', name: 'Li Yanpei' },
+        }}
       />
       <HeaderFooter isMobile={false}>
         <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[12, 16]}>
@@ -59,10 +68,17 @@ export default function NowPage({ source, updated, host }: Props) {
 
 export const getStaticProps: GetStaticProps<Props> = async () => {
   const page = await getStaticMdxPage('now')
+  const raw = page?.frontmatter.updated as unknown
+  const updated =
+    raw instanceof Date
+      ? raw.toISOString().slice(0, 10)
+      : raw
+        ? String(raw).slice(0, 10)
+        : null
   return {
     props: {
       source: page?.source ?? null,
-      updated: page?.frontmatter.updated ? String(page.frontmatter.updated).slice(0, 10) : null,
+      updated,
       host: process.env.NEXT_PUBLIC_SITE_HOST || 'hiko.dev',
     },
     revalidate: 60,

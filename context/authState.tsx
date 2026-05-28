@@ -1,5 +1,4 @@
 import { createContext, useReducer, Dispatch } from 'react'
-// import { UserRoleType yarn} from '../types/Propstypes'
 
 interface AuthAppState {
   accessToken: string

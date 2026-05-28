@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import {
   Box,
   Button,
@@ -7,17 +7,20 @@ import {
   HStack,
   Input,
   Text,
-  Textarea,
   useToast,
   FormControl,
   FormLabel,
   Checkbox,
   SimpleGrid,
   Select,
+  Image as ChakraImage,
 } from '@chakra-ui/react'
 import { useRouter } from 'next/router'
+import dynamic from 'next/dynamic'
 import HeaderFooter from '../../../layout/HeaderFooter'
 import CustomHead from '../../../components/General-UI/CustomHead'
+
+const RichEditor = dynamic(() => import('../../../components/Admin/RichEditor'), { ssr: false })
 
 type Frontmatter = {
   title: string
@@ -29,6 +32,7 @@ type Frontmatter = {
   featured: boolean
   link: string
   repo: string
+  cover?: string
 }
 
 export default function AdminWorkEdit() {
@@ -36,6 +40,7 @@ export default function AdminWorkEdit() {
   const toast = useToast()
   const initialSlug = (router.query.slug as string | undefined) || ''
 
+  const coverInputRef = useRef<HTMLInputElement>(null)
   const [slug, setSlug] = useState(initialSlug)
   const [fm, setFm] = useState<Frontmatter>({
     title: '',
@@ -47,6 +52,7 @@ export default function AdminWorkEdit() {
     featured: false,
     link: '',
     repo: '',
+    cover: '',
   })
   const [body, setBody] = useState('')
   const [loading, setLoading] = useState(Boolean(initialSlug))
@@ -73,6 +79,7 @@ export default function AdminWorkEdit() {
           featured: Boolean(data.frontmatter.featured),
           link: data.frontmatter.link || '',
           repo: data.frontmatter.repo || '',
+          cover: data.frontmatter.cover || '',
         })
         setBody(data.body || '')
       } catch {
@@ -108,6 +115,7 @@ export default function AdminWorkEdit() {
           featured: fm.featured || undefined,
           link: fm.link || undefined,
           repo: fm.repo || undefined,
+          cover: fm.cover || undefined,
         },
         body,
       }),
@@ -256,15 +264,75 @@ export default function AdminWorkEdit() {
             </Checkbox>
           </FormControl>
 
+          <FormControl mb={4}>
+            <FormLabel fontSize="13px">Cover image</FormLabel>
+            <HStack spacing={3} align="flex-start">
+              {fm.cover ? (
+                <ChakraImage
+                  src={fm.cover}
+                  alt="cover"
+                  maxH="120px"
+                  borderRadius="6px"
+                  border="1px solid"
+                  borderColor="whiteAlpha.200"
+                />
+              ) : null}
+              <Box flex="1">
+                <Input
+                  value={fm.cover || ''}
+                  onChange={(e) => setFm({ ...fm, cover: e.target.value })}
+                  placeholder="/uploads/cover.png or https://…"
+                />
+                <HStack mt={2} spacing={2}>
+                  <Button size="xs" variant="outline" onClick={() => coverInputRef.current?.click()}>
+                    Upload…
+                  </Button>
+                  {fm.cover ? (
+                    <Button size="xs" variant="ghost" onClick={() => setFm({ ...fm, cover: '' })}>
+                      Remove
+                    </Button>
+                  ) : null}
+                </HStack>
+                <Input
+                  ref={coverInputRef}
+                  type="file"
+                  accept="image/*"
+                  display="none"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    e.target.value = ''
+                    if (!file) return
+                    const reader = new FileReader()
+                    reader.onload = async () => {
+                      const res = await fetch('/api/admin/upload-image', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          filename: `${Date.now()}-${file.name}`,
+                          dataUrl: String(reader.result),
+                        }),
+                      })
+                      if (!res.ok) {
+                        toast({ status: 'error', title: 'Cover upload failed' })
+                        return
+                      }
+                      const data = await res.json()
+                      setFm((prev) => ({ ...prev, cover: data.url }))
+                    }
+                    reader.readAsDataURL(file)
+                  }}
+                />
+              </Box>
+            </HStack>
+          </FormControl>
+
           <FormControl>
-            <FormLabel fontSize="13px">Body (MDX)</FormLabel>
-            <Textarea
+            <FormLabel fontSize="13px">Body</FormLabel>
+            <RichEditor
               value={body}
-              onChange={(e) => setBody(e.target.value)}
+              onChange={setBody}
               minH="500px"
-              fontFamily="var(--font-geist-mono), monospace"
-              fontSize="14px"
-              placeholder={`## Problem\n\nWhat were we solving?\n\n## Constraints\n\n## Process\n\n## Outcome`}
+              placeholder="Write in Markdown + MDX. Drag, drop or paste images. Switch to MDX tab for raw JSX."
             />
           </FormControl>
         </Box>

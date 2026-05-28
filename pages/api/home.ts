@@ -17,7 +17,7 @@ function isAuthed(req: NextApiRequest, res: NextApiResponse) {
   }
 }
 
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') {
     // List home snapshots
     if (req.query.snapshots === '1') {
@@ -55,11 +55,12 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     }
     // Save snapshot before write
     try { saveHomeSnapshot() } catch {}
-    writeHome(body)
+    const writeResult = await writeHome(body)
+    if (!writeResult.ok) return res.status(500).json({ error: writeResult.error })
     try {
       sendMail({ to: process.env.NOTIFY_EMAIL || process.env.ADMIN_EMAIL || 'hi@hiko.dev', subject: 'Home updated', text: `Home updated at ${new Date().toISOString()}` })
     } catch {}
-    return res.status(200).json({ ok: true })
+    return res.status(200).json(writeResult)
   }
 
   if (req.method === 'POST') {
@@ -71,8 +72,9 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     }
     if (action === 'restore') {
       if (!filename) return res.status(400).json({ error: 'Missing filename' })
-      const ok = restoreHomeSnapshot(filename)
-      return ok ? res.status(200).json({ ok: true }) : res.status(404).json({ error: 'Not found' })
+      const result = await restoreHomeSnapshot(filename)
+      if (!result.ok) return res.status(404).json({ error: result.error })
+      return res.status(200).json(result)
     }
     return res.status(400).json({ error: 'Unknown action' })
   }

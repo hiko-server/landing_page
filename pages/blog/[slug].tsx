@@ -41,15 +41,27 @@ export default function BlogPost({
         title={frontmatter.title}
         description={frontmatter.description || 'Post by Li Yanpei'}
         url={`https://${host}/blog/${slug}`}
+        image={`https://${host}/api/og?kind=blog&title=${encodeURIComponent(frontmatter.title)}${frontmatter.description ? `&subtitle=${encodeURIComponent(frontmatter.description)}` : ''}`}
         type="article"
-        jsonLd={{
-          '@context': 'https://schema.org',
-          '@type': 'BlogPosting',
-          headline: frontmatter.title,
-          datePublished: frontmatter.date,
-          dateModified: frontmatter.updated || frontmatter.date,
-          author: { '@type': 'Person', name: 'Li Yanpei' },
-        }}
+        jsonLd={[
+          {
+            '@context': 'https://schema.org',
+            '@type': 'BlogPosting',
+            headline: frontmatter.title,
+            datePublished: frontmatter.date,
+            dateModified: frontmatter.updated || frontmatter.date,
+            author: { '@type': 'Person', name: 'Li Yanpei' },
+          },
+          {
+            '@context': 'https://schema.org',
+            '@type': 'BreadcrumbList',
+            itemListElement: [
+              { '@type': 'ListItem', position: 1, name: 'Home', item: `https://${host}/` },
+              { '@type': 'ListItem', position: 2, name: 'Writing', item: `https://${host}/blog` },
+              { '@type': 'ListItem', position: 3, name: frontmatter.title, item: `https://${host}/blog/${slug}` },
+            ],
+          },
+        ]}
       />
       <HeaderFooter isMobile={false}>
         <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[12, 16]}>

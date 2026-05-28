@@ -34,7 +34,27 @@ export default function WorkCase({ slug, frontmatter, source, readingMinutes, ho
         title={frontmatter.title}
         description={frontmatter.description || 'Project case study by Li Yanpei'}
         url={`https://${host}/work/${slug}`}
+        image={`https://${host}/api/og?kind=work&title=${encodeURIComponent(frontmatter.title)}${frontmatter.description ? `&subtitle=${encodeURIComponent(frontmatter.description)}` : ''}`}
         type="article"
+        jsonLd={[
+          {
+            '@context': 'https://schema.org',
+            '@type': 'CreativeWork',
+            name: frontmatter.title,
+            url: `https://${host}/work/${slug}`,
+            author: { '@type': 'Person', name: 'Li Yanpei' },
+            description: frontmatter.description,
+          },
+          {
+            '@context': 'https://schema.org',
+            '@type': 'BreadcrumbList',
+            itemListElement: [
+              { '@type': 'ListItem', position: 1, name: 'Home', item: `https://${host}/` },
+              { '@type': 'ListItem', position: 2, name: 'Work', item: `https://${host}/work` },
+              { '@type': 'ListItem', position: 3, name: frontmatter.title, item: `https://${host}/work/${slug}` },
+            ],
+          },
+        ]}
       />
       <HeaderFooter isMobile={false}>
         <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[12, 16]}>

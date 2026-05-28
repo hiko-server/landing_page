@@ -31,6 +31,26 @@ const About = (props: any) => {
         description="About Hiko — background, skills, and interests."
         url={`https://${props.host || 'hiko.dev'}/about`}
         image="/images/hikoAvator.png"
+        jsonLd={[
+          {
+            '@context': 'https://schema.org',
+            '@type': 'ProfilePage',
+            name: 'About — Li Yanpei (Hiko)',
+            url: `https://${props.host || 'hiko.dev'}/about`,
+          },
+          {
+            '@context': 'https://schema.org',
+            '@type': 'Person',
+            name: 'Li Yanpei (Hiko)',
+            url: `https://${props.host || 'hiko.dev'}`,
+            sameAs: [
+              'https://github.com/HikoPLi',
+              'https://gitlab.com/HikoPLi',
+              'https://www.linkedin.com/in/liyanpeihiko/',
+            ],
+            jobTitle: 'Software Engineer',
+          },
+        ]}
       />
       <HeaderFooter isMobile={isMobile}>
         <Flex
