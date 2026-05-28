@@ -1,264 +1,170 @@
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&family=Sora:wght@500;700;800&display=swap');
+/* ─────────────────────────────────────────────────────────────────────────
+ * HIKO.DEV v6 — Global design layer
+ *
+ * Loaded once via pages/_app.tsx. Everything visual that isn't Chakra
+ * component styling lives here: design-token CSS variables, the signature
+ * dot-grid background variables, helper classes for section labels and
+ * animated underlines, reduced-motion + print resets.
+ *
+ * Chakra owns: body bg/fg, fonts, component styling.
+ * This file owns: CSS variables, helper classes, motion preferences, print.
+ * ──────────────────────────────────────────────────────────────────────── */
 
 :root {
-  --bg-0: #fbfaf6;
-  --bg-1: #f6efe5;
-  --bg-2: #fdf7f0;
-  --ink-1: #1b2531;
-  --ink-2: #455468;
-  --brand-1: #dd6b20;
-  --brand-2: #0f766e;
-  --brand-3: #f59e0b;
-  --line-soft: rgba(15, 23, 42, 0.1);
-  --card-bg: rgba(255, 255, 255, 0.82);
-  --card-shadow: 0 16px 40px rgba(15, 23, 42, 0.14);
-  --scrollbar-thumb: rgba(221, 107, 32, 0.4);
-  --scrollbar-track: rgba(0, 0, 0, 0.04);
-  --selection-bg: rgba(221, 107, 32, 0.25);
+  /* Signature dot grid + section rule line (light mode default) */
+  --dot-color: rgba(0, 0, 0, 0.05);
+  --rule-color: rgba(0, 0, 0, 0.08);
+
+  /* Single brand accent (locked: indigo-500) */
+  --accent: #6366f1;
+  --accent-soft: rgba(99, 102, 241, 0.10);
+  --accent-ring: rgba(99, 102, 241, 0.35);
+
+  /* Single global easing curve */
+  --ease-out-quart: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
+  --duration-slow: 450ms;
+
+  /* Container widths */
+  --container-content: 1100px;
+  --container-prose: 720px;
+
+  /* Live status green */
+  --live-green: #22c55e;
 }
 
-/* Dark mode CSS vars */
 [data-theme='dark'],
 .chakra-ui-dark {
-  --bg-0: #0f1117;
-  --bg-1: #161b27;
-  --bg-2: #1a2133;
-  --ink-1: #e8ecf4;
-  --ink-2: #94a3b8;
-  --brand-1: #f97316;
-  --brand-2: #14b8a6;
-  --brand-3: #fbbf24;
-  --line-soft: rgba(226, 232, 240, 0.1);
-  --card-bg: rgba(22, 27, 39, 0.82);
-  --card-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
-  --scrollbar-thumb: rgba(249, 115, 22, 0.4);
-  --scrollbar-track: rgba(255, 255, 255, 0.04);
-  --selection-bg: rgba(249, 115, 22, 0.25);
+  --dot-color: rgba(255, 255, 255, 0.045);
+  --rule-color: rgba(255, 255, 255, 0.08);
 }
 
-/* Dark mode body background */
-.chakra-ui-dark body,
-.chakra-ui-dark {
-  background:
-    radial-gradient(55% 40% at 12% 4%, rgba(249, 115, 22, 0.12) 0%, rgba(249, 115, 22, 0) 100%),
-    radial-gradient(45% 35% at 90% 10%, rgba(20, 184, 166, 0.1) 0%, rgba(20, 184, 166, 0) 100%),
-    linear-gradient(165deg, #0f1117, #161b27 48%, #1a2133);
-}
-
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--brand-1);
-}
-
-/* Text selection */
-::selection {
-  background: var(--selection-bg);
-  color: var(--ink-1);
-}
-
-* {
-  box-sizing: border-box;
-}
-
-html,
-body {
-  padding: 0;
-  margin: 0;
-  min-height: 100%;
-  background:
-    radial-gradient(55% 40% at 12% 4%, rgba(245, 158, 11, 0.24) 0%, rgba(245, 158, 11, 0) 100%),
-    radial-gradient(45% 35% at 90% 10%, rgba(15, 118, 110, 0.2) 0%, rgba(15, 118, 110, 0) 100%),
-    linear-gradient(165deg, var(--bg-0), var(--bg-1) 48%, var(--bg-2));
-  color: var(--ink-1);
-  font-family: 'Manrope', 'Segoe UI', sans-serif;
-  letter-spacing: 0.01em;
-  -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
-}
-
-body {
-  animation: page-enter 0.55s ease-out;
-}
-
-@keyframes page-enter {
-  from {
+/* ──────────────────────────────────────────────────────────────────────────
+ * Pulse dot — used by the header's "● Last commit · 2h ago" status pill.
+ * Apply to a positioned span that wraps the green dot.
+ * ──────────────────────────────────────────────────────────────────────── */
+@keyframes pulse-dot {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1.9);
     opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
   }
 }
 
-a {
-  color: var(--brand-2);
-  text-decoration: none;
-  transition: color 0.2s ease;
-}
-
-a:hover {
-  color: #0d9488;
-}
-
-#__next {
-  min-height: 100vh;
-  min-width: 100vw;
-  position: relative;
-  isolation: isolate;
-}
-
-#__next::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  background-image:
-    linear-gradient(rgba(15, 23, 42, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(15, 23, 42, 0.04) 1px, transparent 1px);
-  background-size: 32px 32px;
-  mask-image: radial-gradient(70% 70% at 50% 20%, black 28%, transparent 100%);
-}
-
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  font-family: 'Sora', 'Manrope', sans-serif;
-  color: var(--ink-1);
-  letter-spacing: 0.01em;
-}
-
-h1 {
-  line-height: 1.08;
-}
-
-p,
-span,
-label,
-li {
-  color: var(--ink-2);
-}
-
-button {
-  font-family: 'Manrope', 'Segoe UI', sans-serif;
-}
-
-.main {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  justify-content: center;
-  align-items: center;
-  background: var(--card-bg);
-  border: 1px solid var(--line-soft);
-  border-radius: 14px;
-  box-shadow: var(--card-shadow);
-  padding: 24px;
-}
-
-.footer {
-  background-color: rgba(255, 255, 255, 0.78);
-  width: 100vw;
-  padding: 10px;
-  text-align: center;
-  border-top: 1px solid var(--line-soft);
-  backdrop-filter: blur(8px);
-}
-
-.slick-slider {
-  overflow: hidden;
-}
-
-.slick-slide {
-  padding-left: 10px;
-  padding-right: 10px;
-}
-
-.slick-list {
-  margin-left: -10px;
-  margin-right: -10px;
-}
-
-input:checked + label {
-  border-color: #111827;
-  box-shadow: 0 8px 14px rgba(15, 23, 42, 0.15);
-}
-
-.premium-home-shell {
-  position: relative;
-}
-
-.premium-home-shell::after {
+.pulse-dot::before {
   content: '';
   position: absolute;
-  top: 6%;
-  right: -8%;
-  width: 280px;
-  height: 280px;
-  border-radius: 999px;
-  background: radial-gradient(circle, rgba(221, 107, 32, 0.22), rgba(221, 107, 32, 0));
-  filter: blur(2px);
-  pointer-events: none;
+  inset: 0;
+  border-radius: 9999px;
+  background: var(--live-green);
+  animation: pulse-dot 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  opacity: 0.55;
 }
 
-.profileContainer {
-  margin-top: 20px;
+/* ──────────────────────────────────────────────────────────────────────────
+ * Section label rule — `[01] WORK ───────────`
+ * Apply class `section-label-rule` to a flex container holding the label;
+ * the ::after pseudo paints the thin trailing line.
+ * ──────────────────────────────────────────────────────────────────────── */
+.section-label-rule {
   display: flex;
-  flex-direction: column;
-  text-align: left;
-  border: 0 solid transparent;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-  box-sizing: border-box;
-  margin-bottom: 10px;
+  align-items: center;
+}
+.section-label-rule::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--rule-color);
+  margin-left: 16px;
 }
 
-.userDetail {
-  display: flex;
-  justify-content: space-between;
+/* ──────────────────────────────────────────────────────────────────────────
+ * Link underline animation — pen-stroke from left to right on hover.
+ * Use class `link-underline` on <a> or <Link>.
+ * ──────────────────────────────────────────────────────────────────────── */
+.link-underline {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-size: 0% 1px;
+  background-repeat: no-repeat;
+  background-position: 0 100%;
+  transition: background-size var(--duration-base) var(--ease-out-quart);
+}
+.link-underline:hover,
+.link-underline:focus-visible {
+  background-size: 100% 1px;
 }
 
-.userDetailTitle {
-  font-size: 19.75px;
+/* ──────────────────────────────────────────────────────────────────────────
+ * Accessibility — skip-to-content link, visible only on keyboard focus.
+ * ──────────────────────────────────────────────────────────────────────── */
+.skip-nav {
+  position: absolute;
+  top: -100%;
+  left: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--accent);
+  color: white;
+  border-radius: 0.5rem;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 12px;
+  z-index: 100;
+}
+.skip-nav:focus,
+.skip-nav:focus-visible {
+  top: 0.5rem;
 }
 
-.goToEditProfile {
-  color: #0f6fc5;
-}
-
-.SearchEvent {
-  width: 500px;
-  border-color: black;
-  border-width: 2px;
-  margin-top: 20px;
-}
-
-@media (max-width: 768px) {
-  #__next::before {
-    background-size: 22px 22px;
+/* ──────────────────────────────────────────────────────────────────────────
+ * Reduced motion — respect user preference everywhere.
+ * ──────────────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
+}
 
-  .premium-home-shell::after {
-    width: 180px;
-    height: 180px;
-    right: -16%;
-    top: 1%;
+/* ──────────────────────────────────────────────────────────────────────────
+ * Print — hide all chrome, restore white background, ensure CV prints clean.
+ * Components that should not appear when printing the CV get class `no-print`.
+ * ──────────────────────────────────────────────────────────────────────── */
+@media print {
+  body {
+    background: white !important;
+    background-image: none !important;
+    color: black !important;
   }
+  .no-print {
+    display: none !important;
+  }
+  a[href]::after {
+    content: '';
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Scrollbar — minimal, themed.
+ * ──────────────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--rule-color);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
 }
