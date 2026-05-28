@@ -1,13 +1,28 @@
 import { MongoClient, GridFSBucket } from 'mongodb'
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { getCookie } from 'cookies-next'
+import jwt from 'jsonwebtoken'
 import fs from 'fs'
 import path from 'path'
+import { getJwtSecret } from '../../lib/env'
 
 const CONFIG_PATH = path.join(process.cwd(), 'data', 'mongo_config.json')
 const CV_DATA_Path = path.join(process.cwd(), 'data', 'cvdata.json')
 const HOME_DATA_Path = path.join(process.cwd(), 'data', 'home.json')
 const ADMIN_DATA_Path = path.join(process.cwd(), 'data', 'admin.json')
 const IMAGE_DIR = path.join(process.cwd(), 'public', 'images')
+
+// Admin guard (same scheme as pages/api/cvdata.ts / home.ts)
+function isAuthed(req: NextApiRequest, res: NextApiResponse): boolean {
+  const token = getCookie('cv_admin_token', { req, res }) as string | undefined
+  if (!token) return false
+  try {
+    const decoded = jwt.verify(token, getJwtSecret()) as { role?: string }
+    return decoded?.role === 'admin'
+  } catch {
+    return false
+  }
+}
 
 // Helper for file reading
 const readFile = (p: string) => {
@@ -42,6 +57,12 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  // All mongo backup/restore + connection-config endpoints require admin auth.
+  // (Previously unauthenticated — fixed in v6 phase A as a critical hardening.)
+  if (!isAuthed(req, res)) {
+    return res.status(401).json({ ok: false, message: 'Unauthorized' })
+  }
+
   if (req.method === 'GET') {
      // Config retrieval (GET alias for action=get_config for simplicity)
      try {

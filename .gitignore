@@ -7,6 +7,10 @@
 /.pnp
 .pnp.js
 
+# Lockfile: project uses yarn.lock as source of truth (Dockerfile uses yarn).
+# package-lock.json is a local convenience for npm install on Windows where yarn cache misbehaves.
+package-lock.json
+
 # testing
 /coverage
 
@@ -26,8 +30,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# local env files
+# local env files (NEVER commit secrets — .env.example holds documented placeholders)
+.env
 .env*.local
+!.env.example
 
 # vercel
 .vercel
@@ -41,3 +47,9 @@ hiko-easilycv-frontend-ts-staging-temp.tar
 
 # local data (persisted content, credentials)
 data/
+
+# Claude harness state (per-project session config)
+.claude/
+
+# Design preview (local-only working file)
+.design-preview/
