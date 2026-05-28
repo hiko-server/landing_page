@@ -126,3 +126,25 @@ export async function r2List(prefix: string): Promise<string[]> {
   } while (token)
   return keys
 }
+
+export type R2ObjectMeta = { key: string; size: number; lastModified: string | null }
+
+export async function r2ListDetailed(prefix = ''): Promise<R2ObjectMeta[]> {
+  const out: R2ObjectMeta[] = []
+  let token: string | undefined
+  do {
+    const resp = await getClient().send(
+      new ListObjectsV2Command({ Bucket: BUCKET, Prefix: prefix, ContinuationToken: token }),
+    )
+    for (const obj of (resp.Contents || []) as _Object[]) {
+      if (!obj.Key) continue
+      out.push({
+        key: obj.Key,
+        size: Number(obj.Size || 0),
+        lastModified: obj.LastModified ? obj.LastModified.toISOString() : null,
+      })
+    }
+    token = resp.IsTruncated ? resp.NextContinuationToken : undefined
+  } while (token)
+  return out
+}

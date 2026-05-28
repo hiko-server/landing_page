@@ -10,8 +10,9 @@
     "start": "next start -p ${PORT:=3002}",
     "lint": "next lint",
     "content:migrate": "node scripts/migrate-files-to-db.mjs",
-    "content:pull": "node scripts/sync-from-r2.mjs",
-    "content:push": "node scripts/sync-to-r2.mjs"
+    "content:pull": "node --env-file=.env scripts/sync-from-r2.mjs",
+    "content:push": "node --env-file=.env scripts/sync-to-r2.mjs",
+    "content:list": "node --env-file=.env scripts/list-r2.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1055.0",

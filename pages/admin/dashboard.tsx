@@ -24,11 +24,12 @@ import CVGuiEditor from '../../components/Admin/CVGuiEditorV2'
 import CVEditorStudio from '../../components/Admin/CVEditorStudio'
 import HomeEditor from '../../components/Admin/HomeEditor'
 import VersionHistory from '../../components/Admin/VersionHistory'
+import StoragePanel from '../../components/Admin/StoragePanel'
 import { useRouter } from 'next/router'
 import Link from 'next/link'
-import { FaHome, FaFileAlt, FaHistory } from 'react-icons/fa'
+import { FaHome, FaFileAlt, FaHistory, FaDatabase } from 'react-icons/fa'
 
-const TAB_LABELS = ['Home', 'CV', 'Versions']
+const TAB_LABELS = ['Home', 'CV', 'Versions', 'Storage']
 
 export default function AdminDashboard() {
   const toast = useToast()
@@ -43,6 +44,7 @@ export default function AdminDashboard() {
     const t = ((router.query.tab as string) || '').toLowerCase()
     if (t === 'cv') setTabIndex(1)
     else if (t === 'versions' || t === 'history') setTabIndex(2)
+    else if (t === 'storage') setTabIndex(3)
     else setTabIndex(0)
   }, [router.isReady, router.query.tab])
 
@@ -59,8 +61,8 @@ export default function AdminDashboard() {
     }
   }
 
-  const tabIcons = [FaHome, FaFileAlt, FaHistory]
-  const tabColors = ['blue.400', 'purple.400', 'orange.400']
+  const tabIcons = [FaHome, FaFileAlt, FaHistory, FaDatabase]
+  const tabColors = ['blue.400', 'purple.400', 'orange.400', 'teal.400']
 
   return (
     <>
@@ -176,6 +178,11 @@ export default function AdminDashboard() {
               {/* Versions */}
               <TabPanel p={0}>
                 <VersionHistory />
+              </TabPanel>
+
+              {/* Storage — local SQLite + R2 inventory */}
+              <TabPanel p={0}>
+                <StoragePanel />
               </TabPanel>
             </TabPanels>
           </Tabs>
