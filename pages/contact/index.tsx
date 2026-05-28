@@ -1,4 +1,3 @@
-import { useSession } from 'next-auth/react'
 import React, { useEffect, useState } from 'react'
 
 import { Flex, useMediaQuery } from '@chakra-ui/react'
@@ -8,8 +7,6 @@ import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 
 const About = (props: any) => {
-  useSession()
-
   const [, setIsHostCV] = useState<boolean>(false)
   const [isMobile] = useMediaQuery('(max-width: 767px)')
 
@@ -23,7 +20,7 @@ const About = (props: any) => {
     <React.Fragment>
       <CustomHead
         title="Contact"
-        description="Get in touch with Hiko. Protected by hCaptcha."
+        description="Get in touch with Hiko."
         url={`https://${props.host || 'hiko.dev'}/contact`}
         image="/images/hikoAvator.png"
       />

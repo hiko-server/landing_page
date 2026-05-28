@@ -40,7 +40,6 @@ config.autoAddCss = false
 
 import theme from '../theme/chakra'
 
-import { SessionProvider } from 'next-auth/react'
 import { MainProvider } from '../context/state'
 import { SettingsAppProvider } from '../context/settingsState'
 import { AuthProvider } from '../context/authState'
@@ -66,9 +65,8 @@ const App = ({ Component, pageProps }: any) => {
     <div className={`${sans.variable} ${mono.variable}`} style={{ minHeight: '100%' }}>
       {/* <Provider store={store}>
         <QueryClientProvider client={queryClient}> */}
-      <SessionProvider>
-        <ChakraProvider theme={theme}>
-          <AuthProvider>
+      <ChakraProvider theme={theme}>
+        <AuthProvider>
             <MainProvider>
               <SettingsAppProvider>
                 <CSSReset />
@@ -93,9 +91,8 @@ const App = ({ Component, pageProps }: any) => {
                 <FloatingNav />
               </SettingsAppProvider>
             </MainProvider>
-          </AuthProvider>
-        </ChakraProvider>
-      </SessionProvider>
+        </AuthProvider>
+      </ChakraProvider>
       {/* </QueryClientProvider>
       </Provider> */}
     </div>
