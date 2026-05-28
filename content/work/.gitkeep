@@ -1,0 +1,13 @@
+# Project case studies live here as `{slug}.mdx` with frontmatter:
+#   ---
+#   title: WeGreen AI
+#   description: One-line summary
+#   role: Co-founder / COT
+#   period: 2024 — Now
+#   tech: [Next.js, FastAPI, MongoDB]
+#   featured: true
+#   status: live
+#   link: https://wegreen.ltd
+#   repo: https://github.com/HikoPLi/wegreen
+#   ---
+# Edit via /admin/work or by hand.

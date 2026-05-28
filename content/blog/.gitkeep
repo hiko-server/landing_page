@@ -1,0 +1,9 @@
+# Blog posts live here as `{slug}.mdx` with frontmatter:
+#   ---
+#   title: My first post
+#   description: One-line summary
+#   date: 2026-05-28
+#   tags: [engineering, notes]
+#   draft: false
+#   ---
+# Edit via /admin/blog or by hand. Slug must match [a-z0-9-_]+.
