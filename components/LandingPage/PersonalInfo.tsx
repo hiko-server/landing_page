@@ -1,11 +1,14 @@
 'use client'
 import React from 'react'
-import type { HomeData } from '../../lib/home'
+// Type-only import is normally safe (TS erases it) but routing through
+// the pure shape module removes the foot-gun in case someone later drops
+// the `type` keyword and ships a server module into the client bundle.
+import type { HomeData } from '../../lib/homeShape'
+import { deriveCurrentlyCoding } from '../../lib/currentlyCoding'
 import {
   Box,
   Button,
   Flex,
-  Link,
   Text,
   Stack,
   Image,
@@ -41,13 +44,15 @@ import SectionLabel from '../General-UI/SectionLabel'
 const PersonalInfo = ({
   isMobile,
   home,
+  cvEn,
 }: {
   isMobile: boolean
   home?: HomeData
+  /** CV (English) used to auto-derive the "currently coding" chip when
+   *  the admin leaves any of its three fields blank. */
+  cvEn?: any[]
 }) => {
   const router = useRouter()
-  const [showPhone, setShowPhone] = React.useState(false)
-  const [showEmail, setShowEmail] = React.useState(false)
 
   // Theme-aware tokens (was hard-coded white because of v5 video overlay)
   const fg = useColorModeValue('gray.900', 'white')
@@ -138,62 +143,15 @@ const PersonalInfo = ({
                   </Flex>
                 </Flex>
 
-                {/* Reveal: phone + email (logic preserved from v5) */}
-                <Flex direction="column" gap={2} mb={8} fontSize="14px">
-                  <Box>
-                    <Text as="span" color={fgMuted} fontFamily={monoFont} fontSize="11px" mr={2}>
-                      tel
-                    </Text>
-                    {showPhone ? (
-                      <Text as="span" color={fg}>
-                        {home?.hero?.phone || ''}
-                      </Text>
-                    ) : (
-                      <Button
-                        size="xs"
-                        variant="link"
-                        color="var(--accent)"
-                        fontFamily={monoFont}
-                        fontWeight={500}
-                        onClick={() => setShowPhone(true)}
-                        aria-label="Reveal phone number"
-                      >
-                        Click to reveal →
-                      </Button>
-                    )}
-                  </Box>
-                  <Box>
-                    <Text as="span" color={fgMuted} fontFamily={monoFont} fontSize="11px" mr={2}>
-                      email
-                    </Text>
-                    {showEmail ? (
-                      home?.hero?.email ? (
-                        <Link
-                          href={`mailto:${home.hero.email}`}
-                          color={fg}
-                          _hover={{ color: 'var(--accent)' }}
-                        >
-                          {home.hero.email}
-                        </Link>
-                      ) : null
-                    ) : (
-                      <Button
-                        size="xs"
-                        variant="link"
-                        color="var(--accent)"
-                        fontFamily={monoFont}
-                        fontWeight={500}
-                        onClick={() => setShowEmail(true)}
-                        aria-label="Reveal email"
-                      >
-                        Click to reveal →
-                      </Button>
-                    )}
-                  </Box>
-                </Flex>
+                {/*
+                  Contact info (tel + email) intentionally removed from the
+                  intro per spec — direct contact lives on /contact (linked
+                  in the header). Keeping it here doubled the surface and
+                  made the hero feel like a business card.
+                */}
 
                 {/* CTAs + socials */}
-                <Flex direction={['column', 'row']} alignItems={['stretch', 'center']} gap={4}>
+                <Flex direction={['column', 'row']} alignItems={['stretch', 'center']} gap={4} mt={8}>
                   <Button
                     onClick={() => router.push('/cv')}
                     size="md"
@@ -267,25 +225,49 @@ const PersonalInfo = ({
                   />
                 </Box>
 
-                {/* Currently-doing chip beneath avatar */}
-                <Flex
-                  mt={3}
-                  direction="column"
-                  fontFamily={monoFont}
-                  fontSize="10px"
-                  letterSpacing="0.04em"
-                  color={fgMuted}
-                  textAlign={['center', 'left']}
-                  gap={0.5}
-                >
-                  <Text as="span">currently coding</Text>
-                  <Text as="span" color={fg}>
-                    WeGreen AI · COT
-                  </Text>
-                  <Text as="span" opacity={0.6}>
-                    self-taught · since 2022
-                  </Text>
-                </Flex>
+                {/*
+                  Currently-coding chip beneath avatar.
+                  Three-way merge per line:
+                      admin (home.json) → auto-derived from CV → blank
+                  Admin wins when non-empty; otherwise we fall back to the
+                  CV-derived default; if both are blank the line is skipped.
+                  Whole chip hides only when all three merged values are
+                  empty (i.e. no manual values AND no CV signal).
+                */}
+                {(() => {
+                  const cc = home?.hero?.currentlyCoding
+                  const auto = deriveCurrentlyCoding(cvEn)
+                  const merge = (admin?: string, fallback?: string) =>
+                    ((admin ?? '').trim() || (fallback ?? '').trim())
+                  const label = merge(cc?.label, auto.label)
+                  const project = merge(cc?.project, auto.project)
+                  const note = merge(cc?.note, auto.note)
+                  if (!label && !project && !note) return null
+                  return (
+                    <Flex
+                      mt={3}
+                      direction="column"
+                      fontFamily={monoFont}
+                      fontSize="10px"
+                      letterSpacing="0.04em"
+                      color={fgMuted}
+                      textAlign={['center', 'left']}
+                      gap={0.5}
+                    >
+                      {label && <Text as="span">{label}</Text>}
+                      {project && (
+                        <Text as="span" color={fg}>
+                          {project}
+                        </Text>
+                      )}
+                      {note && (
+                        <Text as="span" opacity={0.6}>
+                          {note}
+                        </Text>
+                      )}
+                    </Flex>
+                  )
+                })()}
               </Box>
             </Flex>
 

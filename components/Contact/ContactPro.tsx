@@ -37,11 +37,22 @@ type HomeData = {
     linkedin?: string
     whatsapp?: string
   }
+  /** Editable contact-panel copy + reasons dropdown. All optional —
+   *  every field falls back to a built-in default when blank. */
+  contact?: {
+    heading?: string
+    blurb?: string
+    eyebrow?: string
+    reasons?: string[]
+  }
 }
 
 const MotionBox = motion(Box)
 
-const REASONS = [
+// Built-in defaults — used when home.json's contact block is missing or
+// any individual field is blank. Kept in sync with HomeEditor's
+// DEFAULT_CONTACT_REASONS so the admin and renderer agree.
+const DEFAULT_REASONS = [
   'Project Inquiry',
   'Hiring',
   'Collaboration',
@@ -49,6 +60,8 @@ const REASONS = [
   'Mentorship',
   'Other',
 ]
+const DEFAULT_EYEBROW = '▸ Reach me'
+const DEFAULT_BLURB = 'I usually reply within 24 hours.'
 
 const monoFont = 'var(--font-geist-mono), monospace'
 
@@ -84,9 +97,20 @@ export default function ContactPro({
   const dim = useColorModeValue('gray.600', 'gray.500')
   const fg = useColorModeValue('gray.800', 'gray.100')
 
+  // Resolve editable copy + reasons once per render. Admin values win
+  // when non-blank; blank/missing entries fall back to the defaults.
+  const REASONS =
+    home?.contact?.reasons && home.contact.reasons.length > 0
+      ? home.contact.reasons
+      : DEFAULT_REASONS
+  const eyebrowText = (home?.contact?.eyebrow ?? '').trim() || DEFAULT_EYEBROW
+  const headingText =
+    (home?.contact?.heading ?? '').trim() || home?.hero?.brand || 'Contact'
+  const blurbText = (home?.contact?.blurb ?? '').trim() || DEFAULT_BLURB
+
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
-  const [reason, setReason] = useState<string>('Project Inquiry')
+  const [reason, setReason] = useState<string>(REASONS[0])
   const [subject, setSubject] = useState('')
   const [message, setMessage] = useState('')
   const [sending, setSending] = useState(false)
@@ -149,7 +173,7 @@ export default function ContactPro({
         const d = JSON.parse(raw)
         setName(d.name || '')
         setEmail(d.email || '')
-        setReason(d.reason || 'Project Inquiry')
+        setReason(d.reason || REASONS[0])
         setSubject(d.subject || '')
         setMessage(d.message || '')
       }
@@ -162,7 +186,7 @@ export default function ContactPro({
     } catch {}
     setName('')
     setEmail('')
-    setReason('Project Inquiry')
+    setReason(REASONS[0])
     setSubject('')
     setMessage('')
     setMathAnswer('')
@@ -282,13 +306,13 @@ export default function ContactPro({
                 color={dim}
                 mb={2}
               >
-                ▸ Reach me
+                {eyebrowText}
               </Text>
               <Heading size="md" fontWeight={500} letterSpacing="-0.015em">
-                {home?.hero?.brand || 'Contact'}
+                {headingText}
               </Heading>
               <Text fontSize="sm" color={dim} mt={1}>
-                I usually reply within 24 hours.
+                {blurbText}
               </Text>
             </Box>
 

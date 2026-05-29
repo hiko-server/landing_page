@@ -142,7 +142,7 @@ export default function CommandPalette({
       {
         group: 'Actions',
         label: 'View source on GitHub',
-        href: 'https://github.com/HikoPLi/landing_page',
+        href: 'https://github.com/hiko-server/landing_page',
         external: true,
         keywords: 'repo source code',
       },

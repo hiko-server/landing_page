@@ -294,22 +294,14 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                 onClick={toggleColorMode}
               />
 
-              {/* Admin entry */}
-              {!isAdmin ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  h="32px"
-                  borderColor={borderColor}
-                  color={linkColor}
-                  fontSize="13px"
-                  fontWeight={500}
-                  _hover={{ borderColor: linkColor, color: linkHover }}
-                  onClick={() => router.push('/admin/login')}
-                >
-                  Admin
-                </Button>
-              ) : (
+              {/*
+                Admin entry — hidden when logged out (per spec: 不要直接显示).
+                Reach /admin/login through the ⌘K command palette ("Admin login")
+                or by typing the URL directly. The logged-in pair (Dashboard +
+                Logout) stays visible because an authenticated admin needs an
+                obvious way back to the dashboard / out of the session.
+              */}
+              {isAdmin && (
                 <Flex gap={1}>
                   <Button
                     size="sm"
@@ -434,33 +426,22 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                 </Button>
               </Box>
 
-              <Box mt={2}>
-                <Text
-                  fontFamily="var(--font-geist-mono), monospace"
-                  fontSize="10px"
-                  letterSpacing="0.12em"
-                  textTransform="uppercase"
-                  color={subtle}
-                  mb={2}
-                >
-                  Admin
-                </Text>
-                {!isAdmin ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    w="100%"
-                    borderColor={borderColor}
-                    color={linkColor}
-                    _hover={{ borderColor: linkColor, color: linkHover }}
-                    onClick={() => {
-                      router.push('/admin/login')
-                      onClose()
-                    }}
+              {/*
+                Mobile admin section — matches desktop: hidden when logged
+                out. Visitors reach /admin/login via ⌘K or by typing the URL.
+              */}
+              {isAdmin && (
+                <Box mt={2}>
+                  <Text
+                    fontFamily="var(--font-geist-mono), monospace"
+                    fontSize="10px"
+                    letterSpacing="0.12em"
+                    textTransform="uppercase"
+                    color={subtle}
+                    mb={2}
                   >
-                    Admin Login
-                  </Button>
-                ) : (
+                    Admin
+                  </Text>
                   <Flex direction="column" gap={2}>
                     <Button
                       size="sm"
@@ -488,8 +469,8 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                       Logout
                     </Button>
                   </Flex>
-                )}
-              </Box>
+                </Box>
+              )}
             </Flex>
           </DrawerBody>
           <DrawerFooter borderTopWidth="1px" borderColor={borderColor}>
