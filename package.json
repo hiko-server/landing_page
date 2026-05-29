@@ -4,6 +4,14 @@
   "private": true,
   "main": "index.js",
   "license": "MIT",
+  "homepage": "https://github.com/hiko-server/landing_page#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hiko-server/landing_page.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hiko-server/landing_page/issues"
+  },
   "scripts": {
     "dev": "next",
     "build": "next build",
@@ -54,6 +62,7 @@
     "geist": "^1.7.1",
     "gray-matter": "^4.0.3",
     "i18next": "^23.7.0",
+    "jose": "^4.15.9",
     "jsonwebtoken": "^9.0.1",
     "jwt-decode": "^3.1.2",
     "luxon": "^3.3.0",
@@ -82,6 +91,7 @@
     "shiki": "^4.1.0",
     "styled-components": "^6.1.0",
     "tailwindcss": "^3.4.0",
+    "tar-stream": "^2.2.0",
     "tiptap-markdown": "^0.9.0",
     "usehooks-ts": "^2.9.0",
     "yup": "^1.3.0",
