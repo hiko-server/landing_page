@@ -1,0 +1,78 @@
+version: 2
+
+# Weekly dependency PRs. Grouped to avoid PR-spam from minor bumps of
+# unrelated packages — Dependabot opens one PR per group instead of one
+# per dependency. Security advisories still file individually + bypass
+# the group throttle (Dependabot handles that automatically).
+
+updates:
+  - package-ecosystem: npm
+    directory: '/'
+    schedule:
+      interval: weekly
+      day: monday
+      time: '03:00'
+      timezone: Asia/Hong_Kong
+    open-pull-requests-limit: 5
+    versioning-strategy: increase-if-necessary
+    labels:
+      - dependencies
+      - npm
+    groups:
+      next:
+        patterns:
+          - 'next'
+          - 'next-*'
+          - '@next/*'
+          - 'eslint-config-next'
+      react:
+        patterns:
+          - 'react'
+          - 'react-*'
+          - '@types/react*'
+      chakra:
+        patterns:
+          - '@chakra-ui/*'
+          - '@emotion/*'
+          - 'framer-motion'
+      tiptap:
+        patterns:
+          - '@tiptap/*'
+          - 'tiptap-*'
+      types:
+        patterns:
+          - '@types/*'
+      dev-toolchain:
+        patterns:
+          - 'typescript'
+          - 'eslint'
+          - 'eslint-*'
+          - '@typescript-eslint/*'
+          - 'prettier'
+          - 'autoprefixer'
+          - 'postcss'
+          - 'tailwindcss'
+    ignore:
+      # Pinned intentionally — bumping these requires manual review of
+      # the v6 design pass + a fresh visual diff against the screenshots
+      # in docs/screenshots/.
+      - dependency-name: 'next'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'react'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'react-dom'
+        update-types: ['version-update:semver-major']
+      - dependency-name: '@chakra-ui/react'
+        update-types: ['version-update:semver-major']
+
+  - package-ecosystem: github-actions
+    directory: '/'
+    schedule:
+      interval: weekly
+      day: monday
+      time: '03:00'
+      timezone: Asia/Hong_Kong
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - github-actions
