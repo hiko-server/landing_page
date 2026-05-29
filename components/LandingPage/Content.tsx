@@ -16,23 +16,20 @@ import ExperienceTimeline from './ExperienceTimeline'
 import CertificationsPeek from './CertificationsPeek'
 import SectionReveal from '../General-UI/SectionReveal'
 import SectionLabel from '../General-UI/SectionLabel'
-import type { HomeData } from '../../lib/home'
+// Pure shape — must NOT import from lib/home (server-only / better-sqlite3).
+import { isSectionVisible, type HomeData } from '../../lib/homeShape'
 
 /**
  * v6 home Content.
  *
- * Replaces v5's two-column layout with a centered single-column flow under the
- * Hero. No more A4Paper-styled wrapper / orange border / heavy panel chrome —
- * each section is announced with a monospace [NN] label and sits flat on the
- * dot-grid background.
+ * Each [NN] section is now gated through `isSectionVisible(home, key)` so
+ * the admin can hide whole rows from the Home editor without code
+ * changes. Sections default to visible if the key is missing — clean
+ * install keeps the full page.
  *
- * Left column from v5 (StatsBar + ImageScroller + ContactPro) is hoisted into
- * the main flow: StatsBar runs full-width above the section grid (sets the
- * engineer-credibility tone), photo strip + contact form remain available but
- * intermixed with the editorial sections.
- *
- * Removed: A4Paper StyledBox wrapper, Quick Access accordion (CTAs already
- * live in the Hero and Header).
+ * Photos + Contact share a single bottom row on desktop; when only one of
+ * them is enabled the surviving side stretches to fill the row instead
+ * of leaving a ghost column.
  */
 
 const Content = ({
@@ -53,6 +50,19 @@ const Content = ({
   const isEditMode = router.asPath.includes('edit')
   const border = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
 
+  const show = {
+    openSource: isSectionVisible(home, 'open-source'),
+    techStack: isSectionVisible(home, 'tech-stack'),
+    activity: isSectionVisible(home, 'activity'),
+    projects: isSectionVisible(home, 'projects'),
+    experience: isSectionVisible(home, 'experience'),
+    certifications: isSectionVisible(home, 'certifications'),
+    photos: isSectionVisible(home, 'photos'),
+    contact: isSectionVisible(home, 'contact'),
+  }
+
+  const hasBottomRow = show.photos || show.contact
+
   return (
     <Box
       w="100%"
@@ -64,93 +74,118 @@ const Content = ({
       style={{ marginTop: isEditMode ? '320px' : '0px' }}
     >
       {/* [02] OPEN SOURCE — GitHub stats banner spanning full width */}
-      <SectionReveal>
-        <Box mb={{ base: 16, md: 24 }}>
-          <SectionLabel n={2} mb={6}>
-            Open Source
-          </SectionLabel>
-          <StatsBar />
-          <Box mt={6}>
-            <TopRepos />
+      {show.openSource && (
+        <SectionReveal>
+          <Box mb={{ base: 16, md: 24 }}>
+            <SectionLabel n={2} mb={6}>
+              Open Source
+            </SectionLabel>
+            <StatsBar />
+            <Box mt={6}>
+              <TopRepos />
+            </Box>
           </Box>
-        </Box>
-      </SectionReveal>
+        </SectionReveal>
+      )}
 
       {/* [03] TECH STACK */}
-      <SectionReveal>
-        <Box mb={{ base: 16, md: 24 }}>
-          <SectionLabel n={3} mb={6}>
-            Tech Stack
-          </SectionLabel>
-          <TechCloud />
-          <Box mt={10}>
-            <LanguageBars />
+      {show.techStack && (
+        <SectionReveal>
+          <Box mb={{ base: 16, md: 24 }}>
+            <SectionLabel n={3} mb={6}>
+              Tech Stack
+            </SectionLabel>
+            <TechCloud />
+            <Box mt={10}>
+              <LanguageBars />
+            </Box>
           </Box>
-        </Box>
-      </SectionReveal>
+        </SectionReveal>
+      )}
 
       {/* [04] RECENT ACTIVITY */}
-      <SectionReveal>
-        <Box mb={{ base: 16, md: 24 }}>
-          <SectionLabel n={4} mb={6}>
-            Recent Activity
-          </SectionLabel>
-          <ActivityFeed />
-        </Box>
-      </SectionReveal>
+      {show.activity && (
+        <SectionReveal>
+          <Box mb={{ base: 16, md: 24 }}>
+            <SectionLabel n={4} mb={6}>
+              Recent Activity
+            </SectionLabel>
+            <ActivityFeed />
+          </Box>
+        </SectionReveal>
+      )}
 
       {/* [05] SELECTED PROJECTS — horizontal scroller */}
-      <SectionReveal>
-        <Box mb={{ base: 16, md: 24 }}>
-          <SectionLabel n={5} mb={6}>
-            Selected Projects
-          </SectionLabel>
-          <ProjectSpotlight cvEn={cvEn} />
-        </Box>
-      </SectionReveal>
+      {show.projects && (
+        <SectionReveal>
+          <Box mb={{ base: 16, md: 24 }}>
+            <SectionLabel n={5} mb={6}>
+              Selected Projects
+            </SectionLabel>
+            <ProjectSpotlight cvEn={cvEn} />
+          </Box>
+        </SectionReveal>
+      )}
 
       {/* [06] EXPERIENCE TIMELINE */}
-      <SectionReveal>
-        <Box mb={{ base: 16, md: 24 }}>
-          <SectionLabel n={6} mb={6}>
-            Experience
-          </SectionLabel>
-          <ExperienceTimeline cvEn={cvEn} />
-        </Box>
-      </SectionReveal>
+      {show.experience && (
+        <SectionReveal>
+          <Box mb={{ base: 16, md: 24 }}>
+            <SectionLabel n={6} mb={6}>
+              Experience
+            </SectionLabel>
+            <ExperienceTimeline cvEn={cvEn} />
+          </Box>
+        </SectionReveal>
+      )}
 
       {/* [07] CERTIFICATIONS */}
-      <SectionReveal>
-        <Box mb={{ base: 16, md: 24 }}>
-          <SectionLabel n={7} mb={6}>
-            Certifications
-          </SectionLabel>
-          <CertificationsPeek cvEn={cvEn} />
-        </Box>
-      </SectionReveal>
+      {show.certifications && (
+        <SectionReveal>
+          <Box mb={{ base: 16, md: 24 }}>
+            <SectionLabel n={7} mb={6}>
+              Certifications
+            </SectionLabel>
+            <CertificationsPeek cvEn={cvEn} />
+          </Box>
+        </SectionReveal>
+      )}
 
       {/* Photos + Contact (side by side on desktop, stacked on mobile) */}
-      <Flex
-        direction={{ base: 'column', md: 'row' }}
-        gap={{ base: 12, md: 8 }}
-        align="flex-start"
-        pt={{ base: 8, md: 12 }}
-        borderTop="1px solid"
-        borderColor={border}
-      >
-        <Box flex={{ base: 'none', md: '0 0 380px' }} w={{ base: '100%', md: '380px' }}>
-          <SectionLabel n={8} mb={6}>
-            Field Notes
-          </SectionLabel>
-          <ImageScroller images={photos} />
-        </Box>
-        <Box flex="1" minW={0} w="100%">
-          <SectionLabel n={9} mb={6}>
-            Get In Touch
-          </SectionLabel>
-          <ContactPro home={home || undefined} formOnly />
-        </Box>
-      </Flex>
+      {hasBottomRow && (
+        <Flex
+          direction={{ base: 'column', md: 'row' }}
+          gap={{ base: 12, md: 8 }}
+          align="flex-start"
+          pt={{ base: 8, md: 12 }}
+          borderTop="1px solid"
+          borderColor={border}
+        >
+          {show.photos && (
+            <Box
+              flex={
+                show.contact
+                  ? { base: 'none', md: '0 0 380px' }
+                  : { base: 'none', md: '1' }
+              }
+              w={{ base: '100%', md: show.contact ? '380px' : '100%' }}
+            >
+              <SectionLabel n={8} mb={6}>
+                Field Notes
+              </SectionLabel>
+              <ImageScroller images={photos} />
+            </Box>
+          )}
+          {show.contact && (
+            <Box flex="1" minW={0} w="100%">
+              <SectionLabel n={9} mb={6}>
+                Get In Touch
+              </SectionLabel>
+              <ContactPro home={home || undefined} formOnly />
+            </Box>
+          )}
+        </Flex>
+      )}
     </Box>
   )
 }

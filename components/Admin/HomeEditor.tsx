@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react'
 import {
   Button,
   Checkbox,
+  Divider,
   FormControl,
   FormLabel,
   Heading,
@@ -11,6 +12,9 @@ import {
   Input,
   SimpleGrid,
   Table,
+  Tag,
+  TagCloseButton,
+  TagLabel,
   Tbody,
   Td,
   Th,
@@ -18,14 +22,29 @@ import {
   Tr,
   Textarea,
   useToast,
+  Wrap,
+  WrapItem,
   Box,
   Text,
   Flex,
 } from '@chakra-ui/react'
 import { AddIcon, DeleteIcon } from '@chakra-ui/icons'
+// Pure shape import — must NOT come from lib/home.ts (server-only, drags
+// better-sqlite3 into the client bundle). lib/homeShape.ts has no Node deps.
+import { HOME_SECTION_META, type SectionKey } from '../../lib/homeShape'
 
 type Brand = { name: string; href: string; image: string }
 type Quick = { label: string; url: string }
+type Contact = { heading: string; blurb: string; eyebrow: string; reasons: string[] }
+
+const DEFAULT_CONTACT_REASONS = [
+  'Project Inquiry',
+  'Hiring',
+  'Collaboration',
+  'Consulting',
+  'Mentorship',
+  'Other',
+]
 
 export default function HomeEditor() {
   const toast = useToast()
@@ -38,6 +57,9 @@ export default function HomeEditor() {
     email: '',
     // added: avatar transform control (x,y in %, scale multiplier)
     avatarTransform: { x: 50, y: 50, scale: 1 },
+    // Three-line chip rendered under the avatar in the intro. Was hard-
+    // coded; now editable so operators can update without redeploy.
+    currentlyCoding: { label: '', project: '', note: '' },
   })
   const [socials, setSocials] = useState({
     github: '',
@@ -50,6 +72,28 @@ export default function HomeEditor() {
   const [photos, setPhotos] = useState<
     { url: string; describe?: string; redirectTo?: string; visible?: boolean }[]
   >([])
+  // Per-section visibility map (key → bool). Defaults to all-visible —
+  // a missing key always means "show" to be safe on first install.
+  const [sections, setSections] = useState<Partial<Record<SectionKey, boolean>>>({})
+  // Editable contact panel copy + reasons dropdown (was hard-coded
+  // inside ContactPro.tsx; now driven from home.json).
+  const [contact, setContact] = useState<Contact>({
+    heading: '',
+    blurb: '',
+    eyebrow: '',
+    reasons: [],
+  })
+  const [newReason, setNewReason] = useState('')
+  // CV-derived defaults for the "currently coding" chip. Shown as input
+  // placeholders so the operator can see what will auto-fill if they
+  // leave a field blank. Auth-gated server endpoint; falls back to empty
+  // on any fetch error (no UX regression — placeholders just show generic
+  // examples).
+  const [ccAuto, setCcAuto] = useState<{ label: string; project: string; note: string }>({
+    label: '',
+    project: '',
+    note: '',
+  })
 
   useEffect(() => {
     const load = async () => {
@@ -68,6 +112,11 @@ export default function HomeEditor() {
             y: data.hero?.avatarTransform?.y ?? 50,
             scale: data.hero?.avatarTransform?.scale ?? 1,
           },
+          currentlyCoding: {
+            label: data.hero?.currentlyCoding?.label ?? '',
+            project: data.hero?.currentlyCoding?.project ?? '',
+            note: data.hero?.currentlyCoding?.note ?? '',
+          },
         })
         setSocials({
           github: data.socials?.github || '',
@@ -78,6 +127,35 @@ export default function HomeEditor() {
         setBrands(Array.isArray(data.brands) ? data.brands : [])
         setQuick(Array.isArray(data.quickAccess) ? data.quickAccess : [])
         setPhotos(Array.isArray(data.photos) ? data.photos : [])
+        setSections(
+          data.sections && typeof data.sections === 'object' ? data.sections : {},
+        )
+        setContact({
+          heading: data.contact?.heading || '',
+          blurb: data.contact?.blurb || '',
+          eyebrow: data.contact?.eyebrow || '',
+          reasons: Array.isArray(data.contact?.reasons)
+            ? data.contact.reasons.filter((r: unknown) => typeof r === 'string')
+            : [],
+        })
+      }
+
+      // Pull CV-derived defaults in parallel. Best-effort: stays blank
+      // on failure so the editor still works.
+      try {
+        const dr = await fetch('/api/admin/cv-derived')
+        if (dr.ok) {
+          const dj = await dr.json()
+          if (dj?.currentlyCoding) {
+            setCcAuto({
+              label: dj.currentlyCoding.label || '',
+              project: dj.currentlyCoding.project || '',
+              note: dj.currentlyCoding.note || '',
+            })
+          }
+        }
+      } catch {
+        // ignore — placeholders just stay generic
       }
     }
     load()
@@ -125,6 +203,13 @@ export default function HomeEditor() {
           ? normalizeUrl(stripTs(p.redirectTo))
           : undefined,
       })),
+      sections,
+      contact: {
+        heading: contact.heading.trim(),
+        blurb: contact.blurb.trim(),
+        eyebrow: contact.eyebrow.trim(),
+        reasons: contact.reasons.map((r) => r.trim()).filter(Boolean),
+      },
     }
     const res = await fetch('/api/home', {
       method: 'PUT',
@@ -133,6 +218,27 @@ export default function HomeEditor() {
     })
     if (res.ok) toast({ status: 'success', title: 'Saved' })
     else toast({ status: 'error', title: 'Save failed (login?)' })
+  }
+
+  const toggleSection = (key: SectionKey, visible: boolean) => {
+    setSections((prev) => ({ ...prev, [key]: visible }))
+  }
+
+  const addReason = () => {
+    const v = newReason.trim()
+    if (!v) return
+    if (contact.reasons.includes(v)) {
+      toast({ status: 'info', title: 'Already in the list' })
+      return
+    }
+    setContact((c) => ({ ...c, reasons: [...c.reasons, v] }))
+    setNewReason('')
+  }
+  const removeReason = (idx: number) => {
+    setContact((c) => ({ ...c, reasons: c.reasons.filter((_, i) => i !== idx) }))
+  }
+  const restoreDefaultReasons = () => {
+    setContact((c) => ({ ...c, reasons: [...DEFAULT_CONTACT_REASONS] }))
   }
 
   const validateUrl = (u: string) => /^\//.test(u) || /^https?:\/\//i.test(u)
@@ -467,6 +573,86 @@ export default function HomeEditor() {
             value={hero.email}
             onChange={(e) => setHero({ ...hero, email: e.target.value })}
           />
+        </FormControl>
+
+        {/*
+          "Currently coding" chip — three short lines rendered under the
+          intro avatar. Each field follows admin > CV > nothing precedence:
+          if you type a value, it wins; if you leave it blank, the home
+          page auto-fills from data/cvdata.json (current company, earliest
+          year, generic label); if both are empty the line is omitted.
+          Clearing all three suppresses the whole chip when there's no
+          CV signal either.
+
+          The placeholders mirror what /api/admin/cv-derived returns now,
+          so an operator sees exactly what visitors will see if they leave
+          a row blank. Falls back to instructive examples when CV is empty.
+        */}
+        <FormControl gridColumn="1 / -1">
+          <FormLabel>
+            Currently coding chip
+            <Text as="span" color="gray.500" fontWeight="normal" fontSize="xs" ml={2}>
+              shown under avatar on home · blank = auto-fill from CV
+            </Text>
+          </FormLabel>
+          <SimpleGrid columns={[1, 3]} gap={3}>
+            <Input
+              placeholder={
+                ccAuto.label
+                  ? `auto: ${ccAuto.label}`
+                  : 'Top label (e.g. currently coding)'
+              }
+              value={hero.currentlyCoding.label}
+              onChange={(e) =>
+                setHero((h) => ({
+                  ...h,
+                  currentlyCoding: { ...h.currentlyCoding, label: e.target.value },
+                }))
+              }
+            />
+            <Input
+              placeholder={
+                ccAuto.project
+                  ? `auto: ${ccAuto.project}`
+                  : 'Project line (e.g. WeGreen AI · COT)'
+              }
+              value={hero.currentlyCoding.project}
+              onChange={(e) =>
+                setHero((h) => ({
+                  ...h,
+                  currentlyCoding: { ...h.currentlyCoding, project: e.target.value },
+                }))
+              }
+            />
+            <Input
+              placeholder={
+                ccAuto.note
+                  ? `auto: ${ccAuto.note}`
+                  : 'Footer note (e.g. self-taught · since 2022)'
+              }
+              value={hero.currentlyCoding.note}
+              onChange={(e) =>
+                setHero((h) => ({
+                  ...h,
+                  currentlyCoding: { ...h.currentlyCoding, note: e.target.value },
+                }))
+              }
+            />
+          </SimpleGrid>
+          <Text mt={2} fontSize="xs" color="gray.500">
+            Auto-derived now:{' '}
+            <Text as="span" color="gray.700" fontFamily="mono">
+              {ccAuto.label || '—'}
+            </Text>
+            {' · '}
+            <Text as="span" color="gray.700" fontFamily="mono">
+              {ccAuto.project || '—'}
+            </Text>
+            {' · '}
+            <Text as="span" color="gray.700" fontFamily="mono">
+              {ccAuto.note || '—'}
+            </Text>
+          </Text>
         </FormControl>
       </SimpleGrid>
 
@@ -819,6 +1005,135 @@ export default function HomeEditor() {
       >
         Add Photo
       </Button>
+
+      {/* ── Section visibility ─────────────────────────────────────── */}
+      <Heading size="sm" mt={8}>
+        Visibility
+      </Heading>
+      <Text fontSize="xs" color="gray.500" mt={1} mb={3}>
+        Toggle which [NN] rows appear on the home page. Hiding a row also
+        removes its anchor + scroll target — the numbering on the rest of
+        the page stays the same because labels are static.
+      </Text>
+      <SimpleGrid columns={[1, 2, 3]} gap={3}>
+        {HOME_SECTION_META.map(({ key, label, hint }) => {
+          const visible = sections[key] !== false
+          return (
+            <Flex
+              key={key}
+              align="flex-start"
+              gap={3}
+              p={3}
+              borderWidth="1px"
+              borderRadius="md"
+              borderColor={visible ? 'green.300' : 'gray.200'}
+              bg={visible ? 'green.50' : 'gray.50'}
+              _dark={{
+                borderColor: visible ? 'green.700' : 'gray.700',
+                bg: visible ? 'rgba(34,197,94,0.08)' : 'rgba(255,255,255,0.02)',
+              }}
+            >
+              <Checkbox
+                isChecked={visible}
+                onChange={(e) => toggleSection(key, e.target.checked)}
+                mt={0.5}
+              />
+              <Box>
+                <Text fontSize="sm" fontWeight={600}>
+                  {label}
+                </Text>
+                <Text fontSize="xs" color="gray.500" mt={0.5}>
+                  {hint}
+                </Text>
+              </Box>
+            </Flex>
+          )
+        })}
+      </SimpleGrid>
+
+      {/* ── Contact panel copy ─────────────────────────────────────── */}
+      <Heading size="sm" mt={8}>
+        Contact panel
+      </Heading>
+      <Text fontSize="xs" color="gray.500" mt={1} mb={3}>
+        Headings + reasons-dropdown options shown on the home contact
+        section. Leave a field blank to use the built-in default
+        (heading = brand name, blurb = &ldquo;I usually reply within 24 hours.&rdquo;,
+        eyebrow = &ldquo;▸ Reach me&rdquo;). Reasons default to the original
+        six when the list is empty.
+      </Text>
+      <SimpleGrid columns={[1, 2]} gap={3}>
+        <FormControl>
+          <FormLabel>Eyebrow</FormLabel>
+          <Input
+            placeholder="▸ Reach me"
+            value={contact.eyebrow}
+            onChange={(e) => setContact((c) => ({ ...c, eyebrow: e.target.value }))}
+          />
+        </FormControl>
+        <FormControl>
+          <FormLabel>Heading</FormLabel>
+          <Input
+            placeholder={hero.brand || 'Contact'}
+            value={contact.heading}
+            onChange={(e) => setContact((c) => ({ ...c, heading: e.target.value }))}
+          />
+        </FormControl>
+        <FormControl gridColumn="1 / -1">
+          <FormLabel>Blurb</FormLabel>
+          <Input
+            placeholder="I usually reply within 24 hours."
+            value={contact.blurb}
+            onChange={(e) => setContact((c) => ({ ...c, blurb: e.target.value }))}
+          />
+        </FormControl>
+      </SimpleGrid>
+
+      <Box mt={4}>
+        <FormLabel mb={2}>
+          Reasons (dropdown)
+          <Text as="span" color="gray.500" fontWeight="normal" fontSize="xs" ml={2}>
+            empty list = use defaults
+          </Text>
+        </FormLabel>
+        <Wrap spacing={2} mb={3}>
+          {contact.reasons.length === 0 && (
+            <Text fontSize="xs" color="gray.500" fontStyle="italic">
+              No custom reasons — the dropdown will show:{' '}
+              <strong>{DEFAULT_CONTACT_REASONS.join(', ')}</strong>
+            </Text>
+          )}
+          {contact.reasons.map((r, idx) => (
+            <WrapItem key={`${r}-${idx}`}>
+              <Tag size="md" colorScheme="purple" borderRadius="full" variant="subtle">
+                <TagLabel>{r}</TagLabel>
+                <TagCloseButton onClick={() => removeReason(idx)} />
+              </Tag>
+            </WrapItem>
+          ))}
+        </Wrap>
+        <HStack>
+          <Input
+            placeholder="Add a reason (e.g. Speaking engagement)"
+            value={newReason}
+            onChange={(e) => setNewReason(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                addReason()
+              }
+            }}
+          />
+          <Button onClick={addReason} leftIcon={<AddIcon />}>
+            Add
+          </Button>
+          <Button variant="outline" onClick={restoreDefaultReasons}>
+            Restore defaults
+          </Button>
+        </HStack>
+      </Box>
+
+      <Divider my={6} />
 
       <HStack mt={6}>
         <Button
