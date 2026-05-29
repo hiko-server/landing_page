@@ -62,13 +62,17 @@ function applySecurityHeaders(res: NextResponse, opts: { adminContext: boolean }
   res.headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload')
 
   // CSP — permissive enough for Next.js hydration but locks frames + objects.
-  const isProd = process.env.NODE_ENV === 'production'
   const csp = [
     "default-src 'self'",
     "frame-ancestors 'none'",
-    isProd
-      ? "script-src 'self' 'unsafe-inline' https:"
-      : "script-src 'self' 'unsafe-eval' 'unsafe-inline' https:",
+    // next-mdx-remote compiles MDX to a JS string and evaluates it on the
+    // client via `new Function(...)` during hydration — that requires
+    // 'unsafe-eval'. Without it, every MDX-backed page (/now, /uses,
+    // /blog/*, /work/*) throws EvalError under CSP and the React tree fails
+    // to hydrate (a blank "Application error" screen). Since 'unsafe-inline'
+    // is already permitted for scripts, additionally allowing 'unsafe-eval'
+    // is a negligible marginal change to the threat model.
+    "script-src 'self' 'unsafe-eval' 'unsafe-inline' https:",
     "style-src 'self' 'unsafe-inline' https:",
     "img-src 'self' data: https:",
     "font-src 'self' https: data:",
