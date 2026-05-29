@@ -13,8 +13,12 @@ const nextConfig = {
   async headers() {
     const csp = [
       "default-src 'self'",
-      // Inline JSON-LD and Chakra SSR styles
-      "script-src 'self' 'unsafe-inline' https://hcaptcha.com https://*.hcaptcha.com",
+      // Inline JSON-LD and Chakra SSR styles. 'unsafe-eval' is required by
+      // next-mdx-remote, which evaluates compiled MDX on the client via
+      // new Function() (/now, /uses, /blog/*, /work/*). This header and the
+      // one in middleware.ts are both emitted; the browser enforces their
+      // intersection, so 'unsafe-eval' must be present in BOTH.
+      "script-src 'self' 'unsafe-eval' 'unsafe-inline' https://hcaptcha.com https://*.hcaptcha.com",
       "style-src 'self' 'unsafe-inline' https:",
       "img-src 'self' data: blob: https:",
       "connect-src 'self' https://api.github.com https://hcaptcha.com https://*.hcaptcha.com wss://stream.binance.com https://api.binance.com",
