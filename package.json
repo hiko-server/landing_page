@@ -54,7 +54,7 @@
     "@types/qs": "^6.9.7",
     "@types/react-datepicker": "^4.15.0",
     "@vercel/og": "^0.11.1",
-    "axios": "^1.4.0",
+    "axios": "^1.15.2",
     "better-sqlite3": "^12.10.0",
     "cookies-next": "^2.1.2",
     "formik": "^2.4.5",
@@ -112,5 +112,8 @@
     "nodemailer": "^6.9.7",
     "prettier": "^3.1.0",
     "typescript": "^5.3.3"
+  },
+  "resolutions": {
+    "i18next-fs-backend": "^2.6.4"
   }
 }

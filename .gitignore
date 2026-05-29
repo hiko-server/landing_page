@@ -53,3 +53,8 @@ data/
 
 # Design preview (local-only working file)
 .design-preview/
+
+# Defence in depth — these contain credentials / hash and must NEVER be tracked,
+# even if a future fork starts selectively tracking other things under data/.
+data/admin.json
+data/mongo_config.json
