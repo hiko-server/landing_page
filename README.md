@@ -1,65 +1,85 @@
-# HIKO.DEV — Personal Site
+<div align="center">
 
+# Portfolio Studio
+
+**A self-hostable, content-driven personal site + admin studio.**
+Local-first SQLite, off-site Cloudflare R2 mirror, MDX writing, MongoDB
+backup, and a hardened admin GUI for non-engineers.
+
+中文版 → [README.zh.md](./README.zh.md)
+
+[![Repo](https://img.shields.io/badge/GitHub-hiko--server%2Flanding__page-181717?logo=github)](https://github.com/hiko-server/landing_page)
 [![Next.js](https://img.shields.io/badge/Next.js-13.5-black?logo=next.js)](https://nextjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue?logo=typescript)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Chakra UI](https://img.shields.io/badge/Chakra_UI-2.8-319795?logo=chakraui)](https://chakra-ui.com/)
-[![MDX](https://img.shields.io/badge/Content-MDX-1d4ed8)](https://mdxjs.com/)
-[![MongoDB](https://img.shields.io/badge/Backup-MongoDB-green?logo=mongodb)](https://www.mongodb.com/)
+[![SQLite](https://img.shields.io/badge/Storage-SQLite-003B57?logo=sqlite)](https://www.sqlite.org/)
+[![Cloudflare R2](https://img.shields.io/badge/Mirror-R2-f38020?logo=cloudflare)](https://developers.cloudflare.com/r2/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
-A high-performance personal site + CV management system: data-driven public
-pages, a visual admin for non-engineers, file-based MDX for long-form content,
-and one-click MongoDB GridFS backup/restore.
+<img src="docs/screenshots/hero-light.png" alt="Home page in light mode" width="900" />
 
-**v6** is the current release. It builds on the v5 foundation (Pages Router,
-Chakra UI, JSON-FS storage, admin GUI, MongoDB backup) and adds:
-
-- 🎨 **"Indigo Precision" design language** — dot-grid background, Geist-family
-  typography, monospace section labels (`[01] WORK ─────`), single indigo
-  accent (`#6366f1`)
-- ✍️ **MDX content layer** — `/blog`, `/work` (case studies), `/now`, `/uses`
-  pages backed by `content/*.mdx` files
-- 📝 **Admin editors for blog + case studies** — sit alongside the existing
-  Home / CV / Versions / DB editors; same JWT-cookie auth, same auto-snapshot
-- 🔐 **Hardening** — `/api/mongo` now requires admin auth; `.env` is no longer
-  tracked; `.env.example` has clean placeholders
+</div>
 
 ---
 
-## Table of contents
+## Highlights
 
-- [Tech stack](#tech-stack)
-- [Project layout](#project-layout)
-- [Quick start](#quick-start)
-- [Environment variables](#environment-variables)
-- [Adding content](#adding-content)
-- [Admin pages](#admin-pages)
-- [Public routes](#public-routes)
-- [API routes](#api-routes)
-- [Docker deployment](#docker-deployment)
-- [Design tokens](#design-tokens)
-- [Security notes](#security-notes)
+- **Local-first content store** — SQLite at `data/content.db` is canonical;
+  Cloudflare R2 is an off-site mirror; the filesystem MDX/JSON is a one-way
+  seed. Every admin write is a synchronous DB write + best-effort R2 push.
+- **One-click whole-site snapshots** — tarball backup pipeline packs the
+  SQLite DB (via the SQLite Online Backup API, WAL-consistent), uploaded
+  images, version-history snapshots, and admin/Mongo config into one
+  gzipped tar. Manual *Backup now* / *Pull latest* buttons in the admin.
+- **MDX writing layer** — `/blog`, `/work` (case studies), `/now`, `/uses`
+  pages backed by typed MDX collections with auto-generated OG images,
+  RSS feed, and reading-time annotations.
+- **Bilingual CV** — English / 中文 toggle on `/about` and `/cv`; same
+  data file (`data/cvdata.json`), zero translation duplication for shared
+  fields, rolling version history.
+- **Admin GUI for non-engineers** — visual editors for hero, brands,
+  socials, photo strip, blog posts, case studies, CV (split-pane Studio
+  + raw JSON + legacy GUI), and Now/Uses pages.
+- **Per-section visibility** — toggle any `[NN]` row on the home page
+  (Open Source, Tech Stack, Activity, Projects, Experience, Certs,
+  Photos, Contact) without touching code.
+- **Editable contact panel** — heading, eyebrow, blurb, and the dropdown
+  reasons list all come from `data/home.json`; built-in defaults when
+  blank.
+- **Industry-grade admin auth** — scrypt with 16-byte salt; per-account
+  lockout (10 fails / 15 min → 15 min lock); per-IP rate limit; httpOnly
+  + sameSite=Strict + Secure cookies; JWT via `jose` in edge middleware
+  so unauth visitors never see admin UI for a frame; HSTS / CSP / X-Frame
+  / X-Robots applied via `middleware.ts`.
+
+<table>
+<tr>
+<td><img src="docs/screenshots/admin-home.png" alt="Admin Home editor" /></td>
+<td><img src="docs/screenshots/admin-storage.png" alt="Storage + backup panel" /></td>
+</tr>
+<tr>
+<td align="center"><sub>Admin → Home: visibility toggles + content fields</sub></td>
+<td align="center"><sub>Admin → Storage: local SQLite + R2 mirror + tarball snapshots</sub></td>
+</tr>
+</table>
 
 ---
 
 ## Tech stack
 
-| Layer | Choice |
-|-------|--------|
-| Framework | **Next.js 13.5** (Pages Router — preserved from v5) |
-| Language | **TypeScript 5.3 strict** |
-| UI | **Chakra UI 2.8** themed with v6 design tokens |
-| Typography | **Inter** + **JetBrains Mono** via `next/font/google` (Geist is the design ancestor; we use Inter directly because Geist isn't in Next 13.5's bundled Google font list yet) |
-| Animation | Framer Motion (used sparingly) |
-| Content | **MDX** via `next-mdx-remote` + `gray-matter` + `rehype-pretty-code` (Shiki) |
-| Data storage | **JSON files** in `data/` (admin.json / home.json / cvdata.json) — no database required |
-| Optional backup | **MongoDB + GridFS** for full-site snapshots (admin-gated) |
-| Auth | Self-managed JWT (HS256) in HttpOnly cookie + `scrypt` password hashing |
-| Forms | React Hook Form + Formik + Yup |
-| Email | Nodemailer (SMTP) |
-| CAPTCHA | hCaptcha on contact form |
-| Drag-and-drop | `@dnd-kit/*` for the CV section reorder GUI |
+| Layer | Choice | Why |
+|---|---|---|
+| Framework | **Next.js 13 (Pages router)** | Mature SSR, file-routed APIs, edge middleware |
+| UI | **Chakra UI 2** | Composable primitives, dark-mode out of the box |
+| Animations | **Framer Motion** | Hero entry, section reveal |
+| Content store | **better-sqlite3** + **Cloudflare R2** | Local-first, cheap off-site replica |
+| Writing | **MDX** via `next-mdx-remote` + `rehype-pretty-code` | Syntax-highlighted prose |
+| Backup tarball | **`tar-stream` + `node:zlib`** | One-file atomic snapshot |
+| Backup destination | **MongoDB GridFS** *(optional)* | Mirror images + JSON when configured |
+| Email | **Nodemailer** | Contact form + password reset |
+| Auth | **scrypt + `jsonwebtoken` + `jose` (edge)** | Lockout-aware login, edge JWT verify |
+| Editor | **TipTap** (rich) + **Monaco-style JSON** | Block editor for posts + raw JSON for CV |
 
 ---
 
@@ -67,314 +87,318 @@ Chakra UI, JSON-FS storage, admin GUI, MongoDB backup) and adds:
 
 ```
 .
-├── pages/                       Public + admin routes (Pages Router)
-│   ├── index.tsx                /        Home with video bg + hero
-│   ├── about/                   /about
-│   ├── cv/                      /cv (A4 print) + /cv/edit
-│   ├── contact/                 /contact (hCaptcha + SMTP)
-│   ├── crypto/                  /crypto (Binance WS live prices)
-│   ├── quick-payment/           /quick-payment
-│   ├── blog/                    /blog + /blog/[slug]      ← v6
-│   ├── work/                    /work + /work/[slug]      ← v6
-│   ├── now.tsx                  /now                      ← v6
-│   ├── uses.tsx                 /uses                     ← v6
-│   ├── admin/                   Admin portal (JWT-protected)
-│   │   ├── index.tsx              Entry cards
-│   │   ├── dashboard.tsx          Home / CV / Versions tabs
-│   │   ├── login.tsx, forgot.tsx, reset.tsx
-│   │   ├── db-config.tsx          MongoDB backup/restore UI
-│   │   ├── blog/index.tsx         Blog post list      ← v6
-│   │   ├── blog/edit.tsx          Blog editor         ← v6
-│   │   ├── work/index.tsx         Case study list     ← v6
-│   │   └── work/edit.tsx          Case study editor   ← v6
-│   ├── api/                     Serverless API endpoints
-│   │   ├── admin/                 login / logout / session / upload-image
-│   │   │   ├── posts.ts             Blog CRUD          ← v6
-│   │   │   └── work.ts              Case study CRUD    ← v6
-│   │   ├── auth/                  Email login / reset
-│   │   ├── github/                events / stats / top-repos / languages
-│   │   ├── contact.ts             hCaptcha + send
-│   │   ├── cvdata.ts              CV CRUD + snapshots
-│   │   ├── home.ts                Home CRUD + snapshots
-│   │   ├── mongo.ts               GridFS backup/restore (JWT-guarded)
-│   │   ├── versions.ts            Unified version history
-│   │   ├── stack.ts               package.json reflection
-│   │   └── rss.xml.ts             Blog RSS feed       ← v6
-│   ├── 404.tsx, 500.tsx
-│   ├── sitemap.xml.tsx
-│   └── _app.tsx, _document.tsx
-│
-├── components/
-│   ├── LandingPage/             Hero, sections, scrollers, ContentPro
-│   ├── Header/, Footer/         Top + bottom chrome
-│   ├── About/, Background/, BrandShowcase/, Contact/
-│   ├── Crypto/, GitHub/, TechStack/, PersonalInstruction/
-│   ├── CVViewerPage/            A4-print CV breakdown
-│   ├── Admin/                   CVEditor, CVGuiEditorV2, HomeEditor, VersionHistory
-│   ├── MDX/                     MDXContent renderer with Chakra overrides ← v6
-│   ├── General-UI/              CustomHead, SectionLabel ← v6, ScrollProgressBar, …
+├── components/          # UI atoms / molecules / organisms
+│   ├── Admin/           # HomeEditor, CVEditorStudio, StoragePanel, …
+│   ├── LandingPage/     # PersonalInfo, Content, ExperienceTimeline, …
 │   └── …
-│
-├── content/                     File-based MDX (v6)
-│   ├── blog/                    {slug}.mdx blog posts
-│   ├── work/                    {slug}.mdx case studies
-│   ├── now.mdx, uses.mdx        Static pages
-│   └── .gitkeep files document the frontmatter schema
-│
-├── lib/                         Server-side utilities (framework-agnostic)
-│   ├── admin.ts                 scrypt password hashing + reset tokens
-│   ├── cvdata.ts                CV read/write + snapshots
-│   ├── home.ts                  Home read/write + snapshots
-│   ├── mailer.ts                Dynamic-import nodemailer
-│   ├── rateLimit.ts             In-memory token bucket
-│   ├── env.ts                   JWT_SECRET validation
-│   ├── mdx.ts                   MDX content loader        ← v6
-│   ├── mdx-admin.ts             MDX write/delete with auto-snapshot ← v6
-│   └── gtag.js
-│
-├── data/                        Local state (gitignored)
-│   ├── admin.json               Admin credentials (scrypt + salt)
-│   ├── home.json                Hero / socials / brands / photos / quickAccess
-│   ├── cvdata.json              {en, zh} CV section arrays
-│   ├── cv_snapshots/            CV version history (auto-saved on every write)
-│   ├── home_snapshots/          Home version history
-│   ├── blog_snapshots/          ← v6 (blog post snapshots)
-│   └── work_snapshots/          ← v6 (case study snapshots)
-│
-├── public/
-│   ├── images/                  brand/, imageScroller/, payment/, hikoAvator.png
-│   ├── uploads/                 admin GUI image uploads
-│   └── videos/                  hero reels
-│
-├── styles/
-│   └── globals.css              v6 design layer (CSS variables, dot grid,
-│                                section-label-rule, link-underline, motion prefs)
-│
-├── theme/
-│   └── chakra.js                Chakra theme — ink scale, accent palette,
-│                                semantic tokens, signature dot-grid body bg
-│
-├── context/                     React Context (auth, settings, cvData)
-├── helpers/, hooks/             Client-side utilities
-├── layout/                      HeaderFooter, VideoBackgroundLayout, etc.
-├── docker/                      Nginx reverse-proxy config
-├── *.sh                         build / deploy / docker scripts
-└── Dockerfile, docker-compose.yml, .github/workflows/ci.yml
+├── content/             # MDX seed data (one-way → DB on first read)
+│   ├── blog/*.mdx
+│   ├── work/*.mdx
+│   ├── now.mdx
+│   └── uses.mdx
+├── data/                # Runtime state — gitignored
+│   ├── content.db       # Canonical SQLite store
+│   ├── home.json        # KV seed for hero/socials/brands/photos
+│   ├── cvdata.json      # CV en/zh source of truth
+│   ├── admin.json       # Local admin record (hash + salt)
+│   ├── *_snapshots/     # Version history per content kind
+│   └── backups/         # snapshot-<UTC>.tgz
+├── lib/                 # Server-side libs
+│   ├── backup.ts        # Snapshot pack/extract pipeline
+│   ├── admin.ts         # scrypt + lockout-aware verify
+│   ├── home.ts          # HomeData schema + section keys
+│   ├── currentlyCoding.ts # Derive chip from CV
+│   ├── db.ts / r2.ts / contentStore.ts
+│   └── env.ts / rateLimit.ts / mailer.ts
+├── pages/
+│   ├── api/             # All server endpoints
+│   │   ├── admin/       # Gated: storage, posts, work, page, …
+│   │   ├── auth/        # email-login, request-reset, reset-password
+│   │   ├── contact*     # Form + nonce
+│   │   └── home, cvdata, mongo, og, …
+│   ├── admin/           # Gated UI: dashboard, login, forgot, reset, …
+│   ├── blog/, work/, now, uses, about, cv, …
+│   └── index.tsx
+├── scripts/             # CLI helpers (migrate / push / pull / list)
+├── middleware.ts        # Security headers + admin auth gate
+└── public/              # Static assets
 ```
 
 ---
 
 ## Quick start
 
+### 1. Clone & install
+
 ```bash
-# 1. Clone + install
-git clone https://github.com/HikoPLi/landing_page.git
+git clone https://github.com/hiko-server/landing_page.git
 cd landing_page
-yarn install            # or `npm install --legacy-peer-deps` on Windows
+yarn          # or npm install / pnpm install
+```
 
-# 2. Configure env
+### 2. Configure env
+
+```bash
 cp .env.example .env
-# Edit .env — at minimum set JWT_SECRET (32+ random bytes)
-# Generate one: openssl rand -base64 32
+# Edit .env — at minimum set ADMIN_EMAIL, ADMIN_PASS, JWT_SECRET
+# (use: node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")
+```
 
-# 3. Run dev
-yarn dev                # http://localhost:3000
+### 3. Seed local content (first run only)
 
-# 4. Build for production
+```bash
+yarn content:migrate    # imports content/*.mdx + data/*.json → data/content.db
+```
+
+### 4. Dev
+
+```bash
+yarn dev                # localhost:3002 (or PORT env)
+```
+
+Visit:
+- `/` — home
+- `/admin/login` — admin entry (covert: there is no visible nav link)
+
+### 5. Production
+
+```bash
 yarn build && yarn start
 ```
 
-The admin portal lives at `/admin`. On first visit it bootstraps
-`data/admin.json` from `ADMIN_EMAIL` / `ADMIN_PASS` in your `.env`.
+Or with Docker:
+
+```bash
+docker compose up --build
+```
 
 ---
 
 ## Environment variables
 
-See [.env.example](.env.example) for the full list. Required for production:
+All variables are documented in [`.env.example`](./.env.example). Headlines:
 
-| Variable | Notes |
-|----------|-------|
-| `JWT_SECRET` | ≥ 32 chars. `openssl rand -base64 32` |
-| `ADMIN_EMAIL` + `ADMIN_PASS` | Bootstraps `data/admin.json` on first run |
-| `SITE_URL` | Used in password-reset email links |
+| Group | Vars | Required |
+|---|---|---|
+| Admin bootstrap | `ADMIN_EMAIL`, `ADMIN_PASS` | ✅ on first boot, then deletable |
+| Sessions | `JWT_SECRET` (base64, ≥ 32 bytes) | ✅ always |
+| Site identity | `NEXT_PUBLIC_PRODUCT_NAME`, `NEXT_PUBLIC_SITE_HOST`, `SITE_URL` | recommended |
+| Mailer | `SMTP_HOST/PORT/USER/PASS`, `FROM_EMAIL`, `NOTIFY_EMAIL` | optional — silently skipped when unset |
+| Contact captcha | none — built-in nonce + math + honeypot | n/a |
+| GitHub | `GITHUB_TOKEN` (PAT, read-only) | recommended (raises API limit 60→5000/h) |
+| MongoDB backup | `MONGODB_URI`, `MONGODB_DB_NAME` | optional |
+| Cloudflare R2 | `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_REQUIRED` | optional |
+| Feature flags | `ENABLE_DEMO` | optional |
 
-Optional but recommended:
-
-| Variable | Effect |
-|----------|--------|
-| `GITHUB_TOKEN` | Raises the GitHub API rate limit (5000/hr instead of 60/hr) used by `/api/github/*` |
-| `SMTP_HOST/PORT/USER/PASS/FROM_EMAIL` | Enables the contact form + admin notifications |
-| `HCAPTCHA_SECRET` + `NEXT_PUBLIC_HCAPTCHA_KEY` | Required for the contact form to accept submissions |
-| `ENABLE_DEMO=true` | Exposes the `/demo/route-planning` demo page |
+> The repo never commits a real `.env`. `.env.example` contains placeholders
+> only — copy and fill in for your own deployment.
 
 ---
 
-## Adding content
+## Architecture
 
-### Blog post
+### Content store (local-first)
+
+```
+                ┌─────────────┐
+   admin GUI ──▶│ /api/home   │──┐
+                │ /api/admin/*│  │
+                └─────────────┘  │ dual-write
+                                 ▼
+            ┌──────────────────────────────┐
+            │ SQLite (data/content.db)     │  ← canonical
+            └──────────────────────────────┘
+                                 │ best-effort
+                                 ▼
+            ┌──────────────────────────────┐
+            │ Cloudflare R2                │  ← off-site mirror
+            │ pages/*.mdx, blog/, work/,   │
+            │ data/*.json, uploads/,       │
+            │ backups/snapshot-<UTC>.tgz   │
+            └──────────────────────────────┘
+```
+
+- **Reads** prefer SQLite; fall back to filesystem MDX/JSON and seed the DB
+  on first call. The legacy `content/*.mdx` and `data/*.json` continue to
+  ship in the repo as the bootstrap baseline.
+- **Writes** are dual: a synchronous SQLite write *must* succeed; the R2
+  push is best-effort and surfaces as `r2Warning` on failure (so the admin
+  knows replication is broken, but no data is lost).
+- **Container boot** runs `scripts/sync-from-r2.mjs` (set `R2_REQUIRED=1`
+  in prod to make missing R2 fatal — otherwise it warns and proceeds).
+
+### Backup pipeline
+
+Whole-site atomic snapshots packed by `lib/backup.ts`:
+
+```
+MANIFEST.json
+db/content.db          ← via SQLite Online Backup API (WAL-consistent)
+data/admin.json
+data/mongo_config.json
+data/snapshots/{cv,home,blog,work,page}_snapshots/**
+uploads/*
+```
+
+Pipeline: `tar pack → gzip → fs.WriteStream → atomic rename`. Local copy at
+`data/backups/snapshot-<UTC>.tgz`, plus R2 push to `backups/<UTC>.tgz` and
+`backups/latest.tgz` (the cheap pull target).
+
+Restore is symmetric: extract to a sibling temp dir, close the live DB
+handle, swap the file, then mirror trees back over the live ones.
+
+<div align="center">
+  <img src="docs/screenshots/admin-storage.png" alt="Storage & backup admin panel" width="780" />
+</div>
+
+### Admin security
+
+- **Edge middleware** (`middleware.ts`) verifies the `cv_admin_token` JWT
+  with `jose` before any `/admin/*` page or `/api/admin/*` route renders.
+  Unauthenticated requests are redirected to `/admin/login?next=<original>`
+  for pages, or returned as JSON 401 for APIs. Public whitelisted paths:
+  `/admin/{login,forgot,reset}` and `/api/admin/{session,logout}`.
+- **scrypt** password hashing (N=16384, r=8, p=1, 64-byte key) with a
+  per-account 16-byte random salt. Comparisons use `crypto.timingSafeEqual`
+  on equal-length buffers.
+- **Per-account lockout**: 10 failed attempts in a rolling 15-minute window
+  triggers a 15-minute lock, regardless of the attacker's IP rotation.
+  Persisted in `data/admin.json`. Successful login clears the counter.
+- **Per-IP rate limit** (10 / 5 min on login, 5 / 10 min on reset request,
+  5 / 10 min on contact form).
+- **Origin check** on `POST /api/auth/email-login` in production —
+  defence-in-depth on top of `SameSite=Strict`.
+- **JWT** is HS256, 7d expiry, signed with `JWT_SECRET`.
+- **Cookies**: `httpOnly`, `sameSite: 'strict'`, `secure` in prod, `path: /`.
+- **Reset tokens**: 24 random bytes, 30 min TTL, single-use, constant-time
+  compare, pruned on every read.
+- **Admin pages**: `X-Robots-Tag: noindex, nofollow, noarchive` and
+  `Cache-Control: no-store` to keep them out of search and caches.
+
+### Section visibility
+
+Each `[NN]` home section is gated through `isSectionVisible(home, key)`
+where `key ∈ {introduction, brands, open-source, tech-stack, activity,
+projects, experience, certifications, photos, contact}`. Defaults to
+*visible* if the key is missing — a clean install keeps the full page.
+
+Toggle from **Admin → Home → Visibility**.
+
+### Currently-coding chip
+
+Three-line chip under the hero avatar (`label / project / note`). Each
+field independently follows **admin → CV → blank** precedence:
+
+- If the operator typed something, that wins.
+- Otherwise the helper in `lib/currentlyCoding.ts` derives a value from
+  `data/cvdata.json`:
+  - `label` → `"currently coding"`
+  - `project` → the "most relevant current" `workExperience.companyName`
+    (prefers ongoing roles by start-date asc; falls back to the most
+    recently ended)
+  - `note` → `"since <earliest year>"` across all dated CV entries
+- The whole chip hides only when all three merged values are empty.
+
+The admin editor surfaces the auto-derived values as input placeholders
+plus a small `Auto-derived now: …` footer, so the operator always knows
+what visitors will see if they leave a row blank.
+
+---
+
+## CLI scripts
 
 ```bash
-# Option A — admin UI
-# Sign in at /admin/login, click "Blog Posts", click "New Post".
-
-# Option B — by hand
-cat > content/blog/my-first-post.mdx <<'EOF'
----
-title: My first post
-description: A one-line summary that lands in the RSS + meta.
-date: 2026-05-28
-tags: [engineering, notes]
-draft: false
----
-
-Body in **Markdown** + MDX. Code blocks get syntax highlighting:
-
-```ts
-const hello = 'world'
-```
-EOF
+yarn content:migrate    # filesystem → SQLite (idempotent)
+yarn content:pull       # R2 → SQLite (overwrites; uses .env)
+yarn content:push       # SQLite → R2 (overwrites; uses .env)
+yarn content:list       # list R2 objects
 ```
 
-The post appears at `/blog/my-first-post`, in `/blog`'s index, and in
-`/api/rss.xml`. `data/blog_snapshots/` keeps every prior version after each
-save.
+---
 
-### Case study
+## Docker
 
 ```bash
-# content/work/wegreen-ai.mdx
----
-title: WeGreen AI
-description: Co-founded sustainability AI platform.
-role: Co-founder / COT
-period: 2024 — Now
-tech: [Next.js, FastAPI, MongoDB]
-featured: true
-status: live
-link: https://wegreen.ltd
-repo: https://github.com/HikoPLi/wegreen
----
-
-## Problem
-…
+docker compose up --build
 ```
 
-Featured case studies (`featured: true`) get highlighted on `/work`.
+The bundled `docker-entrypoint.sh` runs `sync-from-r2.mjs` on boot, so a
+fresh container hydrates from the R2 mirror automatically. Mount `./data`
+to a volume to persist the local SQLite + uploads across rebuilds.
 
-### `/now` and `/uses`
-
-Edit `content/now.mdx` or `content/uses.mdx` directly. Each is a single MDX
-file with frontmatter (`title`, `description`, `updated`).
-
----
-
-## Admin pages
-
-All under `/admin/*`, protected by the `cv_admin_token` HttpOnly cookie
-(JWT HS256, 7-day expiry).
-
-| Path | What |
-|------|------|
-| `/admin/login` | Email + password |
-| `/admin` | Card grid entry |
-| `/admin/dashboard` | Home / CV / Versions tabs (existing v5 functionality) |
-| `/admin/db-config` | MongoDB connection + backup/restore (now JWT-guarded) |
-| `/admin/blog` | New post + list + edit + delete (v6) |
-| `/admin/blog/edit?slug=…` | Editor (v6) |
-| `/admin/work` | New case study + list + edit + delete (v6) |
-| `/admin/work/edit?slug=…` | Editor (v6) |
-| `/admin/forgot`, `/admin/reset` | Password reset via SMTP |
-
-Every write through the admin GUI takes a filesystem snapshot first. CV and
-Home snapshots are restorable via `/admin/dashboard?tab=versions`. Blog and
-case-study snapshots live in `data/blog_snapshots/` and `data/work_snapshots/`
-(restore by copying back into `content/`).
+Build args from `.env` (R2_*, MONGODB_*, SMTP_*, ADMIN_*, JWT_SECRET) are
+passed straight through.
 
 ---
 
 ## Public routes
 
-| Path | Source |
-|------|--------|
-| `/` | `pages/index.tsx` — hero + brands + sections |
-| `/about` | `pages/about/index.tsx` |
-| `/work` | `pages/work/index.tsx` (MDX index) |
-| `/work/[slug]` | `pages/work/[slug].tsx` |
-| `/blog` | `pages/blog/index.tsx` |
-| `/blog/[slug]` | `pages/blog/[slug].tsx` |
-| `/cv` | `pages/cv/index.tsx` (A4 print) |
-| `/now` | `pages/now.tsx` |
-| `/uses` | `pages/uses.tsx` |
-| `/contact` | `pages/contact/index.tsx` |
-| `/crypto` | `pages/crypto/index.tsx` (Binance WS) |
-| `/quick-payment` | `pages/quick-payment/index.tsx` |
-| `/sitemap.xml` | Includes every static + MDX route |
-| `/api/rss.xml` | Blog RSS 2.0 |
+| Route | Description |
+|---|---|
+| `/` | Home — composed `[NN]` sections, gated by visibility |
+| `/about` | Long-form intro + GitHub stats + bilingual CV stack |
+| `/cv` | Printable CV (browser print-to-PDF target) |
+| `/work` | Case-study index (MDX) |
+| `/work/[slug]` | Case study page with cover image + body |
+| `/blog` | Blog index with tag filters + RSS link |
+| `/blog/[slug]` | Post with rehype-pretty-code + reading time |
+| `/now` | "What I'm doing now" page (MDX) |
+| `/uses` | Tools, hardware, services page (MDX) |
+| `/contact` | Dedicated contact page (same component as the home [09]) |
+
+API surface lives under `/api/*`; admin-only endpoints under `/api/admin/*`
+are gated by the middleware.
 
 ---
 
-## Docker deployment
+## Admin pages (gated)
 
-```bash
-# Build + run
-docker compose build
-docker compose up -d
+| Route | Purpose |
+|---|---|
+| `/admin/login` | Sign-in (covert: no nav link; reachable via ⌘K palette or URL) |
+| `/admin/forgot` + `/admin/reset` | Email-based reset flow |
+| `/admin` | Portal — links to the editors below |
+| `/admin/dashboard?tab=home` | HomeEditor — hero, contact, visibility, brands, photos |
+| `/admin/dashboard?tab=cv` | CV Studio (split-pane) + raw JSON + legacy GUI |
+| `/admin/dashboard?tab=versions` | Version-history rollback |
+| `/admin/dashboard?tab=storage` | SQLite + R2 inventory, manual Backup / Pull |
+| `/admin/blog`, `/admin/blog/edit?slug=…` | Blog post manager |
+| `/admin/work`, `/admin/work/edit?slug=…` | Case-study manager |
+| `/admin/now`, `/admin/uses` | One-off page editors |
+| `/admin/db-config` | MongoDB connection + manual backup/restore |
 
-# Logs
-docker compose logs -f
-```
-
-The included `Dockerfile` does a multi-stage build (node:22-alpine) and
-produces a `standalone` output. Reverse-proxy config for Nginx (mapping
-`cv.hiko.dev` to port 4000 and `landing.hiko-prime.com` to port 5000) lives
-in `docker/nginx/default.conf`.
-
-Helper scripts:
-
-- `./build.sh` — build the production Docker image
-- `./deploy.sh` — restart the container locally
-- `./scp_deploy.sh` — ship a tarball image to a server
-- `./rebuid.sh` — full build → stop → restart → cleanup
-- `./docker_compose.sh` — `docker compose up -d --build`
-- `./log.sh` — tail docker logs
+<div align="center">
+  <img src="docs/screenshots/admin-cv-studio.png" alt="CV Editor Studio" width="780" />
+  <br /><sub>Admin → CV → Studio: split-pane editor with live preview</sub>
+</div>
 
 ---
 
-## Design tokens
+## Screenshots
 
-The v6 design language is a single set of tokens, fully readable in source:
-
-- **`theme/chakra.js`** — Chakra theme: `ink.0..1000` scale, `accent.50..900`
-  indigo palette, semantic tokens (`page.bg`, `page.fg`, `page.muted`,
-  `page.border`, `page.surface`), `--font-geist-sans/mono` font hookup,
-  signature dot-grid body bg
-- **`styles/globals.css`** — CSS variables: `--accent: #6366f1`, dot grid,
-  rule colors, `--ease-out-quart`, durations, container widths. Helper
-  classes: `.pulse-dot`, `.section-label-rule`, `.link-underline`. Plus
-  `prefers-reduced-motion`, print resets, scrollbar styles.
-
-Section labels in code: `<SectionLabel n={1}>Introduction</SectionLabel>` →
-`[01] INTRODUCTION ──────`.
+Recommended captures live under [`docs/screenshots/`](./docs/screenshots/).
+Drop your own files there — see [the index](./docs/screenshots/README.md)
+for filenames and content guidance. Do not commit screenshots that
+contain real credentials, paid dashboards, or personal contact details.
 
 ---
 
-## Security notes
+## Security disclosure
 
-- **`.env` is gitignored.** `.env.example` documents the placeholders.
-- **`/api/mongo` requires admin auth.** All backup/restore endpoints share
-  the same JWT-cookie scheme as `/api/cvdata` and `/api/home`.
-- **Passwords are stored as `scrypt(password, salt, 64)` hex**, not the
-  password itself. Reset tokens expire in 30 minutes.
-- **Rate limiting** on contact (5/10min), login (10/5min), CV/Home writes
-  (30/10min), blog/work writes (30/10min).
-- **CSP, HSTS, X-Frame-Options DENY** set in `middleware.ts` + `next.config.js`.
-- If you ever leak secrets into git history (e.g. an early `.env` commit),
-  rotate them — `git filter-repo` only helps the future, not anyone who
-  cloned before the rewrite.
+If you discover a security issue, please **do not** open a public issue.
+Use [GitHub's private security advisory flow](https://github.com/hiko-server/landing_page/security/advisories/new)
+or email the maintainer directly. Coordinated disclosure preferred.
+
+Known limitations (by design, document and accept):
+- In-memory rate limiter resets on server restart. Behind a reverse
+  proxy or for HA, layer a persistent limiter (Redis, Cloudflare).
+- Single admin account per deployment. This is a portfolio CMS, not a
+  multi-tenant SaaS.
 
 ---
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+[MIT](./LICENSE) © the contributors.
+
+Fork it, ship your own portfolio, send a PR if you find something rough.
