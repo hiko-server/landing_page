@@ -10,6 +10,19 @@ const nextConfig = {
   // Ensure styled-components renders consistently on SSR to avoid layout
   // mismatches when landing directly on routes like /cv.
   compiler: { styledComponents: true },
+  // Route every /uploads/* request to the runtime file server BEFORE Next's
+  // static handler runs. With `output: 'standalone'`, that static handler only
+  // knows about files present in public/ at BUILD time, so runtime-uploaded
+  // images 404. `beforeFiles` runs ahead of the filesystem check; the
+  // destination (/api/uploads/*) doesn't match `/uploads/:path*`, so there is
+  // no rewrite loop.
+  async rewrites() {
+    return {
+      beforeFiles: [
+        { source: '/uploads/:path*', destination: '/api/uploads/:path*' },
+      ],
+    }
+  },
   async headers() {
     const csp = [
       "default-src 'self'",
