@@ -80,7 +80,7 @@ const About = (props: any) => {
           </SectionReveal>
           {/* 技术语言分布（如需恢复可取消注释） */}
           <SectionReveal>
-            <Box mt={2} w="100%" maxW="1100px">
+            <Box mt={2} w="100%" maxW="1100px" mx="auto">
               <Heading as="h3" size="md" mb={2}>
                 Recent Activity
               </Heading>
@@ -89,7 +89,7 @@ const About = (props: any) => {
           </SectionReveal>
           {props.githubUser ? (
             <SectionReveal>
-              <Box mt={2} w="100%" maxW="1100px">
+              <Box mt={2} w="100%" maxW="1100px" mx="auto">
                 <Heading as="h3" size="md" mb={2}>
                   Contributions
                 </Heading>

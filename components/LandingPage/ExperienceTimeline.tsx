@@ -36,7 +36,7 @@ export default function ExperienceTimeline({ cvEn }: { cvEn?: any[] }) {
   if (!list.length) return null
 
   return (
-    <Box w="100%" maxW="900px" position="relative" pl={{ base: 6, md: 8 }}>
+    <Box w="100%" maxW="900px" mx="auto" position="relative" pl={{ base: 6, md: 8 }}>
       {/* Vertical rail (flat, no gradient) */}
       <Box
         position="absolute"
