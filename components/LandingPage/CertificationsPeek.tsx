@@ -34,7 +34,7 @@ export default function CertificationsPeek({ cvEn }: { cvEn?: any[] }) {
   if (!orgs.length) return null
 
   return (
-    <Box w="100%" maxW="900px">
+    <Box w="100%" maxW="900px" mx="auto">
       {orgs.map((org, oi) => (
         <Box
           as={motion.div as any}
