@@ -8,7 +8,12 @@ services:
       dockerfile: ./Dockerfile
     env_file:
       - .env
-    restart: on-failure
+    # unless-stopped survives daemon restarts and clean exits (on-failure does
+    # not); the caps stop a runaway from starving co-located containers. The app
+    # idles ~150MB, so 1g is generous headroom, not a tight leash.
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 2
     ports:
       - 8000:3000
     networks:

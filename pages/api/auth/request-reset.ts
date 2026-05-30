@@ -18,6 +18,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   const { token } = createResetToken()
   const url = `${siteUrl()}/admin/reset?token=${token}`
-  await sendMail({ to: email, subject: 'Password Reset', text: `Reset your password: ${url}\nExpires in 30 minutes.` })
+  try {
+    await sendMail({ to: email, subject: 'Password Reset', text: `Reset your password: ${url}\nExpires in 30 minutes.` })
+  } catch (err) {
+    // Swallow SMTP failures: surfacing them would both leak that this address
+    // is a real admin account and turn a mail outage into an uncontrolled 500.
+    console.error('request-reset: sendMail failed', err)
+  }
   return res.status(200).json({ ok: true })
 }

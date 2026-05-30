@@ -4,9 +4,17 @@ type Bucket = { count: number; resetAt: number }
 const buckets = new Map<string, Bucket>()
 
 export function ipFromReq(req: NextApiRequest): string {
-  const xf = (req.headers['x-forwarded-for'] || '') as string
-  if (xf) return xf.split(',')[0].trim()
-  // @ts-ignore - Node specific
+  // Cloudflare fronts this site and sets CF-Connecting-IP to the real client
+  // address, which the client cannot forge (CF overwrites it at its edge).
+  // Prefer it, then nginx's X-Real-IP, before falling back to the socket peer.
+  //
+  // We deliberately do NOT trust the left-most X-Forwarded-For entry any more:
+  // that hop is attacker-supplied, so a client could send a fresh fake IP on
+  // every request and slip past every IP rate limit (login, contact, reset).
+  const cf = req.headers['cf-connecting-ip']
+  if (typeof cf === 'string' && cf.trim()) return cf.trim()
+  const realIp = req.headers['x-real-ip']
+  if (typeof realIp === 'string' && realIp.trim()) return realIp.trim()
   return (req.socket?.remoteAddress as string) || 'unknown'
 }
 

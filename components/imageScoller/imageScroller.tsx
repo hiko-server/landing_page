@@ -9,11 +9,17 @@ export type ScrollerImage = { url: string; describe?: string; redirectTo?: strin
 const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
   const [positionx, setPositionx] = useState<number>(0)
   const [imgCount, setImgCount] = useState<number>(1)
-  const [_endSwipe, setEndSwipe] = useState<boolean>(false)
   const data = (images || []).filter((i) => i.visible !== false)
 
+  // Hooks must run unconditionally on every render. These colour values used to
+  // sit AFTER the `if (!data.length) return null` guard below, which violated
+  // the rules of hooks and could crash ("rendered fewer hooks than expected")
+  // when a post's image array toggled between empty and non-empty.
+  const activeDot = useColorModeValue('#2563eb', '#60a5fa')
+  const inactiveDot = useColorModeValue('#a8a8a8', '#4b5563')
+  const describeColor = useColorModeValue('gray.700', 'gray.200')
+
   const onSwipeMove = (position: { x: number }) => {
-    setEndSwipe(false)
     if (data.length === 1) return
     if (imgCount === 1 && position.x < 0) setPositionx(position.x)
     if (imgCount > 1 && imgCount < data.length) setPositionx(position.x)
@@ -24,7 +30,6 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
     if (positionx < -20) setImgCount(imgCount + 1)
     if (positionx > 20) setImgCount(imgCount - 1)
     setPositionx(0)
-    setEndSwipe(true)
   }
 
   const handleNextClick = () => {
@@ -58,9 +63,6 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
   // If no images provided, render nothing (no fake defaults)
   if (!data.length) return null
 
-  const activeDot = useColorModeValue('#2563eb', '#60a5fa')
-  const inactiveDot = useColorModeValue('#a8a8a8', '#4b5563')
-
   return (
     <Flex direction="column" alignItems="center" justifyContent="center">
       <Swipe onSwipeEnd={onSwipeEnd} onSwipeMove={onSwipeMove}>
@@ -85,7 +87,7 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
         </Flex>
       </Swipe>
 
-      {data.length > 1 && <Text mt={2} color={useColorModeValue('gray.700','gray.200')}>{data[imgCount - 1].describe}</Text>}
+      {data.length > 1 && <Text mt={2} color={describeColor}>{data[imgCount - 1].describe}</Text>}
 
       {data.length > 1 && (
         <ImageCounterWrapper>
