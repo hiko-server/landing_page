@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { readHome } from '../../../lib/home'
+import { ghFetch, extractGithubUser } from '../../../lib/github'
 
 type Repo = {
   id: number
@@ -15,34 +16,18 @@ type Repo = {
 let cache: { data: Repo[]; ts: number } | null = null
 const TTL = 10 * 60 * 1000
 
-function extractUser(url?: string): string | null {
-  if (!url) return null
-  try {
-    const u = new URL(url)
-    const parts = u.pathname.split('/').filter(Boolean)
-    return parts[0] || null
-  } catch {
-    return null
-  }
-}
-
 export default async function handler(_req: NextApiRequest, res: NextApiResponse) {
   try {
     const home = readHome()
-    const user = extractUser(home?.socials?.github)
+    const user = extractGithubUser(home?.socials?.github)
     if (!user) return res.status(200).json({ repos: [] })
     const now = Date.now()
     if (cache && now - cache.ts < TTL) {
       return res.status(200).json({ repos: cache.data })
     }
-    const token = process.env.GITHUB_TOKEN
-    const gh = await fetch(`https://api.github.com/users/${user}/repos?per_page=100&sort=updated`, {
-      headers: {
-        'Accept': 'application/vnd.github+json',
-        'User-Agent': 'hiko.dev-site',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      // no auth -> limited to 60/hr
+    const gh = await ghFetch(`https://api.github.com/users/${user}/repos?per_page=100&sort=updated`, {
+      // Unauthenticated fallback is limited to 60/hr; the in-memory cache above
+      // plus this revalidate hint keep us comfortably under it.
       next: { revalidate: TTL / 1000 },
     })
     if (!gh.ok) return res.status(200).json({ repos: [] })
