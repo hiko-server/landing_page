@@ -1,6 +1,7 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
+import { buildCsp } from './lib/csp'
 
 /**
  * Root middleware.
@@ -61,27 +62,9 @@ function applySecurityHeaders(res: NextResponse, opts: { adminContext: boolean }
   res.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
   res.headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload')
 
-  // CSP — permissive enough for Next.js hydration but locks frames + objects.
-  const csp = [
-    "default-src 'self'",
-    "frame-ancestors 'none'",
-    // next-mdx-remote compiles MDX to a JS string and evaluates it on the
-    // client via `new Function(...)` during hydration — that requires
-    // 'unsafe-eval'. Without it, every MDX-backed page (/now, /uses,
-    // /blog/*, /work/*) throws EvalError under CSP and the React tree fails
-    // to hydrate (a blank "Application error" screen). Since 'unsafe-inline'
-    // is already permitted for scripts, additionally allowing 'unsafe-eval'
-    // is a negligible marginal change to the threat model.
-    "script-src 'self' 'unsafe-eval' 'unsafe-inline' https:",
-    "style-src 'self' 'unsafe-inline' https:",
-    "img-src 'self' data: https:",
-    "font-src 'self' https: data:",
-    "connect-src 'self' https: ws:",
-    "object-src 'none'",
-    "base-uri 'self'",
-    "form-action 'self'",
-  ].join('; ')
-  res.headers.set('Content-Security-Policy', csp)
+  // CSP — single source of truth shared with next.config.js (see lib/csp.js),
+  // so the two headers can no longer drift into a surprising intersection.
+  res.headers.set('Content-Security-Policy', buildCsp())
 
   // Keep admin pages out of search indexes (defence-in-depth — even with
   // the gate, we don't want googlebot caching the login page).

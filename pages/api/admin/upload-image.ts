@@ -32,8 +32,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const match = /^data:(.+);base64,(.*)$/.exec(dataUrl)
   if (!match) return res.status(400).json({ error: 'Invalid dataUrl' })
   const contentType = match[1]
-  const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_')
   const buf = Buffer.from(match[2], 'base64')
+
+  // Validate against an allowlist: the declared MIME must be a known image
+  // type, the decoded bytes must actually start with that type's magic number
+  // (so a text/html or SVG payload can't be smuggled in under an image MIME),
+  // and the size must be sane. Defence-in-depth for a write sink.
+  const ALLOWED: Record<string, { ext: string; magic: (b: Buffer) => boolean }> = {
+    'image/png':  { ext: '.png',  magic: b => b.length > 8 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47 },
+    'image/jpeg': { ext: '.jpg',  magic: b => b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
+    'image/webp': { ext: '.webp', magic: b => b.length > 12 && b.toString('ascii', 0, 4) === 'RIFF' && b.toString('ascii', 8, 12) === 'WEBP' },
+    'image/gif':  { ext: '.gif',  magic: b => b.length > 6 && b.toString('ascii', 0, 4) === 'GIF8' },
+    'image/avif': { ext: '.avif', magic: b => b.length > 12 && b.toString('ascii', 4, 8) === 'ftyp' },
+  }
+  const spec = ALLOWED[contentType]
+  if (!spec) return res.status(415).json({ error: 'Unsupported image type' })
+  const MAX_BYTES = 8 * 1024 * 1024
+  if (buf.length === 0 || buf.length > MAX_BYTES) return res.status(413).json({ error: 'Image must be 1 byte to 8MB' })
+  if (!spec.magic(buf)) return res.status(400).json({ error: 'File content does not match its declared image type' })
+
+  // Sanitise the name and force the canonical extension for the validated type
+  // so nothing can be persisted/served as e.g. "evil.html".
+  let safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_')
+  if (path.extname(safeName).toLowerCase() !== spec.ext) {
+    safeName = safeName.replace(/\.[^.]*$/, '') + spec.ext
+  }
   const uploadDir = path.join(process.cwd(), 'public', 'uploads')
   fs.mkdirSync(uploadDir, { recursive: true })
   const filePath = path.join(uploadDir, safeName)

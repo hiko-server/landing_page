@@ -21,3 +21,12 @@ build
 .dockerignore
 README.md
 docker
+
+# Secrets & runtime-only data — keep out of the build context and image layers.
+.env
+.env.*
+!.env.example
+# Admin credential hash is written/read at runtime only; never bake it in.
+data/admin.json
+# User uploads are served from a bind-mount + R2 at runtime, not from the image.
+public/uploads

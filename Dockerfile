@@ -9,8 +9,10 @@ WORKDIR /app
 
 COPY package.json yarn.lock* ./
 
-
-RUN yarn install
+# --frozen-lockfile: fail the build if yarn.lock is out of sync with
+# package.json instead of silently resolving a different dependency tree, so
+# images are reproducible. CI already enforces the same flag.
+RUN yarn install --frozen-lockfile
 
 COPY . .
 RUN yarn build
@@ -61,6 +63,12 @@ USER nextjs
 EXPOSE 3000
 ENV PORT 3000
 ENV HOSTNAME 0.0.0.0
+
+# Liveness probe — hits /api/health (verifies the SQLite store is reachable),
+# giving the orchestrator a real signal instead of just "process is up".
+# Alpine's busybox wget is sufficient; no extra package needed.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=3 \
+  CMD wget -q -O /dev/null http://127.0.0.1:3000/api/health || exit 1
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 

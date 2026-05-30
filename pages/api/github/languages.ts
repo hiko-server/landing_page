@@ -28,19 +28,31 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
       .sort((a, b) => (b.stargazers_count - a.stargazers_count) || (Date.parse(b.updated_at) - Date.parse(a.updated_at)))
       .slice(0, 30)
 
+    // Fetch each repo's language breakdown with bounded concurrency. This used
+    // to be a sequential await-in-loop (3-9s cold on a 6h cache); batching cuts
+    // it to a few round-trips while staying polite to GitHub's rate limit
+    // (<=8 in flight) on the unauthenticated path.
     const breakdown: LangMap = {}
     let total = 0
-    for (const r of chosen) {
+    const CONCURRENCY = 8
+    const fetchLangs = async (name: string): Promise<LangMap | null> => {
       try {
-        const langRes = await ghFetch(`https://api.github.com/repos/${user}/${r.name}/languages`)
-        if (!langRes.ok) continue
-        const langs: LangMap = await langRes.json()
-        for (const [k, v] of Object.entries(langs)) {
-          breakdown[k] = (breakdown[k] || 0) + (typeof v === 'number' ? v : 0)
-          total += typeof v === 'number' ? v : 0
-        }
+        const langRes = await ghFetch(`https://api.github.com/repos/${user}/${name}/languages`)
+        if (!langRes.ok) return null
+        return (await langRes.json()) as LangMap
       } catch {
-        // skip broken repo
+        return null // skip broken repo
+      }
+    }
+    for (let i = 0; i < chosen.length; i += CONCURRENCY) {
+      const batch = await Promise.all(chosen.slice(i, i + CONCURRENCY).map((r) => fetchLangs(r.name)))
+      for (const langs of batch) {
+        if (!langs) continue
+        for (const [k, v] of Object.entries(langs)) {
+          const n = typeof v === 'number' ? v : 0
+          breakdown[k] = (breakdown[k] || 0) + n
+          total += n
+        }
       }
     }
 
