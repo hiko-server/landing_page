@@ -334,23 +334,6 @@ export default async function handler(
                 if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true })
 
                 const downloadStream = bucket.openDownloadStream(file._id)
-        // 4. Snapshots (cv/home/blog/work history)
-        if (['all', 'snapshots'].includes(type)) {
-            const allowedDirs = new Set(SNAPSHOT_DIRS.map((d) => path.basename(d)))
-            const docs = await db.collection('snapshots').find({}).toArray()
-            for (const doc of docs) {
-                const dir = String(doc.dir || '')
-                const rel = String(doc.relPath || '').replace(/\\/g, '/')
-                // 防呆: only restore into known snapshot dirs, no traversal.
-                if (!allowedDirs.has(dir)) continue
-                if (!rel || rel.includes('..') || path.isAbsolute(rel)) continue
-                const destPath = path.join(process.cwd(), 'data', dir, rel)
-                const destDir = path.dirname(destPath)
-                if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true })
-                fs.writeFileSync(destPath, String(doc.body ?? ''), 'utf-8')
-            }
-        }
-
                 const fileStream = fs.createWriteStream(destPath)
                 
                 await new Promise((resolve, reject) => {
@@ -370,6 +353,26 @@ export default async function handler(
                 if (!rel || rel.includes('..') || path.isAbsolute(rel)) continue
                 if (!/\.(mdx|md)$/i.test(rel)) continue
                 const destPath = path.join(CONTENT_DIR, rel)
+                const destDir = path.dirname(destPath)
+                if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true })
+                fs.writeFileSync(destPath, String(doc.body ?? ''), 'utf-8')
+            }
+        }
+
+        // 4. Snapshots (cv/home/blog/work history). This is a sibling of the
+        // sections above. It was previously spliced INSIDE the image-download
+        // loop, so it restored 0x when type='snapshots' (the images guard was
+        // false) and Nx under type='all' (once per image file) — neither correct.
+        if (['all', 'snapshots'].includes(type)) {
+            const allowedDirs = new Set(SNAPSHOT_DIRS.map((d) => path.basename(d)))
+            const docs = await db.collection('snapshots').find({}).toArray()
+            for (const doc of docs) {
+                const dir = String(doc.dir || '')
+                const rel = String(doc.relPath || '').replace(/\\/g, '/')
+                // 防呆: only restore into known snapshot dirs, no traversal.
+                if (!allowedDirs.has(dir)) continue
+                if (!rel || rel.includes('..') || path.isAbsolute(rel)) continue
+                const destPath = path.join(process.cwd(), 'data', dir, rel)
                 const destDir = path.dirname(destPath)
                 if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true })
                 fs.writeFileSync(destPath, String(doc.body ?? ''), 'utf-8')
