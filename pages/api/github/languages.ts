@@ -1,26 +1,16 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { readHome } from '../../../lib/home'
+import { ghFetch, extractGithubUser } from '../../../lib/github'
 
 type LangMap = Record<string, number>
 
 let cache: { data: { total: number; breakdown: LangMap } | null; ts: number } | null = null
 const TTL = 6 * 60 * 60 * 1000 // 6 hours
 
-function extractUser(url?: string): string | null {
-  if (!url) return null
-  try {
-    const u = new URL(url)
-    const parts = u.pathname.split('/').filter(Boolean)
-    return parts[0] || null
-  } catch {
-    return null
-  }
-}
-
 export default async function handler(_req: NextApiRequest, res: NextApiResponse) {
   try {
     const home = readHome()
-    const user = extractUser(home?.socials?.github)
+    const user = extractGithubUser(home?.socials?.github)
     if (!user) return res.status(200).json({ total: 0, breakdown: {} })
 
     const now = Date.now()
@@ -28,15 +18,8 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
       return res.status(200).json(cache.data)
     }
 
-    const token = process.env.GITHUB_TOKEN
-    const headers: Record<string, string> = {
-      'Accept': 'application/vnd.github+json',
-      'User-Agent': 'hiko.dev-site',
-    }
-    if (token) headers['Authorization'] = `Bearer ${token}`
-
     // fetch up to 100 repos (public), then pick top by stargazers to limit language calls
-    const repoRes = await fetch(`https://api.github.com/users/${user}/repos?per_page=100&sort=updated`, { headers })
+    const repoRes = await ghFetch(`https://api.github.com/users/${user}/repos?per_page=100&sort=updated`)
     if (!repoRes.ok) return res.status(200).json({ total: 0, breakdown: {} })
     const repos: any[] = await repoRes.json()
     // Select top 30 by stars (then updated)
@@ -49,7 +32,7 @@ export default async function handler(_req: NextApiRequest, res: NextApiResponse
     let total = 0
     for (const r of chosen) {
       try {
-        const langRes = await fetch(`https://api.github.com/repos/${user}/${r.name}/languages`, { headers })
+        const langRes = await ghFetch(`https://api.github.com/repos/${user}/${r.name}/languages`)
         if (!langRes.ok) continue
         const langs: LangMap = await langRes.json()
         for (const [k, v] of Object.entries(langs)) {
