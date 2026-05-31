@@ -162,16 +162,16 @@ export default CVPage
 
 export const getServerSideProps = async (context: any) => {
   const host = context.req.headers.host || 'hiko.dev'
-  const fs = await import('fs')
-  const path = await import('path')
-  const dataPath = path.join(process.cwd(), 'data', 'cvdata.json')
+  // Read the LIVE CV from the content store (SQLite kv + R2) — the same source
+  // the admin editor writes via /api/cvdata. This previously read the static
+  // data/cvdata.json seed file, so admin edits never appeared on /cv.
   let en: any[] = []
   let zh: any[] = []
   try {
-    const raw = fs.readFileSync(dataPath, 'utf-8') as unknown as string
-    const json = JSON.parse(raw)
-    en = json.en || []
-    zh = json.zh || []
+    const { readCvData } = await import('../../lib/cvdata')
+    const cv = readCvData()
+    en = cv.en
+    zh = cv.zh
   } catch {}
   return { props: { props: { host }, en, zh } }
 }
