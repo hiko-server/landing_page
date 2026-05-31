@@ -122,16 +122,14 @@ export async function getServerSideProps(context: any) {
   let githubUser: string | null = null
   let home: any = null
   try {
-    const fs = await import('fs')
-    const path = await import('path')
-    const dataPath = path.join(process.cwd(), 'data', 'cvdata.json')
+    // Live CV from the content store (SQLite kv + R2) — same source the admin
+    // editor writes via /api/cvdata. (Was reading the static cvdata.json seed.)
     try {
-      const raw = fs.readFileSync(dataPath, 'utf-8') as unknown as string
-      const json = JSON.parse(raw)
-      en = json.en || []
-      zh = json.zh || []
+      const { readCvData } = await import('../../lib/cvdata')
+      const cv = readCvData()
+      en = cv.en
+      zh = cv.zh
     } catch {}
-    // No example fallback — use only real data
     try {
       const mod = await import('../../lib/home')
       home = mod.readHome()

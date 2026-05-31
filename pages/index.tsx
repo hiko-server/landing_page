@@ -76,20 +76,16 @@ export const getServerSideProps: GetServerSideProps = async (context: any) => {
     const mod = await import('../lib/home')
     home = mod.readHome()
   } catch {}
-  // read cv data server-side (reuse logic from /cv)
+  // read live cv data server-side from the content store (SQLite kv + R2) — the
+  // same source the admin editor writes via /api/cvdata. (Was reading the static
+  // data/cvdata.json seed file, so admin edits never appeared.)
   let en: any[] = []
   let zh: any[] = []
   try {
-    const fs = await import('fs')
-    const path = await import('path')
-    const dataPath = path.join(process.cwd(), 'data', 'cvdata.json')
-    try {
-      const raw = fs.readFileSync(dataPath, 'utf-8') as unknown as string
-      const json = JSON.parse(raw)
-      en = json.en || []
-      zh = json.zh || []
-    } catch {}
-    // No example fallback — use only real data if present
+    const { readCvData } = await import('../lib/cvdata')
+    const cv = readCvData()
+    en = cv.en
+    zh = cv.zh
   } catch {}
   return { props: { host, home, cv: { en, zh } } }
 }
