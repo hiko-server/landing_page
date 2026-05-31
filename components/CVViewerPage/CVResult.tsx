@@ -44,6 +44,7 @@ const CVResult = ({
 
   return (
     <Flex
+      className="cv-print-flow"
       direction="column"
       flex={1}
       alignItems="center"
@@ -124,9 +125,9 @@ const PrintArea = styled.div`
   @media print {
     width: 210mm !important;
     margin: 0 !important;
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
+    /* Flow in normal order so multi-page CVs paginate instead of overlapping
+       (see styles/globals.css #print-area). */
+    position: static !important;
   }
 `
 

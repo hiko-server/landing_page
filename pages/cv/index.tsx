@@ -74,7 +74,7 @@ const CVPage = ({
       />
 
       <HeaderFooter isMobile={isMobile}>
-        <Box maxW="var(--container-content)" mx="auto" w="100%" px={[4, 6, 8]} py={[6, 10]}>
+        <Box className="cv-print-flow" maxW="var(--container-content)" mx="auto" w="100%" px={[4, 6, 8]} py={[6, 10]}>
           {/* Page chrome — hidden in print via .no-print */}
           <Box className="no-print" mb={8}>
             <SectionLabel n={1} mb={4}>
@@ -132,8 +132,9 @@ const CVPage = ({
           </Box>
 
           {/* A4 sheet container — mobile scale preserved */}
-          <Box w="full" overflowX="auto" minH={isMobile ? '140vh' : '100vh'}>
+          <Box className="cv-print-flow" w="full" overflowX="auto" minH={isMobile ? '140vh' : '100vh'}>
             <Box
+              className="cv-print-flow"
               w={isMobile ? '125%' : '100%'}
               transform={isMobile ? 'scale(0.8)' : 'none'}
               transformOrigin="top left"

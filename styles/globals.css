@@ -179,10 +179,32 @@
   body:has(#print-area) #print-area * {
     visibility: visible !important;
   }
+  /* The CV must flow in NORMAL document order so a multi-page CV paginates
+     across pages. The previous `position:absolute` pulled the sheet out of
+     flow, which Chrome cannot paginate — anything past page 1 rendered ON TOP
+     of the content above it (the reported "字重叠"). It only surfaced once the
+     CV exceeded a single page, which taller CJK text does but the shorter EN
+     text didn't. Keep #print-area static and collapse the on-screen centering /
+     100vh / mobile-scale wrappers (tagged .cv-print-flow) that sit between the
+     page and the A4 sheet, so the sheet starts at the top and grows naturally. */
+  .cv-print-flow {
+    position: static !important;
+    display: block !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    transform: none !important;
+    overflow: visible !important;
+    align-items: flex-start !important;
+    justify-content: flex-start !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
   #print-area {
-    position: absolute !important;
-    top: 0 !important;
-    left: 0 !important;
+    position: static !important;
     width: 210mm !important;
     margin: 0 !important;
     padding: 0 !important;
@@ -192,7 +214,7 @@
     min-height: 297mm !important;
     margin: 0 !important;
     box-shadow: none !important;
-    page-break-after: always;
+    page-break-after: auto;
     break-inside: auto;
   }
 }
