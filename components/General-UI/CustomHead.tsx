@@ -1,7 +1,23 @@
 import Head from 'next/head'
+import { useEffect, useState } from 'react'
 import { VPColor } from '../../theme/color'
 
-const productName = process.env.NEXT_PUBLIC_PRODUCT_NAME || 'HIKO.DEV'
+// Brand/site name shown in the browser tab and <title>. We want this to track
+// the domain the deployment is actually served from (e.g. "hiko.dev") rather
+// than a baked-in brand string, so the same image reads correctly under any
+// domain it is fronted by.
+//
+// NEXT_PUBLIC_* are inlined at build time, but .env is kept out of the Docker
+// build context (see .dockerignore), so at build time these are usually
+// undefined. We therefore use them only as the SSR/first-paint fallback and
+// let the client correct the value to the real hostname after hydration.
+const FALLBACK_SITE_NAME =
+  process.env.NEXT_PUBLIC_SITE_HOST || process.env.NEXT_PUBLIC_PRODUCT_NAME || 'hiko.dev'
+
+// Strip a leading "www." and any ":port" so the tab reads as the bare domain.
+function normalizeHost(host: string): string {
+  return host.replace(/^www\./i, '').replace(/:\d+$/, '')
+}
 
 type JsonLd = Record<string, any> | Array<Record<string, any>>
 
@@ -30,6 +46,15 @@ const CustomHead = ({
   hreflang,
   jsonLd,
 }: Props) => {
+  // Start from the SSR fallback so the server render and the first client
+  // render agree (no hydration mismatch), then switch to the live hostname
+  // once mounted — that is the "auto-convert to the deployed domain" behaviour.
+  const [productName, setProductName] = useState(() => normalizeHost(FALLBACK_SITE_NAME))
+  useEffect(() => {
+    const host = typeof window !== 'undefined' ? window.location?.hostname : ''
+    if (host) setProductName(normalizeHost(host))
+  }, [])
+
   const pageTitle = title ? `${title} | ${productName}` : productName
   const pageDesc = description || 'Personal site of Hiko — software engineer.'
   const ogImage = image || '/images/hikoAvator.png'
