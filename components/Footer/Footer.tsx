@@ -108,8 +108,8 @@ const Footer: React.FC = () => {
             >
               <Text as="span">
                 © {new Date().getFullYear()}{' '}
-                <Link href="https://hiko.dev" isExternal _hover={{ color: linkHover, textDecoration: 'none' }}>
-                  hiko.dev
+                <Link href="https://lucian-dev.com" isExternal _hover={{ color: linkHover, textDecoration: 'none' }}>
+                  lucian-dev.com
                 </Link>
               </Text>
               <Text as="span">·</Text>

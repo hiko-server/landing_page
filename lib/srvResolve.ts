@@ -55,7 +55,7 @@ async function tryCurlDoh(url: string): Promise<DohResponse> {
       '-H',
       'Accept: application/dns-json',
       '-A',
-      'Mozilla/5.0 (compatible; hiko.dev mongo-srv-resolver)',
+      'Mozilla/5.0 (compatible; lucian-dev.com mongo-srv-resolver)',
       url,
     ],
     { maxBuffer: 1024 * 1024 },

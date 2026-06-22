@@ -44,7 +44,7 @@ const CVPage = ({
   const [isMobile] = useMediaQuery('(max-width: 768px)', { ssr: true, fallback: false })
 
   useEffect(() => {
-    if (props?.host && props?.host === 'cv.hiko.dev') setIsHostCV(true)
+    if (props?.host && props?.host === 'cv.lucian-dev.com') setIsHostCV(true)
   }, [props?.host])
 
   const [language, setLanguage] = useState<'en' | 'zh'>('en')
@@ -59,7 +59,7 @@ const CVPage = ({
       <CustomHead
         title="CV / Resume"
         description="Hiko's CV with skills matrix, timeline, and downloadable PDF."
-        url={`https://${props?.host || 'hiko.dev'}/cv`}
+        url={`https://${props?.host || 'lucian-dev.com'}/cv`}
         image="/images/hikoAvator.png"
         type="article"
         jsonLd={[
@@ -67,7 +67,7 @@ const CVPage = ({
             '@context': 'https://schema.org',
             '@type': 'CreativeWork',
             name: 'Resume of Li Yanpei (Hiko)',
-            url: `https://${props?.host || 'hiko.dev'}/cv`,
+            url: `https://${props?.host || 'lucian-dev.com'}/cv`,
             author: { '@type': 'Person', name: 'Li Yanpei (Hiko)' },
           },
         ]}
@@ -162,7 +162,7 @@ const CVPage = ({
 export default CVPage
 
 export const getServerSideProps = async (context: any) => {
-  const host = context.req.headers.host || 'hiko.dev'
+  const host = context.req.headers.host || 'lucian-dev.com'
   // Read the LIVE CV from the content store (SQLite kv + R2) — the same source
   // the admin editor writes via /api/cvdata. This previously read the static
   // data/cvdata.json seed file, so admin edits never appeared on /cv.

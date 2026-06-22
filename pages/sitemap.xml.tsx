@@ -4,7 +4,7 @@ import { listPosts, listWork } from '../lib/mdx'
 const Sitemap = () => null
 
 export const getServerSideProps: GetServerSideProps = async ({ res }) => {
-  const host = process.env.NEXT_PUBLIC_SITE_HOST || 'hiko.dev'
+  const host = process.env.NEXT_PUBLIC_SITE_HOST || 'lucian-dev.com'
   const baseUrl = `https://${host}`
   const lastmod = new Date().toISOString()
 

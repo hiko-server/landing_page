@@ -15,7 +15,7 @@ const LandingPage = (props: any) => {
   const [isMobile] = useMediaQuery('(max-width: 767px)')
 
   useEffect(() => {
-    if (props.host && props.host === 'cv.hiko.dev') {
+    if (props.host && props.host === 'cv.lucian-dev.com') {
       setIsHostCV(true)
     }
   }, [props.host])
@@ -36,7 +36,7 @@ const LandingPage = (props: any) => {
           {
             '@context': 'https://schema.org',
             '@type': 'WebSite',
-            name: 'HIKO.DEV',
+            name: 'LUCIAN-DEV.COM',
             url: `https://${props.host}`,
           },
           {

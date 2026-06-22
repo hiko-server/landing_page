@@ -58,7 +58,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const writeResult = await writeHome(body)
     if (!writeResult.ok) return res.status(500).json({ error: writeResult.error })
     try {
-      sendMail({ to: process.env.NOTIFY_EMAIL || process.env.ADMIN_EMAIL || 'hi@hiko.dev', subject: 'Home updated', text: `Home updated at ${new Date().toISOString()}` })
+      sendMail({ to: process.env.NOTIFY_EMAIL || process.env.ADMIN_EMAIL || 'hi@lucian-dev.com', subject: 'Home updated', text: `Home updated at ${new Date().toISOString()}` })
     } catch {}
     return res.status(200).json(writeResult)
   }

@@ -53,7 +53,7 @@ export default function HeroHeadline({
   const taglineColor = useColorModeValue('gray.600', 'rgba(255,255,255,0.78)')
 
   // Split brand on "." so we can paint only the TLD-like suffix with accent,
-  // matching the header's "hiko.dev" treatment. If there's no dot, the whole
+  // matching the header's "lucian-dev.com" treatment. If there's no dot, the whole
   // brand becomes accent.
   const dotIdx = brand?.lastIndexOf('.')
   const brandHead = brand && dotIdx && dotIdx > 0 ? brand.slice(0, dotIdx) : brand

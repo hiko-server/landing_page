@@ -19,6 +19,6 @@ export async function sendMail(opts: MailOptions) {
 }
 
 export function siteUrl() {
-  return process.env.SITE_URL || 'https://hiko.dev'
+  return process.env.SITE_URL || 'https://lucian-dev.com'
 }
 

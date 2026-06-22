@@ -45,7 +45,7 @@ type DynamicLists = {
   work: { slug: string; title: string; permalink: string }[]
 }
 
-const HIKO_EMAIL = 'hi@hiko.dev'
+const HIKO_EMAIL = 'hi@lucian-dev.com'
 
 function matches(item: Item, q: string): boolean {
   if (!q) return true

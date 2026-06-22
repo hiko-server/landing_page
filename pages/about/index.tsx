@@ -19,7 +19,7 @@ const About = (props: any) => {
   const [isMobile] = useMediaQuery('(max-width: 767px)')
 
   useEffect(() => {
-    if (props.host && props.host === 'cv.hiko.dev') {
+    if (props.host && props.host === 'cv.lucian-dev.com') {
       setIsHostCV(true)
     }
   }, [props.host])
@@ -29,20 +29,20 @@ const About = (props: any) => {
       <CustomHead
         title="About"
         description="About Hiko — background, skills, and interests."
-        url={`https://${props.host || 'hiko.dev'}/about`}
+        url={`https://${props.host || 'lucian-dev.com'}/about`}
         image="/images/hikoAvator.png"
         jsonLd={[
           {
             '@context': 'https://schema.org',
             '@type': 'ProfilePage',
             name: 'About — Li Yanpei (Hiko)',
-            url: `https://${props.host || 'hiko.dev'}/about`,
+            url: `https://${props.host || 'lucian-dev.com'}/about`,
           },
           {
             '@context': 'https://schema.org',
             '@type': 'Person',
             name: 'Li Yanpei (Hiko)',
-            url: `https://${props.host || 'hiko.dev'}`,
+            url: `https://${props.host || 'lucian-dev.com'}`,
             sameAs: [
               'https://github.com/HikoPLi',
               'https://gitlab.com/HikoPLi',
@@ -116,7 +116,7 @@ const About = (props: any) => {
 
 export default About
 export async function getServerSideProps(context: any) {
-  const host = context.req.headers.host || 'hiko.dev'
+  const host = context.req.headers.host || 'lucian-dev.com'
   let en: any[] = []
   let zh: any[] = []
   let githubUser: string | null = null
