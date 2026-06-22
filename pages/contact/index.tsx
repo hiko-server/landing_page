@@ -11,7 +11,7 @@ const About = (props: any) => {
   const [isMobile] = useMediaQuery('(max-width: 767px)')
 
   useEffect(() => {
-    if (props.host && props.host === 'cv.hiko.dev') {
+    if (props.host && props.host === 'cv.lucian-dev.com') {
       setIsHostCV(true)
     }
   }, [props.host])
@@ -21,7 +21,7 @@ const About = (props: any) => {
       <CustomHead
         title="Contact"
         description="Get in touch with Hiko."
-        url={`https://${props.host || 'hiko.dev'}/contact`}
+        url={`https://${props.host || 'lucian-dev.com'}/contact`}
         image="/images/hikoAvator.png"
       />
       <HeaderFooter isMobile={isMobile}>
@@ -36,7 +36,7 @@ const About = (props: any) => {
 export default About
 
 export async function getServerSideProps(context: any) {
-  const host = context.req.headers.host || 'hiko.dev'
+  const host = context.req.headers.host || 'lucian-dev.com'
   let home = null
   try {
     const mod = await import('../../lib/home')

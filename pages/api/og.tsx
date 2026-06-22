@@ -15,7 +15,7 @@ export const config = {
 
 export default function handler(req: NextRequest) {
   const { searchParams } = new URL(req.url)
-  const title = (searchParams.get('title') || 'HIKO.DEV').slice(0, 120)
+  const title = (searchParams.get('title') || 'LUCIAN-DEV.COM').slice(0, 120)
   const kind = (searchParams.get('kind') || 'page').slice(0, 24)
   const subtitle = (searchParams.get('subtitle') || '').slice(0, 200)
 
@@ -47,7 +47,7 @@ export default function handler(req: NextRequest) {
             textTransform: 'uppercase',
           }}
         >
-          [{kind}] · HIKO.DEV
+          [{kind}] · LUCIAN-DEV.COM
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 28 }}>
@@ -102,7 +102,7 @@ export default function handler(req: NextRequest) {
               letterSpacing: 2,
             }}
           >
-            HIKO.DEV
+            LUCIAN-DEV.COM
           </div>
         </div>
       </div>

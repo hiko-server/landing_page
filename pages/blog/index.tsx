@@ -59,7 +59,7 @@ export default function BlogIndex({ posts, host }: Props) {
         jsonLd={{
           '@context': 'https://schema.org',
           '@type': 'Blog',
-          name: 'HIKO.DEV — Writing',
+          name: 'LUCIAN-DEV.COM — Writing',
           url: `https://${host}/blog`,
           blogPost: posts.slice(0, 10).map((p) => ({
             '@type': 'BlogPosting',
@@ -206,7 +206,7 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
   return {
     props: {
       posts: listPosts(),
-      host: process.env.NEXT_PUBLIC_SITE_HOST || 'hiko.dev',
+      host: process.env.NEXT_PUBLIC_SITE_HOST || 'lucian-dev.com',
     },
     revalidate: 60,
   }

@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://hiko.dev/sitemap.xml
+Sitemap: https://lucian-dev.com/sitemap.xml

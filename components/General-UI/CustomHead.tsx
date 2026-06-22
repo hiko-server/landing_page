@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { VPColor } from '../../theme/color'
 
 // Brand/site name shown in the browser tab and <title>. We want this to track
-// the domain the deployment is actually served from (e.g. "hiko.dev") rather
+// the domain the deployment is actually served from (e.g. "lucian-dev.com") rather
 // than a baked-in brand string, so the same image reads correctly under any
 // domain it is fronted by.
 //
@@ -12,7 +12,7 @@ import { VPColor } from '../../theme/color'
 // undefined. We therefore use them only as the SSR/first-paint fallback and
 // let the client correct the value to the real hostname after hydration.
 const FALLBACK_SITE_NAME =
-  process.env.NEXT_PUBLIC_SITE_HOST || process.env.NEXT_PUBLIC_PRODUCT_NAME || 'hiko.dev'
+  process.env.NEXT_PUBLIC_SITE_HOST || process.env.NEXT_PUBLIC_PRODUCT_NAME || 'lucian-dev.com'
 
 // Strip a leading "www." and any ":port" so the tab reads as the bare domain.
 function normalizeHost(host: string): string {

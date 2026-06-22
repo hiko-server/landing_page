@@ -46,7 +46,7 @@ import CommandPalette from '../General-UI/CommandPalette'
  * Visual changes vs v5:
  *   - teal accent → indigo (var(--accent))
  *   - icon-only quick buttons → readable text links with hover-underline
- *   - mono brand mark "hiko.dev" with accent on ".dev"
+ *   - mono brand mark "lucian-dev.com" with accent on ".dev"
  *   - live-status pill (● Last commit · Nh ago) — fetches /api/github/events on mount
  *   - ⌘K search trigger placeholder (cmd palette UI lands in a later phase)
  */
@@ -210,8 +210,8 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
               _hover={{ textDecoration: 'none' }}
               whiteSpace="nowrap"
             >
-              <Text as="span">hiko</Text>
-              <Text as="span" color="var(--accent)">.dev</Text>
+              <Text as="span">lucian-dev</Text>
+              <Text as="span" color="var(--accent)">.com</Text>
             </Link>
             <LiveStatus />
           </Flex>

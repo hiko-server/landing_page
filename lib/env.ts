@@ -11,7 +11,7 @@ export function isProd(): boolean {
 }
 
 export function getSiteUrl(): string {
-  return process.env.SITE_URL || 'https://hiko.dev'
+  return process.env.SITE_URL || 'https://lucian-dev.com'
 }
 
 /**

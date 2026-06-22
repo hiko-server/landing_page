@@ -16,7 +16,7 @@ function xmlEscape(s: string): string {
 }
 
 export const getServerSideProps: GetServerSideProps = async ({ res }) => {
-  const host = process.env.NEXT_PUBLIC_SITE_HOST || 'hiko.dev'
+  const host = process.env.NEXT_PUBLIC_SITE_HOST || 'lucian-dev.com'
   const site = `https://${host}`
   const posts = listPosts()
 
@@ -36,7 +36,7 @@ export const getServerSideProps: GetServerSideProps = async ({ res }) => {
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
   <channel>
-    <title>HIKO.DEV — Writing</title>
+    <title>LUCIAN-DEV.COM — Writing</title>
     <link>${site}/blog</link>
     <description>Engineering essays, ML notes, and write-ups by Li Yanpei.</description>
     <language>en</language>

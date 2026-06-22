@@ -79,7 +79,7 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
     props: {
       source: page?.source ?? null,
       updated,
-      host: process.env.NEXT_PUBLIC_SITE_HOST || 'hiko.dev',
+      host: process.env.NEXT_PUBLIC_SITE_HOST || 'lucian-dev.com',
     },
     revalidate: 60,
   }

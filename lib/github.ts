@@ -20,7 +20,7 @@ let tokenKnownBad = false
 
 const BASE_HEADERS: Record<string, string> = {
   Accept: 'application/vnd.github+json',
-  'User-Agent': 'hiko.dev-site',
+  'User-Agent': 'lucian-dev.com-site',
 }
 
 /** Pull the GitHub login from a profile URL like `https://github.com/<user>`. */

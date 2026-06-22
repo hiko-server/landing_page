@@ -262,7 +262,7 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
   return {
     props: {
       items: listWork(),
-      host: process.env.NEXT_PUBLIC_SITE_HOST || 'hiko.dev',
+      host: process.env.NEXT_PUBLIC_SITE_HOST || 'lucian-dev.com',
     },
     revalidate: 60,
   }
