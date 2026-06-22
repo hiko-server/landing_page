@@ -30,6 +30,17 @@ import { MoonIcon, SunIcon, SearchIcon } from '@chakra-ui/icons'
 import Footer from '../Footer/Footer'
 import CommandPalette from '../General-UI/CommandPalette'
 
+// The header "brand mark" tracks the site's domain automatically: it seeds from
+// the configured site host for SSR/first paint, then switches to the live
+// hostname after hydration. Change the domain and the wordmark follows with no
+// code edit. The TLD-like suffix (after the last dot) gets the accent colour.
+const BRAND_FALLBACK =
+  process.env.NEXT_PUBLIC_SITE_HOST || process.env.NEXT_PUBLIC_PRODUCT_NAME || 'lucian-dev.com'
+
+function normalizeHost(host: string): string {
+  return host.replace(/^www\./i, '').replace(/:\d+$/, '')
+}
+
 /**
  * v6 Header
  *
@@ -46,7 +57,7 @@ import CommandPalette from '../General-UI/CommandPalette'
  * Visual changes vs v5:
  *   - teal accent → indigo (var(--accent))
  *   - icon-only quick buttons → readable text links with hover-underline
- *   - mono brand mark "lucian-dev.com" with accent on ".dev"
+ *   - mono brand mark auto-derived from the live domain, accent on the TLD suffix
  *   - live-status pill (● Last commit · Nh ago) — fetches /api/github/events on mount
  *   - ⌘K search trigger placeholder (cmd palette UI lands in a later phase)
  */
@@ -176,6 +187,18 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
   const linkHover = useColorModeValue('black', 'white')
   const subtle = useColorModeValue('gray.600', 'gray.400')
 
+  // Brand mark, auto-derived from the domain (see BRAND_FALLBACK note above):
+  // SSR/first paint uses the configured fallback, then the client swaps in the
+  // real hostname. Split on the last dot so the TLD-like suffix gets the accent.
+  const [brand, setBrand] = useState(() => normalizeHost(BRAND_FALLBACK))
+  useEffect(() => {
+    const host = typeof window !== 'undefined' ? window.location?.hostname : ''
+    if (host) setBrand(normalizeHost(host))
+  }, [])
+  const brandDot = brand.lastIndexOf('.')
+  const brandHead = brandDot > 0 ? brand.slice(0, brandDot) : brand
+  const brandTail = brandDot > 0 ? brand.slice(brandDot) : ''
+
   return (
     <>
       <Box
@@ -210,8 +233,8 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
               _hover={{ textDecoration: 'none' }}
               whiteSpace="nowrap"
             >
-              <Text as="span">lucian-dev</Text>
-              <Text as="span" color="var(--accent)">.com</Text>
+              <Text as="span">{brandHead}</Text>
+              {brandTail && <Text as="span" color="var(--accent)">{brandTail}</Text>}
             </Link>
             <LiveStatus />
           </Flex>
