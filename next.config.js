@@ -44,6 +44,13 @@ const nextConfig = {
 
     return [
       { source: '/:path*', headers },
+      // Static brand imagery rarely changes — cache hard at the browser + CDN.
+      // (Not fingerprinted, so 30d + SWR rather than immutable, so an updated
+      // image still propagates without forcing a filename change.)
+      {
+        source: '/images/:path*',
+        headers: [{ key: 'Cache-Control', value: 'public, max-age=2592000, stale-while-revalidate=86400' }],
+      },
     ]
   },
 }
