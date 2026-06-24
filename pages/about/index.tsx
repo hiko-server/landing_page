@@ -4,6 +4,7 @@ import LandingCVSections from '../../components/LandingPage/LandingCVSections'
 import { Flex, useMediaQuery, Box, Image, Heading } from '@chakra-ui/react'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
+import { absUrl, personNode, breadcrumb, PERSON_ID } from '../../lib/schema'
 // import LanguageBars from '../../components/GitHub/LanguageBars'
 import ActivityFeed from '../../components/GitHub/ActivityFeed'
 import StatsBar from '../../components/GitHub/StatsBar'
@@ -28,28 +29,22 @@ const About = (props: any) => {
     <React.Fragment>
       <CustomHead
         title="About"
-        description="About Hiko — background, skills, and interests."
-        url={`https://${props.host || 'lucian-dev.com'}/about`}
-        image="/images/hikoAvator.png"
+        description="About Li Yanpei (Lucian) — a Hong Kong software engineer (HKMU, UOW College). Background, skills, GitHub activity, and project case studies like WeGreen AI and Carboy."
+        url={absUrl('/about')}
+        image={absUrl('/api/og?title=About&kind=page&subtitle=Background%2C%20skills%20%26%20projects')}
         jsonLd={[
           {
             '@context': 'https://schema.org',
             '@type': 'ProfilePage',
-            name: 'About — Li Yanpei (Hiko)',
-            url: `https://${props.host || 'lucian-dev.com'}/about`,
+            name: 'About — Li Yanpei (Lucian)',
+            url: absUrl('/about'),
+            mainEntity: { '@id': PERSON_ID },
           },
-          {
-            '@context': 'https://schema.org',
-            '@type': 'Person',
-            name: 'Li Yanpei (Hiko)',
-            url: `https://${props.host || 'lucian-dev.com'}`,
-            sameAs: [
-              'https://github.com/HikoPLi',
-              'https://gitlab.com/HikoPLi',
-              'https://www.linkedin.com/in/liyanpeihiko/',
-            ],
-            jobTitle: 'Software Engineer',
-          },
+          personNode(),
+          breadcrumb([
+            { name: 'Home', path: '/' },
+            { name: 'About', path: '/about' },
+          ]),
         ]}
       />
       <HeaderFooter isMobile={isMobile}>

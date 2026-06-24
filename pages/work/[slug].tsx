@@ -14,6 +14,7 @@ import CustomHead from '../../components/General-UI/CustomHead'
 import SectionLabel from '../../components/General-UI/SectionLabel'
 import MDXContent from '../../components/MDX/MDXContent'
 import { listWork, getWork, type WorkFrontmatter } from '../../lib/mdx'
+import { absUrl, breadcrumb, personRef, PERSON_NAME } from '../../lib/schema'
 import type { MDXRemoteSerializeResult } from 'next-mdx-remote'
 
 type Props = {
@@ -32,28 +33,30 @@ export default function WorkCase({ slug, frontmatter, source, readingMinutes, ho
     <>
       <CustomHead
         title={frontmatter.title}
-        description={frontmatter.description || 'Project case study by Li Yanpei'}
-        url={`https://${host}/work/${slug}`}
-        image={`https://${host}/api/og?kind=work&title=${encodeURIComponent(frontmatter.title)}${frontmatter.description ? `&subtitle=${encodeURIComponent(frontmatter.description)}` : ''}`}
+        description={frontmatter.description || `${frontmatter.title} — a project case study by ${PERSON_NAME}.`}
+        url={absUrl(`/work/${slug}`)}
+        image={absUrl(`/api/og?kind=work&title=${encodeURIComponent(frontmatter.title)}${frontmatter.description ? `&subtitle=${encodeURIComponent(frontmatter.description)}` : ''}`)}
         type="article"
         jsonLd={[
           {
             '@context': 'https://schema.org',
             '@type': 'CreativeWork',
             name: frontmatter.title,
-            url: `https://${host}/work/${slug}`,
-            author: { '@type': 'Person', name: 'Li Yanpei' },
+            url: absUrl(`/work/${slug}`),
+            mainEntityOfPage: absUrl(`/work/${slug}`),
+            image: absUrl(`/api/og?kind=work&title=${encodeURIComponent(frontmatter.title)}`),
             description: frontmatter.description,
+            author: personRef,
+            ...(frontmatter.tech?.length ? { keywords: frontmatter.tech.join(', ') } : {}),
+            ...(frontmatter.link || frontmatter.repo
+              ? { sameAs: [frontmatter.link, frontmatter.repo].filter(Boolean) }
+              : {}),
           },
-          {
-            '@context': 'https://schema.org',
-            '@type': 'BreadcrumbList',
-            itemListElement: [
-              { '@type': 'ListItem', position: 1, name: 'Home', item: `https://${host}/` },
-              { '@type': 'ListItem', position: 2, name: 'Work', item: `https://${host}/work` },
-              { '@type': 'ListItem', position: 3, name: frontmatter.title, item: `https://${host}/work/${slug}` },
-            ],
-          },
+          breadcrumb([
+            { name: 'Home', path: '/' },
+            { name: 'Work', path: '/work' },
+            { name: frontmatter.title, path: `/work/${slug}` },
+          ]),
         ]}
       />
       <HeaderFooter isMobile={false}>

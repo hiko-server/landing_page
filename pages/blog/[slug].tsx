@@ -15,6 +15,7 @@ import CustomHead from '../../components/General-UI/CustomHead'
 import SectionLabel from '../../components/General-UI/SectionLabel'
 import MDXContent from '../../components/MDX/MDXContent'
 import { listPosts, getPost, type PostFrontmatter } from '../../lib/mdx'
+import { absUrl, breadcrumb, personRef, PERSON_NAME } from '../../lib/schema'
 import type { MDXRemoteSerializeResult } from 'next-mdx-remote'
 
 type Props = {
@@ -39,28 +40,31 @@ export default function BlogPost({
     <>
       <CustomHead
         title={frontmatter.title}
-        description={frontmatter.description || 'Post by Li Yanpei'}
-        url={`https://${host}/blog/${slug}`}
-        image={`https://${host}/api/og?kind=blog&title=${encodeURIComponent(frontmatter.title)}${frontmatter.description ? `&subtitle=${encodeURIComponent(frontmatter.description)}` : ''}`}
+        description={frontmatter.description || `${frontmatter.title} — an essay by ${PERSON_NAME}.`}
+        url={absUrl(`/blog/${slug}`)}
+        image={absUrl(`/api/og?kind=blog&title=${encodeURIComponent(frontmatter.title)}${frontmatter.description ? `&subtitle=${encodeURIComponent(frontmatter.description)}` : ''}`)}
         type="article"
+        publishedTime={frontmatter.date ? String(frontmatter.date).slice(0, 10) : undefined}
+        modifiedTime={String(frontmatter.updated || frontmatter.date || '').slice(0, 10) || undefined}
         jsonLd={[
           {
             '@context': 'https://schema.org',
             '@type': 'BlogPosting',
             headline: frontmatter.title,
+            description: frontmatter.description || undefined,
+            image: absUrl(`/api/og?kind=blog&title=${encodeURIComponent(frontmatter.title)}`),
             datePublished: frontmatter.date,
             dateModified: frontmatter.updated || frontmatter.date,
-            author: { '@type': 'Person', name: 'Li Yanpei' },
+            author: personRef,
+            publisher: personRef,
+            mainEntityOfPage: absUrl(`/blog/${slug}`),
+            url: absUrl(`/blog/${slug}`),
           },
-          {
-            '@context': 'https://schema.org',
-            '@type': 'BreadcrumbList',
-            itemListElement: [
-              { '@type': 'ListItem', position: 1, name: 'Home', item: `https://${host}/` },
-              { '@type': 'ListItem', position: 2, name: 'Writing', item: `https://${host}/blog` },
-              { '@type': 'ListItem', position: 3, name: frontmatter.title, item: `https://${host}/blog/${slug}` },
-            ],
-          },
+          breadcrumb([
+            { name: 'Home', path: '/' },
+            { name: 'Writing', path: '/blog' },
+            { name: frontmatter.title, path: `/blog/${slug}` },
+          ]),
         ]}
       />
       <HeaderFooter isMobile={false}>

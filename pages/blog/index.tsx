@@ -53,7 +53,7 @@ export default function BlogIndex({ posts, host }: Props) {
     <>
       <CustomHead
         title="Writing"
-        description="Essays, notes, and technical write-ups by Li Yanpei (Hiko)."
+        description="Essays, notes, and technical write-ups by Li Yanpei (Lucian) on software engineering, machine learning, and building products."
         url={`https://${host}/blog`}
         image={`https://${host}/api/og?title=Writing&kind=blog&subtitle=Essays%2C%20notes%2C%20and%20write-ups`}
         jsonLd={{

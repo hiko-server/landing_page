@@ -15,6 +15,7 @@ import CVResult from '../../components/CVViewerPage/CVResult'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 import SectionLabel from '../../components/General-UI/SectionLabel'
+import { absUrl, personNode, breadcrumb, personRef, PERSON_NAME } from '../../lib/schema'
 
 /**
  * /cv — bilingual CV viewer page.
@@ -58,18 +59,24 @@ const CVPage = ({
     <React.Fragment>
       <CustomHead
         title="CV / Resume"
-        description="Hiko's CV with skills matrix, timeline, and downloadable PDF."
-        url={`https://${props?.host || 'lucian-dev.com'}/cv`}
-        image="/images/hikoAvator.png"
-        type="article"
+        description="The CV / résumé of Li Yanpei (Lucian): bilingual EN/ZH, a skills matrix and timeline, education (HKMU, UOW College), projects, patents, and a downloadable PDF."
+        url={absUrl('/cv')}
+        image={absUrl('/api/og?title=CV%20%2F%20Resume&kind=page&subtitle=Skills%2C%20timeline%20%26%20PDF')}
         jsonLd={[
           {
             '@context': 'https://schema.org',
             '@type': 'CreativeWork',
-            name: 'Resume of Li Yanpei (Hiko)',
-            url: `https://${props?.host || 'lucian-dev.com'}/cv`,
-            author: { '@type': 'Person', name: 'Li Yanpei (Hiko)' },
+            name: `Résumé of ${PERSON_NAME}`,
+            url: absUrl('/cv'),
+            inLanguage: ['en', 'zh'],
+            about: personRef,
+            author: personRef,
           },
+          personNode(),
+          breadcrumb([
+            { name: 'Home', path: '/' },
+            { name: 'CV / Resume', path: '/cv' },
+          ]),
         ]}
       />
 

@@ -1,14 +1,13 @@
 {
-  "name": "LUCIAN-DEV.COM",
-  "short_name": "HIKO",
+  "name": "lucian-dev.com — Li Yanpei (Lucian)",
+  "short_name": "Lucian",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#559ec7",
-  "description": "Hiko — Full-stack engineer portfolio and CV.",
+  "description": "Li Yanpei (Lucian) — software engineer in Hong Kong. Full-stack web, machine learning / computer vision, and embedded systems. Portfolio, projects, and CV.",
   "icons": [
     { "src": "/images/favicon-32x32.png", "sizes": "32x32", "type": "image/png" },
     { "src": "/images/favicon-32x32.png", "sizes": "48x48", "type": "image/png" }
   ]
 }
-
