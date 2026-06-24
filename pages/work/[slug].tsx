@@ -25,7 +25,7 @@ type Props = {
   host: string
 }
 
-export default function WorkCase({ slug, frontmatter, source, readingMinutes, host }: Props) {
+export default function WorkCase({ slug, frontmatter, source, readingMinutes }: Props) {
   const muted = useColorModeValue('gray.600', 'gray.500')
   const monoFont = 'var(--font-geist-mono), monospace'
 

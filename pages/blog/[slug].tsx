@@ -31,7 +31,6 @@ export default function BlogPost({
   frontmatter,
   source,
   readingMinutes,
-  host,
 }: Props) {
   const muted = useColorModeValue('gray.600', 'gray.500')
   const monoFont = 'var(--font-geist-mono), monospace'
