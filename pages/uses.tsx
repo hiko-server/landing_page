@@ -26,7 +26,7 @@ export default function UsesPage({ source, updated, host }: Props) {
     <>
       <CustomHead
         title="Uses"
-        description="Tools, hardware, and software I rely on daily — Li Yanpei (Hiko)."
+        description="The tools, hardware, and software Li Yanpei (Lucian) relies on daily for engineering work."
         url={`https://${host}/uses`}
         image={`https://${host}/api/og?title=Uses&kind=page&subtitle=Tools%20%26%20setup`}
         jsonLd={{

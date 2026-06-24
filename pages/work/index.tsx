@@ -44,7 +44,7 @@ export default function WorkIndex({ items, host }: Props) {
     <>
       <CustomHead
         title="Work"
-        description="Selected project case studies and engineering write-ups by Li Yanpei (Hiko)."
+        description="Selected project case studies and engineering write-ups by Li Yanpei (Lucian) — including WeGreen AI and Carboy."
         url={`https://${host}/work`}
         image={`https://${host}/api/og?title=Selected%20Work&kind=work&subtitle=Project%20case%20studies`}
         jsonLd={{

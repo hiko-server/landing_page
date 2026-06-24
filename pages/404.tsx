@@ -1,63 +1,59 @@
-import React, { useEffect } from 'react'
-import styled from '@emotion/styled'
-import { useRouter } from 'next/router'
-import { Box, useToast } from '@chakra-ui/react'
-import LoadingScreen from '../components/General-UI/LoadingScreen'
+import React from 'react'
+import NextLink from 'next/link'
+import { Box, Heading, Text, Link } from '@chakra-ui/react'
+import HeaderFooter from '../layout/HeaderFooter'
+import CustomHead from '../components/General-UI/CustomHead'
 
+/**
+ * 404 — must stay a real 404 for crawlers. The previous version auto-redirected
+ * to "/" after 3s via JS, which Google reads as a soft-404 (it dilutes the
+ * homepage and lets dead URLs linger in the index). We now render a static,
+ * noindex 404 with a manual link home instead.
+ */
 const Custom404 = () => {
-  const router = useRouter()
-  const toast = useToast()
-
-  useEffect(() => {
-    toast({
-      title: 'Page Not Found',
-      description: 'Will back to home page after 3 seconds',
-      status: 'error',
-      duration: 3000,
-      isClosable: true,
-    })
-    setTimeout(() => {
-      // router.back()
-      router.replace('/')
-    }, 3000)
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
   return (
-    <Wrapper>
-      {/* <HeaderContainer>
-          <HeaderTitle>404 Error</HeaderTitle>
-        </HeaderContainer> */}
-      <React.Fragment>
-        <h1>404 - Page Not Found</h1>
-        <LoadingScreen />
-        {/* <Button onClick={() => {}}>Back</Button> */}
-      </React.Fragment>
-    </Wrapper>
+    <>
+      <CustomHead
+        title="404 — Page Not Found"
+        description="The page you’re looking for doesn’t exist or has moved."
+        noindex
+      />
+      <HeaderFooter isMobile={false}>
+        <Box
+          maxW="var(--container-content)"
+          mx="auto"
+          px={[4, 6, 8]}
+          py={[20, 28]}
+          textAlign="center"
+        >
+          <Text
+            fontFamily="var(--font-geist-mono), monospace"
+            fontSize="12px"
+            letterSpacing="0.08em"
+            color="gray.500"
+            mb={3}
+          >
+            404
+          </Text>
+          <Heading
+            as="h1"
+            fontSize={['28px', '40px']}
+            fontWeight={500}
+            letterSpacing="-0.02em"
+            mb={4}
+          >
+            This page doesn’t exist.
+          </Heading>
+          <Text color="gray.500" mb={8}>
+            The link may be broken, or the page may have moved.
+          </Text>
+          <Link as={NextLink} href="/" color="var(--accent)" fontWeight={600}>
+            ← Back to home
+          </Link>
+        </Box>
+      </HeaderFooter>
+    </>
   )
 }
 
 export default Custom404
-
-const Wrapper = styled(Box)`
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
-  width: 100%;
-  max-height: calc(100vh - 70px);
-  /* justify-content: center;
-  align-content: center; */
-`
-
-// const HeaderContainer = styled.div`
-//   background-color: #559ec7;
-// `
-
-// const HeaderTitle = styled.h1`
-//   display: flex;
-//   color: white;
-//   padding: 20px;
-//   font-size: 20px;
-//   font-weight: bold;
-// `

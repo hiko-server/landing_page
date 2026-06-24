@@ -26,7 +26,7 @@ export default function NowPage({ source, updated, host }: Props) {
     <>
       <CustomHead
         title="Now"
-        description="What I'm focused on right now — Li Yanpei (Hiko)."
+        description="What Li Yanpei (Lucian) is focused on right now — current projects, learning, and work."
         url={`https://${host}/now`}
         image={`https://${host}/api/og?title=Now&kind=page&subtitle=What%20I%27m%20focused%20on`}
         jsonLd={{

@@ -5,6 +5,7 @@ import { Flex, useMediaQuery } from '@chakra-ui/react'
 import LandingContent from '../components/LandingPage/LandingContent'
 import HeaderFooter from '../layout/HeaderFooter'
 import CustomHead from '../components/General-UI/CustomHead'
+import { absUrl, websiteNode, personNode } from '../lib/schema'
 
 
 
@@ -24,34 +25,13 @@ const LandingPage = (props: any) => {
     <>
       <CustomHead
         title="Home"
-        description="Hiko — Full-stack engineer. View CV, projects, and contact."
-        url={`https://${props.host}`}
+        description="Li Yanpei (Lucian) — software engineer in Hong Kong building full-stack web apps, machine-learning / computer-vision, and embedded systems. CV, projects, and contact."
+        url={absUrl('/')}
         image={(props.home?.photos && props.home.photos.find((p:any)=> p.visible !== false)?.url ?
-          ((props.home.photos.find((p:any)=> p.visible !== false)!.url as string).startsWith('http')
-            ? props.home.photos.find((p:any)=> p.visible !== false)!.url
-            : `https://${props.host}${props.home.photos.find((p:any)=> p.visible !== false)!.url}`)
-          : '/images/hikoAvator.png') as string}
+          absUrl(props.home.photos.find((p:any)=> p.visible !== false)!.url as string)
+          : absUrl('/images/hikoAvator.png')) as string}
         type="website"
-        jsonLd={[
-          {
-            '@context': 'https://schema.org',
-            '@type': 'WebSite',
-            name: 'LUCIAN-DEV.COM',
-            url: `https://${props.host}`,
-          },
-          {
-            '@context': 'https://schema.org',
-            '@type': 'Person',
-            name: 'Li Yanpei (Hiko)',
-            url: `https://${props.host}`,
-            sameAs: [
-              'https://github.com/HikoPLi',
-              'https://gitlab.com/HikoPLi',
-              'https://www.linkedin.com/in/liyanpeihiko/',
-            ],
-            jobTitle: 'Software Engineer',
-          },
-        ]}
+        jsonLd={[websiteNode(), personNode()]}
       />
 
       <HeaderFooter isMobile={isMobile}>
