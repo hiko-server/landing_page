@@ -54,7 +54,10 @@ export function listSnapshots(): string[] {
 }
 
 export async function restoreSnapshot(filename: string): Promise<StoreError> {
-  const filePath = path.join(snapshotDir, filename)
+  // Sanitize like readSnapshot() — never let a caller-supplied name escape the
+  // snapshot dir (path traversal). Same allowlist as the sibling reader.
+  const safe = filename.replace(/[^a-zA-Z0-9_.\-]/g, '_')
+  const filePath = path.join(snapshotDir, safe)
   if (!fs.existsSync(filePath)) return { ok: false, error: 'Snapshot not found' }
   try {
     const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'))

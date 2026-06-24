@@ -61,15 +61,50 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Please complete the human check.' })
     }
 
-    // 5. Send the mail
+    // 5. Sanitize: strip CR/LF (mail-header injection) + cap lengths.
+    const clean = (v: unknown, max: number) =>
+      String(v ?? '').replace(/[\r\n]+/g, ' ').slice(0, max).trim()
+    const safeName = clean(name, 200)
+    const safeEmail = clean(email, 254)
+    const safeSubject = clean(subject, 200)
+    const safeMessage = String(message ?? '').slice(0, 10_000)
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeEmail)) {
+      return res.status(400).json({ error: 'Please enter a valid email address.' })
+    }
+
+    // 6. Deliver — and NEVER drop the message silently. If SMTP is unconfigured
+    // or the send fails, persist to the bind-mounted data dir so the message is
+    // recoverable, and log loudly (captured by Sentry once a DSN is set).
     const to = process.env.NOTIFY_EMAIL || process.env.ADMIN_EMAIL
     if (!to) return res.status(500).json({ error: 'Recipient not configured' })
 
-    await sendMail({
-      to,
-      subject: `[Contact] ${subject}`,
-      text: `From: ${name} <${email}>\n\n${message}`,
-    })
+    let delivered = false
+    try {
+      const result = await sendMail({
+        to,
+        subject: `[Contact] ${safeSubject}`,
+        text: `From: ${safeName} <${safeEmail}>\n\n${safeMessage}`,
+      })
+      delivered = !!result?.ok
+    } catch (e) {
+      console.error('[contact] sendMail threw', e)
+    }
+    if (!delivered) {
+      try {
+        const fs = await import('fs')
+        const path = await import('path')
+        const dir = path.join(process.cwd(), 'data')
+        fs.mkdirSync(dir, { recursive: true })
+        fs.appendFileSync(
+          path.join(dir, 'contact-inbox.jsonl'),
+          JSON.stringify({ at: new Date().toISOString(), name: safeName, email: safeEmail, subject: safeSubject, message: safeMessage }) + '\n',
+          'utf-8',
+        )
+        console.error('[contact] mail NOT delivered — saved to data/contact-inbox.jsonl')
+      } catch (e) {
+        console.error('[contact] FAILED to persist fallback contact message', e)
+      }
+    }
 
     return res.status(200).json({ ok: true })
   } catch (err) {

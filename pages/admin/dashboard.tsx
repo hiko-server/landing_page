@@ -38,6 +38,9 @@ export default function AdminDashboard() {
   const pageBg = useColorModeValue('gray.50', 'gray.900')
   const dim = useColorModeValue('gray.600', 'gray.400')
   const tabBorder = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.1)')
+  // Hooks must not be called inside the TAB_LABELS.map() callback below (the
+  // hook-count would change with the list) — resolve the selected-tab bg once here.
+  const tabSelectedBg = useColorModeValue('white', 'gray.700')
 
   useEffect(() => {
     if (!router.isReady) return
@@ -133,7 +136,7 @@ export default function AdminDashboard() {
                   transition="all 0.2s"
                   color={dim}
                   _selected={{
-                    bg: useColorModeValue('white', 'gray.700'),
+                    bg: tabSelectedBg,
                     color: tabColors[i],
                     boxShadow: 'md',
                   }}
