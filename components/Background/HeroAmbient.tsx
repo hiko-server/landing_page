@@ -99,7 +99,12 @@ export default function HeroAmbient({
         pointerEvents="none"
         opacity={imgOpacity}
         sx={{
-          backgroundImage: `url("${HERO_IMG}")`,
+          // Emotion array = CSS fallback cascade: browsers without image-set()
+          // get the (recompressed) JPG; modern browsers get the ~60KB WebP.
+          backgroundImage: [
+            `url("${HERO_IMG}")`,
+            `image-set(url("/images/hero/hero-mountains.webp") type("image/webp"), url("${HERO_IMG}") type("image/jpeg"))`,
+          ],
           backgroundSize: 'cover',
           backgroundPosition: 'center 35%', // bias upward so peaks land mid-hero
           backgroundRepeat: 'no-repeat',

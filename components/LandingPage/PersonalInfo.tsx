@@ -208,7 +208,8 @@ const PersonalInfo = ({
                 >
                   <Image
                     src={avatarSrc}
-                    alt={home?.hero?.brand || 'avatar'}
+                    alt="Li Yanpei (Lucian)"
+                    loading="eager"
                     w="100%"
                     h="100%"
                     objectFit="cover"
