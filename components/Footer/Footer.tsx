@@ -1,56 +1,33 @@
 import React from 'react'
-import {
-  Box,
-  Flex,
-  Text,
-  Link,
-  useColorModeValue,
-  Divider,
-} from '@chakra-ui/react'
+import NextLink from 'next/link'
+import { Box, Flex, Text, Link, Divider } from '@chakra-ui/react'
+import { PRIMARY_LINKS, SOCIAL_LINKS } from '../Chrome/chrome'
+import { useBrandHost } from '../Chrome/useBrandHost'
 
 /**
- * v6 Footer
+ * v6 Footer — rendered once by components/Chrome/SiteChrome.
  *
- * Minimal three-row layout:
- *   1. Navigation links (text, hover-underline)
- *   2. Social + external links
- *   3. Copyright + version pill (engineer signature)
+ * Minimal layout:
+ *   1. Navigation links (client-side via next/link, hover-underline)
+ *   2. Social links (new tab) + copyright
+ *
+ * Colours are semantic tokens, so the footer is right on the first paint in
+ * both colour modes.
  */
 
-const navLinks = [
-  { name: 'Home', url: '/' },
-  { name: 'About', url: '/about' },
-  { name: 'Work', url: '/work' },
-  { name: 'Writing', url: '/blog' },
-  { name: 'CV', url: '/cv' },
-  { name: 'Now', url: '/now' },
-  { name: 'Uses', url: '/uses' },
-  { name: 'Contact', url: '/contact' },
-]
-
-const socialLinks = [
-  { name: 'GitHub', url: 'https://github.com/HikoPLi' },
-  { name: 'GitLab', url: 'https://gitlab.com/HikoPLi' },
-  { name: 'LinkedIn', url: 'https://www.linkedin.com/in/liyanpeihiko/' },
-  { name: 'WhatsApp', url: 'https://wa.me/85262040827' },
-]
+const MONO = 'var(--font-geist-mono), ui-monospace, monospace'
 
 const Footer: React.FC = () => {
-  const bg = useColorModeValue('rgba(253,253,253,0.5)', 'rgba(5,5,5,0.5)')
-  const border = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
-  const fg = useColorModeValue('gray.700', 'gray.300')
-  const subtle = useColorModeValue('gray.600', 'gray.500')
-  const linkHover = useColorModeValue('black', 'white')
-  const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
+  const brand = useBrandHost()
 
   return (
     <Box
       as="footer"
       w="100%"
-      bg={bg}
+      bg="page.footer-bg"
       backdropFilter="blur(8px)"
       borderTop="1px solid"
-      borderColor={border}
+      borderColor="page.border"
       mt={16}
       className="no-print"
     >
@@ -58,61 +35,62 @@ const Footer: React.FC = () => {
         <Flex direction="column" gap={6}>
           {/* Row 1: nav links */}
           <Flex
+            as="nav"
+            aria-label="Footer"
             wrap="wrap"
             gap={{ base: 4, md: 6 }}
             justifyContent={{ base: 'center', md: 'flex-start' }}
             fontSize="13px"
-            color={fg}
+            color="page.fg-secondary"
           >
-            {navLinks.map((l) => (
+            {PRIMARY_LINKS.map((l) => (
               <Link
                 key={l.name}
+                as={NextLink}
                 href={l.url}
                 className="link-underline"
-                _hover={{ color: linkHover, textDecoration: 'none' }}
+                _hover={{ color: 'page.fg', textDecoration: 'none' }}
               >
                 {l.name}
               </Link>
             ))}
           </Flex>
 
-          <Divider borderColor={border} />
+          <Divider borderColor="page.border" />
 
-          {/* Row 2: social + version + copyright */}
+          {/* Row 2: social + copyright */}
           <Flex
             direction={{ base: 'column', md: 'row' }}
             justifyContent="space-between"
             alignItems={{ base: 'flex-start', md: 'center' }}
             gap={4}
           >
-            <Flex gap={5} wrap="wrap" fontFamily={monoFont} fontSize="11px" color={subtle}>
-              {socialLinks.map((s) => (
+            <Flex gap={5} wrap="wrap" fontFamily={MONO} fontSize="11px" color="page.fg-subtle">
+              {SOCIAL_LINKS.map((s) => (
                 <Link
                   key={s.name}
                   href={s.url}
                   isExternal
                   className="link-underline"
-                  _hover={{ color: linkHover, textDecoration: 'none' }}
+                  _hover={{ color: 'page.fg', textDecoration: 'none' }}
                 >
-                  {s.name} ↗
+                  {s.name}{' '}
+                  <span aria-hidden>↗</span>
+                  <span className="sr-only"> (opens in a new tab)</span>
                 </Link>
               ))}
             </Flex>
 
-            <Flex
-              gap={3}
-              alignItems="center"
-              fontFamily={monoFont}
-              fontSize="11px"
-              color={subtle}
-            >
+            <Flex gap={3} alignItems="center" fontFamily={MONO} fontSize="11px" color="page.fg-subtle">
               <Text as="span">
                 © {new Date().getFullYear()}{' '}
-                <Link href="https://lucian-dev.com" isExternal _hover={{ color: linkHover, textDecoration: 'none' }}>
-                  lucian-dev.com
+                <Link as={NextLink} href="/" _hover={{ color: 'page.fg', textDecoration: 'none' }}>
+                  {brand}
                 </Link>
               </Text>
-              <Text as="span">·</Text>
+              <Text as="span" aria-hidden>
+                ·
+              </Text>
               <Text as="span">All rights reserved</Text>
             </Flex>
           </Flex>

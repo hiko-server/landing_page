@@ -1,9 +1,7 @@
-/** @type {import('next').NextConfig} */
-const { i18n } = require('./next-i18next.config')
-const path = require('path')
+/* eslint-disable @typescript-eslint/no-var-requires -- CommonJS config file */
 const { buildCsp } = require('./lib/csp')
-const { withSentryConfig } = require('@sentry/nextjs')
 
+/** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
   reactStrictMode: true,
@@ -13,6 +11,19 @@ const nextConfig = {
   // Required on Next 14 so instrumentation.ts runs on server/edge startup and
   // loads the Sentry init for each runtime. (Stable/removed in Next 15.)
   experimental: { instrumentationHook: true },
+  // The server SDK (imported by instrumentation.ts) pulls in OpenTelemetry's
+  // runtime instrumentation, which loads modules through a computed require.
+  // Webpack flags that as "Critical dependency" although it is intended and
+  // harmless on Node. withSentryConfig silences exactly these two; do the same
+  // when the build is not wrapped, so the build output stays warning-free.
+  webpack(webpackConfig) {
+    webpackConfig.ignoreWarnings = [
+      ...(webpackConfig.ignoreWarnings || []),
+      { module: /@opentelemetry[\\/]instrumentation/, message: /Critical dependency/ },
+      { module: /require-in-the-middle/, message: /Critical dependency/ },
+    ]
+    return webpackConfig
+  },
   // Route every /uploads/* request to the runtime file server BEFORE Next's
   // static handler runs. With `output: 'standalone'`, that static handler only
   // knows about files present in public/ at BUILD time, so runtime-uploaded
@@ -53,14 +64,49 @@ const nextConfig = {
   },
 }
 
-// Wrap with Sentry. Fully inert without a DSN; source maps upload only when
-// SENTRY_ORG + SENTRY_PROJECT + SENTRY_AUTH_TOKEN are all set, otherwise the
-// plugin just instruments the build and skips upload. `silent` keeps logs clean.
-module.exports = withSentryConfig(nextConfig, {
-  silent: true,
-  org: process.env.SENTRY_ORG,
-  project: process.env.SENTRY_PROJECT,
-  authToken: process.env.SENTRY_AUTH_TOKEN,
-  widenClientFileUpload: false,
-  disableLogger: true,
-})
+// Sentry is opt-in at BUILD time. NEXT_PUBLIC_SENTRY_DSN is inlined into the
+// client bundle (it arrives as a Docker build arg), so without it there is
+// nothing the browser SDK could report to — and then the build is not wrapped
+// at all: no client SDK in the shared _app chunk (~120 KB raw / ~40 KB gzip),
+// no auto-instrumentation loaders. The server/edge SDK still initialises from
+// instrumentation.ts whenever SENTRY_DSN is present at runtime.
+//
+// When enabled, unused SDK code paths are compiled out: debug logging and
+// Session Replay (the app never adds the replay integration) everywhere, and
+// browser tracing in the CLIENT bundle unless a non-zero
+// NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE is set. Server/edge tracing is left
+// intact because SENTRY_TRACES_SAMPLE_RATE is a runtime setting. Source maps
+// upload only when SENTRY_ORG + SENTRY_PROJECT + SENTRY_AUTH_TOKEN are all set.
+const sentryDsn = (process.env.NEXT_PUBLIC_SENTRY_DSN || '').trim()
+const clientTracing = Number(process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE || 0) > 0
+
+if (sentryDsn) {
+  const { withSentryConfig } = require('@sentry/nextjs')
+  const config = clientTracing
+    ? nextConfig
+    : {
+        ...nextConfig,
+        webpack(webpackConfig, context) {
+          const cfg = nextConfig.webpack(webpackConfig, context)
+          if (!context.isServer) cfg.plugins.push(new context.webpack.DefinePlugin({ __SENTRY_TRACING__: false }))
+          return cfg
+        },
+      }
+  module.exports = withSentryConfig(config, {
+    silent: true,
+    telemetry: false,
+    org: process.env.SENTRY_ORG,
+    project: process.env.SENTRY_PROJECT,
+    authToken: process.env.SENTRY_AUTH_TOKEN,
+    widenClientFileUpload: false,
+    disableLogger: true,
+    bundleSizeOptimizations: {
+      excludeDebugStatements: true,
+      excludeReplayShadowDom: true,
+      excludeReplayIframe: true,
+      excludeReplayWorker: true,
+    },
+  })
+} else {
+  module.exports = nextConfig
+}

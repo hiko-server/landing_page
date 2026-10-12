@@ -1,18 +1,19 @@
 // Browser-side Sentry initialisation.
 //
-// Inert by default: NEXT_PUBLIC_SENTRY_DSN is inlined into the client bundle at
-// BUILD time, and with no DSN the SDK initialises disabled and sends nothing.
-// To activate, set NEXT_PUBLIC_SENTRY_DSN and rebuild.
+// Only bundled when NEXT_PUBLIC_SENTRY_DSN is set at BUILD time: next.config.js
+// applies withSentryConfig (which injects this file) only in that case, so a
+// build without a DSN ships no client SDK at all.
+//
+// Tracing is opt-in via NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE (> 0); otherwise
+// the build also tree-shakes the tracing code (bundleSizeOptimizations). Session
+// Replay is not used — its integration is never added and its code is excluded.
 import * as Sentry from '@sentry/nextjs'
 
 const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN
 
-Sentry.init({
-  dsn,
-  enabled: !!dsn,
-  // Performance tracing is opt-in via env (0 = off) to avoid overhead/quota.
-  tracesSampleRate: Number(process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE || 0),
-  // Session Replay off by default (bundle weight + privacy); enable later.
-  replaysSessionSampleRate: 0,
-  replaysOnErrorSampleRate: 0,
-})
+if (dsn) {
+  Sentry.init({
+    dsn,
+    tracesSampleRate: Number(process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE || 0),
+  })
+}

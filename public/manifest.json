@@ -1,13 +1,18 @@
 {
-  "name": "lucian-dev.com — Li Yanpei (Lucian)",
+  "id": "/",
+  "name": "lucian-dev.com",
   "short_name": "Lucian",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#559ec7",
   "description": "Li Yanpei (Lucian) — software engineer in Hong Kong. Full-stack web, machine learning / computer vision, and embedded systems. Portfolio, projects, and CV.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#050505",
+  "theme_color": "#050505",
   "icons": [
-    { "src": "/images/favicon-32x32.png", "sizes": "32x32", "type": "image/png" },
-    { "src": "/images/favicon-32x32.png", "sizes": "48x48", "type": "image/png" }
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
