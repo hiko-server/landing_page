@@ -1,0 +1,52 @@
+import type { NextApiRequest, NextApiResponse } from 'next'
+import { isAdminRequest } from '../../../lib/auth'
+import { deleteInbox, isInboxId, listInbox, markInbox } from '../../../lib/inbox'
+
+/**
+ * Contact inbox for the admin.
+ *
+ *   GET  /api/admin/inbox                       → { messages, unread, total }
+ *   POST /api/admin/inbox { action, ids }       → { ok, affected, unread, total }
+ *        action: 'read' | 'unread' | 'delete'   ids: up to 500 message ids
+ *
+ * The middleware already gates /api/admin/* and refuses cross-site or
+ * non-JSON writes; the session check here is the defence-in-depth copy that
+ * also enforces session revocation.
+ */
+const ACTIONS = new Set(['read', 'unread', 'delete'])
+const MAX_IDS = 500
+
+export default function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (!isAdminRequest(req, res)) return res.status(401).json({ error: 'Unauthorized' })
+  res.setHeader('Cache-Control', 'no-store')
+
+  if (req.method === 'GET') {
+    try {
+      return res.status(200).json(listInbox())
+    } catch (err: any) {
+      console.error('[inbox] read failed', err)
+      return res.status(500).json({ error: 'Could not read the inbox' })
+    }
+  }
+
+  if (req.method === 'POST') {
+    const { action, ids } = (req.body || {}) as { action?: unknown; ids?: unknown }
+    if (typeof action !== 'string' || !ACTIONS.has(action)) {
+      return res.status(400).json({ error: "action must be 'read', 'unread' or 'delete'" })
+    }
+    if (!Array.isArray(ids) || ids.length === 0 || ids.length > MAX_IDS || !ids.every(isInboxId)) {
+      return res.status(400).json({ error: `ids must be 1–${MAX_IDS} message ids` })
+    }
+    try {
+      const affected = action === 'delete' ? deleteInbox(ids) : markInbox(ids, action === 'read')
+      const { unread, total } = listInbox()
+      return res.status(200).json({ ok: true, affected, unread, total })
+    } catch (err: any) {
+      console.error('[inbox] update failed', err)
+      return res.status(500).json({ error: 'Could not update the inbox' })
+    }
+  }
+
+  res.setHeader('Allow', 'GET, POST')
+  return res.status(405).json({ error: 'Method not allowed' })
+}

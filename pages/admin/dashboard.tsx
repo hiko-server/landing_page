@@ -14,7 +14,7 @@ import {
   useToast,
 } from '@chakra-ui/react'
 import { ChevronDownIcon } from '@chakra-ui/icons'
-import { FaHome, FaFileAlt, FaHistory, FaDatabase } from 'react-icons/fa'
+import { FaHome, FaFileAlt, FaHistory, FaDatabase, FaInbox } from 'react-icons/fa'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 import CVEditor from '../../components/Admin/CVEditor'
@@ -22,6 +22,7 @@ import CVEditorStudio from '../../components/Admin/CVEditorStudio'
 import HomeEditor from '../../components/Admin/HomeEditor'
 import VersionHistory from '../../components/Admin/VersionHistory'
 import StoragePanel from '../../components/Admin/StoragePanel'
+import InboxPanel from '../../components/Admin/InboxPanel'
 import { AdminDirtyProvider, useAdminDirty } from '../../components/Admin/AdminDirtyContext'
 import { AdminTitleBar, MONO, SITE_HEADER_H, useIsMac } from '../../components/Admin/shell/ui'
 import SegmentedTabs, {
@@ -48,6 +49,7 @@ const TAB_META: Record<DashboardTab, { label: string; icon: SegmentedItem<Dashbo
     cv: { label: 'CV', icon: FaFileAlt },
     versions: { label: 'Versions', icon: FaHistory },
     storage: { label: 'Storage', icon: FaDatabase },
+    inbox: { label: 'Inbox', icon: FaInbox },
   }
 
 const CV_VIEW_ITEMS: SegmentedItem<CvView>[] = [
@@ -73,6 +75,20 @@ function Dashboard() {
   const isMac = useIsMac()
   const [tab, setTab] = useState<DashboardTab>('home')
   const [cvView, setCvView] = useState<CvView>('studio')
+  // Unread contact messages, shown on the Inbox tab from any tab.
+  const [unread, setUnread] = useState(0)
+  useEffect(() => {
+    let alive = true
+    fetch('/api/admin/inbox', { cache: 'no-store', credentials: 'same-origin' })
+      .then((r) => (r.ok ? readJsonObject(r) : null))
+      .then((b) => {
+        if (alive && b && typeof b.unread === 'number') setUnread(b.unread)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
 
   // URL → state (initial load, shared links, /admin cards).
   useEffect(() => {
@@ -157,6 +173,7 @@ function Dashboard() {
   const tabItems: SegmentedItem<DashboardTab>[] = DASHBOARD_TABS.map((key, i) => ({
     key,
     ...TAB_META[key],
+    ...(key === 'inbox' && unread > 0 ? { label: `Inbox (${unread})` } : {}),
     shortcut: tabShortcutFor(isMac, i),
     ariaShortcut: `${isMac ? 'Control' : 'Alt'}+${i + 1}`,
   }))
@@ -275,6 +292,11 @@ function Dashboard() {
           {tab === 'storage' ? (
             <Box maxW="var(--container-content)" mx="auto">
               <StoragePanel />
+            </Box>
+          ) : null}
+          {tab === 'inbox' ? (
+            <Box maxW="var(--container-content)" mx="auto">
+              <InboxPanel onUnreadChange={setUnread} />
             </Box>
           ) : null}
         </Box>

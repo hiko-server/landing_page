@@ -22,6 +22,7 @@ import { STATIC_CONTENT_PATHS, collectionPaths, type Collection } from './revali
 import { isValidUploadName } from './security/uploadName'
 // @ts-expect-error -- tar-stream ships no type declarations (typed below).
 import tarStream from 'tar-stream'
+import { inboxFile, mergeInboxText } from './inbox'
 
 // A static import (not require) so the standalone tracer bundles the package
 // and the module also loads as native ESM (node --test).
@@ -39,6 +40,7 @@ const tar = tarStream as {
  *   db/content.db           ← SQLite online backup (consistent across WAL)
  *   data/snapshots/<dir>/*  ← cv/home/blog/work/page version history
  *   uploads/<file>          ← public/uploads contents
+ *   data/inbox/contact-inbox.jsonl ← contact messages (merged on restore, never replaced)
  *
  * Credentials and connection settings are not content: data/admin.json and
  * data/mongo_config.json are never written into a snapshot, and when an older
@@ -282,6 +284,8 @@ async function buildLocalSnapshot(reason: NonNullable<SnapshotManifest['reason']
       for (const f of listFilesRecursive(path.join(DATA_DIR, snap))) add(`data/snapshots/${snap}/${f.rel}`, f.abs)
     }
     for (const f of listFilesRecursive(UPLOADS_DIR)) add(`uploads/${f.rel}`, f.abs)
+    // Contact inbox (messages + read state) — restored by merging, never replacing.
+    add('data/inbox/contact-inbox.jsonl', inboxFile())
 
     const manifest: SnapshotManifest = {
       version: 1,
@@ -682,12 +686,23 @@ async function restoreFromBuffer(buf: Buffer, source: 'r2' | 'local', key: strin
       fs.copyFileSync(f.abs, path.join(UPLOADS_DIR, f.name))
       filesRestored++
     }
+
+    // 6. Contact inbox: merge, so messages received after the snapshot survive.
+    const stagedInbox = path.join(stageDir, 'data', 'inbox', 'contact-inbox.jsonl')
+    if (fs.existsSync(stagedInbox)) {
+      try {
+        const added = mergeInboxText(fs.readFileSync(stagedInbox, 'utf8'))
+        if (added) filesRestored++
+      } catch (err) {
+        warnings.push(`Contact inbox could not be merged (${errMsg(err)}).`)
+      }
+    }
   } finally {
     // Always clean the stage dir — also when extraction failed.
     fs.rmSync(stageDir, { recursive: true, force: true })
   }
 
-  // 6. Make R2 match the restored DB.
+  // 7. Make R2 match the restored DB.
   let r2Mirrored = 0
   let r2Removed = 0
   if (dbReplaced && isR2Configured()) {
