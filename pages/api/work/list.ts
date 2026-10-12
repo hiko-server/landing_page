@@ -1,15 +1,19 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { listWork } from '../../../lib/mdx'
+import { listWorkInDisplayOrder } from '../../../lib/mdx'
 
 /**
- * Public list of project case studies for the ⌘K palette / index reuse.
+ * Public list of project case studies (in /work display order) for the ⌘K
+ * palette and index reuse.
  */
 export default function handler(_req: NextApiRequest, res: NextApiResponse) {
-  const items = listWork().map((w) => ({
+  const items = listWorkInDisplayOrder().map((w) => ({
     slug: w.slug,
     title: w.frontmatter.title,
+    description: w.frontmatter.description || null,
+    tech: Array.isArray(w.frontmatter.tech) ? w.frontmatter.tech : [],
     status: w.frontmatter.status || 'case-study',
     featured: w.frontmatter.featured || false,
+    lang: w.lang,
     permalink: w.permalink,
   }))
   res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')

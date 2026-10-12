@@ -1,36 +1,71 @@
 import type { GetServerSideProps } from 'next'
-import { listPosts, listWork } from '../lib/mdx'
+import { listPosts, listWork, xmlEscape } from '../lib/mdx'
+import { getDb } from '../lib/db'
+import { latestDate } from '../lib/postDate'
+import { SITE_URL, CV_ALTERNATES, type Alternate } from '../lib/schema'
+
+/**
+ * sitemap.xml with real <lastmod> values: items use the newest of their
+ * frontmatter `updated` / `date` and the content-store write time; static
+ * pages use the write time of the data they render (home, CV, now, uses).
+ * The bilingual CV is listed in both languages with hreflang alternates.
+ */
 
 const Sitemap = () => null
 
+type Entry = { path: string; lastmod: string; alternates?: readonly Alternate[] }
+
+/** Content-store write time (epoch ms) for a kv key or page name; 0 when unknown. */
+function storedAt(table: 'kv' | 'pages', id: string): number {
+  try {
+    const sql = table === 'kv' ? 'SELECT updated_at FROM kv WHERE key = ?' : 'SELECT updated_at FROM pages WHERE name = ?'
+    const row = getDb().prepare(sql).get(id) as { updated_at: number } | undefined
+    return row?.updated_at || 0
+  } catch {
+    return 0
+  }
+}
+
+function urlXml({ path, lastmod, alternates }: Entry): string {
+  const lines = [`    <loc>${xmlEscape(`${SITE_URL}${path}`)}</loc>`]
+  if (lastmod) lines.push(`    <lastmod>${lastmod}</lastmod>`)
+  for (const a of alternates || []) {
+    lines.push(`    <xhtml:link rel="alternate" hreflang="${xmlEscape(a.hrefLang)}" href="${xmlEscape(a.href)}" />`)
+  }
+  return `  <url>\n${lines.join('\n')}\n  </url>`
+}
+
 export const getServerSideProps: GetServerSideProps = async ({ res }) => {
-  const host = process.env.NEXT_PUBLIC_SITE_HOST || 'lucian-dev.com'
-  const baseUrl = `https://${host}`
-  const lastmod = new Date().toISOString()
+  const posts = listPosts()
+  const work = listWork()
+  const postEntries: Entry[] = posts.map((p) => ({
+    path: p.permalink,
+    lastmod: latestDate([p.frontmatter.updated, p.frontmatter.date, p.updatedAt]),
+  }))
+  const workEntries: Entry[] = work.map((w) => ({ path: w.permalink, lastmod: latestDate([w.updatedAt]) }))
 
-  // Static routes (v6 ships new content sections alongside existing pages)
-  const staticPages = [
-    '/',
-    '/about',
-    '/work',
-    '/blog',
-    '/cv',
-    '/now',
-    '/uses',
-    '/contact',
+  const home = storedAt('kv', 'home')
+  const cv = storedAt('kv', 'cvdata')
+
+  const entries: Entry[] = [
+    { path: '/', lastmod: latestDate([home, cv]) },
+    { path: '/about', lastmod: latestDate([home, cv]) },
+    { path: '/work', lastmod: latestDate(workEntries.map((e) => e.lastmod)) },
+    { path: '/blog', lastmod: latestDate(postEntries.map((e) => e.lastmod)) },
+    { path: '/cv', lastmod: latestDate([cv]), alternates: CV_ALTERNATES },
+    { path: '/cv?lang=zh', lastmod: latestDate([cv]), alternates: CV_ALTERNATES },
+    { path: '/now', lastmod: latestDate([storedAt('pages', 'now')]) },
+    { path: '/uses', lastmod: latestDate([storedAt('pages', 'uses')]) },
+    { path: '/contact', lastmod: latestDate([home]) },
+    ...postEntries,
+    ...workEntries,
   ]
 
-  const dynamicPages = [
-    ...listPosts().map((p) => p.permalink),
-    ...listWork().map((w) => w.permalink),
-  ]
-
-  const urls = [...staticPages, ...dynamicPages]
-    .map((p) => `  <url><loc>${baseUrl}${p}</loc><lastmod>${lastmod}</lastmod></url>`)
-    .join('\n')
-
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>`
-  res.setHeader('Content-Type', 'application/xml')
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+${entries.map(urlXml).join('\n')}
+</urlset>`
+  res.setHeader('Content-Type', 'application/xml; charset=utf-8')
   res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
   res.write(xml)
   res.end()

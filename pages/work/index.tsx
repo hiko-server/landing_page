@@ -14,25 +14,28 @@ import NextLink from 'next/link'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 import SectionLabel from '../../components/General-UI/SectionLabel'
-import { listWork, type WorkFrontmatter, type MDXIndexEntry } from '../../lib/mdx'
+import { listWorkInDisplayOrder, type WorkFrontmatter, type MDXIndexEntry } from '../../lib/mdx'
+import { absUrl, ogImageUrl, PERSON_NAME } from '../../lib/schema'
 
 type Props = {
   items: MDXIndexEntry<WorkFrontmatter>[]
-  host: string
 }
 
-export default function WorkIndex({ items, host }: Props) {
+const titleLang = (w: MDXIndexEntry<WorkFrontmatter>) => (w.lang === 'en' ? undefined : w.lang)
+
+export default function WorkIndex({ items }: Props) {
   // AA contrast on both themes (#22c55e / #a855f7 at 10px failed on light).
   const liveColor = useColorModeValue('green.700', 'green.300')
   const featuredColor = useColorModeValue('purple.700', 'purple.300')
-  const muted = useColorModeValue('gray.600', 'gray.500')
-  const border = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
-  const hover = useColorModeValue('rgba(0,0,0,0.20)', 'rgba(255,255,255,0.20)')
-  const cardBg = useColorModeValue('rgba(255,255,255,0.6)', 'rgba(20,20,20,0.4)')
+  const muted = 'page.fg-secondary'
+  const border = 'page.border'
+  const hover = 'page.border-strong'
+  const cardBg = 'page.surface'
   const monoFont = 'var(--font-geist-mono), monospace'
 
   // Partition featured vs the rest so the featured row can render full-width
-  // with cover art while everything else stays in the 2-col grid.
+  // with cover art while everything else stays in the 2-col grid. (`items`
+  // already arrives featured-first; the split keeps the two layouts apart.)
   const { featured, rest } = useMemo(() => {
     const f: MDXIndexEntry<WorkFrontmatter>[] = []
     const r: MDXIndexEntry<WorkFrontmatter>[] = []
@@ -47,9 +50,17 @@ export default function WorkIndex({ items, host }: Props) {
     <>
       <CustomHead
         title="Work"
-        description="Selected project case studies and engineering write-ups by Li Yanpei (Lucian) — including WeGreen AI and Carboy."
-        url={`https://${host}/work`}
-        image={`https://${host}/api/og?title=Selected%20Work&kind=work&subtitle=Project%20case%20studies`}
+        description={
+          `Selected project case studies and engineering write-ups by ${PERSON_NAME}` +
+          (items.length
+            ? ` — including ${items
+                .slice(0, 2)
+                .map((w) => w.frontmatter.title)
+                .join(' and ')}.`
+            : '.')
+        }
+        url={absUrl('/work')}
+        image={ogImageUrl({ kind: 'work', title: 'Selected Work', subtitle: 'Project case studies' })}
         jsonLd={{
           '@context': 'https://schema.org',
           '@type': 'ItemList',
@@ -57,7 +68,7 @@ export default function WorkIndex({ items, host }: Props) {
           itemListElement: items.map((w, i) => ({
             '@type': 'ListItem',
             position: i + 1,
-            url: `https://${host}${w.permalink}`,
+            url: absUrl(w.permalink),
             name: w.frontmatter.title,
           })),
         }}
@@ -93,11 +104,7 @@ export default function WorkIndex({ items, host }: Props) {
                 [ no case studies yet ]
               </Text>
               <Text color={muted} fontSize="14px">
-                Drop an{' '}
-                <Text as="code" bg={border} px={1.5} py={0.5} borderRadius="sm">
-                  .mdx
-                </Text>{' '}
-                into <Text as="code">content/work/</Text> or use the admin editor.
+                Case studies will appear here as they&rsquo;re published.
               </Text>
             </Box>
           ) : (
@@ -120,6 +127,7 @@ export default function WorkIndex({ items, host }: Props) {
                         mb={4}
                         display="block"
                         transition="border-color 250ms var(--ease-out-quart)"
+                        _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
                       >
                         <Flex direction={['column', 'column', 'row']} gap={[6, 8]} align="flex-start">
                           {fm.cover ? (
@@ -133,6 +141,7 @@ export default function WorkIndex({ items, host }: Props) {
                               borderColor={border}
                               objectFit="cover"
                               flexShrink={0}
+                              decoding="async"
                             />
                           ) : null}
                           <Box flex="1">
@@ -164,10 +173,13 @@ export default function WorkIndex({ items, host }: Props) {
                               )}
                             </Flex>
                             <Heading
+                              as="h2"
                               size="lg"
                               mb={3}
                               fontWeight={500}
                               letterSpacing="-0.02em"
+                              lang={titleLang(w)}
+                              style={{ viewTransitionName: `vt-work-${w.slug}` }}
                             >
                               {fm.title}
                             </Heading>
@@ -209,7 +221,7 @@ export default function WorkIndex({ items, host }: Props) {
                       p={6}
                       display="block"
                       transition="border-color 250ms var(--ease-out-quart), transform 250ms var(--ease-out-quart)"
-                      _focus={{ outline: 'none', boxShadow: '0 0 0 2px var(--accent-ring)' }}
+                      _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
                     >
                       <Flex justify="space-between" align="flex-start" gap={3} mb={4}>
                         <Text fontFamily={monoFont} fontSize="11px" color={muted}>
@@ -232,7 +244,15 @@ export default function WorkIndex({ items, host }: Props) {
                           </Text>
                         )}
                       </Flex>
-                      <Heading size="md" mb={2} fontWeight={500} letterSpacing="-0.015em">
+                      <Heading
+                        as="h2"
+                        size="md"
+                        mb={2}
+                        fontWeight={500}
+                        letterSpacing="-0.015em"
+                        lang={titleLang(w)}
+                        style={{ viewTransitionName: `vt-work-${w.slug}` }}
+                      >
                         {fm.title}
                       </Heading>
                       {fm.description && (
@@ -264,8 +284,7 @@ export default function WorkIndex({ items, host }: Props) {
 export const getStaticProps: GetStaticProps<Props> = async () => {
   return {
     props: {
-      items: listWork(),
-      host: process.env.NEXT_PUBLIC_SITE_HOST || 'lucian-dev.com',
+      items: listWorkInDisplayOrder(),
     },
     revalidate: 60,
   }

@@ -1,7 +1,16 @@
 import Head from 'next/head'
 import { useEffect, useState } from 'react'
 import { VPColor } from '../../theme/color'
-import { SITE_HOST, SITE_URL, absUrl, PERSON_NAME } from '../../lib/schema'
+import {
+  SITE_HOST,
+  absUrl,
+  ogImageUrl,
+  ogLocale,
+  serializeJsonLd,
+  withXDefault,
+  PERSON_NAME,
+  type Alternate,
+} from '../../lib/schema'
 
 // Brand/site name shown in the browser tab and <title>. We want this to track
 // the domain the deployment is actually served from (e.g. "lucian-dev.com") rather
@@ -37,7 +46,16 @@ type Props = {
   themeColor?: string
   twitterCard?: 'summary' | 'summary_large_image'
   canonical?: string
-  hreflang?: Array<{ hrefLang: string; href: string }>
+  /**
+   * Language versions of this page, e.g. CV_ALTERNATES from lib/schema
+   * (/cv → en, /cv?lang=zh → zh-Hans). Rendered as <link rel="alternate"
+   * hreflang>; an x-default entry is added (first alternate) when missing.
+   */
+  alternates?: readonly Alternate[]
+  /** Same as `alternates` (older name, kept for existing callers). */
+  hreflang?: readonly Alternate[]
+  /** BCP-47 language of this page ("zh-Hans"); drives og:locale. Default 'en'. */
+  lang?: string
   jsonLd?: JsonLd
   /** Keep this page out of the index (admin, 404, 500). Defaults to indexable. */
   noindex?: boolean
@@ -56,7 +74,9 @@ const CustomHead = ({
   themeColor,
   twitterCard = 'summary_large_image',
   canonical,
+  alternates,
   hreflang,
+  lang,
   jsonLd,
   noindex = false,
   publishedTime,
@@ -74,13 +94,26 @@ const CustomHead = ({
   const pageTitle = title ? `${title} | ${productName}` : productName
   const pageDesc =
     description ||
-    'Li Yanpei (Lucian) — software engineer in Hong Kong building full-stack web apps, machine-learning / computer-vision, and embedded systems.'
+    'Li Yanpei (Lucian) — software engineer building full-stack web apps, machine-learning / computer-vision, and embedded systems.'
 
   // Canonical + OG URL are PINNED to the fixed origin (never the request host).
-  const canonicalUrl = canonical || url || SITE_URL
+  // Only emitted when the page names its own URL: a page without one (404,
+  // admin) must not claim to be the homepage.
+  const explicitUrl = canonical || url
+  const canonicalUrl = explicitUrl ? absUrl(explicitUrl) : ''
   // og:image must be absolute on the canonical origin or crawlers drop it.
-  const rawImage = image || '/images/hikoAvator.png'
-  const ogImage = rawImage.startsWith('http') ? rawImage : absUrl(rawImage)
+  // Pages without an image get a generic social card titled after the page.
+  const ogImage = image ? absUrl(image) : ogImageUrl({ kind: 'page', title: title || SITE_HOST })
+  const languageLinks = withXDefault(alternates || hreflang)
+  const locale = ogLocale(lang)
+  const altLocales = Array.from(
+    new Set(
+      languageLinks
+        .filter((a) => a.hrefLang !== 'x-default')
+        .map((a) => ogLocale(a.hrefLang))
+        .filter((l) => l !== locale),
+    ),
+  )
   // The dynamic /api/og endpoint renders a true 1200x630 social card; only
   // claim those dimensions for that source (avatar/photo images are not 1200x630).
   const isOgCard = ogImage.includes('/api/og')
@@ -103,16 +136,19 @@ const CustomHead = ({
         name="robots"
         content={noindex ? 'noindex, nofollow' : 'index, follow, max-image-preview:large'}
       />
-      <link rel="canonical" href={canonicalUrl} />
-      {hreflang?.map(({ hrefLang, href }) => (
+      {canonicalUrl && <link rel="canonical" href={canonicalUrl} />}
+      {languageLinks.map(({ hrefLang, href }) => (
         <link key={hrefLang} rel="alternate" hrefLang={hrefLang} href={href} />
       ))}
 
       {/* Open Graph */}
-      <meta property="og:url" content={canonicalUrl} />
+      {canonicalUrl && <meta property="og:url" content={canonicalUrl} />}
       <meta property="og:type" content={type} />
       <meta property="og:site_name" content={SITE_HOST} />
-      <meta property="og:locale" content="en_US" />
+      <meta property="og:locale" content={locale} />
+      {altLocales.map((l) => (
+        <meta key={l} property="og:locale:alternate" content={l} />
+      ))}
       <meta property="og:title" content={pageTitle} />
       <meta property="og:description" content={pageDesc} />
       <meta property="og:image" content={ogImage} />
@@ -138,7 +174,7 @@ const CustomHead = ({
       {jsonLd && (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+          dangerouslySetInnerHTML={{ __html: serializeJsonLd(jsonLd) }}
         />
       )}
 
