@@ -146,12 +146,10 @@ export default function ContactPro({
   const [sent, setSent] = useState<Sent | null>(null)
   const [honeypot, setHoneypot] = useState('')
 
-  // The sum is generated after mount so SSR and hydration markup match.
+  // The sum comes from the server together with the signed nonce, which
+  // carries an HMAC of the answer (verified by /api/contact). It is loaded
+  // when the form scrolls into view, so SSR and hydration markup match.
   const [mathPair, setMathPair] = useState<{ a: number; b: number } | null>(null)
-  const newMathPair = () => setMathPair({ a: Math.floor(Math.random() * 9) + 1, b: Math.floor(Math.random() * 9) + 1 })
-  useEffect(() => {
-    setMathPair({ a: Math.floor(Math.random() * 9) + 1, b: Math.floor(Math.random() * 9) + 1 })
-  }, [])
   const expectedMath = mathPair ? mathPair.a + mathPair.b : null
 
   const errors = validateContact(values, expectedMath)
@@ -162,8 +160,8 @@ export default function ContactPro({
   const nameRef = useRef<HTMLInputElement | null>(null)
   const successRef = useRef<HTMLHeadingElement | null>(null)
 
-  // Signed nonce: fetched on first interaction (not on every page view) and
-  // refreshed near its 30-minute expiry so a slow message never fails.
+  // Signed nonce (+ its sum): fetched when the form scrolls into view or is
+  // focused, and refreshed near its 30-minute expiry so a slow message never fails.
   const [nonce, setNonce] = useState<string | null>(null)
   const [nonceErr, setNonceErr] = useState<string | null>(null)
   const nonceAtRef = useRef(0)
@@ -172,8 +170,11 @@ export default function ContactPro({
       const r = await fetch('/api/contact/nonce', { cache: 'no-store' })
       if (!r.ok) throw new Error(String(r.status))
       const d = await r.json()
+      const c = d?.challenge
+      if (!c || !Number.isInteger(c.a) || !Number.isInteger(c.b)) throw new Error('no challenge')
       nonceAtRef.current = Date.now()
       setNonce(d.token)
+      setMathPair({ a: c.a, b: c.b })
       setNonceErr(null)
       return d.token as string
     } catch {
@@ -186,12 +187,43 @@ export default function ContactPro({
     if (nonce && Date.now() - nonceAtRef.current < NONCE_MAX_AGE_MS) return nonce
     return fetchNonce()
   }, [nonce, fetchNonce])
-  const warmNonce = () => {
+  const warmNonce = useCallback(() => {
     if (!nonce && !nonceAtRef.current) {
       nonceAtRef.current = 1 // in flight
       fetchNonce()
     }
-  }
+  }, [nonce, fetchNonce])
+
+  // Load the challenge once the form is on screen (not on every page view
+  // that never reaches the form).
+  const formRef = useRef<HTMLFormElement | null>(null)
+  useEffect(() => {
+    if (sent || mathPair) return
+    const el = formRef.current
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      warmNonce()
+      return
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          warmNonce()
+          io.disconnect()
+        }
+      },
+      { rootMargin: '200px' },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [sent, mathPair, warmNonce])
+
+  /** Replace the challenge (wrong answer / expired nonce) and clear the stale answer. */
+  const refreshChallenge = useCallback(async () => {
+    setNonce(null)
+    nonceAtRef.current = 0
+    setValues((v) => ({ ...v, mathAnswer: '' }))
+    return fetchNonce()
+  }, [fetchNonce])
 
   // Draft autosave (name / email / reason / subject / message only).
   useEffect(() => {
@@ -243,7 +275,8 @@ export default function ContactPro({
 
   const sendAnother = () => {
     setSent(null)
-    newMathPair()
+    // The used nonce is gone; the form's observer loads a fresh challenge.
+    setMathPair(null)
     // Focus returns to the first field once the form is back in the DOM.
     requestAnimationFrame(() => nameRef.current?.focus())
   }
@@ -266,8 +299,15 @@ export default function ContactPro({
     setSending(true)
     setServerError(null)
     try {
+      const previous = nonce
       const token = await ensureNonce()
       if (!token) return
+      // An expired nonce was replaced at submit time: its sum changed too.
+      if (previous && token !== previous) {
+        setValues((v) => ({ ...v, mathAnswer: '' }))
+        setServerError('The human check was refreshed — please answer the new sum.')
+        return
+      }
       // The server requires ≥ 2s between issuing the nonce and submitting.
       const age = Date.now() - nonceAtRef.current
       if (age < 2100) await new Promise((r) => setTimeout(r, 2100 - age))
@@ -293,6 +333,8 @@ export default function ContactPro({
         nonceAtRef.current = 0
       } else {
         const d = await res.json().catch(() => ({}))
+        // Each challenge allows one attempt: take a fresh one after a miss.
+        if (d?.code === 'BAD_CHALLENGE') await refreshChallenge()
         setServerError(typeof d?.error === 'string' && d.error ? d.error : 'The message couldn’t be sent. Please try again.')
       }
     } catch {
@@ -466,7 +508,7 @@ export default function ContactPro({
               ▸ Send a message
             </Text>
 
-            <form onSubmit={onSubmit} onFocus={warmNonce} noValidate aria-describedby={serverError ? 'contact-server-error' : undefined}>
+            <form ref={formRef} onSubmit={onSubmit} onFocus={warmNonce} noValidate aria-describedby={serverError ? 'contact-server-error' : undefined}>
               <VStack spacing={5} align="stretch">
                 <Flex gap={4} direction={{ base: 'column', sm: 'row' }} align="flex-start">
                   <FormControl isRequired isInvalid={!!shown.name} flex={1} minW={0}>

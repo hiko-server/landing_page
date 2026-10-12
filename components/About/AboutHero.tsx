@@ -32,7 +32,7 @@ export default function AboutHero({ brand, tagline }: { brand?: string; tagline?
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
     >
-      <Text fontFamily="var(--font-geist-mono), monospace" fontSize="11px" letterSpacing="0.16em" textTransform="uppercase" color="var(--accent)" mb={3}>
+      <Text fontFamily="var(--font-geist-mono), monospace" fontSize="11px" letterSpacing="0.16em" textTransform="uppercase" color="accent.text" mb={3}>
         About
       </Text>
       <Heading as="h1" fontSize={{ base: '3xl', md: '5xl' }} fontWeight={700} letterSpacing="-0.025em" lineHeight="1.05" color="page.fg">
