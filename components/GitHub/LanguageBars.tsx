@@ -84,15 +84,18 @@ export default function LanguageBars() {
               <Text fontSize="xs" color={metaColor} sx={{ fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(1)}%</Text>
             </Flex>
             <Box w="100%" h="6px" bg={trackBg} borderRadius="full" overflow="hidden">
+              {/* scaleX (compositor-only) instead of animating width (layout). */}
               <Box
                 as={motion.div as any}
-                initial={{ width: '0%' }}
-                whileInView={{ width: `${pct}%` }}
+                initial={{ scaleX: 0 }}
+                whileInView={{ scaleX: 1 }}
                 viewport={{ once: true }}
-                transition={{ duration: 0.7, delay: idx * 0.06, ease: 'easeOut' } as any}
+                transition={{ duration: 0.7, delay: idx * 0.06, ease: [0.22, 1, 0.36, 1] } as any}
+                w={`${pct}%`}
                 h="100%"
                 bg={colorFor(name)}
                 borderRadius="full"
+                style={{ transformOrigin: 'left center' }}
               />
             </Box>
           </Box>

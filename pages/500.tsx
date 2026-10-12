@@ -13,9 +13,9 @@ export default function Custom500() {
       </Head>
       <main style={{ maxWidth: 720, margin: '0 auto', padding: '96px 20px', textAlign: 'center' }}>
         <h1 style={{ fontSize: 32, fontWeight: 500, marginBottom: 12 }}>500 — Something went wrong</h1>
-        <p style={{ color: '#888' }}>
+        <p style={{ color: '#5c5c5c' }}>
           An unexpected error occurred. Please try again, or{' '}
-          <Link href="/" style={{ color: '#559ec7' }}>go back home</Link>.
+          <Link href="/" style={{ color: '#4f46e5', textDecoration: 'underline' }}>go back home</Link>.
         </p>
       </main>
     </>

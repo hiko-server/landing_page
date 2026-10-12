@@ -1,5 +1,4 @@
 import React from 'react'
-import { useRouter } from 'next/router'
 import { Box, Flex, useColorModeValue } from '@chakra-ui/react'
 
 import ImageScroller from '../imageScoller/imageScroller'
@@ -16,6 +15,7 @@ import ExperienceTimeline from './ExperienceTimeline'
 import CertificationsPeek from './CertificationsPeek'
 import SectionReveal from '../General-UI/SectionReveal'
 import SectionLabel from '../General-UI/SectionLabel'
+import FloatingNav from '../General-UI/FloatingNav'
 // Pure shape — must NOT import from lib/home (server-only / better-sqlite3).
 import { isSectionVisible, type HomeData } from '../../lib/homeShape'
 
@@ -46,8 +46,6 @@ const Content = ({
   cvZh?: any[]
   home?: HomeData | null
 }) => {
-  const router = useRouter()
-  const isEditMode = router.asPath.includes('edit')
   const border = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
 
   const show = {
@@ -62,6 +60,9 @@ const Content = ({
   }
 
   const hasBottomRow = show.photos || show.contact
+  // Anchor targets land below the sticky header, and focus (for keyboard
+  // users jumping via the section nav) doesn't paint an outline box.
+  const sectionSx = { scrollMarginTop: '80px', '&:focus': { outline: 'none' } }
 
   return (
     <Box
@@ -71,12 +72,12 @@ const Content = ({
       px={{ base: 4, md: 6, lg: 8 }}
       pt={{ base: 10, md: 16 }}
       pb={{ base: 12, md: 20 }}
-      style={{ marginTop: isEditMode ? '320px' : '0px' }}
     >
+      <FloatingNav />
       {/* [02] OPEN SOURCE — GitHub stats banner spanning full width */}
       {show.openSource && (
         <SectionReveal>
-          <Box mb={{ base: 16, md: 24 }}>
+          <Box mb={{ base: 16, md: 24 }} id="section-open-source" data-nav-label="Open Source" tabIndex={-1} sx={sectionSx}>
             <SectionLabel n={2} mb={6}>
               Open Source
             </SectionLabel>
@@ -91,7 +92,7 @@ const Content = ({
       {/* [03] TECH STACK */}
       {show.techStack && (
         <SectionReveal>
-          <Box mb={{ base: 16, md: 24 }}>
+          <Box mb={{ base: 16, md: 24 }} id="section-tech-stack" data-nav-label="Tech Stack" tabIndex={-1} sx={sectionSx}>
             <SectionLabel n={3} mb={6}>
               Tech Stack
             </SectionLabel>
@@ -106,7 +107,7 @@ const Content = ({
       {/* [04] RECENT ACTIVITY */}
       {show.activity && (
         <SectionReveal>
-          <Box mb={{ base: 16, md: 24 }}>
+          <Box mb={{ base: 16, md: 24 }} id="section-activity" data-nav-label="Recent Activity" tabIndex={-1} sx={sectionSx}>
             <SectionLabel n={4} mb={6}>
               Recent Activity
             </SectionLabel>
@@ -118,7 +119,7 @@ const Content = ({
       {/* [05] SELECTED PROJECTS — horizontal scroller */}
       {show.projects && (
         <SectionReveal>
-          <Box mb={{ base: 16, md: 24 }}>
+          <Box mb={{ base: 16, md: 24 }} id="section-projects" data-nav-label="Selected Projects" tabIndex={-1} sx={sectionSx}>
             <SectionLabel n={5} mb={6}>
               Selected Projects
             </SectionLabel>
@@ -130,7 +131,7 @@ const Content = ({
       {/* [06] EXPERIENCE TIMELINE */}
       {show.experience && (
         <SectionReveal>
-          <Box mb={{ base: 16, md: 24 }}>
+          <Box mb={{ base: 16, md: 24 }} id="section-experience" data-nav-label="Experience" tabIndex={-1} sx={sectionSx}>
             <SectionLabel n={6} mb={6}>
               Experience
             </SectionLabel>
@@ -142,7 +143,7 @@ const Content = ({
       {/* [07] CERTIFICATIONS */}
       {show.certifications && (
         <SectionReveal>
-          <Box mb={{ base: 16, md: 24 }}>
+          <Box mb={{ base: 16, md: 24 }} id="section-certifications" data-nav-label="Certifications" tabIndex={-1} sx={sectionSx}>
             <SectionLabel n={7} mb={6}>
               Certifications
             </SectionLabel>
@@ -169,6 +170,10 @@ const Content = ({
                   : { base: 'none', md: '1' }
               }
               w={{ base: '100%', md: show.contact ? '380px' : '100%' }}
+              id="section-photos"
+              data-nav-label="Field Notes"
+              tabIndex={-1}
+              sx={sectionSx}
             >
               <SectionLabel n={8} mb={6}>
                 Field Notes
@@ -177,7 +182,7 @@ const Content = ({
             </Box>
           )}
           {show.contact && (
-            <Box flex="1" minW={0} w="100%">
+            <Box flex="1" minW={0} w="100%" id="section-contact" data-nav-label="Get In Touch" tabIndex={-1} sx={sectionSx}>
               <SectionLabel n={9} mb={6}>
                 Get In Touch
               </SectionLabel>

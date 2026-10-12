@@ -109,7 +109,6 @@ export default function HeroAmbient({
           backgroundPosition: 'center 35%', // bias upward so peaks land mid-hero
           backgroundRepeat: 'no-repeat',
           filter: imgFilter,
-          willChange: 'filter, opacity',
         }}
       />
 

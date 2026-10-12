@@ -38,9 +38,9 @@ export default function NowPage({ source, updated, host }: Props) {
           author: { '@type': 'Person', name: 'Li Yanpei' },
         }}
       />
-      <HeaderFooter isMobile={false}>
+      <HeaderFooter>
         <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[12, 16]}>
-          <SectionLabel n="01">Now</SectionLabel>
+          <SectionLabel n="01" as="p">Now</SectionLabel>
 
           <Heading
             as="h1"

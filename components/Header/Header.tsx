@@ -18,7 +18,9 @@ import {
   useColorModeValue,
   Kbd,
 } from '@chakra-ui/react'
+import NextLink from 'next/link'
 import { useRouter } from 'next/router'
+import { motion } from 'framer-motion'
 import { TfiAlignJustify } from 'react-icons/tfi'
 import {
   FaGithub,
@@ -44,8 +46,11 @@ function normalizeHost(host: string): string {
 /**
  * v6 Header
  *
- * Layout (desktop):  [logo · live-status]  [primary nav]  [⌘K · theme · admin]
- * Layout (mobile):   [logo]                [hamburger → drawer]
+ * Layout (lg+):      [logo · live-status]  [primary nav]  [⌘K · theme · admin]
+ * Layout (< lg):     [logo]                [⌘K · theme · hamburger → drawer]
+ *
+ * Breakpoints are pure CSS (no JS media query), so the right controls render
+ * on the very first paint on every route and at every width.
  *
  * Preserves every original capability from v5:
  *   - All routes (Home, About, Contact, CV, Crypto, QuickPayment)
@@ -92,8 +97,9 @@ function LiveStatus() {
       try {
         const res = await fetch('/api/github/events')
         if (!res.ok) return
-        const data = (await res.json()) as { events?: { created_at?: string }[] }
-        const created = data.events?.[0]?.created_at
+        const data = (await res.json()) as { events?: { type?: string; created_at?: string }[] }
+        const events = data.events || []
+        const created = (events.find((e) => e.type === 'PushEvent') || events[0])?.created_at
         if (!created || cancelled) return
         const diffMs = Date.now() - new Date(created).getTime()
         const minutes = Math.max(0, Math.floor(diffMs / 60000))
@@ -104,7 +110,9 @@ function LiveStatus() {
               ? `${Math.floor(minutes / 60)}h ago`
               : `${Math.floor(minutes / 60 / 24)}d ago`
         setText(label)
-      } catch {}
+      } catch {
+    /* best effort — render with what we have */
+  }
     }
     load()
     return () => {
@@ -116,24 +124,41 @@ function LiveStatus() {
 
   return (
     <Flex
-      display={{ base: 'none', md: 'flex' }}
+      // Hidden at lg (1024–1279): the full nav + admin actions leave no room there.
+      display={{ base: 'none', md: 'flex', lg: 'none', xl: 'flex' }}
       alignItems="center"
       gap="6px"
+      flexShrink={0}
+      whiteSpace="nowrap"
       fontFamily="var(--font-geist-mono), monospace"
       fontSize="11px"
       color={muted}
       letterSpacing="0.02em"
+      title={`Last commit · ${text}`}
     >
       <Box position="relative" w="6px" h="6px">
         <Box className="pulse-dot" position="absolute" inset={0} borderRadius="full" />
         <Box w="6px" h="6px" borderRadius="full" bg="var(--live-green)" position="relative" />
       </Box>
-      <Text as="span">Last commit · {text}</Text>
+      <Text as="span">
+        <span className="sr-only">Last commit </span>
+        {/* Beside the full nav (xl+, fixed-width header) only the age fits. */}
+        <Text as="span" aria-hidden display={{ base: 'inline', lg: 'none' }}>
+          Last commit ·{' '}
+        </Text>
+        {text}
+      </Text>
     </Flex>
   )
 }
 
-const Header = ({ isMobile }: { isMobile: boolean }) => {
+/** Current route matches a nav link (exact for "/", prefix otherwise). */
+function isActive(pathname: string, url: string) {
+  if (url === '/') return pathname === '/'
+  return pathname === url || pathname.startsWith(`${url}/`)
+}
+
+const Header = () => {
   const router = useRouter()
   const toast = useToast()
   const [isAdmin, setIsAdmin] = useState(false)
@@ -145,10 +170,22 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
   } = useDisclosure()
   const { colorMode, toggleColorMode } = useColorMode()
 
+  // The session cookie is httpOnly (invisible to document.cookie), so ask the
+  // server (always 200 → { authenticated }).
   useEffect(() => {
-    if (typeof document !== 'undefined') {
-      setIsAdmin(document.cookie.includes('cv_admin_token='))
+    let alive = true
+    fetch('/api/admin/session', { credentials: 'same-origin' })
+      .then((r) => (r.ok ? r.json() : { authenticated: false }))
+      .then((d) => alive && setIsAdmin(!!d?.authenticated))
+      .catch(() => {})
+    return () => {
+      alive = false
     }
+  }, [router.asPath])
+
+  const [isMac, setIsMac] = useState(true)
+  useEffect(() => {
+    setIsMac(/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent))
   }, [])
 
   // Global ⌘K / Ctrl+K to open the command palette from any page.
@@ -175,17 +212,14 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
     }
   }
 
-  const goto = (url: string) => {
-    if (url.startsWith('http')) window.open(url, '_blank')
-    else router.push(url)
-  }
-
   // Tokens (computed via Chakra so dark/light mode resolve automatically)
   const headerBg = useColorModeValue('rgba(253,253,253,0.75)', 'rgba(5,5,5,0.75)')
   const borderColor = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
   const linkColor = useColorModeValue('gray.700', 'gray.300')
   const linkHover = useColorModeValue('black', 'white')
   const subtle = useColorModeValue('gray.600', 'gray.400')
+  const drawerBg = useColorModeValue('white', 'gray.900')
+  const activeBg = useColorModeValue('rgba(0,0,0,0.04)', 'rgba(255,255,255,0.06)')
 
   // Brand mark, auto-derived from the domain (see BRAND_FALLBACK note above):
   // SSR/first paint uses the configured fallback, then the client swaps in the
@@ -203,9 +237,7 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
     <>
       <Box
         as="header"
-        position="sticky"
-        top={0}
-        zIndex={40}
+        position="relative"
         w="100%"
         bg={headerBg}
         backdropFilter="blur(14px)"
@@ -225,7 +257,9 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
           {/* Left: brand + live status */}
           <Flex alignItems="center" gap={5} minW={0}>
             <Link
+              as={NextLink}
               href="/"
+              aria-label="Home"
               fontFamily="var(--font-geist-mono), monospace"
               fontSize="13px"
               fontWeight={600}
@@ -239,43 +273,55 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
             <LiveStatus />
           </Flex>
 
-          {/* Center / right: primary nav (desktop only) */}
-          {!isMobile && (
-            <Flex
-              as="nav"
-              aria-label="Primary"
-              alignItems="center"
-              gap={6}
-              display={{ base: 'none', lg: 'flex' }}
-              fontSize="14px"
-              color={linkColor}
-            >
-              {primaryLinks.map((l) => (
+          {/* Center: primary nav (lg+) */}
+          <Flex
+            as="nav"
+            aria-label="Primary"
+            alignItems="center"
+            gap={1}
+            display={{ base: 'none', lg: 'flex' }}
+            fontSize="14px"
+            color={linkColor}
+          >
+            {primaryLinks.map((l) => {
+              const active = isActive(router.pathname, l.url)
+              return (
                 <Link
                   key={l.name}
+                  as={NextLink}
                   href={l.url}
-                  className="link-underline"
-                  _hover={{ color: linkHover, textDecoration: 'none' }}
+                  aria-current={active ? 'page' : undefined}
+                  position="relative"
+                  px={2.5}
+                  py={1.5}
+                  borderRadius="md"
+                  color={active ? linkHover : undefined}
+                  fontWeight={active ? 500 : 400}
+                  _hover={{ color: linkHover, textDecoration: 'none', bg: activeBg }}
+                  transition="color 150ms, background-color 150ms"
                 >
                   {l.name}
+                  {active ? (
+                    <Box
+                      as={motion.span}
+                      layoutId="nav-active"
+                      position="absolute"
+                      left="10px"
+                      right="10px"
+                      bottom="-1px"
+                      h="1.5px"
+                      borderRadius="full"
+                      bg="var(--accent)"
+                      transition={{ type: 'spring', stiffness: 520, damping: 40 } as any}
+                    />
+                  ) : null}
                 </Link>
-              ))}
-            </Flex>
-          )}
+              )
+            })}
+          </Flex>
 
           {/* Right: utility */}
-          {isMobile ? (
-            <IconButton
-              icon={<TfiAlignJustify />}
-              onClick={onOpen}
-              variant="ghost"
-              size="sm"
-              aria-label="Open menu"
-              color={subtle}
-              _hover={{ color: linkHover, bg: 'transparent' }}
-            />
-          ) : (
-            <Flex alignItems="center" gap={2}>
+          <Flex alignItems="center" gap={2}>
               {/* ⌘K search trigger — opens the full CommandPalette */}
               <Button
                 size="sm"
@@ -290,18 +336,21 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                 letterSpacing="0.02em"
                 _hover={{ borderColor: linkColor, color: linkHover }}
                 leftIcon={<SearchIcon boxSize="10px" />}
+                iconSpacing={{ base: 0, md: 2 }}
                 onClick={openCmdk}
                 aria-label="Open command palette"
+                aria-keyshortcuts={isMac ? 'Meta+K' : 'Control+K'}
               >
-                <Text display={{ base: 'none', xl: 'inline' }} mr={2}>Search</Text>
+                <Text as="span" display={{ base: 'none', xl: 'inline' }} mr={2}>Search</Text>
                 <Kbd
+                  display={{ base: 'none', md: 'inline-block' }}
                   fontSize="10px"
                   bg="transparent"
                   border="1px solid"
                   borderColor={borderColor}
                   color={subtle}
                 >
-                  ⌘K
+                  {isMac ? '⌘K' : 'Ctrl K'}
                 </Kbd>
               </Button>
 
@@ -325,8 +374,10 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                 obvious way back to the dashboard / out of the session.
               */}
               {isAdmin && (
-                <Flex gap={1}>
+                <Flex gap={1} display={{ base: 'none', lg: 'flex' }}>
                   <Button
+                    as={NextLink}
+                    href="/admin/dashboard"
                     size="sm"
                     variant="outline"
                     h="32px"
@@ -335,7 +386,6 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                     fontSize="13px"
                     fontWeight={500}
                     _hover={{ borderColor: linkColor, color: linkHover }}
-                    onClick={() => router.push('/admin/dashboard')}
                   >
                     Dashboard
                   </Button>
@@ -352,15 +402,26 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                   </Button>
                 </Flex>
               )}
-            </Flex>
-          )}
+
+              <IconButton
+                icon={<TfiAlignJustify />}
+                onClick={onOpen}
+                variant="ghost"
+                size="sm"
+                aria-label="Open menu"
+                aria-expanded={isOpen}
+                display={{ base: 'inline-flex', lg: 'none' }}
+                color={subtle}
+                _hover={{ color: linkHover, bg: 'transparent' }}
+              />
+          </Flex>
         </Flex>
       </Box>
 
       {/* Mobile drawer (preserves all links + admin) */}
       <Drawer isOpen={isOpen} placement="right" onClose={onClose} size="xs">
         <DrawerOverlay bg="rgba(0,0,0,0.6)" backdropFilter="blur(4px)" />
-        <DrawerContent bg={useColorModeValue('white', 'gray.900')}>
+        <DrawerContent bg={drawerBg}>
           <DrawerHeader
             borderBottomWidth="1px"
             borderColor={borderColor}
@@ -386,23 +447,30 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                   Navigate
                 </Text>
                 <Flex direction="column" gap={1}>
-                  {primaryLinks.concat(utilityLinks).map((link) => (
-                    <Button
-                      key={link.name}
-                      variant="ghost"
-                      justifyContent="flex-start"
-                      onClick={() => {
-                        goto(link.url)
-                        onClose()
-                      }}
-                      h="36px"
-                      fontWeight={500}
-                      color={linkColor}
-                      _hover={{ color: linkHover, bg: 'transparent' }}
-                    >
-                      {link.name}
-                    </Button>
-                  ))}
+                  {primaryLinks.concat(utilityLinks).map((link) => {
+                    const active = isActive(router.pathname, link.url)
+                    return (
+                      <Button
+                        key={link.name}
+                        as={NextLink}
+                        href={link.url}
+                        aria-current={active ? 'page' : undefined}
+                        variant="ghost"
+                        justifyContent="flex-start"
+                        onClick={onClose}
+                        h="40px"
+                        fontWeight={active ? 600 : 500}
+                        color={active ? linkHover : linkColor}
+                        bg={active ? activeBg : undefined}
+                        borderLeft="2px solid"
+                        borderColor={active ? 'var(--accent)' : 'transparent'}
+                        borderRadius="0 6px 6px 0"
+                        _hover={{ color: linkHover, bg: activeBg }}
+                      >
+                        {link.name}
+                      </Button>
+                    )
+                  })}
                 </Flex>
               </Box>
 
@@ -421,8 +489,11 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                   {socialLinks.map((s) => (
                     <IconButton
                       key={s.name}
+                      as="a"
+                      href={s.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       icon={s.icon}
-                      onClick={() => goto(s.url)}
                       variant="outline"
                       size="sm"
                       borderColor={borderColor}
@@ -467,15 +538,14 @@ const Header = ({ isMobile }: { isMobile: boolean }) => {
                   </Text>
                   <Flex direction="column" gap={2}>
                     <Button
+                      as={NextLink}
+                      href="/admin/dashboard"
                       size="sm"
                       variant="outline"
                       borderColor={borderColor}
                       color={linkColor}
                       _hover={{ borderColor: linkColor, color: linkHover }}
-                      onClick={() => {
-                        router.push('/admin/dashboard')
-                        onClose()
-                      }}
+                      onClick={onClose}
                     >
                       Dashboard
                     </Button>

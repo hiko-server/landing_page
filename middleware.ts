@@ -36,7 +36,7 @@ const PUBLIC_ADMIN_PAGE_PATHS = new Set<string>([
   '/admin/reset',
 ])
 const PUBLIC_ADMIN_API_PATHS = new Set<string>([
-  '/api/admin/session', // /admin/login polls this; must be reachable to return 401
+  '/api/admin/session', // header + /admin/login ask this; answers { authenticated } for everyone
   '/api/admin/logout',  // logging out doesn't require an active session
 ])
 // Auth lives under /api/auth/*, never /api/admin/*, so it's not gated here.

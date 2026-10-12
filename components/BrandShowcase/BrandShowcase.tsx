@@ -33,12 +33,14 @@ const SingleBrand = ({ brand }: { brand: Brand }) => {
       initial={{ opacity: 0, y: 8 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
+      // Fluid up to 160px so N columns always fit the row (fixed widths overflowed at md).
+      style={{ width: '100%', maxWidth: 160 }}
     >
-      <Link href={href} isExternal aria-label={name} _hover={{ textDecoration: 'none' }}>
+      <Link href={href} isExternal aria-label={name} display="block" _hover={{ textDecoration: 'none' }}>
         <Box
           position="relative"
           h="40px"
-          w={{ base: '120px', md: '160px' }}
+          w="100%"
           display="flex"
           alignItems="center"
           justifyContent="center"
@@ -97,7 +99,7 @@ const Brands = ({
         </Text>
         <Grid
           placeItems="center"
-          templateColumns={['repeat(2, 1fr)', 'repeat(3, 1fr)', 'repeat(4, 1fr)']}
+          templateColumns={['repeat(2, minmax(0, 1fr))', 'repeat(3, minmax(0, 1fr))', 'repeat(4, minmax(0, 1fr))']}
           gap={[6, 8, 12]}
         >
           {data.map((brand) => (

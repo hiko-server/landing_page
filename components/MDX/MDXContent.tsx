@@ -7,11 +7,10 @@ import {
   Link as ChakraLink,
   Code,
   Divider,
-  useColorModeValue,
   type ChakraProps,
 } from '@chakra-ui/react'
 import NextLink from 'next/link'
-import type { ReactNode } from 'react'
+import React, { type ReactNode } from 'react'
 
 /**
  * MDX → React renderer used by /blog/[slug], /work/[slug], /now, /uses.
@@ -37,6 +36,69 @@ const Prose = ({ children, ...rest }: ChakraProps & { children: ReactNode }) => 
     {children}
   </Box>
 )
+
+
+/** Code block with a copy button (appears on hover / focus). */
+function CodeBlock(props: any) {
+  const ref = React.useRef<HTMLPreElement | null>(null)
+  const [copied, setCopied] = React.useState(false)
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(ref.current?.innerText || '')
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch {
+      /* clipboard blocked — nothing to do */
+    }
+  }
+  return (
+    <Box position="relative" role="group" my={6}>
+      <Box
+        as="pre"
+        ref={ref}
+        p={4}
+        pr={16}
+        bg="gray.50"
+        _dark={{ bg: 'gray.900' }}
+        border="1px solid"
+        borderColor="page.border"
+        borderRadius="md"
+        overflowX="auto"
+        fontSize="14px"
+        fontFamily="var(--font-geist-mono), monospace"
+        sx={{
+          '& code': { bg: 'transparent', p: 0, fontSize: 'inherit' },
+          '& [data-line]': { display: 'block' },
+        }}
+        {...props}
+      />
+      <Box
+        as="button"
+        type="button"
+        onClick={copy}
+        aria-label={copied ? 'Copied' : 'Copy code'}
+        position="absolute"
+        top={2}
+        right={2}
+        px={2}
+        py={1}
+        fontSize="11px"
+        fontFamily="var(--font-geist-mono), monospace"
+        borderRadius="md"
+        border="1px solid"
+        borderColor="page.border"
+        bg="page.bg"
+        color={copied ? 'green.500' : 'page.fg-secondary'}
+        opacity={copied ? 1 : 0}
+        _groupHover={{ opacity: 1 }}
+        _focusVisible={{ opacity: 1, outline: '2px solid var(--accent)' }}
+        transition="opacity 150ms"
+      >
+        {copied ? 'copied ✓' : 'copy'}
+      </Box>
+    </Box>
+  )
+}
 
 const headingProps = {
   fontFamily: 'var(--font-geist-sans), Inter, sans-serif',
@@ -89,7 +151,8 @@ const mdxComponents = {
   hr: () => <Divider my={8} borderColor="page.border" />,
   code: (props: any) => (
     <Code
-      bg={useColorModeValue('gray.100', 'gray.800')}
+      bg="gray.100"
+      _dark={{ bg: 'gray.800' }}
       px={1.5}
       py={0.5}
       fontSize="0.92em"
@@ -98,25 +161,7 @@ const mdxComponents = {
       {...props}
     />
   ),
-  pre: (props: any) => (
-    <Box
-      as="pre"
-      my={6}
-      p={4}
-      bg={useColorModeValue('gray.50', 'gray.900')}
-      border="1px solid"
-      borderColor="page.border"
-      borderRadius="md"
-      overflowX="auto"
-      fontSize="14px"
-      fontFamily="var(--font-geist-mono), monospace"
-      sx={{
-        '& code': { bg: 'transparent', p: 0, fontSize: 'inherit' },
-        '& [data-line]': { display: 'block' },
-      }}
-      {...props}
-    />
-  ),
+  pre: (props: any) => <CodeBlock {...props} />,
   img: (props: any) => (
     <Box
       as="img"

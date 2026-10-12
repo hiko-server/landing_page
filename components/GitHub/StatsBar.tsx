@@ -1,19 +1,25 @@
 import React, { useEffect, useState } from 'react'
 import { Box, Flex, Text, useColorModeValue } from '@chakra-ui/react'
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 
 type Stats = {
   user: string
   public_repos: number
   followers: number
   total_stars: number
+  available?: boolean
 }
 
 /** Eased count-up for the headline number on each stat tile. */
 function useCountUp(target: number, ms = 900) {
+  const reduce = useReducedMotion()
   const [val, setVal] = useState(0)
   useEffect(() => {
     if (!target) return
+    if (reduce) {
+      setVal(target)
+      return
+    }
     let raf = 0
     const start = performance.now()
     const tick = (t: number) => {
@@ -23,7 +29,7 @@ function useCountUp(target: number, ms = 900) {
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [target, ms])
+  }, [target, ms, reduce])
   return val
 }
 
@@ -61,8 +67,9 @@ const StatItem = ({
         lineHeight="1"
         fontWeight={500}
         letterSpacing="-0.03em"
+        sx={{ fontVariantNumeric: 'tabular-nums' }}
       >
-        {count.toLocaleString()}
+        {count.toLocaleString('en-US')}
       </Text>
       <Text
         mt={2}
@@ -90,13 +97,15 @@ export default function StatsBar() {
         if (alive) setStats(d)
       })
       .catch(() => {
-        if (alive)
-          setStats({ user: '', public_repos: 0, followers: 0, total_stars: 0 })
+        if (alive) setStats({ user: '', public_repos: 0, followers: 0, total_stars: 0, available: false })
       })
     return () => {
       alive = false
     }
   }, [])
+
+  // GitHub unreachable / rate-limited: render nothing rather than "0 · 0 · 0".
+  if (stats && (stats.available === false || !stats.user)) return null
 
   const s: Stats = stats || {
     user: '',

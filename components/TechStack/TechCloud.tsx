@@ -1,80 +1,96 @@
 import React, { useEffect, useState } from 'react'
-import { Box, Wrap, WrapItem, Text, useColorModeValue } from '@chakra-ui/react'
+import { Box, Flex, Skeleton, Text, useColorModeValue } from '@chakra-ui/react'
 import { motion } from 'framer-motion'
 
-// Assign a gradient based on first char for color variety
-const GRADIENTS = [
-  'linear-gradient(135deg,#dd6b20,#f59e0b)',
-  'linear-gradient(135deg,#0f766e,#14b8a6)',
-  'linear-gradient(135deg,#7c3aed,#a78bfa)',
-  'linear-gradient(135deg,#2563eb,#60a5fa)',
-  'linear-gradient(135deg,#dc2626,#f87171)',
-  'linear-gradient(135deg,#059669,#34d399)',
-  'linear-gradient(135deg,#b45309,#fbbf24)',
-  'linear-gradient(135deg,#6d28d9,#c4b5fd)',
-]
+type Item = { name: string; version?: string }
+type Group = { label: string; items: Item[] }
 
-function tagGradient(name: string): string {
-  let hash = 0
-  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0
-  return GRADIENTS[hash % GRADIENTS.length]
-}
+const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
+/**
+ * The site's own stack, grouped (Framework / Interface / Content / Data /
+ * Platform / Infrastructure). Data comes from /api/stack, which derives it
+ * from package.json so it never goes stale.
+ */
 export default function TechCloud() {
-  const [packages, setPackages] = useState<string[] | null>(null)
-  const tagBg = useColorModeValue('rgba(255,255,255,0.7)', 'rgba(30,41,59,0.6)')
-  const tagBorder = useColorModeValue('rgba(0,0,0,0.07)', 'rgba(255,255,255,0.1)')
-  const textColor = useColorModeValue('gray.800', 'gray.100')
+  const [groups, setGroups] = useState<Group[] | null>(null)
+  const border = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
+  const borderHover = useColorModeValue('rgba(0,0,0,0.22)', 'rgba(255,255,255,0.26)')
+  const label = useColorModeValue('gray.600', 'gray.500')
+  const fg = useColorModeValue('gray.800', 'gray.100')
+  const ver = useColorModeValue('gray.500', 'gray.500')
 
   useEffect(() => {
     let alive = true
     fetch('/api/stack')
-      .then(r => r.json())
-      .then(d => { if (alive) setPackages(d.packages || []) })
-      .catch(() => { if (alive) setPackages([]) })
-    return () => { alive = false }
+      .then((r) => r.json())
+      .then((d) => alive && setGroups(Array.isArray(d.groups) ? d.groups : []))
+      .catch(() => alive && setGroups([]))
+    return () => {
+      alive = false
+    }
   }, [])
 
-  if (!packages || !packages.length) return null
+  if (groups && !groups.length) return null
 
   return (
-    <Wrap spacing={2} justify="center">
-      {packages.map((name, i) => (
-        <WrapItem key={name}>
-          <Box
-            as={motion.div as any}
-            initial={{ opacity: 0, scale: 0.85 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.25, delay: (i % 20) * 0.03 } as any}
-            whileHover={{ scale: 1.08, y: -2 } as any}
-            bg={tagBg}
-            border="1px solid"
-            borderColor={tagBorder}
-            borderRadius="full"
-            px={3}
-            py={1}
-            backdropFilter="blur(6px)"
-            position="relative"
-            overflow="hidden"
-            sx={{ transition: 'all 0.18s ease' }}
-          >
-            {/* Gradient left accent */}
-            <Box
-              position="absolute"
-              left={0}
-              top={0}
-              bottom={0}
-              w="3px"
-              bgImage={tagGradient(name)}
-            />
-            <Text fontSize="sm" fontWeight="600" color={textColor} pl={1}>
-              {name}
-            </Text>
-          </Box>
-        </WrapItem>
-      ))}
-    </Wrap>
+    <Box w="100%" maxW="1100px" mx="auto" minH={groups ? undefined : '220px'}>
+      {!groups
+        ? Array.from({ length: 4 }, (_, i) => <Skeleton key={i} h="28px" mb={4} borderRadius="md" opacity={0.4} />)
+        : groups.map((g, gi) => (
+            <Flex
+              key={g.label}
+              direction={{ base: 'column', sm: 'row' }}
+              align={{ base: 'flex-start', sm: 'baseline' }}
+              gap={{ base: 2, sm: 6 }}
+              py={3}
+              borderTop={gi === 0 ? undefined : '1px solid'}
+              borderColor={border}
+            >
+              <Text
+                fontFamily={monoFont}
+                fontSize="10px"
+                letterSpacing="0.14em"
+                textTransform="uppercase"
+                color={label}
+                w={{ sm: '120px' }}
+                flexShrink={0}
+              >
+                {g.label}
+              </Text>
+              <Flex wrap="wrap" gap={2}>
+                {g.items.map((it, i) => (
+                  <Box
+                    as={motion.span as any}
+                    key={it.name}
+                    initial={{ opacity: 0, y: 6 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, margin: '-40px' }}
+                    transition={{ duration: 0.3, delay: gi * 0.04 + i * 0.03, ease: [0.22, 1, 0.36, 1] } as any}
+                    display="inline-flex"
+                    alignItems="baseline"
+                    gap={1.5}
+                    px={2.5}
+                    py={1}
+                    border="1px solid"
+                    borderColor={border}
+                    borderRadius="md"
+                    fontSize="13px"
+                    color={fg}
+                    _hover={{ borderColor: borderHover }}
+                    sx={{ transitionProperty: 'border-color', transitionDuration: '160ms' }}
+                  >
+                    {it.name}
+                    {it.version ? (
+                      <Text as="span" fontFamily={monoFont} fontSize="10px" color={ver}>
+                        {it.version}
+                      </Text>
+                    ) : null}
+                  </Box>
+                ))}
+              </Flex>
+            </Flex>
+          ))}
+    </Box>
   )
 }
-

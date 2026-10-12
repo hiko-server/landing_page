@@ -17,7 +17,8 @@ import {
   useColorModeValue,
 } from '@chakra-ui/react'
 import { FaGithub, FaGitlab, FaLinkedin, FaWhatsapp } from 'react-icons/fa'
-import { useRouter } from 'next/router'
+import NextLink from 'next/link'
+import NextImage from 'next/image'
 
 import HeroHeadline from './HeroHeadline'
 import HeroAmbient from '../Background/HeroAmbient'
@@ -31,7 +32,7 @@ import SectionLabel from '../General-UI/SectionLabel'
  *   - HeroHeadline typewriter tagline from home.json
  *   - Avatar with x/y/scale transform from admin GUI
  *   - Phone / email click-to-reveal pattern
- *   - CV button (router.push('/cv'))
+ *   - CV button (client-side link to /cv)
  *   - GitHub / GitLab / LinkedIn / WhatsApp social row
  *
  * Visual upgrades:
@@ -52,7 +53,6 @@ const PersonalInfo = ({
    *  the admin leaves any of its three fields blank. */
   cvEn?: any[]
 }) => {
-  const router = useRouter()
 
   // Theme-aware tokens (was hard-coded white because of v5 video overlay)
   const fg = useColorModeValue('gray.900', 'white')
@@ -98,7 +98,7 @@ const PersonalInfo = ({
               {/* Left column: section label + tagline + meta + CTAs */}
               <Box flex={1} minW={0}>
                 <Box mb={8}>
-                  <SectionLabel n={1}>Introduction</SectionLabel>
+                  <SectionLabel n={1} as="p">Introduction</SectionLabel>
                 </Box>
 
                 {!isMobile && (
@@ -139,7 +139,9 @@ const PersonalInfo = ({
                     <Text as="span" opacity={0.5}>/</Text>
                     <Text as="span">Mandarin · Cantonese · English</Text>
                     <Text as="span" opacity={0.5}>/</Text>
-                    <Text as="span">Available · {new Date().getFullYear()}</Text>
+                    <Text as="span" suppressHydrationWarning>
+                      Available · {new Date().getFullYear()}
+                    </Text>
                   </Flex>
                 </Flex>
 
@@ -153,7 +155,8 @@ const PersonalInfo = ({
                 {/* CTAs + socials */}
                 <Flex direction={['column', 'row']} alignItems={['stretch', 'center']} gap={4} mt={8}>
                   <Button
-                    onClick={() => router.push('/cv')}
+                    as={NextLink}
+                    href="/cv"
                     size="md"
                     h="44px"
                     px={6}
@@ -171,8 +174,11 @@ const PersonalInfo = ({
                     {socials.map((s) => (
                       <Tooltip key={s.name} label={s.name} placement="top" hasArrow>
                         <IconButton
+                          as="a"
+                          href={s.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
                           aria-label={s.name}
-                          onClick={() => window.open(s.url, '_blank')}
                           icon={s.icon}
                           variant="outline"
                           size="md"
@@ -206,24 +212,41 @@ const PersonalInfo = ({
                   position="relative"
                   bg={avatarFrameBg}
                 >
-                  <Image
-                    src={avatarSrc}
-                    alt="Li Yanpei (Lucian)"
-                    loading="eager"
-                    w="100%"
-                    h="100%"
-                    objectFit="cover"
-                    sx={{ objectPosition: `${posX}% ${posY}%` }}
-                    transform={`scale(${scale})`}
-                    transformOrigin={`${posX}% ${posY}%`}
-                    draggable={false}
-                    pointerEvents="none"
-                    style={{
-                      willChange: 'transform',
-                      backfaceVisibility: 'hidden',
-                      display: 'block',
-                    }}
-                  />
+                  {avatarSrc.startsWith('/') ? (
+                    // Local / uploaded avatar → optimised (AVIF/WebP, right-sized
+                    // srcset) and fetched with high priority: it's the hero's LCP image.
+                    <NextImage
+                      src={avatarSrc}
+                      alt="Li Yanpei (Lucian)"
+                      fill
+                      priority
+                      sizes="(max-width: 480px) 200px, (max-width: 768px) 220px, 260px"
+                      draggable={false}
+                      style={{
+                        objectFit: 'cover',
+                        objectPosition: `${posX}% ${posY}%`,
+                        transform: `scale(${scale})`,
+                        transformOrigin: `${posX}% ${posY}%`,
+                        pointerEvents: 'none',
+                      }}
+                    />
+                  ) : (
+                    <Image
+                      src={avatarSrc}
+                      alt="Li Yanpei (Lucian)"
+                      loading="eager"
+                      decoding="async"
+                      w="100%"
+                      h="100%"
+                      objectFit="cover"
+                      sx={{ objectPosition: `${posX}% ${posY}%` }}
+                      transform={`scale(${scale})`}
+                      transformOrigin={`${posX}% ${posY}%`}
+                      draggable={false}
+                      pointerEvents="none"
+                      display="block"
+                    />
+                  )}
                 </Box>
 
                 {/*

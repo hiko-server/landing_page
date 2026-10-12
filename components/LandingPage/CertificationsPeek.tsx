@@ -34,7 +34,7 @@ export default function CertificationsPeek({ cvEn }: { cvEn?: any[] }) {
   if (!orgs.length) return null
 
   return (
-    <Box w="100%" maxW="900px" mx="auto">
+    <Box w="100%" maxW="1100px" mx="auto">
       {orgs.map((org, oi) => (
         <Box
           as={motion.div as any}
@@ -58,36 +58,37 @@ export default function CertificationsPeek({ cvEn }: { cvEn?: any[] }) {
           <Flex wrap="wrap" gap={2}>
             {(org.CertificationList || []).slice(0, 8).map((c, ci) => {
               const isLink = !!c.credentialURL
-              return (
+              const chipProps = {
+                border: '1px solid',
+                borderColor: border,
+                borderRadius: 'md',
+                px: 3,
+                py: 1.5,
+                fontSize: '12px',
+                color: fg,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 1.5,
+                transition: 'border-color 200ms var(--ease-out-quart), color 200ms var(--ease-out-quart)',
+              } as const
+              return isLink ? (
                 <Link
                   key={ci}
-                  href={c.credentialURL || '#'}
-                  isExternal={isLink}
-                  _hover={{ textDecoration: 'none' }}
-                  border="1px solid"
-                  borderColor={border}
-                  borderRadius="md"
-                  px={3}
-                  py={1.5}
-                  fontSize="12px"
-                  color={fg}
-                  display="inline-flex"
-                  alignItems="center"
-                  gap={1.5}
-                  transition="border-color 200ms var(--ease-out-quart), color 200ms var(--ease-out-quart)"
-                  sx={{
-                    '&:hover': isLink
-                      ? { borderColor: borderHover, color: 'var(--accent)' }
-                      : {},
-                  }}
+                  href={c.credentialURL}
+                  isExternal
+                  rel="noopener noreferrer"
+                  {...chipProps}
+                  _hover={{ textDecoration: 'none', borderColor: borderHover, color: 'var(--accent)' }}
                 >
                   {c.certificationName}
-                  {isLink && (
-                    <Text as="span" fontFamily={monoFont} fontSize="9px" opacity={0.6}>
-                      ↗
-                    </Text>
-                  )}
+                  <Text as="span" fontFamily={monoFont} fontSize="9px" opacity={0.6} aria-hidden>
+                    ↗
+                  </Text>
                 </Link>
+              ) : (
+                <Box as="span" key={ci} {...chipProps}>
+                  {c.certificationName}
+                </Box>
               )
             })}
           </Flex>

@@ -1,15 +1,21 @@
 import React from 'react'
 import NextLink from 'next/link'
-import { Box, Heading, Text, Link } from '@chakra-ui/react'
+import { Box, Button, Flex, Heading, Text } from '@chakra-ui/react'
 import HeaderFooter from '../layout/HeaderFooter'
 import CustomHead from '../components/General-UI/CustomHead'
 
 /**
- * 404 — must stay a real 404 for crawlers. The previous version auto-redirected
- * to "/" after 3s via JS, which Google reads as a soft-404 (it dilutes the
- * homepage and lets dead URLs linger in the index). We now render a static,
- * noindex 404 with a manual link home instead.
+ * 404 — must stay a real 404 for crawlers (no JS auto-redirect, which Google
+ * treats as a soft-404). Offers the most useful next steps instead.
  */
+const LINKS = [
+  { href: '/', label: 'Home' },
+  { href: '/cv', label: 'CV' },
+  { href: '/work', label: 'Work' },
+  { href: '/blog', label: 'Writing' },
+  { href: '/contact', label: 'Contact' },
+]
+
 const Custom404 = () => {
   return (
     <>
@@ -18,38 +24,45 @@ const Custom404 = () => {
         description="The page you’re looking for doesn’t exist or has moved."
         noindex
       />
-      <HeaderFooter isMobile={false}>
-        <Box
-          maxW="var(--container-content)"
-          mx="auto"
-          px={[4, 6, 8]}
-          py={[20, 28]}
-          textAlign="center"
-        >
+      <HeaderFooter>
+        <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[20, 28]} textAlign="center">
           <Text
             fontFamily="var(--font-geist-mono), monospace"
             fontSize="12px"
-            letterSpacing="0.08em"
-            color="gray.500"
+            letterSpacing="0.16em"
+            color="var(--accent)"
             mb={3}
           >
-            404
+            ERROR 404
           </Text>
-          <Heading
-            as="h1"
-            fontSize={['28px', '40px']}
-            fontWeight={500}
-            letterSpacing="-0.02em"
-            mb={4}
-          >
+          <Heading as="h1" fontSize={['28px', '40px']} fontWeight={500} letterSpacing="-0.02em" mb={4}>
             This page doesn’t exist.
           </Heading>
-          <Text color="gray.500" mb={8}>
-            The link may be broken, or the page may have moved.
+          <Text color="page.fg-secondary" mb={10} maxW="460px" mx="auto">
+            The link may be broken, or the page may have moved. Try one of these — or press{' '}
+            <Text as="kbd" fontFamily="var(--font-geist-mono), monospace" fontSize="0.9em">
+              ⌘K
+            </Text>{' '}
+            to search.
           </Text>
-          <Link as={NextLink} href="/" color="var(--accent)" fontWeight={600}>
-            ← Back to home
-          </Link>
+          <Flex as="nav" aria-label="Suggested pages" justify="center" gap={2} wrap="wrap">
+            {LINKS.map((l, i) => (
+              <Button
+                key={l.href}
+                as={NextLink}
+                href={l.href}
+                size="sm"
+                variant={i === 0 ? 'solid' : 'outline'}
+                bg={i === 0 ? 'var(--accent)' : undefined}
+                color={i === 0 ? 'white' : undefined}
+                borderColor="page.border-strong"
+                _hover={i === 0 ? { opacity: 0.92 } : { borderColor: 'var(--accent)', color: 'var(--accent)' }}
+              >
+                {i === 0 ? '← ' : ''}
+                {l.label}
+              </Button>
+            ))}
+          </Flex>
         </Box>
       </HeaderFooter>
     </>

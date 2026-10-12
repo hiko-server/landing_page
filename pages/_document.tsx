@@ -1,45 +1,20 @@
-import Document, {
-  DocumentContext,
-  Head,
-  Html,
-  Main,
-  NextScript,
-} from 'next/document'
+import Document, { Head, Html, Main, NextScript } from 'next/document'
 import React from 'react'
-import { ServerStyleSheet } from 'styled-components'
+import { ColorModeScript } from '@chakra-ui/react'
+import theme from '../theme/chakra'
 
+/**
+ * Chakra (emotion) handles its own SSR style extraction, so no custom
+ * getInitialProps is needed. The colour-mode script runs before first paint
+ * so a stored light / dark preference never flashes the other theme.
+ */
 class MyDocument extends Document {
-  static async getInitialProps(ctx: DocumentContext) {
-    const sheet = new ServerStyleSheet()
-    const originalRenderPage = ctx.renderPage
-
-    try {
-      ctx.renderPage = () =>
-        originalRenderPage({
-          enhanceApp: (App: any) => (props) =>
-            sheet.collectStyles(<App {...props} />),
-        })
-
-      const initialProps = await Document.getInitialProps(ctx)
-      return {
-        ...initialProps,
-        styles: (
-          <React.Fragment>
-            {initialProps.styles}
-            {sheet.getStyleElement()}
-          </React.Fragment>
-        ),
-      }
-    } finally {
-      sheet.seal()
-    }
-  }
-
   render() {
     return (
       <Html lang="en">
         <Head />
         <body>
+          <ColorModeScript initialColorMode={(theme as any).config?.initialColorMode || 'system'} />
           <Main />
           <NextScript />
         </body>

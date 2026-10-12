@@ -17,6 +17,7 @@ import MDXContent from '../../components/MDX/MDXContent'
 import { listPosts, getPost, type PostFrontmatter } from '../../lib/mdx'
 import { absUrl, breadcrumb, personRef, PERSON_NAME } from '../../lib/schema'
 import type { MDXRemoteSerializeResult } from 'next-mdx-remote'
+import { formatPostDate, isoDate } from '../../lib/postDate'
 
 type Props = {
   slug: string
@@ -43,8 +44,8 @@ export default function BlogPost({
         url={absUrl(`/blog/${slug}`)}
         image={absUrl(`/api/og?kind=blog&title=${encodeURIComponent(frontmatter.title)}${frontmatter.description ? `&subtitle=${encodeURIComponent(frontmatter.description)}` : ''}`)}
         type="article"
-        publishedTime={frontmatter.date ? String(frontmatter.date).slice(0, 10) : undefined}
-        modifiedTime={String(frontmatter.updated || frontmatter.date || '').slice(0, 10) || undefined}
+        publishedTime={isoDate(frontmatter.date) || undefined}
+        modifiedTime={isoDate(frontmatter.updated || frontmatter.date) || undefined}
         jsonLd={[
           {
             '@context': 'https://schema.org',
@@ -66,7 +67,7 @@ export default function BlogPost({
           ]),
         ]}
       />
-      <HeaderFooter isMobile={false}>
+      <HeaderFooter>
         <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[12, 16]}>
           {/* Back link */}
           <Link
@@ -82,7 +83,7 @@ export default function BlogPost({
             ← All posts
           </Link>
 
-          <SectionLabel n="01">Article</SectionLabel>
+          <SectionLabel n="01" as="p">Article</SectionLabel>
 
           <Heading
             as="h1"
@@ -114,7 +115,9 @@ export default function BlogPost({
             borderBottom="1px solid"
             borderColor="page.border"
           >
-            <Text as="span">{frontmatter.date}</Text>
+            <Text as="time" dateTime={isoDate(frontmatter.date) || undefined}>
+              {formatPostDate(frontmatter.date)}
+            </Text>
             <Text as="span" opacity={0.5}>·</Text>
             <Text as="span">{readingMinutes} min read</Text>
             {frontmatter.tags && frontmatter.tags.length > 0 && (
