@@ -36,3 +36,49 @@ test('visibility metadata is copied from EN; missing ZH entries get EN text', ()
   assert.equal(out[0].educationExperience[0].schoolName, '香港都会大学')
   assert.equal(out[0].educationExperience[1].schoolName, 'UOW')
 })
+
+test('hides set only on the ZH side survive a sync', () => {
+  const en = [
+    {
+      sessionName: 'education',
+      headerName: 'EDUCATION',
+      educationExperience: [
+        { schoolName: 'HKMU', gpa: '3.0', hiddenFields: ['gpa'] },
+        { schoolName: 'UOW', gpa: '3.3' },
+      ],
+      points: ['a', 'b'],
+    },
+    { sessionName: 'certification', headerName: 'CERTS', certifications: [] },
+  ]
+  const zh = [
+    {
+      sessionName: 'education',
+      headerName: '教育',
+      educationExperience: [
+        { schoolName: '都会', gpa: '3.0', hiddenFields: ['schoolName'] },
+        { schoolName: '伍伦贡', gpa: '3.3', isVisible: false },
+      ],
+      points: ['甲', '乙', '丙'],
+      hiddenItems: { points: [1, 2] },
+    },
+    { sessionName: 'certification', headerName: '证书', certifications: [], isVisible: false, showOnWebsite: false },
+  ]
+  const [edu, cert] = syncLanguage(en, zh)
+  assert.deepEqual(edu.educationExperience[0].hiddenFields, ['gpa', 'schoolName'], 'EN hide added, ZH hide kept')
+  assert.equal(edu.educationExperience[1].isVisible, false, 'ZH-only hidden entry kept')
+  assert.deepEqual(edu.points, ['甲', '乙'], 'list follows EN length')
+  assert.deepEqual(edu.hiddenItems, { points: [1] }, 'hidden bullet kept; index past the synced list dropped')
+  assert.equal(cert.isVisible, false)
+  assert.equal(cert.showOnWebsite, false)
+})
+
+test('an explicit EN switch does not override a ZH "off", and absent metadata stays absent', () => {
+  const out = syncLanguage(
+    [{ sessionName: 'skill', isVisible: true, showOnWebsite: true, languages: [{ language: 'TS' }] }],
+    [{ sessionName: 'skill', isVisible: false, languages: [{ language: 'TS' }] }],
+  )
+  assert.equal(out[0].isVisible, false)
+  assert.equal(out[0].showOnWebsite, true)
+  assert.equal('hiddenFields' in out[0], false)
+  assert.equal('hiddenItems' in out[0].languages[0], false)
+})

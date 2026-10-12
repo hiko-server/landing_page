@@ -11,7 +11,17 @@
  * if both are blank the line is omitted (chip hides when all three are empty).
  *
  * Pure / sync / no side-effects so it runs identically on server and client.
+ *
+ * Visibility-aware: it accepts either the pruned public view or the full
+ * editor document. Anything the owner hid — a website-hidden section, a
+ * hidden entry, or a hidden field (pruned `redacted` marker or full-doc
+ * `hiddenFields`) — is treated as absent. In particular a hidden end date is
+ * "unknown", never "still ongoing", so it cannot turn a past job into the
+ * current one or leak through the derived chip.
  */
+
+import { isPresent } from './cvFormat'
+import { isEntryHidden, isRedacted, isSectionOnWebsite } from './cvVisibility'
 
 export type CurrentlyCoding = { label: string; project: string; note: string }
 
@@ -21,7 +31,19 @@ const EMPTY: CurrentlyCoding = { label: '', project: '', note: '' }
 
 function pickSection<T extends string>(cv: CvSection[] | undefined | null, name: T): any {
   if (!Array.isArray(cv)) return undefined
-  return cv.find((s) => s?.sessionName === name)
+  return cv.find((s) => s?.sessionName === name && isSectionOnWebsite(s))
+}
+
+/** Visible entries of a section's list (the list itself may be hidden). */
+function visibleEntries(section: any, listKey: string): any[] {
+  if (!section || isRedacted(section, listKey)) return []
+  const list = section[listKey]
+  return Array.isArray(list) ? list.filter((e) => e && typeof e === 'object' && !isEntryHidden(e)) : []
+}
+
+/** A field's value, or undefined when the owner hid it. */
+function field(entry: any, key: string): unknown {
+  return isRedacted(entry, key) ? undefined : entry?.[key]
 }
 
 /** Parse "YYYY-MM" or "YYYY-MM-DD" → YYYY (number) or null. */
@@ -50,14 +72,12 @@ function todayYm(now = new Date()): string {
   return `${y}-${mo}`
 }
 
-function isOngoing(endDate: unknown): boolean {
+function isOngoing(entry: any): boolean {
+  // A hidden end date is unknown, not "present".
+  if (isRedacted(entry, 'endDate')) return false
+  const endDate = entry?.endDate
   if (endDate == null) return true
-  if (typeof endDate === 'string') {
-    const t = endDate.trim().toLowerCase()
-    if (!t || t === 'now' || t === 'present' || t === 'current' || t === '至今' || t === '现在')
-      return true
-  }
-  return false
+  return typeof endDate === 'string' && (endDate.trim() === '' || isPresent(endDate))
 }
 
 /**
@@ -74,16 +94,16 @@ function pickCurrentJob(experiences: any[] | undefined, today = todayYm()): any 
   if (!Array.isArray(experiences) || experiences.length === 0) return null
 
   const active = experiences.filter((e) => {
-    if (isOngoing(e?.endDate)) return true
-    const end = ymKey(e?.endDate)
+    if (isOngoing(e)) return true
+    const end = ymKey(field(e, 'endDate'))
     return end && end >= today
   })
 
   if (active.length > 0) {
-    return [...active].sort((a, b) => ymKey(a?.startDate).localeCompare(ymKey(b?.startDate)))[0]
+    return [...active].sort((a, b) => ymKey(field(a, 'startDate')).localeCompare(ymKey(field(b, 'startDate'))))[0]
   }
 
-  return [...experiences].sort((a, b) => ymKey(b?.endDate).localeCompare(ymKey(a?.endDate)))[0]
+  return [...experiences].sort((a, b) => ymKey(field(b, 'endDate')).localeCompare(ymKey(field(a, 'endDate'))))[0]
 }
 
 export function deriveCurrentlyCoding(
@@ -91,9 +111,9 @@ export function deriveCurrentlyCoding(
 ): CurrentlyCoding {
   if (!Array.isArray(cvEn) || cvEn.length === 0) return EMPTY
 
-  const work = pickSection(cvEn, 'workExperience')?.experiences as any[] | undefined
-  const projects = pickSection(cvEn, 'project')?.projectExperience as any[] | undefined
-  const education = pickSection(cvEn, 'education')?.educationExperience as any[] | undefined
+  const work = visibleEntries(pickSection(cvEn, 'workExperience'), 'experiences')
+  const projects = visibleEntries(pickSection(cvEn, 'project'), 'projectExperience')
+  const education = visibleEntries(pickSection(cvEn, 'education'), 'educationExperience')
 
   // ── (b) project line ────────────────────────────────────────────────
   // Most-relevant current job's company. Avoid bolting on the full job
@@ -101,26 +121,16 @@ export function deriveCurrentlyCoding(
   // sized for a single short line; the admin can paste a richer string
   // manually if they want it.
   const current = pickCurrentJob(work)
-  let project = ''
-  if (current?.companyName && typeof current.companyName === 'string') {
-    project = current.companyName.trim()
-  }
+  const company = current ? field(current, 'companyName') : undefined
+  const project = typeof company === 'string' ? company.trim() : ''
 
   // ── (c) note line ───────────────────────────────────────────────────
   // Earliest dated entry across work + projects + education → "since YYYY".
   // Preserves the spirit of the original hard-coded "self-taught · since 2022"
   // without inventing personal narrative that isn't in the CV.
   const years: number[] = []
-  for (const e of work || []) {
-    const y = yearOf(e?.startDate)
-    if (y) years.push(y)
-  }
-  for (const p of projects || []) {
-    const y = yearOf(p?.startDate)
-    if (y) years.push(y)
-  }
-  for (const e of education || []) {
-    const y = yearOf(e?.startDate)
+  for (const e of [...work, ...projects, ...education]) {
+    const y = yearOf(field(e, 'startDate'))
     if (y) years.push(y)
   }
   let note = ''

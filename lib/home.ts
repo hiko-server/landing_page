@@ -1,6 +1,15 @@
-import fs from 'fs'
 import path from 'path'
-import { getKv, putKv, type StoreError } from './contentStore'
+import {
+  getKvWithMeta,
+  listSnapshotFiles,
+  putKv,
+  readSnapshotFile,
+  safeSnapshotName,
+  SNAPSHOT_NOT_FOUND,
+  writeSnapshotFile,
+  type KvPutOptions,
+  type KvPutResult,
+} from './contentStore'
 
 /**
  * Server-side HomeData IO: SQLite/R2-backed reader + writer + filesystem
@@ -19,8 +28,15 @@ import { publicHome } from './homeShape'
 
 const homeSnapshotDir = path.join(process.cwd(), 'data', 'home_snapshots')
 
+/** FULL home document — admin editors and server-only consumers. */
 export function readHome(): HomeData | null {
-  return getKv<HomeData>('home')
+  return getKvWithMeta<HomeData>('home').value
+}
+
+/** FULL home document plus its version (kv `updated_at`, 0 when no row). */
+export function readHomeWithVersion(): { home: HomeData | null; version: number } {
+  const row = getKvWithMeta<HomeData>('home')
+  return { home: row.value, version: row.updatedAt }
 }
 
 /**
@@ -32,48 +48,42 @@ export function readPublicHome(): HomeData | null {
   return publicHome(readHome())
 }
 
-export async function writeHome(data: HomeData): Promise<StoreError> {
-  return await putKv('home', data)
+/** Write the full document. Pass `precondition` for an atomic If-Match check. */
+export async function writeHome(data: HomeData, opts: KvPutOptions = {}): Promise<KvPutResult> {
+  return await putKv('home', data, opts)
 }
 
+/**
+ * Snapshot the stored home document into data/home_snapshots (newest 100
+ * kept). Skips the write when the newest snapshot is identical. A row that is
+ * not valid JSON is snapshotted verbatim.
+ */
 export function saveHomeSnapshot(): string {
-  const now = new Date()
-  const stamp = now.toISOString().replace(/[:.]/g, '-').replace('T', '_').replace('Z', '')
-  const filename = `home_${stamp}.json`
-  const filePath = path.join(homeSnapshotDir, filename)
-  fs.mkdirSync(homeSnapshotDir, { recursive: true })
-  const current = readHome()
-  fs.writeFileSync(filePath, JSON.stringify(current, null, 2), 'utf-8')
-  return filename
+  const row = getKvWithMeta<HomeData>('home')
+  const content = row.corrupt && row.raw !== null ? row.raw : JSON.stringify(row.value, null, 2)
+  return writeSnapshotFile(homeSnapshotDir, 'home', content)
 }
 
 export function listHomeSnapshots(): string[] {
-  try {
-    return fs.readdirSync(homeSnapshotDir).filter(f => f.endsWith('.json')).sort().reverse()
-  } catch {
-    return []
-  }
+  return listSnapshotFiles(homeSnapshotDir)
 }
 
-export function restoreHomeSnapshot(filename: string): Promise<StoreError> {
-  const safe = filename.replace(/[^a-zA-Z0-9_.-]/g, '_')
-  const filePath = path.join(homeSnapshotDir, safe)
-  if (!fs.existsSync(filePath)) return Promise.resolve({ ok: false, error: 'Snapshot not found' })
+export async function restoreHomeSnapshot(filename: unknown): Promise<KvPutResult> {
+  if (!safeSnapshotName(filename)) return { ok: false, error: 'Invalid snapshot name' }
+  const raw = readSnapshotFile(homeSnapshotDir, filename)
+  if (raw === null) return { ok: false, error: SNAPSHOT_NOT_FOUND }
+  let data: unknown
   try {
-    const data = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as HomeData
-    return putKv('home', data)
-  } catch (err: any) {
-    return Promise.resolve({ ok: false, error: err?.message || 'Failed to restore' })
+    data = JSON.parse(raw)
+  } catch {
+    return { ok: false, error: 'Snapshot is not valid JSON' }
   }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return { ok: false, error: 'Snapshot does not contain a home document' }
+  }
+  return await putKv('home', data)
 }
 
-export function readHomeSnapshot(filename: string): string | null {
-  const safe = filename.replace(/[^a-zA-Z0-9_.-]/g, '_')
-  const filePath = path.join(homeSnapshotDir, safe)
-  try {
-    if (!fs.existsSync(filePath)) return null
-    return fs.readFileSync(filePath, 'utf-8')
-  } catch {
-    return null
-  }
+export function readHomeSnapshot(filename: unknown): string | null {
+  return readSnapshotFile(homeSnapshotDir, filename)
 }

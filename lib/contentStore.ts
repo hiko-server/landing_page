@@ -12,9 +12,15 @@ import { isR2Configured, r2PutText, r2Delete } from './r2'
  *   2. Legacy file on disk (content/*.mdx, data/*.json)  — auto-seeds DB
  *
  * Write order (per user spec):
- *   1. SQLite — MUST succeed (errors propagate)
- *   2. Cloudflare R2 — MUST succeed if configured; if R2 fails we still keep
- *      the local DB write but surface the error to the caller.
+ *   1. SQLite — MUST succeed (errors propagate). Multi-statement writes
+ *      (item + tombstone list) run in one transaction.
+ *   2. Cloudflare R2 — retried a few times with backoff when configured; if
+ *      it still fails we keep the local DB write and surface the error to the
+ *      caller as `r2Warning` (a save never fails because R2 is down).
+ *
+ * Seeds never overwrite: the git seed files only fill a *missing* row. A row
+ * that exists but cannot be parsed is reported loudly and treated as absent
+ * for readers — it is never silently replaced by the (stale) seed.
  *
  * R2 key conventions mirror the legacy filesystem so an operator can
  * inspect/restore via any S3 browser:
@@ -83,16 +89,24 @@ function tombstoneKey(collection: string) {
   return `tombstones:${collection}`
 }
 
-function readTombstones(collection: string): Set<string> {
+type TombstoneRead = { set: Set<string>; corrupt: boolean }
+
+function readTombstoneRow(collection: string): TombstoneRead {
+  const row = getDb().prepare('SELECT value, updated_at FROM kv WHERE key = ?').get(tombstoneKey(collection)) as
+    | { value: string; updated_at: number }
+    | undefined
+  if (!row) return { set: new Set(), corrupt: false }
   try {
-    const row = getDb().prepare('SELECT value FROM kv WHERE key = ?').get(tombstoneKey(collection)) as
-      | { value: string }
-      | undefined
-    const list = row ? JSON.parse(row.value) : []
-    return new Set(Array.isArray(list) ? list.filter((x: unknown) => typeof x === 'string') : [])
-  } catch {
-    return new Set()
+    const list = JSON.parse(row.value)
+    return { set: new Set(Array.isArray(list) ? list.filter((x: unknown) => typeof x === 'string') : []), corrupt: false }
+  } catch (err) {
+    reportCorruptKv(tombstoneKey(collection), row.updated_at, err)
+    return { set: new Set(), corrupt: true }
   }
+}
+
+function readTombstones(collection: string): Set<string> {
+  return readTombstoneRow(collection).set
 }
 
 function writeTombstones(collection: string, set: Set<string>) {
@@ -105,24 +119,62 @@ function writeTombstones(collection: string, set: Set<string>) {
 }
 
 // ── Dual-write helper ─────────────────────────────────────────────────────
-async function pushToR2(key: string, body: string, contentType?: string): Promise<string | null> {
+
+export type RetryOptions = {
+  /** Total attempts including the first one (default 3). */
+  attempts?: number
+  /** Delay before the 2nd attempt; each later delay is 4× the previous (default 300 ms). */
+  baseDelayMs?: number
+  /** Injected for tests. */
+  sleep?: (ms: number) => Promise<void>
+  /** Called after every failed attempt that will be retried. */
+  onRetry?: (err: unknown, attempt: number, delayMs: number) => void
+}
+
+const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+/** Run `fn`, retrying failures with exponential backoff; rethrows the last error. */
+export async function retryAsync<T>(fn: () => Promise<T>, opts: RetryOptions = {}): Promise<T> {
+  const attempts = Math.max(1, Math.floor(opts.attempts ?? 3))
+  const base = Math.max(0, opts.baseDelayMs ?? 300)
+  const sleep = opts.sleep ?? defaultSleep
+  let lastErr: unknown
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await fn()
+    } catch (err) {
+      lastErr = err
+      if (attempt === attempts) break
+      const delay = base * 4 ** (attempt - 1)
+      opts.onRetry?.(err, attempt, delay)
+      await sleep(delay)
+    }
+  }
+  throw lastErr
+}
+
+const errMessage = (err: unknown) => (err instanceof Error ? err.message : String(err))
+
+async function r2WithRetry(op: string, key: string, fn: () => Promise<void>): Promise<string | null> {
   if (!isR2Configured()) return null
   try {
-    await r2PutText(key, body, contentType)
+    await retryAsync(fn, {
+      onRetry: (err, attempt, delay) =>
+        console.warn(`[contentStore] R2 ${op} ${key} failed (attempt ${attempt}), retrying in ${delay} ms:`, errMessage(err)),
+    })
     return null
-  } catch (err: any) {
-    return err?.message || String(err)
+  } catch (err) {
+    console.error(`[contentStore] R2 ${op} ${key} failed after retries:`, errMessage(err))
+    return errMessage(err)
   }
 }
 
-async function deleteFromR2(key: string): Promise<string | null> {
-  if (!isR2Configured()) return null
-  try {
-    await r2Delete(key)
-    return null
-  } catch (err: any) {
-    return err?.message || String(err)
-  }
+function pushToR2(key: string, body: string, contentType?: string): Promise<string | null> {
+  return r2WithRetry('put', key, () => r2PutText(key, body, contentType))
+}
+
+function deleteFromR2(key: string): Promise<string | null> {
+  return r2WithRetry('delete', key, () => r2Delete(key))
 }
 
 // ── Pages (now, uses) ─────────────────────────────────────────────────────
@@ -150,8 +202,11 @@ export function getPage(name: string): PageRecord | null {
   if (fromDb) return fromDb
   const fromFile = readPageFromFile(name)
   if (!fromFile) return null
-  putPageToDbOnly(name, fromFile.frontmatter, fromFile.body)
-  return fromFile
+  // Seed only a missing row; if another worker seeded it first, theirs wins.
+  getDb()
+    .prepare('INSERT INTO pages (name, frontmatter, body, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(name) DO NOTHING')
+    .run(name, JSON.stringify(fromFile.frontmatter), fromFile.body, Date.now())
+  return getPageFromDb(name) ?? fromFile
 }
 
 function putPageToDbOnly(name: string, frontmatter: Record<string, any>, body: string) {
@@ -265,12 +320,16 @@ function readItemFromDisk(collection: string, slug: string): ItemRecord | null {
   }
 }
 
-function putItemToDbOnly(item: ItemRecord) {
+function putItemToDbOnly(item: ItemRecord, onConflict: 'update' | 'ignore' = 'update') {
+  const conflict =
+    onConflict === 'ignore'
+      ? 'DO NOTHING'
+      : 'DO UPDATE SET frontmatter = excluded.frontmatter, body = excluded.body, updated_at = excluded.updated_at'
   getDb()
     .prepare(
       `INSERT INTO collection_items (collection, slug, frontmatter, body, updated_at)
        VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT(collection, slug) DO UPDATE SET frontmatter = excluded.frontmatter, body = excluded.body, updated_at = excluded.updated_at`,
+       ON CONFLICT(collection, slug) ${conflict}`,
     )
     .run(
       item.collection,
@@ -286,8 +345,11 @@ export function listItems(collection: string): ItemRecord[] {
   const fromDb = listItemsFromDb(collection)
   if (fromDb.length > 0) return fromDb
   const fromDisk = readItemsFromDisk(collection)
-  for (const item of fromDisk) putItemToDbOnly(item)
-  return fromDisk
+  if (fromDisk.length === 0) return fromDisk
+  getDb().transaction(() => {
+    for (const item of fromDisk) putItemToDbOnly(item, 'ignore')
+  })()
+  return listItemsFromDb(collection)
 }
 
 export function getItem(collection: string, slug: string): ItemRecord | null {
@@ -295,8 +357,8 @@ export function getItem(collection: string, slug: string): ItemRecord | null {
   if (fromDb) return fromDb
   const fromDisk = readItemFromDisk(collection, slug)
   if (!fromDisk) return null
-  putItemToDbOnly(fromDisk)
-  return fromDisk
+  putItemToDbOnly(fromDisk, 'ignore')
+  return getItemFromDb(collection, slug) ?? fromDisk
 }
 
 export async function putItem(
@@ -306,9 +368,13 @@ export async function putItem(
   body: string,
 ): Promise<StoreError> {
   try {
-    putItemToDbOnly({ collection, slug, frontmatter: jsonSafeFrontmatter(frontmatter), body, updated_at: Date.now() })
-    const dead = readTombstones(collection)
-    if (dead.delete(slug)) writeTombstones(collection, dead)
+    getDb().transaction(() => {
+      putItemToDbOnly({ collection, slug, frontmatter: jsonSafeFrontmatter(frontmatter), body, updated_at: Date.now() })
+      // A corrupt tombstone row is left untouched (reported by the reader);
+      // the item row itself wins over any tombstone on read.
+      const dead = readTombstoneRow(collection)
+      if (!dead.corrupt && dead.set.delete(slug)) writeTombstones(collection, dead.set)
+    })()
   } catch (err: any) {
     return { ok: false, error: `DB write failed: ${err?.message || String(err)}` }
   }
@@ -320,12 +386,17 @@ export async function putItem(
 
 export async function removeItem(collection: string, slug: string): Promise<StoreError> {
   try {
-    getDb()
-      .prepare('DELETE FROM collection_items WHERE collection = ? AND slug = ?')
-      .run(collection, slug)
-    const dead = readTombstones(collection)
-    dead.add(slug)
-    writeTombstones(collection, dead)
+    getDb().transaction(() => {
+      const dead = readTombstoneRow(collection)
+      // Rewriting a corrupt list would forget every earlier deletion and let
+      // seeded posts reappear — refuse instead (the transaction rolls back).
+      if (dead.corrupt) {
+        throw new Error(`kv row "${tombstoneKey(collection)}" is not valid JSON; fix it before deleting`)
+      }
+      getDb().prepare('DELETE FROM collection_items WHERE collection = ? AND slug = ?').run(collection, slug)
+      dead.set.add(slug)
+      writeTombstones(collection, dead.set)
+    })()
   } catch (err: any) {
     return { ok: false, error: `DB delete failed: ${err?.message || String(err)}` }
   }
@@ -335,16 +406,55 @@ export async function removeItem(collection: string, slug: string): Promise<Stor
 }
 
 // ── KV (home.json, cvdata.json, …) ────────────────────────────────────────
-export function getKvFromDb<T = any>(key: string): T | null {
-  const row = getDb().prepare('SELECT value FROM kv WHERE key = ?').get(key) as
-    | { value: string }
-    | undefined
-  if (!row) return null
+
+const reportedCorrupt = new Set<string>()
+
+/** Loud, once-per-version report of a kv row that is not valid JSON. */
+function reportCorruptKv(key: string, updatedAt: number, err: unknown) {
+  const id = `${key}@${updatedAt}`
+  if (reportedCorrupt.has(id)) return
+  reportedCorrupt.add(id)
+  console.error(
+    `[contentStore] CORRUPT kv row "${key}" (updated_at ${updatedAt}) is not valid JSON: ${errMessage(err)}. ` +
+      'Readers get null; the row is NOT replaced by the seed file. Restore it from a snapshot or R2.',
+  )
+}
+
+type KvRow = { value: string; updated_at: number }
+
+function readKvRow(key: string): KvRow | null {
+  return (getDb().prepare('SELECT value, updated_at FROM kv WHERE key = ?').get(key) as KvRow | undefined) ?? null
+}
+
+export type KvRead<T> = {
+  /** Parsed value, or null when there is no row or the row is corrupt. */
+  value: T | null
+  /** Row `updated_at` in ms; 0 when there is no row. */
+  updatedAt: number
+  /** True when a row exists but its value is not valid JSON. */
+  corrupt: boolean
+  /** Raw stored text (kept so a corrupt row can still be snapshotted). */
+  raw: string | null
+}
+
+function decodeKvRow<T>(key: string, row: KvRow | null): KvRead<T> {
+  if (!row) return { value: null, updatedAt: 0, corrupt: false, raw: null }
   try {
-    return JSON.parse(row.value) as T
-  } catch {
-    return null
+    return { value: JSON.parse(row.value) as T, updatedAt: row.updated_at, corrupt: false, raw: row.value }
+  } catch (err) {
+    reportCorruptKv(key, row.updated_at, err)
+    return { value: null, updatedAt: row.updated_at, corrupt: true, raw: row.value }
   }
+}
+
+export function getKvFromDb<T = any>(key: string): T | null {
+  return decodeKvRow<T>(key, readKvRow(key)).value
+}
+
+/** Version metadata only (cheap): null when the row does not exist. */
+export function getKvMeta(key: string): { updatedAt: number } | null {
+  const row = getDb().prepare('SELECT updated_at FROM kv WHERE key = ?').get(key) as { updated_at: number } | undefined
+  return row ? { updatedAt: row.updated_at } : null
 }
 
 function readKvFromDisk<T = any>(key: string): T | null {
@@ -352,32 +462,76 @@ function readKvFromDisk<T = any>(key: string): T | null {
   if (!fs.existsSync(fp)) return null
   try {
     return JSON.parse(fs.readFileSync(fp, 'utf-8')) as T
-  } catch {
+  } catch (err) {
+    console.error(`[contentStore] seed file data/${key}.json is not valid JSON:`, errMessage(err))
     return null
   }
 }
 
-function putKvToDbOnly(key: string, value: any) {
+/**
+ * Upsert. `updated_at` is strictly increasing per key (never equal to the
+ * previous value), so it doubles as a version / ETag even for two writes
+ * within the same millisecond.
+ */
+function putKvToDbOnly(key: string, value: any): number {
+  const db = getDb()
+  db.prepare(
+    `INSERT INTO kv (key, value, updated_at) VALUES (?, ?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = MAX(excluded.updated_at, kv.updated_at + 1)`,
+  ).run(key, JSON.stringify(value), Date.now())
+  return getKvMeta(key)?.updatedAt ?? 0
+}
+
+/**
+ * Read a kv value with its version. A missing row is seeded from the git
+ * seed file (data/<key>.json) — a corrupt row is not.
+ */
+export function getKvWithMeta<T = any>(key: string): KvRead<T> {
+  const row = readKvRow(key)
+  if (row) return decodeKvRow<T>(key, row)
+  const fromDisk = readKvFromDisk<T>(key)
+  if (fromDisk === null) return { value: null, updatedAt: 0, corrupt: false, raw: null }
   getDb()
-    .prepare(
-      `INSERT INTO kv (key, value, updated_at) VALUES (?, ?, ?)
-       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-    )
-    .run(key, JSON.stringify(value), Date.now())
+    .prepare('INSERT INTO kv (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO NOTHING')
+    .run(key, JSON.stringify(fromDisk), Date.now())
+  return decodeKvRow<T>(key, readKvRow(key))
 }
 
 export function getKv<T = any>(key: string): T | null {
-  const fromDb = getKvFromDb<T>(key)
-  if (fromDb !== null) return fromDb
-  const fromDisk = readKvFromDisk<T>(key)
-  if (fromDisk === null) return null
-  putKvToDbOnly(key, fromDisk)
-  return fromDisk
+  return getKvWithMeta<T>(key).value
 }
 
-export async function putKv(key: string, value: any): Promise<StoreError> {
+export type KvPutResult =
+  | { ok: true; updatedAt: number; r2Warning?: string }
+  | { ok: false; error: string; conflict?: { updatedAt: number } }
+
+export type KvPutOptions = {
+  /**
+   * Optimistic-concurrency check, evaluated atomically with the write against
+   * the row's current `updated_at` (0 when missing). Returning false aborts
+   * the write with `conflict`.
+   */
+  precondition?: (currentUpdatedAt: number) => boolean
+}
+
+export async function putKv(key: string, value: any, opts: KvPutOptions = {}): Promise<KvPutResult> {
+  let updatedAt: number
   try {
-    putKvToDbOnly(key, value)
+    const outcome = getDb().transaction((): { conflict: number } | { updatedAt: number } => {
+      if (opts.precondition) {
+        const current = getKvMeta(key)?.updatedAt ?? 0
+        if (!opts.precondition(current)) return { conflict: current }
+      }
+      return { updatedAt: putKvToDbOnly(key, value) }
+    })()
+    if ('conflict' in outcome) {
+      return {
+        ok: false,
+        error: 'The stored document changed since it was loaded',
+        conflict: { updatedAt: outcome.conflict },
+      }
+    }
+    updatedAt = outcome.updatedAt
   } catch (err: any) {
     return { ok: false, error: `DB write failed: ${err?.message || String(err)}` }
   }
@@ -386,6 +540,140 @@ export async function putKv(key: string, value: any): Promise<StoreError> {
     JSON.stringify(value, null, 2),
     'application/json; charset=utf-8',
   )
-  if (r2Err) return { ok: true, r2Warning: `R2 sync failed: ${r2Err}` }
-  return { ok: true }
+  if (r2Err) return { ok: true, updatedAt, r2Warning: `R2 sync failed: ${r2Err}` }
+  return { ok: true, updatedAt }
+}
+
+// ── Versions / ETags (HTTP helpers for kv-backed documents) ──────────────
+
+/** Strong ETag for a kv version: `"<updated_at ms>"` (`"0"` when no row). */
+export function kvEtag(updatedAt: number): string {
+  const n = Number.isFinite(updatedAt) && updatedAt > 0 ? Math.trunc(updatedAt) : 0
+  return `"${n}"`
+}
+
+/**
+ * Evaluate an `If-Match` request header against the current kv version.
+ * No header (or an empty one) → allowed, for backward compatibility.
+ * `*` matches only an existing row. Strong comparison: weak tags never match.
+ */
+export function ifMatchAllows(header: string | string[] | undefined, updatedAt: number): boolean {
+  const raw = Array.isArray(header) ? header.join(',') : header
+  if (typeof raw !== 'string' || raw.trim() === '') return true
+  const current = kvEtag(updatedAt)
+  return raw
+    .split(',')
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .some((t) => (t === '*' ? updatedAt > 0 : t === current))
+}
+
+/**
+ * JSON with object keys sorted, for "did anything change?" comparisons that
+ * must not depend on key order.
+ */
+export function stableStringify(value: unknown): string {
+  return JSON.stringify(sortKeysDeep(value))
+}
+
+function sortKeysDeep(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortKeysDeep)
+  if (value && typeof value === 'object') {
+    const src = value as Record<string, unknown>
+    const out: Record<string, unknown> = {}
+    for (const k of Object.keys(src).sort()) {
+      if (src[k] !== undefined) out[k] = sortKeysDeep(src[k])
+    }
+    return out
+  }
+  return value
+}
+
+// ── Filesystem snapshots (audit trail for cv / home) ─────────────────────
+
+/** How many snapshots of each kind are kept on disk (newest first). */
+export const SNAPSHOT_KEEP = 100
+
+/** Error text of a restore whose snapshot file does not exist (maps to HTTP 404). */
+export const SNAPSHOT_NOT_FOUND = 'Snapshot not found'
+
+/** HTTP status for a failed snapshot restore: missing file 404, storage failure 500, bad input 400. */
+export function restoreErrorStatus(error: string): 400 | 404 | 500 {
+  if (error === SNAPSHOT_NOT_FOUND) return 404
+  return error.startsWith('DB write failed') ? 500 : 400
+}
+
+const SNAPSHOT_NAME = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,126}\.json$/
+
+/** Validate a caller-supplied snapshot filename. Returns null for anything unsafe or non-string. */
+export function safeSnapshotName(input: unknown): string | null {
+  if (typeof input !== 'string') return null
+  const name = input.trim()
+  return SNAPSHOT_NAME.test(name) && !name.includes('..') ? name : null
+}
+
+/**
+ * `Content-Disposition: attachment` for a download, with an ASCII-only
+ * fallback `filename` and an RFC 5987 `filename*` (RFC 6266).
+ */
+export function attachmentDisposition(filename: string): string {
+  const ascii = filename.replace(/[^A-Za-z0-9_.-]/g, '_') || 'download.json'
+  const encoded = encodeURIComponent(filename).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encoded}`
+}
+
+export function listSnapshotFiles(dir: string): string[] {
+  try {
+    return fs.readdirSync(dir).filter((f) => f.endsWith('.json')).sort().reverse()
+  } catch {
+    return []
+  }
+}
+
+export function readSnapshotFile(dir: string, filename: unknown): string | null {
+  const safe = safeSnapshotName(filename)
+  if (!safe) return null
+  const filePath = path.join(dir, safe)
+  try {
+    if (!fs.existsSync(filePath)) return null
+    return fs.readFileSync(filePath, 'utf-8')
+  } catch {
+    return null
+  }
+}
+
+/** Newest-first snapshot files written by writeSnapshotFile for `prefix`. */
+function ownSnapshots(dir: string, prefix: string): string[] {
+  return listSnapshotFiles(dir).filter((f) => f.startsWith(`${prefix}_`))
+}
+
+/**
+ * Write `<prefix>_<UTC stamp>.json` into `dir` and prune to the newest
+ * SNAPSHOT_KEEP files of that prefix. When the newest existing snapshot has
+ * identical content no duplicate is written and its name is returned.
+ */
+export function writeSnapshotFile(dir: string, prefix: string, content: string, now = new Date()): string {
+  fs.mkdirSync(dir, { recursive: true })
+  const existing = ownSnapshots(dir, prefix)
+  if (existing.length && readSnapshotFile(dir, existing[0]) === content) return existing[0]
+  const stamp = now.toISOString().replace(/[:.]/g, '-').replace('T', '_').replace('Z', '')
+  const filename = `${prefix}_${stamp}.json`
+  fs.writeFileSync(path.join(dir, filename), content, 'utf-8')
+  pruneSnapshots(dir, prefix, SNAPSHOT_KEEP)
+  return filename
+}
+
+/** Delete all but the newest `keep` snapshots of `prefix`; returns the removed names. */
+export function pruneSnapshots(dir: string, prefix: string, keep: number = SNAPSHOT_KEEP): string[] {
+  const stale = ownSnapshots(dir, prefix).slice(Math.max(0, keep))
+  const removed: string[] = []
+  for (const f of stale) {
+    try {
+      fs.unlinkSync(path.join(dir, f))
+      removed.push(f)
+    } catch (err) {
+      console.warn(`[contentStore] could not prune snapshot ${f}:`, errMessage(err))
+    }
+  }
+  return removed
 }
