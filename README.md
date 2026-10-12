@@ -56,8 +56,11 @@ backup, and a hardened admin GUI for non-engineers.
 - **Editable contact panel** — heading, eyebrow, blurb, and the dropdown
   reasons list all come from `data/home.json`; built-in defaults when
   blank.
-- **Industry-grade admin auth** — scrypt with 16-byte salt; per-account
-  lockout (10 fails / 15 min → 15 min lock); per-IP rate limit; httpOnly
+- **Admin Inbox** — every contact message is stored with its delivery
+  status and can be read and answered from the dashboard, even when SMTP
+  is not configured.
+- **Industry-grade admin auth** — scrypt with 16-byte salt; per-(email, IP)
+  lockout with a site-wide throughput cap under attack; httpOnly
   + sameSite=Strict + Secure cookies; JWT via `jose` in edge middleware
   so unauth visitors never see admin UI for a frame; HSTS / CSP / X-Frame
   / X-Robots applied via `middleware.ts`.
@@ -286,17 +289,24 @@ handle, swap the file, then mirror trees back over the live ones.
   Unauthenticated requests are redirected to `/admin/login?next=<original>`
   for pages, or returned as JSON 401 for APIs. Public whitelisted paths:
   `/admin/{login,forgot,reset}` and `/api/admin/{session,logout}`.
-- **scrypt** password hashing (N=16384, r=8, p=1, 64-byte key) with a
-  per-account 16-byte random salt. Comparisons use `crypto.timingSafeEqual`
-  on equal-length buffers.
-- **Per-account lockout**: 10 failed attempts in a rolling 15-minute window
-  triggers a 15-minute lock, regardless of the attacker's IP rotation.
-  Persisted in `data/admin.json`. Successful login clears the counter.
-- **Per-IP rate limit** (10 / 5 min on login, 5 / 10 min on reset request,
-  5 / 10 min on contact form).
-- **Origin check** on `POST /api/auth/email-login` in production —
-  defence-in-depth on top of `SameSite=Strict`.
-- **JWT** is HS256, 7d expiry, signed with `JWT_SECRET`.
+- **scrypt** password hashing (N=16384, r=8, p=1, 64-byte key, async) with
+  a per-account 16-byte random salt. Comparisons use
+  `crypto.timingSafeEqual` on equal-length buffers.
+- **Login throttling**: lockout per (normalised e-mail, client IP) with
+  backoff; under sustained failures a site-wide queue caps how fast
+  credentials can be tried at all. A signed, long-lived known-device cookie
+  (set on successful login) lets the owner skip that queue. Unknown e-mail
+  and wrong password get identical responses.
+- **Per-IP rate limits** keyed per route (IPv6 bucketed by /64 and /48).
+  Client-IP headers (`cf-connecting-ip`) are trusted only from loopback and
+  the container's default gateway — how the Cloudflare Tunnel reaches the
+  app through the Docker port mapping — unless `TRUSTED_PROXY_IPS` is set.
+- **CSRF**: the middleware refuses cross-site (`Origin` / `Sec-Fetch-Site`)
+  and non-JSON writes to every admin and content API, on top of
+  `SameSite=Strict`.
+- **Session revocation**: logout and password reset bump a session version
+  in `data/admin.json`, invalidating every issued token.
+- **JWT** is HS256 (pinned), 7d expiry, signed with `JWT_SECRET`.
 - **Cookies**: `httpOnly`, `sameSite: 'strict'`, `secure` in prod, `path: /`.
 - **Reset tokens**: 24 random bytes, 30 min TTL, single-use, constant-time
   compare, pruned on every read.
@@ -350,12 +360,17 @@ yarn content:list       # list R2 objects
 docker compose up --build
 ```
 
-The bundled `docker-entrypoint.sh` runs `sync-from-r2.mjs` on boot, so a
-fresh container hydrates from the R2 mirror automatically. Mount `./data`
-to a volume to persist the local SQLite + uploads across rebuilds.
+The bundled `docker-entrypoint.sh` (under `dumb-init`) runs
+`sync-from-r2.mjs` on boot — reconciling the local SQLite store with the R2
+mirror by real timestamps, repairing writes that never reached R2 — then
+starts the server and `scripts/warm-isr.mjs`, which regenerates every
+statically generated page from the real store (the image is built without
+a database). `./data` and `./public/uploads` are persisted through volumes
+or bind mounts.
 
-Build args from `.env` (R2_*, MONGODB_*, SMTP_*, ADMIN_*, JWT_SECRET) are
-passed straight through.
+Runtime settings come from `.env` (`env_file`); the public `NEXT_PUBLIC_*`
+values are also passed as build args because Next inlines them at build
+time.
 
 ---
 
@@ -387,9 +402,10 @@ are gated by the middleware.
 | `/admin/forgot` + `/admin/reset` | Email-based reset flow |
 | `/admin` | Portal — links to the editors below |
 | `/admin/dashboard?tab=home` | HomeEditor — hero, contact, visibility, brands, photos |
-| `/admin/dashboard?tab=cv` | CV Studio (split-pane) + raw JSON + legacy GUI |
+| `/admin/dashboard?tab=cv` | CV Studio (per-field visibility, hidden-items panel, A4 / website preview) + raw JSON |
 | `/admin/dashboard?tab=versions` | Version-history rollback |
 | `/admin/dashboard?tab=storage` | SQLite + R2 inventory, manual Backup / Pull |
+| `/admin/dashboard?tab=inbox` | Contact Inbox — read, reply by e-mail, mark, delete |
 | `/admin/blog`, `/admin/blog/edit?slug=…` | Blog post manager |
 | `/admin/work`, `/admin/work/edit?slug=…` | Case-study manager |
 | `/admin/now`, `/admin/uses` | One-off page editors |

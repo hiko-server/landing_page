@@ -8,6 +8,73 @@ portfolio CMS, no public package). Entries are grouped by release date.
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-10-13
+
+Hardening and polish on top of 2.0.0, after two adversarial reviews (81
+confirmed findings fixed) and an end-to-end check against a copy of the live
+content store.
+
+### Added
+
+- **Admin Inbox** (`/admin/dashboard?tab=inbox`, Alt/⌃+5): every contact
+  message is stored with whether it was emailed — readable and answerable
+  (reply-by-email with the original quoted) even when SMTP is not
+  configured. Read/unread, delete, unread badge, keyboard navigation.
+  Site-wide daily and size caps; full-site backups include it and restores
+  merge it without bringing deleted messages back.
+- **CV Studio**: hidden-items panel (every hidden section/entry/field/bullet
+  in EN and 中, jump-to and one-click Show), A4 CV / Website preview,
+  alignment badges for linked EN↔中 lists, drafts that remember the version
+  they were based on.
+- **Admin-only reads with optimistic concurrency**: `GET /api/admin/cvdata`
+  and `/api/admin/home` return the full documents with a version ETag;
+  saves send `If-Match` and get 409 instead of silently overwriting newer
+  edits. Public `GET /api/cvdata` / `/api/home` always return the pruned
+  view, even to a signed-in admin.
+- **Mobile CV reading mode** with a sticky Download PDF / EN·中文 / Copy link
+  bar; **self-updating /now and /uses** built from the public CV, the
+  currently-coding note, the latest writing and the curated stack.
+- **Articles**: heading anchors, sticky table of contents, reading progress,
+  prev/next and related items; **command palette 2.0** (fuzzy ranking,
+  recents, in-page jumps, CV / theme / link actions).
+- **On-demand revalidation**: saving a post, case study, page, CV or home
+  page refreshes the affected static pages immediately; a boot-time warm-up
+  (`scripts/warm-isr.mjs`) replaces the image's build-time pages before
+  traffic arrives.
+- Persistent header/footer across navigation, native view transitions,
+  real PWA icons, AA-contrast accent tokens.
+
+### Fixed
+
+- `next build` failed with "database is locked" when the store did not exist
+  yet (always the case in the Docker build).
+- Next's `res.json()` replaced version ETags with a body hash, so every
+  conditional save conflicted (`lib/http.ts` `sendVersionedJson`).
+- Editors could load the pruned public CV after a session expired and save
+  it back, deleting hidden content.
+- A full-backup restore was undone on the next boot; public pages kept
+  reading the old database after a restore; failed R2 writes could be
+  reverted by the boot sync (`r2_pending` now repairs them).
+- Hidden end dates showed as "Present", hidden expiry dates as "No Expiry";
+  linked hide toggles could hit the wrong 中 entry; "Sync 中 ← EN" dropped
+  中-only hides; duplicating a hidden entry made it public.
+- Home page layout shift on phones (CLS 0.28–0.48 → none); light-mode dark
+  flash; portals without the site fonts; `/cv` language not following client
+  navigation; social cards blocked by robots.txt.
+
+### Security
+
+- Middleware refuses cross-site and non-JSON writes to admin/content APIs.
+- Login: per-(email, IP) lockout plus a real site-wide throughput cap under
+  attack, a signed known-device cookie for the owner, identical responses
+  for unknown e-mail vs wrong password, async scrypt.
+- Logout and password reset revoke every issued session.
+- Client-IP headers trusted only from loopback and the container's default
+  gateway unless `TRUSTED_PROXY_IPS` is set.
+- Contact form: the sum is issued and verified by the server (HMAC bound to
+  the single-use nonce); JSON-LD escaped against script breakout; one
+  upload-name rule for upload, serving and backups.
+
 ## [2.0.0] — 2026-10-12
 
 ### Added

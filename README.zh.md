@@ -49,8 +49,10 @@ English → [README.md](./README.md)
   从后台直接隐藏，无需改代码。
 - **联系面板可编辑**：标题、眉标、副标语、原因下拉项均来自
   `data/home.json`；留空时回退到内置默认值。
-- **工业级后台认证**：scrypt + 16 字节随机盐；按账户锁定（15 分钟
-  内 10 次失败 → 锁 15 分钟）；按 IP 限流；`httpOnly` + `SameSite=Strict`
+- **后台收件箱**：联系表单的每条留言都会连同是否已发出邮件一起保存，
+  即使没有配置 SMTP，也能在后台阅读并回复。
+- **工业级后台认证**：scrypt + 16 字节随机盐；按（邮箱，IP）锁定，遭受攻击时
+  全站限制尝试速率；按 IP 限流；`httpOnly` + `SameSite=Strict`
   + `Secure` Cookie；通过 `jose` 在 Edge Middleware 校验 JWT，未登录
   访客**完全无法看到**任何 admin 页面；统一下发 HSTS / CSP / X-Frame /
   X-Robots。
@@ -259,14 +261,19 @@ uploads/*
   未登录访问 → 页面 302 到 `/admin/login?next=<原路径>`；接口直接返
   JSON 401。公开白名单：`/admin/{login,forgot,reset}` 与
   `/api/admin/{session,logout}`。
-- **scrypt** 密码哈希（N=16384、r=8、p=1、64 字节 key），每账户独立的
-  16 字节随机盐。比较一律走 `crypto.timingSafeEqual` 且两侧 buffer 等长。
-- **账户级锁定**：15 分钟滚动窗口内 10 次失败即锁 15 分钟，攻击者轮
-  换 IP 也无效。状态存 `data/admin.json`。登录成功立即清零计数。
-- **IP 级限流**（登录 10/5min、重置请求 5/10min、联系表单 5/10min）。
-- **同源校验**：生产环境下 `POST /api/auth/email-login` 强制
-  `Origin === Host`，作为 `SameSite=Strict` 之上的纵深防御。
-- **JWT** 走 HS256，7 天有效期，签名密钥 `JWT_SECRET`。
+- **scrypt** 密码哈希（N=16384、r=8、p=1、64 字节 key，异步计算），每账户
+  独立的 16 字节随机盐。比较一律走 `crypto.timingSafeEqual` 且两侧 buffer 等长。
+- **登录限速**：按（规范化邮箱，客户端 IP）锁定并逐步退避；持续失败时，
+  全站排队限制凭据尝试的总速率。登录成功会写入签名的长期"已知设备"
+  Cookie，站长可绕过该队列。邮箱不存在与密码错误的响应完全一致。
+- **按路由的 IP 限流**（IPv6 按 /64 与 /48 归并）。只信任来自本机回环和
+  容器默认网关的 `cf-connecting-ip`（即 Cloudflare Tunnel 经 Docker 端口
+  映射到达的方式），除非设置了 `TRUSTED_PROXY_IPS`。
+- **CSRF**：中间件拒绝所有跨站（`Origin` / `Sec-Fetch-Site`）以及非 JSON 的
+  后台与内容写入请求，作为 `SameSite=Strict` 之上的纵深防御。
+- **会话吊销**：登出与重置密码会提升 `data/admin.json` 中的会话版本，
+  所有已签发的 Token 立即失效。
+- **JWT** 走 HS256（固定算法），7 天有效期，签名密钥 `JWT_SECRET`。
 - **Cookie**：`httpOnly`、`sameSite: 'strict'`、生产开 `secure`、`path: /`。
 - **重置 Token**：24 字节随机、30 分钟 TTL、一次性、常量时间比较、
   每次读取自动清理过期项。
@@ -318,12 +325,14 @@ yarn content:list       # 列出 R2 对象
 docker compose up --build
 ```
 
-自带的 `docker-entrypoint.sh` 在容器启动时先跑 `sync-from-r2.mjs`，
-所以**新容器会自动从 R2 镜像水合**。建议把 `./data` 挂成卷，跨重建
-保留本地 SQLite 与上传图。
+自带的 `docker-entrypoint.sh`（由 `dumb-init` 托管）在启动时先运行
+`sync-from-r2.mjs`：按真实时间戳对齐本地 SQLite 与 R2 镜像，并补齐此前未能
+写入 R2 的内容；随后启动服务器和 `scripts/warm-isr.mjs`，用真实数据重新生成
+所有静态页面（镜像构建时不含数据库）。`./data` 与 `./public/uploads` 通过卷或
+绑定挂载持久化。
 
-`.env` 中的构建参数（R2_*、MONGODB_*、SMTP_*、ADMIN_*、JWT_SECRET）
-会直接透传。
+运行时配置来自 `.env`（`env_file`）；公开的 `NEXT_PUBLIC_*` 变量同时作为构建
+参数传入，因为 Next 会在构建时把它们写进前端代码。
 
 ---
 
@@ -354,9 +363,10 @@ API 在 `/api/*`；`/api/admin/*` 全部需要鉴权（Middleware 把关）。
 | `/admin/forgot` + `/admin/reset` | 邮件密码重置流程 |
 | `/admin` | 入口卡片 |
 | `/admin/dashboard?tab=home` | HomeEditor — Hero / Contact / 可见性 / 品牌 / 照片 |
-| `/admin/dashboard?tab=cv` | CV Studio（分屏）+ 原始 JSON + 旧版 GUI |
+| `/admin/dashboard?tab=cv` | CV Studio（逐字段显示/隐藏、隐藏项面板、A4 / 网站预览）+ 原始 JSON |
 | `/admin/dashboard?tab=versions` | 版本回滚 |
 | `/admin/dashboard?tab=storage` | SQLite + R2 清单，手动 Backup / Pull |
+| `/admin/dashboard?tab=inbox` | 联系收件箱：阅读、邮件回复、标记、删除 |
 | `/admin/blog`、`/admin/blog/edit?slug=…` | 博客管理 |
 | `/admin/work`、`/admin/work/edit?slug=…` | 案例研究管理 |
 | `/admin/now`、`/admin/uses` | 单页编辑器 |
