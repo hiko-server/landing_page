@@ -25,10 +25,18 @@ import {
 import { kvEtag, restoreErrorStatus, safeSnapshotName } from '../../lib/contentStore'
 import { isAdminRequest } from '../../lib/auth'
 import { sendVersionedJson } from '../../lib/http'
+import { revalidatePaths } from '../../lib/revalidate'
 
 const isAuthed = isAdminRequest
 
 type VersionType = 'cv' | 'home'
+
+/**
+ * Statically generated pages rendered from each document: /now reads the
+ * public CV sections and home.hero.currentlyCoding, so restoring either one
+ * must regenerate it instead of leaving the ISR copy live.
+ */
+const STATIC_PATHS: Record<VersionType, string[]> = { cv: ['/now'], home: ['/now'] }
 
 function parseType(value: unknown): VersionType | null {
   if (value === undefined || value === '') return null
@@ -111,7 +119,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const result = type === 'home' ? await restoreHomeSnapshot(filename) : await restoreSnapshot(filename)
       if (!result.ok) return res.status(restoreErrorStatus(result.error)).json({ error: result.error })
       const etag = kvEtag(result.updatedAt)
-      return sendVersionedJson(res, 200, { ok: true, etag, ...(result.r2Warning ? { r2Warning: result.r2Warning } : {}) }, etag)
+      const paths = STATIC_PATHS[type]
+      const failed = await revalidatePaths(res, paths)
+      return sendVersionedJson(res, 200, {
+        ok: true,
+        etag,
+        ...(result.r2Warning ? { r2Warning: result.r2Warning } : {}),
+        revalidated: paths.filter((p) => !failed.includes(p)),
+        ...(failed.length ? { revalidateFailed: failed } : {}),
+      }, etag)
     }
 
     return res.status(400).json({ error: 'Unknown action' })

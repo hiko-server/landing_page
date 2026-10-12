@@ -49,6 +49,7 @@ import { useDirtyRegistration } from './AdminDirtyContext'
 import { useCvDocument } from './cvStudio/useCvDocument'
 import {
   addSection,
+  duplicatesHidden,
   hasContent,
   insertMany,
   listOp,
@@ -58,6 +59,7 @@ import {
   removeSection,
   sectionMisalignments,
   setEntryHidden,
+  studioOwnsUndo,
   setFieldHidden,
   setItemHidden,
   setSectionFlag,
@@ -400,7 +402,10 @@ export default function CVEditorStudio() {
             return
           }
         }
-        applyListOp(listPath, op, label, linked)
+        // A copy of something hidden stays hidden — say so, or the owner may
+        // expect it to show once saved.
+        const hiddenCopy = op.type === 'duplicate' && duplicatesHidden(getDoc(), lang, listPath, op.index)
+        applyListOp(listPath, op, hiddenCopy ? `${label || 'Duplicated'} — the copy is hidden` : label, linked)
       },
       insertMany: (listPath: CvPath, index: number, values: string[], replaceAtIndex = false) => {
         const r = run((d) => insertMany(d, lang, listPath, index, values, replaceAtIndex, linked))
@@ -577,12 +582,13 @@ export default function CVEditorStudio() {
         // Always keep the browser's "Save page" dialog away; save only real changes.
         e.preventDefault()
         if (dirtyRef.current) doSave(false)
-      } else if (k === 'z' && !e.shiftKey) {
+      } else if (k === 'z' || k === 'y') {
+        // Only the Studio's own document: the command palette, dialogs, the
+        // Hidden-items drawer and fields outside the Studio keep native undo.
+        if (!studioOwnsUndo(e.target, rootRef.current, document)) return
         e.preventDefault()
-        undo()
-      } else if ((k === 'z' && e.shiftKey) || k === 'y') {
-        e.preventDefault()
-        redo()
+        if (k === 'z' && !e.shiftKey) undo()
+        else redo()
       }
     }
     document.addEventListener('keydown', onKey)

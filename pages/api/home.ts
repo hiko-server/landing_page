@@ -15,6 +15,7 @@ import { sendMail } from '../../lib/mailer'
 import { rateLimit } from '../../lib/rateLimit'
 import { isAdminRequest } from '../../lib/auth'
 import { sendVersionedJson } from '../../lib/http'
+import { revalidatePaths } from '../../lib/revalidate'
 
 const isAuthed = isAdminRequest
 
@@ -28,6 +29,22 @@ const isAuthed = isAdminRequest
  *   PUT                    admin: save the full document; honours If-Match
  *   POST {action}          admin: snapshot / restore
  */
+
+/**
+ * Statically generated pages that render home data. /now shows
+ * hero.currentlyCoding, so a save or restore must regenerate it right away
+ * instead of leaving the ISR copy (possibly with a cleared value) live.
+ */
+const HOME_STATIC_PATHS = ['/now']
+
+/** Regenerate home-backed static pages; never fails the (already stored) write. */
+async function revalidateHomePages(res: NextApiResponse): Promise<{ revalidated: string[]; revalidateFailed?: string[] }> {
+  const failed = await revalidatePaths(res, HOME_STATIC_PATHS)
+  return {
+    revalidated: HOME_STATIC_PATHS.filter((p) => !failed.includes(p)),
+    ...(failed.length ? { revalidateFailed: failed } : {}),
+  }
+}
 
 function sendConflict(res: NextApiResponse, version: number) {
   const etag = kvEtag(version)
@@ -122,10 +139,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       subject: 'Home updated',
       text: `Home updated at ${new Date().toISOString()}`,
     }).catch((err) => console.warn('home: notification mail failed', err?.message || err))
+    const revalidation = await revalidateHomePages(res)
     return sendVersionedJson(res, 200, {
       ok: true,
       etag,
       ...(writeResult.r2Warning ? { r2Warning: writeResult.r2Warning } : {}),
+      ...revalidation,
     }, etag)
   }
 
@@ -147,7 +166,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const result = await restoreHomeSnapshot(filename)
       if (!result.ok) return res.status(restoreErrorStatus(result.error)).json({ error: result.error })
       const etag = kvEtag(result.updatedAt)
-      return sendVersionedJson(res, 200, { ok: true, etag, ...(result.r2Warning ? { r2Warning: result.r2Warning } : {}) }, etag)
+      const revalidation = await revalidateHomePages(res)
+      return sendVersionedJson(res, 200, {
+        ok: true,
+        etag,
+        ...(result.r2Warning ? { r2Warning: result.r2Warning } : {}),
+        ...revalidation,
+      }, etag)
     }
     return res.status(400).json({ error: 'Unknown action' })
   }
