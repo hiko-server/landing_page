@@ -29,8 +29,12 @@ services:
     volumes:
       - landing-data:/app/data
       - landing-uploads:/app/public/uploads
+    # Loopback only: the site is reached through a reverse proxy / Cloudflare
+    # Tunnel on the host, never directly. (The server's override replaces this
+    # mapping with its own loopback port; the named volumes above are likewise
+    # shadowed there by bind mounts on the same targets.)
     ports:
-      - 8000:3000
+      - "127.0.0.1:8000:3000"
     networks:
       easilycv:
         ipv4_address: 172.18.0.9

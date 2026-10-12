@@ -1,21 +1,31 @@
-/* eslint-disable @typescript-eslint/no-var-requires */
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
 import zlib from 'zlib'
+import crypto from 'crypto'
 import { pipeline } from 'stream/promises'
 import { Readable } from 'stream'
-import { closeDb, getDb } from './db'
+import Database from 'better-sqlite3'
+import matter from 'gray-matter'
+import { CONTENT_DB_PATH, closeDb, getDb, reopenDb } from './db'
 import {
   isR2Configured,
   getR2Bucket,
+  r2Delete,
   r2GetBuffer,
   r2PutBuffer,
+  r2PutText,
   r2ListDetailed,
 } from './r2'
+import { itemR2Key, kvR2Key, pageR2Key, uploadR2Key } from './contentStore'
+import { STATIC_CONTENT_PATHS, collectionPaths, type Collection } from './revalidate'
+import { isValidUploadName } from './security/uploadName'
+// @ts-expect-error -- tar-stream ships no type declarations (typed below).
+import tarStream from 'tar-stream'
 
-// tar-stream has no bundled types; declared with require + any.
-const tar = require('tar-stream') as {
+// A static import (not require) so the standalone tracer bundles the package
+// and the module also loads as native ESM (node --test).
+const tar = tarStream as {
   pack: () => any
   extract: () => any
 }
@@ -23,24 +33,37 @@ const tar = require('tar-stream') as {
 /**
  * Whole-site snapshot system.
  *
- * Per user spec the backup must contain ALL local data — not just per-row
- * dual-writes — so the unit of work is a single gzipped tar:
+ * The unit of work is a single gzipped tar of all *content*:
  *
  *   MANIFEST.json
  *   db/content.db           ← SQLite online backup (consistent across WAL)
- *   data/admin.json         ← bootstrap credentials
- *   data/mongo_config.json  ← Mongo connection settings (when not env-only)
  *   data/snapshots/<dir>/*  ← cv/home/blog/work/page version history
  *   uploads/<file>          ← public/uploads contents
  *
+ * Credentials and connection settings are not content: data/admin.json and
+ * data/mongo_config.json are never written into a snapshot, and when an older
+ * snapshot still carries them they are ignored on restore — restoring content
+ * must never roll back the admin password.
+ *
  * Atomicity:
- *   - Snapshot is built in a temp dir and only moved into place once the tar
- *     finalises successfully.
- *   - Restore extracts to a sibling temp tree, swaps the live DB after
- *     closeDb(), then mirrors the remaining trees.
+ *   - A snapshot is built in a temp file and only renamed into place once the
+ *     tar finalises successfully. Names carry milliseconds + a random suffix,
+ *     so two snapshots in the same second can never overwrite each other.
+ *   - Restore extracts to a sibling temp tree, validates the database, takes a
+ *     safety snapshot of the current state, swaps the live DB file with a
+ *     rename while the shared connection is closed, then mirrors the rest.
+ *   - After a restore the R2 per-key objects are rewritten from the restored
+ *     DB (and item objects the restored DB no longer has are deleted), so the
+ *     next boot sync cannot resurrect pre-restore content from R2.
+ *   - Backups and restores are serialised: a second request while one runs
+ *     fails fast with StorageBusyError instead of interleaving.
+ *
+ * Retention: the newest LOCAL_KEEP tarballs are kept in data/backups and the
+ * newest R2_KEEP in R2 (plus backups/latest.tgz). Only files this module
+ * names (snapshot-*.tgz) are ever pruned.
  *
  * R2 layout (S3-compatible):
- *   backups/<ts>.tgz        ← every successful snapshot
+ *   backups/<name>.tgz      ← every successful snapshot
  *   backups/latest.tgz      ← alias overwritten on success (cheap pull target)
  */
 
@@ -48,7 +71,7 @@ const ROOT = process.cwd()
 const DATA_DIR = path.join(ROOT, 'data')
 const UPLOADS_DIR = path.join(ROOT, 'public', 'uploads')
 const BACKUPS_DIR = path.join(DATA_DIR, 'backups')
-const DB_PATH = path.join(DATA_DIR, 'content.db')
+const DB_PATH = CONTENT_DB_PATH
 const SNAPSHOT_DIRS = [
   'cv_snapshots',
   'home_snapshots',
@@ -56,10 +79,19 @@ const SNAPSHOT_DIRS = [
   'work_snapshots',
   'page_snapshots',
 ]
-const CONFIG_FILES = ['admin.json', 'mongo_config.json']
+/** Files under data/ that may appear in old snapshots but are never restored. */
+const NEVER_RESTORED = ['admin.json', 'mongo_config.json']
+const REQUIRED_TABLES = ['pages', 'collection_items', 'kv']
+const COLLECTIONS: Collection[] = ['blog', 'work']
+const SAFE_NAME = /^[a-z0-9][a-z0-9-_]*$/
 
 const R2_PREFIX = 'backups/'
 const R2_LATEST_KEY = `${R2_PREFIX}latest.tgz`
+
+export const LOCAL_KEEP = 20
+export const R2_KEEP = 30
+/** Names this module generates; nothing else in data/backups or R2 is pruned. */
+export const SNAPSHOT_FILE_RE = /^snapshot-\d{8}-\d{6}(?:-\d{3}-[0-9a-f]{6})?\.tgz$/
 
 export type SnapshotManifest = {
   version: 1
@@ -67,6 +99,7 @@ export type SnapshotManifest = {
   host: string
   nodeVersion: string
   bucket: string | null
+  reason?: 'manual' | 'pre-restore'
   files: Array<{ path: string; bytes: number }>
   totals: { files: number; bytes: number }
 }
@@ -82,6 +115,16 @@ export type SnapshotResult = {
     latestKey: string | null
     error: string | null
   }
+  pruned: { local: string[]; r2: string[] }
+  warnings: string[]
+}
+
+/** What a restore changed (contract H, minus `revalidated`, which the API fills in). */
+export type RestoreReport = {
+  dbReplaced: boolean
+  r2Mirrored: number
+  r2Removed: number
+  warnings: string[]
 }
 
 export type RestoreResult = {
@@ -90,15 +133,65 @@ export type RestoreResult = {
   bytes: number
   manifest: SnapshotManifest | null
   restored: { files: number; dbReplaced: boolean }
+  /** Local snapshot of the state that was replaced (data/backups/<name>). */
+  safetySnapshot: string | null
+  report: RestoreReport
+  /** Public pages whose content may have changed: static pages + every blog/work path before and after. */
+  pathsToRevalidate: string[]
 }
 
-function tsStamp(d = new Date()): string {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return (
-    `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}` +
-    `-${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}`
-  )
+export class StorageBusyError extends Error {
+  constructor(running: string) {
+    super(`A ${running} is already running — try again when it has finished.`)
+    this.name = 'StorageBusyError'
+  }
 }
+
+// ── Small pure helpers (unit-tested) ──────────────────────────────────────
+
+/** `snapshot-20261012-101500-123-a1b2c3.tgz` — sortable, unique per call. */
+export function snapshotFilename(d = new Date(), suffix = crypto.randomBytes(3).toString('hex')): string {
+  const pad = (n: number, w = 2) => String(n).padStart(w, '0')
+  const stamp =
+    `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}` +
+    `-${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}` +
+    `-${pad(d.getUTCMilliseconds(), 3)}`
+  return `snapshot-${stamp}-${suffix}.tgz`
+}
+
+/** Entries beyond the newest `keep` (newest first by `timeOf`, then by name). */
+export function selectForPruning<T extends { name: string }>(items: T[], keep: number, timeOf: (t: T) => number): T[] {
+  const sorted = [...items].sort((a, b) => timeOf(b) - timeOf(a) || b.name.localeCompare(a.name))
+  return sorted.slice(Math.max(0, keep))
+}
+
+/** Run `fn` over `items` with at most `limit` in flight. */
+async function mapLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0
+  const worker = async () => {
+    while (next < items.length) await fn(items[next++])
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+}
+
+const errMsg = (err: unknown) => (err instanceof Error ? err.message : String(err))
+
+// ── Serialisation of backup/restore ───────────────────────────────────────
+
+type LockGlobal = typeof globalThis & { __storageOperation?: string | null }
+
+async function exclusive<T>(operation: string, fn: () => Promise<T>): Promise<T> {
+  const g = globalThis as LockGlobal
+  if (g.__storageOperation) throw new StorageBusyError(g.__storageOperation)
+  g.__storageOperation = operation
+  try {
+    return await fn()
+  } finally {
+    g.__storageOperation = null
+  }
+}
+
+// ── Filesystem helpers ────────────────────────────────────────────────────
 
 function ensureDir(p: string) {
   if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true })
@@ -128,6 +221,29 @@ function listFilesRecursive(dir: string, prefix = ''): Array<{ abs: string; rel:
   return out
 }
 
+/** Flat, servable files in public/uploads (the only ones /uploads/* can serve). */
+function listUploadFiles(dir: string): Array<{ abs: string; name: string }> {
+  if (!fs.existsSync(dir)) return []
+  return fs
+    .readdirSync(dir, { withFileTypes: true })
+    .filter((e) => e.isFile() && isValidUploadName(e.name))
+    .map((e) => ({ abs: path.join(dir, e.name), name: e.name }))
+}
+
+const UPLOAD_MIME: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.avif': 'image/avif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.pdf': 'application/pdf',
+}
+
+// ── Snapshot side ─────────────────────────────────────────────────────────
+
 /** Use SQLite's online backup API so we capture a consistent .db across WAL. */
 async function dumpDbToFile(dest: string): Promise<void> {
   if (!fs.existsSync(DB_PATH)) {
@@ -135,154 +251,154 @@ async function dumpDbToFile(dest: string): Promise<void> {
     fs.writeFileSync(dest, Buffer.alloc(0))
     return
   }
-  const db = getDb()
-  await db.backup(dest)
+  await getDb().backup(dest)
 }
 
 /** Build the tar and write a local copy. Returns its absolute path + manifest. */
-async function buildLocalSnapshot(): Promise<{
+async function buildLocalSnapshot(reason: NonNullable<SnapshotManifest['reason']>): Promise<{
   localPath: string
   manifest: SnapshotManifest
 }> {
   ensureDir(BACKUPS_DIR)
-  const stamp = tsStamp()
-  const filename = `snapshot-${stamp}.tgz`
+  const filename = snapshotFilename()
   const localPath = path.join(BACKUPS_DIR, filename)
   const tmpPath = `${localPath}.tmp`
+  const dbDump = path.join(os.tmpdir(), `${filename}.content.db`)
 
-  // 1. Dump the SQLite DB into a temp file.
-  const dbDump = path.join(os.tmpdir(), `content-${stamp}.db`)
-  await dumpDbToFile(dbDump)
+  try {
+    await dumpDbToFile(dbDump)
 
-  const entries: Array<{ tarPath: string; source: string | Buffer }> = []
-  const manifestFiles: SnapshotManifest['files'] = []
-
-  // 2. SQLite DB.
-  const dbStat = safeStat(dbDump)
-  if (dbStat) {
-    entries.push({ tarPath: 'db/content.db', source: dbDump })
-    manifestFiles.push({ path: 'db/content.db', bytes: dbStat.size })
-  }
-
-  // 3. Top-level config files (admin, mongo).
-  for (const name of CONFIG_FILES) {
-    const abs = path.join(DATA_DIR, name)
-    const stat = safeStat(abs)
-    if (stat && stat.isFile()) {
-      entries.push({ tarPath: `data/${name}`, source: abs })
-      manifestFiles.push({ path: `data/${name}`, bytes: stat.size })
-    }
-  }
-
-  // 4. Version-history snapshot dirs.
-  for (const snap of SNAPSHOT_DIRS) {
-    const absDir = path.join(DATA_DIR, snap)
-    for (const f of listFilesRecursive(absDir)) {
-      const stat = safeStat(f.abs)
-      if (!stat) continue
-      const tarPath = `data/snapshots/${snap}/${f.rel}`
-      entries.push({ tarPath, source: f.abs })
+    const entries: Array<{ tarPath: string; source: string }> = []
+    const manifestFiles: SnapshotManifest['files'] = []
+    const add = (tarPath: string, source: string) => {
+      const stat = safeStat(source)
+      if (!stat) return
+      entries.push({ tarPath, source })
       manifestFiles.push({ path: tarPath, bytes: stat.size })
     }
+
+    add('db/content.db', dbDump)
+    for (const snap of SNAPSHOT_DIRS) {
+      for (const f of listFilesRecursive(path.join(DATA_DIR, snap))) add(`data/snapshots/${snap}/${f.rel}`, f.abs)
+    }
+    for (const f of listFilesRecursive(UPLOADS_DIR)) add(`uploads/${f.rel}`, f.abs)
+
+    const manifest: SnapshotManifest = {
+      version: 1,
+      createdAt: new Date().toISOString(),
+      host: os.hostname(),
+      nodeVersion: process.version,
+      bucket: isR2Configured() ? getR2Bucket() : null,
+      reason,
+      files: manifestFiles,
+      totals: {
+        files: manifestFiles.length,
+        bytes: manifestFiles.reduce((n, f) => n + f.bytes, 0),
+      },
+    }
+
+    // Pipeline: pack → gzip → file. Push entries while the pipeline is running.
+    const pack = tar.pack()
+    const piped = pipeline(pack, zlib.createGzip({ level: 6 }), fs.createWriteStream(tmpPath))
+    const addEntry = (name: string, body: Buffer) =>
+      new Promise<void>((resolve, reject) => {
+        pack.entry({ name, size: body.length }, body, (err: Error | null) => (err ? reject(err) : resolve()))
+      })
+
+    // MANIFEST first so a reader can short-circuit metadata reads.
+    await addEntry('MANIFEST.json', Buffer.from(JSON.stringify(manifest, null, 2)))
+    for (const entry of entries) await addEntry(entry.tarPath, fs.readFileSync(entry.source))
+    pack.finalize()
+    await piped
+
+    fs.renameSync(tmpPath, localPath)
+    return { localPath, manifest }
+  } finally {
+    fs.rmSync(dbDump, { force: true })
+    fs.rmSync(tmpPath, { force: true })
   }
+}
 
-  // 5. Uploaded images.
-  for (const f of listFilesRecursive(UPLOADS_DIR)) {
-    const stat = safeStat(f.abs)
-    if (!stat) continue
-    const tarPath = `uploads/${f.rel}`
-    entries.push({ tarPath, source: f.abs })
-    manifestFiles.push({ path: tarPath, bytes: stat.size })
+function pruneLocalBackups(keepFilename: string, warnings: string[]): string[] {
+  const candidates = listLocalBackups()
+    .filter((b) => SNAPSHOT_FILE_RE.test(b.filename) && b.filename !== keepFilename)
+    .map((b) => ({ ...b, name: b.filename }))
+  // The snapshot just written counts towards the limit.
+  const victims = selectForPruning(candidates, LOCAL_KEEP - 1, (b) => b.mtime)
+  const removed: string[] = []
+  for (const v of victims) {
+    try {
+      fs.unlinkSync(path.join(BACKUPS_DIR, v.filename))
+      removed.push(v.filename)
+    } catch (err) {
+      warnings.push(`Could not prune local backup ${v.filename}: ${errMsg(err)}`)
+    }
   }
+  return removed
+}
 
-  // 6. Write everything through tar | gzip → tmp file → atomic rename.
-  const pack = tar.pack()
-  const gzip = zlib.createGzip({ level: 6 })
-  const out = fs.createWriteStream(tmpPath)
-
-  const manifest: SnapshotManifest = {
-    version: 1,
-    createdAt: new Date().toISOString(),
-    host: os.hostname(),
-    nodeVersion: process.version,
-    bucket: isR2Configured() ? getR2Bucket() : null,
-    files: manifestFiles,
-    totals: {
-      files: manifestFiles.length,
-      bytes: manifestFiles.reduce((n, f) => n + f.bytes, 0),
-    },
-  }
-
-  // Pipeline: pack → gzip → file. Push entries while the pipeline is running.
-  const piped = pipeline(pack, gzip, out)
-
-  // MANIFEST first so a reader can short-circuit metadata reads.
-  await new Promise<void>((resolve, reject) => {
-    const body = Buffer.from(JSON.stringify(manifest, null, 2))
-    pack.entry({ name: 'MANIFEST.json', size: body.length }, body, (err: Error | null) =>
-      err ? reject(err) : resolve(),
-    )
+async function pruneR2Backups(warnings: string[]): Promise<string[]> {
+  const objs = (await r2ListDetailed(R2_PREFIX))
+    .filter((o) => o.key !== R2_LATEST_KEY && SNAPSHOT_FILE_RE.test(o.key.slice(R2_PREFIX.length)))
+    .map((o) => ({ ...o, name: o.key }))
+  const victims = selectForPruning(objs, R2_KEEP, (o) => Date.parse(o.lastModified || '') || 0)
+  const removed: string[] = []
+  await mapLimit(victims, 4, async (v) => {
+    try {
+      await r2Delete(v.key)
+      removed.push(v.key)
+    } catch (err) {
+      warnings.push(`Could not prune ${v.key} from R2: ${errMsg(err)}`)
+    }
   })
-
-  for (const entry of entries) {
-    const body =
-      typeof entry.source === 'string'
-        ? fs.readFileSync(entry.source)
-        : entry.source
-    await new Promise<void>((resolve, reject) => {
-      pack.entry({ name: entry.tarPath, size: body.length }, body, (err: Error | null) =>
-        err ? reject(err) : resolve(),
-      )
-    })
-  }
-
-  pack.finalize()
-  await piped
-
-  fs.renameSync(tmpPath, localPath)
-  try {
-    fs.unlinkSync(dbDump)
-  } catch {
-    // best-effort cleanup
-  }
-
-  return { localPath, manifest }
+  return removed
 }
 
 /**
  * Create a snapshot, save a local copy, and (if R2 is configured) push to
- * `backups/<ts>.tgz` and overwrite `backups/latest.tgz`.
+ * `backups/<name>.tgz` and overwrite `backups/latest.tgz`. Old snapshots
+ * beyond the retention limits are pruned afterwards.
  *
  * R2 failures never delete the local snapshot — the operator still has
  * a recoverable artefact on disk.
  */
-export async function createSnapshot(): Promise<SnapshotResult> {
-  const { localPath, manifest } = await buildLocalSnapshot()
-  const filename = path.basename(localPath)
-  const bytes = fs.statSync(localPath).size
+export function createSnapshot(): Promise<SnapshotResult> {
+  return exclusive('backup', async () => {
+    const { localPath, manifest } = await buildLocalSnapshot('manual')
+    const filename = path.basename(localPath)
+    const warnings: string[] = []
+    const result: SnapshotResult = {
+      filename,
+      localPath,
+      bytes: fs.statSync(localPath).size,
+      manifest,
+      r2: { pushed: false, key: null, latestKey: null, error: null },
+      pruned: { local: pruneLocalBackups(filename, warnings), r2: [] },
+      warnings,
+    }
 
-  const result: SnapshotResult = {
-    filename,
-    localPath,
-    bytes,
-    manifest,
-    r2: { pushed: false, key: null, latestKey: null, error: null },
-  }
+    if (!isR2Configured()) return result
 
-  if (!isR2Configured()) return result
+    try {
+      const body = fs.readFileSync(localPath)
+      const key = `${R2_PREFIX}${filename}`
+      await r2PutBuffer(key, body, 'application/gzip')
+      await r2PutBuffer(R2_LATEST_KEY, body, 'application/gzip')
+      result.r2.pushed = true
+      result.r2.key = key
+      result.r2.latestKey = R2_LATEST_KEY
+    } catch (err) {
+      result.r2.error = errMsg(err)
+      return result
+    }
 
-  try {
-    const body = fs.readFileSync(localPath)
-    const key = `${R2_PREFIX}${filename}`
-    await r2PutBuffer(key, body, 'application/gzip')
-    await r2PutBuffer(R2_LATEST_KEY, body, 'application/gzip')
-    result.r2.pushed = true
-    result.r2.key = key
-    result.r2.latestKey = R2_LATEST_KEY
-  } catch (err: any) {
-    result.r2.error = err?.message || String(err)
-  }
-  return result
+    try {
+      result.pruned.r2 = await pruneR2Backups(warnings)
+    } catch (err) {
+      warnings.push(`Could not list R2 backups for pruning: ${errMsg(err)}`)
+    }
+    return result
+  })
 }
 
 // ── Restore side ──────────────────────────────────────────────────────────
@@ -347,69 +463,237 @@ function copyTreeOverwrite(src: string, dest: string): number {
   return count
 }
 
+/**
+ * Is the staged file a usable content DB? `null` = no database in the
+ * snapshot (taken before the store existed); a string = why it is unusable.
+ * The staged copy is private to this restore, so it may be opened read-write.
+ */
+function inspectStagedDb(file: string): { usable: true } | { usable: false; reason: string | null } {
+  const stat = safeStat(file)
+  if (!stat || stat.size === 0) return { usable: false, reason: null }
+  let db: Database.Database | null = null
+  try {
+    db = new Database(file, { fileMustExist: true })
+    const check = String(db.pragma('quick_check', { simple: true }))
+    if (check !== 'ok') return { usable: false, reason: `integrity check failed (${check})` }
+    const tables = new Set(
+      (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>).map(
+        (r) => r.name,
+      ),
+    )
+    const missing = REQUIRED_TABLES.filter((t) => !tables.has(t))
+    if (missing.length) return { usable: false, reason: `missing table(s): ${missing.join(', ')}` }
+    return { usable: true }
+  } catch (err) {
+    return { usable: false, reason: `not a readable SQLite database (${errMsg(err)})` }
+  } finally {
+    db?.close()
+  }
+}
+
+function currentItemRefs(): Array<{ collection: string; slug: string }> {
+  try {
+    return getDb().prepare('SELECT collection, slug FROM collection_items').all() as Array<{
+      collection: string
+      slug: string
+    }>
+  } catch {
+    return []
+  }
+}
+
+/** Every public path whose content may differ after the restore. */
+function restoredPaths(refs: Array<{ collection: string; slug: string }>): string[] {
+  const out = new Set<string>(STATIC_CONTENT_PATHS)
+  for (const { collection, slug } of refs) {
+    if (!(COLLECTIONS as string[]).includes(collection) || !SAFE_NAME.test(slug)) continue
+    for (const p of collectionPaths(collection as Collection, slug)) out.add(p)
+  }
+  return Array.from(out)
+}
+
+function summarizeFailures(what: string, failures: string[]): string {
+  const shown = failures.slice(0, 5).join('; ')
+  const more = failures.length > 5 ? ` (+${failures.length - 5} more)` : ''
+  return `${what} failed for ${failures.length} object(s): ${shown}${more}`
+}
+
+/**
+ * Rewrite every pages/items/kv R2 object from the (restored) local DB, delete
+ * item objects the DB no longer has, and upload restored images R2 lacks.
+ * Failures become warnings: the local restore has already succeeded.
+ */
+async function mirrorDbToR2(warnings: string[]): Promise<{ mirrored: number; removed: number }> {
+  const db = getDb()
+  const puts: Array<{ key: string; body: string; contentType: string }> = []
+  const mdx = 'text/markdown; charset=utf-8'
+
+  const pages = db.prepare('SELECT name, frontmatter, body FROM pages').all() as Array<{
+    name: string
+    frontmatter: string
+    body: string
+  }>
+  for (const p of pages) {
+    puts.push({ key: pageR2Key(p.name), body: matter.stringify(p.body || '\n', JSON.parse(p.frontmatter)), contentType: mdx })
+  }
+
+  const items = db.prepare('SELECT collection, slug, frontmatter, body FROM collection_items').all() as Array<{
+    collection: string
+    slug: string
+    frontmatter: string
+    body: string
+  }>
+  const liveItemKeys = new Set<string>()
+  for (const it of items) {
+    const key = itemR2Key(it.collection, it.slug)
+    liveItemKeys.add(key)
+    puts.push({ key, body: matter.stringify(it.body || '\n', JSON.parse(it.frontmatter)), contentType: mdx })
+  }
+
+  // kv keys the boot sync reads back; tombstone bookkeeping stays local.
+  const kv = db.prepare('SELECT key, value FROM kv').all() as Array<{ key: string; value: string }>
+  for (const row of kv) {
+    if (!SAFE_NAME.test(row.key)) continue
+    try {
+      puts.push({
+        key: kvR2Key(row.key),
+        body: JSON.stringify(JSON.parse(row.value), null, 2),
+        contentType: 'application/json; charset=utf-8',
+      })
+    } catch {
+      warnings.push(`kv '${row.key}' in the restored DB is not valid JSON; it was not mirrored to R2.`)
+    }
+  }
+
+  let mirrored = 0
+  const failures: string[] = []
+  await mapLimit(puts, 4, async (p) => {
+    try {
+      await r2PutText(p.key, p.body, p.contentType)
+      mirrored++
+    } catch (err) {
+      failures.push(`${p.key}: ${errMsg(err)}`)
+    }
+  })
+
+  // Item objects the restored DB does not have (or non-canonical duplicates).
+  let removed = 0
+  for (const collection of COLLECTIONS) {
+    let remote: Array<{ key: string }>
+    try {
+      remote = await r2ListDetailed(`${collection}/`)
+    } catch (err) {
+      warnings.push(`Could not list ${collection}/ in R2 (${errMsg(err)}); stale objects were not removed.`)
+      continue
+    }
+    const stale = remote.filter((o) => {
+      const base = o.key.slice(collection.length + 1)
+      return /^[a-z0-9][a-z0-9-_]*\.(mdx|md)$/.test(base) && !liveItemKeys.has(o.key)
+    })
+    await mapLimit(stale, 4, async (o) => {
+      try {
+        await r2Delete(o.key)
+        removed++
+      } catch (err) {
+        failures.push(`delete ${o.key}: ${errMsg(err)}`)
+      }
+    })
+  }
+
+  // Restored images R2 has never seen (a fresh container rehydrates from R2).
+  try {
+    const remoteUploads = new Set((await r2ListDetailed('uploads/')).map((o) => o.key))
+    const missing = listUploadFiles(UPLOADS_DIR).filter((f) => !remoteUploads.has(uploadR2Key(f.name)))
+    await mapLimit(missing, 4, async (f) => {
+      try {
+        const type = UPLOAD_MIME[path.extname(f.name).toLowerCase()] || 'application/octet-stream'
+        await r2PutBuffer(uploadR2Key(f.name), fs.readFileSync(f.abs), type)
+        mirrored++
+      } catch (err) {
+        failures.push(`${uploadR2Key(f.name)}: ${errMsg(err)}`)
+      }
+    })
+  } catch (err) {
+    warnings.push(`Could not list uploads/ in R2 (${errMsg(err)}); restored images were not mirrored.`)
+  }
+
+  if (failures.length) warnings.push(summarizeFailures('R2 mirror', failures))
+  return { mirrored, removed }
+}
+
 async function restoreFromBuffer(buf: Buffer, source: 'r2' | 'local', key: string | null): Promise<RestoreResult> {
-  const stamp = `${tsStamp()}-${Math.random().toString(36).slice(2, 8)}`
-  const stageDir = path.join(BACKUPS_DIR, `_restore-${stamp}`)
+  const stageDir = path.join(BACKUPS_DIR, `_restore-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`)
   ensureDir(BACKUPS_DIR)
 
+  const warnings: string[] = []
   let filesRestored = 0
   let dbReplaced = false
   let manifest: SnapshotManifest | null = null
+  let safetySnapshot: string | null = null
+  const before = currentItemRefs()
 
   try {
     manifest = await extractTarball(buf, stageDir)
 
-    // 1. Replace the SQLite DB. Copy next to the target first, then rename —
-    //    a crash mid-copy can never leave a half-written live database.
+    // 0. Validate before touching anything live.
     const stagedDb = path.join(stageDir, 'db', 'content.db')
-    if (fs.existsSync(stagedDb)) {
+    const inspection = inspectStagedDb(stagedDb)
+    if (!inspection.usable && inspection.reason) {
+      throw new Error(`Snapshot database is unusable: ${inspection.reason}. Nothing was restored.`)
+    }
+    if (!inspection.usable) warnings.push('The snapshot contains no database; the current content DB was kept.')
+
+    // 1. Safety net: the state about to be replaced becomes a local snapshot.
+    safetySnapshot = path.basename((await buildLocalSnapshot('pre-restore')).localPath)
+
+    // 2. Replace the SQLite DB. Copy next to the target first, then rename —
+    //    a crash mid-copy can never leave a half-written live database. The
+    //    shared connection is closed for every runtime, then reopened.
+    if (inspection.usable) {
       ensureDir(path.dirname(DB_PATH))
       const incoming = `${DB_PATH}.restore`
       fs.copyFileSync(stagedDb, incoming)
       closeDb()
       // Drop WAL/SHM so reopen doesn't replay against the new file.
-      for (const ext of ['-wal', '-shm']) {
-        try {
-          fs.unlinkSync(`${DB_PATH}${ext}`)
-        } catch {
-          // not present — fine
-        }
-      }
+      for (const ext of ['-wal', '-shm']) fs.rmSync(`${DB_PATH}${ext}`, { force: true })
       fs.renameSync(incoming, DB_PATH)
+      reopenDb()
       dbReplaced = true
       filesRestored++
     }
 
-    // 2. Top-level config files.
-    const stagedDataDir = path.join(stageDir, 'data')
-    for (const name of CONFIG_FILES) {
-      const src = path.join(stagedDataDir, name)
-      if (fs.existsSync(src)) {
-        fs.copyFileSync(src, path.join(DATA_DIR, name))
-        filesRestored++
+    // 3. Credentials / connection settings are never taken from a snapshot.
+    for (const name of NEVER_RESTORED) {
+      if (fs.existsSync(path.join(stageDir, 'data', name))) {
+        warnings.push(`data/${name} in the snapshot was ignored (credentials and settings are never restored).`)
       }
     }
 
-    // 3. Snapshot history dirs.
+    // 4. Snapshot history dirs.
     const stagedSnapshots = path.join(stageDir, 'data', 'snapshots')
-    if (fs.existsSync(stagedSnapshots)) {
-      for (const snap of SNAPSHOT_DIRS) {
-        filesRestored += copyTreeOverwrite(path.join(stagedSnapshots, snap), path.join(DATA_DIR, snap))
-      }
+    for (const snap of SNAPSHOT_DIRS) {
+      filesRestored += copyTreeOverwrite(path.join(stagedSnapshots, snap), path.join(DATA_DIR, snap))
     }
 
-    // 4. Uploads.
-    const stagedUploads = path.join(stageDir, 'uploads')
-    if (fs.existsSync(stagedUploads)) {
-      filesRestored += copyTreeOverwrite(stagedUploads, UPLOADS_DIR)
+    // 5. Uploads — only flat names the file server can actually serve.
+    const stagedUploads = listUploadFiles(path.join(stageDir, 'uploads'))
+    if (stagedUploads.length) ensureDir(UPLOADS_DIR)
+    for (const f of stagedUploads) {
+      fs.copyFileSync(f.abs, path.join(UPLOADS_DIR, f.name))
+      filesRestored++
     }
   } finally {
-    // 5. Always clean the stage dir — also when extraction failed.
-    try {
-      fs.rmSync(stageDir, { recursive: true, force: true })
-    } catch {
-      // best-effort
-    }
+    // Always clean the stage dir — also when extraction failed.
+    fs.rmSync(stageDir, { recursive: true, force: true })
+  }
+
+  // 6. Make R2 match the restored DB.
+  let r2Mirrored = 0
+  let r2Removed = 0
+  if (dbReplaced && isR2Configured()) {
+    const mirror = await mirrorDbToR2(warnings)
+    r2Mirrored = mirror.mirrored
+    r2Removed = mirror.removed
   }
 
   return {
@@ -418,6 +702,9 @@ async function restoreFromBuffer(buf: Buffer, source: 'r2' | 'local', key: strin
     bytes: buf.length,
     manifest,
     restored: { files: filesRestored, dbReplaced },
+    safetySnapshot,
+    report: { dbReplaced, r2Mirrored, r2Removed, warnings },
+    pathsToRevalidate: restoredPaths([...before, ...currentItemRefs()]),
   }
 }
 
@@ -425,28 +712,31 @@ async function restoreFromBuffer(buf: Buffer, source: 'r2' | 'local', key: strin
  * Pull `backups/latest.tgz` from R2 and apply it. Throws if R2 isn't
  * configured or the object is missing.
  */
-export async function restoreLatestFromR2(): Promise<RestoreResult> {
-  if (!isR2Configured()) throw new Error('R2 is not configured.')
-  const buf = await r2GetBuffer(R2_LATEST_KEY)
-  if (!buf) {
-    throw new Error(
-      `No snapshot at ${R2_LATEST_KEY}. Run "Backup now" once before pulling, or upload a tarball manually.`,
-    )
-  }
-  return restoreFromBuffer(buf, 'r2', R2_LATEST_KEY)
+export function restoreLatestFromR2(): Promise<RestoreResult> {
+  return exclusive('restore', async () => {
+    if (!isR2Configured()) throw new Error('R2 is not configured.')
+    const buf = await r2GetBuffer(R2_LATEST_KEY)
+    if (!buf) {
+      throw new Error(
+        `No snapshot at ${R2_LATEST_KEY}. Run "Backup now" once before pulling, or upload a tarball manually.`,
+      )
+    }
+    return restoreFromBuffer(buf, 'r2', R2_LATEST_KEY)
+  })
 }
 
-/** Restore from a specific local snapshot file (absolute or under data/backups). */
-export async function restoreLocalSnapshot(filename: string): Promise<RestoreResult> {
-  // Only a bare *.tgz name inside data/backups is accepted (no paths, no
-  // `..`, no sibling directories that merely share the prefix).
-  const abs = path.resolve(BACKUPS_DIR, path.basename(String(filename || '')))
-  if (path.dirname(abs) !== path.resolve(BACKUPS_DIR) || !abs.endsWith('.tgz')) {
-    throw new Error('Refusing to restore from outside data/backups.')
-  }
-  if (!fs.existsSync(abs)) throw new Error(`Snapshot not found: ${abs}`)
-  const buf = fs.readFileSync(abs)
-  return restoreFromBuffer(buf, 'local', path.relative(ROOT, abs))
+/** Restore from a specific local snapshot file (a bare *.tgz name under data/backups). */
+export function restoreLocalSnapshot(filename: string): Promise<RestoreResult> {
+  return exclusive('restore', async () => {
+    // Only a bare *.tgz name inside data/backups is accepted (no paths, no
+    // `..`, no sibling directories that merely share the prefix).
+    const abs = path.resolve(BACKUPS_DIR, path.basename(String(filename || '')))
+    if (path.dirname(abs) !== path.resolve(BACKUPS_DIR) || !abs.endsWith('.tgz')) {
+      throw new Error('Refusing to restore from outside data/backups.')
+    }
+    if (!fs.existsSync(abs)) throw new Error(`Snapshot not found: ${path.basename(abs)}`)
+    return restoreFromBuffer(fs.readFileSync(abs), 'local', path.relative(ROOT, abs))
+  })
 }
 
 // ── Inventory ─────────────────────────────────────────────────────────────
@@ -461,10 +751,10 @@ export function listLocalBackups(): LocalBackupMeta[] {
   if (!fs.existsSync(BACKUPS_DIR)) return []
   return fs
     .readdirSync(BACKUPS_DIR)
-    .filter((f) => f.endsWith('.tgz') && !f.includes('_restore-'))
-    .map((f) => {
-      const stat = fs.statSync(path.join(BACKUPS_DIR, f))
-      return { filename: f, bytes: stat.size, mtime: stat.mtimeMs }
+    .filter((f) => f.endsWith('.tgz') && !f.startsWith('_restore-'))
+    .flatMap((f) => {
+      const stat = safeStat(path.join(BACKUPS_DIR, f))
+      return stat && stat.isFile() ? [{ filename: f, bytes: stat.size, mtime: stat.mtimeMs }] : []
     })
     .sort((a, b) => b.mtime - a.mtime)
 }
@@ -487,4 +777,6 @@ export const BACKUP_CONSTANTS = {
   R2_PREFIX,
   R2_LATEST_KEY,
   BACKUPS_DIR,
+  LOCAL_KEEP,
+  R2_KEEP,
 }

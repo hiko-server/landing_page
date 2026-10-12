@@ -74,3 +74,78 @@ jobs:
       - run: yarn install --frozen-lockfile
       - name: Yarn audit (high+ severity only)
         run: yarn audit --level high
+
+  docker:
+    name: docker image smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Same build the server runs (`docker compose up -d --build`): no
+      # data/content.db in the context, public identifiers as build args.
+      - name: Build image
+        run: |
+          docker build \
+            --build-arg NEXT_PUBLIC_SITE_HOST=example.com \
+            --build-arg NEXT_PUBLIC_PRODUCT_NAME=PortfolioStudio \
+            -t landing-page:ci .
+
+      # Fresh, EMPTY bind-mounted data + uploads dirs and no R2 env: the
+      # container must start, seed itself from the bundled files and serve.
+      - name: Start container (empty data volume, no R2)
+        run: |
+          mkdir -p "$RUNNER_TEMP/data" "$RUNNER_TEMP/uploads"
+          chmod 0777 "$RUNNER_TEMP/data" "$RUNNER_TEMP/uploads"
+          docker run -d --name lp -p 127.0.0.1:3000:3000 \
+            -e NODE_ENV=production \
+            -e JWT_SECRET=ci-smoke-placeholder-not-a-real-secret-32chars \
+            -e ADMIN_EMAIL=ci@example.com \
+            -e ADMIN_PASS=ci-placeholder-not-real \
+            -e SITE_URL=http://127.0.0.1:3000 \
+            -v "$RUNNER_TEMP/data:/app/data" \
+            -v "$RUNNER_TEMP/uploads:/app/public/uploads" \
+            landing-page:ci
+
+      - name: Smoke test
+        run: |
+          set -eu
+          for i in $(seq 1 60); do
+            if curl -fsS -o /dev/null http://127.0.0.1:3000/api/health; then break; fi
+            if [ "$(docker inspect -f '{{.State.Running}}' lp)" != "true" ]; then
+              echo "container exited"; exit 1
+            fi
+            sleep 2
+          done
+          echo "health: $(curl -fsS http://127.0.0.1:3000/api/health)"
+          for path in /api/health /blog /work /now /uses; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000$path")
+            echo "$path → $code"
+            test "$code" = 200
+          done
+          # warm-isr must find /app/.next/prerender-manifest.json and refresh the
+          # build-time pages once the server is healthy.
+          for i in $(seq 1 30); do
+            if docker logs lp 2>&1 | grep -q '\[warm-isr\] regenerated'; then break; fi
+            sleep 2
+          done
+          docker logs lp 2>&1 | grep '\[warm-isr\] regenerated'
+          # Runs as the image's non-root user and could write the mounted data dir.
+          test "$(docker exec lp id -u)" = 1001
+          test -f "$RUNNER_TEMP/data/content.db"
+
+      # dumb-init must forward SIGTERM to the server: stopping has to finish
+      # well before docker's 10 s SIGKILL fallback.
+      - name: Graceful stop
+        run: |
+          start=$(date +%s)
+          docker stop -t 10 lp
+          elapsed=$(( $(date +%s) - start ))
+          echo "stopped in ${elapsed}s"
+          test "$elapsed" -lt 8
+
+      - name: Container logs
+        if: always()
+        run: docker logs lp || true
