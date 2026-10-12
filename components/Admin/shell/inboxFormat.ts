@@ -34,3 +34,31 @@ export function replyHref(m: ReplySource): string {
   const body = `\n\n—\nOn ${formatWhen(m.at)}, ${m.name || m.email} wrote:\n${quoted}`
   return `mailto:${encodeURIComponent(m.email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
 }
+
+/**
+ * Which message ↑/↓ opens in the Inbox list.
+ *
+ * With a message open, the key moves one step from it (clamped to the
+ * list). With nothing open, the key opens the message that has keyboard
+ * focus — Tab lands on the newest message, so the first ↓ opens that one
+ * rather than skipping to the second — or the first message when focus is
+ * not on one. Returns -1 for an empty list.
+ */
+export function inboxArrowTarget(
+  count: number,
+  selectedIndex: number,
+  focusedIndex: number,
+  key: 'ArrowDown' | 'ArrowUp',
+): number {
+  if (count <= 0) return -1
+  const clamp = (i: number) => Math.min(count - 1, Math.max(0, i))
+  if (selectedIndex >= 0 && selectedIndex < count) return clamp(selectedIndex + (key === 'ArrowDown' ? 1 : -1))
+  return focusedIndex >= 0 && focusedIndex < count ? focusedIndex : 0
+}
+
+/** Human size for the Inbox storage note: "3.2 MB", "640 KB". */
+export function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 1024) return `${Math.max(0, Math.round(bytes || 0))} B`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}

@@ -27,12 +27,13 @@ import {
 import { FaInbox, FaRedo, FaReply, FaTrashAlt, FaEnvelopeOpen, FaEnvelope, FaCopy, FaArrowLeft } from 'react-icons/fa'
 import { Eyebrow, MONO, Panel, SessionExpiredNotice, outlineButtonProps, primaryButtonProps } from './shell/ui'
 import { readJsonObject } from './shell/http'
-import { formatWhen, relative, replyHref } from './shell/inboxFormat'
+import { formatBytes, formatWhen, inboxArrowTarget, relative, replyHref } from './shell/inboxFormat'
 
 /**
  * Admin Inbox — every message sent through the public contact form
  * (GET/POST /api/admin/inbox). Messages are stored even when email delivery
- * is not configured, so nothing a visitor sends is ever lost.
+ * is not configured; the server pauses storing only at its site-wide caps
+ * (messages per day, total size), which this panel explains when reached.
  */
 
 export type InboxMessage = {
@@ -48,6 +49,30 @@ export type InboxMessage = {
 
 type LoadState = 'loading' | 'ready' | 'error' | 'session'
 
+type Storage = {
+  bytes: number
+  maxBytes: number
+  storedToday: number
+  dailyLimit: number
+  paused: 'daily-limit' | 'inbox-full' | null
+}
+
+/** Show the storage note from this fill level on, before the cap is hit. */
+const STORAGE_WARN_RATIO = 0.8
+
+function parseStorage(raw: unknown): Storage | null {
+  if (!raw || typeof raw !== 'object') return null
+  const s = raw as Record<string, unknown>
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+  return {
+    bytes: num(s.bytes),
+    maxBytes: num(s.maxBytes),
+    storedToday: num(s.storedToday),
+    dailyLimit: num(s.dailyLimit),
+    paused: s.paused === 'daily-limit' || s.paused === 'inbox-full' ? s.paused : null,
+  }
+}
+
 const RETURN_PATH = '/admin/dashboard?tab=inbox'
 const REFRESH_MS = 60_000
 
@@ -56,6 +81,8 @@ export default function InboxPanel({ onUnreadChange }: { onUnreadChange?: (unrea
   const [state, setState] = useState<LoadState>('loading')
   const [error, setError] = useState('')
   const [messages, setMessages] = useState<InboxMessage[]>([])
+  const [storage, setStorage] = useState<Storage | null>(null)
+  const [truncated, setTruncated] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [now, setNow] = useState(() => Date.now())
@@ -84,6 +111,8 @@ export default function InboxPanel({ onUnreadChange }: { onUnreadChange?: (unrea
       const body = await readJsonObject(res)
       if (!res.ok || !Array.isArray(body.messages)) throw new Error(body.error || `HTTP ${res.status}`)
       setMessages(body.messages as InboxMessage[])
+      setStorage(parseStorage(body.storage))
+      setTruncated(body.truncated === true)
       setNow(Date.now())
       setState('ready')
     } catch (e: any) {
@@ -118,6 +147,8 @@ export default function InboxPanel({ onUnreadChange }: { onUnreadChange?: (unrea
         }
         const body = await readJsonObject(res)
         if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`)
+        const nextStorage = parseStorage(body.storage)
+        if (nextStorage) setStorage(nextStorage)
         setMessages((list) =>
           action === 'delete'
             ? list.filter((m) => !ids.includes(m.id))
@@ -154,16 +185,46 @@ export default function InboxPanel({ onUnreadChange }: { onUnreadChange?: (unrea
     }
   }
 
-  // ↑/↓ move through the list while it has focus.
+  // ↑/↓ move through the list while it has focus; with nothing open they
+  // start from the focused message.
   const onListKeyDown = (e: React.KeyboardEvent) => {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return
     e.preventDefault()
-    if (!messages.length) return
-    const idx = Math.max(0, messages.findIndex((m) => m.id === selectedId))
-    const next = messages[Math.min(messages.length - 1, Math.max(0, idx + (e.key === 'ArrowDown' ? 1 : -1)))]
+    const focusedId = (document.activeElement as HTMLElement | null)?.dataset?.id
+    const target = inboxArrowTarget(
+      messages.length,
+      messages.findIndex((m) => m.id === selectedId),
+      focusedId ? messages.findIndex((m) => m.id === focusedId) : -1,
+      e.key,
+    )
+    const next = messages[target]
+    if (!next) return
     open(next)
     requestAnimationFrame(() => listRef.current?.querySelector<HTMLElement>(`[data-id="${next.id}"]`)?.focus())
   }
+
+  const storageNote = (() => {
+    if (!storage) return null
+    if (storage.paused === 'inbox-full') {
+      return {
+        status: 'warning' as const,
+        text: `The inbox is full (${formatBytes(storage.bytes)} of ${formatBytes(storage.maxBytes)}). New messages are only emailed to you — or refused when email isn’t configured — until you delete some here.`,
+      }
+    }
+    if (storage.paused === 'daily-limit') {
+      return {
+        status: 'warning' as const,
+        text: `${storage.storedToday} messages arrived today, the daily maximum the inbox stores. Until midnight (UTC) new messages are only emailed to you — or refused when email isn’t configured.`,
+      }
+    }
+    if (storage.maxBytes > 0 && storage.bytes >= storage.maxBytes * STORAGE_WARN_RATIO) {
+      return {
+        status: 'info' as const,
+        text: `The inbox is ${Math.round((storage.bytes / storage.maxBytes) * 100)}% full (${formatBytes(storage.bytes)} of ${formatBytes(storage.maxBytes)}). Delete messages you no longer need so new ones can still be stored.`,
+      }
+    }
+    return null
+  })()
 
   if (state === 'session') return <SessionExpiredNotice returnPath={RETURN_PATH} />
 
@@ -194,6 +255,19 @@ export default function InboxPanel({ onUnreadChange }: { onUnreadChange?: (unrea
             delivery (SMTP) is not configured or failed. They are safe here — reply from this page.
           </AlertDescription>
         </Alert>
+      ) : null}
+
+      {state === 'ready' && storageNote ? (
+        <Alert status={storageNote.status} variant="left-accent" borderRadius="md" bg="page.bg-elevated" fontSize="sm">
+          <AlertIcon />
+          <AlertDescription>{storageNote.text}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {state === 'ready' && truncated ? (
+        <Text fontSize="sm" color="page.fg-secondary">
+          Showing the newest messages only — older ones are still kept in data/contact-inbox.jsonl on the server.
+        </Text>
       ) : null}
 
       {state === 'error' ? (
@@ -372,7 +446,8 @@ export default function InboxPanel({ onUnreadChange }: { onUnreadChange?: (unrea
                     size="sm"
                     leftIcon={<FaTrashAlt />}
                     variant="ghost"
-                    color="red.400"
+                    color="red.600"
+                    _dark={{ color: 'red.300' }}
                     _hover={{ bg: 'page.bg-overlay' }}
                     isDisabled={busy}
                     onClick={del.onOpen}
@@ -401,7 +476,8 @@ export default function InboxPanel({ onUnreadChange }: { onUnreadChange?: (unrea
           <AlertDialogContent bg="page.bg-elevated" borderColor="page.border" borderWidth="1px">
             <AlertDialogHeader fontSize="md">Delete this message?</AlertDialogHeader>
             <AlertDialogBody fontSize="sm" color="page.fg-secondary">
-              It is removed from the inbox permanently. Copies in earlier full-site backups are not affected.
+              It is removed from the inbox for good. Earlier full-site backups still contain a copy until they are
+              rotated out, but restoring one will not bring this message back into the inbox.
             </AlertDialogBody>
             <AlertDialogFooter gap={2}>
               <Button ref={cancelRef} size="sm" {...outlineButtonProps} onClick={del.onClose}>

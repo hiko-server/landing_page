@@ -1,7 +1,8 @@
 import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
-import { createLoginThrottle, pairKey, type LoginThrottle, type Pressure } from './security/loginThrottle'
+import { createLoginGate, type LoginGate } from './security/loginGate'
+import { createLoginThrottle, pairKey, type LockState, type LoginThrottle, type Pressure } from './security/loginThrottle'
 import { toSessionVersion } from './security/session'
 
 /**
@@ -12,12 +13,18 @@ import { toSessionVersion } from './security/session'
  *
  * Hashing: scrypt with random 16-byte salt, 64-byte key (N=16384, r=8,
  * p=1 — Node defaults). Constant-time comparison via crypto.timingSafeEqual.
+ * Login verification uses the asynchronous crypto.scrypt (libuv thread
+ * pool), so a flood of sign-in attempts cannot block the event loop; only
+ * the rare bootstrap / password-change paths hash synchronously.
  *
- * Brute-force defence (lib/security/loginThrottle.ts): per (email, client)
- * lockout with exponential backoff, per-IP limits in the route, and a global
- * slowdown — never a global lockout, so nobody can lock the owner out by
- * failing logins from many addresses. Every email is throttled identically,
- * real or not, so neither responses nor timing reveal the admin address.
+ * Brute-force defence: per (email, client) lockout with exponential backoff
+ * (lib/security/loginThrottle.ts), per-IP and per-/48 limits in the route,
+ * and a process-wide admission gate (lib/security/loginGate.ts) that, while
+ * the site is under pressure, runs credential checks one at a time spaced by
+ * the slowdown delay — a real throughput cap, never a global lockout: the
+ * owner's known devices skip the queue. Every email is throttled
+ * identically, real or not, so neither responses nor timing reveal the admin
+ * address.
  *
  * Sessions: `sessionVersion` is embedded in every admin JWT (`sv`); bumping
  * it (password reset, logout) revokes every outstanding token.
@@ -50,8 +57,17 @@ export function normalizeEmail(email: unknown): string {
 
 // ── Hashing ────────────────────────────────────────────────────────────
 
+const KEY_LEN = 64
+
 function hashPassword(password: string, salt: string): string {
-  return crypto.scryptSync(password, salt, 64).toString('hex')
+  return crypto.scryptSync(password, salt, KEY_LEN).toString('hex')
+}
+
+/** Same hash as hashPassword, computed off the event loop. */
+function hashPasswordAsync(password: string, salt: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(password, salt, KEY_LEN, (err, key) => (err ? reject(err) : resolve(key.toString('hex'))))
+  })
 }
 
 /** Constant-time hex string compare — defends against timing oracles. */
@@ -140,9 +156,34 @@ function throttle(): LoginThrottle {
   return t
 }
 
-/** Site-wide login pressure: how much to slow responses / tighten per-IP limits. */
+/** Site-wide login pressure: how much to space credential checks / tighten per-IP limits. */
 export function loginPressure(): Pressure {
   return throttle().pressure()
+}
+
+/**
+ * The process-wide credential-check gate. Its spacing follows the current
+ * pressure, so it only queues while the site is under attack (or while a
+ * burst exceeds its concurrency cap).
+ */
+export function loginGate(): LoginGate {
+  const registry = globalThis as unknown as Record<symbol, LoginGate | undefined>
+  const key = Symbol.for('lucian-dev.loginGate')
+  let g = registry[key]
+  if (!g) {
+    g = createLoginGate(() => loginPressure().delayMs)
+    registry[key] = g
+  }
+  return g
+}
+
+/**
+ * Cheap lockout pre-check for an (email, client) pair — no hashing. Every
+ * email is tracked identically, so a locked answer reveals nothing about
+ * which address is real; it just spares a locked pair the queue and scrypt.
+ */
+export function loginLockState(email: string, clientBucket: string): LockState {
+  return throttle().check(pairKey(normalizeEmail(email), clientBucket))
 }
 
 // ── Public verify ──────────────────────────────────────────────────────
@@ -157,22 +198,20 @@ export type VerifyOutcome =
  *
  * `clientBucket` is the caller's rate-limit identity (lib/rateLimit
  * clientKey: IPv4 or IPv6 /64). The same code path runs for a wrong
- * password, an unknown email and a missing admin record: one scrypt hash,
- * one in-memory failure record — so neither the response nor its timing
- * tells them apart.
+ * password, an unknown email and a missing admin record: one (async) scrypt
+ * hash, one in-memory failure record — so neither the response nor its
+ * timing tells them apart. A pair that is locked (also re-checked here,
+ * because the state may change while a request waits in the login gate)
+ * is answered without hashing.
  */
-export function verifyCredentials(email: string, password: string, clientBucket: string): VerifyOutcome {
+export async function verifyCredentials(email: string, password: string, clientBucket: string): Promise<VerifyOutcome> {
   const t = throttle()
   const key = pairKey(normalizeEmail(email), clientBucket)
   const lock = t.check(key)
+  if (lock.locked) return { ok: false, reason: 'locked', retryAfterMs: lock.retryAfterMs }
+
   const data = readAdmin() || ensureAdminFromEnv()
-
-  if (lock.locked) {
-    hashPassword(password, data?.salt || DUMMY_SALT)
-    return { ok: false, reason: 'locked', retryAfterMs: lock.retryAfterMs }
-  }
-
-  const candidate = hashPassword(password, data?.salt || DUMMY_SALT)
+  const candidate = await hashPasswordAsync(password, data?.salt || DUMMY_SALT)
   const emailOk = !!data && normalizeEmail(email) === normalizeEmail(data.email)
   const passOk = !!data && timingSafeEqualHex(candidate, data.passwordHash)
 

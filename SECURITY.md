@@ -70,41 +70,73 @@ What the code actually does today, and where its limits are.
   every admin API it calls answers `401` and `/api/admin/session` reports
   `authenticated: false`.
 
-### Login brute-force defence (`lib/security/loginThrottle.ts`)
+### Login brute-force defence (`lib/security/loginThrottle.ts`, `lib/security/loginGate.ts`)
 
-Designed so that it cannot be turned into a lock-out weapon against the
-owner:
+Designed so that it caps guessing for the whole internet together, yet
+cannot be turned into a lock-out weapon against the owner:
 
 - **Per (email, client) lockout with exponential backoff** — 4 free
   mistakes; the 5th locks that email *for that client network* for 30 s,
   then 60 s, 2 min, … up to 1 h. History is forgotten after 24 h without a
   failure, and a successful login clears it. An attacker only ever locks
   out their own network; the owner signing in from anywhere else is
-  unaffected.
-- **Per-IP limits** — 10 login attempts per 5 min (tightened to 4 while
-  the site is under a distributed attack) and 30 per hour.
-- **Global slowdown, never a global lockout** — once 30+ failures from all
-  clients land within 15 min, every login response is delayed (0.5 s per
-  30 failures, up to 4 s), success and failure alike.
+  unaffected. A locked pair is answered at once, without hashing.
+- **Per-client limits** — 10 login attempts per 5 min (tightened to 4
+  while the site is under a distributed attack) and 30 per hour, per IPv4
+  address or IPv6 `/64`; IPv6 clients additionally share a `/48` budget of
+  three times that, because one customer (or one free tunnel-broker
+  account) gets a whole `/48` — 65,536 `/64`s.
+- **Global throughput cap, never a global lockout** — once 30+ failures
+  from all clients land within 15 min, the site is "under pressure" and
+  every credential check from an unrecognised browser passes through one
+  process-wide serial queue: a check starts only after the previous one
+  finished and the slowdown delay (0.5 s per 30 recent failures, up to 4 s)
+  has passed. At the maximum that is 15 guesses a minute for everyone
+  combined, however many addresses are used. The queue is bounded (at most
+  ~30 s of waiting, 32 entries); past that the request gets the generic
+  `429` immediately. Outside an attack up to 8 checks run concurrently, and
+  any burst beyond that is queued too.
+- **Known devices** — a successful login also sets `cv_known_device`, a
+  random device id signed with HMAC-SHA256 under `JWT_SECRET` (180 days,
+  `httpOnly`, `SameSite=Strict`, `Secure` in production). A browser
+  carrying a valid one skips the global queue, so the owner can sign in
+  during an attack; it still obeys the per-(email, client) lockout and the
+  per-client limits, and grants nothing else. Log out does not clear it
+  (it identifies the browser, not a session); rotating `JWT_SECRET` forgets
+  every device. Signing in from a new browser during an attack means
+  waiting in the queue.
+- **Event loop stays free** — login uses the asynchronous `crypto.scrypt`,
+  so a flood of attempts cannot block other requests.
 - **No account enumeration** — unknown emails go through the exact same
   path as wrong passwords: one scrypt hash, the same throttling state,
-  the same `401 Invalid credentials`, and the same generic `429` lockout
-  message, which never confirms an address. Password-reset requests always
-  answer `{ ok: true }` without waiting for SMTP, and at most 3 reset links
-  can be outstanding at once (no inbox flooding).
-- Throttle state lives in process memory and is bounded; a restart (which
-  only the operator can trigger) clears it.
+  the same `401 Invalid credentials`, and the same generic `429` message,
+  which never confirms an address. Password-reset requests always answer
+  `{ ok: true }` without waiting for SMTP, and at most 3 reset links can be
+  outstanding at once (no inbox flooding).
+- Throttle and queue state live in process memory and are bounded; a
+  restart (which only the operator can trigger) clears them.
 
-### Client IP (`lib/rateLimit.ts`, `lib/security/ip.ts`)
+### Client IP (`lib/rateLimit.ts`, `lib/security/ip.ts`, `lib/security/proxyTrust.ts`)
 
 - The client address comes from `TRUST_CLIENT_IP_HEADER` (default
   `cf-connecting-ip`, which Cloudflare overwrites at its edge), falling back
   to the TCP peer when the header is missing or malformed.
-- `TRUSTED_PROXY_IPS` (IPs and CIDRs, IPv4 and IPv6) restricts header trust
-  to requests that arrive from those proxies. `x-forwarded-for` is read
-  right-to-left, skipping trusted hops.
+- The header is only believed when the TCP peer is a trusted proxy:
+  `TRUSTED_PROXY_IPS` (IPs and CIDRs, IPv4 and IPv6) when set; otherwise
+  loopback plus the container's default gateway, read once from
+  `/proc/net/route` (Linux; elsewhere loopback only). In the standard
+  deployment cloudflared runs on the host and reaches the container
+  through Docker's `127.0.0.1:3002 → 3000` mapping, so its connections
+  arrive from that gateway. Any other peer — a sibling container talking
+  to the container's address directly, for instance — is rate-limited by
+  its own socket address and cannot pick a fresh client IP per request.
+  Every process on the host also connects from the gateway address: the
+  host is inside the trust boundary.
+- `x-forwarded-for` is read right-to-left, skipping trusted hops.
 - IPv6 clients are rate-limited per `/64`, so one end-user network can't
-  rotate through fresh addresses.
+  rotate through fresh addresses (login also per `/48`, see above).
+- The edge `/api/og` route cannot see the TCP peer and uses the header as
+  is; it only applies a coarse render limit (60/min).
 
 ### CSRF (`middleware.ts`, `lib/security/csrf.ts`)
 
@@ -136,9 +168,24 @@ For `POST` / `PUT` / `PATCH` / `DELETE` to `/api/admin/*`, `/api/auth/*`,
 
 ### Other endpoints
 
-- **Contact form** — signed nonce (2 s minimum fill time), honeypot, per-IP
-  limit; header-injection-safe; undelivered mail is kept in
-  `data/contact-inbox.jsonl` rather than dropped.
+- **Contact form** — signed single-use nonce (2 s minimum fill time),
+  honeypot, per-client limit (5 per 10 min); header-injection-safe. Every
+  message is kept in the admin Inbox (`data/contact-inbox.jsonl`) as well
+  as emailed when SMTP is configured, within site-wide caps: at most 300
+  messages stored per UTC day and nothing more once the log reaches 5 MB
+  (a warning is logged once per day). Past a cap a message is still
+  emailed when possible; when it can be neither emailed nor stored the form
+  answers `503` ("try again later") — never a fake success. Inbox reads are
+  bounded (only the newest ~6 MB of the log is parsed; other operations
+  stream it in 64 KB chunks), so a large log cannot exhaust memory.
+- **Inbox deletion and backups** — snapshots (`lib/backup.ts`) include the
+  inbox log, so a deleted message remains in up to 20 local and 30 R2
+  backups until they rotate out. Restoring merges the backup's log into the
+  live one, but skips every id the owner deleted (the newest 5,000 deleted
+  ids are remembered in `data/contact-inbox.state.json`), so a restore does
+  not resurrect deleted messages. To erase a message from backups too,
+  delete it and then let newer snapshots replace the old ones (or remove
+  old tarballs).
 - **`/api/og`** — text clamped by code point, per-IP render limit (60/min),
   `Cache-Control: public, max-age=86400, s-maxage=31536000, immutable` so
   repeat crawls are served by the CDN.
@@ -184,8 +231,9 @@ its operator. After cloning:
    dashboards on any deploy, even if the same values "look fine".
    Cleartext credentials in `.env` should never be reused across
    personal and production deployments.
-5. Behind a proxy other than Cloudflare, set `TRUST_CLIENT_IP_HEADER`
-   (and ideally `TRUSTED_PROXY_IPS`) so rate limits see real client
-   addresses; see `.env.example`.
+5. Behind a proxy other than a cloudflared on the Docker host, set
+   `TRUST_CLIENT_IP_HEADER` and `TRUSTED_PROXY_IPS` so rate limits see
+   real client addresses; see `.env.example`. With both blank, the header
+   is believed only from loopback and the container's default gateway.
 6. Set `R2_REQUIRED=1` in production so the container refuses to start
    without a working off-site mirror (default = warn only).

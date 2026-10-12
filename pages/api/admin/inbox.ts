@@ -5,9 +5,13 @@ import { deleteInbox, isInboxId, listInbox, markInbox } from '../../../lib/inbox
 /**
  * Contact inbox for the admin.
  *
- *   GET  /api/admin/inbox                       → { messages, unread, total }
- *   POST /api/admin/inbox { action, ids }       → { ok, affected, unread, total }
+ *   GET  /api/admin/inbox                       → { messages, unread, total, truncated, storage }
+ *   POST /api/admin/inbox { action, ids }       → { ok, affected, unread, total, storage }
  *        action: 'read' | 'unread' | 'delete'   ids: up to 500 message ids
+ *
+ * Every call does bounded work (lib/inbox.ts reads only the tail of the log
+ * and streams it otherwise), so a large log can't exhaust memory. Deleting
+ * remembers the ids, so restoring an older backup won't bring them back.
  *
  * The middleware already gates /api/admin/* and refuses cross-site or
  * non-JSON writes; the session check here is the defence-in-depth copy that
@@ -39,8 +43,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     }
     try {
       const affected = action === 'delete' ? deleteInbox(ids) : markInbox(ids, action === 'read')
-      const { unread, total } = listInbox()
-      return res.status(200).json({ ok: true, affected, unread, total })
+      const { unread, total, storage } = listInbox()
+      return res.status(200).json({ ok: true, affected, unread, total, storage })
     } catch (err: any) {
       console.error('[inbox] update failed', err)
       return res.status(500).json({ error: 'Could not update the inbox' })

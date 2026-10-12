@@ -20,7 +20,10 @@ const msg = (n: number, delivered = false) => ({ name: `N${n}`, email: `n${n}@ex
 
 test('empty inbox lists nothing', async () => {
   const { listInbox } = await import('../lib/inbox')
-  assert.deepEqual(listInbox(), { messages: [], unread: 0, total: 0 })
+  const l = listInbox()
+  assert.deepEqual({ messages: l.messages, unread: l.unread, total: l.total, truncated: l.truncated }, { messages: [], unread: 0, total: 0, truncated: false })
+  assert.equal(l.storage.bytes, 0)
+  assert.equal(l.storage.paused, null)
 })
 
 test('append, list newest first, read state, legacy lines', async () => {
