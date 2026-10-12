@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { Box, Heading, Text, useColorModeValue } from '@chakra-ui/react'
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 
 /**
  * Hero brand + typewriter tagline.
@@ -10,7 +10,9 @@ import { motion } from 'framer-motion'
  * that token). Tagline stays as plain white text on the video bg.
  *
  * Tagline phrases are separated by `|` in data/home.json and cycled with a
- * 35ms-per-char typewriter; the cursor still blinks at 550ms.
+ * 35ms-per-char typewriter; the cursor blinks via CSS. Screen readers and
+ * crawlers get every phrase as real text (the animated copy is aria-hidden),
+ * and with reduced motion the first phrase is shown statically.
  */
 export default function HeroHeadline({
   brand,
@@ -19,7 +21,7 @@ export default function HeroHeadline({
   brand?: string
   tagline?: string
 }) {
-  const [cursor, setCursor] = useState(true)
+  const reduce = useReducedMotion()
   const [idx, setIdx] = useState(0)
   const [text, setText] = useState('')
   const phrases = useMemo(
@@ -28,25 +30,28 @@ export default function HeroHeadline({
   )
 
   useEffect(() => {
-    const blink = setInterval(() => setCursor((v) => !v), 550)
-    return () => clearInterval(blink)
-  }, [])
-
-  useEffect(() => {
     if (!phrases.length) return
+    const chars = phrases[idx % phrases.length]
+    if (reduce) {
+      setText(chars)
+      return
+    }
     setText('')
     let i = 0
-    const chars = phrases[idx % phrases.length]
+    let pause: ReturnType<typeof setTimeout> | undefined
     const timer = setInterval(() => {
       i++
       setText(chars.slice(0, i))
       if (i >= chars.length) {
         clearInterval(timer)
-        setTimeout(() => setIdx((x) => x + 1), 1400)
+        pause = setTimeout(() => setIdx((x) => x + 1), 1600)
       }
     }, 35)
-    return () => clearInterval(timer)
-  }, [idx, phrases])
+    return () => {
+      clearInterval(timer)
+      if (pause) clearTimeout(pause)
+    }
+  }, [idx, phrases, reduce])
 
   // Theme-aware colors (was hard-white because of v5's always-dark video bg)
   const brandColor = useColorModeValue('gray.900', 'white')
@@ -89,16 +94,16 @@ export default function HeroHeadline({
           color={taglineColor}
           letterSpacing="0.01em"
           maxW="640px"
+          minH="1.6em"
         >
-          {text}
-          <Box
-            as="span"
-            ml="2px"
-            opacity={cursor ? 1 : 0}
-            color="var(--accent)"
-            transition="opacity 100ms linear"
-          >
-            ▍
+          <Box as="span" className="sr-only">
+            {phrases.join(' · ')}
+          </Box>
+          <Box as="span" aria-hidden>
+            {text}
+            <Box as="span" ml="2px" color="var(--accent)" className={reduce ? undefined : 'hero-caret'}>
+              ▍
+            </Box>
           </Box>
         </Text>
       )}

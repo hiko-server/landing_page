@@ -4,31 +4,30 @@ import Header from '../components/Header/Header'
 import React from 'react'
 
 /**
- * Page chrome: <Header> + page content + <Footer>.
+ * Page chrome: skip link + sticky <Header> + <main> + <Footer>.
  *
- * v6 update — removed the two global background layers:
- *   - <AnimatedBackground/>  three blurred gradient blobs that read as a
- *                            web3-startup landing-page corner glow
- *   - <ParticlesBackground/> canvas constellation network
+ * The sticky element is the header's own wrapper (a sticky child inside a
+ * wrapper of the same height can never move), and it sits above page
+ * content in the stacking order.
  *
- * Both clashed with the Hero photo (HeroAmbient mountains) and made the
- * /about CV cards sit on a busy, dated backdrop. The body now uses only
- * the global 8×8 dot grid defined in styles/globals.css, which keeps the
- * engineer signature without competing with foreground content.
+ * `isMobile` is accepted for backwards compatibility with existing pages but
+ * no longer used — the header switches layouts with CSS breakpoints.
  */
 const HeaderFooter = ({
   children,
-  isMobile,
 }: {
   children: React.ReactNode
-  isMobile: boolean
+  isMobile?: boolean
 }) => {
   return (
-    <Box gridTemplateRows="auto 1fr auto" minHeight="100vh" w="full">
-      <Box position="relative" zIndex={1} className="no-print">
-        <Header isMobile={isMobile} />
+    <Box display="flex" flexDirection="column" minHeight="100vh" w="full">
+      <a className="skip-nav no-print" href="#main">
+        Skip to content
+      </a>
+      <Box position="sticky" top={0} zIndex={40} className="no-print">
+        <Header />
       </Box>
-      <Box position="relative" zIndex={1} className="print-parent">
+      <Box as="main" id="main" tabIndex={-1} flex="1" position="relative" zIndex={1} className="print-parent" _focus={{ outline: 'none' }}>
         {children}
       </Box>
       <Box position="relative" zIndex={1} className="no-print">

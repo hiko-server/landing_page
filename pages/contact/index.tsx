@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 
-import { Flex, useMediaQuery } from '@chakra-ui/react'
+import { Flex } from '@chakra-ui/react'
 
 import ContactPro from '../../components/Contact/ContactPro'
 import HeaderFooter from '../../layout/HeaderFooter'
@@ -8,14 +8,6 @@ import CustomHead from '../../components/General-UI/CustomHead'
 import { absUrl, breadcrumb, PERSON_ID } from '../../lib/schema'
 
 const About = (props: any) => {
-  const [, setIsHostCV] = useState<boolean>(false)
-  const [isMobile] = useMediaQuery('(max-width: 767px)')
-
-  useEffect(() => {
-    if (props.host && props.host === 'cv.lucian-dev.com') {
-      setIsHostCV(true)
-    }
-  }, [props.host])
 
   return (
     <React.Fragment>
@@ -38,9 +30,9 @@ const About = (props: any) => {
           ]),
         ]}
       />
-      <HeaderFooter isMobile={isMobile}>
+      <HeaderFooter>
         <Flex direction="column" alignItems="center" justifyContent="center" p={['20px', '40px']} gap={['20px', '40px']}>
-          <ContactPro home={props.home || undefined} />
+          <ContactPro home={props.home || undefined} headingAs="h1" />
         </Flex>
       </HeaderFooter>
     </React.Fragment>
@@ -55,6 +47,8 @@ export async function getServerSideProps(context: any) {
   try {
     const mod = await import('../../lib/home')
     home = mod.readHome()
-  } catch {}
+  } catch {
+    /* best effort — render with what we have */
+  }
   return { props: { host, home } }
 }

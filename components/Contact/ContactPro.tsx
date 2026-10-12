@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Box,
   Button,
@@ -28,6 +28,10 @@ import {
   FaCopy,
 } from 'react-icons/fa'
 import { motion } from 'framer-motion'
+
+const MESSAGE_MAX = 5000
+/** Nonces live 30 min server-side; refresh a little before that. */
+const NONCE_MAX_AGE_MS = 25 * 60 * 1000
 
 type HomeData = {
   hero?: { phone?: string; email?: string; avatarUrl?: string; brand?: string }
@@ -87,9 +91,12 @@ const monoFont = 'var(--font-geist-mono), monospace'
 export default function ContactPro({
   home,
   formOnly,
+  headingAs = 'h2',
 }: {
   home?: HomeData
   formOnly?: boolean
+  /** The info-panel heading is the page title on /contact. */
+  headingAs?: 'h1' | 'h2'
 }) {
   const toast = useToast()
   const border = useColorModeValue('rgba(0,0,0,0.10)', 'rgba(255,255,255,0.12)')
@@ -129,6 +136,11 @@ export default function ContactPro({
   const [honeypot, setHoneypot] = useState('')
   const [nonce, setNonce] = useState<string | null>(null)
   const [nonceErr, setNonceErr] = useState<string | null>(null)
+  const nonceAtRef = useRef(0)
+  const [submitted, setSubmitted] = useState(false)
+  const [touched, setTouched] = useState<Record<string, boolean>>({})
+  const touch = (k: string) => setTouched((t) => (t[k] ? t : { ...t, [k]: true }))
+  const showErr = (k: string) => submitted || !!touched[k]
 
   // Generate the math pair only on the client to keep SSR markup deterministic.
   useEffect(() => {
@@ -138,32 +150,45 @@ export default function ContactPro({
     })
   }, [])
 
-  // Fetch a fresh nonce on mount (and once per page load)
-  useEffect(() => {
-    let alive = true
-    setNonceErr(null)
-    fetch('/api/contact/nonce')
-      .then((r) => (r.ok ? r.json() : Promise.reject(r)))
-      .then((d) => {
-        if (alive) setNonce(d.token)
-      })
-      .catch(() => {
-        if (alive) setNonceErr('Verification could not initialize — refresh the page')
-      })
-    return () => {
-      alive = false
+  // The signed nonce is fetched on first interaction (not on every page
+  // view) and re-fetched once it is close to its 30-minute expiry, so a
+  // message composed slowly never fails verification.
+  const fetchNonce = useCallback(async (): Promise<string | null> => {
+    try {
+      const r = await fetch('/api/contact/nonce', { cache: 'no-store' })
+      if (!r.ok) throw new Error(String(r.status))
+      const d = await r.json()
+      nonceAtRef.current = Date.now()
+      setNonce(d.token)
+      setNonceErr(null)
+      return d.token as string
+    } catch {
+      setNonceErr('Verification could not initialize — check your connection and try again')
+      return null
     }
   }, [])
+  const ensureNonce = useCallback(async (): Promise<string | null> => {
+    if (nonce && Date.now() - nonceAtRef.current < NONCE_MAX_AGE_MS) return nonce
+    return fetchNonce()
+  }, [nonce, fetchNonce])
+  const warmNonce = () => {
+    if (!nonce && !nonceAtRef.current) {
+      nonceAtRef.current = 1 // in flight
+      fetchNonce()
+    }
+  }
 
   // autosave draft (preserved from v5)
   useEffect(() => {
-    const id = setInterval(() => {
+    const id = setTimeout(() => {
       const draft = { name, email, reason, subject, message }
       try {
         localStorage.setItem('contact_draft', JSON.stringify(draft))
-      } catch {}
-    }, 1000)
-    return () => clearInterval(id)
+      } catch {
+        /* storage unavailable — drafts are a convenience only */
+      }
+    }, 600)
+    return () => clearTimeout(id)
   }, [name, email, reason, subject, message])
 
   useEffect(() => {
@@ -177,13 +202,21 @@ export default function ContactPro({
         setSubject(d.subject || '')
         setMessage(d.message || '')
       }
-    } catch {}
+    } catch {
+      /* ignore malformed draft */
+    }
+    // REASONS is derived from props once; restoring a draft runs only on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const clearDraft = () => {
     try {
       localStorage.removeItem('contact_draft')
-    } catch {}
+    } catch {
+      /* ignore */
+    }
+    setSubmitted(false)
+    setTouched({})
     setName('')
     setEmail('')
     setReason(REASONS[0])
@@ -202,13 +235,13 @@ export default function ContactPro({
       /.+@.+\..+/.test(email) &&
       (subject.trim().length > 0 || Boolean(reason)) &&
       message.trim().length > 0 &&
-      mathOk &&
-      Boolean(nonce)
+      message.length <= MESSAGE_MAX &&
+      mathOk
     setValid(!!ok)
-  }, [name, email, subject, message, mathAnswer, expectedMath, nonce, reason])
+  }, [name, email, subject, message, mathAnswer, expectedMath, reason])
 
   const chars = message.length
-  const pct = Math.min(100, Math.floor((chars / 1000) * 100))
+  const pct = Math.min(100, Math.floor((chars / MESSAGE_MAX) * 100))
 
   const onCopy = (txt: string, label?: string) => {
     navigator.clipboard
@@ -219,9 +252,15 @@ export default function ContactPro({
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setSubmitted(true)
     if (!valid || sending) return
     setSending(true)
     try {
+      const token = await ensureNonce()
+      if (!token) return
+      // The server requires ≥2s between issuing the nonce and submitting.
+      const age = Date.now() - nonceAtRef.current
+      if (age < 2100) await new Promise((r) => setTimeout(r, 2100 - age))
       const fullSubject = subject || reason
       const body = `Reason: ${reason}\n\n${message}`
       const res = await fetch('/api/contact', {
@@ -232,14 +271,17 @@ export default function ContactPro({
           email,
           subject: fullSubject,
           message: body,
-          nonce,
+          nonce: token,
           mathAnswer: Number(mathAnswer),
           hp: honeypot, // expected to be ''
         }),
       })
       if (res.ok) {
-        toast({ status: 'success', title: 'Sent successfully' })
+        toast({ status: 'success', title: 'Message sent', description: 'Thanks — I’ll reply by email.' })
         clearDraft()
+        // A nonce is single-purpose; take a fresh one for any follow-up.
+        setNonce(null)
+        nonceAtRef.current = 0
       } else {
         const d = await res.json().catch(() => ({}))
         toast({ status: 'error', title: d?.error || 'Failed to send' })
@@ -308,7 +350,7 @@ export default function ContactPro({
               >
                 {eyebrowText}
               </Text>
-              <Heading size="md" fontWeight={500} letterSpacing="-0.015em">
+              <Heading as={headingAs} size="md" fontWeight={500} letterSpacing="-0.015em">
                 {headingText}
               </Heading>
               <Text fontSize="sm" color={dim} mt={1}>
@@ -369,6 +411,10 @@ export default function ContactPro({
                     {socials.map((s) => (
                       <IconButton
                         key={s.name}
+                        as="a"
+                        href={s.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         aria-label={s.name}
                         icon={s.icon as any}
                         variant="outline"
@@ -376,7 +422,6 @@ export default function ContactPro({
                         borderColor={border}
                         color={dim}
                         _hover={{ borderColor: borderStrong, color: fg }}
-                        onClick={() => window.open(s.href!, '_blank')}
                       />
                     ))}
                   </HStack>
@@ -410,10 +455,10 @@ export default function ContactPro({
           ▸ Send a message
         </Text>
 
-        <form onSubmit={onSubmit}>
+        <form onSubmit={onSubmit} onFocus={warmNonce} noValidate>
           <VStack spacing={5} align="stretch">
             <HStack spacing={4} align={{ base: 'stretch', md: 'flex-start' }} flexWrap="wrap">
-              <FormControl isRequired isInvalid={!name.trim()} flex={1} minW="200px">
+              <FormControl isRequired isInvalid={showErr('name') && !name.trim()} flex={1} minW="200px">
                 <FormLabel
                   fontFamily={monoFont}
                   fontSize="11px"
@@ -427,6 +472,8 @@ export default function ContactPro({
                 <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
+                  onBlur={() => touch('name')}
+                  autoComplete="name"
                   placeholder="Your name"
                   borderColor={border}
                   _hover={{ borderColor: borderStrong }}
@@ -435,11 +482,11 @@ export default function ContactPro({
                     boxShadow: '0 0 0 1px var(--accent)',
                   }}
                 />
-                {!name.trim() && <FormErrorMessage fontSize="11px">Required</FormErrorMessage>}
+                <FormErrorMessage fontSize="11px">Required</FormErrorMessage>
               </FormControl>
               <FormControl
                 isRequired
-                isInvalid={!/.+@.+\..+/.test(email)}
+                isInvalid={showErr('email') && !/.+@.+\..+/.test(email)}
                 flex={1}
                 minW="200px"
               >
@@ -457,6 +504,9 @@ export default function ContactPro({
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  onBlur={() => touch('email')}
+                  autoComplete="email"
+                  inputMode="email"
                   placeholder="you@example.com"
                   borderColor={border}
                   _hover={{ borderColor: borderStrong }}
@@ -465,9 +515,7 @@ export default function ContactPro({
                     boxShadow: '0 0 0 1px var(--accent)',
                   }}
                 />
-                {!/.+@.+\..+/.test(email) && (
-                  <FormErrorMessage fontSize="11px">Invalid email</FormErrorMessage>
-                )}
+                <FormErrorMessage fontSize="11px">Enter a valid email</FormErrorMessage>
               </FormControl>
             </HStack>
 
@@ -502,7 +550,7 @@ export default function ContactPro({
               </FormControl>
               <FormControl
                 isRequired
-                isInvalid={!subject.trim() && !reason}
+                isInvalid={showErr('subject') && !subject.trim() && !reason}
                 flex={1}
                 minW="200px"
               >
@@ -527,13 +575,11 @@ export default function ContactPro({
                     boxShadow: '0 0 0 1px var(--accent)',
                   }}
                 />
-                {!subject.trim() && !reason && (
-                  <FormErrorMessage fontSize="11px">Subject required</FormErrorMessage>
-                )}
+                <FormErrorMessage fontSize="11px">Subject required</FormErrorMessage>
               </FormControl>
             </HStack>
 
-            <FormControl isRequired isInvalid={!message.trim()}>
+            <FormControl isRequired isInvalid={showErr('message') && (!message.trim() || message.length > MESSAGE_MAX)}>
               <FormLabel
                 fontFamily={monoFont}
                 fontSize="11px"
@@ -547,6 +593,8 @@ export default function ContactPro({
               <Textarea
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
+                onBlur={() => touch('message')}
+                maxLength={MESSAGE_MAX}
                 placeholder="Tell me a bit more…"
                 rows={8}
                 borderColor={border}
@@ -558,7 +606,7 @@ export default function ContactPro({
               />
               <HStack justify="space-between" pt={2}>
                 <Text fontFamily={monoFont} fontSize="10px" color={dim} letterSpacing="0.04em">
-                  {chars} / 1000
+                  {chars} / {MESSAGE_MAX}
                 </Text>
                 <Progress
                   w="180px"
@@ -572,7 +620,7 @@ export default function ContactPro({
                   }}
                 />
               </HStack>
-              {!message.trim() && <FormErrorMessage fontSize="11px">Required</FormErrorMessage>}
+              <FormErrorMessage fontSize="11px">Required</FormErrorMessage>
             </FormControl>
 
             {/* v6 three-layer human check. Honeypot 'hp' is hidden via aria
@@ -609,6 +657,7 @@ export default function ContactPro({
                       inputMode="numeric"
                       value={mathAnswer}
                       onChange={(e) => setMathAnswer(e.target.value)}
+                      isInvalid={submitted && mathAnswer.trim() !== String(expectedMath)}
                       placeholder="?"
                       w="80px"
                       size="sm"
@@ -667,7 +716,8 @@ export default function ContactPro({
                   _hover={{ bg: '#4f46e5' }}
                   _active={{ bg: '#4338ca' }}
                   _disabled={{ opacity: 0.45, cursor: 'not-allowed' }}
-                  isDisabled={!valid}
+                  aria-disabled={!valid}
+                  opacity={valid ? 1 : 0.6}
                   isLoading={sending}
                   loadingText="Sending…"
                   size="md"

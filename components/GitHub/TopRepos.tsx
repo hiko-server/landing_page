@@ -87,19 +87,21 @@ export default function TopRepos() {
             as={motion.a as any}
             initial={{ opacity: 0, y: 12 }}
             whileInView={{ opacity: 1, y: 0 }}
+            whileHover={{ y: -2 }}
             viewport={{ once: true }}
-            transition={{ duration: 0.3, delay: i * 0.04 } as any}
+            transition={{ duration: 0.3, delay: i * 0.04, ease: [0.22, 1, 0.36, 1] } as any}
             display="block"
             border="1px solid"
             borderColor={cardBorder}
             borderRadius="lg"
             p={4}
             position="relative"
+            // framer owns `transform` (inline style), so the lift is whileHover;
+            // CSS only transitions the border.
             sx={{
-              transition:
-                'border-color 250ms var(--ease-out-quart), transform 250ms var(--ease-out-quart)',
-              '&:hover': { borderColor: cardBorderHover, transform: 'translateY(-2px)' },
-              '&:focus-visible': { borderColor: 'var(--accent)' },
+              transition: 'border-color 250ms var(--ease-out-quart)',
+              '&:hover': { borderColor: cardBorderHover },
+              '&:focus-visible': { borderColor: 'var(--accent)', outline: 'none', boxShadow: '0 0 0 1px var(--accent)' },
             }}
           >
             <Flex justify="space-between" align="baseline" mb={2}>

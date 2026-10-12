@@ -20,11 +20,14 @@ export default function SectionLabel({
   children,
   mb = 10,
   id,
+  as = 'h2',
 }: {
   n: number | string
   children: React.ReactNode
   mb?: number | string
   id?: string
+  /** Heading level for the document outline (visual style is identical). */
+  as?: 'h1' | 'h2' | 'h3' | 'p'
 }) {
   const muted = useColorModeValue('gray.600', 'gray.500')
   const padded = typeof n === 'number' ? String(n).padStart(2, '0') : n
@@ -40,8 +43,11 @@ export default function SectionLabel({
       textTransform="uppercase"
       color={muted}
     >
-      <Text as="span" whiteSpace="nowrap">
-        [{padded}] {children}
+      <Text as={as} whiteSpace="nowrap" fontSize="inherit" fontWeight="inherit" letterSpacing="inherit" lineHeight="inherit" m={0}>
+        <Text as="span" aria-hidden>
+          [{padded}]
+        </Text>{' '}
+        {children}
       </Text>
     </Box>
   )

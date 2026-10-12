@@ -32,9 +32,15 @@ const ProjectCard = ({ p, i }: { p: Project; i: number }) => {
 
   return (
     <Box
-      as={motion.div as any}
-      minW={{ base: '270px', md: '320px' }}
+      as={motion.button as any}
+      type="button"
+      aria-expanded={expanded}
+      textAlign="left"
+      display="block"
+      w={{ base: '82vw', sm: '320px' }}
       maxW="380px"
+      bg="transparent"
+      sx={{ scrollSnapAlign: 'start' }}
       border="1px solid"
       borderColor={border}
       borderRadius="lg"
@@ -47,10 +53,8 @@ const ProjectCard = ({ p, i }: { p: Project; i: number }) => {
       transition={{ duration: 0.35, delay: i * 0.05 } as any}
       onClick={() => setExpanded((v) => !v)}
       position="relative"
-      sx={{
-        '&:hover': { borderColor: borderHover },
-        '&:focus-visible': { borderColor: 'var(--accent)', outline: 'none' },
-      }}
+      _hover={{ borderColor: borderHover }}
+      _focusVisible={{ borderColor: 'var(--accent)', outline: 'none', boxShadow: '0 0 0 1px var(--accent)' }}
     >
       {/* Metadata header */}
       <Flex
@@ -124,8 +128,8 @@ const ProjectCard = ({ p, i }: { p: Project; i: number }) => {
         fontSize="11px"
         color={muted}
       >
-        {expanded ? <FaChevronUp size={10} /> : <FaChevronDown size={10} />}
-        <Text>{expanded ? 'less' : 'more'}</Text>
+        {expanded ? <FaChevronUp size={10} aria-hidden /> : <FaChevronDown size={10} aria-hidden />}
+        <Text as="span">{expanded ? 'less' : 'more'}</Text>
       </Flex>
     </Box>
   )
@@ -142,10 +146,26 @@ export default function ProjectSpotlight({ cvEn }: { cvEn?: any[] }) {
   if (!projects.length) return null
 
   return (
-    <Box w="100%" maxW="1100px" overflowX="auto" pb={2}>
-      <Flex gap={4} pb={2} w="max-content">
+    <Box
+      w="100%"
+      maxW="1100px"
+      overflowX="auto"
+      pb={2}
+      role="list"
+      aria-label="Selected projects"
+      sx={{
+        scrollSnapType: 'x mandatory',
+        scrollPaddingInline: '2px',
+        // Soft edge so it reads as scrollable without a scrollbar.
+        maskImage: 'linear-gradient(to right, black calc(100% - 48px), transparent)',
+        WebkitMaskImage: 'linear-gradient(to right, black calc(100% - 48px), transparent)',
+      }}
+    >
+      <Flex gap={4} pb={2} pr={12} w="max-content" align="flex-start">
         {projects.map((p, i) => (
-          <ProjectCard key={i} p={p} i={i} />
+          <Box role="listitem" key={i}>
+            <ProjectCard p={p} i={i} />
+          </Box>
         ))}
       </Flex>
     </Box>

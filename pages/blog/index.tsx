@@ -15,6 +15,7 @@ import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 import SectionLabel from '../../components/General-UI/SectionLabel'
 import { listPosts, type PostFrontmatter, type MDXIndexEntry } from '../../lib/mdx'
+import { formatPostDate, isoDate } from '../../lib/postDate'
 
 type Props = {
   posts: MDXIndexEntry<PostFrontmatter>[]
@@ -69,11 +70,11 @@ export default function BlogIndex({ posts, host }: Props) {
           })),
         }}
       />
-      <HeaderFooter isMobile={false}>
+      <HeaderFooter>
         <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[16, 24]}>
-          <SectionLabel n={1}>Writing</SectionLabel>
+          <SectionLabel n={1} as="p">Writing</SectionLabel>
 
-          <Heading
+          <Heading as="h1"
             mt={6}
             mb={4}
             fontSize={['32px', '44px', '56px']}
@@ -148,6 +149,7 @@ export default function BlogIndex({ posts, host }: Props) {
                   key={p.slug}
                   as={NextLink}
                   href={p.permalink}
+                  role="group"
                   _hover={{ textDecoration: 'none' }}
                   display="block"
                   borderBottom="1px solid"
@@ -160,13 +162,15 @@ export default function BlogIndex({ posts, host }: Props) {
                     gap={[1, 6]}
                   >
                     <Text
+                      as="time"
+                      dateTime={isoDate(p.frontmatter.date) || undefined}
                       flexShrink={0}
                       fontFamily={monoFont}
                       fontSize="12px"
                       color={muted}
                       w={['auto', '110px']}
                     >
-                      {p.frontmatter.date}
+                      {formatPostDate(p.frontmatter.date)}
                     </Text>
                     <Box flex={1}>
                       <Text

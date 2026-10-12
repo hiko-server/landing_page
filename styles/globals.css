@@ -119,6 +119,38 @@
   top: 0.5rem;
 }
 
+/* Visually hidden but available to screen readers / crawlers. */
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* Typewriter caret blink (CSS, so no per-frame React re-render). */
+@keyframes hero-caret {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.hero-caret {
+  animation: hero-caret 1.1s steps(1, end) infinite;
+}
+
+/* Code blocks: rehype-pretty-code emits dual-theme CSS variables
+   (--shiki-light / --shiki-dark) and no colours of its own. */
+[data-rehype-pretty-code-figure] code span {
+  color: var(--shiki-light);
+}
+.chakra-ui-dark [data-rehype-pretty-code-figure] code span,
+[data-theme='dark'] [data-rehype-pretty-code-figure] code span {
+  color: var(--shiki-dark);
+}
+
 /* ──────────────────────────────────────────────────────────────────────────
  * Reduced motion — respect user preference everywhere.
  * ──────────────────────────────────────────────────────────────────────── */
@@ -213,9 +245,27 @@
     width: 210mm !important;
     min-height: 297mm !important;
     margin: 0 !important;
+    /* Same side padding as on screen (identical line wraps), plus a real top /
+       bottom margin that is repeated on EVERY printed page — without `clone`
+       page 2+ would start flush against the paper edge. */
+    padding: 10mm 20px !important;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
     box-shadow: none !important;
+    border-radius: 0 !important;
     page-break-after: auto;
     break-inside: auto;
+  }
+}
+
+/* On screen the sheet reads as paper: hairline edge + soft lift. */
+@media screen {
+  .cv-print-area #A4Paper {
+    border-radius: 2px;
+    box-shadow:
+      0 0 0 1px rgba(0, 0, 0, 0.06),
+      0 1px 2px rgba(0, 0, 0, 0.06),
+      0 12px 32px -8px rgba(0, 0, 0, 0.18);
   }
 }
 

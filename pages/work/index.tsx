@@ -22,6 +22,9 @@ type Props = {
 }
 
 export default function WorkIndex({ items, host }: Props) {
+  // AA contrast on both themes (#22c55e / #a855f7 at 10px failed on light).
+  const liveColor = useColorModeValue('green.700', 'green.300')
+  const featuredColor = useColorModeValue('purple.700', 'purple.300')
   const muted = useColorModeValue('gray.600', 'gray.500')
   const border = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
   const hover = useColorModeValue('rgba(0,0,0,0.20)', 'rgba(255,255,255,0.20)')
@@ -59,11 +62,11 @@ export default function WorkIndex({ items, host }: Props) {
           })),
         }}
       />
-      <HeaderFooter isMobile={false}>
+      <HeaderFooter>
         <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[16, 24]}>
-          <SectionLabel n={2}>Selected Work</SectionLabel>
+          <SectionLabel n={2} as="p">Selected Work</SectionLabel>
 
-          <Heading
+          <Heading as="h1"
             mt={6}
             mb={4}
             fontSize={['32px', '44px', '56px']}
@@ -139,7 +142,7 @@ export default function WorkIndex({ items, host }: Props) {
                                 fontSize="10px"
                                 letterSpacing="0.12em"
                                 textTransform="uppercase"
-                                color="#a855f7"
+                                color={featuredColor}
                               >
                                 ★ Featured · {fm.period || '—'}
                               </Text>
@@ -149,7 +152,7 @@ export default function WorkIndex({ items, host }: Props) {
                                   fontSize="10px"
                                   letterSpacing="0.08em"
                                   textTransform="uppercase"
-                                  color={fm.status === 'live' ? '#22c55e' : muted}
+                                  color={fm.status === 'live' ? liveColor : muted}
                                   border="1px solid"
                                   borderColor={fm.status === 'live' ? '#22c55e44' : border}
                                   px={2}
@@ -218,7 +221,7 @@ export default function WorkIndex({ items, host }: Props) {
                             fontSize="10px"
                             letterSpacing="0.08em"
                             textTransform="uppercase"
-                            color={fm.status === 'live' ? '#22c55e' : muted}
+                            color={fm.status === 'live' ? liveColor : muted}
                             border="1px solid"
                             borderColor={fm.status === 'live' ? '#22c55e44' : border}
                             px={2}

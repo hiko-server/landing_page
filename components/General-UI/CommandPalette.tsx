@@ -120,7 +120,6 @@ export default function CommandPalette({
       {
         group: 'Actions',
         label: colorMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode',
-        shortcut: '⌘ T',
         action: toggleColorMode,
         keywords: 'theme toggle appearance',
       },
@@ -128,7 +127,6 @@ export default function CommandPalette({
         group: 'Actions',
         label: 'Copy email address',
         hint: HIKO_EMAIL,
-        shortcut: '⌘ E',
         action: async () => {
           try {
             await navigator.clipboard.writeText(HIKO_EMAIL)
@@ -213,11 +211,37 @@ export default function CommandPalette({
     setTimeout(() => {
       if (it.action) it.action()
       else if (it.href) {
-        if (it.external) window.open(it.href, '_blank')
+        if (it.external) window.open(it.href, '_blank', 'noopener,noreferrer')
         else router.push(it.href)
       }
     }, 60)
   }
+
+  // "G then <key>" navigation (the shortcuts listed next to Pages), active
+  // anywhere on the site except while typing in a field.
+  useEffect(() => {
+    const targets: Record<string, string> = {}
+    for (const it of items) {
+      const m = it.shortcut?.match(/^G ([A-Z])$/)
+      if (m && it.href) targets[m[1].toLowerCase()] = it.href
+    }
+    let armedUntil = 0
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (isOpen || e.metaKey || e.ctrlKey || e.altKey || e.repeat) return
+      const el = e.target as HTMLElement | null
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return
+      const k = e.key.toLowerCase()
+      if (Date.now() < armedUntil && targets[k]) {
+        armedUntil = 0
+        e.preventDefault()
+        if (router.asPath.split(/[?#]/)[0] !== targets[k]) router.push(targets[k])
+        return
+      }
+      armedUntil = k === 'g' && !e.shiftKey ? Date.now() + 1200 : 0
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [items, isOpen, router])
 
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
@@ -278,6 +302,12 @@ export default function CommandPalette({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKey}
+            role="combobox"
+            aria-label="Search pages, actions, posts and projects"
+            aria-expanded
+            aria-controls="cmdk-list"
+            aria-autocomplete="list"
+            aria-activedescendant={filtered.length ? `cmdk-opt-${activeIdx}` : undefined}
             placeholder="Search pages, actions, posts, projects…"
             variant="unstyled"
             fontSize="15px"
@@ -300,7 +330,7 @@ export default function CommandPalette({
         </Flex>
 
         {/* Results */}
-        <Box ref={listRef} maxH="60vh" overflowY="auto" p={2}>
+        <Box ref={listRef} maxH="60vh" overflowY="auto" p={2} id="cmdk-list" role="listbox" aria-label="Results">
           {grouped.length === 0 ? (
             <Flex
               direction="column"
@@ -317,8 +347,9 @@ export default function CommandPalette({
             </Flex>
           ) : (
             grouped.map(([group, list]) => (
-              <Box key={group} mb={2}>
+              <Box key={group} mb={2} role="group" aria-label={group}>
                 <Text
+                  role="presentation"
                   px={3}
                   pt={3}
                   pb={1.5}
@@ -337,6 +368,8 @@ export default function CommandPalette({
                     <Flex
                       key={`${it.group}-${it.label}-${it.href ?? ''}`}
                       data-idx={idx}
+                      id={`cmdk-opt-${idx}`}
+                      aria-selected={active}
                       onMouseEnter={() => setActiveIdx(idx)}
                       onClick={() => runItem(it)}
                       px={3}
@@ -347,7 +380,7 @@ export default function CommandPalette({
                       alignItems="center"
                       justifyContent="space-between"
                       gap={3}
-                      role="button"
+                      role="option"
                     >
                       <Flex alignItems="baseline" gap={2} minW={0}>
                         <Text fontSize="14px" color={fg} noOfLines={1}>

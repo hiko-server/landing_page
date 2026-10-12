@@ -59,7 +59,7 @@ export default function WorkCase({ slug, frontmatter, source, readingMinutes }: 
           ]),
         ]}
       />
-      <HeaderFooter isMobile={false}>
+      <HeaderFooter>
         <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[12, 16]}>
           <Link
             as={NextLink}
@@ -74,7 +74,7 @@ export default function WorkCase({ slug, frontmatter, source, readingMinutes }: 
             ← All projects
           </Link>
 
-          <SectionLabel n="02">Case Study</SectionLabel>
+          <SectionLabel n="02" as="p">Case Study</SectionLabel>
 
           <Heading
             as="h1"

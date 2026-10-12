@@ -1,5 +1,3 @@
-import { appWithTranslation } from 'next-i18next'
-
 import React, { useEffect } from 'react'
 import { useRouter } from 'next/router'
 import localFont from 'next/font/local'
@@ -47,25 +45,13 @@ const mono = localFont({
   fallback: ['ui-monospace', 'monospace'],
 })
 
-// using the chakra-ui (styled components)
-import { ChakraProvider, CSSReset, ColorModeScript } from '@chakra-ui/react'
-import { AnimatePresence, motion } from 'framer-motion'
-
-import { config } from '@fortawesome/fontawesome-svg-core'
-import '@fortawesome/fontawesome-svg-core/styles.css'
-config.autoAddCss = false
+import { ChakraProvider } from '@chakra-ui/react'
+import { AnimatePresence, MotionConfig, motion } from 'framer-motion'
+import Head from 'next/head'
 
 import theme from '../theme/chakra'
-
-import { MainProvider } from '../context/state'
-import { SettingsAppProvider } from '../context/settingsState'
-import { AuthProvider } from '../context/authState'
-import Head from 'next/head';
 import ScrollToTop from '../components/ScrollToTop/ScrollToTop'
 import ScrollProgressBar from '../components/General-UI/ScrollProgressBar'
-import FloatingNav from '../components/General-UI/FloatingNav'
-
-// const queryClient = new QueryClient()
 
 const App = ({ Component, pageProps }: any) => {
   const router = useRouter()
@@ -78,42 +64,36 @@ const App = ({ Component, pageProps }: any) => {
       router.events.off('routeChangeComplete', handleRouteChange)
     }
   }, [router.events])
+  // Animate between *pages* only: a hash / query change (in-page anchors,
+  // ?lang=zh, ?tab=cv) must not remount the whole page.
+  const pageKey = router.asPath.split(/[?#]/)[0]
+
   return (
     <div className={`${sans.variable} ${mono.variable}`} style={{ minHeight: '100%' }}>
-      {/* <Provider store={store}>
-        <QueryClientProvider client={queryClient}> */}
       <ChakraProvider theme={theme}>
-        <AuthProvider>
-            <MainProvider>
-              <SettingsAppProvider>
-                <CSSReset />
-                <ColorModeScript initialColorMode={(theme as any).config?.initialColorMode || 'system'} />
-                <Head>
-                  <meta name="viewport" content="width=device-width, initial-scale=1" />
-                  <link rel="icon" href="/images/favicon-32x32.png" />
-                </Head>
-                <AnimatePresence initial={false} mode="wait">
-                  <motion.div
-                    key={router.asPath}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <Component {...pageProps} />
-                  </motion.div>
-                </AnimatePresence>
-                <ScrollToTop />
-                <ScrollProgressBar />
-                <FloatingNav />
-              </SettingsAppProvider>
-            </MainProvider>
-        </AuthProvider>
+        {/* Every framer-motion animation honours prefers-reduced-motion. */}
+        <MotionConfig reducedMotion="user">
+          <Head>
+            <meta name="viewport" content="width=device-width, initial-scale=1" />
+            <link rel="icon" href="/images/favicon-32x32.png" />
+          </Head>
+          <AnimatePresence initial={false} mode="wait">
+            <motion.div
+              key={pageKey}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            >
+              <Component {...pageProps} />
+            </motion.div>
+          </AnimatePresence>
+          <ScrollToTop />
+          <ScrollProgressBar />
+        </MotionConfig>
       </ChakraProvider>
-      {/* </QueryClientProvider>
-      </Provider> */}
     </div>
   )
 }
 
-export default appWithTranslation(App)
+export default App
