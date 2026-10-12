@@ -1,5 +1,4 @@
-'use client'
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   Box,
   Flex,
@@ -9,212 +8,386 @@ import {
   ModalOverlay,
   Text,
   Kbd,
-  useColorMode,
-  useColorModeValue,
-  useToast,
   Spinner,
+  useColorMode,
+  usePrefersReducedMotion,
+  useToast,
 } from '@chakra-ui/react'
 import { useRouter } from 'next/router'
+import { highlightSegments, rankItems } from '../Article/fuzzyMatch'
+import { jumpToSection } from '../Article/useActiveHeading'
+import { copyText } from '../MDX/clipboard'
 
 /**
- * v6 ⌘K Command Palette.
+ * ⌘K command palette.
  *
- * Triggered globally with Cmd/Ctrl + K. Renders inside a Chakra Modal with
- * a single Input, results grouped into three sections (Pages / Actions /
- * Content), keyboard-navigable, fuzzy-filtered.
+ *   - Fuzzy search over pages, actions, posts, case studies and the sections
+ *     of the current page (elements with `data-nav-label` + id, and article
+ *     headings), ranked best-first with the matched characters highlighted.
+ *   - Empty query: recently used items, this page's sections, everything
+ *     grouped, and a keyboard-shortcut cheatsheet.
+ *   - WAI-ARIA combobox: the input owns a listbox, the active option is
+ *     announced via aria-activedescendant, result counts via a live region.
+ *   - Honours prefers-reduced-motion (no open/close animation, instant
+ *     section jumps).
  *
- * No external dep (cmdk is fine but Chakra Modal + a small matcher is enough).
- *
- * Dynamic content (recent blog posts + case studies) is fetched once when the
- * palette first opens, then memoised for the rest of the session.
+ * Posts / case studies are fetched once, the first time the palette opens.
+ * Recent items live in localStorage (per browser; failures are ignored).
  */
 
+type Group = 'Recent' | 'On this page' | 'Pages' | 'Actions' | 'Writing' | 'Work'
+type Kind = 'nav' | 'action' | 'section'
+
 type Item = {
-  group: 'Pages' | 'Actions' | 'Writing' | 'Work'
+  id: string
+  group: Exclude<Group, 'Recent'>
+  kind: Kind
   label: string
   hint?: string
   shortcut?: string
   href?: string
   external?: boolean
-  action?: () => void
+  run?: () => void | Promise<void>
   keywords?: string
+  lang?: string
 }
 
-type DynamicLists = {
-  posts: { slug: string; title: string; permalink: string }[]
-  work: { slug: string; title: string; permalink: string }[]
-}
+type Row = { item: Item; group: Group; indices: number[] }
+
+type ListEntry = { slug: string; title: string; permalink: string; description?: string | null; tags?: string[]; tech?: string[]; lang?: string }
+type DynamicLists = { posts: ListEntry[]; work: ListEntry[] }
+
+type RecentRecord = { id: string; label: string; href?: string; group: Item['group'] }
 
 const HIKO_EMAIL = 'hi@lucian-dev.com'
+const RECENT_KEY = 'cmdk:recent:v1'
+const RECENT_MAX = 5
+const RESULT_LIMIT = 40
+const GROUP_ORDER: Group[] = ['Recent', 'On this page', 'Pages', 'Actions', 'Writing', 'Work']
+const GROUP_BOOST: Record<Item['group'], number> = { Pages: 6, Actions: 4, 'On this page': 3, Writing: 2, Work: 2 }
+const MONO = 'var(--font-geist-mono), monospace'
 
-function matches(item: Item, q: string): boolean {
-  if (!q) return true
-  const hay = `${item.label} ${item.group} ${item.keywords || ''}`.toLowerCase()
-  return q
-    .toLowerCase()
-    .split(/\s+/)
-    .every((tok) => hay.includes(tok))
+function readRecent(): RecentRecord[] {
+  try {
+    const raw = window.localStorage.getItem(RECENT_KEY)
+    const list = raw ? JSON.parse(raw) : []
+    return Array.isArray(list)
+      ? list.filter((r): r is RecentRecord => !!r && typeof r.id === 'string' && typeof r.label === 'string').slice(0, RECENT_MAX)
+      : []
+  } catch {
+    return []
+  }
 }
 
-export default function CommandPalette({
-  isOpen,
-  onClose,
-}: {
-  isOpen: boolean
-  onClose: () => void
-}) {
+function writeRecent(list: RecentRecord[]) {
+  try {
+    window.localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, RECENT_MAX)))
+  } catch {
+    // Storage disabled / full — recents are a convenience only.
+  }
+}
+
+/** Visible text of a heading without the "#" self-link marker. */
+function headingLabel(el: HTMLElement): string {
+  return Array.from(el.childNodes)
+    .filter((n) => !(n instanceof HTMLElement && n.classList.contains('heading-anchor-icon')))
+    .map((n) => n.textContent || '')
+    .join('')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function collectSections(): Item[] {
+  const seen = new Set<string>()
+  const out: Item[] = []
+  document
+    .querySelectorAll<HTMLElement>('[data-nav-label][id], .article-prose h2[id], .article-prose h3[id]')
+    .forEach((el) => {
+      if (!el.id || seen.has(el.id) || el.getClientRects().length === 0) return
+      const label = el.dataset.navLabel || headingLabel(el)
+      if (!label) return
+      seen.add(el.id)
+      out.push({
+        id: `section:${el.id}`,
+        group: 'On this page',
+        kind: 'section',
+        label,
+        hint: el.tagName === 'H3' ? 'subsection' : 'section',
+        keywords: 'jump section heading',
+        run: () => jumpToSection(el.id),
+      })
+    })
+  return out
+}
+
+function Highlighted({ text, indices }: { text: string; indices: number[] }) {
+  return (
+    <>
+      {highlightSegments(text, indices).map((seg, i) =>
+        seg.match ? (
+          <Box as="mark" key={i} bg="transparent" color="var(--accent)" fontWeight={600}>
+            {seg.text}
+          </Box>
+        ) : (
+          <React.Fragment key={i}>{seg.text}</React.Fragment>
+        ),
+      )}
+    </>
+  )
+}
+
+function Key({ children }: { children: React.ReactNode }) {
+  return (
+    <Kbd fontFamily={MONO} fontSize="10px" fontWeight={500} bg="transparent" border="1px solid" borderColor="page.border-strong" color="page.fg-secondary">
+      {children}
+    </Kbd>
+  )
+}
+
+export default function CommandPalette({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const router = useRouter()
   const toast = useToast()
+  const reduceMotion = usePrefersReducedMotion()
   const { colorMode, toggleColorMode } = useColorMode()
+  const baseId = useId()
+  const listId = `${baseId}-list`
+  const optId = (i: number) => `${baseId}-opt-${i}`
+
   const [query, setQuery] = useState('')
   const [activeIdx, setActiveIdx] = useState(0)
   const [dyn, setDyn] = useState<DynamicLists | null>(null)
   const [loading, setLoading] = useState(false)
+  const [sections, setSections] = useState<Item[]>([])
+  const [recent, setRecent] = useState<RecentRecord[]>([])
+  const [restoreFocus, setRestoreFocus] = useState(true)
+  const [isMac, setIsMac] = useState(true)
+  const inputRef = useRef<HTMLInputElement | null>(null)
   const listRef = useRef<HTMLDivElement | null>(null)
+  const pending = useRef<(() => void) | null>(null)
   const dynLoaded = useRef(false)
 
-  // Theme tokens
-  const bg = useColorModeValue('white', 'gray.900')
-  const border = useColorModeValue('rgba(0,0,0,0.10)', 'rgba(255,255,255,0.12)')
-  const dim = useColorModeValue('gray.600', 'gray.500')
-  const fg = useColorModeValue('gray.800', 'gray.100')
-  const activeBg = useColorModeValue('rgba(99,102,241,0.10)', 'rgba(99,102,241,0.18)')
-
-  // Reset state when palette opens
   useEffect(() => {
-    if (isOpen) {
-      setQuery('')
-      setActiveIdx(0)
-    }
+    setIsMac(/Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent))
+  }, [])
+
+  // Fresh state every time the palette opens.
+  useEffect(() => {
+    if (!isOpen) return
+    setQuery('')
+    setActiveIdx(0)
+    setRestoreFocus(true)
+    setSections(collectSections())
+    setRecent(readRecent())
   }, [isOpen])
 
-  // Fetch dynamic lists once when first opened (then cache for the session)
+  // Posts + case studies: fetched once, cached for the session.
   useEffect(() => {
     if (!isOpen || dynLoaded.current) return
+    dynLoaded.current = true
     setLoading(true)
     Promise.all([
       fetch('/api/blog/list').then((r) => (r.ok ? r.json() : { items: [] })),
       fetch('/api/work/list').then((r) => (r.ok ? r.json() : { items: [] })),
     ])
-      .then(([blog, work]) => {
-        setDyn({ posts: blog.items || [], work: work.items || [] })
-        dynLoaded.current = true
+      .then(([blog, work]) => setDyn({ posts: blog.items || [], work: work.items || [] }))
+      .catch(() => {
+        dynLoaded.current = false
+        setDyn({ posts: [], work: [] })
       })
-      .catch(() => setDyn({ posts: [], work: [] }))
       .finally(() => setLoading(false))
   }, [isOpen])
 
-  // Compose static + dynamic items
+  const copyAndToast = useCallback(
+    async (text: string, title: string) => {
+      const ok = await copyText(text)
+      toast(ok ? { status: 'success', title, description: text } : { status: 'error', title: 'Copy failed' })
+    },
+    [toast],
+  )
+
   const items: Item[] = useMemo(() => {
+    const page = (label: string, href: string, shortcut?: string, keywords?: string): Item => ({
+      id: `page:${href}`,
+      group: 'Pages',
+      kind: 'nav',
+      label,
+      href,
+      shortcut,
+      keywords,
+    })
     const list: Item[] = [
-      // Pages
-      { group: 'Pages', label: 'Home', shortcut: 'G H', href: '/' },
-      { group: 'Pages', label: 'About', shortcut: 'G A', href: '/about', keywords: 'bio profile' },
-      { group: 'Pages', label: 'Work', shortcut: 'G W', href: '/work', keywords: 'case studies projects' },
-      { group: 'Pages', label: 'Writing', shortcut: 'G B', href: '/blog', keywords: 'blog posts essays' },
-      { group: 'Pages', label: 'CV', shortcut: 'G C', href: '/cv', keywords: 'resume curriculum' },
-      { group: 'Pages', label: 'Now', shortcut: 'G N', href: '/now', keywords: 'status current focus' },
-      { group: 'Pages', label: 'Uses', shortcut: 'G U', href: '/uses', keywords: 'tools gear setup' },
-      { group: 'Pages', label: 'Contact', href: '/contact', keywords: 'email message' },
-      // Actions
+      page('Home', '/', 'G H', 'start landing index'),
+      page('About', '/about', 'G A', 'bio profile'),
+      page('Work', '/work', 'G W', 'case studies projects portfolio'),
+      page('Writing', '/blog', 'G B', 'blog posts essays articles'),
+      page('CV', '/cv', 'G C', 'resume curriculum vitae'),
+      page('Now', '/now', 'G N', 'status current focus'),
+      page('Uses', '/uses', 'G U', 'tools gear setup'),
+      page('Contact', '/contact', undefined, 'email message hire'),
       {
+        id: 'action:cv-pdf',
         group: 'Actions',
-        label: colorMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode',
-        action: toggleColorMode,
-        keywords: 'theme toggle appearance',
+        kind: 'nav',
+        label: 'Download CV (PDF)',
+        hint: 'print / save as PDF',
+        href: '/cv?print=1',
+        keywords: 'resume pdf print save download',
       },
       {
+        id: 'action:cv-zh',
         group: 'Actions',
+        kind: 'nav',
+        label: 'CV in 中文',
+        hint: 'Chinese version',
+        href: '/cv?lang=zh',
+        keywords: 'chinese zh resume 简历 中文 cv',
+      },
+      {
+        id: 'action:theme',
+        group: 'Actions',
+        kind: 'action',
+        label: 'Toggle theme',
+        hint: colorMode === 'dark' ? 'switch to light' : 'switch to dark',
+        run: toggleColorMode,
+        keywords: 'dark light mode appearance colour color',
+      },
+      {
+        id: 'action:copy-link',
+        group: 'Actions',
+        kind: 'action',
+        label: 'Copy page link',
+        hint: 'share this page',
+        run: () => copyAndToast(window.location.href, 'Link copied'),
+        keywords: 'url share permalink clipboard',
+      },
+      {
+        id: 'action:copy-email',
+        group: 'Actions',
+        kind: 'action',
         label: 'Copy email address',
         hint: HIKO_EMAIL,
-        action: async () => {
-          try {
-            await navigator.clipboard.writeText(HIKO_EMAIL)
-            toast({ status: 'success', title: 'Email copied', description: HIKO_EMAIL })
-          } catch {
-            toast({ status: 'error', title: 'Copy failed' })
-          }
-        },
-        keywords: 'contact mail',
+        run: () => copyAndToast(HIKO_EMAIL, 'Email copied'),
+        keywords: 'contact mail clipboard',
       },
       {
+        id: 'action:source',
         group: 'Actions',
+        kind: 'nav',
         label: 'View source on GitHub',
         href: 'https://github.com/hiko-server/landing_page',
         external: true,
         keywords: 'repo source code',
       },
       {
+        id: 'action:rss',
         group: 'Actions',
-        label: 'View RSS feed',
-        href: '/api/rss.xml',
+        kind: 'nav',
+        label: 'RSS feed',
+        href: '/feed.xml',
         external: true,
-        keywords: 'subscribe feed',
+        keywords: 'subscribe feed atom',
       },
       {
+        id: 'action:admin',
         group: 'Actions',
+        kind: 'nav',
         label: 'Admin login',
         href: '/admin/login',
         keywords: 'sign in dashboard',
       },
     ]
-
-    // Dynamic: blog posts + work case studies
-    if (dyn) {
-      for (const p of dyn.posts.slice(0, 10)) {
-        list.push({
-          group: 'Writing',
-          label: p.title || p.slug,
-          hint: p.slug,
-          href: p.permalink,
-          keywords: 'post blog',
-        })
-      }
-      for (const w of dyn.work.slice(0, 10)) {
-        list.push({
-          group: 'Work',
-          label: w.title || w.slug,
-          hint: w.slug,
-          href: w.permalink,
-          keywords: 'project case study',
-        })
-      }
+    for (const p of dyn?.posts || []) {
+      list.push({
+        id: `post:${p.slug}`,
+        group: 'Writing',
+        kind: 'nav',
+        label: p.title || p.slug,
+        href: p.permalink,
+        keywords: ['post blog', p.description, ...(p.tags || [])].filter(Boolean).join(' '),
+        lang: p.lang && p.lang !== 'en' ? p.lang : undefined,
+      })
+    }
+    for (const w of dyn?.work || []) {
+      list.push({
+        id: `work:${w.slug}`,
+        group: 'Work',
+        kind: 'nav',
+        label: w.title || w.slug,
+        href: w.permalink,
+        keywords: ['project case study', w.description, ...(w.tech || [])].filter(Boolean).join(' '),
+        lang: w.lang && w.lang !== 'en' ? w.lang : undefined,
+      })
     }
     return list
-  }, [dyn, colorMode, toggleColorMode, toast])
+  }, [dyn, colorMode, toggleColorMode, copyAndToast])
 
-  const filtered = useMemo(() => items.filter((i) => matches(i, query)), [items, query])
+  const recentItems: Item[] = useMemo(() => {
+    const out: Item[] = []
+    for (const r of recent) {
+      const live = items.find((i) => i.id === r.id)
+      if (live) out.push(live)
+      else if (r.href && r.href.startsWith('/') && !r.href.startsWith('//')) {
+        out.push({ id: r.id, group: r.group, kind: 'nav', label: r.label, href: r.href })
+      }
+    }
+    return out
+  }, [recent, items])
 
-  // Group filtered items, preserving the group order from `items`
-  const grouped = useMemo(() => {
-    const order: Item['group'][] = ['Pages', 'Actions', 'Writing', 'Work']
-    return order
-      .map((g) => [g, filtered.filter((i) => i.group === g)] as const)
-      .filter(([, list]) => list.length > 0)
-  }, [filtered])
+  const rows: Row[] = useMemo(() => {
+    const q = query.trim()
+    if (!q) {
+      const grouped: Row[] = []
+      const push = (group: Group, list: Item[]) => list.forEach((item) => grouped.push({ item, group, indices: [] }))
+      push('Recent', recentItems)
+      push('On this page', sections)
+      for (const g of ['Pages', 'Actions', 'Writing', 'Work'] as const) {
+        const list = items.filter((i) => i.group === g)
+        push(g, g === 'Writing' || g === 'Work' ? list.slice(0, 6) : list)
+      }
+      return grouped
+    }
+    const recentIds = new Set(recent.map((r) => r.id))
+    return rankItems([...sections, ...items], q, (it) => GROUP_BOOST[it.group] + (recentIds.has(it.id) ? 8 : 0))
+      .slice(0, RESULT_LIMIT)
+      .map(({ item, indices }) => ({ item, group: item.group, indices }))
+  }, [query, items, sections, recentItems, recent])
 
-  // Reset cursor when filter changes
+  useEffect(() => setActiveIdx(0), [query])
+
   useEffect(() => {
-    setActiveIdx(0)
-  }, [query])
-
-  // Scroll active row into view
-  useEffect(() => {
+    if (!isOpen) return
     const el = listRef.current?.querySelector<HTMLElement>(`[data-idx="${activeIdx}"]`)
     el?.scrollIntoView({ block: 'nearest' })
-  }, [activeIdx])
+  }, [activeIdx, isOpen])
 
-  const runItem = (it: Item | undefined) => {
-    if (!it) return
-    onClose()
-    // Defer so the modal closes first, then navigate / fire action
-    setTimeout(() => {
-      if (it.action) it.action()
-      else if (it.href) {
-        if (it.external) window.open(it.href, '_blank', 'noopener,noreferrer')
-        else router.push(it.href)
+  const remember = (item: Item) => {
+    if (item.kind === 'section') return
+    const record: RecentRecord = { id: item.id, label: item.label, href: item.href, group: item.group }
+    const next = [record, ...readRecent().filter((r) => r.id !== item.id)]
+    writeRecent(next)
+  }
+
+  const runItem = (item: Item | undefined) => {
+    if (!item) return
+    remember(item)
+    // Navigation and section jumps move focus themselves; actions hand focus
+    // back to whatever opened the palette.
+    setRestoreFocus(item.kind === 'action')
+    pending.current = () => {
+      if (item.run) void item.run()
+      else if (item.href) {
+        if (item.external) window.open(item.href, '_blank', 'noopener,noreferrer')
+        else router.push(item.href)
       }
-    }, 60)
+    }
+    onClose()
+  }
+
+  // Run the chosen item once the dialog (and its focus trap) is gone.
+  const onCloseComplete = () => {
+    const run = pending.current
+    pending.current = null
+    run?.()
   }
 
   // "G then <key>" navigation (the shortcuts listed next to Pages), active
@@ -243,225 +416,232 @@ export default function CommandPalette({
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [items, isOpen, router])
 
-  const onKey = (e: React.KeyboardEvent) => {
+  const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.nativeEvent.isComposing) return
     if (e.key === 'ArrowDown') {
       e.preventDefault()
-      setActiveIdx((i) => Math.min(i + 1, filtered.length - 1))
+      setActiveIdx((i) => (rows.length ? (i + 1) % rows.length : 0))
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
-      setActiveIdx((i) => Math.max(i - 1, 0))
+      setActiveIdx((i) => (rows.length ? (i - 1 + rows.length) % rows.length : 0))
     } else if (e.key === 'Enter') {
       e.preventDefault()
-      runItem(filtered[activeIdx])
-    } else if (e.key === 'Escape') {
-      e.preventDefault()
-      onClose()
+      runItem(rows[activeIdx]?.item)
     }
   }
+
+  const mod = isMac ? '⌘' : 'Ctrl'
+  const searching = query.trim() !== ''
+  const pageShortcuts = items.filter((i) => i.shortcut)
+
+  const renderRow = (row: Row, idx: number) => {
+    const { item } = row
+    const active = idx === activeIdx
+    return (
+      <Flex
+        key={`${row.group}:${item.id}`}
+        id={optId(idx)}
+        data-idx={idx}
+        role="option"
+        aria-selected={active}
+        onMouseMove={() => !active && setActiveIdx(idx)}
+        onClick={() => runItem(item)}
+        px={3}
+        py={2}
+        minH="40px"
+        borderRadius="md"
+        cursor="pointer"
+        bg={active ? 'var(--accent-soft)' : 'transparent'}
+        boxShadow={active ? 'inset 2px 0 0 var(--accent)' : 'none'}
+        alignItems="center"
+        justifyContent="space-between"
+        gap={3}
+      >
+        <Flex alignItems="baseline" gap={2} minW={0}>
+          <Text as="span" fontSize="14px" color="page.fg" noOfLines={1} lang={item.lang}>
+            <Highlighted text={item.label} indices={row.indices} />
+          </Text>
+          {(item.hint || row.group === 'Recent') && (
+            <Text as="span" fontFamily={MONO} fontSize="11px" color="page.fg-secondary" noOfLines={1}>
+              {row.group === 'Recent' ? item.group : item.hint}
+            </Text>
+          )}
+        </Flex>
+        <Flex alignItems="center" gap={2} flexShrink={0}>
+          {searching && (
+            <Text as="span" fontFamily={MONO} fontSize="10px" letterSpacing="0.08em" textTransform="uppercase" color="page.fg-secondary">
+              {item.group}
+            </Text>
+          )}
+          {!searching && item.shortcut && <Key>{item.shortcut}</Key>}
+          {item.external && (
+            <Text as="span" aria-hidden color="page.fg-secondary" fontSize="12px">
+              ↗
+            </Text>
+          )}
+        </Flex>
+      </Flex>
+    )
+  }
+
+  const renderGrouped = () => {
+    let idx = 0
+    return GROUP_ORDER.map((group) => {
+      const groupRows = rows.filter((r) => r.group === group)
+      if (!groupRows.length) return null
+      const headingId = `${baseId}-group-${group.replace(/\s+/g, '-').toLowerCase()}`
+      return (
+        <Box key={group} role="group" aria-labelledby={headingId} mb={2}>
+          <Text
+            id={headingId}
+            px={3}
+            pt={3}
+            pb={1.5}
+            fontFamily={MONO}
+            fontSize="10px"
+            letterSpacing="0.16em"
+            textTransform="uppercase"
+            color="page.fg-secondary"
+          >
+            {group}
+          </Text>
+          {groupRows.map((row) => renderRow(row, idx++))}
+        </Box>
+      )
+    })
+  }
+
+  const resultText = searching
+    ? `${rows.length} result${rows.length === 1 ? '' : 's'}`
+    : `${rows.length} command${rows.length === 1 ? '' : 's'}`
 
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
+      onCloseComplete={onCloseComplete}
       size="xl"
-      motionPreset="slideInBottom"
+      motionPreset={reduceMotion ? 'none' : 'slideInBottom'}
       isCentered={false}
-      initialFocusRef={undefined}
+      initialFocusRef={inputRef}
+      returnFocusOnClose={restoreFocus}
     >
       <ModalOverlay backdropFilter="blur(12px)" bg="rgba(0,0,0,0.45)" />
       <ModalContent
-        bg={bg}
+        aria-label="Command palette"
+        bg="page.bg"
         border="1px solid"
-        borderColor={border}
+        borderColor="page.border-strong"
         borderRadius="xl"
-        mt={['10vh', '15vh']}
+        mt={['8vh', '15vh']}
         mx={4}
         boxShadow="0 24px 60px rgba(0,0,0,0.35)"
         overflow="hidden"
       >
-        {/* Search input */}
-        <Flex
-          borderBottom="1px solid"
-          borderColor={border}
-          px={4}
-          h="56px"
-          alignItems="center"
-          gap={3}
-        >
-          <Text
-            as="span"
-            color={dim}
-            fontFamily="var(--font-geist-mono), monospace"
-            fontSize="13px"
-            lineHeight={1}
-            transform="translateY(1px)"
-          >
+        <Flex borderBottom="1px solid" borderColor="page.border" px={4} h="56px" alignItems="center" gap={3}>
+          <Text as="span" aria-hidden color="page.fg-secondary" fontFamily={MONO} fontSize="13px" lineHeight={1}>
             ›
           </Text>
           <Input
+            ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKey}
             role="combobox"
-            aria-label="Search pages, actions, posts and projects"
-            aria-expanded
-            aria-controls="cmdk-list"
+            aria-label="Search pages, sections, actions, posts and projects"
+            aria-expanded={rows.length > 0}
+            aria-controls={listId}
             aria-autocomplete="list"
-            aria-activedescendant={filtered.length ? `cmdk-opt-${activeIdx}` : undefined}
-            placeholder="Search pages, actions, posts, projects…"
+            aria-activedescendant={rows.length ? optId(activeIdx) : undefined}
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+            placeholder="Search or jump to…"
             variant="unstyled"
             fontSize="15px"
-            color={fg}
-            _placeholder={{ color: dim }}
-            autoFocus
+            color="page.fg"
+            _placeholder={{ color: 'page.fg-secondary' }}
             flex={1}
           />
-          {loading && <Spinner size="xs" color={dim} />}
-          <Kbd
-            fontFamily="var(--font-geist-mono), monospace"
-            fontSize="10px"
-            bg="transparent"
-            border="1px solid"
-            borderColor={border}
-            color={dim}
-          >
-            ESC
-          </Kbd>
+          {loading && <Spinner size="xs" color="page.fg-secondary" label="Loading posts and projects" />}
+          <Key>ESC</Key>
         </Flex>
 
-        {/* Results */}
-        <Box ref={listRef} maxH="60vh" overflowY="auto" p={2} id="cmdk-list" role="listbox" aria-label="Results">
-          {grouped.length === 0 ? (
-            <Flex
-              direction="column"
-              align="center"
-              justify="center"
-              py={10}
-              color={dim}
-              fontFamily="var(--font-geist-mono), monospace"
-              fontSize="12px"
-              gap={1}
-            >
+        <Box ref={listRef} maxH={['65vh', '60vh']} overflowY="auto" p={2}>
+          <Box id={listId} role="listbox" aria-label="Commands">
+            {searching ? rows.map((row, i) => renderRow(row, i)) : renderGrouped()}
+          </Box>
+          {searching && rows.length === 0 && (
+            <Flex direction="column" align="center" justify="center" py={10} color="page.fg-secondary" fontFamily={MONO} fontSize="12px" gap={1}>
               <Text>no matches</Text>
-              <Text opacity={0.6}>try a different query</Text>
+              <Text opacity={0.75}>try fewer or different letters</Text>
             </Flex>
-          ) : (
-            grouped.map(([group, list]) => (
-              <Box key={group} mb={2} role="group" aria-label={group}>
-                <Text
-                  role="presentation"
-                  px={3}
-                  pt={3}
-                  pb={1.5}
-                  fontFamily="var(--font-geist-mono), monospace"
-                  fontSize="10px"
-                  letterSpacing="0.16em"
-                  textTransform="uppercase"
-                  color={dim}
-                >
-                  {group}
-                </Text>
-                {list.map((it) => {
-                  const idx = filtered.indexOf(it)
-                  const active = idx === activeIdx
-                  return (
-                    <Flex
-                      key={`${it.group}-${it.label}-${it.href ?? ''}`}
-                      data-idx={idx}
-                      id={`cmdk-opt-${idx}`}
-                      aria-selected={active}
-                      onMouseEnter={() => setActiveIdx(idx)}
-                      onClick={() => runItem(it)}
-                      px={3}
-                      py={2}
-                      borderRadius="md"
-                      cursor="pointer"
-                      bg={active ? activeBg : 'transparent'}
-                      alignItems="center"
-                      justifyContent="space-between"
-                      gap={3}
-                      role="option"
-                    >
-                      <Flex alignItems="baseline" gap={2} minW={0}>
-                        <Text fontSize="14px" color={fg} noOfLines={1}>
-                          {it.label}
-                        </Text>
-                        {it.hint && (
-                          <Text
-                            fontFamily="var(--font-geist-mono), monospace"
-                            fontSize="11px"
-                            color={dim}
-                            noOfLines={1}
-                          >
-                            {it.hint}
-                          </Text>
-                        )}
-                      </Flex>
-                      {it.shortcut && (
-                        <Kbd
-                          fontFamily="var(--font-geist-mono), monospace"
-                          fontSize="10px"
-                          bg="transparent"
-                          border="1px solid"
-                          borderColor={border}
-                          color={dim}
-                        >
-                          {it.shortcut}
-                        </Kbd>
-                      )}
-                    </Flex>
-                  )
-                })}
+          )}
+          {!searching && (
+            <Box as="section" aria-label="Keyboard shortcuts" mt={2} mx={3} mb={2} pt={4} borderTop="1px solid" borderColor="page.border">
+              <Text fontFamily={MONO} fontSize="10px" letterSpacing="0.16em" textTransform="uppercase" color="page.fg-secondary" mb={3}>
+                Shortcuts
+              </Text>
+              <Box
+                as="dl"
+                display="grid"
+                gridTemplateColumns={{ base: '1fr', sm: '1fr 1fr' }}
+                columnGap={6}
+                rowGap={2}
+                fontSize="12px"
+                color="page.fg-secondary"
+                sx={{ '& > div': { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 3 }, '& dd': { m: 0 } }}
+              >
+                <div>
+                  <dt>Open / close palette</dt>
+                  <dd>
+                    <Key>{mod}</Key> <Key>K</Key>
+                  </dd>
+                </div>
+                <div>
+                  <dt>Move / open</dt>
+                  <dd>
+                    <Key>↑</Key> <Key>↓</Key> <Key>↵</Key>
+                  </dd>
+                </div>
+                {pageShortcuts.map((it) => (
+                  <div key={it.id}>
+                    <dt>Go to {it.label}</dt>
+                    <dd>
+                      <Key>{it.shortcut}</Key>
+                    </dd>
+                  </div>
+                ))}
               </Box>
-            ))
+            </Box>
           )}
         </Box>
 
-        {/* Footer hints */}
         <Flex
           borderTop="1px solid"
-          borderColor={border}
+          borderColor="page.border"
           px={3}
           h="36px"
           alignItems="center"
           justifyContent="space-between"
-          fontFamily="var(--font-geist-mono), monospace"
+          fontFamily={MONO}
           fontSize="10px"
-          color={dim}
+          color="page.fg-secondary"
         >
-          <Flex gap={3} alignItems="center">
+          <Flex gap={3} alignItems="center" display={{ base: 'none', sm: 'flex' }} aria-hidden>
             <Flex gap={1} alignItems="center">
-              <Kbd
-                fontSize="10px"
-                bg="transparent"
-                border="1px solid"
-                borderColor={border}
-              >
-                ↑
-              </Kbd>
-              <Kbd
-                fontSize="10px"
-                bg="transparent"
-                border="1px solid"
-                borderColor={border}
-              >
-                ↓
-              </Kbd>
+              <Key>↑</Key>
+              <Key>↓</Key>
               <Text>navigate</Text>
             </Flex>
             <Flex gap={1} alignItems="center">
-              <Kbd
-                fontSize="10px"
-                bg="transparent"
-                border="1px solid"
-                borderColor={border}
-              >
-                ↵
-              </Kbd>
+              <Key>↵</Key>
               <Text>open</Text>
             </Flex>
           </Flex>
-          <Text>{filtered.length} result{filtered.length === 1 ? '' : 's'}</Text>
+          <Text role="status" aria-live="polite" ml="auto">
+            {resultText}
+          </Text>
         </Flex>
       </ModalContent>
     </Modal>

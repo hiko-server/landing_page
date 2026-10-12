@@ -1,13 +1,22 @@
 // Custom error page wired to Sentry (official @sentry/nextjs Pages-Router
 // pattern). Renders Next's default error UI but also reports the exception so
 // server-side render errors aren't silently swallowed. Inert without a DSN.
+// Error responses are never indexable.
 import * as Sentry from '@sentry/nextjs'
 import type { NextPage } from 'next'
+import Head from 'next/head'
 import type { ErrorProps } from 'next/error'
 import NextErrorComponent from 'next/error'
 
 const CustomErrorComponent: NextPage<ErrorProps> = (props) => {
-  return <NextErrorComponent statusCode={props.statusCode} />
+  return (
+    <>
+      <Head>
+        <meta name="robots" content="noindex, nofollow" />
+      </Head>
+      <NextErrorComponent statusCode={props.statusCode} />
+    </>
+  )
 }
 
 CustomErrorComponent.getInitialProps = async (contextData) => {

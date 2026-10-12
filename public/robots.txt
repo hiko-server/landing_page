@@ -1,5 +1,7 @@
 User-agent: *
 Allow: /
+# Social-card images must stay fetchable for link previews and search.
+Allow: /api/og
 Disallow: /admin
 Disallow: /api/
 

@@ -1,36 +1,21 @@
 import React, { useMemo, useState } from 'react'
 import type { GetStaticProps } from 'next'
-import {
-  Box,
-  Flex,
-  Heading,
-  Text,
-  Link,
-  useColorModeValue,
-  HStack,
-  Button,
-} from '@chakra-ui/react'
+import { Box, Flex, Heading, Text, Link, HStack, Button } from '@chakra-ui/react'
 import NextLink from 'next/link'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 import SectionLabel from '../../components/General-UI/SectionLabel'
 import { listPosts, type PostFrontmatter, type MDXIndexEntry } from '../../lib/mdx'
 import { formatPostDate, isoDate } from '../../lib/postDate'
+import { absUrl, ogImageUrl, personRef, PERSON_NAME, SITE_HOST } from '../../lib/schema'
 
 type Props = {
   posts: MDXIndexEntry<PostFrontmatter>[]
-  host: string
 }
 
-export default function BlogIndex({ posts, host }: Props) {
-  const muted = useColorModeValue('gray.600', 'gray.500')
-  const border = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
-  const fg = useColorModeValue('gray.800', 'gray.100')
-  const hover = useColorModeValue('black', 'white')
-  const activeBg = useColorModeValue('black', 'white')
-  const activeFg = useColorModeValue('white', 'black')
-  const monoFont = 'var(--font-geist-mono), monospace'
+const MONO = 'var(--font-geist-mono), monospace'
 
+export default function BlogIndex({ posts }: Props) {
   const [activeTag, setActiveTag] = useState<string | null>(null)
 
   // Collect tags with counts; keep deterministic order (alphabetical) so the
@@ -50,31 +35,48 @@ export default function BlogIndex({ posts, host }: Props) {
     [posts, activeTag],
   )
 
+  const chip = (selected: boolean) => ({
+    size: 'xs' as const,
+    variant: 'outline' as const,
+    bg: selected ? 'page.fg' : 'transparent',
+    color: selected ? 'page.bg' : 'page.fg-secondary',
+    borderColor: selected ? 'page.fg' : 'page.border-strong',
+    fontFamily: MONO,
+    fontWeight: 500,
+    _hover: { borderColor: 'page.fg', bg: selected ? 'page.fg' : 'transparent' },
+    _focusVisible: { outline: '2px solid var(--accent)', outlineOffset: '2px' },
+  })
+
   return (
     <>
       <CustomHead
         title="Writing"
-        description="Essays, notes, and technical write-ups by Li Yanpei (Lucian) on software engineering, machine learning, and building products."
-        url={`https://${host}/blog`}
-        image={`https://${host}/api/og?title=Writing&kind=blog&subtitle=Essays%2C%20notes%2C%20and%20write-ups`}
+        description={`Essays, notes, and technical write-ups by ${PERSON_NAME} on software engineering, machine learning, and building products.`}
+        url={absUrl('/blog')}
+        image={ogImageUrl({ kind: 'blog', title: 'Writing', subtitle: 'Essays, notes, and write-ups' })}
         jsonLd={{
           '@context': 'https://schema.org',
           '@type': 'Blog',
-          name: 'LUCIAN-DEV.COM — Writing',
-          url: `https://${host}/blog`,
+          name: `${SITE_HOST.toUpperCase()} — Writing`,
+          url: absUrl('/blog'),
+          author: personRef,
           blogPost: posts.slice(0, 10).map((p) => ({
             '@type': 'BlogPosting',
             headline: p.frontmatter.title,
-            url: `https://${host}${p.permalink}`,
-            datePublished: p.frontmatter.date,
+            url: absUrl(p.permalink),
+            datePublished: isoDate(p.frontmatter.date) || undefined,
+            inLanguage: p.lang,
           })),
         }}
       />
       <HeaderFooter>
         <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[16, 24]}>
-          <SectionLabel n={1} as="p">Writing</SectionLabel>
+          <SectionLabel n={1} as="p">
+            Writing
+          </SectionLabel>
 
-          <Heading as="h1"
+          <Heading
+            as="h1"
             mt={6}
             mb={4}
             fontSize={['32px', '44px', '56px']}
@@ -84,39 +86,18 @@ export default function BlogIndex({ posts, host }: Props) {
           >
             Notes, essays, and write-ups.
           </Heading>
-          <Text color={muted} maxW="640px" mb={12} fontSize="15px">
+          <Text color="page.fg-secondary" maxW="640px" mb={12} fontSize="15px">
             Long-form pieces on engineering, ML, and the craft of shipping software.
             New posts land here when they&rsquo;re ready — no drafts, no fluff.
           </Text>
 
           {tags.length > 0 && (
-            <HStack mb={8} spacing={2} flexWrap="wrap" rowGap={2}>
-              <Button
-                size="xs"
-                variant={activeTag === null ? 'solid' : 'outline'}
-                bg={activeTag === null ? activeBg : 'transparent'}
-                color={activeTag === null ? activeFg : muted}
-                borderColor={border}
-                fontFamily={monoFont}
-                fontWeight={500}
-                onClick={() => setActiveTag(null)}
-                _hover={{ borderColor: hover }}
-              >
+            <HStack as="div" role="group" aria-label="Filter posts by tag" mb={8} spacing={2} flexWrap="wrap" rowGap={2}>
+              <Button {...chip(activeTag === null)} aria-pressed={activeTag === null} onClick={() => setActiveTag(null)}>
                 all ({posts.length})
               </Button>
               {tags.map(([t, n]) => (
-                <Button
-                  key={t}
-                  size="xs"
-                  variant={activeTag === t ? 'solid' : 'outline'}
-                  bg={activeTag === t ? activeBg : 'transparent'}
-                  color={activeTag === t ? activeFg : muted}
-                  borderColor={border}
-                  fontFamily={monoFont}
-                  fontWeight={500}
-                  onClick={() => setActiveTag(t)}
-                  _hover={{ borderColor: hover }}
-                >
+                <Button key={t} {...chip(activeTag === t)} aria-pressed={activeTag === t} onClick={() => setActiveTag(t)}>
                   #{t} ({n})
                 </Button>
               ))}
@@ -124,79 +105,73 @@ export default function BlogIndex({ posts, host }: Props) {
           )}
 
           {visible.length === 0 ? (
-            <Box
-              border="1px dashed"
-              borderColor={border}
-              borderRadius="lg"
-              p={[6, 10]}
-              textAlign="center"
-            >
-              <Text fontFamily={monoFont} fontSize="12px" color={muted} mb={2}>
+            <Box border="1px dashed" borderColor="page.border-strong" borderRadius="lg" p={[6, 10]} textAlign="center">
+              <Text fontFamily={MONO} fontSize="12px" color="page.fg-secondary" mb={2}>
                 [ no posts yet ]
               </Text>
-              <Text color={muted} fontSize="14px">
-                Posts will appear here as they&rsquo;re published. Drop an{' '}
-                <Text as="code" bg={border} px={1.5} py={0.5} borderRadius="sm">
-                  .mdx
-                </Text>{' '}
-                into <Text as="code">content/blog/</Text> or use the admin editor.
+              <Text color="page.fg-secondary" fontSize="14px">
+                Posts will appear here as they&rsquo;re published.
               </Text>
             </Box>
           ) : (
-            <Box borderTop="1px solid" borderColor={border}>
+            <Box as="ul" listStyleType="none" m={0} p={0} borderTop="1px solid" borderColor="page.border">
               {visible.map((p) => (
-                <Link
-                  key={p.slug}
-                  as={NextLink}
-                  href={p.permalink}
-                  role="group"
-                  _hover={{ textDecoration: 'none' }}
-                  display="block"
-                  borderBottom="1px solid"
-                  borderColor={border}
-                  py={5}
-                >
-                  <Flex
-                    direction={['column', 'row']}
-                    align={['flex-start', 'baseline']}
-                    gap={[1, 6]}
+                <Box as="li" key={p.slug} borderBottom="1px solid" borderColor="page.border">
+                  <Link
+                    as={NextLink}
+                    href={p.permalink}
+                    role="group"
+                    _hover={{ textDecoration: 'none' }}
+                    _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
+                    display="block"
+                    py={5}
                   >
-                    <Text
-                      as="time"
-                      dateTime={isoDate(p.frontmatter.date) || undefined}
-                      flexShrink={0}
-                      fontFamily={monoFont}
-                      fontSize="12px"
-                      color={muted}
-                      w={['auto', '110px']}
-                    >
-                      {formatPostDate(p.frontmatter.date)}
-                    </Text>
-                    <Box flex={1}>
+                    <Flex direction={['column', 'row']} align={['flex-start', 'baseline']} gap={[1, 6]}>
                       <Text
-                        color={fg}
-                        fontWeight={500}
-                        fontSize="17px"
-                        _groupHover={{ color: hover }}
+                        as="time"
+                        dateTime={isoDate(p.frontmatter.date) || undefined}
+                        flexShrink={0}
+                        fontFamily={MONO}
+                        fontSize="12px"
+                        color="page.fg-secondary"
+                        w={['auto', '110px']}
                       >
-                        {p.frontmatter.title}
+                        {formatPostDate(p.frontmatter.date)}
                       </Text>
-                      {p.frontmatter.description && (
-                        <Text color={muted} fontSize="14px" mt={1} noOfLines={2}>
-                          {p.frontmatter.description}
+                      <Box flex={1} minW={0}>
+                        <Text
+                          as="span"
+                          display="block"
+                          color="page.fg"
+                          fontWeight={500}
+                          fontSize="17px"
+                          transition="color 150ms var(--ease-out-quart)"
+                          _groupHover={{ color: 'var(--accent)' }}
+                          lang={p.lang === 'en' ? undefined : p.lang}
+                          style={{ viewTransitionName: `vt-blog-${p.slug}` }}
+                        >
+                          {p.frontmatter.title}
                         </Text>
-                      )}
-                    </Box>
-                    <Text
-                      flexShrink={0}
-                      fontFamily={monoFont}
-                      fontSize="11px"
-                      color={muted}
-                    >
-                      {p.readingMinutes} min
-                    </Text>
-                  </Flex>
-                </Link>
+                        {p.frontmatter.description && (
+                          <Text
+                            as="span"
+                            display="block"
+                            color="page.fg-secondary"
+                            fontSize="14px"
+                            mt={1}
+                            noOfLines={2}
+                            lang={p.lang === 'en' ? undefined : p.lang}
+                          >
+                            {p.frontmatter.description}
+                          </Text>
+                        )}
+                      </Box>
+                      <Text as="span" flexShrink={0} fontFamily={MONO} fontSize="11px" color="page.fg-secondary">
+                        {p.readingMinutes} min read
+                      </Text>
+                    </Flex>
+                  </Link>
+                </Box>
               ))}
             </Box>
           )}
@@ -210,7 +185,6 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
   return {
     props: {
       posts: listPosts(),
-      host: process.env.NEXT_PUBLIC_SITE_HOST || 'lucian-dev.com',
     },
     revalidate: 60,
   }
