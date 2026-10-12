@@ -17,7 +17,7 @@ import {
   r2PutText,
   r2ListDetailed,
 } from './r2'
-import { itemR2Key, kvR2Key, pageR2Key, uploadR2Key } from './contentStore'
+import { itemR2Key, kvR2Key, markR2Pending, pageR2Key, uploadR2Key } from './contentStore'
 import { STATIC_CONTENT_PATHS, collectionPaths, type Collection } from './revalidate'
 import { isValidUploadName } from './security/uploadName'
 // @ts-expect-error -- tar-stream ships no type declarations (typed below).
@@ -54,9 +54,14 @@ const tar = tarStream as {
  *   - Restore extracts to a sibling temp tree, validates the database, takes a
  *     safety snapshot of the current state, swaps the live DB file with a
  *     rename while the shared connection is closed, then mirrors the rest.
- *   - After a restore the R2 per-key objects are rewritten from the restored
- *     DB (and item objects the restored DB no longer has are deleted), so the
- *     next boot sync cannot resurrect pre-restore content from R2.
+ *   - Right after the swap, one transaction stamps every restored row with
+ *     the restore time and tombstones every blog/work slug the restore
+ *     dropped, so the restored state is the newest side for the boot sync.
+ *   - The R2 per-key objects are then rewritten from the restored DB (and item
+ *     objects the restored DB no longer has are deleted). Keys the mirror
+ *     could not write or delete are recorded in r2_pending, and the boot sync
+ *     pushes/deletes them on the next start — it can never resurrect
+ *     pre-restore content from a stale R2.
  *   - Backups and restores are serialised: a second request while one runs
  *     fails fast with StorageBusyError instead of interleaving.
  *
@@ -495,6 +500,84 @@ function inspectStagedDb(file: string): { usable: true } | { usable: false; reas
   }
 }
 
+/** Newest updated_at in the live DB (0 when empty or unreadable). */
+function newestRowStamp(): number {
+  try {
+    const row = getDb()
+      .prepare(
+        `SELECT max(m) AS m FROM (
+           SELECT max(updated_at) AS m FROM pages
+           UNION ALL SELECT max(updated_at) FROM collection_items
+           UNION ALL SELECT max(updated_at) FROM kv)`,
+      )
+      .get() as { m: number | null } | undefined
+    return Number(row?.m) || 0
+  } catch {
+    return 0
+  }
+}
+
+/**
+ * Make the freshly swapped-in DB the newest side for the boot sync, in one
+ * transaction:
+ *   - every page / item / kv row gets updated_at = the restore time (kept
+ *     above every pre-restore version, so a kv ETag from before the restore
+ *     can never match a restored row);
+ *   - every blog/work slug that existed before the restore and is missing
+ *     after it joins that collection's tombstone list (stamped the same), so
+ *     the boot sync deletes its R2 copy instead of importing it again;
+ *   - r2_pending entries carried in the snapshot are dropped (they describe
+ *     the replaced timeline; the mirror records its own failures).
+ * Without this, restored rows keep their old timestamps and lose to the
+ * pre-restore R2 objects whenever the mirror below fails.
+ */
+function settleRestoredDb(before: Array<{ collection: string; slug: string }>, floor: number): string[] {
+  const warnings: string[] = []
+  const db = getDb()
+  const stamp = Math.max(Date.now(), floor + 1)
+  db.transaction(() => {
+    db.prepare('UPDATE pages SET updated_at = ?').run(stamp)
+    db.prepare('UPDATE collection_items SET updated_at = ?').run(stamp)
+    db.prepare('UPDATE kv SET updated_at = ?').run(stamp)
+    db.prepare('DELETE FROM r2_pending').run()
+
+    const after = new Set(
+      (db.prepare('SELECT collection, slug FROM collection_items').all() as Array<{ collection: string; slug: string }>).map(
+        (r) => `${r.collection}/${r.slug}`,
+      ),
+    )
+    for (const collection of COLLECTIONS) {
+      const dropped = before
+        .filter((r) => r.collection === collection && !after.has(`${collection}/${r.slug}`))
+        .map((r) => r.slug)
+      if (!dropped.length) continue
+      const key = `tombstones:${collection}`
+      const row = db.prepare('SELECT value FROM kv WHERE key = ?').get(key) as { value: string } | undefined
+      let list: string[] = []
+      if (row) {
+        try {
+          const parsed: unknown = JSON.parse(row.value)
+          list = Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string') : []
+        } catch {
+          // Rewriting a corrupt list would forget every earlier deletion.
+          warnings.push(
+            `kv '${key}' in the restored DB is not valid JSON, so ${dropped.length} ${collection} item(s) the restore ` +
+              'removed were not recorded as deleted; if their R2 copies survive, the next boot sync imports them again.',
+          )
+          continue
+        }
+      }
+      const set = new Set(list)
+      for (const slug of dropped) set.add(slug)
+      db.prepare(
+        `INSERT INTO kv (key, value, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+      ).run(key, JSON.stringify(Array.from(set)), stamp)
+    }
+  })()
+  return warnings
+}
+
 function currentItemRefs(): Array<{ collection: string; slug: string }> {
   try {
     return getDb().prepare('SELECT collection, slug FROM collection_items').all() as Array<{
@@ -525,7 +608,9 @@ function summarizeFailures(what: string, failures: string[]): string {
 /**
  * Rewrite every pages/items/kv R2 object from the (restored) local DB, delete
  * item objects the DB no longer has, and upload restored images R2 lacks.
- * Failures become warnings: the local restore has already succeeded.
+ * Failures become warnings: the local restore has already succeeded. A page /
+ * item / kv key that could not be written or deleted is recorded in
+ * r2_pending, so the next boot sync repairs it from the restored DB.
  */
 async function mirrorDbToR2(warnings: string[]): Promise<{ mirrored: number; removed: number }> {
   const db = getDb()
@@ -571,12 +656,18 @@ async function mirrorDbToR2(warnings: string[]): Promise<{ mirrored: number; rem
 
   let mirrored = 0
   const failures: string[] = []
+  // Content keys R2 still holds pre-restore state for (boot sync repairs them)
+  // vs restored images it lacks (the boot sync only downloads images).
+  let contentStale = false
+  let uploadsStale = false
   await mapLimit(puts, 4, async (p) => {
     try {
       await r2PutText(p.key, p.body, p.contentType)
       mirrored++
     } catch (err) {
       failures.push(`${p.key}: ${errMsg(err)}`)
+      markR2Pending(p.key, 'put')
+      contentStale = true
     }
   })
 
@@ -588,6 +679,7 @@ async function mirrorDbToR2(warnings: string[]): Promise<{ mirrored: number; rem
       remote = await r2ListDetailed(`${collection}/`)
     } catch (err) {
       warnings.push(`Could not list ${collection}/ in R2 (${errMsg(err)}); stale objects were not removed.`)
+      contentStale = true
       continue
     }
     const stale = remote.filter((o) => {
@@ -600,6 +692,11 @@ async function mirrorDbToR2(warnings: string[]): Promise<{ mirrored: number; rem
         removed++
       } catch (err) {
         failures.push(`delete ${o.key}: ${errMsg(err)}`)
+        // Recorded under the canonical key, which is what the boot sync
+        // reconciles (it finds a `.md` variant of the same slug too). A slug
+        // the restored DB still has is pushed instead — also correct.
+        markR2Pending(itemR2Key(collection, o.key.slice(collection.length + 1).replace(/\.(mdx|md)$/, '')), 'delete')
+        contentStale = true
       }
     })
   }
@@ -615,13 +712,27 @@ async function mirrorDbToR2(warnings: string[]): Promise<{ mirrored: number; rem
         mirrored++
       } catch (err) {
         failures.push(`${uploadR2Key(f.name)}: ${errMsg(err)}`)
+        uploadsStale = true
       }
     })
   } catch (err) {
     warnings.push(`Could not list uploads/ in R2 (${errMsg(err)}); restored images were not mirrored.`)
+    uploadsStale = true
   }
 
   if (failures.length) warnings.push(summarizeFailures('R2 mirror', failures))
+  if (contentStale) {
+    warnings.push(
+      'R2 is stale until the next successful sync: some R2 objects still hold the pre-restore content. ' +
+        'The restored content stays in charge — the next container start pushes it to R2 and removes the dropped items.',
+    )
+  }
+  if (uploadsStale) {
+    warnings.push(
+      'Some restored images are not in R2 yet, and the boot sync does not upload images: run `yarn content:push` ' +
+        'once R2 is reachable, or a fresh container will be missing them.',
+    )
+  }
   return { mirrored, removed }
 }
 
@@ -635,6 +746,7 @@ async function restoreFromBuffer(buf: Buffer, source: 'r2' | 'local', key: strin
   let manifest: SnapshotManifest | null = null
   let safetySnapshot: string | null = null
   const before = currentItemRefs()
+  const newestBefore = newestRowStamp()
 
   try {
     manifest = await extractTarball(buf, stageDir)
@@ -664,6 +776,14 @@ async function restoreFromBuffer(buf: Buffer, source: 'r2' | 'local', key: strin
       reopenDb()
       dbReplaced = true
       filesRestored++
+      try {
+        warnings.push(...settleRestoredDb(before, newestBefore))
+      } catch (err) {
+        warnings.push(
+          `Could not stamp the restored rows as current (${errMsg(err)}); if the R2 mirror below fails too, ` +
+            'the next boot sync may bring back pre-restore content from R2.',
+        )
+      }
     }
 
     // 3. Credentials / connection settings are never taken from a snapshot.

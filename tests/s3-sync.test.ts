@@ -10,6 +10,7 @@ import {
   nameFromKey,
   parseMdx,
   prettyJson,
+  remoteOnlyNotice,
   sameJsonText,
   sameMdx,
   serializeMdx,
@@ -42,6 +43,32 @@ test('decideSync: tombstones are respected unless R2 rewrote the slug after the 
   assert.equal(decideSync({ local: null, remote: { at: T }, tombstoneAt: T + 1000 }), 'delete-remote')
   assert.equal(decideSync({ local: null, remote: { at: T + SKEW_MS }, tombstoneAt: T }), 'delete-remote')
   assert.equal(decideSync({ local: null, remote: { at: T + SKEW_MS + 1 }, tombstoneAt: T }), 'pull')
+})
+
+test('decideSync: a pending key is repaired from the local side, whatever the timestamps say', () => {
+  // The F1 case: save #2 failed to reach R2 two seconds after save #1 did.
+  assert.equal(decideSync({ local: { at: T + 2000, isSeed: false }, remote: { at: T + 50 } }), 'pull')
+  assert.equal(decideSync({ local: { at: T + 2000, isSeed: false }, remote: { at: T + 50 }, pending: true }), 'push')
+  assert.equal(decideSync({ local: { at: T, isSeed: true }, remote: { at: T + 60_000 }, pending: true }), 'push')
+  assert.equal(decideSync({ local: { at: T, isSeed: false }, remote: null, pending: true }), 'push')
+  // Deleted locally, R2 delete failed: removed even when R2 looks newer than the tombstone.
+  assert.equal(decideSync({ local: null, remote: { at: T + 60_000 }, tombstoneAt: T, pending: true }), 'delete-remote')
+  assert.equal(decideSync({ local: null, remote: { at: T }, pending: true }), 'delete-remote')
+  assert.equal(decideSync({ local: null, remote: null, pending: true }), 'none')
+})
+
+test('decideSync: a row stamped with the object LastModified is settled (no GET)', () => {
+  assert.equal(decideSync({ local: { at: T, isSeed: false }, remote: { at: T } }), 'none')
+  assert.equal(decideSync({ local: { at: T, isSeed: true }, remote: { at: T } }), 'none')
+  // An unknown LastModified (0) never counts as settled.
+  assert.equal(decideSync({ local: { at: 0, isSeed: false }, remote: { at: 0 } }), 'pull')
+})
+
+test('remoteOnlyNotice names the item and the way to remove it', () => {
+  assert.equal(
+    remoteOnlyNotice('blog/x'),
+    'remote-only item imported: blog/x — delete it in the admin if it was removed on purpose',
+  )
 })
 
 test('jsonSafeFrontmatter matches the app: midnight dates become YYYY-MM-DD', () => {

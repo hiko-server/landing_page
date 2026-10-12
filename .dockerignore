@@ -27,16 +27,15 @@ docker
 .env
 .env.*
 !.env.example
-# Admin credential hash is written/read at runtime only; never bake it in.
-data/admin.json
 # User uploads are served from a bind-mount + R2 at runtime, not from the image.
 public/uploads
 
-# Runtime state must never be baked into the image (older backups embed admin.json).
-data/content.db
-data/content.db-*
-data/content.db.*
-data/backups
-data/mongo_config.json
-data/contact-inbox.jsonl
-data/*_snapshots
+# data/ is the live runtime directory on the server (content.db, admin.json,
+# the contact inbox and its state, backups, snapshots, crash-leftover *.tmp
+# files, …), and the standalone tracer copies whatever is in it into the
+# image. Allow-list the git seeds the build actually reads (lib/contentStore.ts
+# seeds a missing kv row from data/<key>.json: home, cvdata) so any runtime
+# file — including ones added later — stays out by default.
+data/*
+!data/home.json
+!data/cvdata.json

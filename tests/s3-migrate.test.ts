@@ -64,5 +64,15 @@ test('existing rows are kept unless --force; tombstoned slugs stay deleted', () 
   assert.equal((check.prepare("SELECT value FROM kv WHERE key = 'home'").get() as { value: string }).value, '{"hero":{"brand":"Seed"}}')
   assert.ok(check.prepare("SELECT 1 FROM collection_items WHERE slug = 'deleted'").get())
   assert.equal((check.prepare("SELECT value FROM kv WHERE key = 'tombstones:blog'").get() as { value: string }).value, '[]')
+  // Overwritten rows are queued for the boot sync to upload (their file mtime
+  // would otherwise lose to R2's newer copy); fresh imports are not.
+  assert.deepEqual(
+    (check.prepare("SELECT key, op FROM r2_pending ORDER BY key").all() as Array<{ key: string; op: string }>),
+    [
+      { key: 'blog/hello.mdx', op: 'put' },
+      { key: 'data/home.json', op: 'put' },
+      { key: 'pages/now.mdx', op: 'put' },
+    ],
+  )
   check.close()
 })

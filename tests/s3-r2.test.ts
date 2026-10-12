@@ -18,6 +18,11 @@ import Database from 'better-sqlite3'
 type Obj = { body: Buffer; at: number }
 const objects = new Map<string, Obj>()
 let failListing = false
+/** Keys whose PUT / DELETE is refused (403, not retried by the SDK). */
+const failWrites = new Set<string>()
+/** Object GETs served, in order (listings are not counted). */
+const gets: string[] = []
+const puts: string[] = []
 
 const xml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
@@ -54,7 +59,13 @@ const server = http.createServer((req, res) => {
           '</ListBucketResult>',
       )
     }
+    if ((req.method === 'PUT' || req.method === 'DELETE') && failWrites.has(key)) {
+      res.statusCode = 403
+      res.setHeader('content-type', 'application/xml')
+      return res.end('<?xml version="1.0"?><Error><Code>AccessDenied</Code><Message>denied</Message></Error>')
+    }
     if (req.method === 'GET') {
+      gets.push(key)
       const o = objects.get(key)
       if (!o) {
         res.statusCode = 404
@@ -64,6 +75,7 @@ const server = http.createServer((req, res) => {
       return res.end(o.body)
     }
     if (req.method === 'PUT') {
+      puts.push(key)
       objects.set(key, { body: Buffer.concat(chunks), at: Date.now() })
       return res.end()
     }
@@ -110,10 +122,12 @@ after(() => {
   fs.rmSync(libRoot, { recursive: true, force: true })
 })
 
-function runSync(): Promise<{ code: number; out: string }> {
+function runSync(projectRoot = root): Promise<{ code: number; out: string }> {
+  gets.length = 0
+  puts.length = 0
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, [path.join(root, 'scripts', 'sync-from-r2.mjs')], {
-      cwd: root,
+    const child = spawn(process.execPath, [path.join(projectRoot, 'scripts', 'sync-from-r2.mjs')], {
+      cwd: projectRoot,
       env: {
         ...process.env,
         R2_REQUIRED: '',
@@ -133,6 +147,7 @@ function runSync(): Promise<{ code: number; out: string }> {
 function resetRoot() {
   objects.clear()
   failListing = false
+  failWrites.clear()
   for (const dir of ['data', 'content', 'public']) fs.rmSync(path.join(root, dir), { recursive: true, force: true })
   fs.mkdirSync(path.join(root, 'data'), { recursive: true })
   fs.mkdirSync(path.join(root, 'content', 'blog'), { recursive: true })
@@ -144,6 +159,7 @@ function openDb() {
     CREATE TABLE IF NOT EXISTS pages (name TEXT PRIMARY KEY, frontmatter TEXT NOT NULL DEFAULT '{}', body TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL);
     CREATE TABLE IF NOT EXISTS collection_items (collection TEXT NOT NULL, slug TEXT NOT NULL, frontmatter TEXT NOT NULL DEFAULT '{}', body TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL, PRIMARY KEY (collection, slug));
     CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS r2_pending (key TEXT PRIMARY KEY, op TEXT NOT NULL, updated_at INTEGER NOT NULL);
   `)
   return db
 }
@@ -203,7 +219,8 @@ test('timestamps and seeds decide each key; local-newer rows go back to R2; tomb
   assert.deepEqual(JSON.parse(item('blog', 'fresh')!.frontmatter), { title: 'Fresh', date: '2024-02-02' })
   assert.equal(item('blog', 'fresh')!.updated_at, dayAgo)
   assert.equal(item('blog', 'gone'), undefined)
-  assert.equal((check.prepare("SELECT updated_at FROM pages WHERE name = 'now'").get() as { updated_at: number }).updated_at, dayAgo)
+  // Identical on both sides: settled to the object's LastModified.
+  assert.equal((check.prepare("SELECT updated_at FROM pages WHERE name = 'now'").get() as { updated_at: number }).updated_at, dayAgo + 10)
   check.close()
 
   // Local-newer rows were pushed; the tombstoned object was deleted.
@@ -212,10 +229,140 @@ test('timestamps and seeds decide each key; local-newer rows go back to R2; tomb
   assert.equal(objects.has('blog/gone.mdx'), false)
   assert.equal(fs.readFileSync(path.join(root, 'public', 'uploads', 'pic.png'), 'utf-8'), 'PNGDATA')
 
-  // A second run is a no-op.
+  // A second run is a no-op, and every settled key costs no GET (only the
+  // unparseable object is fetched again).
   const again = await runSync()
   assert.equal(again.code, 0, again.out)
-  assert.match(again.out, /OK: pulled 0, pushed 0, .*removed 0, invalid 1, uploads 0/)
+  assert.match(again.out, /OK: pulled 0, pushed 0, unchanged 0, removed 0, invalid 1, uploads 0/)
+  assert.deepEqual(gets, ['data/broken.json'])
+  assert.deepEqual(puts, [])
+})
+
+const pendingRows = (file = dbPath) => {
+  const d = new Database(file, { readonly: true })
+  try {
+    return d.prepare('SELECT key, op FROM r2_pending ORDER BY key').all() as Array<{ key: string; op: string }>
+  } finally {
+    d.close()
+  }
+}
+
+test('pending keys are repaired from the local row first, regardless of timestamps', async () => {
+  resetRoot()
+  const t = Date.now() - 3_600_000
+  const db = openDb()
+  // Save #1 reached R2 at t+50; save #2 two seconds later did not (F1).
+  db.prepare('INSERT INTO kv VALUES (?, ?, ?)').run('cvdata', '{"en":{"v":2}}', t + 2000)
+  db.prepare('INSERT INTO r2_pending VALUES (?, ?, ?)').run('data/cvdata.json', 'put', t + 2100)
+  // Deleted here, R2 delete failed; R2 even looks newer than the tombstone.
+  db.prepare('INSERT INTO kv VALUES (?, ?, ?)').run('tombstones:blog', '["removed"]', t)
+  db.prepare('INSERT INTO r2_pending VALUES (?, ?, ?)').run('blog/removed.mdx', 'delete', t + 10)
+  // Nothing on either side any more: the entry is simply dropped.
+  db.prepare('INSERT INTO r2_pending VALUES (?, ?, ?)').run('work/ghost.mdx', 'delete', t)
+  // Still unreachable: stays pending for the next boot.
+  db.prepare('INSERT INTO pages VALUES (?, ?, ?, ?)').run('now', '{"title":"Now"}', 'Local now\n', t + 2000)
+  db.prepare('INSERT INTO r2_pending VALUES (?, ?, ?)').run('pages/now.mdx', 'put', t + 2100)
+  db.close()
+
+  put('data/cvdata.json', '{"en":{"v":1}}', t + 50)
+  put('blog/removed.mdx', '---\ntitle: Removed\n---\nx\n', t + 60_000)
+  put('pages/now.mdx', '---\ntitle: Now\n---\nRemote now\n', t + 50)
+  failWrites.add('pages/now.mdx')
+
+  const { code, out } = await runSync()
+  assert.equal(code, 0, out)
+  assert.match(out, /4 key\(s\) left stale in R2/)
+  assert.match(out, /push pages\/now\.mdx failed/)
+  assert.deepEqual(JSON.parse(objects.get('data/cvdata.json')!.body.toString()), { en: { v: 2 } })
+  assert.equal(objects.has('blog/removed.mdx'), false)
+  assert.match(objects.get('pages/now.mdx')!.body.toString(), /Remote now/)
+  assert.deepEqual(pendingRows(), [{ key: 'pages/now.mdx', op: 'put' }])
+
+  const check = new Database(dbPath, { readonly: true })
+  // Local content is never replaced by the stale R2 copy.
+  assert.equal((check.prepare("SELECT value FROM kv WHERE key = 'cvdata'").get() as { value: string }).value, '{"en":{"v":2}}')
+  assert.equal((check.prepare("SELECT body FROM pages WHERE name = 'now'").get() as { body: string }).body, 'Local now\n')
+  // The repaired key is settled to the new object's LastModified.
+  assert.equal((check.prepare("SELECT updated_at FROM kv WHERE key = 'cvdata'").get() as { updated_at: number }).updated_at, objects.get('data/cvdata.json')!.at)
+  check.close()
+
+  // R2 is back: the remaining pending key is repaired and cleared.
+  failWrites.clear()
+  const again = await runSync()
+  assert.equal(again.code, 0, again.out)
+  assert.match(objects.get('pages/now.mdx')!.body.toString(), /Local now/)
+  assert.deepEqual(pendingRows(), [])
+})
+
+test('push decisions compare content first; settled rows cost no GET on the next boot', async () => {
+  resetRoot()
+  const now = Date.now()
+  const oldBoot = now - 3_600_000
+  const dayAgo = now - 86_400_000
+  const db = openDb()
+  // Rows an older sync re-stamped with its boot time; R2 holds the same documents.
+  db.prepare('INSERT INTO pages VALUES (?, ?, ?, ?)').run('uses', '{"title":"Uses","updated":"2026-05-28"}', 'Kit\n', oldBoot)
+  db.prepare('INSERT INTO collection_items VALUES (?, ?, ?, ?, ?)').run('blog', 'a', '{"title":"A"}', 'Body A\n', oldBoot)
+  db.prepare('INSERT INTO kv VALUES (?, ?, ?)').run('tombstones:blog', '[]', oldBoot)
+  db.prepare('INSERT INTO kv VALUES (?, ?, ?)').run('home', '{"hero":{"brand":"X"}}', oldBoot)
+  // A real local edit is still pushed.
+  db.prepare('INSERT INTO collection_items VALUES (?, ?, ?, ?, ?)').run('blog', 'b', '{"title":"B2"}', 'New\n', oldBoot)
+  db.close()
+  const usesBody = '---\ntitle: Uses\nupdated: 2026-05-28\n---\nKit\n'
+  put('pages/uses.mdx', usesBody, dayAgo)
+  put('blog/a.mdx', '---\ntitle: A\n---\nBody A\n', dayAgo)
+  put('data/home.json', '{\n  "hero": { "brand": "X" }\n}', dayAgo)
+  put('blog/b.mdx', '---\ntitle: B1\n---\nOld\n', dayAgo)
+
+  const { code, out } = await runSync()
+  assert.equal(code, 0, out)
+  assert.match(out, /OK: pulled 0, pushed 1, unchanged 3, removed 0/)
+  assert.deepEqual(puts, ['blog/b.mdx'])
+  // The R2 object was not re-serialised (its YAML date stays unquoted).
+  assert.equal(objects.get('pages/uses.mdx')!.body.toString(), usesBody)
+
+  const check = new Database(dbPath, { readonly: true })
+  const at = (sql: string) => (check.prepare(sql).get() as { updated_at: number }).updated_at
+  assert.equal(at("SELECT updated_at FROM pages WHERE name = 'uses'"), dayAgo)
+  assert.equal(at("SELECT updated_at FROM collection_items WHERE slug = 'a'"), dayAgo)
+  assert.equal(at("SELECT updated_at FROM kv WHERE key = 'home'"), dayAgo)
+  assert.equal(at("SELECT updated_at FROM collection_items WHERE slug = 'b'"), objects.get('blog/b.mdx')!.at)
+  check.close()
+
+  const again = await runSync()
+  assert.equal(again.code, 0, again.out)
+  assert.match(again.out, /OK: pulled 0, pushed 0, unchanged 0, removed 0/)
+  assert.deepEqual(gets, [])
+  assert.deepEqual(puts, [])
+})
+
+test('without any tombstone row, remote-only items are imported and each one is logged', async () => {
+  resetRoot()
+  const dayAgo = Date.now() - 86_400_000
+  const db = openDb()
+  db.prepare('INSERT INTO kv VALUES (?, ?, ?)').run('home', '{"hero":{}}', dayAgo)
+  db.prepare('INSERT INTO kv VALUES (?, ?, ?)').run('tombstones:work', '[]', dayAgo)
+  db.close()
+  put('data/home.json', '{"hero":{}}', dayAgo)
+  put('blog/x.mdx', '---\ntitle: X\n---\nx\n', dayAgo)
+  put('work/y.mdx', '---\ntitle: Y\n---\ny\n', dayAgo)
+
+  const { code, out } = await runSync()
+  assert.equal(code, 0, out)
+  assert.match(out, /remote-only item imported: blog\/x — delete it in the admin if it was removed on purpose/)
+  // work/ records deletions: a remote-only item there is simply new.
+  assert.doesNotMatch(out, /remote-only item imported: work\/y/)
+  const check = new Database(dbPath, { readonly: true })
+  assert.ok(check.prepare("SELECT 1 FROM collection_items WHERE collection = 'blog' AND slug = 'x'").get())
+  assert.ok(check.prepare("SELECT 1 FROM collection_items WHERE collection = 'work' AND slug = 'y'").get())
+  check.close()
+
+  // An empty store is a fresh restore from R2: nothing to flag.
+  resetRoot()
+  put('blog/x.mdx', '---\ntitle: X\n---\nx\n', dayAgo)
+  const fresh = await runSync()
+  assert.equal(fresh.code, 0, fresh.out)
+  assert.doesNotMatch(fresh.out, /remote-only item imported/)
 })
 
 test('an item R2 rewrote after the local deletion comes back and its tombstone is cleared', async () => {
@@ -290,6 +437,71 @@ test('restore re-mirrors every row to R2, removes stale item objects and uploads
   assert.equal(objects.get('uploads/img.png')!.body.toString(), 'PNG')
   assert.match(objects.get('pages/now.mdx')!.body.toString(), /Restored now/)
   assert.ok(result.pathsToRevalidate.includes('/blog/kept'))
+})
+
+test('a restore whose R2 mirror fails is not undone by the next boot sync', async () => {
+  objects.clear()
+  failListing = false
+  failWrites.clear()
+  const db = getDb()
+  db.exec('DELETE FROM pages; DELETE FROM collection_items; DELETE FROM kv; DELETE FROM r2_pending;')
+  db.prepare('INSERT INTO pages VALUES (?, ?, ?, ?)').run('now', '{"title":"Now"}', 'Restored now', 1)
+  db.prepare('INSERT INTO collection_items VALUES (?, ?, ?, ?, ?)').run('blog', 'kept', '{"title":"Kept"}', 'Old body', 1)
+  db.prepare('INSERT INTO kv VALUES (?, ?, ?)').run('tombstones:blog', '["older"]', 1)
+  db.prepare('INSERT INTO r2_pending VALUES (?, ?, ?)').run('data/stale.json', 'put', 1)
+  const snap = await backup.createSnapshot()
+
+  // After the snapshot the site moves on, and R2 follows it.
+  const t = Date.now()
+  db.prepare("UPDATE collection_items SET body = 'Newer body', updated_at = ? WHERE slug = 'kept'").run(t)
+  db.prepare('INSERT INTO collection_items VALUES (?, ?, ?, ?, ?)').run('blog', 'later', '{"title":"Later"}', 'x', t)
+  put('blog/kept.mdx', '---\ntitle: Kept\n---\nNewer body\n', t)
+  put('blog/later.mdx', '---\ntitle: Later\n---\nx\n', t)
+  put('pages/now.mdx', '---\ntitle: Now\n---\nRestored now\n', t)
+
+  // Restore while R2 refuses the item upload and cannot list anything.
+  failWrites.add('blog/kept.mdx')
+  failListing = true
+  const started = Date.now()
+  const result = await backup.restoreLocalSnapshot(snap.filename)
+  assert.equal(result.report.dbReplaced, true)
+  const warnings = result.report.warnings.join('\n')
+  assert.match(warnings, /R2 mirror failed for 1 object\(s\): blog\/kept\.mdx/)
+  assert.match(warnings, /R2 is stale until the next successful sync/)
+  assert.match(warnings, /run `yarn content:push`/)
+
+  const live = getDb()
+  const stamps = live
+    .prepare('SELECT updated_at AS at FROM pages UNION ALL SELECT updated_at FROM collection_items UNION ALL SELECT updated_at FROM kv')
+    .all() as Array<{ at: number }>
+  assert.ok(stamps.length > 0 && stamps.every((r) => r.at >= started), JSON.stringify(stamps))
+  // Above every pre-restore version, so no old ETag can match a restored row.
+  assert.ok(stamps.every((r) => r.at > t))
+  const tomb = live.prepare("SELECT value FROM kv WHERE key = 'tombstones:blog'").get() as { value: string }
+  assert.deepEqual(JSON.parse(tomb.value).sort(), ['later', 'older'])
+  // The snapshot's own pending entry is gone; the mirror's failure is recorded.
+  assert.deepEqual(live.prepare('SELECT key, op FROM r2_pending ORDER BY key').all(), [{ key: 'blog/kept.mdx', op: 'put' }])
+  closeDb()
+
+  // Next container start, R2 healthy again: the boot sync finishes the job.
+  failListing = false
+  failWrites.clear()
+  fs.mkdirSync(path.join(libRoot, 'scripts'), { recursive: true })
+  for (const f of ['sync-from-r2.mjs', 'content-helpers.mjs']) {
+    fs.copyFileSync(path.join(repoRoot, 'scripts', f), path.join(libRoot, 'scripts', f))
+  }
+  if (!fs.existsSync(path.join(libRoot, 'node_modules'))) {
+    fs.symlinkSync(path.join(repoRoot, 'node_modules'), path.join(libRoot, 'node_modules'), 'dir')
+  }
+  const boot = await runSync(libRoot)
+  assert.equal(boot.code, 0, boot.out)
+  assert.match(objects.get('blog/kept.mdx')!.body.toString(), /Old body/)
+  assert.equal(objects.has('blog/later.mdx'), false)
+  const after = new Database(path.join(libRoot, 'data', 'content.db'), { readonly: true })
+  assert.equal((after.prepare("SELECT body FROM collection_items WHERE slug = 'kept'").get() as { body: string }).body, 'Old body')
+  assert.equal(after.prepare("SELECT 1 FROM collection_items WHERE slug = 'later'").get(), undefined)
+  assert.deepEqual(after.prepare('SELECT key FROM r2_pending').all(), [])
+  after.close()
 })
 
 test('R2 retention keeps the newest 30 snapshots plus latest.tgz', async () => {
