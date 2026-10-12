@@ -366,10 +366,11 @@ function applyToList(list: any[], op: ListOp, forTwin: boolean): any[] {
       return next
     case 'duplicate': {
       if (op.index < 0 || op.index >= next.length) return next
-      // JSON clone drops the in-memory key, so the copy gets a fresh one.
-      const copy = clone(next[op.index])
-      if (copy && typeof copy === 'object') delete copy.isVisible
-      next.splice(op.index + 1, 0, copy)
+      // JSON clone drops the in-memory key, so the copy gets a fresh one. It
+      // keeps every hide of its source — isVisible:false on the entry as well
+      // as hiddenFields / hiddenItems — so duplicating never publishes
+      // anything the owner hid.
+      next.splice(op.index + 1, 0, clone(next[op.index]))
       return next
     }
     case 'remove':
@@ -392,8 +393,25 @@ function listOpOnSections(sections: Section[], listPath: CvPath, op: ListOp, for
   const field = String(listPath[listPath.length - 1])
   const parent = getAt(sections, parentPath) || {}
   let nextParent = { ...parent, [field]: nextList }
-  if (hiddenIndices(parent, field).length) nextParent = remapHiddenItems(nextParent, field, mappingFor(op, arr.length))
+  const hidden = hiddenIndices(parent, field)
+  if (hidden.length) {
+    nextParent = remapHiddenItems(nextParent, field, mappingFor(op, arr.length))
+    // A copy of a hidden bullet stays hidden, like a copy of a hidden entry.
+    if (op.type === 'duplicate' && nextList.length > arr.length && hidden.includes(op.index)) {
+      nextParent = withItemHidden(nextParent, field, op.index + 1, true)
+    }
+  }
   return setAt(sections, parentPath, nextParent)
+}
+
+/** True when duplicating `index` of the list at `listPath` copies something hidden (entry or bullet). */
+export function duplicatesHidden(doc: Doc, lang: CvLang, listPath: CvPath, index: number): boolean {
+  const list = getAt(doc[lang], listPath)
+  if (!Array.isArray(list) || index < 0 || index >= list.length) return false
+  const item = list[index]
+  if (item && typeof item === 'object') return item.isVisible === false
+  const parent = getAt(doc[lang], listPath.slice(0, -1))
+  return hiddenIndices(parent, String(listPath[listPath.length - 1])).includes(index)
 }
 
 /**
@@ -521,4 +539,35 @@ export function previewText(v: unknown, max = 80): string {
   }
   const t = find(v).replace(/\s+/g, ' ')
   return t.length > max ? `${t.slice(0, max - 1)}…` : t
+}
+
+// ── Keyboard shortcut scope ───────────────────────────────────────────────
+
+/**
+ * Overlays that keep the browser's own undo: dialogs, drawers, popovers and
+ * anything rendered through a Chakra portal (command palette, Hidden-items
+ * drawer, confirmation dialogs).
+ */
+const NATIVE_UNDO_SELECTOR = '[role="dialog"], [role="alertdialog"], [aria-modal="true"], .chakra-portal'
+
+type ShortcutDocument = Pick<Document, 'body' | 'documentElement' | 'querySelector'>
+
+/**
+ * Whether the Studio's ⌘Z / ⌘⇧Z (Ctrl+Z / Ctrl+Y) may handle a keydown with
+ * this target. True when the target is inside the Studio root but not inside
+ * an overlay there, or when nothing is focused (the target is <body>) and no
+ * modal is open — e.g. after clicking a non-focusable part of the preview.
+ * Everything else — the command palette, dialogs, drawers and editable
+ * elements anywhere outside the Studio — keeps native undo.
+ */
+export function studioOwnsUndo(target: EventTarget | null, root: Element | null, doc: ShortcutDocument): boolean {
+  if (!root || !target) return false
+  const node = target as Node
+  if (typeof node.nodeType !== 'number') return false
+  if (node === doc.body || node === doc.documentElement) return !doc.querySelector('[aria-modal="true"]')
+  if (!root.contains(node)) return false
+  const el = node.nodeType === 1 ? (node as Element) : node.parentElement
+  const overlay = el?.closest(NATIVE_UNDO_SELECTOR)
+  // An overlay that wraps the whole Studio does not count; only one inside it.
+  return !overlay || overlay === root || !root.contains(overlay)
 }

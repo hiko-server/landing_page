@@ -15,6 +15,7 @@ import { sendMail } from '../../lib/mailer'
 import { rateLimit } from '../../lib/rateLimit'
 import { isAdminRequest, readAdminClaims } from '../../lib/auth'
 import { sendVersionedJson } from '../../lib/http'
+import { revalidatePaths } from '../../lib/revalidate'
 
 const isAuthed = isAdminRequest
 
@@ -49,6 +50,23 @@ function parseLoose(v: any): any {
 
 function isSectionArray(v: unknown): v is any[] {
   return Array.isArray(v) && v.every((s) => s && typeof s === 'object' && typeof (s as any).sessionName === 'string')
+}
+
+/**
+ * Statically generated pages that render CV data. /now reads the public
+ * workExperience / education / project sections, so a save, restore or
+ * import must regenerate it right away — otherwise an entry the owner just
+ * hid keeps being served from the ISR cache.
+ */
+const CV_STATIC_PATHS = ['/now']
+
+/** Regenerate CV-backed static pages; never fails the (already stored) write. */
+async function revalidateCvPages(res: NextApiResponse): Promise<{ revalidated: string[]; revalidateFailed?: string[] }> {
+  const failed = await revalidatePaths(res, CV_STATIC_PATHS)
+  return {
+    revalidated: CV_STATIC_PATHS.filter((p) => !failed.includes(p)),
+    ...(failed.length ? { revalidateFailed: failed } : {}),
+  }
 }
 
 function sendConflict(res: NextApiResponse, version: number) {
@@ -145,10 +163,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       subject: 'CV updated',
       text: `CV updated by ${actor} at ${new Date().toISOString()}\nSyncZh=${syncZh}`,
     }).catch((err) => console.warn('cvdata: notification mail failed', err?.message || err))
+    const revalidation = await revalidateCvPages(res)
     return sendVersionedJson(res, 200, {
       ok: true,
       etag,
       ...(writeResult.r2Warning ? { r2Warning: writeResult.r2Warning } : {}),
+      ...revalidation,
     }, etag)
   }
 
@@ -172,7 +192,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const result = await restoreSnapshot(filename)
       if (!result.ok) return res.status(restoreErrorStatus(result.error)).json({ error: result.error })
       const etag = kvEtag(result.updatedAt)
-      return sendVersionedJson(res, 200, { ok: true, etag, ...(result.r2Warning ? { r2Warning: result.r2Warning } : {}) }, etag)
+      const revalidation = await revalidateCvPages(res)
+      return sendVersionedJson(res, 200, {
+        ok: true,
+        etag,
+        ...(result.r2Warning ? { r2Warning: result.r2Warning } : {}),
+        ...revalidation,
+      }, etag)
     }
     if (action === 'import') {
       // overwrite with provided JSON structure
@@ -203,7 +229,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const importResult = await writeCvData({ en: newEn, zh: newZh })
       if (!importResult.ok) return res.status(500).json({ error: importResult.error })
       const etag = kvEtag(importResult.updatedAt)
-      return sendVersionedJson(res, 200, { ok: true, etag, ...(importResult.r2Warning ? { r2Warning: importResult.r2Warning } : {}) }, etag)
+      const revalidation = await revalidateCvPages(res)
+      return sendVersionedJson(res, 200, {
+        ok: true,
+        etag,
+        ...(importResult.r2Warning ? { r2Warning: importResult.r2Warning } : {}),
+        ...revalidation,
+      }, etag)
     }
     return res.status(400).json({ error: 'Unknown action' })
   }
