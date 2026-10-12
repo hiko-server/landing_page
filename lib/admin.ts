@@ -11,10 +11,15 @@ import crypto from 'crypto'
  * Hashing: scrypt with random 16-byte salt, 64-byte key (N=16384, r=8,
  * p=1 — Node defaults). Constant-time comparison via crypto.timingSafeEqual.
  *
- * Brute-force defence: per-account exponential-backoff lockout layered on
- * top of the per-IP rate limiter (lib/rateLimit.ts). After 10 wrong
- * attempts in a rolling 15 min window the account is locked for 15 min;
- * a correct password (or the 15 min elapsing) clears the counter.
+ * Brute-force defence, layered on top of the per-IP rate limiter
+ * (lib/rateLimit.ts):
+ *   - per (account, client IP): 10 wrong passwords in a rolling 15 min
+ *     window lock THAT client out for 15 min — so a stranger hammering the
+ *     login can no longer lock the real admin out from elsewhere;
+ *   - global circuit breaker: 100 wrong passwords across all IPs in the
+ *     window (a distributed attack) lock the account for 15 min.
+ * Only attempts against the real admin email count. A correct login clears
+ * all counters. Client IPs are stored as short SHA-256 digests.
  *
  * Reset tokens: 24 random bytes, 30 min TTL, single-use, pruned on every
  * read. Token comparison is constant-time to avoid leaking via timing.
@@ -23,7 +28,7 @@ import crypto from 'crypto'
 const adminPath = path.join(process.cwd(), 'data', 'admin.json')
 
 type ResetToken = { token: string; expires: number }
-type FailedLogin = { at: number }
+type FailedLogin = { at: number; ip?: string }
 
 export type AdminData = {
   email: string
@@ -31,8 +36,19 @@ export type AdminData = {
   salt: string
   resets?: ResetToken[]
   failedLogins?: FailedLogin[]
-  /** ms-epoch; while in the future, logins are rejected as locked. */
+  /** ms-epoch; while in the future, ALL logins are rejected (global breaker). */
   lockoutUntil?: number
+  /** Per-client lockouts: ipDigest → ms-epoch. */
+  ipLockouts?: Record<string, number>
+}
+
+/** Emails compare case-insensitively and without surrounding whitespace. */
+export function normalizeEmail(email: unknown): string {
+  return typeof email === 'string' ? email.trim().toLowerCase() : ''
+}
+
+function ipDigest(ip: string): string {
+  return crypto.createHash('sha256').update(`admin-lockout:${ip}`).digest('hex').slice(0, 16)
 }
 
 // ── Hashing ────────────────────────────────────────────────────────────
@@ -72,7 +88,7 @@ function writeAdmin(data: AdminData) {
 export function ensureAdminFromEnv(): AdminData | null {
   const current = readAdmin()
   if (current) return current
-  const email = process.env.ADMIN_EMAIL || process.env.ADMIN_USER
+  const email = normalizeEmail(process.env.ADMIN_EMAIL || process.env.ADMIN_USER)
   const pass = process.env.ADMIN_PASS
   if (!email || !pass) return null
   const salt = crypto.randomBytes(16).toString('hex')
@@ -90,19 +106,21 @@ export function ensureAdminFromEnv(): AdminData | null {
 // ── Lockout policy ─────────────────────────────────────────────────────
 
 const FAILED_WINDOW_MS = 15 * 60 * 1000 // 15 min rolling window
-const LOCKOUT_THRESHOLD = 10
+const PER_IP_THRESHOLD = 10
+const GLOBAL_THRESHOLD = 100
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000
 
-export function getLockoutInfo(data: AdminData | null = readAdmin()): {
+export function getLockoutInfo(
+  data: AdminData | null = readAdmin(),
+  ip = 'unknown',
+): {
   locked: boolean
   retryAfterMs: number
 } {
   if (!data) return { locked: false, retryAfterMs: 0 }
   const now = Date.now()
-  if (data.lockoutUntil && data.lockoutUntil > now) {
-    return { locked: true, retryAfterMs: data.lockoutUntil - now }
-  }
-  return { locked: false, retryAfterMs: 0 }
+  const until = Math.max(data.lockoutUntil || 0, data.ipLockouts?.[ipDigest(ip)] || 0)
+  return until > now ? { locked: true, retryAfterMs: until - now } : { locked: false, retryAfterMs: 0 }
 }
 
 function pruneFailedLogins(list: FailedLogin[] | undefined, now: number): FailedLogin[] {
@@ -110,27 +128,25 @@ function pruneFailedLogins(list: FailedLogin[] | undefined, now: number): Failed
   return list.filter((f) => now - f.at < FAILED_WINDOW_MS)
 }
 
-function recordFailedAttempt(data: AdminData): { locked: boolean; retryAfterMs: number } {
+function recordFailedAttempt(data: AdminData, ip: string): { locked: boolean; retryAfterMs: number } {
   const now = Date.now()
-  const recent = pruneFailedLogins(data.failedLogins, now)
-  recent.push({ at: now })
-  let lockoutUntil = data.lockoutUntil
-  let locked = false
-  let retryAfterMs = 0
-  if (recent.length >= LOCKOUT_THRESHOLD) {
-    lockoutUntil = now + LOCKOUT_DURATION_MS
-    locked = true
-    retryAfterMs = LOCKOUT_DURATION_MS
-  } else if (lockoutUntil && lockoutUntil <= now) {
-    lockoutUntil = undefined
-  }
-  writeAdmin({ ...data, failedLogins: recent, lockoutUntil })
-  return { locked, retryAfterMs }
+  const key = ipDigest(ip)
+  const recent = pruneFailedLogins(data.failedLogins, now).slice(-GLOBAL_THRESHOLD * 2)
+  recent.push({ at: now, ip: key })
+  const ipLockouts: Record<string, number> = {}
+  for (const [k, until] of Object.entries(data.ipLockouts || {})) if (until > now) ipLockouts[k] = until
+  let lockoutUntil = data.lockoutUntil && data.lockoutUntil > now ? data.lockoutUntil : undefined
+
+  if (recent.filter((f) => f.ip === key).length >= PER_IP_THRESHOLD) ipLockouts[key] = now + LOCKOUT_DURATION_MS
+  if (recent.length >= GLOBAL_THRESHOLD) lockoutUntil = now + LOCKOUT_DURATION_MS
+
+  writeAdmin({ ...data, failedLogins: recent, lockoutUntil, ipLockouts })
+  return getLockoutInfo({ ...data, lockoutUntil, ipLockouts }, ip)
 }
 
 function clearFailedAttempts(data: AdminData) {
-  if ((data.failedLogins?.length || 0) === 0 && !data.lockoutUntil) return
-  writeAdmin({ ...data, failedLogins: [], lockoutUntil: undefined })
+  if ((data.failedLogins?.length || 0) === 0 && !data.lockoutUntil && !Object.keys(data.ipLockouts || {}).length) return
+  writeAdmin({ ...data, failedLogins: [], lockoutUntil: undefined, ipLockouts: {} })
 }
 
 // ── Public verify ──────────────────────────────────────────────────────
@@ -147,7 +163,7 @@ export type VerifyOutcome =
  * isn't configured yet) so the response time doesn't differ for "user
  * exists" vs "user doesn't" — defends against username enumeration.
  */
-export function verifyCredentials(email: string, password: string): VerifyOutcome {
+export function verifyCredentials(email: string, password: string, ip = 'unknown'): VerifyOutcome {
   const data = readAdmin() || ensureAdminFromEnv()
 
   // No admin record at all → still consume a hash so timing matches.
@@ -156,14 +172,14 @@ export function verifyCredentials(email: string, password: string): VerifyOutcom
     return { ok: false, reason: 'invalid' }
   }
 
-  const lock = getLockoutInfo(data)
+  const lock = getLockoutInfo(data, ip)
   if (lock.locked) {
     hashPassword(password, '0'.repeat(32))
     return { ok: false, reason: 'locked', retryAfterMs: lock.retryAfterMs }
   }
 
   const candidate = hashPassword(password, data.salt)
-  const emailOk = email === data.email
+  const emailOk = normalizeEmail(email) === normalizeEmail(data.email)
   const passOk = timingSafeEqualHex(candidate, data.passwordHash)
   const success = emailOk && passOk
 
@@ -171,7 +187,10 @@ export function verifyCredentials(email: string, password: string): VerifyOutcom
     clearFailedAttempts(data)
     return { ok: true }
   }
-  const after = recordFailedAttempt(data)
+  // Guesses against a wrong email can't hurt the account (and are already
+  // IP rate-limited), so only real-account failures feed the lockout.
+  if (!emailOk) return { ok: false, reason: 'invalid' }
+  const after = recordFailedAttempt(data, ip)
   if (after.locked) return { ok: false, reason: 'locked', retryAfterMs: after.retryAfterMs }
   return { ok: false, reason: 'invalid' }
 }
@@ -194,6 +213,7 @@ export function updatePassword(newPassword: string) {
     resets: [],
     failedLogins: [],
     lockoutUntil: undefined,
+    ipLockouts: {},
   })
 }
 
@@ -211,6 +231,7 @@ export function createResetToken(): { token: string; expires: number } {
 }
 
 export function consumeResetToken(token: string): boolean {
+  if (typeof token !== 'string' || !/^[0-9a-f]{48}$/.test(token)) return false
   const data = readAdmin() || ensureAdminFromEnv()
   if (!data) return false
   const now = Date.now()

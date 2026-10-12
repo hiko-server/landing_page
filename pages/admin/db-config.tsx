@@ -77,22 +77,18 @@ export default function DbConfigPage() {
 
   const isEnv = configSource === 'env'
 
-  // Load Config on Mount
+  // Load config on mount. Credentials are never kept in browser storage (an
+  // older version cached the full URI in localStorage — clear that copy).
   useEffect(() => {
+     try { localStorage.removeItem('cv_mongo_config') } catch { /* ignore */ }
      const loadConfig = async () => {
          try {
-             // 1. Try server config
              const res = await fetch('/api/mongo')
              const data = await res.json()
              if (data.ok && data.config) {
-                 setDbConfig(data.config)
+                 setDbConfig({ url: '', username: '', password: '', dbName: 'cv_database', ...data.config })
                  setConfigSource(data.fromEnv ? 'env' : 'file')
              } else {
-                 // 2. Local storage fallback (only when env hasn't claimed it)
-                 const saved = localStorage.getItem('cv_mongo_config')
-                 if (saved) {
-                     try { setDbConfig(JSON.parse(saved)) } catch(e){}
-                 }
                  setConfigSource('default')
              }
          } catch (e) {
@@ -102,15 +98,10 @@ export default function DbConfigPage() {
      loadConfig()
   }, [])
 
-  // Auto-save to Local Storage (skip when env owns the config — we don't want
-  // stale credentials lingering in the browser).
-  useEffect(() => {
-      if (isEnv) return
-      const timer = setTimeout(() => {
-        localStorage.setItem('cv_mongo_config', JSON.stringify(dbConfig))
-      }, 500)
-      return () => clearTimeout(timer)
-  }, [dbConfig, isEnv])
+  // A stored / env URL comes back with its password masked ("••••"). It can
+  // be used as-is (the server swaps the real one back in) but not edited in
+  // place — editing would bake the dots into the password.
+  const urlIsMasked = dbConfig.url.includes('••••')
 
   // Helper: Connection String
   const constructUrl = () => {
@@ -139,8 +130,8 @@ export default function DbConfigPage() {
   
   const saveConfigToServer = async (cfg: any) => {
       // 防呆: never push config to the server when env owns it (the API
-      // would reject this anyway, but skip the wasted round-trip).
-      if (isEnv) return
+      // would reject this anyway), nor an unchanged masked URL.
+      if (isEnv || String(cfg?.url || '').includes('••••')) return
       try {
           await fetch('/api/mongo', {
             method: 'POST',
@@ -176,7 +167,7 @@ export default function DbConfigPage() {
           if (res.ok && data.ok) {
               setDbVerified(true)
               toast({ status: 'success', title: 'Connected!', description: 'Database is reachable.' })
-              saveConfigToServer(dbConfig)
+              saveConfigToServer({ url: uri, dbName: dbConfig.dbName })
               setLoading(false)
               return
           }
@@ -273,9 +264,11 @@ export default function DbConfigPage() {
   }
 
   const displayedUrl = useMemo(
-      () => (showUrl ? dbConfig.url : maskMongoUri(dbConfig.url)),
-      [dbConfig.url, showUrl]
+      () => (showUrl || urlIsMasked ? dbConfig.url : maskMongoUri(dbConfig.url)),
+      [dbConfig.url, showUrl, urlIsMasked]
   )
+  // Typing into a masked display would write the dots into the password.
+  const urlReadOnly = isEnv || urlIsMasked || (!showUrl && /:\/\/[^/@]+:[^@]+@/.test(dbConfig.url))
 
   const pageBg = useColorModeValue('gray.50', 'gray.900')
   const cardBg = useColorModeValue('rgba(255,255,255,0.9)', 'rgba(30,41,59,0.7)')
@@ -300,9 +293,7 @@ export default function DbConfigPage() {
                 <Box>
                   <Heading
                     size="lg"
-                    fontFamily="'Sora', sans-serif"
-                    bgGradient="linear(to-r, purple.500, blue.400)"
-                    bgClip="text"
+                    letterSpacing="-0.02em"
                   >
                     Database Management
                   </Heading>
@@ -338,7 +329,7 @@ export default function DbConfigPage() {
         >
           <Box position="absolute" top={0} left={0} right={0} h="3px" bgImage="linear-gradient(135deg,#7c3aed,#3b82f6)" />
             <Flex justify="space-between" align="center" mb={5} flexWrap="wrap" gap={2}>
-                <Heading size="md" fontFamily="'Sora', sans-serif">Connection Settings</Heading>
+                <Heading size="md">Connection Settings</Heading>
                 <HStack>
                     <Badge
                       colorScheme={isEnv ? 'purple' : configSource === 'file' ? 'blue' : 'gray'}
@@ -377,9 +368,9 @@ export default function DbConfigPage() {
                     <InputGroup>
                         <Input
                             value={displayedUrl}
-                            isReadOnly={isEnv}
+                            isReadOnly={urlReadOnly}
                             onChange={(e) => {
-                                if (isEnv) return
+                                if (urlReadOnly) return
                                 setDbConfig({...dbConfig, url: e.target.value})
                                 setDbVerified(false)
                             }}
@@ -388,17 +379,36 @@ export default function DbConfigPage() {
                             bg={isEnv ? lockedBg : undefined}
                         />
                         <InputRightElement>
-                            <Tooltip label={showUrl ? 'Hide credentials' : 'Reveal credentials'}>
+                            {urlIsMasked ? null : (
+                              <Tooltip label={showUrl ? 'Hide credentials' : 'Reveal credentials to edit'}>
                                 <IconButton
-                                    aria-label="Toggle URL visibility"
+                                    aria-label={showUrl ? 'Hide credentials' : 'Reveal credentials'}
                                     size="sm"
                                     variant="ghost"
                                     icon={showUrl ? <ViewOffIcon /> : <ViewIcon />}
                                     onClick={() => setShowUrl((s) => !s)}
                                 />
-                            </Tooltip>
+                              </Tooltip>
+                            )}
                         </InputRightElement>
                     </InputGroup>
+                    {urlIsMasked && !isEnv ? (
+                      <HStack mt={1.5} spacing={2} fontSize="xs" color={dim}>
+                        <Text>Saved credentials stay on the server.</Text>
+                        <Button
+                          size="xs"
+                          variant="link"
+                          colorScheme="purple"
+                          onClick={() => {
+                            setDbConfig({ ...dbConfig, url: '' })
+                            setDbVerified(false)
+                            setShowUrl(true)
+                          }}
+                        >
+                          Replace URL
+                        </Button>
+                      </HStack>
+                    ) : null}
                  </FormControl>
                  <FormControl>
                     <FormLabel>
@@ -473,7 +483,7 @@ export default function DbConfigPage() {
               pointerEvents={dbVerified ? 'all' : 'none'}
             >
               <Box position="absolute" top={0} left={0} right={0} h="3px" bgImage="linear-gradient(135deg,#1d4ed8,#3b82f6)" />
-                <Heading size="md" mb={2} color="blue.500" fontFamily="'Sora', sans-serif">Backup</Heading>
+                <Heading size="md" mb={2} color="blue.500">Backup</Heading>
                 <Text mb={6} color={dim} fontSize="sm">Site → Database: save current content to MongoDB (CV data, home settings, MDX content under <code>content/</code>, images, and version snapshots).</Text>
 
                 <VStack align="stretch" spacing={3}>
@@ -512,7 +522,7 @@ export default function DbConfigPage() {
               pointerEvents={dbVerified ? 'all' : 'none'}
             >
               <Box position="absolute" top={0} left={0} right={0} h="3px" bgImage="linear-gradient(135deg,#dd6b20,#f59e0b)" />
-              <HStack mb={2}><WarningIcon color="orange.400"/><Heading size="md" color="orange.500" fontFamily="'Sora', sans-serif">Restore</Heading></HStack>
+              <HStack mb={2}><WarningIcon color="orange.400"/><Heading size="md" color="orange.500">Restore</Heading></HStack>
                 <Text mb={6} color={dim} fontSize="sm">Database → Site: overwrite local files with stored backup (CV data, home settings, MDX content, images, and version snapshots).</Text>
 
                 <VStack align="stretch" spacing={3}>

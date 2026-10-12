@@ -28,7 +28,9 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     const token = jwt.sign(
       { t: 'contact-nonce', iat: Math.floor(Date.now() / 1000) },
       getJwtSecret(),
-      { expiresIn: '10m' },
+      // Audience keeps a contact nonce from ever being accepted as anything
+      // else signed with the same secret (e.g. an admin session) and vice versa.
+      { expiresIn: '30m', audience: 'contact-form', algorithm: 'HS256' },
     )
     res.setHeader('Cache-Control', 'no-store')
     return res.status(200).json({ token })

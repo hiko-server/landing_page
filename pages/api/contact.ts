@@ -43,7 +43,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Missing verification token' })
     }
     try {
-      const decoded = jwt.verify(nonce, getJwtSecret()) as { iat?: number; t?: string }
+      const decoded = jwt.verify(nonce, getJwtSecret(), { algorithms: ['HS256'], audience: 'contact-form' }) as { iat?: number; t?: string }
       if (decoded.t !== 'contact-nonce') {
         return res.status(400).json({ error: 'Invalid verification token' })
       }
@@ -84,11 +84,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         to,
         subject: `[Contact] ${safeSubject}`,
         text: `From: ${safeName} <${safeEmail}>\n\n${safeMessage}`,
+        // Hitting "Reply" answers the visitor directly.
+        replyTo: safeEmail,
       })
       delivered = !!result?.ok
     } catch (e) {
       console.error('[contact] sendMail threw', e)
     }
+    let persisted = false
     if (!delivered) {
       try {
         const fs = await import('fs')
@@ -100,10 +103,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           JSON.stringify({ at: new Date().toISOString(), name: safeName, email: safeEmail, subject: safeSubject, message: safeMessage }) + '\n',
           'utf-8',
         )
+        persisted = true
         console.error('[contact] mail NOT delivered — saved to data/contact-inbox.jsonl')
       } catch (e) {
         console.error('[contact] FAILED to persist fallback contact message', e)
       }
+    }
+    // Only claim success when the message actually exists somewhere.
+    if (!delivered && !persisted) {
+      return res.status(503).json({ error: 'Message could not be delivered right now — please email directly.' })
     }
 
     return res.status(200).json({ ok: true })

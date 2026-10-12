@@ -14,9 +14,14 @@
  * never blank the section again — it just degrades to the lower rate limit.
  */
 
-// Once GitHub rejects the configured token with a 401, stop sending it for the
-// remainder of this process so we don't waste a failing request on every call.
-let tokenKnownBad = false
+import type { NextApiResponse } from 'next'
+
+// Once GitHub rejects the configured token with a 401, stop sending it for an
+// hour so we don't waste a failing request on every call (a rotated token is
+// picked up again without a restart).
+let tokenBadUntil = 0
+const TOKEN_RETRY_MS = 60 * 60 * 1000
+const FETCH_TIMEOUT_MS = 8000
 
 const BASE_HEADERS: Record<string, string> = {
   Accept: 'application/vnd.github+json',
@@ -49,13 +54,65 @@ type GhInit = RequestInit & { next?: { revalidate?: number } }
 export async function ghFetch(url: string, init: GhInit = {}): Promise<Response> {
   const token = process.env.GITHUB_TOKEN
   const headers = { ...BASE_HEADERS, ...(init.headers as Record<string, string> | undefined) }
+  // A hung GitHub connection must never hold an API request (and a server
+  // worker) open indefinitely.
+  const { next: _next, ...rest } = init
+  void _next
+  const withTimeout = (): RequestInit => ({ ...rest, signal: rest.signal ?? AbortSignal.timeout(FETCH_TIMEOUT_MS) })
 
-  if (token && !tokenKnownBad) {
-    const res = await fetch(url, { ...init, headers: { ...headers, Authorization: `Bearer ${token}` } })
+  if (token && Date.now() >= tokenBadUntil) {
+    const res = await fetch(url, { ...withTimeout(), headers: { ...headers, Authorization: `Bearer ${token}` } })
     if (res.status !== 401) return res
     // Token rejected — don't let one bad credential blank the whole section.
-    tokenKnownBad = true
+    tokenBadUntil = Date.now() + TOKEN_RETRY_MS
   }
 
-  return fetch(url, { ...init, headers })
+  return fetch(url, { ...withTimeout(), headers })
+}
+
+// ── Shared response cache ───────────────────────────────────────────────────
+
+/** Thrown by loaders when GitHub answered but not usefully (rate limit, 404…). */
+export class GhUnavailable extends Error {}
+
+type Entry<T> = { value: T; expires: number }
+const store = new Map<string, Entry<unknown>>()
+const inflight = new Map<string, Promise<unknown>>()
+const FAILURE_TTL_MS = 60 * 1000
+
+/**
+ * Memoise a GitHub-backed value per process:
+ *   - fresh values are served for `ttlMs`;
+ *   - concurrent cache misses share one in-flight request (no stampede
+ *     against the 60 req/hr unauthenticated limit);
+ *   - failures are cached for a minute as `fallback` (stale data is preferred
+ *     when we have it), so an outage isn't retried on every page view.
+ */
+export async function cachedGh<T>(key: string, ttlMs: number, fallback: T, loader: () => Promise<T>): Promise<T> {
+  const now = Date.now()
+  const hit = store.get(key) as Entry<T> | undefined
+  if (hit && hit.expires > now) return hit.value
+  const pending = inflight.get(key) as Promise<T> | undefined
+  if (pending) return pending
+
+  const p = (async () => {
+    try {
+      const value = await loader()
+      store.set(key, { value, expires: Date.now() + ttlMs })
+      return value
+    } catch {
+      const value = hit ? hit.value : fallback
+      store.set(key, { value, expires: Date.now() + FAILURE_TTL_MS })
+      return value
+    } finally {
+      inflight.delete(key)
+    }
+  })()
+  inflight.set(key, p)
+  return p
+}
+
+/** Let browsers / the CDN reuse public GitHub summaries instead of hitting us per view. */
+export function setPublicCache(res: NextApiResponse, sMaxAge = 600) {
+  res.setHeader('Cache-Control', `public, max-age=60, s-maxage=${sMaxAge}, stale-while-revalidate=3600`)
 }

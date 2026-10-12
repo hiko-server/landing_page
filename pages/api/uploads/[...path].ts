@@ -36,6 +36,15 @@ const MIME: Record<string, string> = {
   '.pdf': 'application/pdf',
 }
 
+// Recent misses, so a burst of requests for a missing file can't turn into a
+// burst of unauthenticated R2 GETs. Bounded; entries expire after 60s.
+const MISS_TTL_MS = 60_000
+const misses = new Map<string, number>()
+function rememberMiss(name: string) {
+  if (misses.size > 2000) misses.clear()
+  misses.set(name, Date.now() + MISS_TTL_MS)
+}
+
 // Images can exceed Next's default 4 MB API response cap; lift it.
 export const config = { api: { responseLimit: false } }
 
@@ -62,6 +71,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.setHeader('Content-Type', contentType)
     res.setHeader('Content-Length', String(buf.length))
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+    // Uploaded files are passive media: never let one (e.g. an SVG) run script
+    // in this origin even when opened directly.
+    res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; media-src 'self'; sandbox")
     if (req.method === 'HEAD') return res.status(200).end()
     return res.status(200).send(buf)
   }
@@ -77,6 +89,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   // 2) Cloudflare R2 fallback.
+  const missUntil = misses.get(name)
+  if (missUntil && missUntil > Date.now()) {
+    res.setHeader('Cache-Control', 'public, max-age=60')
+    return res.status(404).end('Not found')
+  }
   if (isR2Configured()) {
     try {
       const buf = await r2GetBuffer(uploadR2Key(name))
@@ -86,5 +103,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
 
+  rememberMiss(name)
+  res.setHeader('Cache-Control', 'public, max-age=60')
   return res.status(404).end('Not found')
 }

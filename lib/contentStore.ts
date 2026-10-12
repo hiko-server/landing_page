@@ -49,6 +49,61 @@ export function uploadR2Key(filename: string): string {
   return `uploads/${filename}`
 }
 
+// ── Frontmatter normalisation ─────────────────────────────────────────────
+
+/**
+ * gray-matter parses unquoted YAML dates (`date: 2024-05-01`) into `Date`
+ * objects, which getStaticProps / getServerSideProps refuse to serialise.
+ * Convert them to strings once, at the disk boundary: midnight-UTC dates
+ * become "YYYY-MM-DD", anything else a full ISO timestamp.
+ */
+export function jsonSafeFrontmatter(value: any): any {
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) return null
+    const iso = value.toISOString()
+    return iso.endsWith('T00:00:00.000Z') ? iso.slice(0, 10) : iso
+  }
+  if (Array.isArray(value)) return value.map(jsonSafeFrontmatter)
+  if (value && typeof value === 'object') {
+    const out: Record<string, any> = {}
+    for (const [k, v] of Object.entries(value)) {
+      if (v === undefined) continue
+      out[k] = jsonSafeFrontmatter(v)
+    }
+    return out
+  }
+  return value
+}
+
+// ── Deletion tombstones ───────────────────────────────────────────────────
+// Disk MDX files only *seed* the DB. Without a record of deletions, deleting
+// a seeded post would let the next read re-import it from disk.
+
+function tombstoneKey(collection: string) {
+  return `tombstones:${collection}`
+}
+
+function readTombstones(collection: string): Set<string> {
+  try {
+    const row = getDb().prepare('SELECT value FROM kv WHERE key = ?').get(tombstoneKey(collection)) as
+      | { value: string }
+      | undefined
+    const list = row ? JSON.parse(row.value) : []
+    return new Set(Array.isArray(list) ? list.filter((x: unknown) => typeof x === 'string') : [])
+  } catch {
+    return new Set()
+  }
+}
+
+function writeTombstones(collection: string, set: Set<string>) {
+  getDb()
+    .prepare(
+      `INSERT INTO kv (key, value, updated_at) VALUES (?, ?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+    )
+    .run(tombstoneKey(collection), JSON.stringify(Array.from(set)), Date.now())
+}
+
 // ── Dual-write helper ─────────────────────────────────────────────────────
 async function pushToR2(key: string, body: string, contentType?: string): Promise<string | null> {
   if (!isR2Configured()) return null
@@ -86,7 +141,7 @@ function readPageFromFile(name: string): PageRecord | null {
   if (!fs.existsSync(fp)) return null
   const raw = fs.readFileSync(fp, 'utf-8')
   const parsed = matter(raw)
-  return { name, frontmatter: parsed.data, body: parsed.content }
+  return { name, frontmatter: jsonSafeFrontmatter(parsed.data), body: parsed.content }
 }
 
 /** Returns the page, preferring DB then falling back to disk (auto-seeds DB). */
@@ -174,9 +229,11 @@ export function getItemFromDb(collection: string, slug: string): ItemRecord | nu
 function readItemsFromDisk(collection: string): ItemRecord[] {
   const dir = path.join(CONTENT_DIR, collection)
   if (!fs.existsSync(dir)) return []
+  const dead = readTombstones(collection)
   return fs
     .readdirSync(dir)
     .filter((f) => (f.endsWith('.mdx') || f.endsWith('.md')) && !f.startsWith('.'))
+    .filter((f) => !dead.has(f.replace(/\.(mdx|md)$/, '')))
     .map((file) => {
       const slug = file.replace(/\.(mdx|md)$/, '')
       const raw = fs.readFileSync(path.join(dir, file), 'utf-8')
@@ -185,7 +242,7 @@ function readItemsFromDisk(collection: string): ItemRecord[] {
       return {
         collection,
         slug,
-        frontmatter: parsed.data,
+        frontmatter: jsonSafeFrontmatter(parsed.data),
         body: parsed.content,
         updated_at: stat.mtimeMs,
       }
@@ -193,6 +250,7 @@ function readItemsFromDisk(collection: string): ItemRecord[] {
 }
 
 function readItemFromDisk(collection: string, slug: string): ItemRecord | null {
+  if (!/^[a-z0-9][a-z0-9-]*$/i.test(slug) || readTombstones(collection).has(slug)) return null
   const fp = path.join(CONTENT_DIR, collection, `${slug}.mdx`)
   if (!fs.existsSync(fp)) return null
   const raw = fs.readFileSync(fp, 'utf-8')
@@ -201,7 +259,7 @@ function readItemFromDisk(collection: string, slug: string): ItemRecord | null {
   return {
     collection,
     slug,
-    frontmatter: parsed.data,
+    frontmatter: jsonSafeFrontmatter(parsed.data),
     body: parsed.content,
     updated_at: stat.mtimeMs,
   }
@@ -248,7 +306,9 @@ export async function putItem(
   body: string,
 ): Promise<StoreError> {
   try {
-    putItemToDbOnly({ collection, slug, frontmatter, body, updated_at: Date.now() })
+    putItemToDbOnly({ collection, slug, frontmatter: jsonSafeFrontmatter(frontmatter), body, updated_at: Date.now() })
+    const dead = readTombstones(collection)
+    if (dead.delete(slug)) writeTombstones(collection, dead)
   } catch (err: any) {
     return { ok: false, error: `DB write failed: ${err?.message || String(err)}` }
   }
@@ -263,6 +323,9 @@ export async function removeItem(collection: string, slug: string): Promise<Stor
     getDb()
       .prepare('DELETE FROM collection_items WHERE collection = ? AND slug = ?')
       .run(collection, slug)
+    const dead = readTombstones(collection)
+    dead.add(slug)
+    writeTombstones(collection, dead)
   } catch (err: any) {
     return { ok: false, error: `DB delete failed: ${err?.message || String(err)}` }
   }

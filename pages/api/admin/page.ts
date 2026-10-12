@@ -1,19 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { getCookie } from 'cookies-next'
-import jwt from 'jsonwebtoken'
-import { getJwtSecret } from '../../../lib/env'
 import { isPageName, readPage, writePage } from '../../../lib/mdx-admin'
 import { rateLimit } from '../../../lib/rateLimit'
+import { isAdminRequest } from '../../../lib/auth'
 
-function isAuthed(req: NextApiRequest, res: NextApiResponse): boolean {
-  const token = getCookie('cv_admin_token', { req, res }) as string | undefined
-  if (!token) return false
-  try {
-    return ((jwt.verify(token, getJwtSecret()) as { role?: string })?.role === 'admin')
-  } catch {
-    return false
-  }
-}
+const isAuthed = isAdminRequest
 
 /**
  * Admin CRUD for single-file MDX pages (content/now.mdx, content/uses.mdx).

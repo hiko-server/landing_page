@@ -1,471 +1,408 @@
 import { MongoClient, GridFSBucket } from 'mongodb'
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { getCookie } from 'cookies-next'
-import jwt from 'jsonwebtoken'
 import fs from 'fs'
 import path from 'path'
 import dns from 'node:dns'
-import { getJwtSecret, getMongoConfig } from '../../lib/env'
+import matter from 'gray-matter'
+import { getMongoConfig } from '../../lib/env'
 import { resolveMongoSrvUrl } from '../../lib/srvResolve'
+import { isAdminRequest } from '../../lib/auth'
+import { readCvData, writeCvData, saveSnapshot } from '../../lib/cvdata'
+import { readHome, writeHome, saveHomeSnapshot } from '../../lib/home'
+import { getPage, listItems, putItem, putPage } from '../../lib/contentStore'
 
-// Atlas mongodb+srv URLs require a working SRV-record lookup. On Windows /
-// some ISPs / VPNs the local DNS resolver refuses SRV queries
-// (ECONNREFUSED querySrv). Force the resolve* API to use Google + Cloudflare
-// public DNS so /admin/db-config works regardless of the host DNS state.
-// Also prefer IPv4 for getaddrinfo to avoid IPv6 timeouts on hosts that
-// announce AAAA records but can't reach them.
-try {
-  dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4', '1.0.0.1'])
-} catch {
-  // setServers is fine to call repeatedly; ignore if the platform refuses
-}
-try {
-  const setOrder = (dns as any).setDefaultResultOrder
-  if (typeof setOrder === 'function') setOrder('ipv4first')
-} catch {}
+/**
+ * POST /api/mongo — optional MongoDB backup target (admin only).
+ *
+ * Backs up the LIVE content (SQLite store: CV, home, blog/work posts,
+ * now/uses pages), uploaded + brand images (GridFS) and version-history
+ * snapshots; restores them back through the same store API the editors use,
+ * so a restore is immediately visible and mirrored to R2.
+ *
+ * Deliberately never backs up or restores admin credentials: whoever can
+ * write to the Mongo database must not be able to set the admin password.
+ * (The full-site tarball in Admin → Storage covers disaster recovery.)
+ */
 
 const CONFIG_PATH = path.join(process.cwd(), 'data', 'mongo_config.json')
-const CV_DATA_Path = path.join(process.cwd(), 'data', 'cvdata.json')
-const HOME_DATA_Path = path.join(process.cwd(), 'data', 'home.json')
-const ADMIN_DATA_Path = path.join(process.cwd(), 'data', 'admin.json')
 const IMAGE_DIR = path.join(process.cwd(), 'public', 'images')
-// MDX content tree — now.mdx, uses.mdx, blog/*.mdx, work/*.mdx.
-// Backed up as plain UTF-8 documents in the `mdx_content` collection so the
-// /now, /uses, /blog and /work routes survive a clean redeploy.
-const CONTENT_DIR = path.join(process.cwd(), 'content')
-// Version-history snapshots written by lib/cvdata.ts, lib/home.ts and
-// lib/mdx-admin.ts. Backed up so the /admin/dashboard?tab=versions UI can
-// roll back to any prior state after a clean redeploy.
-const SNAPSHOT_DIRS = [
-  path.join(process.cwd(), 'data', 'cv_snapshots'),
-  path.join(process.cwd(), 'data', 'home_snapshots'),
-  path.join(process.cwd(), 'data', 'blog_snapshots'),
-  path.join(process.cwd(), 'data', 'work_snapshots'),
-  path.join(process.cwd(), 'data', 'page_snapshots'),
-]
+const UPLOADS_DIR = path.join(process.cwd(), 'public', 'uploads')
+const SNAPSHOT_DIRS = ['cv_snapshots', 'home_snapshots', 'blog_snapshots', 'work_snapshots', 'page_snapshots'].map((d) =>
+  path.join(process.cwd(), 'data', d),
+)
+const IMAGE_EXT = /\.(png|jpe?g|webp|gif|avif|svg|ico)$/i
+const PAGES = ['now', 'uses'] as const
+const COLLECTIONS = ['blog', 'work'] as const
 
-// Admin guard (same scheme as pages/api/cvdata.ts / home.ts)
-function isAuthed(req: NextApiRequest, res: NextApiResponse): boolean {
-  const token = getCookie('cv_admin_token', { req, res }) as string | undefined
-  if (!token) return false
+let dnsConfigured = false
+/**
+ * Atlas mongodb+srv URLs need SRV lookups, which some resolvers refuse.
+ * Point the resolve* API at public DNS — lazily, only when this route is
+ * actually used, instead of changing process-wide DNS at import time.
+ */
+function configureDnsOnce() {
+  if (dnsConfigured) return
+  dnsConfigured = true
   try {
-    const decoded = jwt.verify(token, getJwtSecret()) as { role?: string }
-    return decoded?.role === 'admin'
+    dns.setServers(['8.8.8.8', '1.1.1.1', '8.8.4.4', '1.0.0.1'])
   } catch {
-    return false
+    /* platform refused — keep system resolvers */
   }
 }
 
-// Helper for file reading
-const readFile = (p: string) => {
-    if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf-8'))
-    return null
+/** "mongodb+srv://user:secret@host/db" → "mongodb+srv://user:••••@host/db" */
+function maskUri(uri: string): string {
+  return uri.replace(/(\/\/[^:/@]+):([^@]+)@/, '$1:••••@')
 }
 
-// Helper to get all files recursively
-const getAllFiles = (dirPath: string, arrayOfFiles: string[] = []) => {
-  const files = fs.readdirSync(dirPath)
+const getAllFiles = (dirPath: string, out: string[] = []): string[] => {
+  if (!fs.existsSync(dirPath)) return out
+  for (const entry of fs.readdirSync(dirPath, { withFileTypes: true })) {
+    const full = path.join(dirPath, entry.name)
+    if (entry.isDirectory()) getAllFiles(full, out)
+    else out.push(full)
+  }
+  return out
+}
 
-  files.forEach(function(file) {
-    if (fs.statSync(dirPath + "/" + file).isDirectory()) {
-      arrayOfFiles = getAllFiles(dirPath + "/" + file, arrayOfFiles)
-    } else {
-      arrayOfFiles.push(path.join(dirPath, "/", file))
-    }
-  })
-
-  return arrayOfFiles
+/** Resolve `rel` under `base`, or null if it would escape / is not a plain relative path. */
+function safeJoin(base: string, rel: string): string | null {
+  const clean = String(rel || '').replace(/\\/g, '/')
+  if (!clean || clean.startsWith('/') || clean.split('/').some((s) => s === '..' || s === '')) return null
+  const dest = path.resolve(base, clean)
+  return dest.startsWith(path.resolve(base) + path.sep) ? dest : null
 }
 
 export const config = {
   api: {
     bodyParser: {
-      sizeLimit: '10mb', // Adjust as needed
+      sizeLimit: '10mb',
     },
   },
 }
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
-  // All mongo backup/restore + connection-config endpoints require admin auth.
-  // (Previously unauthenticated — fixed in v6 phase A as a critical hardening.)
-  if (!isAuthed(req, res)) {
+function readStoredConfig(): { url: string; dbName: string } | null {
+  try {
+    if (!fs.existsSync(CONFIG_PATH)) return null
+    const c = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'))
+    return typeof c?.url === 'string' ? { url: c.url, dbName: String(c.dbName || '') } : null
+  } catch {
+    return null
+  }
+}
+
+/** Config for the browser — credentials are always masked, never sent back. */
+function readConfig(env: ReturnType<typeof getMongoConfig>) {
+  if (env.fromEnv) {
+    return { fromEnv: true, config: { url: maskUri(env.uri), username: '', password: '', dbName: env.dbName } }
+  }
+  const stored = readStoredConfig()
+  if (stored) return { fromEnv: false, config: { url: maskUri(stored.url), username: '', password: '', dbName: stored.dbName } }
+  return { fromEnv: false, config: null }
+}
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (!isAdminRequest(req, res)) {
     return res.status(401).json({ ok: false, message: 'Unauthorized' })
   }
+  res.setHeader('Cache-Control', 'private, no-store')
+  const env = getMongoConfig()
 
   if (req.method === 'GET') {
-     // Config retrieval (GET alias for action=get_config for simplicity).
-     // Priority: env (MONGODB_URI) > data/mongo_config.json > null.
-     try {
-        const env = getMongoConfig()
-        if (env.fromEnv) {
-            return res.status(200).json({
-                ok: true,
-                fromEnv: true,
-                config: { url: env.uri, username: '', password: '', dbName: env.dbName }
-            })
-        }
-        if (fs.existsSync(CONFIG_PATH)) {
-            const fileData = fs.readFileSync(CONFIG_PATH, 'utf-8')
-            return res.status(200).json({ ok: true, fromEnv: false, config: JSON.parse(fileData) })
-        }
-        return res.status(200).json({ ok: true, fromEnv: false, config: null }) // No config yet
-     } catch (e) {
-        return res.status(500).json({ ok: false, message: 'Failed to read config' })
-     }
+    // Priority: env (MONGODB_URI, credentials masked) > data/mongo_config.json > null.
+    try {
+      return res.status(200).json({ ok: true, ...readConfig(env) })
+    } catch {
+      return res.status(500).json({ ok: false, message: 'Failed to read config' })
+    }
   }
 
   if (req.method !== 'POST') {
+    res.setHeader('Allow', 'GET,POST')
     return res.status(405).json({ message: 'Method not allowed' })
   }
 
-  const { action, config: bodyConfig, type, data } = req.body
+  const { action, config: bodyConfig, type } = req.body || {}
 
   // When MONGODB_URI is set in .env, env wins: ignore any url/dbName the
-  // client tries to push and never persist a file copy. This is the core of
-  // the "防呆 / fool-proof" guard — the admin GUI cannot silently change the
-  // production connection string from the browser.
-  const env = getMongoConfig()
-  const config = env.fromEnv
-    ? { ...(bodyConfig || {}), url: env.uri, dbName: env.dbName }
-    : bodyConfig
-
-  if (action === 'save_config') {
-      if (env.fromEnv) {
-          return res.status(403).json({
-              ok: false,
-              message: 'MongoDB connection is managed by .env (MONGODB_URI). Edit the env file to change it.'
-          })
-      }
-      if (!config) return res.status(400).json({ message: 'No config provided' })
-      try {
-          fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2))
-          return res.status(200).json({ ok: true, message: 'Config saved' })
-      } catch (e) {
-          return res.status(500).json({ ok: false, message: 'Failed to save config' })
-      }
+  // client tries to push and never persist a file copy, so the admin GUI
+  // cannot silently change the production connection string.
+  let cfg = env.fromEnv ? { ...(bodyConfig || {}), url: env.uri, dbName: env.dbName } : bodyConfig
+  // The browser only ever sees the masked stored URL; swap the real one back in.
+  if (!env.fromEnv && cfg && typeof cfg.url === 'string' && cfg.url.includes('••••')) {
+    const stored = readStoredConfig()
+    if (stored) cfg = { ...cfg, url: stored.url }
   }
 
   if (action === 'get_config') {
-      try {
-        if (env.fromEnv) {
-            return res.status(200).json({
-                ok: true,
-                fromEnv: true,
-                config: { url: env.uri, username: '', password: '', dbName: env.dbName }
-            })
-        }
-        if (fs.existsSync(CONFIG_PATH)) {
-            const fileData = fs.readFileSync(CONFIG_PATH, 'utf-8')
-            return res.status(200).json({ ok: true, fromEnv: false, config: JSON.parse(fileData) })
-        }
-        return res.status(200).json({ ok: true, fromEnv: false, config: null })
-     } catch (e) {
-        return res.status(500).json({ ok: false, message: 'Failed to read config' })
-     }
+    try {
+      return res.status(200).json({ ok: true, ...readConfig(env) })
+    } catch {
+      return res.status(500).json({ ok: false, message: 'Failed to read config' })
+    }
   }
 
-  if (!config || !config.url) {
-    return res.status(400).json({ message: 'Missing database configuration' })
+  if (action === 'save_config') {
+    if (env.fromEnv) {
+      return res.status(403).json({
+        ok: false,
+        message: 'MongoDB connection is managed by .env (MONGODB_URI). Edit the env file to change it.',
+      })
+    }
+    if (!cfg || typeof cfg.url !== 'string') return res.status(400).json({ message: 'No config provided' })
+    try {
+      fs.mkdirSync(path.dirname(CONFIG_PATH), { recursive: true })
+      fs.writeFileSync(CONFIG_PATH, JSON.stringify({ url: cfg.url, dbName: cfg.dbName || '' }, null, 2), { mode: 0o600 })
+      return res.status(200).json({ ok: true, message: 'Config saved' })
+    } catch {
+      return res.status(500).json({ ok: false, message: 'Failed to save config' })
+    }
   }
 
-  const { url, dbName } = config
+  if (!cfg || typeof cfg.url !== 'string' || !/^mongodb(\+srv)?:\/\//.test(cfg.url)) {
+    return res.status(400).json({ message: 'Missing or invalid database configuration' })
+  }
+  if (!['test', 'backup', 'restore'].includes(action)) {
+    return res.status(400).json({ message: 'Invalid action' })
+  }
+
+  const scope: string = typeof type === 'string' ? type : 'all'
+  const wants = (part: string) => scope === 'all' || scope === part || (part === 'configs' && (scope === 'cv' || scope === 'home'))
 
   let client: MongoClient | null = null
-
   try {
-    // mongodb+srv:// requires a working DNS SRV lookup. On networks that
-    // refuse outbound port 53 (corporate / VPN / China ISPs), this fails
-    // with 'querySrv ECONNREFUSED'. Resolve via DNS-over-HTTPS first and
-    // hand the driver the explicit mongodb:// form so it never touches the
-    // local resolver.
-    let effectiveUrl = url
+    configureDnsOnce()
+    // mongodb+srv:// requires a working DNS SRV lookup. Resolve via
+    // DNS-over-HTTPS first and hand the driver the explicit mongodb:// form.
+    let effectiveUrl = cfg.url
     try {
-      effectiveUrl = await resolveMongoSrvUrl(url)
+      effectiveUrl = await resolveMongoSrvUrl(cfg.url)
     } catch (srvErr: any) {
-      // Re-throw with a clearer message so the toast surfaces the right hint.
       const msg = srvErr?.message || String(srvErr)
-      throw new Error(`SRV resolution failed (${msg}). Use the non-SRV connection string from Atlas (Connect → Drivers → URL format).`)
+      throw new Error(
+        `SRV resolution failed (${msg}). Use the non-SRV connection string from Atlas (Connect → Drivers → URL format).`,
+      )
     }
 
-    // Connect with explicit short timeouts so the UI fails fast instead of
-    // hanging for the driver's 30s default. The most common Atlas failure
-    // after this point is an IP that hasn't been allowlisted.
+    // Short timeouts so the UI fails fast instead of hanging for 30s.
     client = new MongoClient(effectiveUrl, {
       serverSelectionTimeoutMS: 8000,
-      socketTimeoutMS: 10000,
+      socketTimeoutMS: 15000,
       connectTimeoutMS: 8000,
     })
     await client.connect()
+    const db = client.db(cfg.dbName || 'site_backup_db')
 
-    const db = client.db(dbName || 'site_backup_db')
-
-    // -------------------------------------------------------------------------
-    // TEST CONNECTION
-    // -------------------------------------------------------------------------
+    // ── TEST ──────────────────────────────────────────────────────────
     if (action === 'test') {
       await db.command({ ping: 1 })
       return res.status(200).json({ message: 'Connection successful', ok: true })
     }
 
-    // -------------------------------------------------------------------------
-    // BACKUP (Site -> DB)
-    // -------------------------------------------------------------------------
+    // ── BACKUP (site → DB) ────────────────────────────────────────────
     if (action === 'backup') {
-        const timestamp = new Date()
-        
-        // 1. Configs (CV, Home, Admin)
-        if (['all', 'cv', 'home'].includes(type)) {
-            const cv = readFile(CV_DATA_Path)
-            const home = readFile(HOME_DATA_Path)
-            const admin = readFile(ADMIN_DATA_Path)
-            
-            await db.collection('configs').insertOne({
-                cv,
-                home,
-                admin,
-                meta: { backupDate: timestamp, type: type || 'full' }
+      const timestamp = new Date()
+      const counts: Record<string, number> = {}
+
+      if (wants('configs')) {
+        await db.collection('configs').insertOne({
+          cv: readCvData(),
+          home: readHome(),
+          meta: { backupDate: timestamp, type: scope, version: 2 },
+        })
+        counts.configs = 1
+      }
+
+      if (wants('images')) {
+        try {
+          await db.collection('images.files').drop()
+        } catch {
+          /* first backup — nothing to drop */
+        }
+        try {
+          await db.collection('images.chunks').drop()
+        } catch {
+          /* first backup — nothing to drop */
+        }
+        const bucket = new GridFSBucket(db, { bucketName: 'images' })
+        const sources: Array<{ dir: string; prefix: string }> = [
+          { dir: IMAGE_DIR, prefix: '' },
+          { dir: UPLOADS_DIR, prefix: 'uploads/' },
+        ]
+        let n = 0
+        for (const { dir, prefix } of sources) {
+          for (const file of getAllFiles(dir).filter((f) => IMAGE_EXT.test(f))) {
+            const rel = prefix + path.relative(dir, file).replace(/\\/g, '/')
+            await new Promise((resolve, reject) => {
+              fs.createReadStream(file)
+                .pipe(bucket.openUploadStream(rel))
+                .on('error', reject)
+                .on('finish', () => resolve(true))
             })
+            n++
+          }
         }
-
-        // 2. Images
-        if (['all', 'images'].includes(type)) {
-            // Need to drop existing bucket to avoid duplication or name collision logic?
-            // GridFS allows multiple files with same name.
-            // Let's drop for a clean 'current state' backup.
-            if (type === 'images' || type === 'all') {
-                try { await db.collection('images.files').drop() } catch(e){}
-                try { await db.collection('images.chunks').drop() } catch(e){}
-            }
-
-            const bucket = new GridFSBucket(db, { bucketName: 'images' })
-            const files = getAllFiles(IMAGE_DIR)
-
-            for (const file of files) {
-                const relativePath = path.relative(IMAGE_DIR, file).replace(/\\/g, '/') // Ensure forward slashes
-                const stream = fs.createReadStream(file)
-                const uploadStream = bucket.openUploadStream(relativePath)
-                
-                await new Promise((resolve, reject) => {
-                    stream.pipe(uploadStream)
-                        .on('error', reject)
-                        .on('finish', () => resolve(true))
-                })
-            }
-        }
-
-        // 3. MDX content (now.mdx, uses.mdx, blog/*.mdx, work/*.mdx).
-        // Stored as one document per file in `mdx_content`. We drop the
-        // collection first so deleted local files don't reappear on restore.
-        if (['all', 'content'].includes(type)) {
-            try { await db.collection('mdx_content').drop() } catch(e){}
-            if (fs.existsSync(CONTENT_DIR)) {
-                const files = getAllFiles(CONTENT_DIR).filter((f) => /\.(mdx|md)$/i.test(f))
-                const docs = files.map((file) => ({
-                    relPath: path.relative(CONTENT_DIR, file).replace(/\\/g, '/'),
-                    body: fs.readFileSync(file, 'utf-8'),
-                    backupDate: timestamp,
-                }))
-                if (docs.length > 0) {
-                    await db.collection('mdx_content').insertMany(docs)
-                }
-            }
-        }
-
-        // 4. Version-history snapshots (data/{cv,home,blog,work,page}_snapshots/**).
-        // Stored as { dir, relPath, body, backupDate } in `snapshots`. dir is
-        // the snapshot folder name (e.g. "cv_snapshots") so restore can route
-        // back to the correct directory under data/.
-        if (['all', 'snapshots'].includes(type)) {
-            try { await db.collection('snapshots').drop() } catch(e){}
-            const docs: any[] = []
-            for (const snapDir of SNAPSHOT_DIRS) {
-                if (!fs.existsSync(snapDir)) continue
-                const dirName = path.basename(snapDir)
-                const files = getAllFiles(snapDir)
-                for (const file of files) {
-                    docs.push({
-                        dir: dirName,
-                        relPath: path.relative(snapDir, file).replace(/\\/g, '/'),
-                        body: fs.readFileSync(file, 'utf-8'),
-                        backupDate: timestamp,
-                    })
-                }
-            }
-            if (docs.length > 0) {
-                await db.collection('snapshots').insertMany(docs)
-            }
-        }
-
-        return res.status(200).json({ ok: true, message: 'Backup successful' })
-    }
-
-    // -------------------------------------------------------------------------
-    // RESTORE (DB -> Site)
-    // -------------------------------------------------------------------------
-    if (action === 'restore') {
-        // 1. Configs
-        if (['all', 'cv', 'home'].includes(type) || type === undefined) {
-             const latest = await db.collection('configs').find().sort({ 'meta.backupDate': -1 }).limit(1).toArray()
-             if (latest && latest.length > 0) {
-                 const config = latest[0]
-                 if (config.cv) fs.writeFileSync(CV_DATA_Path, JSON.stringify(config.cv, null, 2))
-                 if (config.home) fs.writeFileSync(HOME_DATA_Path, JSON.stringify(config.home, null, 2))
-                 if (config.admin) fs.writeFileSync(ADMIN_DATA_Path, JSON.stringify(config.admin, null, 2))
-             }
-        }
-
-        // 2. Images
-        if (['all', 'images'].includes(type)) {
-            const bucket = new GridFSBucket(db, { bucketName: 'images' })
-            const files = await bucket.find({}).toArray()
-            
-            // Ensure Image Dir exists
-            if (!fs.existsSync(IMAGE_DIR)) fs.mkdirSync(IMAGE_DIR, { recursive: true })
-
-            for (const file of files) {
-                const relativePath = file.filename
-                const destPath = path.join(IMAGE_DIR, relativePath)
-                
-                // Ensure subdir exists
-                const destDir = path.dirname(destPath)
-                if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true })
-
-                const downloadStream = bucket.openDownloadStream(file._id)
-                const fileStream = fs.createWriteStream(destPath)
-                
-                await new Promise((resolve, reject) => {
-                    downloadStream.pipe(fileStream)
-                        .on('error', reject)
-                        .on('finish', () => resolve(true))
-                })
-            }
-        }
-
-        // 3. MDX content
-        if (['all', 'content'].includes(type)) {
-            const docs = await db.collection('mdx_content').find({}).toArray()
-            for (const doc of docs) {
-                const rel = String(doc.relPath || '').replace(/\\/g, '/')
-                // 防呆: refuse path traversal — keep restores inside content/.
-                if (!rel || rel.includes('..') || path.isAbsolute(rel)) continue
-                if (!/\.(mdx|md)$/i.test(rel)) continue
-                const destPath = path.join(CONTENT_DIR, rel)
-                const destDir = path.dirname(destPath)
-                if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true })
-                fs.writeFileSync(destPath, String(doc.body ?? ''), 'utf-8')
-            }
-        }
-
-        // 4. Snapshots (cv/home/blog/work history). This is a sibling of the
-        // sections above. It was previously spliced INSIDE the image-download
-        // loop, so it restored 0x when type='snapshots' (the images guard was
-        // false) and Nx under type='all' (once per image file) — neither correct.
-        if (['all', 'snapshots'].includes(type)) {
-            const allowedDirs = new Set(SNAPSHOT_DIRS.map((d) => path.basename(d)))
-            const docs = await db.collection('snapshots').find({}).toArray()
-            for (const doc of docs) {
-                const dir = String(doc.dir || '')
-                const rel = String(doc.relPath || '').replace(/\\/g, '/')
-                // 防呆: only restore into known snapshot dirs, no traversal.
-                if (!allowedDirs.has(dir)) continue
-                if (!rel || rel.includes('..') || path.isAbsolute(rel)) continue
-                const destPath = path.join(process.cwd(), 'data', dir, rel)
-                const destDir = path.dirname(destPath)
-                if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true })
-                fs.writeFileSync(destPath, String(doc.body ?? ''), 'utf-8')
-            }
-        }
-
-        return res.status(200).json({ ok: true, message: 'Restore successful' })
-    }
-
-    // -------------------------------------------------------------------------
-    // OLD SNAPSHOT FUNCTIONALITY (Keep for compatibility)
-    // -------------------------------------------------------------------------
-    if (action === 'save') {
-      if (!data) {
-        return res.status(400).json({ message: 'No data provided to save' })
-      }
-      
-      const collection = db.collection('cv_snapshots')
-      
-      // We save a new snapshot with timestamp
-      const doc = {
-        timestamp: new Date(),
-        data: data.data, // Expecting { en: ..., zh: ... } structure or similar
-        note: data.note || 'Manual save from Admin Panel',
-        source: 'admin-gui-v2'
+        counts.images = n
       }
 
-      const result = await collection.insertOne(doc)
-      
-      return res.status(200).json({ 
-        message: 'Saved successfully', 
-        id: result.insertedId,
-        ok: true 
-      })
-    }
-
-    if (action === 'list') {
-      const collection = db.collection('cv_snapshots')
-      const snapshots = await collection
-        .find({}) 
-        .project({ data: 0 })
-        .sort({ timestamp: -1 })
-        .limit(20)
-        .toArray()
-      return res.status(200).json({ ok: true, snapshots })
-    }
-
-    if (action === 'load') {
-      if (!data || !data.id) {
-        return res.status(400).json({ message: 'No snapshot ID provided' })
+      if (wants('content')) {
+        try {
+          await db.collection('mdx_content').drop()
+        } catch {
+          /* first backup */
+        }
+        const docs: Array<{ relPath: string; body: string; backupDate: Date }> = []
+        for (const name of PAGES) {
+          const page = getPage(name)
+          if (page) docs.push({ relPath: `${name}.mdx`, body: matter.stringify(page.body || '\n', page.frontmatter || {}), backupDate: timestamp })
+        }
+        for (const c of COLLECTIONS) {
+          for (const item of listItems(c)) {
+            docs.push({
+              relPath: `${c}/${item.slug}.mdx`,
+              body: matter.stringify(item.body || '\n', item.frontmatter || {}),
+              backupDate: timestamp,
+            })
+          }
+        }
+        if (docs.length) await db.collection('mdx_content').insertMany(docs)
+        counts.content = docs.length
       }
-      const { ObjectId } = require('mongodb')
-      const collection = db.collection('cv_snapshots')
-      const snapshot = await collection.findOne({ _id: new ObjectId(data.id) })
 
-      if (!snapshot) {
-        return res.status(404).json({ message: 'Snapshot not found' })
+      if (wants('snapshots')) {
+        try {
+          await db.collection('snapshots').drop()
+        } catch {
+          /* first backup */
+        }
+        const docs: any[] = []
+        for (const snapDir of SNAPSHOT_DIRS) {
+          const dirName = path.basename(snapDir)
+          for (const file of getAllFiles(snapDir)) {
+            docs.push({
+              dir: dirName,
+              relPath: path.relative(snapDir, file).replace(/\\/g, '/'),
+              body: fs.readFileSync(file, 'utf-8'),
+              backupDate: timestamp,
+            })
+          }
+        }
+        if (docs.length) await db.collection('snapshots').insertMany(docs)
+        counts.snapshots = docs.length
       }
-      return res.status(200).json({ ok: true, data: snapshot.data })
+
+      return res.status(200).json({ ok: true, message: 'Backup successful', counts })
     }
 
-    return res.status(400).json({ message: 'Invalid action' })
+    // ── RESTORE (DB → site) ───────────────────────────────────────────
+    const counts: Record<string, number> = {}
+    const warnings: string[] = []
+    const note = (r: { ok: boolean; error?: string; r2Warning?: string } | any) => {
+      if (r && r.ok === false && r.error) warnings.push(r.error)
+      else if (r?.r2Warning) warnings.push(r.r2Warning)
+    }
 
+    if (wants('configs')) {
+      const latest = await db.collection('configs').find().sort({ 'meta.backupDate': -1 }).limit(1).toArray()
+      const doc = latest[0]
+      if (doc) {
+        if (doc.cv && (Array.isArray(doc.cv.en) || Array.isArray(doc.cv.zh))) {
+          try {
+            saveSnapshot()
+          } catch {
+            /* best effort */
+          }
+          note(await writeCvData({ en: Array.isArray(doc.cv.en) ? doc.cv.en : [], zh: Array.isArray(doc.cv.zh) ? doc.cv.zh : [] }))
+          counts.cv = 1
+        }
+        if (doc.home && typeof doc.home === 'object') {
+          try {
+            saveHomeSnapshot()
+          } catch {
+            /* best effort */
+          }
+          note(await writeHome(doc.home))
+          counts.home = 1
+        }
+      }
+    }
+
+    if (wants('images')) {
+      const bucket = new GridFSBucket(db, { bucketName: 'images' })
+      const files = await bucket.find({}).toArray()
+      let n = 0
+      for (const file of files) {
+        const name = String(file.filename || '')
+        if (!IMAGE_EXT.test(name)) continue
+        const dest = name.startsWith('uploads/') ? safeJoin(UPLOADS_DIR, name.slice('uploads/'.length)) : safeJoin(IMAGE_DIR, name)
+        if (!dest) continue // refuse traversal / absolute paths
+        fs.mkdirSync(path.dirname(dest), { recursive: true })
+        await new Promise((resolve, reject) => {
+          bucket
+            .openDownloadStream(file._id)
+            .pipe(fs.createWriteStream(dest))
+            .on('error', reject)
+            .on('finish', () => resolve(true))
+        })
+        n++
+      }
+      counts.images = n
+    }
+
+    if (wants('content')) {
+      const docs = await db.collection('mdx_content').find({}).toArray()
+      let n = 0
+      for (const doc of docs) {
+        const rel = String(doc.relPath || '').replace(/\\/g, '/')
+        const parsed = matter(String(doc.body ?? ''))
+        const page = rel.match(/^(now|uses)\.mdx?$/)
+        const item = rel.match(/^(blog|work)\/([a-z0-9][a-z0-9-]*)\.mdx?$/i)
+        if (page) note(await putPage(page[1], parsed.data, parsed.content))
+        else if (item) note(await putItem(item[1], item[2], parsed.data, parsed.content))
+        else continue
+        n++
+      }
+      counts.content = n
+    }
+
+    if (wants('snapshots')) {
+      const allowed = new Map(SNAPSHOT_DIRS.map((d) => [path.basename(d), d]))
+      const docs = await db.collection('snapshots').find({}).toArray()
+      let n = 0
+      for (const doc of docs) {
+        const base = allowed.get(String(doc.dir || ''))
+        const dest = base ? safeJoin(base, String(doc.relPath || '')) : null
+        if (!dest) continue
+        fs.mkdirSync(path.dirname(dest), { recursive: true })
+        fs.writeFileSync(dest, String(doc.body ?? ''), 'utf-8')
+        n++
+      }
+      counts.snapshots = n
+    }
+
+    return res.status(200).json({
+      ok: warnings.length === 0,
+      message: warnings.length ? `Restored with warnings: ${warnings.join('; ')}` : 'Restore successful',
+      counts,
+    })
   } catch (error: any) {
-    console.error('Mongo Error:', error)
-
-    // Surface the most useful piece of the driver error so the admin GUI can
-    // show actionable text (and not just 'Database operation failed').
-    const raw = error?.message || String(error)
+    console.error('Mongo Error:', error?.message || error)
+    const raw = maskUri(error?.message || String(error))
     const code = error?.code || error?.codeName || error?.name
     let hint: string | undefined
     if (/ENOTFOUND|EAI_AGAIN|getaddrinfo/i.test(raw)) {
       hint = 'DNS lookup failed — check the host portion of the connection string.'
     } else if (/ECONNREFUSED|ECONNRESET|ETIMEDOUT/i.test(raw)) {
-      hint = 'Network blocked — add this IP to your Atlas allowlist, or set 0.0.0.0/0 for testing.'
-    } else if (/Authentication failed|bad auth|password|user/i.test(raw)) {
+      hint = 'Network blocked — add this server’s IP to your Atlas allowlist.'
+    } else if (/Authentication failed|bad auth/i.test(raw)) {
       hint = 'Authentication failed — verify the user and password in the connection string.'
     } else if (/Server selection timed out|ServerSelection/i.test(raw)) {
-      hint = 'Atlas did not accept the connection in time — IP allowlist is the most common cause.'
+      hint = 'Atlas did not accept the connection in time — the IP allowlist is the most common cause.'
     } else if (/TLS|SSL/i.test(raw)) {
       hint = 'TLS handshake failed — make sure mongodb+srv is used and the cluster is running.'
     }
-
-    return res.status(500).json({
-      ok: false,
-      message: hint || raw,
-      error: raw,
-      code,
-      hint,
-    })
+    return res.status(500).json({ ok: false, message: hint || raw, error: raw, code, hint })
   } finally {
-    if (client) {
-      await client.close()
-    }
+    if (client) await client.close().catch(() => {})
   }
 }

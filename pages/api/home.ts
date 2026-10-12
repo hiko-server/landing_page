@@ -1,21 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { getCookie } from 'cookies-next'
-import jwt from 'jsonwebtoken'
 import { readHome, writeHome, saveHomeSnapshot, listHomeSnapshots, restoreHomeSnapshot, readHomeSnapshot, type HomeData } from '../../lib/home'
 import { sendMail } from '../../lib/mailer'
-import { getJwtSecret } from '../../lib/env'
 import { rateLimit } from '../../lib/rateLimit'
+import { isAdminRequest } from '../../lib/auth'
 
-function isAuthed(req: NextApiRequest, res: NextApiResponse) {
-  const token = getCookie('cv_admin_token', { req, res }) as string | undefined
-  if (!token) return false
-  try {
-    const decoded = jwt.verify(token, getJwtSecret()) as any
-    return decoded?.role === 'admin'
-  } catch {
-    return false
-  }
-}
+const isAuthed = isAdminRequest
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') {
@@ -54,12 +43,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ error: 'Invalid payload' })
     }
     // Save snapshot before write
-    try { saveHomeSnapshot() } catch {}
+    try {
+      saveHomeSnapshot()
+    } catch (err) {
+      console.warn('home: snapshot before write failed', err)
+    }
     const writeResult = await writeHome(body)
     if (!writeResult.ok) return res.status(500).json({ error: writeResult.error })
-    try {
-      sendMail({ to: process.env.NOTIFY_EMAIL || process.env.ADMIN_EMAIL || 'hi@lucian-dev.com', subject: 'Home updated', text: `Home updated at ${new Date().toISOString()}` })
-    } catch {}
+    sendMail({
+      to: process.env.NOTIFY_EMAIL || process.env.ADMIN_EMAIL || 'hi@lucian-dev.com',
+      subject: 'Home updated',
+      text: `Home updated at ${new Date().toISOString()}`,
+    }).catch((err) => console.warn('home: notification mail failed', err?.message || err))
     return res.status(200).json(writeResult)
   }
 
@@ -72,6 +67,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     if (action === 'restore') {
       if (!filename) return res.status(400).json({ error: 'Missing filename' })
+      try {
+        saveHomeSnapshot()
+      } catch (err) {
+        console.warn('home: snapshot before restore failed', err)
+      }
       const result = await restoreHomeSnapshot(filename)
       if (!result.ok) return res.status(404).json({ error: result.error })
       return res.status(200).json(result)

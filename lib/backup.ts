@@ -292,45 +292,41 @@ async function extractTarball(buf: Buffer, destDir: string): Promise<SnapshotMan
   let manifest: SnapshotManifest | null = null
   const extract = tar.extract()
 
-  const done = new Promise<void>((resolve, reject) => {
-    extract.on('entry', (header: any, stream: any, next: () => void) => {
-      const chunks: Buffer[] = []
-      stream.on('data', (c: Buffer) => chunks.push(c))
-      stream.on('end', () => {
-        try {
-          const body = Buffer.concat(chunks)
-          // Reject path traversal — only allow forward slashes, no .. segments.
-          const safe = header.name.replace(/\\/g, '/')
-          if (safe.split('/').some((seg: string) => seg === '..' || seg === '')) {
-            return next()
+  extract.on('entry', (header: any, stream: any, next: (err?: unknown) => void) => {
+    const chunks: Buffer[] = []
+    stream.on('data', (c: Buffer) => chunks.push(c))
+    stream.on('error', next)
+    stream.on('end', () => {
+      try {
+        const body = Buffer.concat(chunks)
+        // Reject path traversal — only allow forward slashes, no .. / empty
+        // (absolute) segments.
+        const safe = String(header.name || '').replace(/\\/g, '/')
+        if (safe.split('/').some((seg: string) => seg === '..' || seg === '')) return next()
+        if (header.type === 'directory') return next()
+        if (safe === 'MANIFEST.json') {
+          try {
+            manifest = JSON.parse(body.toString('utf-8'))
+          } catch {
+            manifest = null
           }
-          if (header.type === 'directory') return next()
-          if (safe === 'MANIFEST.json') {
-            try {
-              manifest = JSON.parse(body.toString('utf-8'))
-            } catch {
-              manifest = null
-            }
-            return next()
-          }
-          const outPath = path.join(destDir, safe)
-          ensureDir(path.dirname(outPath))
-          fs.writeFileSync(outPath, body)
-          next()
-        } catch (err) {
-          reject(err)
+          return next()
         }
-      })
-      stream.on('error', reject)
-      stream.resume()
+        const outPath = path.join(destDir, safe)
+        if (!path.resolve(outPath).startsWith(path.resolve(destDir) + path.sep)) return next()
+        ensureDir(path.dirname(outPath))
+        fs.writeFileSync(outPath, body)
+        next()
+      } catch (err) {
+        next(err)
+      }
     })
-    extract.on('finish', () => resolve())
-    extract.on('error', reject)
+    stream.resume()
   })
 
-  const gunzip = zlib.createGunzip()
-  Readable.from(buf).pipe(gunzip).pipe(extract)
-  await done
+  // pipeline() propagates errors from EVERY stage (a corrupt / non-gzip
+  // buffer used to emit an uncaught gunzip error and hang the request).
+  await pipeline(Readable.from(buf), zlib.createGunzip(), extract)
   return manifest
 }
 
@@ -352,65 +348,68 @@ function copyTreeOverwrite(src: string, dest: string): number {
 }
 
 async function restoreFromBuffer(buf: Buffer, source: 'r2' | 'local', key: string | null): Promise<RestoreResult> {
-  const stamp = tsStamp()
+  const stamp = `${tsStamp()}-${Math.random().toString(36).slice(2, 8)}`
   const stageDir = path.join(BACKUPS_DIR, `_restore-${stamp}`)
   ensureDir(BACKUPS_DIR)
 
-  const manifest = await extractTarball(buf, stageDir)
-
   let filesRestored = 0
   let dbReplaced = false
+  let manifest: SnapshotManifest | null = null
 
-  // 1. Replace the SQLite DB. Close any open handle so Windows can move it.
-  const stagedDb = path.join(stageDir, 'db', 'content.db')
-  if (fs.existsSync(stagedDb)) {
-    closeDb()
-    ensureDir(path.dirname(DB_PATH))
-    // Drop WAL/SHM so reopen doesn't replay against the new file.
-    for (const ext of ['', '-wal', '-shm']) {
-      try {
-        fs.unlinkSync(`${DB_PATH}${ext}`)
-      } catch {
-        // not present — fine
+  try {
+    manifest = await extractTarball(buf, stageDir)
+
+    // 1. Replace the SQLite DB. Copy next to the target first, then rename —
+    //    a crash mid-copy can never leave a half-written live database.
+    const stagedDb = path.join(stageDir, 'db', 'content.db')
+    if (fs.existsSync(stagedDb)) {
+      ensureDir(path.dirname(DB_PATH))
+      const incoming = `${DB_PATH}.restore`
+      fs.copyFileSync(stagedDb, incoming)
+      closeDb()
+      // Drop WAL/SHM so reopen doesn't replay against the new file.
+      for (const ext of ['-wal', '-shm']) {
+        try {
+          fs.unlinkSync(`${DB_PATH}${ext}`)
+        } catch {
+          // not present — fine
+        }
       }
-    }
-    fs.copyFileSync(stagedDb, DB_PATH)
-    dbReplaced = true
-    filesRestored++
-  }
-
-  // 2. Top-level config files.
-  const stagedDataDir = path.join(stageDir, 'data')
-  for (const name of CONFIG_FILES) {
-    const src = path.join(stagedDataDir, name)
-    if (fs.existsSync(src)) {
-      fs.copyFileSync(src, path.join(DATA_DIR, name))
+      fs.renameSync(incoming, DB_PATH)
+      dbReplaced = true
       filesRestored++
     }
-  }
 
-  // 3. Snapshot history dirs.
-  const stagedSnapshots = path.join(stageDir, 'data', 'snapshots')
-  if (fs.existsSync(stagedSnapshots)) {
-    for (const snap of SNAPSHOT_DIRS) {
-      filesRestored += copyTreeOverwrite(
-        path.join(stagedSnapshots, snap),
-        path.join(DATA_DIR, snap),
-      )
+    // 2. Top-level config files.
+    const stagedDataDir = path.join(stageDir, 'data')
+    for (const name of CONFIG_FILES) {
+      const src = path.join(stagedDataDir, name)
+      if (fs.existsSync(src)) {
+        fs.copyFileSync(src, path.join(DATA_DIR, name))
+        filesRestored++
+      }
     }
-  }
 
-  // 4. Uploads.
-  const stagedUploads = path.join(stageDir, 'uploads')
-  if (fs.existsSync(stagedUploads)) {
-    filesRestored += copyTreeOverwrite(stagedUploads, UPLOADS_DIR)
-  }
+    // 3. Snapshot history dirs.
+    const stagedSnapshots = path.join(stageDir, 'data', 'snapshots')
+    if (fs.existsSync(stagedSnapshots)) {
+      for (const snap of SNAPSHOT_DIRS) {
+        filesRestored += copyTreeOverwrite(path.join(stagedSnapshots, snap), path.join(DATA_DIR, snap))
+      }
+    }
 
-  // 5. Clean stage dir.
-  try {
-    fs.rmSync(stageDir, { recursive: true, force: true })
-  } catch {
-    // best-effort
+    // 4. Uploads.
+    const stagedUploads = path.join(stageDir, 'uploads')
+    if (fs.existsSync(stagedUploads)) {
+      filesRestored += copyTreeOverwrite(stagedUploads, UPLOADS_DIR)
+    }
+  } finally {
+    // 5. Always clean the stage dir — also when extraction failed.
+    try {
+      fs.rmSync(stageDir, { recursive: true, force: true })
+    } catch {
+      // best-effort
+    }
   }
 
   return {
@@ -439,8 +438,12 @@ export async function restoreLatestFromR2(): Promise<RestoreResult> {
 
 /** Restore from a specific local snapshot file (absolute or under data/backups). */
 export async function restoreLocalSnapshot(filename: string): Promise<RestoreResult> {
-  const abs = path.isAbsolute(filename) ? filename : path.join(BACKUPS_DIR, filename)
-  if (!abs.startsWith(BACKUPS_DIR)) throw new Error('Refusing to restore from outside data/backups.')
+  // Only a bare *.tgz name inside data/backups is accepted (no paths, no
+  // `..`, no sibling directories that merely share the prefix).
+  const abs = path.resolve(BACKUPS_DIR, path.basename(String(filename || '')))
+  if (path.dirname(abs) !== path.resolve(BACKUPS_DIR) || !abs.endsWith('.tgz')) {
+    throw new Error('Refusing to restore from outside data/backups.')
+  }
   if (!fs.existsSync(abs)) throw new Error(`Snapshot not found: ${abs}`)
   const buf = fs.readFileSync(abs)
   return restoreFromBuffer(buf, 'local', path.relative(ROOT, abs))
