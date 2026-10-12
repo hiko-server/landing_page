@@ -1,7 +1,11 @@
-import React, { useEffect, useState } from 'react'
-import { Box, Grid, Link, Text, Flex, Skeleton, useColorModeValue } from '@chakra-ui/react'
-import { motion } from 'framer-motion'
+import React from 'react'
+import { Box, Grid, Link, Text, Flex, Skeleton } from '@chakra-ui/react'
+import { motion, useReducedMotion } from 'framer-motion'
 import { FaStar, FaCodeBranch } from 'react-icons/fa'
+
+import { safeHref } from '../../lib/cvFormat'
+import { useFetchJson } from '../Common/useFetchJson'
+import WidgetNotice from '../Common/WidgetNotice'
 
 type Repo = {
   id: number
@@ -31,130 +35,112 @@ const LANG_COLORS: Record<string, string> = {
   Kotlin: '#A97BFF',
 }
 
+const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
+const COLUMNS = { base: '1fr', sm: 'repeat(2, minmax(0, 1fr))', md: 'repeat(3, minmax(0, 1fr))' }
+const CARD_H = '132px'
+const MotionLink = motion(Link)
+
 /**
- * v6 TopRepos.
- *
- * Replaces v5's gradient-bar glass cards with a flat 3-up grid of
- * minimal repo tiles. Border becomes accent on focus/hover, language
- * indicator is a single dot in canonical GitHub language colour.
+ * Top repositories — flat tiles in a 1 / 2 / 3-up grid. Skeleton tiles have
+ * the loaded tile height; outages and an empty account get an in-place notice.
  */
 export default function TopRepos() {
-  const [repos, setRepos] = useState<Repo[] | null>(null)
-  const cardBorder = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
-  const cardBorderHover = useColorModeValue('rgba(0,0,0,0.20)', 'rgba(255,255,255,0.24)')
-  const nameColor = useColorModeValue('gray.800', 'gray.100')
-  const descColor = useColorModeValue('gray.600', 'gray.400')
-  const metaColor = useColorModeValue('gray.600', 'gray.500')
-  const monoFont = 'var(--font-geist-mono), monospace'
+  const reduce = useReducedMotion()
+  const { data, error, retry } = useFetchJson<{ repos?: Repo[]; available?: boolean }>('/api/github/top-repos')
 
-  useEffect(() => {
-    let alive = true
-    fetch('/api/github/top-repos')
-      .then((r) => r.json())
-      .then((d) => {
-        if (alive) setRepos(d.repos || [])
-      })
-      .catch(() => {
-        if (alive) setRepos([])
-      })
-    return () => {
-      alive = false
-    }
-  }, [])
-
-  if (repos === null) {
+  if (error || data?.available === false) {
     return (
-      <Grid templateColumns={['1fr', 'repeat(2, 1fr)', 'repeat(3, 1fr)']} gap={4} w="100%">
+      <WidgetNotice kind="error" onRetry={retry} minH={CARD_H}>
+        Repositories couldn’t be loaded from GitHub.
+      </WidgetNotice>
+    )
+  }
+
+  if (!data) {
+    return (
+      <Grid templateColumns={COLUMNS} gap={4} w="100%" aria-busy="true" aria-label="Loading repositories">
         {Array.from({ length: 6 }).map((_, i) => (
-          <Skeleton key={i} height="120px" borderRadius="lg" />
+          <Skeleton key={i} h={CARD_H} borderRadius="lg" startColor="page.bg-elevated" endColor="page.bg-overlay" />
         ))}
       </Grid>
     )
   }
 
-  if (!repos.length) return null
+  const repos = (data.repos || []).filter((r) => safeHref(r.html_url))
+  if (!repos.length) {
+    return <WidgetNotice kind="empty">No public repositories to show yet.</WidgetNotice>
+  }
 
   return (
-    <Grid templateColumns={['1fr', 'repeat(2, 1fr)', 'repeat(3, 1fr)']} gap={4} w="100%">
+    <Grid as="ul" listStyleType="none" templateColumns={COLUMNS} gap={4} w="100%">
       {repos.map((r, i) => {
         const langColor = r.language ? LANG_COLORS[r.language] || 'var(--accent)' : 'var(--accent)'
         return (
-          <Link
-            key={r.id}
-            href={r.html_url}
-            isExternal
-            _hover={{ textDecoration: 'none' }}
-            as={motion.a as any}
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            whileHover={{ y: -2 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.3, delay: i * 0.04, ease: [0.22, 1, 0.36, 1] } as any}
-            display="block"
-            border="1px solid"
-            borderColor={cardBorder}
-            borderRadius="lg"
-            p={4}
-            position="relative"
-            // framer owns `transform` (inline style), so the lift is whileHover;
-            // CSS only transitions the border.
-            sx={{
-              transition: 'border-color 250ms var(--ease-out-quart)',
-              '&:hover': { borderColor: cardBorderHover },
-              '&:focus-visible': { borderColor: 'var(--accent)', outline: 'none', boxShadow: '0 0 0 1px var(--accent)' },
-            }}
-          >
-            <Flex justify="space-between" align="baseline" mb={2}>
-              <Text
-                fontWeight={500}
-                fontSize="14px"
-                color={nameColor}
-                noOfLines={1}
-                fontFamily={monoFont}
-              >
-                {r.name}
-              </Text>
-              <Text fontFamily={monoFont} fontSize="10px" color={metaColor}>
-                ↗
-              </Text>
-            </Flex>
-            {r.description && (
-              <Text
-                fontSize="13px"
-                color={descColor}
-                noOfLines={2}
-                lineHeight="1.55"
-                mb={3}
-                minH="38px"
-              >
-                {r.description}
-              </Text>
-            )}
-            <Flex
-              align="center"
-              justify="space-between"
-              fontFamily={monoFont}
-              fontSize="11px"
-              color={metaColor}
+          <li key={r.id}>
+            <MotionLink
+              href={safeHref(r.html_url)}
+              isExternal
+              display="flex"
+              flexDirection="column"
+              h="100%"
+              minH={CARD_H}
+              border="1px solid"
+              borderColor="page.border"
+              borderRadius="lg"
+              p={4}
+              initial={reduce ? false : { opacity: 0, y: 12 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              whileHover={reduce ? undefined : { y: -2 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.3, delay: i * 0.04, ease: [0.22, 1, 0.36, 1] }}
+              // framer owns `transform`; CSS only transitions the border.
+              sx={{
+                transitionProperty: 'border-color',
+                transitionDuration: '250ms',
+                transitionTimingFunction: 'var(--ease-out-quart)',
+                '&:hover': { borderColor: 'page.border-strong', textDecoration: 'none' },
+                '&:focus-visible': { borderColor: 'var(--accent)', outline: 'none', boxShadow: '0 0 0 1px var(--accent)' },
+              }}
             >
-              <Flex align="center" gap={3}>
-                <Flex align="center" gap={1}>
-                  <FaStar size={10} />
-                  <Text>{r.stargazers_count}</Text>
-                </Flex>
-                <Flex align="center" gap={1}>
-                  <FaCodeBranch size={10} />
-                  <Text>{r.forks_count}</Text>
-                </Flex>
+              <Flex justify="space-between" align="baseline" gap={2} mb={2}>
+                <Text as="span" fontWeight={500} fontSize="14px" color="page.fg" noOfLines={1} fontFamily={monoFont}>
+                  {r.name}
+                </Text>
+                <Text as="span" fontFamily={monoFont} fontSize="11px" color="page.fg-secondary" aria-hidden>
+                  ↗
+                </Text>
+                <span className="sr-only"> (opens GitHub in a new tab)</span>
               </Flex>
-              {r.language && (
-                <Flex align="center" gap={1.5}>
-                  <Box w="6px" h="6px" borderRadius="full" bg={langColor} />
-                  <Text>{r.language}</Text>
+              <Text fontSize="13px" color="page.fg-secondary" noOfLines={2} lineHeight="1.55" mb={3} minH="40px">
+                {r.description || ''}
+              </Text>
+              <Box flex="1" />
+              <Flex align="center" justify="space-between" fontFamily={monoFont} fontSize="11px" color="page.fg-secondary">
+                <Flex align="center" gap={3}>
+                  <Flex align="center" gap={1}>
+                    <FaStar size={10} aria-hidden />
+                    <Text as="span">
+                      {r.stargazers_count}
+                      <span className="sr-only"> stars</span>
+                    </Text>
+                  </Flex>
+                  <Flex align="center" gap={1}>
+                    <FaCodeBranch size={10} aria-hidden />
+                    <Text as="span">
+                      {r.forks_count}
+                      <span className="sr-only"> forks</span>
+                    </Text>
+                  </Flex>
                 </Flex>
-              )}
-            </Flex>
-          </Link>
+                {r.language && (
+                  <Flex align="center" gap={1.5}>
+                    <Box as="span" aria-hidden w="6px" h="6px" borderRadius="full" bg={langColor} />
+                    <Text as="span">{r.language}</Text>
+                  </Flex>
+                )}
+              </Flex>
+            </MotionLink>
+          </li>
         )
       })}
     </Grid>

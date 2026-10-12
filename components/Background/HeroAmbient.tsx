@@ -1,4 +1,3 @@
-'use client'
 import React from 'react'
 import { Box, useColorModeValue } from '@chakra-ui/react'
 
@@ -49,8 +48,6 @@ export default function HeroAmbient({
   children: React.ReactNode
   minH?: string
 }) {
-  const base = useColorModeValue('#fdfdfd', '#050505')
-
   // Photo filter — quiet it down so text always wins.
   // Light mode: wash the photo into a soft pastel ghost (high brightness,
   // low saturation, lower contrast) so the silhouette band reads as a
@@ -87,9 +84,11 @@ export default function HeroAmbient({
   const dotColor = useColorModeValue('rgba(0,0,0,0.05)', 'rgba(255,255,255,0.05)')
 
   return (
-    <Box position="relative" w="full" minH={minH || 'auto'} overflow="hidden">
+    // `isolation: isolate` keeps the negative z-index layers inside this box's
+    // own stacking context, so they can never slip behind an ancestor's background.
+    <Box position="relative" w="full" minH={minH || 'auto'} overflow="hidden" sx={{ isolation: 'isolate' }}>
       {/* z=-4 solid base (shows through if the image fails to load) */}
-      <Box position="absolute" inset={0} bg={base} zIndex={-4} />
+      <Box position="absolute" inset={0} bg="page.bg" zIndex={-4} />
 
       {/* z=-3 mountain photo */}
       <Box

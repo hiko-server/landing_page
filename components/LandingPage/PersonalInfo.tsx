@@ -1,21 +1,9 @@
-'use client'
-import React from 'react'
-// Type-only import is normally safe (TS erases it) but routing through
-// the pure shape module removes the foot-gun in case someone later drops
-// the `type` keyword and ships a server module into the client bundle.
+import React, { useMemo } from 'react'
+// Type-only import from the pure shape module — never lib/home (server-only).
 import type { HomeData } from '../../lib/homeShape'
-import { deriveCurrentlyCoding } from '../../lib/currentlyCoding'
-import {
-  Box,
-  Button,
-  Flex,
-  Text,
-  Stack,
-  Image,
-  IconButton,
-  Tooltip,
-  useColorModeValue,
-} from '@chakra-ui/react'
+import type { CurrentlyCoding } from '../../lib/currentlyCoding'
+import { safeHref } from '../../lib/cvFormat'
+import { Box, Button, Flex, Text, Image, IconButton, Tooltip } from '@chakra-ui/react'
 import { FaGithub, FaGitlab, FaLinkedin, FaWhatsapp } from 'react-icons/fa'
 import NextLink from 'next/link'
 import NextImage from 'next/image'
@@ -23,291 +11,268 @@ import NextImage from 'next/image'
 import HeroHeadline from './HeroHeadline'
 import HeroAmbient from '../Background/HeroAmbient'
 import SectionLabel from '../General-UI/SectionLabel'
+import { heroCopy, portraitAlt, type HeroIdentity } from './heroIdentity'
+import { revealSx, settleSx } from './heroReveal'
 
 /**
- * v6 Hero — preserves every v5 capability EXCEPT the video reel background
- * (replaced with HeroAmbient — CSS aurora orbs + dot grid + vignettes).
+ * [01] Introduction — the home hero.
  *
- * Preserved:
- *   - HeroHeadline typewriter tagline from home.json
- *   - Avatar with x/y/scale transform from admin GUI
- *   - Phone / email click-to-reveal pattern
- *   - CV button (client-side link to /cv)
- *   - GitHub / GitLab / LinkedIn / WhatsApp social row
+ * One composition for every width, laid out with responsive props only (no
+ * JS media queries, so the server HTML is final and nothing jumps after
+ * hydration). Reading order is the same everywhere:
  *
- * Visual upgrades:
- *   - [01] INTRODUCTION section marker
- *   - Theme-aware text colors (works in both dark and light mode now;
- *     v5 was effectively dark-only because of the always-dark video bg)
- *   - Indigo accent only on primary CTA + brand suffix
+ *   brand eyebrow → h1 (name + role) → rotating phrases → meta → CTAs → portrait
+ *
+ * ≥ md the portrait sits in a right-hand column; below md it closes the hero
+ * as a compact profile row (portrait + "currently coding" note) under a
+ * hairline, so the headline is always the first thing read.
  */
 
+const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
+
+const SOCIALS: Array<{ key: keyof HomeData['socials']; name: string; icon: React.ReactElement; fallback: string }> = [
+  { key: 'github', name: 'GitHub', icon: <FaGithub />, fallback: 'https://github.com/HikoPLi' },
+  { key: 'gitlab', name: 'GitLab', icon: <FaGitlab />, fallback: 'https://gitlab.com/HikoPLi' },
+  { key: 'linkedin', name: 'LinkedIn', icon: <FaLinkedin />, fallback: 'https://www.linkedin.com/in/liyanpeihiko/' },
+  { key: 'whatsapp', name: 'WhatsApp', icon: <FaWhatsapp />, fallback: 'https://wa.me/85200000000' },
+]
+
+const clamp = (v: number, min: number, max: number, fallback: number) =>
+  Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : fallback
+
 const PersonalInfo = ({
-  isMobile,
   home,
-  cvEn,
+  identity,
+  autoCoding,
 }: {
-  isMobile: boolean
   home?: HomeData
-  /** CV (English) used to auto-derive the "currently coding" chip when
-   *  the admin leaves any of its three fields blank. */
-  cvEn?: any[]
+  identity: HeroIdentity
+  /** CV-derived values for any "currently coding" line the admin left blank. */
+  autoCoding: CurrentlyCoding
 }) => {
+  // Memoised so the typewriter's phrase list keeps its identity across re-renders
+  // (e.g. a colour-mode toggle) instead of restarting mid-phrase.
+  const tagline = home?.hero?.tagline
+  const { role, rotating } = useMemo(() => heroCopy(tagline), [tagline])
 
-  // Theme-aware tokens (was hard-coded white because of v5 video overlay)
-  const fg = useColorModeValue('gray.900', 'white')
-  const fgMuted = useColorModeValue('gray.600', 'rgba(255,255,255,0.7)')
-  const ctaBorder = useColorModeValue('rgba(0,0,0,0.12)', 'rgba(255,255,255,0.18)')
-  const ctaBorderHover = useColorModeValue('rgba(0,0,0,0.30)', 'rgba(255,255,255,0.40)')
-  const socialBg = useColorModeValue('rgba(255,255,255,0.6)', 'rgba(0,0,0,0.25)')
-  const socialBgHover = useColorModeValue('rgba(255,255,255,0.9)', 'rgba(0,0,0,0.45)')
-  const avatarBorder = useColorModeValue('rgba(0,0,0,0.10)', 'rgba(255,255,255,0.14)')
-  const avatarFrameBg = useColorModeValue('rgba(245,245,245,0.6)', 'rgba(0,0,0,0.25)')
+  const posX = clamp(Number(home?.hero?.avatarTransform?.x ?? 50), 0, 100, 50)
+  const posY = clamp(Number(home?.hero?.avatarTransform?.y ?? 50), 0, 100, 50)
+  const scale = clamp(Number(home?.hero?.avatarTransform?.scale ?? 1), 0.5, 3, 1)
+  const avatarSrc = safeHref(home?.hero?.avatarUrl) || '/images/hikoAvator.png'
+  const alt = portraitAlt(identity)
 
-  // Avatar transform (preserved from v5 admin GUI)
-  const clamp = (v: number, min: number, max: number) =>
-    Math.max(min, Math.min(max, v))
-  const posX = clamp(Number(home?.hero?.avatarTransform?.x ?? 50), 0, 100)
-  const posY = clamp(Number(home?.hero?.avatarTransform?.y ?? 50), 0, 100)
-  const scale = clamp(Number(home?.hero?.avatarTransform?.scale ?? 1), 0.5, 3)
+  const socials = SOCIALS.map((s) => ({ ...s, href: safeHref(home?.socials?.[s.key] || s.fallback) })).filter((s) => s.href)
 
-  const avatarSrc =
-    (home?.hero?.avatarUrl && home.hero.avatarUrl.trim()) ||
-    '/images/hikoAvator.png'
+  // Admin value per line wins; blank lines fall back to the CV-derived value.
+  const cc = home?.hero?.currentlyCoding
+  const merge = (admin?: string, fallback?: string) => (admin ?? '').trim() || (fallback ?? '').trim()
+  const coding = {
+    label: merge(cc?.label, autoCoding.label),
+    project: merge(cc?.project, autoCoding.project),
+    note: merge(cc?.note, autoCoding.note),
+  }
+  const hasCoding = Boolean(coding.label || coding.project || coding.note)
 
-  const socials = [
-    { name: 'GitHub', icon: <FaGithub />, url: home?.socials?.github || 'https://github.com/HikoPLi' },
-    { name: 'GitLab', icon: <FaGitlab />, url: home?.socials?.gitlab || 'https://gitlab.com/HikoPLi' },
-    { name: 'LinkedIn', icon: <FaLinkedin />, url: home?.socials?.linkedin || 'https://www.linkedin.com/in/liyanpeihiko/' },
-    { name: 'WhatsApp', icon: <FaWhatsapp />, url: home?.socials?.whatsapp || 'https://wa.me/85200000000' },
-  ]
-
-  const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
+  const imgStyle: React.CSSProperties = {
+    objectFit: 'cover',
+    objectPosition: `${posX}% ${posY}%`,
+    transform: `scale(${scale})`,
+    transformOrigin: `${posX}% ${posY}%`,
+    pointerEvents: 'none',
+  }
 
   return (
-    <Box position="relative" w="full">
-      <HeroAmbient>
-        <Box position="relative" overflow="visible" pb={[16, 20]} pt={[24, 28, 36]}>
-          <Box mx="auto" maxW="var(--container-content)" px={[4, 6, 8]}>
-            <Flex
-              direction={isMobile ? 'column' : 'row'}
-              alignItems="flex-start"
-              justifyContent="space-between"
-              gap={[8, 10, 12]}
-            >
-              {/* Left column: section label + tagline + meta + CTAs */}
-              <Box flex={1} minW={0}>
-                <Box mb={8}>
-                  <SectionLabel n={1} as="p">Introduction</SectionLabel>
-                </Box>
-
-                {!isMobile && (
-                  <Box mb={6}>
-                    <HeroHeadline
-                      brand={home?.hero?.brand}
-                      tagline={home?.hero?.tagline}
-                    />
-                  </Box>
-                )}
-
-                {/* Name */}
-                <Flex direction="column" gap={2} mb={5}>
-                  <Text
-                    fontSize={['28px', '36px', '42px']}
-                    fontWeight={500}
-                    lineHeight="1.05"
-                    letterSpacing="-0.02em"
-                    color={fg}
-                  >
-                    Li Yanpei
-                    <Text as="span" color={fgMuted} fontWeight={300}>
-                      {' '}
-                      / 李彦霈
-                    </Text>
-                  </Text>
-
-                  <Flex
-                    wrap="wrap"
-                    fontFamily={monoFont}
-                    fontSize="11px"
-                    color={fgMuted}
-                    letterSpacing="0.04em"
-                    gap={3}
-                    mt={1}
-                  >
-                    <Text as="span">Hong Kong</Text>
-                    <Text as="span" opacity={0.5}>/</Text>
-                    <Text as="span">Mandarin · Cantonese · English</Text>
-                    <Text as="span" opacity={0.5}>/</Text>
-                    <Text as="span" suppressHydrationWarning>
-                      Available · {new Date().getFullYear()}
-                    </Text>
-                  </Flex>
-                </Flex>
-
-                {/*
-                  Contact info (tel + email) intentionally removed from the
-                  intro per spec — direct contact lives on /contact (linked
-                  in the header). Keeping it here doubled the surface and
-                  made the hero feel like a business card.
-                */}
-
-                {/* CTAs + socials */}
-                <Flex direction={['column', 'row']} alignItems={['stretch', 'center']} gap={4} mt={8}>
-                  <Button
-                    as={NextLink}
-                    href="/cv"
-                    size="md"
-                    h="44px"
-                    px={6}
-                    bg="var(--accent)"
-                    color="white"
-                    fontSize="14px"
-                    fontWeight={500}
-                    _hover={{ bg: '#4f46e5' }}
-                    _active={{ bg: '#4338ca' }}
-                  >
-                    View CV →
-                  </Button>
-
-                  <Stack direction="row" spacing={2}>
-                    {socials.map((s) => (
-                      <Tooltip key={s.name} label={s.name} placement="top" hasArrow>
-                        <IconButton
-                          as="a"
-                          href={s.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          aria-label={s.name}
-                          icon={s.icon}
-                          variant="outline"
-                          size="md"
-                          h="44px"
-                          w="44px"
-                          borderColor={ctaBorder}
-                          color={fg}
-                          bg={socialBg}
-                          _hover={{ borderColor: ctaBorderHover, bg: socialBgHover }}
-                        />
-                      </Tooltip>
-                    ))}
-                  </Stack>
-                </Flex>
-              </Box>
-
-              {/* Right column: avatar (precision-cropped, transform from admin) */}
-              <Box
-                flexShrink={0}
-                alignSelf={['center', 'flex-start']}
-                mt={[6, 0]}
-              >
-                <Box
-                  w={['200px', '220px', '260px']}
-                  h={['200px', '220px', '260px']}
-                  borderRadius="20px"
-                  overflow="hidden"
-                  border="1px solid"
-                  borderColor={avatarBorder}
-                  boxShadow="0 24px 60px rgba(0,0,0,0.30)"
-                  position="relative"
-                  bg={avatarFrameBg}
-                >
-                  {avatarSrc.startsWith('/') ? (
-                    // Local / uploaded avatar → optimised (AVIF/WebP, right-sized
-                    // srcset) and fetched with high priority: it's the hero's LCP image.
-                    <NextImage
-                      src={avatarSrc}
-                      alt="Li Yanpei (Lucian)"
-                      fill
-                      priority
-                      sizes="(max-width: 480px) 200px, (max-width: 768px) 220px, 260px"
-                      draggable={false}
-                      style={{
-                        objectFit: 'cover',
-                        objectPosition: `${posX}% ${posY}%`,
-                        transform: `scale(${scale})`,
-                        transformOrigin: `${posX}% ${posY}%`,
-                        pointerEvents: 'none',
-                      }}
-                    />
-                  ) : (
-                    <Image
-                      src={avatarSrc}
-                      alt="Li Yanpei (Lucian)"
-                      loading="eager"
-                      decoding="async"
-                      w="100%"
-                      h="100%"
-                      objectFit="cover"
-                      sx={{ objectPosition: `${posX}% ${posY}%` }}
-                      transform={`scale(${scale})`}
-                      transformOrigin={`${posX}% ${posY}%`}
-                      draggable={false}
-                      pointerEvents="none"
-                      display="block"
-                    />
-                  )}
-                </Box>
-
-                {/*
-                  Currently-coding chip beneath avatar.
-                  Three-way merge per line:
-                      admin (home.json) → auto-derived from CV → blank
-                  Admin wins when non-empty; otherwise we fall back to the
-                  CV-derived default; if both are blank the line is skipped.
-                  Whole chip hides only when all three merged values are
-                  empty (i.e. no manual values AND no CV signal).
-                */}
-                {(() => {
-                  const cc = home?.hero?.currentlyCoding
-                  const auto = deriveCurrentlyCoding(cvEn)
-                  const merge = (admin?: string, fallback?: string) =>
-                    ((admin ?? '').trim() || (fallback ?? '').trim())
-                  const label = merge(cc?.label, auto.label)
-                  const project = merge(cc?.project, auto.project)
-                  const note = merge(cc?.note, auto.note)
-                  if (!label && !project && !note) return null
-                  return (
-                    <Flex
-                      mt={3}
-                      direction="column"
-                      fontFamily={monoFont}
-                      fontSize="10px"
-                      letterSpacing="0.04em"
-                      color={fgMuted}
-                      textAlign={['center', 'left']}
-                      gap={0.5}
-                    >
-                      {label && <Text as="span">{label}</Text>}
-                      {project && (
-                        <Text as="span" color={fg}>
-                          {project}
-                        </Text>
-                      )}
-                      {note && (
-                        <Text as="span" opacity={0.6}>
-                          {note}
-                        </Text>
-                      )}
-                    </Flex>
-                  )
-                })()}
-              </Box>
-            </Flex>
-
-            {/* Mobile: HeroHeadline below (different ordering vs desktop) */}
-            {isMobile && (
-              <Box mt={10}>
-                <HeroHeadline
-                  brand={home?.hero?.brand}
-                  tagline={home?.hero?.tagline}
-                />
-              </Box>
-            )}
+    <HeroAmbient>
+      <Box pt={{ base: 16, md: 24, lg: 32 }} pb={{ base: 12, md: 20 }}>
+        <Box mx="auto" maxW="var(--container-content)" px={{ base: 4, md: 6, lg: 8 }}>
+          <Box mb={{ base: 8, md: 10 }} sx={revealSx(0)}>
+            <SectionLabel n={1} as="p" mb={0}>
+              Introduction
+            </SectionLabel>
           </Box>
+
+          <Flex
+            direction={{ base: 'column', md: 'row' }}
+            align={{ base: 'stretch', md: 'flex-start' }}
+            justify="space-between"
+            gap={{ base: 10, md: 12, lg: 16 }}
+          >
+            {/* Copy column */}
+            <Box flex="1" minW={0}>
+              <HeroHeadline brand={home?.hero?.brand} identity={identity} role={role} rotating={rotating} startStep={1} />
+
+              <Flex
+                as="ul"
+                listStyleType="none"
+                wrap="wrap"
+                align="center"
+                columnGap={3}
+                rowGap={1}
+                mt={{ base: 6, md: 8 }}
+                fontFamily={monoFont}
+                fontSize="12px"
+                letterSpacing="0.04em"
+                color="page.fg-secondary"
+                sx={{
+                  ...revealSx(5),
+                  // Hairline slash between items, never orphaned when a row wraps.
+                  '& > li + li::before': { content: '"/"', mr: 3, opacity: 0.5 },
+                }}
+              >
+                <li>Hong Kong</li>
+                <li>Mandarin · Cantonese · English</li>
+                <li suppressHydrationWarning>Available · {new Date().getFullYear()}</li>
+              </Flex>
+
+              <Flex
+                direction={{ base: 'column', sm: 'row' }}
+                align={{ base: 'stretch', sm: 'center' }}
+                wrap="wrap"
+                gap={3}
+                mt={{ base: 8, md: 10 }}
+                sx={revealSx(6)}
+              >
+                <Button
+                  as={NextLink}
+                  href="/cv"
+                  h="44px"
+                  px={6}
+                  bg="var(--accent)"
+                  color="white"
+                  fontSize="14px"
+                  fontWeight={500}
+                  _hover={{ bg: '#4f46e5' }}
+                  _active={{ bg: '#4338ca' }}
+                  _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '3px' }}
+                >
+                  View CV →
+                </Button>
+                <Button
+                  as={NextLink}
+                  href="/contact"
+                  h="44px"
+                  px={6}
+                  variant="outline"
+                  borderColor="page.border-strong"
+                  color="page.fg"
+                  bg="page.surface"
+                  fontSize="14px"
+                  fontWeight={500}
+                  _hover={{ borderColor: 'page.fg-secondary', bg: 'page.surface' }}
+                  _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '3px' }}
+                >
+                  Get in touch
+                </Button>
+
+                {socials.length > 0 && (
+                  <Flex as="ul" listStyleType="none" gap={2} ml={{ sm: 1 }} aria-label="Profiles">
+                    {socials.map((s) => (
+                      <li key={s.name}>
+                        <Tooltip label={s.name} placement="top" hasArrow openDelay={300}>
+                          <IconButton
+                            as="a"
+                            href={s.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label={`${s.name} (opens in a new tab)`}
+                            icon={s.icon}
+                            variant="outline"
+                            h="44px"
+                            w="44px"
+                            minW="44px"
+                            borderColor="page.border-strong"
+                            color="page.fg"
+                            bg="page.surface"
+                            _hover={{ borderColor: 'page.fg-secondary', color: 'var(--accent)' }}
+                            _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '3px' }}
+                          />
+                        </Tooltip>
+                      </li>
+                    ))}
+                  </Flex>
+                )}
+              </Flex>
+            </Box>
+
+            {/* Portrait — right column ≥ md, closing profile row below md */}
+            <Flex
+              direction={{ base: 'row', md: 'column' }}
+              align={{ base: 'center', md: 'flex-start' }}
+              gap={{ base: 4, md: 4 }}
+              flexShrink={0}
+              pt={{ base: 8, md: 0 }}
+              borderTop={{ base: '1px solid', md: 'none' }}
+              borderColor="page.border"
+              sx={settleSx(3)}
+            >
+              <Box
+                position="relative"
+                flexShrink={0}
+                w={{ base: '104px', sm: '128px', md: '220px', lg: '260px' }}
+                h={{ base: '104px', sm: '128px', md: '220px', lg: '260px' }}
+                borderRadius={{ base: '14px', md: '20px' }}
+                overflow="hidden"
+                border="1px solid"
+                borderColor="page.border-strong"
+                bg="page.bg-elevated"
+                boxShadow={{ base: 'none', md: '0 24px 60px rgba(0,0,0,0.22)' }}
+              >
+                {avatarSrc.startsWith('/') ? (
+                  // Local / uploaded portrait → optimised, right-sized and
+                  // high-priority: it is the hero's LCP image.
+                  <NextImage
+                    src={avatarSrc}
+                    alt={alt}
+                    fill
+                    priority
+                    sizes="(max-width: 479px) 104px, (max-width: 767px) 128px, (max-width: 991px) 220px, 260px"
+                    draggable={false}
+                    style={imgStyle}
+                  />
+                ) : (
+                  <Image
+                    src={avatarSrc}
+                    alt={alt}
+                    loading="eager"
+                    decoding="async"
+                    w="100%"
+                    h="100%"
+                    display="block"
+                    draggable={false}
+                    style={imgStyle}
+                  />
+                )}
+              </Box>
+
+              {hasCoding && (
+                <Flex
+                  direction="column"
+                  gap={0.5}
+                  minW={0}
+                  fontFamily={monoFont}
+                  fontSize="11px"
+                  letterSpacing="0.04em"
+                  color="page.fg-secondary"
+                >
+                  {coding.label && (
+                    <Flex as="span" align="center" gap={2}>
+                      <Box as="span" aria-hidden w="5px" h="5px" borderRadius="full" bg="var(--accent)" flexShrink={0} />
+                      {coding.label}
+                    </Flex>
+                  )}
+                  {coding.project && (
+                    <Text as="span" color="page.fg" fontSize="13px" fontFamily="body" letterSpacing="-0.005em" fontWeight={500}>
+                      {coding.project}
+                    </Text>
+                  )}
+                  {coding.note && <Text as="span">{coding.note}</Text>}
+                </Flex>
+              )}
+            </Flex>
+          </Flex>
         </Box>
-      </HeroAmbient>
-    </Box>
+      </Box>
+    </HeroAmbient>
   )
 }
 

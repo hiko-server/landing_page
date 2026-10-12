@@ -1,33 +1,38 @@
 import React, { useMemo } from 'react'
-import { Box, Flex, Link, Text, useColorModeValue } from '@chakra-ui/react'
-import { motion } from 'framer-motion'
+import { Box, Flex, Link, Text } from '@chakra-ui/react'
+import { motion, useReducedMotion } from 'framer-motion'
 
-type CertOrg = {
-  issuingOrganization: string
-  CertificationList: { certificationName: string; credentialURL: string }[]
-}
+import { field, list } from '../CVViewerPage/fields'
+import { safeHref } from '../../lib/cvFormat'
+import type { CvSectionLike } from '../../lib/cvVisibility'
+
+const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
+const MotionBox = motion(Box)
+
+type Org = { key: string; name: string; certs: Array<{ key: string; name: string; href: string }> }
 
 /**
- * v6 Certifications.
+ * [07] Certifications — org-grouped chips on a flat surface.
  *
- * Replaces v5's teal-tinted glass chips with org-grouped chip rows on a flat
- * surface. Org name uses monospace label style; chips use a subtle border.
- * Accent appears only on hover for external-link arrows.
+ * Built from the public CV; a hidden certificate, URL or org name is simply
+ * absent. Credential links go through safeHref, so only http(s) URLs become
+ * links — anything else renders as a plain chip.
  */
+export default function CertificationsPeek({ cvEn }: { cvEn?: CvSectionLike[] }) {
+  const reduce = useReducedMotion()
 
-export default function CertificationsPeek({ cvEn }: { cvEn?: any[] }) {
-  const border = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
-  const borderHover = useColorModeValue('rgba(0,0,0,0.20)', 'rgba(255,255,255,0.24)')
-  const fg = useColorModeValue('gray.700', 'gray.300')
-  const dim = useColorModeValue('gray.600', 'gray.500')
-  const monoFont = 'var(--font-geist-mono), monospace'
-
-  const orgs: CertOrg[] = useMemo(() => {
-    if (!Array.isArray(cvEn)) return []
-    const section = cvEn.find((s: any) => s.sessionName === 'certification')
-    if (!section?.certifications) return []
-    return section.certifications
-      .filter((org: any) => org?.CertificationList?.length > 0)
+  const orgs: Org[] = useMemo(() => {
+    const section = Array.isArray(cvEn) ? cvEn.find((s) => s?.sessionName === 'certification') : undefined
+    return list(section, 'certifications')
+      .map((org: any, oi: number) => ({
+        key: `${oi}-${field(org, 'issuingOrganization')}`,
+        name: field(org, 'issuingOrganization'),
+        certs: list(org, 'CertificationList')
+          .map((c: any, ci: number) => ({ key: `${ci}`, name: field(c, 'certificationName'), href: safeHref(field(c, 'credentialURL')) }))
+          .filter((c) => c.name)
+          .slice(0, 8),
+      }))
+      .filter((o) => o.certs.length > 0)
       .slice(0, 4)
   }, [cvEn])
 
@@ -36,63 +41,66 @@ export default function CertificationsPeek({ cvEn }: { cvEn?: any[] }) {
   return (
     <Box w="100%" maxW="1100px" mx="auto">
       {orgs.map((org, oi) => (
-        <Box
-          as={motion.div as any}
-          key={oi}
-          initial={{ opacity: 0, y: 8 }}
+        <MotionBox
+          key={org.key}
+          as="section"
+          aria-label={org.name || undefined}
+          mb={6}
+          initial={reduce ? false : { opacity: 0, y: 8 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.3, delay: oi * 0.08 } as any}
-          mb={6}
+          transition={{ duration: 0.3, delay: oi * 0.08, ease: [0.22, 1, 0.36, 1] }}
         >
-          <Text
-            fontFamily={monoFont}
-            fontSize="10px"
-            letterSpacing="0.16em"
-            textTransform="uppercase"
-            color={dim}
-            mb={3}
-          >
-            ▸ {org.issuingOrganization}
-          </Text>
-          <Flex wrap="wrap" gap={2}>
-            {(org.CertificationList || []).slice(0, 8).map((c, ci) => {
-              const isLink = !!c.credentialURL
-              const chipProps = {
+          {org.name && (
+            <Text as="h3" fontFamily={monoFont} fontSize="11px" letterSpacing="0.14em" textTransform="uppercase" color="page.fg-secondary" mb={3}>
+              <Box as="span" aria-hidden mr={1.5}>
+                ▸
+              </Box>
+              {org.name}
+            </Text>
+          )}
+          <Flex as="ul" listStyleType="none" wrap="wrap" gap={2}>
+            {org.certs.map((c) => {
+              const chip = {
                 border: '1px solid',
-                borderColor: border,
+                borderColor: 'page.border',
                 borderRadius: 'md',
                 px: 3,
                 py: 1.5,
                 fontSize: '12px',
-                color: fg,
+                color: 'page.fg',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 1.5,
                 transition: 'border-color 200ms var(--ease-out-quart), color 200ms var(--ease-out-quart)',
               } as const
-              return isLink ? (
-                <Link
-                  key={ci}
-                  href={c.credentialURL}
-                  isExternal
-                  rel="noopener noreferrer"
-                  {...chipProps}
-                  _hover={{ textDecoration: 'none', borderColor: borderHover, color: 'var(--accent)' }}
-                >
-                  {c.certificationName}
-                  <Text as="span" fontFamily={monoFont} fontSize="9px" opacity={0.6} aria-hidden>
-                    ↗
-                  </Text>
-                </Link>
-              ) : (
-                <Box as="span" key={ci} {...chipProps}>
-                  {c.certificationName}
-                </Box>
+              return (
+                <li key={c.key}>
+                  {c.href ? (
+                    <Link
+                      href={c.href}
+                      isExternal
+                      rel="noopener noreferrer"
+                      {...chip}
+                      _hover={{ textDecoration: 'none', borderColor: 'page.border-strong', color: 'var(--accent)' }}
+                      _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
+                    >
+                      {c.name}
+                      <Text as="span" fontFamily={monoFont} fontSize="10px" color="page.fg-secondary" aria-hidden>
+                        ↗
+                      </Text>
+                      <span className="sr-only"> (credential, opens in a new tab)</span>
+                    </Link>
+                  ) : (
+                    <Box as="span" {...chip}>
+                      {c.name}
+                    </Box>
+                  )}
+                </li>
               )
             })}
           </Flex>
-        </Box>
+        </MotionBox>
       ))}
     </Box>
   )

@@ -1,4 +1,4 @@
-import { Box, Flex } from '@chakra-ui/react'
+import { Box } from '@chakra-ui/react'
 import React from 'react'
 
 import PersonalInfo from './PersonalInfo'
@@ -6,51 +6,47 @@ import Content from './Content'
 import Brands from '../BrandShowcase/BrandShowcase'
 // Pure shape — must NOT import from lib/home (server-only / better-sqlite3).
 import { isSectionVisible, type HomeData } from '../../lib/homeShape'
+import type { CvSectionLike } from '../../lib/cvVisibility'
+import type { CurrentlyCoding } from '../../lib/currentlyCoding'
+import type { HeroIdentity } from './heroIdentity'
+import type { WorkIndexItem } from './projectMatch'
 
+/**
+ * Home page body: hero → affiliations strip → [02]…[09] sections.
+ *
+ * Every size and direction is a CSS/Chakra responsive value — nothing reads
+ * the viewport in JS, so the server-rendered HTML is already the final
+ * layout on every screen (no post-hydration flip, no layout shift).
+ */
 const LandingContent = ({
-  isMobile,
   home,
   cv,
+  identity,
+  autoCoding,
+  work,
 }: {
-  isMobile: boolean
   home?: HomeData | null
-  cv?: { en: any[]; zh: any[] } | null
+  cv?: { en: CvSectionLike[]; zh: CvSectionLike[] } | null
+  identity: HeroIdentity
+  autoCoding: CurrentlyCoding
+  work?: WorkIndexItem[]
 }) => {
-  const showIntro = isSectionVisible(home, 'introduction')
-  const showBrands = isSectionVisible(home, 'brands')
-
   return (
-    <Flex
-      justifyContent="center"
-      alignItems="center"
-      flexWrap="wrap"
-      borderRadius="20px"
-      w="100%"
-      bg="transparent"
-      className="premium-home-shell"
-      px={{ base: 2, md: 4 }}
-      pb={{ base: 10, md: 16 }}
-    >
-      {showIntro && (
-        <PersonalInfo isMobile={isMobile} home={home || undefined} cvEn={cv?.en} />
+    <Box w="100%" pb={{ base: 10, md: 16 }}>
+      {isSectionVisible(home, 'introduction') && (
+        <PersonalInfo home={home || undefined} identity={identity} autoCoding={autoCoding} />
       )}
 
-      {showBrands && (
-        <Box w="100%" mt={{ base: 4, md: 8 }}>
+      {isSectionVisible(home, 'brands') && (
+        <Box w="100%" mt={{ base: 2, md: 6 }}>
           <Brands brands={home?.brands} />
         </Box>
       )}
 
-      <Box w="100%" mt={{ base: 4, md: 10 }}>
-        <Content
-          quickAccess={home?.quickAccess}
-          photos={home?.photos as any}
-          cvEn={cv?.en}
-          cvZh={cv?.zh}
-          home={home || undefined}
-        />
+      <Box w="100%" mt={{ base: 2, md: 6 }}>
+        <Content photos={home?.photos} cvEn={cv?.en} home={home || undefined} work={work} />
       </Box>
-    </Flex>
+    </Box>
   )
 }
 

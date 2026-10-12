@@ -117,7 +117,9 @@ export default function CVSectionShell({
               py={[5, 6]}
               _hover={{ bg: 'transparent' }}
               _expanded={{ bg: 'transparent' }}
-              sx={{ outline: 'none' }}
+              // Keyboard focus gets an inset accent ring (the item clips overflow).
+              _focus={{ boxShadow: 'none' }}
+              _focusVisible={{ outline: 'none', boxShadow: 'inset 0 0 0 2px var(--accent)' }}
             >
               <Flex w="full" align="center" gap={[3, 4]}>
                 {/* Mono index */}

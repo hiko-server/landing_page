@@ -1,8 +1,8 @@
 import React from 'react'
-import { Flex, Link, Box, useColorModeValue } from '@chakra-ui/react'
+import { Flex, Link, Box } from '@chakra-ui/react'
 import { Experiences } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'
-import { cvLabels, formatCvRange, hrefOf } from '../../lib/cvFormat'
+import { cvLabels, formatCvRange, safeHref } from '../../lib/cvFormat'
 import CVSectionShell, { CVRow, CVBullets, CVTagList } from './_CVSectionShell'
 
 const t = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
@@ -18,10 +18,6 @@ const WorkExperience = ({
 }) => {
   const L = cvLabels(lang)
   const items = (data?.experiences || []).filter((e) => t(e.jobTitle) || t(e.companyName))
-  // "at" connector word inside the title — needs theme-aware color so it
-  // stays readable on white (was hard-coded "gray.500" which is 2.4:1 on
-  // light bg, fails WCAG AA).
-  const conjColor = useColorModeValue('gray.600', 'gray.500')
   if (!items.length) return null
   return (
     <CVSectionShell
@@ -39,13 +35,13 @@ const WorkExperience = ({
               <Flex align="baseline" wrap="wrap" gap={2}>
                 {t(exp.jobTitle) ? <Box as="span">{exp.jobTitle}</Box> : null}
                 {t(exp.jobTitle) && t(exp.companyName) ? (
-                  <Box as="span" color={conjColor} fontWeight={400} fontSize="14px">
+                  <Box as="span" color="page.fg-secondary" fontWeight={400} fontSize="14px">
                     {L.at}
                   </Box>
                 ) : null}
-                {!t(exp.companyName) ? null : t(exp.companyURL) ? (
+                {!t(exp.companyName) ? null : safeHref(exp.companyURL) ? (
                   <Link
-                    href={hrefOf(exp.companyURL)}
+                    href={safeHref(exp.companyURL)}
                     isExternal
                     color="var(--accent)"
                     sx={{

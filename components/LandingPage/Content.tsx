@@ -1,5 +1,5 @@
 import React from 'react'
-import { Box, Flex, useColorModeValue } from '@chakra-ui/react'
+import { Box, Flex } from '@chakra-ui/react'
 
 import ImageScroller from '../imageScoller/imageScroller'
 import type { ScrollerImage } from '../imageScoller/imageScroller'
@@ -18,6 +18,8 @@ import SectionLabel from '../General-UI/SectionLabel'
 import FloatingNav from '../General-UI/FloatingNav'
 // Pure shape — must NOT import from lib/home (server-only / better-sqlite3).
 import { isSectionVisible, type HomeData } from '../../lib/homeShape'
+import type { CvSectionLike } from '../../lib/cvVisibility'
+import type { WorkIndexItem } from './projectMatch'
 
 /**
  * v6 home Content.
@@ -36,17 +38,15 @@ const Content = ({
   photos,
   cvEn,
   home,
+  work,
 }: {
-  // `quickAccess` and `cvZh` no longer rendered here (Hero CTAs cover quick
-  // access; full bilingual CV lives at /cv) but the props are kept for
-  // backward-compat with the parent LandingContent component.
-  quickAccess?: { label: string; url: string }[]
   photos?: ScrollerImage[]
-  cvEn?: any[]
-  cvZh?: any[]
+  /** Website-pruned EN CV, limited to the sections rendered here. */
+  cvEn?: CvSectionLike[]
   home?: HomeData | null
+  /** /work case-study index used to link project cards. */
+  work?: WorkIndexItem[]
 }) => {
-  const border = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
 
   const show = {
     openSource: isSectionVisible(home, 'open-source'),
@@ -123,7 +123,7 @@ const Content = ({
             <SectionLabel n={5} mb={6}>
               Selected Projects
             </SectionLabel>
-            <ProjectSpotlight cvEn={cvEn} />
+            <ProjectSpotlight cvEn={cvEn} work={work} />
           </Box>
         </SectionReveal>
       )}
@@ -160,7 +160,7 @@ const Content = ({
           align="flex-start"
           pt={{ base: 8, md: 12 }}
           borderTop="1px solid"
-          borderColor={border}
+          borderColor="page.border"
         >
           {show.photos && (
             <Box

@@ -10,28 +10,33 @@ import {
   Text,
   FormControl,
   FormErrorMessage,
+  FormHelperText,
   FormLabel,
   HStack,
   VStack,
-  useColorModeValue,
   useToast,
-  Progress,
   Tooltip,
   Divider,
   Select,
 } from '@chakra-ui/react'
-import {
-  FaGithub,
-  FaGitlab,
-  FaLinkedin,
-  FaWhatsapp,
-  FaCopy,
-} from 'react-icons/fa'
-import { motion } from 'framer-motion'
+import { keyframes } from '@emotion/react'
+import { FaGithub, FaGitlab, FaLinkedin, FaWhatsapp, FaCopy } from 'react-icons/fa'
+import { motion, useReducedMotion } from 'framer-motion'
 
-const MESSAGE_MAX = 5000
+import { safeHref } from '../../lib/cvFormat'
+import {
+  MESSAGE_MAX,
+  isContactValid,
+  submitHint,
+  validateContact,
+  visibleErrors,
+  type ContactField,
+  type ContactValues,
+} from '../Common/contactForm'
+
 /** Nonces live 30 min server-side; refresh a little before that. */
 const NONCE_MAX_AGE_MS = 25 * 60 * 1000
+const DRAFT_KEY = 'contact_draft'
 
 type HomeData = {
   hero?: { phone?: string; email?: string; avatarUrl?: string; brand?: string }
@@ -56,37 +61,46 @@ const MotionBox = motion(Box)
 // Built-in defaults — used when home.json's contact block is missing or
 // any individual field is blank. Kept in sync with HomeEditor's
 // DEFAULT_CONTACT_REASONS so the admin and renderer agree.
-const DEFAULT_REASONS = [
-  'Project Inquiry',
-  'Hiring',
-  'Collaboration',
-  'Consulting',
-  'Mentorship',
-  'Other',
-]
+const DEFAULT_REASONS = ['Project Inquiry', 'Hiring', 'Collaboration', 'Consulting', 'Mentorship', 'Other']
 const DEFAULT_EYEBROW = '▸ Reach me'
 const DEFAULT_BLURB = 'I usually reply within 24 hours.'
 
-const monoFont = 'var(--font-geist-mono), monospace'
+const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
+
+const drawCircle = keyframes`from { stroke-dashoffset: 151; } to { stroke-dashoffset: 0; }`
+const drawTick = keyframes`from { stroke-dashoffset: 36; } to { stroke-dashoffset: 0; }`
+
+const labelProps = {
+  fontFamily: monoFont,
+  fontSize: '11px',
+  letterSpacing: '0.04em',
+  color: 'page.fg-secondary',
+  fontWeight: 400,
+  mb: 1.5,
+} as const
+
+const inputProps = {
+  borderColor: 'page.border-strong',
+  _hover: { borderColor: 'page.fg-secondary' },
+  _focusVisible: { borderColor: 'var(--accent)', boxShadow: '0 0 0 1px var(--accent)' },
+  _invalid: { borderColor: 'red.500', boxShadow: '0 0 0 1px var(--chakra-colors-red-500)' },
+} as const
+
+type Sent = { name: string; email: string; subject: string }
 
 /**
- * v6 ContactPro.
+ * Contact panel: optional "reach me" info card + the message form.
  *
- * v5 functionality preserved:
- *   - localStorage autosaved draft (clears on send)
- *   - POST /api/contact submission with toast feedback
- *   - 'Use Mail App' fallback opens mailto:
- *   - Click-to-copy email/phone helpers
- *   - Live validation + char counter
- *
- * v6 changes:
- *   - hCaptcha replaced with three-layer human check:
- *       1. Signed nonce from /api/contact/nonce (server-verified, ≥ 2s elapsed)
- *       2. Math captcha (visible UX deterrent)
- *       3. Honeypot 'hp' hidden field (catches dumb form-fillers)
- *     Server enforces (1) + (3); (2) is for human-visible reassurance.
- *   - No external dep, no HCAPTCHA_SECRET required.
- *   - Transparent panels, monospace eyebrows, indigo accent on primary submit.
+ *   - Inline validation (shown once a field is left, or after a send
+ *     attempt); each error is announced politely and linked to its field.
+ *   - "Send" stays disabled until the form is valid, with a hint saying
+ *     exactly what is still missing.
+ *   - On success the form is replaced in place by a confirmation (animated
+ *     check, what was sent, "Send another"), and focus moves to it.
+ *   - API contract unchanged: GET /api/contact/nonce, then POST /api/contact
+ *     with { name, email, subject, message, nonce, mathAnswer, hp }.
+ *   - Human check: signed nonce (server-verified, ≥ 2s old) + visible sum +
+ *     hidden honeypot. Drafts autosave locally and clear on send.
  */
 export default function ContactPro({
   home,
@@ -99,60 +113,60 @@ export default function ContactPro({
   headingAs?: 'h1' | 'h2'
 }) {
   const toast = useToast()
-  const border = useColorModeValue('rgba(0,0,0,0.10)', 'rgba(255,255,255,0.12)')
-  const borderStrong = useColorModeValue('rgba(0,0,0,0.20)', 'rgba(255,255,255,0.20)')
-  const dim = useColorModeValue('gray.600', 'gray.500')
-  const fg = useColorModeValue('gray.800', 'gray.100')
+  const reduce = useReducedMotion()
 
-  // Resolve editable copy + reasons once per render. Admin values win
-  // when non-blank; blank/missing entries fall back to the defaults.
-  const REASONS =
-    home?.contact?.reasons && home.contact.reasons.length > 0
-      ? home.contact.reasons
-      : DEFAULT_REASONS
+  // Admin copy wins when non-blank; blank / missing entries use the defaults.
+  const reasons = useMemo(() => {
+    const list = (home?.contact?.reasons || []).map((r) => (typeof r === 'string' ? r.trim() : '')).filter(Boolean)
+    return list.length ? list : DEFAULT_REASONS
+  }, [home?.contact?.reasons])
   const eyebrowText = (home?.contact?.eyebrow ?? '').trim() || DEFAULT_EYEBROW
-  const headingText =
-    (home?.contact?.heading ?? '').trim() || home?.hero?.brand || 'Contact'
+  const headingText = (home?.contact?.heading ?? '').trim() || home?.hero?.brand || 'Contact'
   const blurbText = (home?.contact?.blurb ?? '').trim() || DEFAULT_BLURB
+  const email = (home?.hero?.email || '').trim()
+  const phone = (home?.hero?.phone || '').trim()
+  const mailtoBase = email ? safeHref(`mailto:${email}`) : ''
 
-  const [name, setName] = useState('')
-  const [email, setEmail] = useState('')
-  const [reason, setReason] = useState<string>(REASONS[0])
-  const [subject, setSubject] = useState('')
-  const [message, setMessage] = useState('')
+  const [values, setValues] = useState<ContactValues>({
+    name: '',
+    email: '',
+    reason: reasons[0],
+    subject: '',
+    message: '',
+    mathAnswer: '',
+  })
+  const set = (k: keyof ContactValues) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
+    setValues((v) => ({ ...v, [k]: e.target.value }))
+
+  const [touched, setTouched] = useState<Partial<Record<ContactField, boolean>>>({})
+  const touch = (k: ContactField) => () => setTouched((t) => (t[k] ? t : { ...t, [k]: true }))
+  const [attempted, setAttempted] = useState(false)
   const [sending, setSending] = useState(false)
-  const [valid, setValid] = useState(false)
-
-  // v6 human check — replaces hCaptcha. Stateless: a 2-number addition
-  // (UX deterrent) + a signed nonce fetched from /api/contact/nonce
-  // (real verification) + an invisible 'hp' honeypot field.
-  //
-  // The math pair must be generated AFTER mount (in useEffect), otherwise SSR
-  // and the client hydration produce different random numbers and React
-  // throws 'Text content does not match server-rendered HTML'.
-  const [mathPair, setMathPair] = useState<{ a: number; b: number } | null>(null)
-  const expectedMath = mathPair ? mathPair.a + mathPair.b : null
-  const [mathAnswer, setMathAnswer] = useState('')
+  const [serverError, setServerError] = useState<string | null>(null)
+  const [sent, setSent] = useState<Sent | null>(null)
   const [honeypot, setHoneypot] = useState('')
+
+  // The sum is generated after mount so SSR and hydration markup match.
+  const [mathPair, setMathPair] = useState<{ a: number; b: number } | null>(null)
+  const newMathPair = () => setMathPair({ a: Math.floor(Math.random() * 9) + 1, b: Math.floor(Math.random() * 9) + 1 })
+  useEffect(() => {
+    setMathPair({ a: Math.floor(Math.random() * 9) + 1, b: Math.floor(Math.random() * 9) + 1 })
+  }, [])
+  const expectedMath = mathPair ? mathPair.a + mathPair.b : null
+
+  const errors = validateContact(values, expectedMath)
+  const valid = isContactValid(errors)
+  const shown = visibleErrors(errors, touched, attempted)
+  const hint = submitHint(errors)
+
+  const nameRef = useRef<HTMLInputElement | null>(null)
+  const successRef = useRef<HTMLHeadingElement | null>(null)
+
+  // Signed nonce: fetched on first interaction (not on every page view) and
+  // refreshed near its 30-minute expiry so a slow message never fails.
   const [nonce, setNonce] = useState<string | null>(null)
   const [nonceErr, setNonceErr] = useState<string | null>(null)
   const nonceAtRef = useRef(0)
-  const [submitted, setSubmitted] = useState(false)
-  const [touched, setTouched] = useState<Record<string, boolean>>({})
-  const touch = (k: string) => setTouched((t) => (t[k] ? t : { ...t, [k]: true }))
-  const showErr = (k: string) => submitted || !!touched[k]
-
-  // Generate the math pair only on the client to keep SSR markup deterministic.
-  useEffect(() => {
-    setMathPair({
-      a: Math.floor(Math.random() * 9) + 1,
-      b: Math.floor(Math.random() * 9) + 1,
-    })
-  }, [])
-
-  // The signed nonce is fetched on first interaction (not on every page
-  // view) and re-fetched once it is close to its 30-minute expiry, so a
-  // message composed slowly never fails verification.
   const fetchNonce = useCallback(async (): Promise<string | null> => {
     try {
       const r = await fetch('/api/contact/nonce', { cache: 'no-store' })
@@ -163,7 +177,8 @@ export default function ContactPro({
       setNonceErr(null)
       return d.token as string
     } catch {
-      setNonceErr('Verification could not initialize — check your connection and try again')
+      nonceAtRef.current = 0
+      setNonceErr('Verification couldn’t start — check your connection and try again.')
       return null
     }
   }, [])
@@ -178,251 +193,215 @@ export default function ContactPro({
     }
   }
 
-  // autosave draft (preserved from v5)
+  // Draft autosave (name / email / reason / subject / message only).
   useEffect(() => {
+    if (sent) return
     const id = setTimeout(() => {
-      const draft = { name, email, reason, subject, message }
+      const { name, email: em, reason, subject, message } = values
       try {
-        localStorage.setItem('contact_draft', JSON.stringify(draft))
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ name, email: em, reason, subject, message }))
       } catch {
         /* storage unavailable — drafts are a convenience only */
       }
     }, 600)
     return () => clearTimeout(id)
-  }, [name, email, reason, subject, message])
+  }, [values, sent])
 
   useEffect(() => {
     try {
-      const raw = localStorage.getItem('contact_draft')
-      if (raw) {
-        const d = JSON.parse(raw)
-        setName(d.name || '')
-        setEmail(d.email || '')
-        setReason(d.reason || REASONS[0])
-        setSubject(d.subject || '')
-        setMessage(d.message || '')
-      }
+      const raw = localStorage.getItem(DRAFT_KEY)
+      if (!raw) return
+      const d = JSON.parse(raw)
+      const str = (x: unknown) => (typeof x === 'string' ? x : '')
+      setValues((v) => ({
+        ...v,
+        name: str(d.name),
+        email: str(d.email),
+        reason: reasons.includes(str(d.reason)) ? str(d.reason) : reasons[0],
+        subject: str(d.subject),
+        message: str(d.message).slice(0, MESSAGE_MAX),
+      }))
     } catch {
       /* ignore malformed draft */
     }
-    // REASONS is derived from props once; restoring a draft runs only on mount.
+    // Restoring a draft runs once, on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const clearDraft = () => {
+  const resetForm = () => {
     try {
-      localStorage.removeItem('contact_draft')
+      localStorage.removeItem(DRAFT_KEY)
     } catch {
       /* ignore */
     }
-    setSubmitted(false)
+    setValues({ name: '', email: '', reason: reasons[0], subject: '', message: '', mathAnswer: '' })
     setTouched({})
-    setName('')
-    setEmail('')
-    setReason(REASONS[0])
-    setSubject('')
-    setMessage('')
-    setMathAnswer('')
+    setAttempted(false)
+    setServerError(null)
     setHoneypot('')
   }
 
-  // validation
+  const sendAnother = () => {
+    setSent(null)
+    newMathPair()
+    // Focus returns to the first field once the form is back in the DOM.
+    requestAnimationFrame(() => nameRef.current?.focus())
+  }
+
   useEffect(() => {
-    const mathOk =
-      expectedMath !== null && mathAnswer.trim() === String(expectedMath)
-    const ok =
-      name.trim().length > 0 &&
-      /.+@.+\..+/.test(email) &&
-      (subject.trim().length > 0 || Boolean(reason)) &&
-      message.trim().length > 0 &&
-      message.length <= MESSAGE_MAX &&
-      mathOk
-    setValid(!!ok)
-  }, [name, email, subject, message, mathAnswer, expectedMath, reason])
+    if (sent) successRef.current?.focus()
+  }, [sent])
 
-  const chars = message.length
-  const pct = Math.min(100, Math.floor((chars / MESSAGE_MAX) * 100))
-
-  const onCopy = (txt: string, label?: string) => {
+  const onCopy = (txt: string, label: string) => {
     navigator.clipboard
       .writeText(txt)
-      .then(() => toast({ status: 'success', title: label || 'Copied' }))
+      .then(() => toast({ status: 'success', title: label, duration: 2000 }))
       .catch(() => toast({ status: 'error', title: 'Copy failed' }))
   }
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setSubmitted(true)
+    setAttempted(true)
     if (!valid || sending) return
     setSending(true)
+    setServerError(null)
     try {
       const token = await ensureNonce()
       if (!token) return
-      // The server requires ≥2s between issuing the nonce and submitting.
+      // The server requires ≥ 2s between issuing the nonce and submitting.
       const age = Date.now() - nonceAtRef.current
       if (age < 2100) await new Promise((r) => setTimeout(r, 2100 - age))
-      const fullSubject = subject || reason
-      const body = `Reason: ${reason}\n\n${message}`
+      const subject = values.subject.trim() || values.reason
       const res = await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name,
-          email,
-          subject: fullSubject,
-          message: body,
+          name: values.name.trim(),
+          email: values.email.trim(),
+          subject,
+          message: `Reason: ${values.reason}\n\n${values.message}`,
           nonce: token,
-          mathAnswer: Number(mathAnswer),
+          mathAnswer: Number(values.mathAnswer),
           hp: honeypot, // expected to be ''
         }),
       })
       if (res.ok) {
-        toast({ status: 'success', title: 'Message sent', description: 'Thanks — I’ll reply by email.' })
-        clearDraft()
+        setSent({ name: values.name.trim(), email: values.email.trim(), subject })
+        resetForm()
         // A nonce is single-purpose; take a fresh one for any follow-up.
         setNonce(null)
         nonceAtRef.current = 0
       } else {
         const d = await res.json().catch(() => ({}))
-        toast({ status: 'error', title: d?.error || 'Failed to send' })
+        setServerError(typeof d?.error === 'string' && d.error ? d.error : 'The message couldn’t be sent. Please try again.')
       }
-    } catch (e: any) {
-      toast({ status: 'error', title: e?.message || 'Network error' })
+    } catch {
+      setServerError('Network error — check your connection and try again.')
     } finally {
       setSending(false)
     }
   }
 
-  const contactRows = useMemo(() => {
-    const items: Array<{ label: string; value: string; onClick: () => void }> = []
-    if (home?.hero?.email)
-      items.push({
-        label: 'email',
-        value: home.hero.email,
-        onClick: () => onCopy(home.hero?.email || '', 'Email copied'),
-      })
-    if (home?.hero?.phone)
-      items.push({
-        label: 'tel',
-        value: home.hero.phone,
-        onClick: () => onCopy(home.hero?.phone || '', 'Phone copied'),
-      })
-    return items
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [home?.hero?.email, home?.hero?.phone])
+  const contactRows = [
+    email ? { label: 'email', value: email, copied: 'Email copied' } : null,
+    phone ? { label: 'tel', value: phone, copied: 'Phone copied' } : null,
+  ].filter((r): r is { label: string; value: string; copied: string } => r !== null)
 
-  const socials: { name: string; icon: React.ReactNode; href?: string }[] = [
-    { name: 'GitHub', icon: <FaGithub />, href: home?.socials?.github },
-    { name: 'GitLab', icon: <FaGitlab />, href: home?.socials?.gitlab },
-    { name: 'LinkedIn', icon: <FaLinkedin />, href: home?.socials?.linkedin },
-    { name: 'WhatsApp', icon: <FaWhatsapp />, href: home?.socials?.whatsapp },
-  ].filter((s) => Boolean(s.href)) as any
+  const socials = [
+    { name: 'GitHub', icon: <FaGithub />, href: safeHref(home?.socials?.github) },
+    { name: 'GitLab', icon: <FaGitlab />, href: safeHref(home?.socials?.gitlab) },
+    { name: 'LinkedIn', icon: <FaLinkedin />, href: safeHref(home?.socials?.linkedin) },
+    { name: 'WhatsApp', icon: <FaWhatsapp />, href: safeHref(home?.socials?.whatsapp) },
+  ].filter((s) => s.href)
+
+  const chars = values.message.length
+  const hintId = 'contact-submit-hint'
+  const panelMotion = (delay: number) => ({
+    initial: reduce ? false : { opacity: 0, y: 12 },
+    animate: { opacity: 1, y: 0 },
+    transition: { duration: 0.4, delay, ease: [0.22, 1, 0.36, 1] },
+  })
 
   return (
-    <Flex
-      direction={{ base: 'column', md: 'row' }}
-      gap={6}
-      w="100%"
-      maxW="var(--container-content)"
-    >
-      {/* Info Panel (hidden when formOnly) */}
+    <Flex direction={{ base: 'column', md: 'row' }} gap={6} w="100%" maxW="var(--container-content)">
       {!formOnly && (
         <MotionBox
           flex={{ base: 'none', md: '0 0 340px' }}
-          bg="transparent"
+          minW={0}
           borderWidth="1px"
-          borderColor={border}
+          borderColor="page.border"
           borderRadius="lg"
-          p={6}
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35 }}
+          p={{ base: 5, md: 6 }}
+          {...(panelMotion(0) as any)}
         >
           <VStack align="stretch" spacing={5}>
             <Box>
-              <Text
-                fontFamily={monoFont}
-                fontSize="10px"
-                letterSpacing="0.16em"
-                textTransform="uppercase"
-                color={dim}
-                mb={2}
-              >
+              <Text fontFamily={monoFont} fontSize="11px" letterSpacing="0.16em" textTransform="uppercase" color="page.fg-secondary" mb={2}>
                 {eyebrowText}
               </Text>
-              <Heading as={headingAs} size="md" fontWeight={500} letterSpacing="-0.015em">
+              <Heading as={headingAs} size="md" fontWeight={500} letterSpacing="-0.015em" color="page.fg">
                 {headingText}
               </Heading>
-              <Text fontSize="sm" color={dim} mt={1}>
+              <Text fontSize="sm" color="page.fg-secondary" mt={1}>
                 {blurbText}
               </Text>
             </Box>
 
-            <Divider borderColor={border} />
-
-            <VStack align="stretch" spacing={2}>
-              {contactRows.map((it, idx) => (
-                <Flex key={idx} justify="space-between" align="center" gap={2}>
-                  <HStack spacing={3} minW={0}>
-                    <Text
-                      fontFamily={monoFont}
-                      fontSize="11px"
-                      color={dim}
-                      letterSpacing="0.04em"
-                      w="44px"
-                      flexShrink={0}
-                    >
-                      {it.label}
-                    </Text>
-                    <Text fontSize="14px" color={fg} isTruncated>
-                      {it.value}
-                    </Text>
-                  </HStack>
-                  <Tooltip label="Copy" hasArrow>
-                    <IconButton
-                      aria-label="Copy"
-                      icon={<FaCopy />}
-                      size="xs"
-                      variant="ghost"
-                      color={dim}
-                      _hover={{ color: 'var(--accent)' }}
-                      onClick={it.onClick}
-                    />
-                  </Tooltip>
-                </Flex>
-              ))}
-            </VStack>
+            {contactRows.length > 0 && (
+              <>
+                <Divider borderColor="page.border" />
+                <VStack as="ul" listStyleType="none" align="stretch" spacing={2}>
+                  {contactRows.map((it) => (
+                    <Flex as="li" key={it.label} justify="space-between" align="center" gap={2}>
+                      <HStack spacing={3} minW={0}>
+                        <Text fontFamily={monoFont} fontSize="11px" color="page.fg-secondary" letterSpacing="0.04em" w="44px" flexShrink={0}>
+                          {it.label}
+                        </Text>
+                        <Text fontSize="14px" color="page.fg" isTruncated>
+                          {it.value}
+                        </Text>
+                      </HStack>
+                      <Tooltip label="Copy" hasArrow openDelay={300}>
+                        <IconButton
+                          aria-label={`Copy ${it.label === 'tel' ? 'phone number' : 'email address'}`}
+                          icon={<FaCopy />}
+                          size="sm"
+                          variant="ghost"
+                          color="page.fg-secondary"
+                          _hover={{ color: 'var(--accent)', bg: 'transparent' }}
+                          onClick={() => onCopy(it.value, it.copied)}
+                        />
+                      </Tooltip>
+                    </Flex>
+                  ))}
+                </VStack>
+              </>
+            )}
 
             {socials.length > 0 && (
               <>
-                <Divider borderColor={border} />
+                <Divider borderColor="page.border" />
                 <Box>
-                  <Text
-                    fontFamily={monoFont}
-                    fontSize="10px"
-                    letterSpacing="0.16em"
-                    textTransform="uppercase"
-                    color={dim}
-                    mb={3}
-                  >
+                  <Text fontFamily={monoFont} fontSize="11px" letterSpacing="0.16em" textTransform="uppercase" color="page.fg-secondary" mb={3}>
                     ▸ Elsewhere
                   </Text>
-                  <HStack spacing={2}>
+                  <HStack as="ul" listStyleType="none" spacing={2}>
                     {socials.map((s) => (
-                      <IconButton
-                        key={s.name}
-                        as="a"
-                        href={s.href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label={s.name}
-                        icon={s.icon as any}
-                        variant="outline"
-                        size="sm"
-                        borderColor={border}
-                        color={dim}
-                        _hover={{ borderColor: borderStrong, color: fg }}
-                      />
+                      <li key={s.name}>
+                        <IconButton
+                          as="a"
+                          href={s.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`${s.name} (opens in a new tab)`}
+                          icon={s.icon}
+                          variant="outline"
+                          size="md"
+                          borderColor="page.border-strong"
+                          color="page.fg-secondary"
+                          _hover={{ borderColor: 'page.fg-secondary', color: 'page.fg' }}
+                        />
+                      </li>
                     ))}
                   </HStack>
                 </Box>
@@ -432,330 +411,261 @@ export default function ContactPro({
         </MotionBox>
       )}
 
-      {/* Form Panel */}
-      <MotionBox
-        flex="1"
-        bg="transparent"
-        borderWidth="1px"
-        borderColor={border}
-        borderRadius="lg"
-        p={6}
-        initial={{ opacity: 0, y: 12 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.05 }}
-      >
-        <Text
-          fontFamily={monoFont}
-          fontSize="10px"
-          letterSpacing="0.16em"
-          textTransform="uppercase"
-          color={dim}
-          mb={5}
-        >
-          ▸ Send a message
-        </Text>
+      {/* Form panel */}
+      <MotionBox flex="1" minW={0} borderWidth="1px" borderColor="page.border" borderRadius="lg" p={{ base: 5, md: 6 }} {...(panelMotion(0.05) as any)}>
+        {sent ? (
+          <Flex direction="column" align="flex-start" gap={4} py={{ base: 4, md: 8 }}>
+            <Box
+              as="svg"
+              aria-hidden
+              viewBox="0 0 52 52"
+              w="52px"
+              h="52px"
+              color="var(--accent)"
+              sx={{
+                '& circle': { strokeDasharray: 151, animation: `${drawCircle} 600ms cubic-bezier(0.22,1,0.36,1) both` },
+                '& path': { strokeDasharray: 36, animation: `${drawTick} 380ms cubic-bezier(0.22,1,0.36,1) 420ms both` },
+                '@media (prefers-reduced-motion: reduce)': { '& circle, & path': { animation: 'none' } },
+              }}
+            >
+              <circle cx="26" cy="26" r="24" fill="none" stroke="currentColor" strokeWidth="2" />
+              <path d="M15 27l7 7 15-16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            </Box>
+            <Heading as={headingAs === 'h1' ? 'h2' : 'h3'} ref={successRef} tabIndex={-1} size="md" fontWeight={500} letterSpacing="-0.015em" color="page.fg" _focus={{ outline: 'none' }}>
+              Message sent
+            </Heading>
+            <Text fontSize="15px" color="page.fg-secondary" lineHeight="1.6" maxW="52ch">
+              Thanks{sent.name ? `, ${sent.name}` : ''} — your message about{' '}
+              <Text as="span" color="page.fg">
+                “{sent.subject}”
+              </Text>{' '}
+              is on its way. I’ll reply to{' '}
+              <Text as="span" color="page.fg" fontFamily={monoFont} fontSize="14px" wordBreak="break-all">
+                {sent.email}
+              </Text>
+              .
+            </Text>
+            <Button
+              variant="outline"
+              size="md"
+              mt={2}
+              borderColor="page.border-strong"
+              color="page.fg"
+              fontFamily={monoFont}
+              fontSize="13px"
+              fontWeight={400}
+              onClick={sendAnother}
+              _hover={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+            >
+              Send another message
+            </Button>
+          </Flex>
+        ) : (
+          <>
+            <Text fontFamily={monoFont} fontSize="11px" letterSpacing="0.16em" textTransform="uppercase" color="page.fg-secondary" mb={5}>
+              ▸ Send a message
+            </Text>
 
-        <form onSubmit={onSubmit} onFocus={warmNonce} noValidate>
-          <VStack spacing={5} align="stretch">
-            <HStack spacing={4} align={{ base: 'stretch', md: 'flex-start' }} flexWrap="wrap">
-              <FormControl isRequired isInvalid={showErr('name') && !name.trim()} flex={1} minW="200px">
-                <FormLabel
-                  fontFamily={monoFont}
-                  fontSize="11px"
-                  letterSpacing="0.04em"
-                  color={dim}
-                  fontWeight={400}
-                  mb={1.5}
-                >
-                  Name
-                </FormLabel>
-                <Input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  onBlur={() => touch('name')}
-                  autoComplete="name"
-                  placeholder="Your name"
-                  borderColor={border}
-                  _hover={{ borderColor: borderStrong }}
-                  _focus={{
-                    borderColor: 'var(--accent)',
-                    boxShadow: '0 0 0 1px var(--accent)',
-                  }}
-                />
-                <FormErrorMessage fontSize="11px">Required</FormErrorMessage>
-              </FormControl>
-              <FormControl
-                isRequired
-                isInvalid={showErr('email') && !/.+@.+\..+/.test(email)}
-                flex={1}
-                minW="200px"
-              >
-                <FormLabel
-                  fontFamily={monoFont}
-                  fontSize="11px"
-                  letterSpacing="0.04em"
-                  color={dim}
-                  fontWeight={400}
-                  mb={1.5}
-                >
-                  Email
-                </FormLabel>
-                <Input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  onBlur={() => touch('email')}
-                  autoComplete="email"
-                  inputMode="email"
-                  placeholder="you@example.com"
-                  borderColor={border}
-                  _hover={{ borderColor: borderStrong }}
-                  _focus={{
-                    borderColor: 'var(--accent)',
-                    boxShadow: '0 0 0 1px var(--accent)',
-                  }}
-                />
-                <FormErrorMessage fontSize="11px">Enter a valid email</FormErrorMessage>
-              </FormControl>
-            </HStack>
-
-            <HStack spacing={4} align={{ base: 'stretch', md: 'flex-start' }} flexWrap="wrap">
-              <FormControl flex={1} minW="200px">
-                <FormLabel
-                  fontFamily={monoFont}
-                  fontSize="11px"
-                  letterSpacing="0.04em"
-                  color={dim}
-                  fontWeight={400}
-                  mb={1.5}
-                >
-                  Reason
-                </FormLabel>
-                <Select
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  borderColor={border}
-                  _hover={{ borderColor: borderStrong }}
-                  _focus={{
-                    borderColor: 'var(--accent)',
-                    boxShadow: '0 0 0 1px var(--accent)',
-                  }}
-                >
-                  {REASONS.map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </Select>
-              </FormControl>
-              <FormControl
-                isRequired
-                isInvalid={showErr('subject') && !subject.trim() && !reason}
-                flex={1}
-                minW="200px"
-              >
-                <FormLabel
-                  fontFamily={monoFont}
-                  fontSize="11px"
-                  letterSpacing="0.04em"
-                  color={dim}
-                  fontWeight={400}
-                  mb={1.5}
-                >
-                  Subject
-                </FormLabel>
-                <Input
-                  value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
-                  placeholder="Subject"
-                  borderColor={border}
-                  _hover={{ borderColor: borderStrong }}
-                  _focus={{
-                    borderColor: 'var(--accent)',
-                    boxShadow: '0 0 0 1px var(--accent)',
-                  }}
-                />
-                <FormErrorMessage fontSize="11px">Subject required</FormErrorMessage>
-              </FormControl>
-            </HStack>
-
-            <FormControl isRequired isInvalid={showErr('message') && (!message.trim() || message.length > MESSAGE_MAX)}>
-              <FormLabel
-                fontFamily={monoFont}
-                fontSize="11px"
-                letterSpacing="0.04em"
-                color={dim}
-                fontWeight={400}
-                mb={1.5}
-              >
-                Message
-              </FormLabel>
-              <Textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                onBlur={() => touch('message')}
-                maxLength={MESSAGE_MAX}
-                placeholder="Tell me a bit more…"
-                rows={8}
-                borderColor={border}
-                _hover={{ borderColor: borderStrong }}
-                _focus={{
-                  borderColor: 'var(--accent)',
-                  boxShadow: '0 0 0 1px var(--accent)',
-                }}
-              />
-              <HStack justify="space-between" pt={2}>
-                <Text fontFamily={monoFont} fontSize="10px" color={dim} letterSpacing="0.04em">
-                  {chars} / {MESSAGE_MAX}
-                </Text>
-                <Progress
-                  w="180px"
-                  size="xs"
-                  value={pct}
-                  sx={{
-                    '& > div': {
-                      background: 'var(--accent)',
-                    },
-                    background: border,
-                  }}
-                />
-              </HStack>
-              <FormErrorMessage fontSize="11px">Required</FormErrorMessage>
-            </FormControl>
-
-            {/* v6 three-layer human check. Honeypot 'hp' is hidden via aria
-                + tab-index + clip-path so screen readers and humans skip it.
-                The math pair renders only after mount (mathPair !== null)
-                so SSR and CSR markup match. */}
-            <Box>
-              <Flex
-                align="center"
-                gap={3}
-                p={3}
-                border="1px solid"
-                borderColor={border}
-                borderRadius="md"
-                flexWrap="wrap"
-                minH="56px"
-              >
-                <Text
-                  fontFamily={monoFont}
-                  fontSize="11px"
-                  color={dim}
-                  letterSpacing="0.04em"
-                >
-                  human check
-                </Text>
-                {mathPair ? (
-                  <>
-                    <Text fontSize="14px" color={fg}>
-                      What is <strong>{mathPair.a}</strong> +{' '}
-                      <strong>{mathPair.b}</strong>?
-                    </Text>
+            <form onSubmit={onSubmit} onFocus={warmNonce} noValidate aria-describedby={serverError ? 'contact-server-error' : undefined}>
+              <VStack spacing={5} align="stretch">
+                <Flex gap={4} direction={{ base: 'column', sm: 'row' }} align="flex-start">
+                  <FormControl isRequired isInvalid={!!shown.name} flex={1} minW={0}>
+                    <FormLabel {...labelProps}>Name</FormLabel>
+                    <Input ref={nameRef} value={values.name} onChange={set('name')} onBlur={touch('name')} autoComplete="name" placeholder="Your name" {...inputProps} />
+                    <FormErrorMessage fontSize="12px">{shown.name}</FormErrorMessage>
+                  </FormControl>
+                  <FormControl isRequired isInvalid={!!shown.email} flex={1} minW={0}>
+                    <FormLabel {...labelProps}>Email</FormLabel>
                     <Input
-                      type="number"
-                      inputMode="numeric"
-                      value={mathAnswer}
-                      onChange={(e) => setMathAnswer(e.target.value)}
-                      isInvalid={submitted && mathAnswer.trim() !== String(expectedMath)}
-                      placeholder="?"
-                      w="80px"
-                      size="sm"
-                      borderColor={border}
-                      _focus={{
-                        borderColor: 'var(--accent)',
-                        boxShadow: '0 0 0 1px var(--accent)',
-                      }}
-                      aria-label="Human check answer"
+                      type="email"
+                      value={values.email}
+                      onChange={set('email')}
+                      onBlur={touch('email')}
+                      autoComplete="email"
+                      inputMode="email"
+                      placeholder="you@example.com"
+                      {...inputProps}
                     />
-                    {mathAnswer && mathAnswer.trim() === String(expectedMath) && (
-                      <Text fontFamily={monoFont} fontSize="11px" color="green.400">
-                        ✓ ok
+                    <FormErrorMessage fontSize="12px">{shown.email}</FormErrorMessage>
+                  </FormControl>
+                </Flex>
+
+                <Flex gap={4} direction={{ base: 'column', sm: 'row' }} align="flex-start">
+                  <FormControl flex={1} minW={0}>
+                    <FormLabel {...labelProps}>Reason</FormLabel>
+                    <Select value={values.reason} onChange={set('reason')} {...inputProps}>
+                      {reasons.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <FormControl isInvalid={!!shown.subject} flex={1} minW={0}>
+                    <FormLabel {...labelProps}>
+                      Subject{' '}
+                      <Text as="span" color="page.fg-secondary" opacity={0.85}>
+                        (optional)
+                      </Text>
+                    </FormLabel>
+                    <Input value={values.subject} onChange={set('subject')} onBlur={touch('subject')} placeholder={values.reason || 'Subject'} {...inputProps} />
+                    <FormErrorMessage fontSize="12px">{shown.subject}</FormErrorMessage>
+                  </FormControl>
+                </Flex>
+
+                <FormControl isRequired isInvalid={!!shown.message}>
+                  <FormLabel {...labelProps}>Message</FormLabel>
+                  <Textarea
+                    value={values.message}
+                    onChange={set('message')}
+                    onBlur={touch('message')}
+                    maxLength={MESSAGE_MAX}
+                    placeholder="Tell me a bit more…"
+                    rows={7}
+                    resize="vertical"
+                    {...inputProps}
+                  />
+                  <Flex justify="space-between" align="flex-start" gap={3} pt={1.5}>
+                    <Box minW={0}>
+                      <FormErrorMessage fontSize="12px" mt={0}>
+                        {shown.message}
+                      </FormErrorMessage>
+                    </Box>
+                    <FormHelperText mt={0} ml="auto" fontFamily={monoFont} fontSize="11px" color="page.fg-secondary" letterSpacing="0.04em" flexShrink={0}>
+                      {chars.toLocaleString('en-US')} / {MESSAGE_MAX.toLocaleString('en-US')}
+                    </FormHelperText>
+                  </Flex>
+                </FormControl>
+
+                {/* Human check: the sum renders only after mount (SSR-safe). */}
+                <FormControl isRequired isInvalid={!!shown.mathAnswer}>
+                  <Flex align="center" gap={3} p={3} border="1px solid" borderColor="page.border" borderRadius="md" flexWrap="wrap" minH="58px">
+                    <FormLabel {...labelProps} mb={0} mr={0} display="flex" alignItems="center" gap={3} flexWrap="wrap" requiredIndicator={<></>}>
+                      <span>human check</span>
+                      <Text as="span" fontFamily="body" fontSize="14px" color="page.fg" letterSpacing="0">
+                        {mathPair ? (
+                          <>
+                            What is <strong>{mathPair.a}</strong> + <strong>{mathPair.b}</strong>?
+                          </>
+                        ) : (
+                          'Loading…'
+                        )}
+                      </Text>
+                    </FormLabel>
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      autoComplete="off"
+                      value={values.mathAnswer}
+                      onChange={set('mathAnswer')}
+                      onBlur={touch('mathAnswer')}
+                      isDisabled={!mathPair}
+                      placeholder="?"
+                      w="72px"
+                      size="sm"
+                      {...inputProps}
+                    />
+                    {!errors.mathAnswer && (
+                      <Text as="span" fontFamily={monoFont} fontSize="11px" color="page.fg-secondary">
+                        <Box as="span" aria-hidden color="var(--accent)">
+                          ✓
+                        </Box>{' '}
+                        ok
                       </Text>
                     )}
-                  </>
-                ) : (
-                  <Text fontFamily={monoFont} fontSize="11px" color={dim}>
-                    loading…
-                  </Text>
-                )}
-                {nonceErr && (
-                  <Text fontFamily={monoFont} fontSize="11px" color="red.400">
-                    {nonceErr}
-                  </Text>
-                )}
-              </Flex>
-              {/* Honeypot (must stay empty). Hidden visually + from a11y. */}
-              <Box
-                aria-hidden
-                tabIndex={-1}
-                position="absolute"
-                left="-9999px"
-                top="auto"
-                width="1px"
-                height="1px"
-                overflow="hidden"
-              >
-                <Input
-                  type="text"
-                  name="website"
-                  tabIndex={-1}
-                  autoComplete="off"
-                  value={honeypot}
-                  onChange={(e) => setHoneypot(e.target.value)}
-                />
-              </Box>
-            </Box>
+                  </Flex>
+                  <FormErrorMessage fontSize="12px">{shown.mathAnswer}</FormErrorMessage>
+                  {nonceErr && (
+                    <Text role="alert" mt={2} fontFamily={monoFont} fontSize="12px" color="red.500" _dark={{ color: 'red.300' }}>
+                      {nonceErr}
+                    </Text>
+                  )}
+                </FormControl>
 
-            <HStack justify="space-between" flexWrap="wrap" gap={3} pt={2}>
-              <HStack>
-                <Button
-                  type="submit"
-                  bg="var(--accent)"
-                  color="white"
-                  _hover={{ bg: '#4f46e5' }}
-                  _active={{ bg: '#4338ca' }}
-                  _disabled={{ opacity: 0.45, cursor: 'not-allowed' }}
-                  aria-disabled={!valid}
-                  opacity={valid ? 1 : 0.6}
-                  isLoading={sending}
-                  loadingText="Sending…"
-                  size="md"
-                >
-                  Send message →
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="md"
-                  color={dim}
-                  _hover={{ color: fg, bg: 'transparent' }}
-                  onClick={clearDraft}
-                  fontFamily={monoFont}
-                  fontSize="13px"
-                >
-                  Clear
-                </Button>
-              </HStack>
-              <Button
-                variant="ghost"
-                size="md"
-                color={dim}
-                _hover={{ color: fg, bg: 'transparent' }}
-                onClick={() => {
-                  const fullSubject = encodeURIComponent(subject || reason)
-                  const body = encodeURIComponent(`Reason: ${reason}\n\n${message}`)
-                  window.location.href = `mailto:${
-                    home?.hero?.email || ''
-                  }?subject=${fullSubject}&body=${body}`
-                }}
-                fontFamily={monoFont}
-                fontSize="13px"
-              >
-                Use mail app ↗
-              </Button>
-            </HStack>
-          </VStack>
-        </form>
+                {/* Honeypot (must stay empty) — hidden from people and assistive tech. */}
+                <Box aria-hidden position="absolute" left="-9999px" top="auto" w="1px" h="1px" overflow="hidden">
+                  <Input type="text" name="website" tabIndex={-1} autoComplete="off" value={honeypot} onChange={(e) => setHoneypot(e.target.value)} />
+                </Box>
+
+                {serverError && (
+                  <Flex
+                    id="contact-server-error"
+                    role="alert"
+                    gap={2.5}
+                    align="flex-start"
+                    px={3}
+                    py={2.5}
+                    border="1px solid"
+                    borderColor="red.400"
+                    borderRadius="md"
+                    fontSize="13px"
+                    color="red.600"
+                    _dark={{ color: 'red.300', borderColor: 'red.300' }}
+                  >
+                    <Box as="span" aria-hidden fontFamily={monoFont}>
+                      !
+                    </Box>
+                    <span>{serverError}</span>
+                  </Flex>
+                )}
+
+                <Flex direction={{ base: 'column', sm: 'row' }} justify="space-between" align={{ base: 'stretch', sm: 'center' }} gap={3} pt={1}>
+                  <HStack spacing={2}>
+                    <Button
+                      type="submit"
+                      flex={{ base: 1, sm: 'none' }}
+                      bg="var(--accent)"
+                      color="white"
+                      _hover={{ bg: '#4f46e5', _disabled: { bg: 'var(--accent)' } }}
+                      _active={{ bg: '#4338ca' }}
+                      _disabled={{ opacity: 0.45, cursor: 'not-allowed' }}
+                      _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '3px' }}
+                      isDisabled={!valid}
+                      isLoading={sending}
+                      loadingText="Sending…"
+                      aria-describedby={!valid && hint ? hintId : undefined}
+                    >
+                      Send message →
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      color="page.fg-secondary"
+                      _hover={{ color: 'page.fg', bg: 'transparent' }}
+                      onClick={resetForm}
+                      fontFamily={monoFont}
+                      fontSize="13px"
+                      fontWeight={400}
+                    >
+                      Clear
+                    </Button>
+                  </HStack>
+                  {mailtoBase && (
+                    <Button
+                      as="a"
+                      href={`${mailtoBase}?subject=${encodeURIComponent(values.subject.trim() || values.reason)}&body=${encodeURIComponent(
+                        `Reason: ${values.reason}\n\n${values.message}`,
+                      )}`}
+                      variant="ghost"
+                      color="page.fg-secondary"
+                      _hover={{ color: 'page.fg', bg: 'transparent' }}
+                      fontFamily={monoFont}
+                      fontSize="13px"
+                      fontWeight={400}
+                    >
+                      Use mail app ↗
+                    </Button>
+                  )}
+                </Flex>
+                {!valid && hint && (
+                  <Text id={hintId} mt={-2} fontFamily={monoFont} fontSize="11px" letterSpacing="0.02em" color="page.fg-secondary">
+                    {hint}
+                  </Text>
+                )}
+              </VStack>
+            </form>
+          </>
+        )}
       </MotionBox>
     </Flex>
   )
