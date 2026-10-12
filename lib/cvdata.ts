@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { getKv, putKv, type StoreError } from './contentStore'
-import { publicCvDoc, type CvAudience, type CvDoc } from './cvVisibility'
+import { publicCvDoc, type CvAudience, type CvDoc, type CvLang } from './cvVisibility'
 
 const snapshotDir = path.join(process.cwd(), 'data', 'cv_snapshots')
 
@@ -20,6 +20,24 @@ export function readCvData(): { en: any[]; zh: any[] } {
  */
 export function readPublicCvData(audience: CvAudience = 'any'): CvDoc {
   return publicCvDoc(readCvData(), audience)
+}
+
+/**
+ * Public view restricted to the sections a page actually renders (by
+ * `sessionName`) and the languages it needs. Pages must use this instead of
+ * shipping the whole public CV, so e.g. contact details never end up in the
+ * __NEXT_DATA__ of a page that does not display them.
+ */
+export function readPublicCvSections(
+  audience: CvAudience,
+  sessionNames: readonly string[],
+  langs: readonly CvLang[] = ['en', 'zh'],
+): CvDoc {
+  const wanted = new Set(sessionNames)
+  const doc = readPublicCvData(audience)
+  const pick = (lang: CvLang) =>
+    langs.includes(lang) ? doc[lang].filter((s) => wanted.has(String(s.sessionName))) : []
+  return { en: pick('en'), zh: pick('zh') }
 }
 
 export async function writeCvData(data: { en: any[]; zh: any[] }): Promise<StoreError> {

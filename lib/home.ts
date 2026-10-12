@@ -12,14 +12,24 @@ import { getKv, putKv, type StoreError } from './contentStore'
  * Node-only surface — never import it from anything under `components/`.
  */
 
-export { HOME_SECTION_META, isSectionVisible } from './homeShape'
+export { HOME_SECTION_META, isSectionVisible, publicHome } from './homeShape'
 export type { HomeData, SectionKey } from './homeShape'
 import type { HomeData } from './homeShape'
+import { publicHome } from './homeShape'
 
 const homeSnapshotDir = path.join(process.cwd(), 'data', 'home_snapshots')
 
 export function readHome(): HomeData | null {
   return getKv<HomeData>('home')
+}
+
+/**
+ * Home data for public pages and the unauthenticated API — hidden photos and
+ * switched-off sections removed (see publicHome). Never ship readHome()
+ * output to the browser.
+ */
+export function readPublicHome(): HomeData | null {
+  return publicHome(readHome())
 }
 
 export async function writeHome(data: HomeData): Promise<StoreError> {

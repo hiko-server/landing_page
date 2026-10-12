@@ -122,3 +122,31 @@ export function isSectionVisible(
   const v = data?.sections?.[key]
   return v !== false
 }
+
+/**
+ * The home document as visitors may see it. Pure (runs on server and client).
+ *
+ * Content that the owner switched off never leaves the server:
+ *   - photos with `visible: false` are dropped
+ *   - a section switched off in `sections` has the data that feeds only that
+ *     section emptied (brand strip, field-note photos, contact copy)
+ * The `sections` map itself is kept so renderers know what to skip.
+ */
+export function publicHome(home: HomeData | null | undefined): HomeData | null {
+  if (!home || typeof home !== 'object') return null
+  const off = (key: SectionKey) => home.sections?.[key] === false
+  const photos = Array.isArray(home.photos) ? home.photos.filter((p) => p && p.visible !== false) : []
+  return {
+    ...home,
+    brands: off('brands') ? [] : Array.isArray(home.brands) ? home.brands : [],
+    photos: off('photos')
+      ? []
+      : photos.map((p) => {
+          const rest = { ...p }
+          delete rest.visible
+          return rest
+        }),
+    contact: off('contact') ? {} : home.contact,
+  }
+}
+

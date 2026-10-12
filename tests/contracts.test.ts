@@ -36,3 +36,22 @@ test('a smuggled `redacted` key in stored data is never passed through', () => {
   const [sec] = publicSections([{ sessionName: 'education', educationExperience: [{ schoolName: 'X', redacted: ['<script>'] }] }])
   assert.equal('redacted' in sec.educationExperience[0], false)
 })
+
+test('publicHome drops hidden photos and data of switched-off sections', async () => {
+  const { publicHome } = await import('../lib/homeShape')
+  const home: any = {
+    hero: { brand: 'B', tagline: 't', welcome: '', avatarUrl: '' },
+    socials: {},
+    brands: [{ name: 'X', href: '', image: '' }],
+    quickAccess: [],
+    photos: [{ url: '/a.jpg' }, { url: '/b.jpg', visible: false }],
+    sections: { brands: false },
+    contact: { heading: 'Hi' },
+  }
+  const out = publicHome(home)!
+  assert.deepEqual(out.photos, [{ url: '/a.jpg' }])
+  assert.deepEqual(out.brands, [])
+  assert.deepEqual(out.contact, { heading: 'Hi' })
+  assert.equal(out.sections?.brands, false)
+  assert.equal(publicHome(null), null)
+})
