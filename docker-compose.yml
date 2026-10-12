@@ -6,6 +6,13 @@ services:
     build:
       context: .
       dockerfile: ./Dockerfile
+      # Public (non-secret) values baked into the client bundle at build time.
+      args:
+        NEXT_PUBLIC_SITE_HOST: ${NEXT_PUBLIC_SITE_HOST:-}
+        NEXT_PUBLIC_PRODUCT_NAME: ${NEXT_PUBLIC_PRODUCT_NAME:-}
+        NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+        NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE:-0}
+        NEXT_PUBLIC_GA_ID: ${NEXT_PUBLIC_GA_ID:-}
     env_file:
       - .env
     # unless-stopped survives daemon restarts and clean exits (on-failure does
@@ -14,6 +21,14 @@ services:
     restart: unless-stopped
     mem_limit: 1g
     cpus: 2
+    # Persistent runtime state. Without these, every rebuild/redeploy wiped
+    # data/admin.json (password changes), version-history snapshots, local
+    # backups, the contact fallback inbox and uploaded images. Named volumes
+    # inherit the image's nextjs ownership on first use and survive
+    # `docker compose down` (only `down -v` removes them).
+    volumes:
+      - landing-data:/app/data
+      - landing-uploads:/app/public/uploads
     ports:
       - 8000:3000
     networks:
@@ -32,6 +47,10 @@ services:
   #   networks:
   #     easilycv:
   #       ipv4_address: 172.18.0.5 
+
+volumes:
+  landing-data:
+  landing-uploads:
 
 networks:
   easilycv:

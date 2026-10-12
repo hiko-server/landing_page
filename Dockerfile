@@ -1,4 +1,3 @@
-#NEW
 FROM node:22-alpine AS build
 
 # better-sqlite3 ships a prebuilt binary for many platforms, but on alpine we
@@ -15,6 +14,22 @@ COPY package.json yarn.lock* ./
 RUN yarn install --frozen-lockfile
 
 COPY . .
+
+# NEXT_PUBLIC_* values are inlined into the client bundle at BUILD time, but
+# .env is (correctly) excluded from the build context — pass them as build
+# args instead (docker-compose.yml forwards them from .env).
+ARG NEXT_PUBLIC_SITE_HOST=""
+ARG NEXT_PUBLIC_PRODUCT_NAME=""
+ARG NEXT_PUBLIC_SENTRY_DSN=""
+ARG NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE="0"
+ARG NEXT_PUBLIC_GA_ID=""
+ENV NEXT_PUBLIC_SITE_HOST=$NEXT_PUBLIC_SITE_HOST \
+    NEXT_PUBLIC_PRODUCT_NAME=$NEXT_PUBLIC_PRODUCT_NAME \
+    NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN \
+    NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE=$NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE \
+    NEXT_PUBLIC_GA_ID=$NEXT_PUBLIC_GA_ID \
+    NEXT_TELEMETRY_DISABLED=1
+
 RUN yarn build
 
 
@@ -22,6 +37,7 @@ FROM node:22-alpine AS release
 # FROM node:22-slim AS release
 
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN apk update && apk upgrade
 RUN apk add --no-cache dumb-init
@@ -41,6 +57,9 @@ RUN mkdir -p /app/data && chown nextjs:nodejs /app/data
 COPY --from=build --chown=nextjs:nodejs /app/next.config.js ./
 
 COPY --from=build --chown=nextjs:nodejs /app/public ./public
+# Runtime uploads dir (mounted as a volume in docker-compose.yml). Created
+# here so a fresh named volume inherits nextjs ownership.
+RUN mkdir -p /app/public/uploads && chown nextjs:nodejs /app/public/uploads
 
 COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
@@ -72,20 +91,3 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=3 \
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
 
-
-#OLD
-# FROM node:18-slim
-
-# WORKDIR /app
-
-# COPY package.json .
-# RUN --mount=type=cache,target=/root/.yarn YARN_CACHE_FOLDER=/root/.yarn yarn install
-
-# COPY . .
-# RUN yarn build
-
-# EXPOSE 3000
-
-# ENV PORT 3000
-
-# CMD ["yarn", "start"]
