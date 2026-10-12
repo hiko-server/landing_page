@@ -2,16 +2,24 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
 import { buildCsp } from './lib/csp'
+import { getConfiguredSiteValues } from './lib/env'
+import { checkCsrf, isCsrfProtectedPath, isFormLikeContentType, isUnsafeMethod, siteHostsFrom } from './lib/security/csrf'
 
 /**
  * Root middleware.
  *
- * Two responsibilities:
+ * Three responsibilities:
  *
  * 1.  **Security headers** for every response (frame deny, HSTS, CSP, etc).
  *     These are applied unconditionally.
  *
- * 2.  **Admin gate** for `/admin/*` and `/api/admin/*`. The cookie is
+ * 2.  **CSRF guard** for state-changing requests (POST/PUT/PATCH/DELETE) to
+ *     /api/admin/*, /api/auth/*, /api/cvdata, /api/home, /api/versions and
+ *     /api/mongo (policy: lib/security/csrf.ts). Cross-site requests get 403;
+ *     form-encoded, multipart and text/plain bodies get 415 — every real
+ *     client of these endpoints sends JSON (or no body).
+ *
+ * 3.  **Admin gate** for `/admin/*` and `/api/admin/*`. The cookie is
  *     httpOnly so we cannot read it from JavaScript on the page — and
  *     getServerSideProps was missing on most admin pages, which meant the
  *     UI shell rendered for unauthenticated visitors (the APIs still
@@ -41,6 +49,11 @@ const PUBLIC_ADMIN_API_PATHS = new Set<string>([
 ])
 // Auth lives under /api/auth/*, never /api/admin/*, so it's not gated here.
 
+/**
+ * Signature-only check (fast, edge-compatible). Session revocation — the
+ * `sv` claim vs data/admin.json — is enforced by every API route through
+ * lib/auth.ts, which the edge runtime can't do (no filesystem).
+ */
 async function verifyAdminJwt(token: string | undefined): Promise<boolean> {
   if (!token) return false
   const secret = process.env.JWT_SECRET
@@ -76,10 +89,36 @@ function applySecurityHeaders(res: NextResponse, opts: { adminContext: boolean }
   return res
 }
 
+/** 403 / 415 for unsafe requests that fail the CSRF policy, else null. */
+function csrfRejection(req: NextRequest, pathname: string): NextResponse | null {
+  if (!isUnsafeMethod(req.method) || !isCsrfProtectedPath(pathname)) return null
+  const verdict = checkCsrf({
+    method: req.method,
+    secFetchSite: req.headers.get('sec-fetch-site'),
+    origin: req.headers.get('origin'),
+    host: req.headers.get('host'),
+    forwardedHost: req.headers.get('x-forwarded-host'),
+    siteHosts: siteHostsFrom(...getConfiguredSiteValues()),
+  })
+  if (!verdict.ok) {
+    return NextResponse.json({ error: 'Cross-site request refused', code: 'CSRF' }, { status: 403 })
+  }
+  if (isFormLikeContentType(req.headers.get('content-type'))) {
+    return NextResponse.json(
+      { error: 'Send the request body as application/json', code: 'UNSUPPORTED_MEDIA_TYPE' },
+      { status: 415 },
+    )
+  }
+  return null
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
   const isAdminPage = pathname === '/admin' || pathname.startsWith('/admin/')
   const isAdminApi = pathname.startsWith('/api/admin/')
+
+  const rejected = csrfRejection(req, pathname)
+  if (rejected) return applySecurityHeaders(rejected, { adminContext: true })
 
   if (isAdminPage || isAdminApi) {
     const allowed = isAdminPage

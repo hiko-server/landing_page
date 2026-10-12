@@ -6,6 +6,7 @@ import { rateLimit } from '../../../lib/rateLimit'
 import { isR2Configured, r2PutBuffer } from '../../../lib/r2'
 import { uploadR2Key } from '../../../lib/contentStore'
 import { isAdminRequest } from '../../../lib/auth'
+import { sanitizeUploadName, withHashSuffix } from '../../../lib/security/uploadName'
 
 const isAuthed = isAdminRequest
 
@@ -16,7 +17,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   res.setHeader('X-RateLimit-Remaining', String(rl.remaining))
   if (!rl.allowed) return res.status(429).json({ error: 'Too many uploads, try later' })
   const { filename, dataUrl } = req.body || {}
-  if (!filename || !dataUrl) return res.status(400).json({ error: 'Missing fields' })
+  if (typeof filename !== 'string' || !filename || typeof dataUrl !== 'string' || !dataUrl) {
+    return res.status(400).json({ error: 'Missing fields' })
+  }
 
   // dataUrl: data:image/png;base64,xxxx
   const match = /^data:(.+);base64,(.*)$/.exec(dataUrl)
@@ -43,19 +46,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!spec.magic(buf)) return res.status(400).json({ error: 'File content does not match its declared image type' })
 
   // Sanitise the name and force the canonical extension for the validated type
-  // so nothing can be persisted/served as e.g. "evil.html".
-  let safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_')
-  if (path.extname(safeName).toLowerCase() !== spec.ext) {
-    safeName = safeName.replace(/\.[^.]*$/, '') + spec.ext
-  }
+  // so nothing can be persisted/served as e.g. "evil.html". The result always
+  // matches UPLOAD_NAME_RE — the same rule /uploads/* serves and backups keep.
+  let safeName = sanitizeUploadName(filename, spec.ext)
   const uploadDir = path.join(process.cwd(), 'public', 'uploads')
   fs.mkdirSync(uploadDir, { recursive: true })
   // Never overwrite: uploads are served `immutable`, so reusing a name would
   // pin stale bytes in every cache. Collisions get a short content hash.
   if (fs.existsSync(path.join(uploadDir, safeName))) {
-    const hash = crypto.createHash('sha256').update(buf).digest('hex').slice(0, 10)
-    const ext = path.extname(safeName)
-    safeName = `${path.basename(safeName, ext)}-${hash}${ext}`
+    safeName = withHashSuffix(safeName, crypto.createHash('sha256').update(buf).digest('hex'))
   }
   const filePath = path.join(uploadDir, safeName)
   if (!fs.existsSync(filePath)) fs.writeFileSync(filePath, buf as unknown as any, { flag: 'wx' })

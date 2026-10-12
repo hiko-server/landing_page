@@ -1,5 +1,9 @@
 import { ImageResponse } from '@vercel/og'
 import type { NextRequest } from 'next/server'
+import { getClientIpHeaderName } from '../../lib/env'
+import { ipBucket, pickClientIp } from '../../lib/security/ip'
+import { parseOgParams } from '../../lib/security/ogParams'
+import { sharedLimiter } from '../../lib/security/rateLimitCore'
 
 // Dynamic Open Graph card rendered to PNG via @vercel/og (Satori + Resvg).
 //
@@ -8,16 +12,42 @@ import type { NextRequest } from 'next/server'
 //
 // Runs on the Edge runtime — required by @vercel/og for streaming PNG output
 // with WASM-backed image rendering.
+//
+// Hardening: texts are clamped (lib/security/ogParams), renders are rate
+// limited per client, and a card is a pure function of its URL, so it is
+// cached hard — a day in browsers, a year (immutable) at Cloudflare — and
+// repeated crawls never reach the renderer.
 
 export const config = {
   runtime: 'edge',
 }
 
+const RENDERS_PER_MINUTE = 60
+const CACHE_CONTROL = 'public, max-age=86400, s-maxage=31536000, immutable'
+
 export default function handler(req: NextRequest) {
-  const { searchParams } = new URL(req.url)
-  const title = (searchParams.get('title') || 'LUCIAN-DEV.COM').slice(0, 120)
-  const kind = (searchParams.get('kind') || 'page').slice(0, 24)
-  const subtitle = (searchParams.get('subtitle') || '').slice(0, 200)
+  // The edge runtime exposes no socket peer; the trusted client-IP header
+  // (cf-connecting-ip behind Cloudflare) is the only signal.
+  const headerName = getClientIpHeaderName()
+  const ip = pickClientIp({
+    peer: '',
+    headerName,
+    headerValue: headerName ? req.headers.get(headerName) : null,
+    trusted: [],
+  })
+  const hit = sharedLimiter('og', 5_000).hit(`og|${ipBucket(ip)}`, RENDERS_PER_MINUTE, 60_000)
+  if (!hit.allowed) {
+    return new Response('Too many requests', {
+      status: 429,
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-store',
+        'Retry-After': String(Math.max(1, Math.ceil((hit.resetAt - Date.now()) / 1000))),
+      },
+    })
+  }
+
+  const { title, kind, subtitle } = parseOgParams(new URL(req.url).searchParams)
 
   const titleFontSize = title.length > 60 ? 64 : title.length > 30 ? 76 : 88
 
@@ -111,7 +141,7 @@ export default function handler(req: NextRequest) {
       width: 1200,
       height: 630,
       headers: {
-        'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
+        'Cache-Control': CACHE_CONTROL,
       },
     },
   )
