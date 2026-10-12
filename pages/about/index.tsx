@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 
 import LandingCVSections from '../../components/LandingPage/LandingCVSections'
-import { Flex, useMediaQuery, Box, Image, Heading } from '@chakra-ui/react'
+import { Flex, Box, Image, Heading } from '@chakra-ui/react'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 import { absUrl, personNode, breadcrumb, PERSON_ID } from '../../lib/schema'
@@ -16,14 +16,6 @@ import CertificationsPeek from '../../components/LandingPage/CertificationsPeek'
 // import ContactPro from '../../components/Contact/ContactPro'
 
 const About = (props: any) => {
-  const [, setIsHostCV] = useState<boolean>(false)
-  const [isMobile] = useMediaQuery('(max-width: 767px)')
-
-  useEffect(() => {
-    if (props.host && props.host === 'cv.lucian-dev.com') {
-      setIsHostCV(true)
-    }
-  }, [props.host])
 
   return (
     <React.Fragment>
@@ -47,7 +39,7 @@ const About = (props: any) => {
           ]),
         ]}
       />
-      <HeaderFooter isMobile={isMobile}>
+      <HeaderFooter>
         <Flex
           direction="column"
           alignItems="center"
@@ -120,11 +112,13 @@ export async function getServerSideProps(context: any) {
     // Live CV from the content store (SQLite kv + R2) — same source the admin
     // editor writes via /api/cvdata. (Was reading the static cvdata.json seed.)
     try {
-      const { readCvData } = await import('../../lib/cvdata')
-      const cv = readCvData()
+      const { readPublicCvData } = await import('../../lib/cvdata')
+      const cv = readPublicCvData('website')
       en = cv.en
       zh = cv.zh
-    } catch {}
+    } catch {
+    /* best effort — render with what we have */
+  }
     try {
       const mod = await import('../../lib/home')
       home = mod.readHome()
@@ -134,9 +128,15 @@ export async function getServerSideProps(context: any) {
           const u = new URL(url)
           const parts = u.pathname.split('/').filter(Boolean)
           githubUser = parts[0] || null
-        } catch {}
+        } catch {
+    /* best effort — render with what we have */
+  }
       }
-    } catch {}
-  } catch {}
+    } catch {
+    /* best effort — render with what we have */
+  }
+  } catch {
+    /* best effort — render with what we have */
+  }
   return { props: { host, cv: { en, zh }, githubUser, home } }
 }

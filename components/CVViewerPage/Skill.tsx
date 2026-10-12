@@ -1,56 +1,40 @@
-import { Text, Flex, Box } from '@chakra-ui/react'
 import React from 'react'
-import { Skill } from '../../types/cvProps'
-import { devColor } from '../../helpers/devColor'
-import { CVSection, Row } from './PersonalInformation'
+import { Box, Flex, Text } from '@chakra-ui/react'
+import type { Skill } from '../../types/cvProps'
+import { cleanList } from '../../lib/cvFormat'
+import { PlainBullets, SheetSection } from './primitives'
+
+const t = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
 const SkillSection = ({ data }: { data: Skill }) => {
+  const langs = (data.languages || []).filter((l) => t(l.language) || t(l.level))
+  const techs = (data.technical || []).filter((g) => t(g.name) || cleanList(g.description).length)
+  if (!langs.length && !techs.length) return null
   return (
-    <React.Fragment>
-      <CVSection bgColor={devColor('#fde3b6')}>
-        <Row style={{ paddingBottom: '0px', breakAfter: 'avoid' }}>
-          <Text fontWeight={800} fontSize={'12px'}>
-            {data.headerName.toUpperCase()}
-          </Text>
-        </Row>
-
-        <Row style={{ borderBottom: 'none' }}>
-          <Flex direction={'column'} gap={'20px'}>
-            <Flex direction={'column'} gap={'10px'} flex={1}>
-              {data.languages.map((lang, index) => (
-                <Box
-                  key={index}
-                  display="grid"
-                  gridTemplateColumns="auto 90%"
-                  gridColumnGap="10px"
-                >
-                  <Text fontWeight={800} fontSize={'12px'}>
-                    {lang.language}
-                  </Text>
-                  <Text textAlign="left">{lang.level}</Text>
-                </Box>
-              ))}
-            </Flex>
-            <Flex direction={'column'} gap={'20px'}>
-              {data.technical.map((tech, i) => (
-                <Flex key={i} direction={'column'} style={{ breakInside: 'avoid' }}>
-                  <Flex fontWeight={800} fontSize={'12px'}>
-                    {tech.name.toUpperCase()}
-                  </Flex>
-                  <Flex direction={'column'}>
-                    {tech.description.map((des, j) => (
-                      <Flex key={j}>
-                        <Flex>•{des}</Flex>
-                      </Flex>
-                    ))}
-                  </Flex>
-                </Flex>
-              ))}
-            </Flex>
-          </Flex>
-        </Row>
-      </CVSection>
-    </React.Fragment>
+    <SheetSection title={data.headerName}>
+      <Flex direction="column" gap="14px">
+        {langs.length ? (
+          <Box display="grid" gridTemplateColumns="max-content 1fr" columnGap="12px" rowGap="4px" fontSize="12px" lineHeight="1.5">
+            {langs.map((lang, index) => (
+              <React.Fragment key={index}>
+                <Text fontWeight={800}>{lang.language}</Text>
+                <Text>{lang.level}</Text>
+              </React.Fragment>
+            ))}
+          </Box>
+        ) : null}
+        {techs.map((tech, i) => (
+          <Box key={i} sx={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+            {t(tech.name) ? (
+              <Text fontWeight={800} fontSize="12px" lineHeight="1.5">
+                {tech.name.toUpperCase()}
+              </Text>
+            ) : null}
+            <PlainBullets items={tech.description} />
+          </Box>
+        ))}
+      </Flex>
+    </SheetSection>
   )
 }
 export default SkillSection

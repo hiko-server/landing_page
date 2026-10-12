@@ -1,6 +1,8 @@
 import React from 'react'
 import { Box, Flex, Text, useColorModeValue } from '@chakra-ui/react'
 import { Skill } from '../../types/cvProps'
+import type { CvLang } from '../../lib/cvVisibility'
+import { cleanList, cvLabels } from '../../lib/cvFormat'
 import CVSectionShell from './_CVSectionShell'
 
 /**
@@ -17,10 +19,13 @@ const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 const SkillSection = ({
   index,
   data,
+  lang = 'en',
 }: {
   index?: number
   data: Skill
+  lang?: CvLang
 }) => {
+  const L = cvLabels(lang)
   const subColor = useColorModeValue('gray.600', 'gray.400')
   const labelColor = useColorModeValue('gray.600', 'gray.500')
   const divider = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.08)')
@@ -28,16 +33,19 @@ const SkillSection = ({
   const techBg = useColorModeValue('rgba(0,0,0,0.025)', 'rgba(255,255,255,0.03)')
   const techBorder = useColorModeValue('rgba(0,0,0,0.06)', 'rgba(255,255,255,0.07)')
 
-  const langs = data?.languages || []
-  const techs = data?.technical || []
+  const langs = (data?.languages || []).filter((l) => (l.language || '').trim())
+  const techs = (data?.technical || [])
+    .map((g) => ({ ...g, description: cleanList(g.description) }))
+    .filter((g) => (g.name || '').trim() || g.description.length)
   const totalCount = langs.length + techs.length
+  if (!totalCount) return null
 
   return (
     <CVSectionShell
       index={index}
       label={data?.headerName || 'Skills'}
       count={totalCount}
-      countSuffix="ITEMS"
+      countSuffix={L.items}
     >
       <Flex direction="column" gap={8}>
         {/* Languages */}
@@ -51,7 +59,7 @@ const SkillSection = ({
                 color={labelColor}
                 textTransform="uppercase"
               >
-                Languages
+                {L.languages}
               </Text>
               <Box flex="1" h="1px" bg={divider} />
             </Flex>
@@ -93,7 +101,7 @@ const SkillSection = ({
                 color={labelColor}
                 textTransform="uppercase"
               >
-                Technical
+                {L.technical}
               </Text>
               <Box flex="1" h="1px" bg={divider} />
             </Flex>

@@ -1,37 +1,39 @@
 import React from 'react'
 import { Flex } from '@chakra-ui/react'
-import { DateTime } from 'luxon'
 import { Project } from '../../types/cvProps'
+import type { CvLang } from '../../lib/cvVisibility'
+import { cvLabels, formatCvRange } from '../../lib/cvFormat'
 import CVSectionShell, { CVRow, CVBullets } from './_CVSectionShell'
 
-const fmt = (iso?: string) =>
-  iso && DateTime.fromISO(iso).isValid
-    ? DateTime.fromISO(iso).toFormat('LLL yyyy')
-    : iso || ''
+const t = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
 const ProjectSection = ({
   index,
   data,
+  lang = 'en',
 }: {
   index?: number
   data: Project
+  lang?: CvLang
 }) => {
-  const items = data?.projectExperience || []
+  const items = (data?.projectExperience || []).filter((p) => t(p.title) || t(p.description))
+  if (!items.length) return null
   return (
     <CVSectionShell
       index={index}
       label={data?.headerName || 'Projects'}
       count={items.length}
+      countSuffix={cvLabels(lang).entries}
     >
       <Flex direction="column">
         {items.map((pro, i) => (
           <CVRow
             key={i}
             isFirst={i === 0}
-            title={pro.title}
-            subtitle={pro.description}
-            period={`${fmt(pro.startDate)} — ${fmt(pro.endDate)}`}
-            location={pro.projectLocation}
+            title={t(pro.title) || t(pro.description)}
+            subtitle={t(pro.title) ? t(pro.description) || undefined : undefined}
+            period={formatCvRange(pro.startDate, pro.endDate, lang, { futureEndAsPresent: true }) || undefined}
+            location={t(pro.projectLocation) || undefined}
           >
             <CVBullets
               items={(pro.features || []).map((fea) => ({

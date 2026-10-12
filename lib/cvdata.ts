@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import { getKv, putKv, type StoreError } from './contentStore'
+import { publicCvDoc, type CvAudience, type CvDoc } from './cvVisibility'
 
 const snapshotDir = path.join(process.cwd(), 'data', 'cv_snapshots')
 
@@ -12,27 +13,21 @@ export function readCvData(): { en: any[]; zh: any[] } {
   return { en, zh }
 }
 
+/**
+ * The CV as visitors may see it: hidden sections / entries / fields / bullets
+ * removed (see lib/cvVisibility.ts). Use this for every public page and the
+ * unauthenticated API — never ship readCvData() output to the browser.
+ */
+export function readPublicCvData(audience: CvAudience = 'any'): CvDoc {
+  return publicCvDoc(readCvData(), audience)
+}
+
 export async function writeCvData(data: { en: any[]; zh: any[] }): Promise<StoreError> {
   return await putKv('cvdata', data)
 }
 
-export function syncStructure(template: any, target: any): any {
-  if (Array.isArray(template)) {
-    const tArr = Array.isArray(target) ? target : []
-    return template.map((item, idx) => syncStructure(item, tArr[idx]))
-  }
-  if (template && typeof template === 'object') {
-    const result: any = {}
-    const tObj = target && typeof target === 'object' ? target : {}
-    for (const key of Object.keys(template)) {
-      result[key] = syncStructure(template[key], tObj[key])
-    }
-    return result
-  }
-  // primitive: prefer target if defined, otherwise copy template
-  if (target === undefined || target === null) return template
-  return target
-}
+// Re-exported for existing importers; implementation is pure (lib/cvSync.ts).
+export { syncStructure, syncLanguage } from './cvSync'
 
 export function saveSnapshot(): string {
   const now = new Date()
@@ -56,7 +51,7 @@ export function listSnapshots(): string[] {
 export async function restoreSnapshot(filename: string): Promise<StoreError> {
   // Sanitize like readSnapshot() — never let a caller-supplied name escape the
   // snapshot dir (path traversal). Same allowlist as the sibling reader.
-  const safe = filename.replace(/[^a-zA-Z0-9_.\-]/g, '_')
+  const safe = filename.replace(/[^a-zA-Z0-9_.-]/g, '_')
   const filePath = path.join(snapshotDir, safe)
   if (!fs.existsSync(filePath)) return { ok: false, error: 'Snapshot not found' }
   try {
@@ -68,7 +63,7 @@ export async function restoreSnapshot(filename: string): Promise<StoreError> {
 }
 
 export function readSnapshot(filename: string): string | null {
-  const safe = filename.replace(/[^a-zA-Z0-9_.\-]/g, '_')
+  const safe = filename.replace(/[^a-zA-Z0-9_.-]/g, '_')
   const filePath = path.join(snapshotDir, safe)
   try {
     if (!fs.existsSync(filePath)) return null

@@ -1,21 +1,33 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import jwt from 'jsonwebtoken'
-import { getCookie } from 'cookies-next'
-import { readCvData, writeCvData, syncStructure, saveSnapshot, listSnapshots, restoreSnapshot, readSnapshot } from '../../lib/cvdata'
+import { readCvData, readPublicCvData, writeCvData, syncLanguage, saveSnapshot, listSnapshots, restoreSnapshot, readSnapshot } from '../../lib/cvdata'
 import { sendMail } from '../../lib/mailer'
-import { getJwtSecret } from '../../lib/env'
 import { rateLimit } from '../../lib/rateLimit'
+import { isAdminRequest, readAdminClaims } from '../../lib/auth'
 
-function isAuthed(req: NextApiRequest, res: NextApiResponse) {
-  const token = getCookie('cv_admin_token', { req, res }) as string | undefined
-  if (!token) return false
+const isAuthed = isAdminRequest
+
+/**
+ * Accept real JSON values, or a JSON string (with a BOM / trailing commas
+ * tolerated). String *contents* are never rewritten.
+ */
+function parseLoose(v: any): any {
+  if (typeof v !== 'string') return v
+  const src = v.replace(/^\uFEFF/, '')
   try {
-    const decoded = jwt.verify(token, getJwtSecret()) as any
-    return decoded?.role === 'admin'
+    return JSON.parse(src)
   } catch {
-    return false
+    try {
+      return JSON.parse(src.replace(/,(\s*[}\]])/g, '$1'))
+    } catch {
+      return undefined
+    }
   }
 }
+
+function isSectionArray(v: unknown): v is any[] {
+  return Array.isArray(v) && v.every((s) => s && typeof s === 'object' && typeof (s as any).sessionName === 'string')
+}
+
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method === 'GET') {
@@ -41,7 +53,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(200).send(JSON.stringify(data, null, 2))
       }
     }
-    const { en, zh } = readCvData()
+    // Admins get the full document (with visibility metadata) for editing;
+    // everyone else gets the public view — hidden sections, entries, fields
+    // and bullets never leave the server.
+    if (isAuthed(req, res)) {
+      res.setHeader('Cache-Control', 'private, no-store')
+      const { en, zh } = readCvData()
+      return res.status(200).json({ en, zh })
+    }
+    res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate')
+    res.setHeader('Vary', 'Cookie')
+    const { en, zh } = readPublicCvData('any')
     return res.status(200).json({ en, zh })
   }
 
@@ -50,37 +72,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const rl = rateLimit(req, 30, 10 * 60 * 1000)
     res.setHeader('X-RateLimit-Remaining', String(rl.remaining))
     if (!rl.allowed) return res.status(429).json({ error: 'Too many updates, try later' })
-    let { en, zh, syncZh } = (req.body || {}) as any
-    // Accept stringified JSON as well, for robustness
-    const parseLoose = (v: any) => {
-      if (typeof v !== 'string') return v
-      try {
-        let s = v.replace(/^\uFEFF/, '')
-        s = s.replace(/[“”]/g, "'").replace(/[‘’]/g, "'")
-        s = s.replace(/\/\*[^]*?\*\//g, '').replace(/(^|\n)\s*\/\/.*(?=\n|$)/g, '$1')
-        s = s.replace(/,\s*(\}|\])/g, '$1')
-        return JSON.parse(s)
-      } catch { return undefined }
+    const { syncZh } = (req.body || {}) as any
+    const en = parseLoose((req.body || {}).en)
+    const zh = parseLoose((req.body || {}).zh)
+    if (en === undefined && zh === undefined) return res.status(400).json({ error: 'Missing payload' })
+    if ((en !== undefined && !isSectionArray(en)) || (zh !== undefined && !isSectionArray(zh))) {
+      return res.status(400).json({ error: 'Each language must be an array of sections with a string "sessionName"' })
     }
-    en = parseLoose(en)
-    zh = parseLoose(zh)
-    if (!en && !zh) return res.status(400).json({ error: 'Missing payload' })
     const current = readCvData()
     // save snapshot before write
-    try { saveSnapshot() } catch {}
+    try {
+      saveSnapshot()
+    } catch (err) {
+      console.warn('cvdata: snapshot before write failed', err)
+    }
     const newEn = Array.isArray(en) ? en : current.en
     const baseZh = Array.isArray(zh) ? zh : current.zh
-    const newZh = syncZh ? syncStructure(newEn, baseZh) : baseZh
+    const newZh = syncZh ? syncLanguage(newEn, baseZh) : baseZh
     const writeResult = await writeCvData({ en: newEn, zh: newZh })
     if (!writeResult.ok) return res.status(500).json({ error: writeResult.error })
-    try {
-      const actor = (() => {
-        const token = getCookie('cv_admin_token', { req, res }) as string | undefined
-        if (!token) return 'unknown'
-        try { const d = jwt.verify(token, getJwtSecret()) as any; return d.email || 'admin'; } catch { return 'admin' }
-      })()
-      sendMail({ to: process.env.NOTIFY_EMAIL || process.env.ADMIN_EMAIL || 'hi@lucian-dev.com', subject: 'CV updated', text: `CV updated by ${actor} at ${new Date().toISOString()}\nSyncZh=${!!syncZh}` })
-    } catch {}
+    const actor = readAdminClaims(req, res)?.email || 'admin'
+    sendMail({
+      to: process.env.NOTIFY_EMAIL || process.env.ADMIN_EMAIL || 'hi@lucian-dev.com',
+      subject: 'CV updated',
+      text: `CV updated by ${actor} at ${new Date().toISOString()}\nSyncZh=${!!syncZh}`,
+    }).catch((err) => console.warn('cvdata: notification mail failed', err?.message || err))
     return res.status(200).json(writeResult)
   }
 
@@ -94,23 +110,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     if (action === 'restore') {
       if (!filename) return res.status(400).json({ error: 'Missing filename' })
+      // Keep the current state recoverable: restoring is itself undoable.
+      try {
+        saveSnapshot()
+      } catch (err) {
+        console.warn('cvdata: snapshot before restore failed', err)
+      }
       const result = await restoreSnapshot(filename)
       if (!result.ok) return res.status(404).json({ error: result.error })
       return res.status(200).json(result)
     }
     if (action === 'import') {
       // overwrite with provided JSON structure
-      const parseLoose = (v: any) => {
-        if (typeof v !== 'string') return v
-        try {
-          let s = v.replace(/^\uFEFF/, '')
-          s = s.replace(/[“”]/g, "'").replace(/[‘’]/g, "'")
-          s = s.replace(/\/\*[^]*?\*\//g, '').replace(/(^|\n)\s*\/\/.*(?=\n|$)/g, '$1')
-          s = s.replace(/,\s*(\}|\])/g, '$1')
-          return JSON.parse(s)
-        } catch { return undefined }
-      }
-      let payload = parseLoose(data) ?? data
+      const payload = parseLoose(data) ?? data
       if (!payload) return res.status(400).json({ error: 'Missing data' })
       // Accept either { en, zh } or a single array meaning EN only
       let enIn: any[] | undefined
@@ -125,8 +137,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!enIn && !zhIn) return res.status(400).json({ error: 'Invalid structure' })
       const current = readCvData()
       const newEn = enIn ?? current.en
-      const newZh = zhIn ? syncStructure(newEn, zhIn) : current.zh
-      try { saveSnapshot() } catch {}
+      const newZh = zhIn ? syncLanguage(newEn, zhIn) : current.zh
+      try { saveSnapshot() } catch {
+    /* best effort — render with what we have */
+  }
       const importResult = await writeCvData({ en: newEn, zh: newZh })
       if (!importResult.ok) return res.status(500).json({ error: importResult.error })
       return res.status(200).json(importResult)

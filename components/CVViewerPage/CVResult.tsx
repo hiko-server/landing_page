@@ -1,8 +1,6 @@
-import { Box, Flex } from '@chakra-ui/react'
-import { useRouter } from 'next/router'
 import React from 'react'
-import styled from 'styled-components'
-import {
+import { Box, Flex } from '@chakra-ui/react'
+import type {
   PersonalInformation,
   Education,
   Skill,
@@ -10,10 +8,12 @@ import {
   Experiences,
   ExtraSkill,
   CompetitionAwards,
-  // Certification,
+  Certification,
+  Patents,
   CVData,
 } from '../../types/cvProps'
-// import CertificateSection from './Certification'
+import type { CvLang } from '../../lib/cvVisibility'
+import CertificateSection from './Certification'
 import EducationSection from './Education'
 import ExtraSkillSection from './ExtraSkill'
 import PersonalInformationSection from './PersonalInformation'
@@ -21,138 +21,98 @@ import ProjectSection from './Project'
 import SkillSection from './Skill'
 import WorkExperience from './WorkExperience'
 import CompetitionAwardsSection from './CompetitionAwards'
+import PatentsSection from './Patents'
 
 /**
- * CVResult — renders the A4 sheet.
+ * CVResult — the A4 sheet used by /cv, print / Save-as-PDF and the admin
+ * Studio preview.
  *
- * v6: the original FaFileDownload button (which sat sticky-top with handlePrint)
- * has been removed. The /cv page now owns the print/download chrome via the
- * 'Print / Save as PDF' button in its toolbar, which simply calls
- * window.print(). The A4-specific print rules live in styles/globals.css so
- * window.print() produces a clean single-page document.
+ * Expects *public* data (lib/cvVisibility.ts → publicSections(…, 'cv')), but
+ * still drops sections switched off for the CV so an unpruned document can't
+ * leak hidden sections into the sheet.
+ *
+ * Print: the sheet flows in normal document order (so multi-page CVs
+ * paginate) and its padding is cloned onto every printed page via
+ * box-decoration-break, giving page 2+ a real top margin. Global print rules
+ * live in styles/globals.css.
  */
+
+export const A4_WIDTH_PX = 794 // 210mm @ 96dpi
+export const A4_HEIGHT_PX = 1123 // 297mm @ 96dpi
+
+function renderSection(section: CVData[number], lang: CvLang): React.ReactNode {
+  switch (section.sessionName) {
+    case 'personalInformation':
+      return <PersonalInformationSection data={section as PersonalInformation} lang={lang} />
+    case 'education':
+      return <EducationSection data={section as Education} lang={lang} />
+    case 'skill':
+      return <SkillSection data={section as Skill} />
+    case 'project':
+      return <ProjectSection data={section as Project} lang={lang} />
+    case 'workExperience':
+      return <WorkExperience data={section as Experiences} lang={lang} />
+    case 'competitionAwards':
+      return <CompetitionAwardsSection data={section as CompetitionAwards} lang={lang} />
+    case 'extraSkill':
+      return <ExtraSkillSection data={section as ExtraSkill} />
+    case 'certification':
+      return <CertificateSection data={section as Certification} lang={lang} />
+    case 'patents':
+      return <PatentsSection data={section as Patents} lang={lang} />
+    default:
+      return null
+  }
+}
+
 const CVResult = ({
   cvData,
+  lang = 'en',
   style,
 }: {
-  cvData: CVData
+  cvData: CVData | any[]
+  lang?: CvLang
   style?: React.CSSProperties
 }) => {
-  const router = useRouter()
-  const pi = cvData.find(s => s.sessionName === 'personalInformation') as PersonalInformation | undefined
+  const sections = (Array.isArray(cvData) ? cvData : []).filter(
+    (s: any) => s && typeof s === 'object' && s.isVisible !== false,
+  ) as CVData
+  const pi = sections.find((s) => s.sessionName === 'personalInformation') as PersonalInformation | undefined
   const sepColor = pi?.separatorColor || 'blue'
 
   return (
-    <Flex
-      className="cv-print-flow"
-      direction="column"
-      flex={1}
-      alignItems="center"
-      justifyContent="center"
-      h="100%"
-      overflowY={router.asPath.includes('edit') ? 'scroll' : 'visible'}
-      p="0px"
-      style={style}
-      gap="20px"
-    >
-      <PrintArea id="print-area">
-        {/* Render CV content here */}
-        {Array.from({ length: 1 }, (_, index) => (
-          <A4Paper
-            key={index}
-            id="A4Paper"
-            size="A4"
-            p="20px"
-            bgColor="white"
-            minW="21cm"
-            maxW="21cm"
-            minH="29.7cm"
-            style={{
-              marginTop: router.asPath.includes('edit') ? '400px' : '0px',
-              ['--cv-separator-color' as any]: sepColor,
-            }}
-          >
-            {cvData
-              .filter((section) => section.isVisible !== false)
-              .map(
-              (
-                section: { sessionName: string | number },
-                index: number
-              ) => (
-                <React.Fragment key={section.sessionName || index}>
-                  {
-                    {
-                      personalInformation: (
-                        <PersonalInformationSection
-                          data={section as PersonalInformation}
-                        />
-                      ),
-                      education: (
-                        <EducationSection data={section as Education} />
-                      ),
-                      skill: <SkillSection data={section as Skill} />,
-                      project: <ProjectSection data={section as Project} />,
-                      workExperience: (
-                        <WorkExperience data={section as Experiences} />
-                      ),
-                      competitionAwards: (
-                        <CompetitionAwardsSection
-                          data={section as CompetitionAwards}
-                        />
-                      ),
-                      extraSkill: (
-                        <ExtraSkillSection data={section as ExtraSkill} />
-                      ),
-                      // certification: (
-                      //   <CertificateSection data={section as Certification} />
-                      // ),
-                    }[section.sessionName]
-                  }
-                </React.Fragment>
-              )
-            )}
-          </A4Paper>
-        ))}
-      </PrintArea>
+    <Flex className="cv-print-flow" direction="column" alignItems="center" w="100%" style={style}>
+      <Box id="print-area" className="cv-print-area">
+        <Box
+          id="A4Paper"
+          as="article"
+          lang={lang === 'zh' ? 'zh-CN' : 'en'}
+          bg="white"
+          color="#111"
+          w={`${A4_WIDTH_PX}px`}
+          minH={`${A4_HEIGHT_PX}px`}
+          p="20px"
+          fontSize="12px"
+          lineHeight="1.5"
+          boxSizing="border-box"
+          style={{ ['--cv-separator-color' as any]: sepColor }}
+          sx={{
+            fontFamily:
+              "'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif",
+            WebkitPrintColorAdjust: 'exact',
+            printColorAdjust: 'exact',
+            textRendering: 'optimizeLegibility',
+            fontKerning: 'normal',
+            'a:hover': { textDecoration: 'underline' },
+          }}
+        >
+          {sections.map((section, index) => (
+            <React.Fragment key={`${section.sessionName}-${index}`}>{renderSection(section, lang)}</React.Fragment>
+          ))}
+        </Box>
+      </Box>
     </Flex>
   )
 }
 
 export default CVResult
-
-const PrintArea = styled.div`
-  /* Ensure this div contains all the content that should be printed */
-  @media print {
-    width: 210mm !important;
-    margin: 0 !important;
-    /* Flow in normal order so multi-page CVs paginate instead of overlapping
-       (see styles/globals.css #print-area). */
-    position: static !important;
-  }
-`
-
-const A4Paper = styled(Box)`
-  background: white;
-  color: #111;
-  font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji',
-    'Segoe UI Symbol', 'Noto Color Emoji', sans-serif;
-  display: block;
-  margin-bottom: 0.5cm;
-  margin-top: 0.5cm;
-  box-sizing: border-box;
-  -webkit-print-color-adjust: exact;
-  print-color-adjust: exact;
-  page-break-inside: auto;
-  break-inside: auto;
-
-  @media print {
-    width: 210mm !important;
-    min-height: 297mm !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    box-shadow: none !important;
-  }
-
-  /* Add any other styles you want for the A4 paper component */
-`

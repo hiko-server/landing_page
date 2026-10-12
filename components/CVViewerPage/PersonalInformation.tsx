@@ -1,96 +1,105 @@
-import { Flex, Text, Link } from '@chakra-ui/react'
 import React from 'react'
+import { Box, Flex, Link, Text } from '@chakra-ui/react'
+import type { PersonalInformation } from '../../types/cvProps'
+import type { CvLang } from '../../lib/cvVisibility'
+import { cvLabels, displayUrl, hrefOf } from '../../lib/cvFormat'
 
-import { PersonalInformation } from '../../types/cvProps'
-import styled from 'styled-components'
-import { devColor } from '../../helpers/devColor'
+/**
+ * A4 header: name + website on the left, location and contact on the right,
+ * optional summary underneath. Hidden fields arrive blank and are skipped;
+ * the block disappears entirely only when nothing at all is left to show.
+ */
 
-const PersonalInformationSection = ({
-  data,
-}: {
-  data: PersonalInformation
-}) => {
-  const isVisible = (field: keyof PersonalInformation) => !data.hiddenFields?.includes(field)
+const t = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
-  const name = [
-    isVisible('nickName') ? data.nickName : null,
-    isVisible('lastName') ? data.lastName.toUpperCase() : null
-  ].filter(Boolean).join(' ')
-  
-  const fullName = [name, isVisible('firstName') ? data.firstName : null].filter(Boolean).join(', ')
+export function composeName(data: Partial<PersonalInformation>, lang: CvLang): { main: string; aside: string } {
+  const first = t(data.firstName)
+  const last = t(data.lastName)
+  const nick = t(data.nickName)
+  if (lang === 'zh') {
+    // Chinese order: family name + given name, preferred name as a quiet aside.
+    return { main: `${last}${first}`, aside: nick }
+  }
+  const lead = [nick, last.toUpperCase()].filter(Boolean).join(' ')
+  return { main: [lead, first].filter(Boolean).join(', '), aside: '' }
+}
 
-  // Only show the bottom border (separator) if there is an introduction to separate from
-  const showIntro = data.introduction !== '' && isVisible('introduction')
+const PersonalInformationSection = ({ data, lang = 'en' }: { data: PersonalInformation; lang?: CvLang }) => {
+  const L = cvLabels(lang)
+  const { main, aside } = composeName(data, lang)
+  const website = t(data.personalWebsite)
+  const address = t(data.address)
+  const phone = t(data.phoneNumber)
+  const email = t(data.email)
+  const intro = t(data.introduction)
+
+  const hasHeader = !!(main || aside || website || address || phone || email)
+  if (!hasHeader && !intro) return null
+
+  const sep = lang === 'zh' ? '：' : ': '
 
   return (
-    <React.Fragment>
-      {data.lastName && (
-        <CVSection bgColor={devColor('#fde3b6')}>
-          <Row style={{ alignItems: 'flex-end', borderBottom: showIntro ? undefined : 'none' }}>
-            <Flex
-              p={0}
-              m={0}
-              bgColor={devColor('#acffaf')}
-              direction={'column'}
-              justifyContent={'center'}
-              alignItems={'flex-start'}
-            >
-              <Text fontSize={'24px'} fontWeight={600}>{fullName}</Text>
-              {isVisible('personalWebsite') && (
-                <Text color={'blue'}>
-                  <Link
-                    href={`https://${data.personalWebsite}`}
-                    isExternal
-                  >{`https://${data.personalWebsite}`}</Link>
+    <Box as="header" className="cv-sheet-section">
+      {hasHeader ? (
+        <Flex
+          px="10px"
+          pb="14px"
+          justify="space-between"
+          align="flex-end"
+          gap="16px"
+          borderBottom={intro ? '3px solid var(--cv-separator-color, blue)' : undefined}
+        >
+          <Box minW={0}>
+            {main || aside ? (
+              <Text as="h2" fontSize="24px" fontWeight={600} lineHeight="1.2">
+                {main}
+                {aside ? (
+                  <Text as="span" fontSize="15px" fontWeight={500} color="#555" ml="8px">
+                    {aside}
+                  </Text>
+                ) : null}
+              </Text>
+            ) : null}
+            {website ? (
+              <Link
+                href={hrefOf(website)}
+                isExternal
+                color="var(--cv-separator-color, blue)"
+                fontSize="12px"
+                display="inline-block"
+                mt="2px"
+              >
+                {displayUrl(website)}
+              </Link>
+            ) : null}
+          </Box>
+          {address || phone || email ? (
+            <Flex direction="column" align="flex-end" textAlign="right" fontSize="12px" lineHeight="1.5" flexShrink={0}>
+              {address ? <Text>{address}</Text> : null}
+              {phone || email ? (
+                <Text>
+                  {phone ? `${L.phone}${sep}${phone}` : null}
+                  {phone && email ? (
+                    <Text as="span" px="5px">
+                      |
+                    </Text>
+                  ) : null}
+                  {email ? `${L.email}${sep}${email}` : null}
                 </Text>
-              )}
+              ) : null}
             </Flex>
-
-            <Flex
-              p={0}
-              m={0}
-              bgColor={devColor('#acffaf')}
-              direction={'column'}
-              justifyContent={'center'}
-              alignItems={'flex-end'}
-            >
-              {isVisible('address') && <Text fontSize={'12px'}>{`${data.address}`}</Text>}
-              <Flex direction={'row'} gap={`calc(12px / 3)`}>
-                {isVisible('phoneNumber') && <Text>{`M:${data.phoneNumber}`}</Text>}
-                {isVisible('phoneNumber') && isVisible('email') && <Text>{`|`}</Text>}
-                {isVisible('email') && <Text>{`E: ${data.email}`}</Text>}
-              </Flex>
-            </Flex>
-          </Row>
-          {showIntro && (
-            <Row style={{ borderBottom: 'none' }}>
-              <Text>{data.introduction}</Text>
-            </Row>
-          )}
-        </CVSection>
-      )}
-    </React.Fragment>
+          ) : null}
+        </Flex>
+      ) : null}
+      {intro ? (
+        <Box px="10px" pt="8px" pb="16px">
+          <Text fontSize="12px" lineHeight="1.55">
+            {intro}
+          </Text>
+        </Box>
+      ) : null}
+    </Box>
   )
 }
 
 export default PersonalInformationSection
-
-// interface RowProps {
-//   noBorder?: boolean
-//   isHeader?: boolean
-// }
-
-// type Props = FlexProps &
-//   RowProps &
-//   DetailedHTMLProps<HTMLAttributes<HTMLDivElement>, HTMLDivElement>
-
-export const Row = styled(Flex)`
-  flex-direction: row;
-  justify-content: space-between;
-  padding: 0 10px;
-  padding-bottom: 20px;
-  border-bottom: 3px solid var(--cv-separator-color, blue);
-`
-export const CVSection = styled(Flex)`
-  flex-direction: column;
-`

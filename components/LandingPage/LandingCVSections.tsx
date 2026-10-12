@@ -6,6 +6,9 @@ import SkillSection from '../PersonalInstruction/Skill'
 import CertificateSection from '../PersonalInstruction/Certificate'
 import WorkExperience from '../PersonalInstruction/WorkExperience'
 import CompetitionAwardsSection from '../PersonalInstruction/CompetitionAwards'
+import PatentsSection from '../PersonalInstruction/Patents'
+import ExtraSkillSection from '../PersonalInstruction/ExtraSkill'
+import { isSectionOnWebsite } from '../../lib/cvVisibility'
 
 /**
  * Renders the CV accordion stack on /about and /cv.
@@ -20,6 +23,17 @@ import CompetitionAwardsSection from '../PersonalInstruction/CompetitionAwards'
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
 type Lang = 'en' | 'zh'
+
+const RENDERED = [
+  'education',
+  'workExperience',
+  'project',
+  'patents',
+  'competitionAwards',
+  'skill',
+  'extraSkill',
+  'certification',
+]
 
 const LandingCVSections = ({ en, zh }: { en?: any[]; zh?: any[] }) => {
   const [language, setLanguage] = useState<Lang>('en')
@@ -49,7 +63,7 @@ const LandingCVSections = ({ en, zh }: { en?: any[]; zh?: any[] }) => {
           Language
         </Text>
         <Box flex="1" h="1px" bg={divider} />
-        <Flex gap={1} fontFamily={monoFont} fontSize="11px">
+        <Flex gap={1} fontFamily={monoFont} fontSize="11px" role="group" aria-label="CV language">
           {langs.map(({ key, label }) => (
             <Box
               key={key}
@@ -66,6 +80,7 @@ const LandingCVSections = ({ en, zh }: { en?: any[]; zh?: any[] }) => {
                 _hover: { color: activeFg },
               }}
               aria-pressed={language === key}
+              aria-label={key === 'en' ? 'English' : '中文'}
             >
               {label}
             </Box>
@@ -74,38 +89,40 @@ const LandingCVSections = ({ en, zh }: { en?: any[]; zh?: any[] }) => {
       </Flex>
 
       {/*
-        cvdata can contain section types the public /about view doesn't render
-        (personalInformation, extraSkill, patents). Filter those out first so
-        the `[NN]` index chips count from 1 with no gaps, regardless of the
-        order they sit at in cvdata.json.
+        personalInformation is rendered by the hero, not here. Filter first so
+        the `[NN]` index chips count from 1 with no gaps, whatever order the
+        sections sit in. Data is already website-pruned server-side; the
+        showOnWebsite check is a second guard for unpruned callers.
       */}
-      {cvData
-        .filter((s: any) =>
-          ['education', 'skill', 'certification', 'workExperience', 'competitionAwards', 'project'].includes(
-            s?.sessionName,
-          ),
-        )
-        .map((section: any, key: number) => {
-          const idx = key + 1
-          switch (section.sessionName) {
-            case 'education':
-              return <EducationSection key={key} index={idx} data={section} />
-            case 'skill':
-              return <SkillSection key={key} index={idx} data={section} />
-            case 'certification':
-              return <CertificateSection key={key} index={idx} data={section} />
-            case 'workExperience':
-              return <WorkExperience key={key} index={idx} data={section} />
-            case 'competitionAwards':
-              return (
-                <CompetitionAwardsSection key={key} index={idx} data={section} />
-              )
-            case 'project':
-              return <ProjectSection key={key} index={idx} data={section} />
-            default:
-              return null
-          }
-        })}
+      <Flex direction="column">
+        {cvData
+          .filter((s: any) => RENDERED.includes(s?.sessionName) && isSectionOnWebsite(s))
+          .map((section: any, key: number) => {
+            const idx = key + 1
+            const k = `${section.sessionName}-${key}`
+            const props = { index: idx, data: section, lang: language }
+            switch (section.sessionName) {
+              case 'education':
+                return <EducationSection key={k} {...props} />
+              case 'skill':
+                return <SkillSection key={k} {...props} />
+              case 'certification':
+                return <CertificateSection key={k} {...props} />
+              case 'workExperience':
+                return <WorkExperience key={k} {...props} />
+              case 'competitionAwards':
+                return <CompetitionAwardsSection key={k} {...props} />
+              case 'project':
+                return <ProjectSection key={k} {...props} />
+              case 'patents':
+                return <PatentsSection key={k} {...props} />
+              case 'extraSkill':
+                return <ExtraSkillSection key={k} {...props} />
+              default:
+                return null
+            }
+          })}
+      </Flex>
     </Box>
   )
 }

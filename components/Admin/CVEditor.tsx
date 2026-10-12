@@ -1,252 +1,261 @@
-import React, { useEffect, useRef, useState } from 'react'
-import { Button, Flex, Heading, HStack, Tab, TabList, TabPanel, TabPanels, Tabs, Textarea, useToast, Select, Input, Box, Text, VStack, Switch, IconButton } from '@chakra-ui/react'
-import { ArrowUpIcon, ArrowDownIcon } from '@chakra-ui/icons'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Box,
+  Button,
+  Flex,
+  HStack,
+  Spinner,
+  Tab,
+  TabList,
+  TabPanel,
+  TabPanels,
+  Tabs,
+  Text,
+  Textarea,
+  useColorModeValue,
+  useToast,
+} from '@chakra-ui/react'
+
+/**
+ * Raw JSON editor for the CV ({ en: Section[], zh: Section[] }).
+ *
+ * Power-user escape hatch next to the Studio. Parsing is strict JSON with
+ * only two forgiving fixes (BOM, trailing commas) — text inside strings is
+ * never rewritten, so curly quotes in prose survive a save.
+ * Version history / restore lives in the dashboard's Versions tab.
+ */
+
+const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
+
+type ParseResult = { ok: true; value: any[] } | { ok: false; error: string }
+
+function parseSections(text: string): ParseResult {
+  const src = text.replace(/^﻿/, '')
+  const tryParse = (s: string) => JSON.parse(s)
+  let value: any
+  try {
+    value = tryParse(src)
+  } catch (first: any) {
+    try {
+      // Only structural leniency: trailing commas before } or ].
+      value = tryParse(src.replace(/,(\s*[}\]])/g, '$1'))
+    } catch {
+      const m = String(first?.message || '').match(/position (\d+)/)
+      if (m) {
+        const pos = Number(m[1])
+        const before = src.slice(0, pos)
+        const line = before.split('\n').length
+        const col = pos - before.lastIndexOf('\n')
+        return { ok: false, error: `Invalid JSON at line ${line}, column ${col}` }
+      }
+      return { ok: false, error: first?.message || 'Invalid JSON' }
+    }
+  }
+  if (!Array.isArray(value)) return { ok: false, error: 'Root must be an array of sections' }
+  const bad = value.findIndex((s) => !s || typeof s !== 'object' || typeof s.sessionName !== 'string')
+  if (bad >= 0) return { ok: false, error: `Section #${bad + 1} needs a string "sessionName"` }
+  return { ok: true, value }
+}
+
+const pretty = (v: unknown) => JSON.stringify(Array.isArray(v) ? v : [], null, 2)
 
 export default function CVEditor() {
   const toast = useToast()
   const [enText, setEnText] = useState('')
   const [zhText, setZhText] = useState('')
+  const [baseline, setBaseline] = useState({ en: '', zh: '' })
   const [loading, setLoading] = useState(true)
-  const [snapshots, setSnapshots] = useState<string[]>([])
-  const [selectedSnap, setSelectedSnap] = useState<string>('')
+  const [saving, setSaving] = useState(false)
   const fileRef = useRef<HTMLInputElement | null>(null)
+  const border = useColorModeValue('rgba(0,0,0,0.10)', 'rgba(255,255,255,0.12)')
+  const dim = useColorModeValue('gray.600', 'gray.400')
+  const editorBg = useColorModeValue('white', 'rgba(255,255,255,0.03)')
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await fetch('/api/cvdata')
-        const data = await res.json()
-        setEnText(JSON.stringify(data.en, null, 2))
-        setZhText(JSON.stringify(data.zh, null, 2))
-      } catch (e) {
-        toast({ status: 'error', title: 'Failed to load CV data' })
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [toast])
-
-  const save = async (syncZh: boolean) => {
-    try {
-      const parseRelaxed = (txt: string) => {
-        // Trim BOM and normalize common full-width quotes used in CN input
-        let s = txt.replace(/^\uFEFF/, '')
-        s = s
-          .replace(/[“”]/g, "'")
-          .replace(/[‘’]/g, "'")
-        // Remove simple comments if pasted from JS-like sources
-        s = s.replace(/\/\*[^]*?\*\//g, '').replace(/(^|\n)\s*\/\/.*(?=\n|$)/g, '$1')
-        // Remove trailing commas before } or ]
-        s = s.replace(/,\s*(\}|\])/g, '$1')
-        return JSON.parse(s)
-      }
-
-      const en = parseRelaxed(enText)
-      const zh = parseRelaxed(zhText)
-      const res = await fetch('/api/cvdata', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ en, zh, syncZh }) })
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
-        throw new Error(data?.error || `Save failed (${res.status})`)
-      }
-      toast({ status: 'success', title: syncZh ? 'Saved with ZH synced' : 'Saved' })
-    } catch (e: any) {
-      const msg = typeof e?.message === 'string' ? e.message : ''
-      toast({ status: 'error', title: msg || 'Invalid JSON or unauthorized' })
-    }
-  }
-
-  const refresh = async () => {
+  const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/cvdata')
+      const res = await fetch('/api/cvdata', { cache: 'no-store' })
+      if (!res.ok) throw new Error(`Server responded ${res.status}`)
       const data = await res.json()
-      setEnText(JSON.stringify(data.en, null, 2))
-      setZhText(JSON.stringify(data.zh, null, 2))
-    } catch {
-      toast({ status: 'error', title: 'Failed to reload CV data' })
+      const en = pretty(data.en)
+      const zh = pretty(data.zh)
+      setEnText(en)
+      setZhText(zh)
+      setBaseline({ en, zh })
+    } catch (e: any) {
+      toast({ status: 'error', title: 'Failed to load CV data', description: e?.message })
     } finally {
       setLoading(false)
     }
+  }, [toast])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  const enParsed = useMemo(() => parseSections(enText), [enText])
+  const zhParsed = useMemo(() => parseSections(zhText), [zhText])
+  const dirty = !loading && (enText !== baseline.en || zhText !== baseline.zh)
+  const valid = enParsed.ok && zhParsed.ok
+
+  useEffect(() => {
+    const onUnload = (e: BeforeUnloadEvent) => {
+      if (!dirty) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', onUnload)
+    return () => window.removeEventListener('beforeunload', onUnload)
+  }, [dirty])
+
+  const save = async () => {
+    if (!enParsed.ok || !zhParsed.ok) return
+    setSaving(true)
+    try {
+      const res = await fetch('/api/cvdata', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ en: enParsed.value, zh: zhParsed.value }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data?.error || `Save failed (${res.status})`)
+      const en = pretty(enParsed.value)
+      const zh = pretty(zhParsed.value)
+      setEnText(en)
+      setZhText(zh)
+      setBaseline({ en, zh })
+      toast({ status: data?.r2Warning ? 'warning' : 'success', title: 'Saved', description: data?.r2Warning })
+    } catch (e: any) {
+      toast({ status: 'error', title: e?.message || 'Save failed' })
+    } finally {
+      setSaving(false)
+    }
   }
 
-  const makeSnapshot = async () => {
-    const res = await fetch('/api/cvdata', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'snapshot' }) })
-    const data = await res.json().catch(()=>({}))
-    if (res.ok) { toast({ status: 'success', title: `Snapshot saved: ${data.file}` }); listSnaps() }
-    else toast({ status: 'error', title: data?.error || 'Snapshot failed' })
-  }
-
-  const listSnaps = async () => {
-    const res = await fetch('/api/cvdata?snapshots=1')
-    const data = await res.json().catch(()=>({ files: [] }))
-    if (res.ok) setSnapshots(data.files || [])
-  }
-
-  const restoreSelected = async () => {
-    if (!selectedSnap) { toast({ status: 'warning', title: 'Select a snapshot' }); return }
-    const res = await fetch('/api/cvdata', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'restore', filename: selectedSnap }) })
-    const data = await res.json().catch(()=>({}))
-    if (res.ok) { toast({ status: 'success', title: 'Restored from snapshot' }); refresh() }
-    else toast({ status: 'error', title: data?.error || 'Restore failed' })
-  }
-
-  const downloadCurrent = () => {
-    window.location.href = '/api/cvdata?download=current'
-  }
-
-  const downloadSelected = () => {
-    if (!selectedSnap) { toast({ status: 'warning', title: 'Select a snapshot' }); return }
-    const u = '/api/cvdata?download=1&file=' + encodeURIComponent(selectedSnap)
-    window.location.href = u
+  const format = () => {
+    if (enParsed.ok) setEnText(pretty(enParsed.value))
+    if (zhParsed.ok) setZhText(pretty(zhParsed.value))
   }
 
   const onUpload = async (file: File) => {
     try {
-      const text = await file.text()
-      const normalized = text
-        .replace(/^\uFEFF/, '')
-        .replace(/[“”]/g, "'")
-        .replace(/[‘’]/g, "'")
-        .replace(/\/\*[^]*?\*\//g, '')
-        .replace(/(^|\n)\s*\/\/.*(?=\n|$)/g, '$1')
-        .replace(/,\s*(\}|\])/g, '$1')
-      const json = JSON.parse(normalized)
-      const res = await fetch('/api/cvdata', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'import', data: json }) })
-      const data = await res.json().catch(()=>({}))
-      if (res.ok) { toast({ status: 'success', title: 'Imported from file' }); refresh() }
-      else toast({ status: 'error', title: data?.error || 'Import failed' })
-    } catch {
-      toast({ status: 'error', title: 'Invalid JSON file' })
+      const json = JSON.parse((await file.text()).replace(/^﻿/, ''))
+      if (Array.isArray(json)) setEnText(pretty(json))
+      else if (json && (Array.isArray(json.en) || Array.isArray(json.zh))) {
+        if (Array.isArray(json.en)) setEnText(pretty(json.en))
+        if (Array.isArray(json.zh)) setZhText(pretty(json.zh))
+      } else throw new Error('Expected { en, zh } or an array')
+      toast({ status: 'info', title: `Loaded ${file.name}`, description: 'Review, then Save to publish.' })
+    } catch (e: any) {
+      toast({ status: 'error', title: 'Invalid JSON file', description: e?.message })
     }
   }
 
+  if (loading) {
+    return (
+      <Flex h="40vh" align="center" justify="center">
+        <Spinner color="var(--accent)" />
+      </Flex>
+    )
+  }
+
+  const editor = (value: string, onChange: (v: string) => void, parsed: ParseResult, label: string) => (
+    <Box>
+      <Textarea
+        aria-label={`${label} CV JSON`}
+        fontFamily={monoFont}
+        fontSize="12px"
+        lineHeight="1.6"
+        minH="62vh"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        spellCheck={false}
+        bg={editorBg}
+        borderColor={parsed.ok ? border : 'red.400'}
+        focusBorderColor={parsed.ok ? 'var(--accent)' : 'red.400'}
+        sx={{ tabSize: 2 }}
+        onKeyDown={(e) => {
+          if (e.key === 'Tab') {
+            e.preventDefault()
+            const el = e.currentTarget
+            const { selectionStart: a, selectionEnd: b } = el
+            const next = value.slice(0, a) + '  ' + value.slice(b)
+            onChange(next)
+            requestAnimationFrame(() => el.setSelectionRange(a + 2, a + 2))
+          }
+        }}
+      />
+      <Text mt={1.5} fontFamily={monoFont} fontSize="11px" color={parsed.ok ? dim : 'red.400'} aria-live="polite">
+        {parsed.ok ? `✓ valid · ${parsed.value.length} section(s)` : parsed.error}
+      </Text>
+    </Box>
+  )
+
   return (
-    <Flex direction="column" gap={4}>
-      <Heading size="sm">CV Data Editor</Heading>
-      <HStack>
-        <Button colorScheme="blue" onClick={() => save(false)} isDisabled={loading}>Save</Button>
-        <Button onClick={() => save(true)} isDisabled={loading}>Save + Sync ZH Structure</Button>
-        <Button onClick={refresh} isDisabled={loading}>Reload</Button>
-      </HStack>
-      <Heading size="sm">Snapshots</Heading>
-      <HStack>
-        <Button onClick={makeSnapshot}>Make Snapshot</Button>
-        <Button onClick={downloadCurrent}>Download Current</Button>
-        <Button onClick={listSnaps}>List Snapshots</Button>
-        <Select placeholder="Select snapshot" width="auto" value={selectedSnap} onChange={(e)=> setSelectedSnap(e.target.value)}>
-          {snapshots.map((f)=> <option key={f} value={f}>{f}</option>)}
-        </Select>
-        <Button onClick={restoreSelected} colorScheme='yellow'>Restore Selected</Button>
-        <Button onClick={downloadSelected}>Download Selected</Button>
-        <Input type='file' accept='application/json' display='none' ref={fileRef} onChange={(e)=>{ const f=e.target.files?.[0]; if (f) onUpload(f); if (fileRef.current) fileRef.current.value='' }} />
-        <Button onClick={()=> fileRef.current?.click()}>Upload JSON</Button>
-      </HStack>
-
-      <Heading size="sm">Structure</Heading>
-      <Box p={4} border="1px" borderColor="gray.200" borderRadius="md">
-        <VStack align="stretch" spacing={2}>
-          {(() => {
-            try {
-              if (!enText) return <Text>Loading...</Text>
-              const sections = JSON.parse(enText)
-              if (!Array.isArray(sections)) return <Text>Root must be an array</Text>
-              
-              const handleChange = (newSections: any[]) => setEnText(JSON.stringify(newSections, null, 2))
-
-              return sections.map((section: any, index: number) => (
-                <Flex direction="column" key={index} p={2} bg="gray.50" borderRadius="md" gap={2}>
-                  <HStack justify="space-between">
-                    <HStack>
-                      <Switch
-                        isChecked={section.isVisible !== false}
-                        onChange={(e) => {
-                          const newSections = [...sections]
-                          newSections[index].isVisible = e.target.checked
-                          handleChange(newSections)
-                        }}
-                      />
-                      <Text fontWeight="bold">{section.headerName}</Text>
-                      <Text fontSize="sm" color="gray.500">({section.sessionName})</Text>
-                    </HStack>
-                    <HStack>
-                      <IconButton
-                        aria-label="Move Up"
-                        icon={<ArrowUpIcon />}
-                        size="xs"
-                        isDisabled={index === 0}
-                        onClick={() => {
-                          const newSections = [...sections]
-                          const temp = newSections[index - 1]
-                          newSections[index - 1] = newSections[index]
-                          newSections[index] = temp
-                          handleChange(newSections)
-                        }}
-                      />
-                      <IconButton
-                        aria-label="Move Down"
-                        icon={<ArrowDownIcon />}
-                        size="xs"
-                        isDisabled={index === sections.length - 1}
-                        onClick={() => {
-                          const newSections = [...sections]
-                          const temp = newSections[index + 1]
-                          newSections[index + 1] = newSections[index]
-                          newSections[index] = temp
-                          handleChange(newSections)
-                        }}
-                      />
-                    </HStack>
-                  </HStack>
-                  {section.sessionName === 'personalInformation' && (
-                    <Flex wrap="wrap" gap={4} pl={8} pt={2} borderTop="1px" borderColor="gray.200">
-                      {['firstName', 'lastName', 'nickName', 'email', 'phoneNumber', 'personalWebsite', 'address', 'introduction'].map(field => {
-                        const isHidden = section.hiddenFields?.includes(field)
-                        return (
-                          <HStack key={field}>
-                            <Switch
-                              size="sm"
-                              isChecked={!isHidden}
-                              onChange={(e) => {
-                                const newSections = [...sections]
-                                const currentHidden = newSections[index].hiddenFields || []
-                                if (e.target.checked) {
-                                  // Unhide: remove from hiddenFields
-                                  newSections[index].hiddenFields = currentHidden.filter((f: string) => f !== field)
-                                } else {
-                                  // Hide: add to hiddenFields
-                                  newSections[index].hiddenFields = [...currentHidden, field]
-                                }
-                                handleChange(newSections)
-                              }}
-                            />
-                            <Text fontSize="xs">{field}</Text>
-                          </HStack>
-                        )
-                      })}
-                    </Flex>
-                  )}
-                </Flex>
-              ))
-            } catch (e) {
-              return <Text color="red.500">Cannot parse JSON to manage structure</Text>
-            }
-          })()}
-        </VStack>
-      </Box>
-
-      <Tabs isFitted variant="enclosed">
+    <Flex direction="column" gap={3}>
+      <Flex align="center" gap={2} wrap="wrap">
+        <Button
+          size="sm"
+          onClick={save}
+          isLoading={saving}
+          isDisabled={!dirty || !valid}
+          bg={dirty && valid ? 'var(--accent)' : undefined}
+          color={dirty && valid ? 'white' : undefined}
+          _hover={dirty && valid ? { opacity: 0.92 } : undefined}
+        >
+          Save
+        </Button>
+        <Button size="sm" variant="outline" onClick={format} isDisabled={!enParsed.ok && !zhParsed.ok}>
+          Format
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => {
+            if (!dirty || window.confirm('Discard your JSON edits and reload from the server?')) load()
+          }}
+        >
+          Reload
+        </Button>
+        <Button size="sm" variant="ghost" as="a" href="/api/cvdata?download=current">
+          Download
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => fileRef.current?.click()}>
+          Load file…
+        </Button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/json,.json"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0]
+            if (f) onUpload(f)
+            e.target.value = ''
+          }}
+        />
+        <HStack ml="auto" spacing={1.5} fontFamily={monoFont} fontSize="11px" color={dim}>
+          <Box w="7px" h="7px" borderRadius="full" bg={dirty ? 'orange.400' : 'green.400'} />
+          <Text>{dirty ? 'unsaved' : 'in sync with server'}</Text>
+        </HStack>
+      </Flex>
+      <Text fontSize="12px" color={dim}>
+        Visibility keys: <code>isVisible</code> (section on CV / entry shown), <code>showOnWebsite</code>,{' '}
+        <code>hiddenFields: [&quot;gpa&quot;]</code>, <code>hiddenItems: {'{'} &quot;points&quot;: [0] {'}'}</code>. The
+        Studio edits these for you.
+      </Text>
+      <Tabs variant="enclosed" size="sm">
         <TabList>
-          <Tab>English (EN)</Tab>
-          <Tab>中文 (ZH)</Tab>
+          <Tab>
+            English {enParsed.ok ? '' : '⚠'}
+          </Tab>
+          <Tab>
+            中文 {zhParsed.ok ? '' : '⚠'}
+          </Tab>
         </TabList>
         <TabPanels>
-          <TabPanel>
-            <Textarea fontFamily="mono" minH="60vh" value={enText} onChange={(e) => setEnText(e.target.value)} />
-          </TabPanel>
-          <TabPanel>
-            <Textarea fontFamily="mono" minH="60vh" value={zhText} onChange={(e) => setZhText(e.target.value)} />
-          </TabPanel>
+          <TabPanel px={0}>{editor(enText, setEnText, enParsed, 'English')}</TabPanel>
+          <TabPanel px={0}>{editor(zhText, setZhText, zhParsed, 'Chinese')}</TabPanel>
         </TabPanels>
       </Tabs>
     </Flex>

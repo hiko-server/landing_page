@@ -1,7 +1,8 @@
 import React from 'react'
 import { Box, Flex, Link, Text, useColorModeValue } from '@chakra-ui/react'
-import { DateTime } from 'luxon'
 import { Certification } from '../../types/cvProps'
+import type { CvLang } from '../../lib/cvVisibility'
+import { cvLabels, displayUrl, formatCvDate, hrefOf } from '../../lib/cvFormat'
 import CVSectionShell, { CVRow } from './_CVSectionShell'
 
 /**
@@ -11,38 +12,40 @@ import CVSectionShell, { CVRow } from './_CVSectionShell'
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
-const fmt = (iso?: string) =>
-  iso && DateTime.fromISO(iso).isValid
-    ? DateTime.fromISO(iso).toFormat('LLL yyyy')
-    : iso || ''
+const t = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
 const CertificateSection = ({
   index,
   data,
+  lang = 'en',
 }: {
   index?: number
   data: Certification
+  lang?: CvLang
 }) => {
+  const L = cvLabels(lang)
   const labelColor = useColorModeValue('gray.600', 'gray.500')
   const divider = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.08)')
-  const totalCerts = (data?.certifications || []).reduce(
-    (acc, org) => acc + (org.CertificationList?.length || 0),
-    0,
-  )
+  const orgs = (data?.certifications || [])
+    .map((org) => ({ ...org, CertificationList: (org.CertificationList || []).filter((c) => t(c.certificationName)) }))
+    .filter((org) => org.CertificationList.length > 0)
+  const totalCerts = orgs.reduce((acc, org) => acc + org.CertificationList.length, 0)
+  if (!totalCerts) return null
 
   return (
     <CVSectionShell
       index={index}
       label={data?.headerName || 'Certifications'}
       count={totalCerts}
+      countSuffix={L.entries}
     >
       <Flex direction="column" gap={6}>
-        {(data?.certifications || []).map((org, orgI) => (
+        {orgs.map((org, orgI) => (
           <Box key={orgI}>
             <Flex align="center" gap={3} mb={3}>
-              {org.organizationURL ? (
+              {t(org.organizationURL) ? (
                 <Link
-                  href={`https://${org.organizationURL}`}
+                  href={hrefOf(org.organizationURL)}
                   isExternal
                   fontFamily={monoFont}
                   fontSize="11px"
@@ -76,15 +79,20 @@ const CertificateSection = ({
                   isFirst={certI === 0}
                   title={cert.certificationName}
                   subtitle={
-                    cert.credentialID ? `Credential ID: ${cert.credentialID}` : undefined
+                    t(cert.credentialID) ? `${L.credentialId}: ${t(cert.credentialID)}` : undefined
                   }
-                  period={`${fmt(cert.issuedDate)} — ${
-                    cert.expirationDate ? fmt(cert.expirationDate) : 'No Expiry'
-                  }`}
+                  period={
+                    t(cert.issuedDate)
+                      ? `${formatCvDate(cert.issuedDate, lang)} – ${
+                          t(cert.expirationDate) ? formatCvDate(cert.expirationDate, lang) : L.noExpiry
+                        }`
+                      : undefined
+                  }
                 >
-                  {cert.credentialURL && (
+                  {t(cert.credentialURL) && (
                     <Link
-                      href={cert.credentialURL}
+                      href={hrefOf(cert.credentialURL)}
+                      title={displayUrl(cert.credentialURL)}
                       isExternal
                       fontFamily={monoFont}
                       fontSize="11px"
@@ -94,7 +102,7 @@ const CertificateSection = ({
                         _hover: { textDecoration: 'underline' },
                       }}
                     >
-                      View Credential ↗
+                      {L.viewCredential} ↗
                     </Link>
                   )}
                 </CVRow>
