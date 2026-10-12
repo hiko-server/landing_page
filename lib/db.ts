@@ -9,7 +9,7 @@ import Database from 'better-sqlite3'
  * editorial content. Cloudflare R2 is the off-site replica (see lib/r2.ts).
  * Filesystem snapshots in data/*_snapshots/ remain as audit-only artefacts
  * and the legacy content/*.mdx + data/*.json files act as a one-way seed
- * (used by scripts/migrate-files-to-db.ts on first boot).
+ * (used by scripts/migrate-files-to-db.mjs).
  *
  * Schema:
  *   pages            (name PK, frontmatter, body, updated_at)
@@ -23,7 +23,16 @@ import Database from 'better-sqlite3'
 const DB_DIR = path.join(process.cwd(), 'data')
 const DB_PATH = path.join(DB_DIR, 'content.db')
 
-let dbInstance: Database.Database | null = null
+/** Absolute path of the live SQLite file (used by backup/restore). */
+export const CONTENT_DB_PATH = DB_PATH
+
+// Next bundles pages and API routes into separate webpack runtimes, so a
+// module-level variable would give each runtime its own connection — and a
+// restore that closes "the" handle would leave the other one pointing at the
+// replaced file. The handle lives on globalThis so the whole process shares
+// exactly one connection, and closeDb()/reopenDb() reset it for everyone.
+type DbGlobal = typeof globalThis & { __contentDb?: Database.Database | null }
+const dbGlobal = globalThis as DbGlobal
 
 // `next build` collects page data in several worker processes at once, and the
 // Docker build starts with no content.db at all. Every worker then races to
@@ -55,9 +64,21 @@ function ensureDir() {
 }
 
 export function getDb(): Database.Database {
-  if (dbInstance) return dbInstance
+  const cached = dbGlobal.__contentDb
+  if (cached && cached.open) return cached
   ensureDir()
   const db = new Database(DB_PATH, { timeout: BUSY_TIMEOUT_MS })
+  try {
+    initSchema(db)
+  } catch (err) {
+    db.close()
+    throw err
+  }
+  dbGlobal.__contentDb = db
+  return db
+}
+
+function initSchema(db: Database.Database) {
   withBusyRetry(() => {
     const mode = String(db.pragma('journal_mode', { simple: true })).toLowerCase()
     if (mode !== 'wal') db.pragma('journal_mode = WAL')
@@ -91,13 +112,17 @@ export function getDb(): Database.Database {
       ON collection_items (collection, updated_at DESC);
   `),
   )
-  dbInstance = db
-  return db
 }
 
+/** Close the shared connection (every runtime in this process sees the reset). */
 export function closeDb() {
-  if (dbInstance) {
-    dbInstance.close()
-    dbInstance = null
-  }
+  const db = dbGlobal.__contentDb
+  dbGlobal.__contentDb = null
+  if (db && db.open) db.close()
+}
+
+/** Drop the shared connection and open a fresh one — e.g. after the file was swapped. */
+export function reopenDb(): Database.Database {
+  closeDb()
+  return getDb()
 }

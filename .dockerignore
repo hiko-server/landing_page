@@ -13,6 +13,7 @@ yarn-error.log*
 .eslintcache
 .cache
 coverage
+.claude
 dist
 out
 build
@@ -31,9 +32,10 @@ data/admin.json
 # User uploads are served from a bind-mount + R2 at runtime, not from the image.
 public/uploads
 
-# Runtime state must never be baked into the image (backups embed admin.json).
+# Runtime state must never be baked into the image (older backups embed admin.json).
 data/content.db
 data/content.db-*
+data/content.db.*
 data/backups
 data/mongo_config.json
 data/contact-inbox.jsonl

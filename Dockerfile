@@ -32,6 +32,14 @@ ENV NEXT_PUBLIC_SITE_HOST=$NEXT_PUBLIC_SITE_HOST \
 
 RUN yarn build
 
+# `next build` renders the static pages through the content store, which
+# creates (and auto-seeds) data/content.db inside the build stage, and the
+# standalone tracer may copy it into .next/standalone/data. Runtime state never
+# belongs in an image: a stale build-time DB would be copied into a fresh data
+# volume, look like "existing content" to the entrypoint and shadow R2.
+RUN rm -f .next/standalone/data/content.db .next/standalone/data/content.db-* \
+ && test -f .next/standalone/.next/prerender-manifest.json
+
 
 FROM node:22-alpine AS release
 # FROM node:22-slim AS release
@@ -64,10 +72,17 @@ RUN mkdir -p /app/public/uploads && chown nextjs:nodejs /app/public/uploads
 COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Sync scripts + entrypoint pull editorial content from R2 on startup.
+# Sync scripts + entrypoint pull editorial content from R2 on startup;
+# scripts/warm-isr.mjs then regenerates the prerendered pages, reading the
+# preview id from /app/.next/prerender-manifest.json (shipped by standalone).
 COPY --from=build --chown=nextjs:nodejs /app/scripts ./scripts
 COPY --chown=nextjs:nodejs docker-entrypoint.sh /app/docker-entrypoint.sh
-RUN chmod +x /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh \
+ && test -f /app/.next/prerender-manifest.json \
+ && test -f /app/scripts/warm-isr.mjs \
+ && test -f /app/scripts/sync-from-r2.mjs \
+ && test -f /app/scripts/content-helpers.mjs \
+ && test ! -e /app/data/content.db
 
 # The standalone server already bundles most deps, but the R2 sync scripts
 # run as plain Node and need their own copy of better-sqlite3 + AWS SDK +
@@ -80,8 +95,8 @@ USER nextjs
 
 
 EXPOSE 3000
-ENV PORT 3000
-ENV HOSTNAME 0.0.0.0
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
 
 # Liveness probe — hits /api/health (verifies the SQLite store is reachable),
 # giving the orchestrator a real signal instead of just "process is up".
@@ -89,5 +104,8 @@ ENV HOSTNAME 0.0.0.0
 HEALTHCHECK --interval=30s --timeout=5s --start-period=25s --retries=3 \
   CMD wget -q -O /dev/null http://127.0.0.1:3000/api/health || exit 1
 
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
+# dumb-init is PID 1: it forwards SIGTERM to the entrypoint's whole process
+# group (R2 sync, server, ISR warm-up) and reaps children, so `docker stop`
+# ends the server promptly instead of waiting for the SIGKILL timeout.
+ENTRYPOINT ["/usr/bin/dumb-init", "--", "/app/docker-entrypoint.sh"]
 

@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { isPageName, readPage, writePage } from '../../../lib/mdx-admin'
 import { rateLimit } from '../../../lib/rateLimit'
 import { isAdminRequest } from '../../../lib/auth'
+import { revalidatePaths } from '../../../lib/revalidate'
 
 const isAuthed = isAdminRequest
 
@@ -11,8 +12,8 @@ const isAuthed = isAdminRequest
  *   GET /api/admin/page?name=now       → { name, frontmatter, body }
  *   PUT /api/admin/page                → { name, frontmatter, body } write
  *
- * Snapshots into data/page_snapshots/ on every write (rollback via /admin
- * version-history once that view lands).
+ * Snapshots into data/page_snapshots/ on every write; the public page is
+ * regenerated immediately and the response lists it under `revalidated`.
  */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!isAuthed(req, res)) return res.status(401).json({ error: 'Unauthorized' })
@@ -38,7 +39,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!frontmatter.title) return res.status(400).json({ error: 'frontmatter.title required' })
     const result = await writePage(name, frontmatter, body || '')
     if (!result.ok) return res.status(400).json({ error: result.error })
-    return res.status(200).json(result)
+    // /now and /uses are statically generated: regenerate the edited one now.
+    const paths = [`/${name}`]
+    const failed = await revalidatePaths(res, paths)
+    return res.status(200).json({
+      ...result,
+      revalidated: paths.filter((p) => !failed.includes(p)),
+      ...(failed.length ? { revalidateFailed: failed } : {}),
+    })
   }
 
   res.setHeader('Allow', 'GET,PUT')

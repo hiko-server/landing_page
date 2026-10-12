@@ -53,6 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     lastLocalAt: localBackups[0]?.mtime ?? null,
     r2Prefix: BACKUP_CONSTANTS.R2_PREFIX,
     r2LatestKey: BACKUP_CONSTANTS.R2_LATEST_KEY,
+    retention: { local: BACKUP_CONSTANTS.LOCAL_KEEP, r2: BACKUP_CONSTANTS.R2_KEEP },
   }
 
   // ── R2 summary ──────────────────────────────────────────────────────

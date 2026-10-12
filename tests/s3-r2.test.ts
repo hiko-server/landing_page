@@ -1,0 +1,309 @@
+import { test, after } from 'node:test'
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import http from 'node:http'
+import { spawn } from 'node:child_process'
+import Database from 'better-sqlite3'
+
+/**
+ * R2 round trips against an in-process S3-compatible server:
+ *   - scripts/sync-from-r2.mjs, run as a child process from a throwaway
+ *     project root (the script resolves data/ and content/ next to itself);
+ *   - lib/backup.ts restore → R2 re-mirror and R2 backup retention, imported
+ *     in this process with cwd switched to a second throwaway root.
+ */
+
+type Obj = { body: Buffer; at: number }
+const objects = new Map<string, Obj>()
+let failListing = false
+
+const xml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+const server = http.createServer((req, res) => {
+  const chunks: Buffer[] = []
+  req.on('data', (c) => chunks.push(c))
+  req.on('end', () => {
+    const url = new URL(req.url || '/', 'http://x')
+    const [, bucket, ...rest] = url.pathname.split('/')
+    const key = decodeURIComponent(rest.join('/'))
+    if (bucket !== 'test-bucket') {
+      res.statusCode = 404
+      return res.end()
+    }
+    if (req.method === 'GET' && !key) {
+      if (failListing) {
+        res.statusCode = 403
+        res.setHeader('content-type', 'application/xml')
+        return res.end('<?xml version="1.0"?><Error><Code>AccessDenied</Code><Message>denied</Message></Error>')
+      }
+      const prefix = url.searchParams.get('prefix') || ''
+      const items = [...objects.entries()].filter(([k]) => k.startsWith(prefix))
+      res.setHeader('content-type', 'application/xml')
+      return res.end(
+        '<?xml version="1.0" encoding="UTF-8"?><ListBucketResult><Name>test-bucket</Name>' +
+          `<KeyCount>${items.length}</KeyCount><IsTruncated>false</IsTruncated>` +
+          items
+            .map(
+              ([k, o]) =>
+                `<Contents><Key>${xml(k)}</Key><LastModified>${new Date(o.at).toISOString()}</LastModified>` +
+                `<Size>${o.body.length}</Size></Contents>`,
+            )
+            .join('') +
+          '</ListBucketResult>',
+      )
+    }
+    if (req.method === 'GET') {
+      const o = objects.get(key)
+      if (!o) {
+        res.statusCode = 404
+        res.setHeader('content-type', 'application/xml')
+        return res.end('<?xml version="1.0"?><Error><Code>NoSuchKey</Code></Error>')
+      }
+      return res.end(o.body)
+    }
+    if (req.method === 'PUT') {
+      objects.set(key, { body: Buffer.concat(chunks), at: Date.now() })
+      return res.end()
+    }
+    if (req.method === 'DELETE') {
+      objects.delete(key)
+      res.statusCode = 204
+      return res.end()
+    }
+    res.statusCode = 405
+    res.end()
+  })
+})
+await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+const port = (server.address() as { port: number }).port
+
+const repoRoot = process.cwd()
+const root = fs.mkdtempSync(path.join(os.tmpdir(), 's3-sync-'))
+fs.mkdirSync(path.join(root, 'scripts'))
+for (const f of ['sync-from-r2.mjs', 'content-helpers.mjs']) {
+  fs.copyFileSync(path.join(repoRoot, 'scripts', f), path.join(root, 'scripts', f))
+}
+fs.symlinkSync(path.join(repoRoot, 'node_modules'), path.join(root, 'node_modules'), 'dir')
+const dbPath = path.join(root, 'data', 'content.db')
+
+// lib/r2.ts reads its env at import time; lib/db.ts and lib/backup.ts resolve
+// data/ from the cwd. Both are set up before the dynamic import below.
+const libRoot = fs.mkdtempSync(path.join(os.tmpdir(), 's3-restore-'))
+Object.assign(process.env, {
+  R2_ENDPOINT: `http://127.0.0.1:${port}`,
+  R2_BUCKET: 'test-bucket',
+  R2_ACCESS_KEY_ID: 'test',
+  R2_SECRET_ACCESS_KEY: 'test',
+})
+process.chdir(libRoot)
+fs.mkdirSync(path.join(libRoot, 'public', 'uploads'), { recursive: true })
+const { getDb, closeDb } = await import('../lib/db')
+const backup = await import('../lib/backup')
+
+after(() => {
+  server.close()
+  closeDb()
+  process.chdir(repoRoot)
+  fs.rmSync(root, { recursive: true, force: true })
+  fs.rmSync(libRoot, { recursive: true, force: true })
+})
+
+function runSync(): Promise<{ code: number; out: string }> {
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [path.join(root, 'scripts', 'sync-from-r2.mjs')], {
+      cwd: root,
+      env: {
+        ...process.env,
+        R2_REQUIRED: '',
+        R2_ENDPOINT: `http://127.0.0.1:${port}`,
+        R2_BUCKET: 'test-bucket',
+        R2_ACCESS_KEY_ID: 'test',
+        R2_SECRET_ACCESS_KEY: 'test',
+      },
+    })
+    let out = ''
+    child.stdout.on('data', (d) => (out += d))
+    child.stderr.on('data', (d) => (out += d))
+    child.on('close', (code) => resolve({ code: code ?? -1, out }))
+  })
+}
+
+function resetRoot() {
+  objects.clear()
+  failListing = false
+  for (const dir of ['data', 'content', 'public']) fs.rmSync(path.join(root, dir), { recursive: true, force: true })
+  fs.mkdirSync(path.join(root, 'data'), { recursive: true })
+  fs.mkdirSync(path.join(root, 'content', 'blog'), { recursive: true })
+}
+
+function openDb() {
+  const db = new Database(dbPath)
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS pages (name TEXT PRIMARY KEY, frontmatter TEXT NOT NULL DEFAULT '{}', body TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS collection_items (collection TEXT NOT NULL, slug TEXT NOT NULL, frontmatter TEXT NOT NULL DEFAULT '{}', body TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL, PRIMARY KEY (collection, slug));
+    CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL);
+  `)
+  return db
+}
+
+const put = (key: string, body: string, at: number) => objects.set(key, { body: Buffer.from(body), at })
+
+test('timestamps and seeds decide each key; local-newer rows go back to R2; tombstones hold', async () => {
+  resetRoot()
+  const now = Date.now()
+  const hourAgo = now - 3_600_000
+  const dayAgo = now - 86_400_000
+
+  // Bundled git seeds.
+  fs.writeFileSync(path.join(root, 'data', 'home.json'), JSON.stringify({ hero: { brand: 'Seed' } }, null, 2))
+  fs.writeFileSync(path.join(root, 'content', 'blog', 'seeded.mdx'), '---\ntitle: Seed post\ndate: 2024-01-01\n---\nSeed body\n')
+
+  const db = openDb()
+  // kv home: auto-seeded copy written "just now" — must NOT beat R2's older real edit.
+  db.prepare('INSERT INTO kv VALUES (?, ?, ?)').run('home', JSON.stringify({ hero: { brand: 'Seed' } }), now)
+  // kv cvdata: a real edit newer than R2 (an earlier R2 push failed).
+  db.prepare('INSERT INTO kv VALUES (?, ?, ?)').run('cvdata', '{"en":{"v":2}}', now)
+  // blog/seeded: seed copy; R2 has the edited version.
+  db.prepare('INSERT INTO collection_items VALUES (?, ?, ?, ?, ?)').run('blog', 'seeded', '{"title":"Seed post","date":"2024-01-01"}', 'Seed body\n', now)
+  // blog/gone: deleted here after R2 last saw it.
+  db.prepare('INSERT INTO kv VALUES (?, ?, ?)').run('tombstones:blog', '["gone"]', hourAgo)
+  // work/local-only: never reached R2.
+  db.prepare('INSERT INTO collection_items VALUES (?, ?, ?, ?, ?)').run('work', 'local-only', '{"title":"Local"}', 'Only here', now - 60_000)
+  // pages/now: identical on both sides.
+  db.prepare('INSERT INTO pages VALUES (?, ?, ?, ?)').run('now', '{"title":"Now"}', 'Same\n', dayAgo)
+  db.close()
+
+  put('data/home.json', JSON.stringify({ hero: { brand: 'Edited' } }, null, 2), dayAgo)
+  put('data/cvdata.json', '{"en":{"v":1}}', dayAgo)
+  put('data/broken.json', '{"not": json', dayAgo)
+  put('blog/seeded.mdx', '---\ntitle: Edited post\ndate: 2024-01-01\n---\nEdited body\n', dayAgo)
+  put('blog/gone.mdx', '---\ntitle: Gone\n---\nbye\n', dayAgo)
+  put('blog/fresh.mdx', '---\ntitle: Fresh\ndate: 2024-02-02\n---\nNew from R2\n', dayAgo)
+  put('pages/now.mdx', '---\ntitle: Now\n---\nSame\n', dayAgo + 10)
+  put('uploads/pic.png', 'PNGDATA', dayAgo)
+
+  const { code, out } = await runSync()
+  assert.equal(code, 0, out)
+  assert.match(out, /OK: pulled 3, pushed 2, unchanged 1, removed 1, invalid 1, uploads 1/)
+
+  const check = new Database(dbPath, { readonly: true })
+  const kv = (k: string) => check.prepare('SELECT value, updated_at FROM kv WHERE key = ?').get(k) as { value: string; updated_at: number } | undefined
+  assert.deepEqual(JSON.parse(kv('home')!.value), { hero: { brand: 'Edited' } })
+  assert.equal(kv('home')!.updated_at, dayAgo)
+  assert.equal(kv('cvdata')!.value, '{"en":{"v":2}}')
+  assert.equal(kv('broken'), undefined)
+
+  const item = (c: string, s: string) =>
+    check.prepare('SELECT frontmatter, body, updated_at FROM collection_items WHERE collection = ? AND slug = ?').get(c, s) as
+      | { frontmatter: string; body: string; updated_at: number }
+      | undefined
+  assert.equal(JSON.parse(item('blog', 'seeded')!.frontmatter).title, 'Edited post')
+  assert.deepEqual(JSON.parse(item('blog', 'fresh')!.frontmatter), { title: 'Fresh', date: '2024-02-02' })
+  assert.equal(item('blog', 'fresh')!.updated_at, dayAgo)
+  assert.equal(item('blog', 'gone'), undefined)
+  assert.equal((check.prepare("SELECT updated_at FROM pages WHERE name = 'now'").get() as { updated_at: number }).updated_at, dayAgo)
+  check.close()
+
+  // Local-newer rows were pushed; the tombstoned object was deleted.
+  assert.deepEqual(JSON.parse(objects.get('data/cvdata.json')!.body.toString()), { en: { v: 2 } })
+  assert.match(objects.get('work/local-only.mdx')!.body.toString(), /title: Local[\s\S]*Only here/)
+  assert.equal(objects.has('blog/gone.mdx'), false)
+  assert.equal(fs.readFileSync(path.join(root, 'public', 'uploads', 'pic.png'), 'utf-8'), 'PNGDATA')
+
+  // A second run is a no-op.
+  const again = await runSync()
+  assert.equal(again.code, 0, again.out)
+  assert.match(again.out, /OK: pulled 0, pushed 0, .*removed 0, invalid 1, uploads 0/)
+})
+
+test('an item R2 rewrote after the local deletion comes back and its tombstone is cleared', async () => {
+  resetRoot()
+  const now = Date.now()
+  const db = openDb()
+  db.prepare('INSERT INTO kv VALUES (?, ?, ?)').run('tombstones:blog', '["back","other"]', now - 3_600_000)
+  db.close()
+  put('blog/back.mdx', '---\ntitle: Back\n---\nAgain\n', now - 60_000)
+
+  const { code, out } = await runSync()
+  assert.equal(code, 0, out)
+  const check = new Database(dbPath, { readonly: true })
+  assert.ok(check.prepare("SELECT 1 FROM collection_items WHERE slug = 'back'").get())
+  assert.deepEqual(JSON.parse((check.prepare("SELECT value FROM kv WHERE key = 'tombstones:blog'").get() as { value: string }).value), ['other'])
+  check.close()
+})
+
+test('R2 failure: exit 3 keeps existing local content, exit 1 when the store is empty', async () => {
+  resetRoot()
+  failListing = true
+  const empty = await runSync()
+  assert.equal(empty.code, 1, empty.out)
+
+  resetRoot()
+  failListing = true
+  const db = openDb()
+  db.prepare('INSERT INTO kv VALUES (?, ?, ?)').run('home', '{"hero":{}}', Date.now())
+  db.close()
+  const kept = await runSync()
+  assert.equal(kept.code, 3, kept.out)
+  const check = new Database(dbPath, { readonly: true })
+  assert.equal((check.prepare("SELECT value FROM kv WHERE key = 'home'").get() as { value: string }).value, '{"hero":{}}')
+  check.close()
+})
+
+test('restore re-mirrors every row to R2, removes stale item objects and uploads missing images', async () => {
+  objects.clear()
+  failListing = false
+  const db = getDb()
+  db.exec('DELETE FROM pages; DELETE FROM collection_items; DELETE FROM kv;')
+  db.prepare('INSERT INTO pages VALUES (?, ?, ?, ?)').run('now', '{"title":"Now"}', 'Restored now', 1)
+  db.prepare('INSERT INTO collection_items VALUES (?, ?, ?, ?, ?)').run('blog', 'kept', '{"title":"Kept"}', 'Body', 1)
+  db.prepare('INSERT INTO kv VALUES (?, ?, ?)').run('home', '{"hero":{"brand":"Restored"}}', 1)
+  db.prepare('INSERT INTO kv VALUES (?, ?, ?)').run('tombstones:blog', '[]', 1)
+  fs.writeFileSync(path.join(libRoot, 'public', 'uploads', 'img.png'), 'PNG')
+  const snap = await backup.createSnapshot()
+  assert.equal(snap.r2.pushed, true)
+  assert.ok(objects.has('backups/latest.tgz'))
+  assert.ok(objects.has(`backups/${snap.filename}`))
+
+  // After the snapshot: R2 picks up content the restore must undo.
+  const t = Date.now()
+  put('blog/kept.mdx', '---\ntitle: Newer\n---\nx\n', t)
+  put('blog/added-later.mdx', '---\ntitle: Later\n---\nx\n', t)
+  put('work/dup.md', '---\ntitle: Dup\n---\nx\n', t)
+  put('blog/notes.txt', 'not an item', t)
+  db.prepare("UPDATE kv SET value = ? WHERE key = 'home'").run('{"hero":{"brand":"Changed"}}')
+
+  const result = await backup.restoreLatestFromR2()
+  assert.equal(result.report.dbReplaced, true)
+  assert.deepEqual(result.report.warnings, [])
+  // pages/now + blog/kept + kv home, plus the image R2 did not have.
+  assert.equal(result.report.r2Mirrored, 4)
+  assert.equal(result.report.r2Removed, 2)
+  assert.match(objects.get('blog/kept.mdx')!.body.toString(), /title: Kept/)
+  assert.equal(objects.has('blog/added-later.mdx'), false)
+  assert.equal(objects.has('work/dup.md'), false)
+  assert.ok(objects.has('blog/notes.txt'))
+  assert.equal(objects.get('data/home.json')!.body.toString(), '{\n  "hero": {\n    "brand": "Restored"\n  }\n}')
+  assert.equal(objects.has('data/tombstones:blog.json'), false)
+  assert.equal(objects.get('uploads/img.png')!.body.toString(), 'PNG')
+  assert.match(objects.get('pages/now.mdx')!.body.toString(), /Restored now/)
+  assert.ok(result.pathsToRevalidate.includes('/blog/kept'))
+})
+
+test('R2 retention keeps the newest 30 snapshots plus latest.tgz', async () => {
+  objects.clear()
+  const base = Date.now() - 1_000_000
+  for (let i = 0; i < 33; i++) put(`backups/snapshot-20200101-0000${String(i).padStart(2, '0')}.tgz`, 'old', base + i * 1000)
+  put('backups/manual-upload.tgz', 'keep', base - 10_000)
+  const snap = await backup.createSnapshot()
+  const keys = [...objects.keys()].filter((k) => k.startsWith('backups/'))
+  const snapshots = keys.filter((k) => backup.SNAPSHOT_FILE_RE.test(k.slice('backups/'.length)))
+  assert.equal(snapshots.length, backup.R2_KEEP)
+  assert.ok(keys.includes('backups/latest.tgz'))
+  assert.ok(keys.includes('backups/manual-upload.tgz'))
+  assert.ok(keys.includes(`backups/${snap.filename}`))
+  assert.equal(keys.includes('backups/snapshot-20200101-000000.tgz'), false)
+  assert.equal(snap.pruned.r2.length, 4)
+})

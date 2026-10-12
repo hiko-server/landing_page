@@ -5,129 +5,96 @@
  * Use this once after the initial filesystem→DB migration to bootstrap the
  * R2 bucket, or any time you want to force-overwrite R2 from the local
  * state. Day-to-day admin writes already dual-write through
- * lib/contentStore.ts so this script is rarely needed.
+ * lib/contentStore.ts, and the boot sync (sync-from-r2.mjs) pushes rows that
+ * are newer locally, so this script is rarely needed.
  *
- * Run: `node scripts/sync-to-r2.mjs`
+ * Run: `yarn content:push`  (node --env-file=.env scripts/sync-to-r2.mjs)
  */
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import matter from 'gray-matter'
 import Database from 'better-sqlite3'
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { PutObjectCommand } from '@aws-sdk/client-s3'
+import {
+  SAFE_NAME,
+  SAFE_UPLOAD,
+  createS3,
+  inferMime,
+  itemKey,
+  kvKey,
+  pageKey,
+  prettyJson,
+  r2Env,
+  serializeMdx,
+} from './content-helpers.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
 const DB_PATH = path.join(ROOT, 'data', 'content.db')
 const UPLOADS_DIR = path.join(ROOT, 'public', 'uploads')
+const TAG = '[sync-to-r2]'
 
-const { R2_ENDPOINT, R2_BUCKET, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY } = process.env
-if (!R2_ENDPOINT || !R2_BUCKET || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) {
-  console.error('[sync-to-r2] R2 env vars missing. Aborting.')
+const cfg = r2Env()
+if (!cfg) {
+  console.error(`${TAG} R2 env vars missing. Aborting.`)
   process.exit(1)
 }
 if (!fs.existsSync(DB_PATH)) {
-  console.error(`[sync-to-r2] No SQLite at ${DB_PATH}. Run migrate-files-to-db.mjs first.`)
+  console.error(`${TAG} No SQLite at ${DB_PATH}. Run migrate-files-to-db.mjs first.`)
   process.exit(1)
 }
 
-const db = new Database(DB_PATH, { readonly: true })
-const s3 = new S3Client({
-  region: 'auto',
-  endpoint: R2_ENDPOINT,
-  credentials: { accessKeyId: R2_ACCESS_KEY_ID, secretAccessKey: R2_SECRET_ACCESS_KEY },
-})
+const db = new Database(DB_PATH, { readonly: true, timeout: 10_000 })
+const s3 = createS3(cfg)
 
-async function putText(key, body, contentType) {
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: R2_BUCKET,
-      Key: key,
-      Body: body,
-      ContentType: contentType,
-    }),
-  )
-}
-
-async function putBuffer(key, body, contentType) {
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: R2_BUCKET,
-      Key: key,
-      Body: body,
-      ContentType: contentType,
-    }),
-  )
-}
-
-function inferMime(filename) {
-  const ext = path.extname(filename).toLowerCase()
-  const map = {
-    '.png': 'image/png',
-    '.jpg': 'image/jpeg',
-    '.jpeg': 'image/jpeg',
-    '.gif': 'image/gif',
-    '.webp': 'image/webp',
-    '.svg': 'image/svg+xml',
-    '.avif': 'image/avif',
-    '.ico': 'image/x-icon',
-    '.pdf': 'application/pdf',
-    '.json': 'application/json',
-    '.txt': 'text/plain',
-  }
-  return map[ext] || 'application/octet-stream'
+async function put(key, body, contentType) {
+  await s3.send(new PutObjectCommand({ Bucket: cfg.bucket, Key: key, Body: body, ContentType: contentType }))
 }
 
 async function main() {
-  console.log(`[sync-to-r2] Bucket: ${R2_BUCKET}`)
+  console.log(`${TAG} Bucket: ${cfg.bucket}`)
+  const counts = { pages: 0, items: 0, kv: 0, uploads: 0 }
 
-  // pages
   for (const row of db.prepare('SELECT name, frontmatter, body FROM pages').all()) {
-    const fm = JSON.parse(row.frontmatter)
-    const yaml = matter.stringify(row.body || '\n', fm)
-    await putText(`pages/${row.name}.mdx`, yaml, 'text/markdown; charset=utf-8')
-    console.log(`  page → pages/${row.name}.mdx`)
+    await put(pageKey(row.name), serializeMdx(matter, JSON.parse(row.frontmatter), row.body), 'text/markdown; charset=utf-8')
+    counts.pages++
+    console.log(`  page → ${pageKey(row.name)}`)
   }
 
-  // collection_items
-  for (const row of db
-    .prepare('SELECT collection, slug, frontmatter, body FROM collection_items')
-    .all()) {
-    const fm = JSON.parse(row.frontmatter)
-    const yaml = matter.stringify(row.body || '\n', fm)
-    await putText(`${row.collection}/${row.slug}.mdx`, yaml, 'text/markdown; charset=utf-8')
-    console.log(`  item → ${row.collection}/${row.slug}.mdx`)
+  for (const row of db.prepare('SELECT collection, slug, frontmatter, body FROM collection_items').all()) {
+    const key = itemKey(row.collection, row.slug)
+    await put(key, serializeMdx(matter, JSON.parse(row.frontmatter), row.body), 'text/markdown; charset=utf-8')
+    counts.items++
+    console.log(`  item → ${key}`)
   }
 
-  // kv (always stored as pretty-printed JSON)
+  // Only keys the boot sync reads back (tombstone bookkeeping stays local).
   for (const row of db.prepare('SELECT key, value FROM kv').all()) {
-    let pretty = row.value
-    try {
-      pretty = JSON.stringify(JSON.parse(row.value), null, 2)
-    } catch {
-      // leave as-is if not valid JSON
-    }
-    await putText(`data/${row.key}.json`, pretty, 'application/json; charset=utf-8')
-    console.log(`  kv   → data/${row.key}.json`)
+    if (!SAFE_NAME.test(row.key)) continue
+    await put(kvKey(row.key), prettyJson(row.value), 'application/json; charset=utf-8')
+    counts.kv++
+    console.log(`  kv   → ${kvKey(row.key)}`)
   }
 
-  // uploads (filesystem only; not in DB)
   if (fs.existsSync(UPLOADS_DIR)) {
     for (const file of fs.readdirSync(UPLOADS_DIR)) {
-      if (file.startsWith('.')) continue
+      if (file.startsWith('.') || !SAFE_UPLOAD.test(file)) continue
       const fp = path.join(UPLOADS_DIR, file)
       if (!fs.statSync(fp).isFile()) continue
-      const buf = fs.readFileSync(fp)
-      await putBuffer(`uploads/${file}`, buf, inferMime(file))
+      await put(`uploads/${file}`, fs.readFileSync(fp), inferMime(file))
+      counts.uploads++
       console.log(`  upl  → uploads/${file}`)
     }
   }
 
-  console.log('[sync-to-r2] OK')
-  db.close()
+  console.log(`${TAG} OK: ${counts.pages} page(s), ${counts.items} item(s), ${counts.kv} kv, ${counts.uploads} upload(s)`)
 }
 
-main().catch((err) => {
-  console.error('[sync-to-r2] FAILED', err)
-  process.exit(1)
-})
+main()
+  .then(() => db.close())
+  .catch((err) => {
+    console.error(`${TAG} FAILED`, err)
+    db.close()
+    process.exit(1)
+  })

@@ -10,10 +10,23 @@ import { S3Client, GetObjectCommand, PutObjectCommand, DeleteObjectCommand, List
  *   R2_SECRET_ACCESS_KEY
  *
  * `isR2Configured()` lets callers skip cleanly when running locally without
- * credentials. Mutating helpers throw when R2 is configured but reachable —
+ * credentials. Mutating helpers throw when R2 is configured but unreachable —
  * callers decide whether the failure is fatal (per user spec: dual-write
  * means R2 errors propagate while the local DB write is already persisted).
+ *
+ * Every call is bounded: a TCP connect that does not complete within
+ * R2_TIMEOUTS.connectionMs, or a socket that stays silent for
+ * R2_TIMEOUTS.requestMs, fails the attempt, and the SDK's standard retry
+ * strategy (exponential backoff + jitter, retryable errors only) gives up
+ * after R2_TIMEOUTS.maxAttempts. An R2 outage therefore turns an admin save
+ * into a prompt "R2 sync failed" warning instead of a request that hangs.
  */
+
+export const R2_TIMEOUTS = {
+  connectionMs: 5_000,
+  requestMs: 10_000,
+  maxAttempts: 3,
+} as const
 
 const ENDPOINT = process.env.R2_ENDPOINT || ''
 const BUCKET = process.env.R2_BUCKET || ''
@@ -43,6 +56,12 @@ function getClient(): S3Client {
     credentials: {
       accessKeyId: ACCESS_KEY_ID,
       secretAccessKey: SECRET_ACCESS_KEY,
+    },
+    maxAttempts: R2_TIMEOUTS.maxAttempts,
+    retryMode: 'standard',
+    requestHandler: {
+      connectionTimeout: R2_TIMEOUTS.connectionMs,
+      requestTimeout: R2_TIMEOUTS.requestMs,
     },
   })
   return client
