@@ -7,14 +7,12 @@ const { withSentryConfig } = require('@sentry/nextjs')
 const nextConfig = {
   output: 'standalone',
   reactStrictMode: true,
-  productionBrowserSourceMaps: true,
+  // Don't publish full client source (incl. the admin UI) as .map files.
+  productionBrowserSourceMaps: false,
   poweredByHeader: false,
   // Required on Next 14 so instrumentation.ts runs on server/edge startup and
   // loads the Sentry init for each runtime. (Stable/removed in Next 15.)
   experimental: { instrumentationHook: true },
-  // Ensure styled-components renders consistently on SSR to avoid layout
-  // mismatches when landing directly on routes like /cv.
-  compiler: { styledComponents: true },
   // Route every /uploads/* request to the runtime file server BEFORE Next's
   // static handler runs. With `output: 'standalone'`, that static handler only
   // knows about files present in public/ at BUILD time, so runtime-uploaded
@@ -66,8 +64,3 @@ module.exports = withSentryConfig(nextConfig, {
   widenClientFileUpload: false,
   disableLogger: true,
 })
-
-
-// module.exports = {
-    
-// }
