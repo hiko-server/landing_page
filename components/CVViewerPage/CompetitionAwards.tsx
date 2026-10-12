@@ -1,88 +1,34 @@
-import { Flex, Text } from '@chakra-ui/react'
 import React from 'react'
-import { DateTime } from 'luxon'
+import type { CompetitionAwards as CompetitionAwardsType } from '../../types/cvProps'
+import type { CvLang } from '../../lib/cvVisibility'
+import { formatCvDate } from '../../lib/cvFormat'
+import { EntryStack, EntryText, EntryTitle, MetaLine, PlainBullets, SheetEntry, SheetSection } from './primitives'
 
-import { CompetitionAwards as CompetitionAwardsType } from '../../types/cvProps'
-import { devColor } from '../../helpers/devColor'
-import { CVSection, Row } from './PersonalInformation'
+const t = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
-const formatMonthYear = (value?: string) => {
-  if (!value) return null
-  const parsed = DateTime.fromISO(value)
-  if (!parsed.isValid) return value
-  return parsed.toFormat('LLL yyyy')
-}
-
-const CompetitionAwardsSection = ({
-  data,
-}: {
-  data: CompetitionAwardsType
-}) => {
+const CompetitionAwardsSection = ({ data, lang = 'en' }: { data: CompetitionAwardsType; lang?: CvLang }) => {
+  const items = (data.awards || []).filter((a) => t(a.contestName) || t(a.award) || (a.description || []).length)
+  if (!items.length) return null
   return (
-    <CVSection bgColor={devColor('#fde3b6')} flex={'flex'}>
-      <Row style={{ paddingBottom: '0px', breakAfter: 'avoid' }}>
-        <Text fontWeight={800} fontSize={'12px'}>
-          {data.headerName.toUpperCase()}
-        </Text>
-      </Row>
-      <Row style={{ borderBottom: 'none' }}>
-        <Flex direction={'column'} gap={'16px'} flex={1}>
-          {data.awards.map((item, index) => (
-            <Flex key={index} direction={'column'} gap={'6px'} style={{ breakInside: 'avoid' }}>
-              <Flex
-                justifyContent={'space-between'}
-                alignItems={'baseline'}
-                flexWrap={'wrap'}
-                style={{ padding: 0 }}
-              >
-                <Flex direction={'column'} minW={'320px'}>
-                  <Text fontWeight={800} fontSize={'14px'}>
-                    {item.contestName}
-                  </Text>
-                  <Text fontSize={'12px'}>{item.award}</Text>
-                  {item.organization ? (
-                    <Text fontSize={'12px'} color={'gray.600'}>
-                      {item.organization}
-                    </Text>
-                  ) : null}
-                </Flex>
-                <Flex
-                  fontSize={'12px'}
-                  fontStyle={'italic'}
-                  gap={`calc(16px/3)`}
-                  minWidth={'210px'}
-                  justifyContent={'flex-end'}
-                  alignItems={'center'}
-                >
-                  {item.date ? (
-                    <Text>{formatMonthYear(item.date)}</Text>
-                  ) : null}
-                  {item.date && item.location ? (
-                    <Text fontStyle={'normal'}>{`|`}</Text>
-                  ) : null}
-                  {item.location ? (
-                    <Text
-                      fontStyle={'normal'}
-                      fontWeight={600}
-                      textAlign={'right'}
-                    >
-                      {item.location}
-                    </Text>
-                  ) : null}
-                </Flex>
-              </Flex>
-              {item.description.length > 0 ? (
-                <Flex direction={'column'} fontSize={'12px'} gap={'2px'}>
-                  {item.description.map((line, lineIndex) => (
-                    <Text key={lineIndex}>• {line}</Text>
-                  ))}
-                </Flex>
-              ) : null}
-            </Flex>
-          ))}
-        </Flex>
-      </Row>
-    </CVSection>
+    <SheetSection title={data.headerName}>
+      <EntryStack>
+        {items.map((item, index) => (
+          <SheetEntry
+            key={index}
+            left={
+              <>
+                {t(item.contestName) ? <EntryTitle>{item.contestName}</EntryTitle> : null}
+                <EntryText>{t(item.award)}</EntryText>
+                <EntryText muted>{t(item.organization)}</EntryText>
+              </>
+            }
+            right={<MetaLine date={formatCvDate(item.date, lang)} place={t(item.location)} />}
+          >
+            <PlainBullets items={item.description} />
+          </SheetEntry>
+        ))}
+      </EntryStack>
+    </SheetSection>
   )
 }
 

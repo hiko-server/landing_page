@@ -1,82 +1,40 @@
-import { Flex, Text } from '@chakra-ui/react'
 import React from 'react'
-import { Project } from '../../types/cvProps'
-import { devColor } from '../../helpers/devColor'
-import { CVSection, Row } from './PersonalInformation'
-import { DateTime } from 'luxon'
+import type { Project } from '../../types/cvProps'
+import type { CvLang } from '../../lib/cvVisibility'
+import { formatCvRange } from '../../lib/cvFormat'
+import { EntryStack, EntryText, EntryTitle, FeatureBullets, MetaLine, SheetEntry, SheetSection } from './primitives'
 
-const ProjectSection = ({ data }: { data: Project }) => {
+const t = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+
+const ProjectSection = ({ data, lang = 'en' }: { data: Project; lang?: CvLang }) => {
+  const items = (data.projectExperience || []).filter(
+    (p) => t(p.title) || t(p.description) || (p.features || []).length,
+  )
+  if (!items.length) return null
   return (
-    <React.Fragment>
-      <CVSection bgColor={devColor('#fde3b6')} flex={'flex'}>
-        <Row style={{ paddingBottom: '0px', breakAfter: 'avoid' }}>
-          <Text fontWeight={800} fontSize={'12px'}>
-            {data.headerName.toUpperCase()}
-          </Text>
-        </Row>
-        <Row style={{ borderBottom: 'none' }}>
-          <Flex direction={'column'} gap={'20px'} flex={1}>
-            {data.projectExperience.map((pro, k) => (
-              <Flex key={k} direction={'column'} style={{ breakInside: 'avoid' }}>
-                <Flex
-                  justifyContent={'space-between'}
-                  alignItems={'center'}
-                  style={{ padding: '0' }}
-                >
-                  <Flex direction={'column'} minW={'500px'}>
-                    <Text fontWeight={800} fontSize={'14px'}>
-                      {pro.title}
-                    </Text>
-                    <Text fontSize={'12px'}>{pro.description}</Text>
-                  </Flex>
-                  {/*  */}
-                  <Flex
-                    fontSize={'12px'}
-                    fontStyle={'italic'}
-                    gap={`calc(16px/3)`}
-                    minWidth={'210px'}
-                    justifyContent={'center'}
-                    alignItems={'center'}
-                  >
-                    <Text>
-                      {DateTime.fromISO(pro.startDate).toFormat('LLL yyyy')}
-                      {' - '}
-                      {DateTime.fromISO(pro.endDate) > DateTime.now()
-                        ? 'present'
-                        : DateTime.fromISO(pro.endDate).toFormat('LLL yyyy')}
-                    </Text>
-                    <Text fontStyle={'normal'}>{`|`}</Text>
-                    <Text fontWeight={800}>{pro.projectLocation}</Text>
-                  </Flex>
-                </Flex>
-
-                <Flex direction={'column'}>
-                  {pro.features.map((fea, i) => (
-                    <Flex key={i} direction={'column'}>
-                      <Flex fontWeight={600} fontSize={'12px'}>
-                        •{fea.description}
-                      </Flex>
-                      {fea.furtherExplanation.length > 0 && (
-                        <Flex direction={'column'}>
-                          {fea.furtherExplanation.map((des, j) => (
-                            <Flex key={j}>
-                              <Text fontWeight={400} fontSize={'12px'}>
-                                {'->'}
-                                {des}
-                              </Text>
-                            </Flex>
-                          ))}
-                        </Flex>
-                      )}
-                    </Flex>
-                  ))}
-                </Flex>
-              </Flex>
-            ))}
-          </Flex>
-        </Row>
-      </CVSection>
-    </React.Fragment>
+    <SheetSection title={data.headerName}>
+      <EntryStack>
+        {items.map((pro, k) => (
+          <SheetEntry
+            key={k}
+            left={
+              <>
+                {t(pro.title) ? <EntryTitle>{pro.title}</EntryTitle> : null}
+                <EntryText>{t(pro.description)}</EntryText>
+              </>
+            }
+            right={
+              <MetaLine
+                date={formatCvRange(pro.startDate, pro.endDate, lang, { futureEndAsPresent: true })}
+                place={t(pro.projectLocation)}
+              />
+            }
+          >
+            <FeatureBullets items={pro.features} />
+          </SheetEntry>
+        ))}
+      </EntryStack>
+    </SheetSection>
   )
 }
 

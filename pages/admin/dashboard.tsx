@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react'
 import {
-  Badge,
   Box,
   Button,
   Flex,
@@ -20,7 +19,6 @@ import { SettingsIcon } from '@chakra-ui/icons'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 import CVEditor from '../../components/Admin/CVEditor'
-import CVGuiEditor from '../../components/Admin/CVGuiEditorV2'
 import CVEditorStudio from '../../components/Admin/CVEditorStudio'
 import HomeEditor from '../../components/Admin/HomeEditor'
 import VersionHistory from '../../components/Admin/VersionHistory'
@@ -30,6 +28,7 @@ import Link from 'next/link'
 import { FaHome, FaFileAlt, FaHistory, FaDatabase } from 'react-icons/fa'
 
 const TAB_LABELS = ['Home', 'CV', 'Versions', 'Storage']
+const TAB_KEYS = ['home', 'cv', 'versions', 'storage']
 
 export default function AdminDashboard() {
   const toast = useToast()
@@ -65,24 +64,29 @@ export default function AdminDashboard() {
   }
 
   const tabIcons = [FaHome, FaFileAlt, FaHistory, FaDatabase]
-  const tabColors = ['blue.400', 'purple.400', 'orange.400', 'teal.400']
+  const tabColors = ['var(--accent)', 'var(--accent)', 'var(--accent)', 'var(--accent)']
 
   return (
     <>
       <CustomHead title="Admin Dashboard" />
-      <HeaderFooter isMobile={false}>
+      <HeaderFooter>
         <Flex direction="column" p={{ base: 4, md: 8 }} gap={6} minH="100vh" bg={pageBg}>
           {/* Header */}
           <Flex justify="space-between" align="center" flexWrap="wrap" gap={3}>
             <Box>
-              <Badge colorScheme="teal" borderRadius="full" px={3} py={1} fontSize="xs" mb={1}>
+              <Text
+                fontFamily="var(--font-geist-mono), monospace"
+                fontSize="10px"
+                letterSpacing="0.16em"
+                textTransform="uppercase"
+                color="var(--accent)"
+                mb={1}
+              >
                 Admin
-              </Badge>
+              </Text>
               <Heading
-                fontFamily="'Sora', sans-serif"
                 size="lg"
-                bgGradient="linear(to-r, teal.400, blue.500)"
-                bgClip="text"
+                letterSpacing="-0.02em"
               >
                 Dashboard
               </Heading>
@@ -111,8 +115,20 @@ export default function AdminDashboard() {
           <Tabs
             variant="unstyled"
             index={tabIndex}
-            onChange={(i) => setTabIndex(i)}
+            onChange={(i) => {
+              setTabIndex(i)
+              // Keep ?tab= in sync so reloads / shared links land on the same tab.
+              router.replace({ pathname: router.pathname, query: { ...router.query, tab: TAB_KEYS[i] } }, undefined, {
+                shallow: true,
+                scroll: false,
+              })
+            }}
             isFitted={false}
+            // Only the visible editor is mounted: each editor owns keyboard
+            // shortcuts and its own copy of the data, so hidden ones must not
+            // listen or later overwrite a newer save.
+            isLazy
+            lazyBehavior="unmount"
           >
             <TabList
               bg={useColorModeValue('rgba(255,255,255,0.8)', 'rgba(30,41,59,0.7)')}
@@ -124,10 +140,14 @@ export default function AdminDashboard() {
               display="inline-flex"
               gap={1}
               mb={6}
+              maxW="100%"
+              overflowX="auto"
+              sx={{ scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}
             >
               {TAB_LABELS.map((label, i) => (
                 <Tab
                   key={label}
+                  flexShrink={0}
                   borderRadius="12px"
                   fontWeight={600}
                   fontSize="sm"
@@ -155,24 +175,19 @@ export default function AdminDashboard() {
                 <HomeEditor />
               </TabPanel>
 
-              {/* CV — Studio is the primary v6 editor; JSON & GUI v2 are
-                  kept as legacy power-user tabs for raw editing / debugging. */}
+              {/* CV — Studio is the editor; raw JSON stays for power users. */}
               <TabPanel p={0}>
-                <Tabs variant="enclosed" colorScheme="purple">
-                  <TabList>
+                <Tabs variant="soft-rounded" colorScheme="purple" size="sm" isLazy lazyBehavior="unmount">
+                  <TabList mb={3} gap={1}>
                     <Tab>Studio</Tab>
-                    <Tab>JSON</Tab>
-                    <Tab>GUI (legacy)</Tab>
+                    <Tab>Raw JSON</Tab>
                   </TabList>
                   <TabPanels>
                     <TabPanel p={0}>
                       <CVEditorStudio />
                     </TabPanel>
-                    <TabPanel>
+                    <TabPanel p={0}>
                       <CVEditor />
-                    </TabPanel>
-                    <TabPanel>
-                      <CVGuiEditor />
                     </TabPanel>
                   </TabPanels>
                 </Tabs>

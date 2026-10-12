@@ -1,47 +1,48 @@
 import React from 'react'
 import { Box, Flex, useColorModeValue } from '@chakra-ui/react'
-import { DateTime } from 'luxon'
 import { Education } from '../../types/cvProps'
+import type { CvLang } from '../../lib/cvVisibility'
+import { cvLabels, formatCvRange, majorAddsInfo } from '../../lib/cvFormat'
 import CVSectionShell, { CVRow } from './_CVSectionShell'
 
-const fmt = (iso?: string) =>
-  iso && DateTime.fromISO(iso).isValid
-    ? DateTime.fromISO(iso).toFormat('LLL yyyy')
-    : iso || ''
+const t = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
 const EducationSection = ({
   index,
   data,
+  lang = 'en',
 }: {
   index?: number
   data: Education
+  lang?: CvLang
 }) => {
-  const items = data?.educationExperience || []
-  // GPA line color — same fix as WorkExperience, theme-aware instead of
-  // hard-coded gray.500 which is below WCAG AA on white.
+  const L = cvLabels(lang)
+  const items = (data?.educationExperience || []).filter((e) => t(e.schoolName) || t(e.degree))
+  // GPA line color — theme-aware (gray.500 on white fails WCAG AA).
   const gpaColor = useColorModeValue('gray.600', 'gray.500')
+  if (!items.length) return null
   return (
-    <CVSectionShell
-      index={index}
-      label={data?.headerName || 'Education'}
-      count={items.length}
-    >
+    <CVSectionShell index={index} label={data?.headerName || 'Education'} count={items.length} countSuffix={L.entries}>
       <Flex direction="column">
-        {items.map((edu, i) => (
-          <CVRow
-            key={i}
-            isFirst={i === 0}
-            title={edu.degree}
-            subtitle={`${edu.schoolName}${edu.schoolLocation ? ` · ${edu.schoolLocation}` : ''}`}
-            period={`${fmt(edu.startDate)} — ${fmt(edu.endDate)}`}
-          >
-            {edu.gpa && (
-              <Box fontSize="13px" color={gpaColor} fontStyle="normal">
-                GPA: {edu.gpa}
-              </Box>
-            )}
-          </CVRow>
-        ))}
+        {items.map((edu, i) => {
+          const major = majorAddsInfo(edu.degree, edu.major) ? t(edu.major) : ''
+          return (
+            <CVRow
+              key={i}
+              isFirst={i === 0}
+              title={t(edu.degree) || t(edu.schoolName)}
+              subtitle={[t(edu.degree) ? t(edu.schoolName) : '', t(edu.schoolLocation)].filter(Boolean).join(' · ') || undefined}
+              meta={major ? `${L.major} · ${major}` : undefined}
+              period={formatCvRange(edu.startDate, edu.endDate, lang) || undefined}
+            >
+              {t(edu.gpa) ? (
+                <Box fontSize="13px" color={gpaColor}>
+                  {L.gpa}: {t(edu.gpa)}
+                </Box>
+              ) : null}
+            </CVRow>
+          )
+        })}
       </Flex>
     </CVSectionShell>
   )

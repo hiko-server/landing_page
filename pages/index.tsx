@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React from 'react'
 import { GetServerSideProps } from 'next'
 import { Flex, useMediaQuery } from '@chakra-ui/react'
 
@@ -10,16 +10,7 @@ import { absUrl, websiteNode, personNode } from '../lib/schema'
 
 
 const LandingPage = (props: any) => {
-  // const { data: session } = useSession()
-
-  const [, setIsHostCV] = useState<boolean>(false)
-  const [isMobile] = useMediaQuery('(max-width: 767px)')
-
-  useEffect(() => {
-    if (props.host && props.host === 'cv.lucian-dev.com') {
-      setIsHostCV(true)
-    }
-  }, [props.host])
+  const [isMobile] = useMediaQuery('(max-width: 767px)', { ssr: true, fallback: false })
 
   return (
     <>
@@ -34,7 +25,7 @@ const LandingPage = (props: any) => {
         jsonLd={[websiteNode(), personNode()]}
       />
 
-      <HeaderFooter isMobile={isMobile}>
+      <HeaderFooter>
         {/* Mobile and desktop share the same composition — LandingContent
             and every child use Chakra responsive props for sizing. */}
         <Flex direction="column" alignItems="center" justifyContent="center" gap={['20px', '40px']}>
@@ -55,17 +46,21 @@ export const getServerSideProps: GetServerSideProps = async (context: any) => {
   try {
     const mod = await import('../lib/home')
     home = mod.readHome()
-  } catch {}
+  } catch {
+    /* best effort — render with what we have */
+  }
   // read live cv data server-side from the content store (SQLite kv + R2) — the
   // same source the admin editor writes via /api/cvdata. (Was reading the static
   // data/cvdata.json seed file, so admin edits never appeared.)
+  // Only the public, website-scoped view is shipped (hidden content never
+  // reaches the browser). The home page renders EN-only CV derivations, so
+  // the ZH half is not sent at all.
   let en: any[] = []
-  let zh: any[] = []
   try {
-    const { readCvData } = await import('../lib/cvdata')
-    const cv = readCvData()
-    en = cv.en
-    zh = cv.zh
-  } catch {}
-  return { props: { host, home, cv: { en, zh } } }
+    const { readPublicCvData } = await import('../lib/cvdata')
+    en = readPublicCvData('website').en
+  } catch {
+    /* best effort — render with what we have */
+  }
+  return { props: { host, home, cv: { en, zh: [] } } }
 }

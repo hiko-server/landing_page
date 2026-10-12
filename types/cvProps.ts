@@ -1,3 +1,12 @@
+/**
+ * Stored CV shape (data/cvdata.json → SQLite kv 'cvdata' → { en, zh }).
+ *
+ * Every object may also carry the visibility metadata described in
+ * lib/cvVisibility.ts (`isVisible`, `showOnWebsite`, `hiddenFields`,
+ * `hiddenItems`). Public renderers receive already-pruned data, so they only
+ * need to treat empty strings / arrays as "nothing to show".
+ */
+
 export type CVData = (
   | PersonalInformation
   | Education
@@ -7,36 +16,39 @@ export type CVData = (
   | Certification
   | Experiences
   | CompetitionAwards
-)[];
-// export type CVData =(PersonalInformation )[];
-// export type CVData =( Education )[];
-// export type CVData =( Skill )[];
-// export type CVData =( Project)[];
-// export type CVData =( ExtraSkill)[];
+  | Patents
+)[]
 
-
-export interface CVSection {
-  sessionName: string
-  headerName: string
+/** Visibility metadata any stored object may carry. */
+export interface Visibility {
   isVisible?: boolean
+  hiddenFields?: string[]
+  hiddenItems?: Record<string, number[]>
 }
 
-export interface Experiences extends CVSection{
+export interface CVSection extends Visibility {
+  sessionName: string
+  headerName: string
+  /** Section shown on the website (/about, home). Default true. */
+  showOnWebsite?: boolean
+}
+
+export interface Experiences extends CVSection {
   experiences: Experience[]
 }
 
-export interface Experience{
+export interface Experience extends Visibility {
   companyName: string
   companyURL: string
   jobTitle: string
   jobDescription: string
-  location:string
+  location: string
   startDate: string
   endDate: string
   relatedSkills: string[]
   features: Feature[]
 }
-export interface Feature {
+export interface Feature extends Visibility {
   description: string
   furtherExplanation: string[]
 }
@@ -45,7 +57,7 @@ export interface CompetitionAwards extends CVSection {
   awards: CompetitionAwardItem[]
 }
 
-export interface CompetitionAwardItem {
+export interface CompetitionAwardItem extends Visibility {
   contestName: string
   award: string
   organization?: string
@@ -54,18 +66,17 @@ export interface CompetitionAwardItem {
   description: string[]
 }
 
-export interface Certification extends CVSection{
+export interface Certification extends CVSection {
   certifications: CertificationByOrg[]
 }
 
-export interface CertificationByOrg{
+export interface CertificationByOrg extends Visibility {
   issuingOrganization: string
-  organizationURL:string
+  organizationURL: string
   CertificationList: CertificationList[]
 }
-export interface CertificationList{
+export interface CertificationList extends Visibility {
   certificationName: string
-  
   issuedDate: string
   expirationDate: string
   credentialID: string
@@ -78,18 +89,17 @@ export interface PersonalInformation extends CVSection {
   nickName: string
   email: string
   phoneNumber: string
-  personalWebsite:string
+  personalWebsite: string
   address: string
   introduction: string
-  hiddenFields?: string[]
   separatorColor?: string
 }
 
-export interface Education extends CVSection{
+export interface Education extends CVSection {
   educationExperience: EducationExperience[]
 }
 
-export interface EducationExperience{
+export interface EducationExperience extends Visibility {
   schoolName: string
   schoolLocation: string
   degree: string
@@ -99,72 +109,47 @@ export interface EducationExperience{
   gpa?: string
 }
 
-export interface Skill  extends CVSection{
+export interface Skill extends CVSection {
   languages: Language[]
   technical: Technical[]
 }
 
-export interface Language {
+export interface Language extends Visibility {
   language: string
   level: string
 }
 
-export interface Technical {
+export interface Technical extends Visibility {
   name: string
   description: string[]
 }
 
-export interface Project  extends CVSection{
+export interface Project extends CVSection {
   projectExperience: ProjectExperience[]
 }
 
-export interface ProjectExperience {
+export interface ProjectExperience extends Visibility {
   title: string
   startDate: string
   endDate: string
-  projectLocation:string
+  projectLocation: string
   description: string
   features: Feature[]
 }
 
-
-
-export interface ExtraSkill  extends CVSection{
+export interface ExtraSkill extends CVSection {
   points: string[]
 }
 
-export const defaultCVData: CVData = [
-  {
-    sessionName: "",
-    headerName: "",
-    firstName: "",
-    lastName: "",
-    nickName: "",
-    email: "",
-    phoneNumber: "",
-    personalWebsite: "",
-    address: "",
-    introduction: ""
-  },
-  {
-    sessionName: "",
-    headerName: "",
-    educationExperience: []
-  },
-  {
-    sessionName: "",
-    headerName: "",
-    languages: [],
-    technical: []
-  },
-  {
-    sessionName: "",
-    headerName: "",
-    projectExperience: []
-  },
-  {
-    sessionName:"",
-    headerName: "",
-    points:[]
+export interface Patents extends CVSection {
+  patentExperience: PatentGroup[]
 }
-];
+
+export interface PatentGroup extends Visibility {
+  title: string
+  organization?: string
+  authority?: string
+  status?: string
+  date?: string
+  patents: string[]
+}
