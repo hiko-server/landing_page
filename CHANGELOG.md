@@ -8,6 +8,104 @@ portfolio CMS, no public package). Entries are grouped by release date.
 
 ## [Unreleased]
 
+## [2.0.0] — 2026-10-12
+
+### Added
+
+- **CV visibility at every level.** Hide / show any section (separately
+  for the CV/PDF and for the website), any entry (degree, job, project,
+  highlight, certificate…), any field (e.g. Education → GPA, phone,
+  email) and any single bullet or tag. Hidden content is removed
+  server-side from `/`, `/about`, `/cv` and the unauthenticated
+  `GET /api/cvdata` (`lib/cvVisibility.ts`, `readPublicCvData()`).
+- **CV Studio rewrite** (`components/Admin/CVEditorStudio.tsx`,
+  `components/Admin/cvStudio/*`): schema-driven forms for every section
+  (`lib/cvSections.ts`), per-field eye toggles, collapsible entry cards
+  with drag-and-drop / duplicate / delete-with-undo, bullet editor
+  (Enter = new bullet, Backspace on empty = remove, Alt+↑/↓ = move,
+  multi-line paste), tag input, month pickers with "Present", one undo
+  history for EN + 中 with typing coalesced per field, EN ↔ 中 linked
+  visibility & structure, in-editor "Sync 中 ← EN" (undoable), local
+  draft recovery, overwrite guard when the CV changed elsewhere, live
+  fit-to-width A4 preview with page-break guides, responsive panes.
+- **Patents** and **Languages** sections now render on the A4 CV and on
+  `/about` (patents data existed but was never shown).
+- `/cv?lang=zh` and `/cv?print=1`; language-aware dates (`Sep 2024` /
+  `2024.09`), labels (`至今`, `预计`, `电话`, `邮箱`) and Chinese name order.
+- Curated, grouped tech stack (`/api/stack`) instead of a raw dependency
+  dump; copy button on MDX code blocks; real `G`-then-key navigation
+  shortcuts in the command palette.
+
+### Fixed
+
+- Studio wrote Awards to `competitionAwardsList` and Extra Skills to
+  `extraSkills` (the viewer reads `awards` / `points`), so those edits
+  never appeared; missing editors for highlights, related skills,
+  certificate details and patents.
+- Header: menu missing on phones for 7 routes and on all tablets; sticky
+  header never stuck; links did full page reloads; Dashboard / Logout
+  never appeared (httpOnly cookie read from JS); the "last commit" pill
+  wrapped onto three lines beside the full nav.
+- Affiliation logos overflowed the page horizontally on tablets (fixed
+  160px chips in a 4-column grid).
+- Dashboard mounted every editor at once — the Studio's ⌘S/⌘Z fired on
+  other tabs and editors overwrote each other's saves.
+- Image uploads over ~750 KB failed (1 MB body limit); same-name uploads
+  overwrote each other; PNG logos lost transparency.
+- Home editor could wipe the home page if its load failed; upload
+  callbacks reverted edits made during the upload.
+- Raw JSON editor rewrote every curly quote in CV text on save.
+- Version restore didn't snapshot the current state first; snapshot times
+  were shown in the wrong timezone.
+- Backup restore hung on a corrupt archive; non-atomic DB swap; local
+  snapshot path check could be bypassed.
+- MongoDB backup/restore used stale seed files instead of the live store
+  (restores silently changed nothing); image restore allowed path
+  traversal; connection string returned to the browser and cached in
+  localStorage.
+- MDX frontmatter dates crashed static generation; deleted posts could be
+  resurrected from disk seeds or a stale R2 copy.
+- Floating section nav targeted IDs that didn't exist; hero typewriter
+  leaked timers; a `marginTop: 320px` hack triggered by any URL containing
+  "edit"; About hero hook-order bug; syntax highlighting colours never
+  applied.
+- Blog/work editors: tags couldn't contain commas/spaces while typing,
+  fields editable before load, "New" could overwrite an existing slug.
+
+### Security
+
+- Login lockout is now per (account, client IP) with a global breaker,
+  so a stranger can no longer lock the admin out; failures against a
+  wrong email no longer count. Admin email compared case-insensitively.
+- One shared admin-auth helper with the JWT algorithm pinned (HS256).
+- Rate limits keyed per route + IP (one endpoint can't exhaust another's
+  budget), bounded memory, optional `TRUSTED_PROXY_IPS`.
+- Contact nonces audience-scoped; contact form returns an error when a
+  message could be neither mailed nor stored; mailer no longer logs
+  bodies (reset links); SMTP timeouts.
+- Reset-password validates token / password before consuming the token.
+- Uploads: AVIF brand check, never overwrite, served with a sandboxing
+  CSP; CSP drops unused hCaptcha / Binance hosts; production browser
+  source maps disabled.
+
+### Changed
+
+- Docker: named volumes for `/app/data` and `/app/public/uploads` (admin
+  password changes, history, backups and uploads now survive redeploys);
+  `NEXT_PUBLIC_*` passed as build args; runtime state excluded from the
+  build context. CI on Node 22. Boot-time R2 sync keeps newer local edits.
+- GitHub proxies: fetch timeouts, shared in-flight requests, short
+  failure caching, CDN cache headers; stats hide instead of showing zeros.
+- Accessibility: skip link + `<main>` landmark, one `h1` per page,
+  labelled icon buttons, accessible carousel (pause / play, keyboard,
+  captions as alt text), combobox semantics in the command palette,
+  `prefers-reduced-motion` honoured by every animation, AA contrast fixes.
+- Removed 38 unused dependencies (MUI, FontAwesome, Formik, axios,
+  next-auth, i18n stack, styled-components, luxon, …) and ~40 dead files;
+  lint is at zero warnings.
+
+## [Earlier]
+
 ### Security
 
 - **CRITICAL** — `/admin/*` and `/api/admin/*` are now gated by
