@@ -1,201 +1,256 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from 'react'
-import type { Doc } from './docOps'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { docJson, type Doc } from './docOps'
+import { EMPTY_DOC, historyApply, historyInit, historyRedo, historyUndo, type History } from './history'
+import { DRAFT_MAX_AGE_MS, UNKNOWN_BASE, readAdminCv, saveCv, type SaveOutcome } from './cvApi'
 
 /**
- * Document state for the Studio: undo / redo over BOTH languages, with
- * typing coalesced into one history step per field (so ⌘Z undoes a word, not
- * a keystroke), accurate dirty tracking against the last saved version
- * (undo back to it and the "unsaved" badge clears), and a server round-trip
- * with an overwrite guard when the CV changed elsewhere since it was loaded.
+ * Document state for the Studio.
+ *
+ *  - Loads the FULL document (with visibility metadata) from the admin-only
+ *    endpoint and refuses anything that is not the admin view, so a pruned
+ *    public copy can never end up in the editor or in a draft.
+ *  - Undo / redo over BOTH languages (see history.ts). Edits are applied
+ *    synchronously, so callers get the resulting document back — used to
+ *    tie a toast's Undo button to exactly one history step.
+ *  - Optimistic concurrency: saves send If-Match with the ETag the editor
+ *    is based on; a 409 surfaces as 'conflict' and nothing is written.
+ *  - Local drafts remember the ETag they were based on and are only offered
+ *    as a plain restore when that is still the server's version.
  */
-
-const HISTORY_LIMIT = 200
-const COALESCE_MS = 1200
-
-type State = {
-  past: Doc[]
-  present: Doc
-  future: Doc[]
-  lastKey: string | null
-  lastAt: number
-}
-
-type Action =
-  | { type: 'load'; doc: Doc }
-  | { type: 'apply'; fn: (d: Doc) => Doc; key?: string; at: number }
-  | { type: 'undo' }
-  | { type: 'redo' }
-
-const EMPTY: Doc = { en: [], zh: [] }
-
-function reducer(state: State, action: Action): State {
-  switch (action.type) {
-    case 'load':
-      return { past: [], present: action.doc, future: [], lastKey: null, lastAt: 0 }
-    case 'apply': {
-      const next = action.fn(state.present)
-      if (next === state.present) return state
-      const coalesce = !!action.key && action.key === state.lastKey && action.at - state.lastAt < COALESCE_MS
-      const past = coalesce ? state.past : [...state.past, state.present].slice(-HISTORY_LIMIT)
-      return { past, present: next, future: [], lastKey: action.key || null, lastAt: action.at }
-    }
-    case 'undo': {
-      if (!state.past.length) return state
-      const prev = state.past[state.past.length - 1]
-      return { past: state.past.slice(0, -1), present: prev, future: [state.present, ...state.future], lastKey: null, lastAt: 0 }
-    }
-    case 'redo': {
-      if (!state.future.length) return state
-      const [next, ...rest] = state.future
-      return { past: [...state.past, state.present], present: next, future: rest, lastKey: null, lastAt: 0 }
-    }
-  }
-}
 
 export type LoadState = 'loading' | 'ready' | 'error' | 'unauthorized'
 
-const DRAFT_KEY = 'cv-studio:draft:v2'
+export type Draft = {
+  at: number
+  /** ETag of the server version the draft was based on (null = unknown, legacy draft). */
+  etag: string | null
+  doc: Doc
+  /** True when the server copy changed since the draft's base version. */
+  stale: boolean
+}
 
-export type Draft = { at: number; doc: Doc }
+const DRAFT_KEY = 'cv-studio:draft:v3'
+const LEGACY_DRAFT_KEY = 'cv-studio:draft:v2'
 
 function normalize(d: any): Doc {
   return { en: Array.isArray(d?.en) ? d.en : [], zh: Array.isArray(d?.zh) ? d.zh : [] }
 }
 
+function readStoredDraft(): { at: number; etag: string | null; doc: Doc } | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY)
+    if (raw) {
+      const d = JSON.parse(raw)
+      if (d && typeof d.at === 'number' && d.doc) return { at: d.at, etag: typeof d.etag === 'string' ? d.etag : null, doc: normalize(d.doc) }
+    }
+    const legacy = localStorage.getItem(LEGACY_DRAFT_KEY)
+    if (legacy) {
+      // Written before drafts tracked their base version: always "older version".
+      localStorage.removeItem(LEGACY_DRAFT_KEY)
+      const d = JSON.parse(legacy)
+      if (d && typeof d.at === 'number' && d.doc) return { at: d.at, etag: null, doc: normalize(d.doc) }
+    }
+  } catch {
+    /* storage unavailable or corrupt — drafts are a convenience only */
+  }
+  return null
+}
+
+function writeStoredDraft(doc: Doc, etag: string | null) {
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ at: Date.now(), etag, doc: { en: doc.en, zh: doc.zh } }))
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+function clearStoredDraft() {
+  try {
+    localStorage.removeItem(DRAFT_KEY)
+    localStorage.removeItem(LEGACY_DRAFT_KEY)
+  } catch {
+    /* ignore */
+  }
+}
+
 export function useCvDocument() {
-  const [state, dispatch] = useReducer(reducer, { past: [], present: EMPTY, future: [], lastKey: null, lastAt: 0 })
+  const [hist, setHist] = useState<History>(() => historyInit())
+  const histRef = useRef(hist)
   const [loadState, setLoadState] = useState<LoadState>('loading')
   const [loadError, setLoadError] = useState('')
-  const [savedJson, setSavedJson] = useState(JSON.stringify(EMPTY))
+  const [savedJson, setSavedJson] = useState(() => docJson(EMPTY_DOC))
   const [savedAt, setSavedAt] = useState<number | null>(null)
   const [saving, setSaving] = useState(false)
   const [draft, setDraft] = useState<Draft | null>(null)
+  // ETag the editor content is based on (sent as If-Match). Kept in a ref
+  // too so a save started right after a load/restore uses the fresh value.
+  const [baseEtag, setBaseEtagState] = useState<string | null>(null)
+  const baseEtagRef = useRef<string | null>(null)
+  const [serverEtag, setServerEtag] = useState<string | null>(null)
 
-  const presentJson = useMemo(() => JSON.stringify(state.present), [state.present])
+  const setBaseEtag = useCallback((v: string | null) => {
+    baseEtagRef.current = v
+    setBaseEtagState(v)
+  }, [])
+
+  const commit = useCallback((h: History) => {
+    histRef.current = h
+    setHist(h)
+  }, [])
+
+  const presentJson = useMemo(() => docJson(hist.present), [hist.present])
   const dirty = loadState === 'ready' && presentJson !== savedJson
 
   const load = useCallback(async () => {
     setLoadState('loading')
     setLoadError('')
-    try {
-      const res = await fetch('/api/cvdata', { credentials: 'same-origin', cache: 'no-store' })
-      if (res.status === 401) {
-        setLoadState('unauthorized')
-        return
-      }
-      if (!res.ok) throw new Error(`Server responded ${res.status}`)
-      const doc = normalize(await res.json())
-      const json = JSON.stringify(doc)
-      dispatch({ type: 'load', doc })
-      setSavedJson(json)
-      setLoadState('ready')
-      try {
-        const raw = localStorage.getItem(DRAFT_KEY)
-        if (raw) {
-          const d = JSON.parse(raw) as Draft
-          const fresh = d?.at && Date.now() - d.at < 1000 * 60 * 60 * 24 * 14
-          if (fresh && d.doc && JSON.stringify(normalize(d.doc)) !== json) setDraft({ at: d.at, doc: normalize(d.doc) })
-          else localStorage.removeItem(DRAFT_KEY)
-        }
-      } catch {
-        /* storage unavailable — drafts are a convenience only */
-      }
-    } catch (e: any) {
-      setLoadError(e?.message || 'Failed to load CV data')
-      setLoadState('error')
+    setDraft(null)
+    const r = await readAdminCv()
+    if (r.kind === 'unauthorized') {
+      setLoadState('unauthorized')
+      return
     }
-  }, [])
+    if (r.kind === 'error') {
+      setLoadError(r.error)
+      setLoadState('error')
+      return
+    }
+    const doc = normalize(r.doc)
+    const json = docJson(doc)
+    commit(historyInit(doc))
+    setSavedJson(json)
+    setBaseEtag(r.etag)
+    setServerEtag(r.etag)
+    setLoadState('ready')
+    const stored = readStoredDraft()
+    if (stored) {
+      const fresh = Date.now() - stored.at < DRAFT_MAX_AGE_MS
+      if (fresh && docJson(stored.doc) !== json) {
+        setDraft({ ...stored, stale: stored.etag === null || stored.etag !== r.etag })
+      } else {
+        clearStoredDraft()
+      }
+    }
+  }, [commit, setBaseEtag])
 
   useEffect(() => {
     load()
   }, [load])
 
-  // Local draft autosave while dirty (survives a closed tab / crash).
+  // Local draft autosave while dirty (survives a closed tab / crash), with
+  // a flush when the page is hidden so the last keystrokes are not lost.
+  const pendingDraft = useRef<{ doc: Doc; etag: string | null } | null>(null)
   useEffect(() => {
-    if (!dirty) return
+    if (!dirty) {
+      pendingDraft.current = null
+      return
+    }
+    pendingDraft.current = { doc: hist.present, etag: baseEtag }
     const id = window.setTimeout(() => {
-      try {
-        localStorage.setItem(DRAFT_KEY, JSON.stringify({ at: Date.now(), doc: state.present }))
-      } catch {
-        /* quota / private mode */
-      }
+      if (pendingDraft.current) writeStoredDraft(pendingDraft.current.doc, pendingDraft.current.etag)
+      pendingDraft.current = null
     }, 1500)
     return () => window.clearTimeout(id)
-  }, [dirty, state.present])
+  }, [dirty, hist.present, baseEtag])
 
-  const apply = useCallback((fn: (d: Doc) => Doc, key?: string) => {
-    dispatch({ type: 'apply', fn, key, at: Date.now() })
+  useEffect(() => {
+    const flush = () => {
+      if (pendingDraft.current) writeStoredDraft(pendingDraft.current.doc, pendingDraft.current.etag)
+      pendingDraft.current = null
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flush()
+    }
+    window.addEventListener('pagehide', flush)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [])
 
-  const undo = useCallback(() => dispatch({ type: 'undo' }), [])
-  const redo = useCallback(() => dispatch({ type: 'redo' }), [])
+  /** Apply an edit; returns the resulting document (unchanged doc when the edit was a no-op). */
+  const apply = useCallback(
+    (fn: (d: Doc) => Doc, key?: string): Doc => {
+      const next = historyApply(histRef.current, fn, key, Date.now())
+      if (next !== histRef.current) commit(next)
+      return next.present
+    },
+    [commit],
+  )
+
+  /** The latest document (also between a commit and the next render). */
+  const getDoc = useCallback(() => histRef.current.present, [])
+
+  const undo = useCallback(() => {
+    const next = historyUndo(histRef.current)
+    if (next !== histRef.current) commit(next)
+  }, [commit])
+
+  const redo = useCallback(() => {
+    const next = historyRedo(histRef.current)
+    if (next !== histRef.current) commit(next)
+  }, [commit])
 
   const restoreDraft = useCallback(() => {
     if (!draft) return
     const d = draft.doc
-    dispatch({ type: 'apply', fn: () => d, at: Date.now() })
+    apply(() => d)
+    // A draft based on an older version keeps that base, so saving it hits
+    // the If-Match check and asks before overwriting the newer server copy.
+    if (draft.stale) setBaseEtag(draft.etag ?? UNKNOWN_BASE)
     setDraft(null)
-  }, [draft])
+  }, [draft, apply, setBaseEtag])
 
   const discardDraft = useCallback(() => {
     setDraft(null)
-    try {
-      localStorage.removeItem(DRAFT_KEY)
-    } catch {
-      /* ignore */
-    }
+    clearStoredDraft()
   }, [])
 
   /**
-   * Persist the current document. Returns 'conflict' (without saving) when
-   * the server copy changed since it was loaded, unless `force` is set.
+   * Persist the current document. Without `force` the write is conditional
+   * on the base ETag and returns 'conflict' (nothing written) when the
+   * server copy changed. `force` resends without If-Match — only after the
+   * owner explicitly chose to overwrite.
    */
   const save = useCallback(
-    async (force = false): Promise<{ ok: true; warning?: string } | { ok: false; error: string } | 'conflict'> => {
-      const doc = state.present
-      const json = JSON.stringify(doc)
+    async (force = false): Promise<SaveOutcome> => {
+      const doc = histRef.current.present
+      const json = docJson(doc)
       setSaving(true)
       try {
-        if (!force) {
-          const cur = await fetch('/api/cvdata', { credentials: 'same-origin', cache: 'no-store' })
-          if (cur.status === 401) return { ok: false, error: 'Session expired — sign in again.' }
-          if (cur.ok) {
-            const serverJson = JSON.stringify(normalize(await cur.json()))
-            if (serverJson !== savedJson && serverJson !== json) return 'conflict'
-          }
+        const r = await saveCv(doc, force ? null : baseEtagRef.current)
+        if (r.kind === 'conflict') {
+          if (r.etag) setServerEtag(r.etag)
+          return r
         }
-        const res = await fetch('/api/cvdata', {
-          method: 'PUT',
-          credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ en: doc.en, zh: doc.zh }),
-        })
-        const body = await res.json().catch(() => ({}))
-        if (!res.ok) return { ok: false, error: body?.error || `Save failed (${res.status})` }
+        if (r.kind === 'unauthorized') {
+          // Keep the edits safe on this device before asking to sign in.
+          writeStoredDraft(doc, baseEtagRef.current)
+          return r
+        }
+        if (r.kind === 'error') return r
+        setBaseEtag(r.etag)
+        setServerEtag(r.etag)
         setSavedJson(json)
         setSavedAt(Date.now())
-        try {
-          localStorage.removeItem(DRAFT_KEY)
-        } catch {
-          /* ignore */
-        }
-        return { ok: true, warning: body?.r2Warning || body?.warning }
-      } catch (e: any) {
-        return { ok: false, error: e?.message || 'Network error' }
+        clearStoredDraft()
+        return r
       } finally {
         setSaving(false)
       }
     },
-    [state.present, savedJson],
+    [setBaseEtag],
   )
 
   return {
-    doc: state.present,
+    doc: hist.present,
+    getDoc,
     apply,
     undo,
     redo,
-    canUndo: state.past.length > 0,
-    canRedo: state.future.length > 0,
+    canUndo: hist.past.length > 0,
+    canRedo: hist.future.length > 0,
     dirty,
     saving,
     savedAt,
@@ -206,5 +261,7 @@ export function useCvDocument() {
     draft,
     restoreDraft,
     discardDraft,
+    /** True while editing on top of a version older than the server's (restored stale draft). */
+    basedOnOlderVersion: loadState === 'ready' && baseEtag !== serverEtag,
   }
 }

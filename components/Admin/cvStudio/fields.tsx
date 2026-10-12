@@ -12,6 +12,7 @@ import {
   Text,
   Textarea,
   Tooltip,
+  VisuallyHidden,
   useColorModeValue,
   type TextareaProps,
 } from '@chakra-ui/react'
@@ -27,24 +28,36 @@ export const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
 const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
 
+/**
+ * Studio colours. Structural colours are the site's semantic tokens (they
+ * flip with the colour mode on their own); "hidden" uses an orange that
+ * keeps AA contrast in both modes.
+ */
 export function useStudioTokens() {
   return {
-    border: useColorModeValue('rgba(0,0,0,0.10)', 'rgba(255,255,255,0.10)'),
-    borderStrong: useColorModeValue('rgba(0,0,0,0.18)', 'rgba(255,255,255,0.20)'),
-    dim: useColorModeValue('gray.600', 'gray.400'),
-    faint: useColorModeValue('gray.500', 'gray.500'),
-    surface: useColorModeValue('white', 'rgba(255,255,255,0.03)'),
-    surfaceAlt: useColorModeValue('gray.50', 'rgba(255,255,255,0.02)'),
-    inputBg: useColorModeValue('white', 'rgba(255,255,255,0.04)'),
+    border: 'page.border',
+    borderStrong: 'page.border-strong',
+    dim: 'page.fg-secondary',
+    faint: 'gray.500',
+    surface: 'page.bg',
+    surfaceAlt: 'page.bg-elevated',
+    inputBg: 'page.bg',
+    hiddenFg: useColorModeValue('orange.600', 'orange.300'),
+    hiddenBorder: useColorModeValue('orange.400', 'orange.400'),
     hiddenStripe: useColorModeValue(
-      'repeating-linear-gradient(135deg, rgba(251,146,60,0.06) 0 8px, transparent 8px 16px)',
-      'repeating-linear-gradient(135deg, rgba(251,146,60,0.08) 0 8px, transparent 8px 16px)',
+      'repeating-linear-gradient(135deg, rgba(234,88,12,0.07) 0 8px, transparent 8px 16px)',
+      'repeating-linear-gradient(135deg, rgba(251,146,60,0.09) 0 8px, transparent 8px 16px)',
     ),
   }
 }
 
 // ── Visibility toggle ─────────────────────────────────────────────────────
 
+/**
+ * The eye. A real <button> (Enter / Space work natively) with a stable
+ * accessible name and aria-pressed = hidden, so a screen reader announces
+ * "Hide GPA from CV and website, toggle button, pressed" when it is hidden.
+ */
 export function VisibilityToggle({
   hidden,
   onToggle,
@@ -56,27 +69,36 @@ export function VisibilityToggle({
   label: string
   size?: 'xs' | 'sm'
 }) {
-  const { faint } = useStudioTokens()
+  const { faint, hiddenFg } = useStudioTokens()
   return (
-    <Tooltip label={hidden ? `Show “${label}”` : `Hide “${label}” from CV & website`} hasArrow openDelay={350}>
+    <Tooltip label={hidden ? 'Show' : 'Hide from CV & website'} hasArrow openDelay={300}>
       <IconButton
-        aria-label={hidden ? `Show ${label}` : `Hide ${label}`}
+        aria-label={`Hide ${label} from CV and website`}
         aria-pressed={hidden}
+        data-vis-toggle=""
         icon={hidden ? <ViewOffIcon /> : <ViewIcon />}
         size={size}
         variant="ghost"
-        color={hidden ? 'orange.400' : faint}
-        _hover={{ color: hidden ? 'orange.300' : 'var(--accent)', bg: 'var(--accent-soft)' }}
+        flexShrink={0}
+        color={hidden ? hiddenFg : faint}
+        bg={hidden ? 'rgba(251,146,60,0.12)' : undefined}
+        _hover={{ color: hidden ? hiddenFg : 'var(--accent)', bg: hidden ? 'rgba(251,146,60,0.18)' : 'var(--accent-soft)' }}
+        _focusVisible={{ boxShadow: '0 0 0 2px var(--accent-ring)' }}
         onClick={(e) => {
           e.stopPropagation()
           onToggle()
+        }}
+        onKeyDown={(e) => {
+          // Keep Enter / Space on the eye from also toggling an enclosing row.
+          if (e.key === 'Enter' || e.key === ' ') e.stopPropagation()
         }}
       />
     </Tooltip>
   )
 }
 
-export function HiddenChip() {
+export function HiddenChip({ label = 'hidden' }: { label?: string }) {
+  const { hiddenFg, hiddenBorder } = useStudioTokens()
   return (
     <Text
       as="span"
@@ -84,21 +106,32 @@ export function HiddenChip() {
       fontSize="9px"
       letterSpacing="0.1em"
       textTransform="uppercase"
-      color="orange.400"
+      color={hiddenFg}
       border="1px solid"
-      borderColor="orange.300"
+      borderColor={hiddenBorder}
       borderRadius="3px"
       px="4px"
       lineHeight="14px"
+      flexShrink={0}
+      whiteSpace="nowrap"
     >
-      hidden
+      {label}
     </Text>
   )
 }
 
 // ── Field shell ───────────────────────────────────────────────────────────
 
+/**
+ * Label row (label · hidden pill · eye) + control + help.
+ *
+ * Single-input controls sit in a FormControl whose id is `fieldId`, so the
+ * label targets the input. Multi-input controls (`group`, e.g. bullet
+ * lists) get role="group" labelled by the visible label instead, and give
+ * each of their inputs its own id derived from `fieldId` — ids stay unique.
+ */
 export function FieldShell({
+  fieldId,
   label,
   required,
   hidden = false,
@@ -108,7 +141,10 @@ export function FieldShell({
   invalid,
   children,
   gridColumn,
+  group = false,
+  cvPath,
 }: {
+  fieldId: string
   label: string
   required?: boolean
   hidden?: boolean
@@ -118,43 +154,84 @@ export function FieldShell({
   invalid?: boolean
   children: React.ReactNode
   gridColumn?: string
+  group?: boolean
+  /** data-cvpath for jump-to from the Hidden items panel. */
+  cvPath?: string
 }) {
-  const { dim } = useStudioTokens()
-  return (
-    <FormControl isInvalid={invalid} gridColumn={gridColumn} minW={0}>
-      <Flex align="center" justify="space-between" mb={1} minH="24px" gap={2}>
-        <HStack spacing={2} minW={0}>
-          <FormLabel
-            m={0}
-            fontFamily={monoFont}
-            fontSize="10px"
-            letterSpacing="0.08em"
-            textTransform="uppercase"
-            color={hidden ? 'orange.400' : dim}
-            textDecoration={hidden ? 'line-through' : undefined}
-            noOfLines={1}
-            requiredIndicator={<></>}
-          >
-            {label}
-            {required ? (
-              <Text as="span" color="var(--accent)" ml="3px" aria-hidden>
-                •
-              </Text>
-            ) : null}
-          </FormLabel>
-          {hidden ? <HiddenChip /> : null}
-        </HStack>
-        {hideable && onToggleHidden ? <VisibilityToggle hidden={hidden} onToggle={onToggleHidden} label={label} /> : null}
-      </Flex>
+  const { dim, hiddenFg } = useStudioTokens()
+  const labelStyle = {
+    m: 0,
+    fontFamily: monoFont,
+    fontSize: '10px',
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase' as const,
+    color: hidden ? hiddenFg : dim,
+    textDecoration: hidden ? 'line-through' : undefined,
+    noOfLines: 1,
+  }
+  const labelContent = (
+    <>
+      {label}
+      {required ? (
+        <Text as="span" color="var(--accent)" ml="3px" aria-hidden>
+          •
+        </Text>
+      ) : null}
+      {hidden ? <VisuallyHidden> (hidden from CV and website)</VisuallyHidden> : null}
+    </>
+  )
+  const labelId = `${fieldId}-label`
+  const helpId = `${fieldId}-helptext`
+  const header = (labelEl: React.ReactNode) => (
+    <Flex align="center" justify="space-between" mb={1} minH="24px" gap={2}>
+      <HStack spacing={2} minW={0}>
+        {labelEl}
+        {hidden ? <HiddenChip /> : null}
+      </HStack>
+      {hideable && onToggleHidden ? <VisibilityToggle hidden={hidden} onToggle={onToggleHidden} label={label} /> : null}
+    </Flex>
+  )
+  const body = (
+    <Box opacity={hidden ? 0.5 : 1} transition="opacity 180ms var(--ease-out-quart)" _focusWithin={{ opacity: 1 }}>
+      {children}
+    </Box>
+  )
+
+  if (group) {
+    return (
       <Box
-        opacity={hidden ? 0.5 : 1}
-        transition="opacity 180ms var(--ease-out-quart)"
-        _focusWithin={{ opacity: 1 }}
+        role="group"
+        aria-labelledby={labelId}
+        aria-describedby={help ? helpId : undefined}
+        gridColumn={gridColumn}
+        minW={0}
+        data-cvpath={cvPath}
       >
-        {children}
+        {header(
+          <Text id={labelId} {...labelStyle}>
+            {labelContent}
+          </Text>,
+        )}
+        {body}
+        {help ? (
+          <Text id={helpId} mt={1} fontSize="11px" color={dim}>
+            {help}
+          </Text>
+        ) : null}
       </Box>
+    )
+  }
+
+  return (
+    <FormControl id={fieldId} isInvalid={invalid} isRequired={required} gridColumn={gridColumn} minW={0} data-cvpath={cvPath}>
+      {header(
+        <FormLabel {...labelStyle} requiredIndicator={<></>}>
+          {labelContent}
+        </FormLabel>,
+      )}
+      {body}
       {help ? (
-        <FormHelperText mt={1} fontSize="11px">
+        <FormHelperText mt={1} fontSize="11px" color={dim}>
           {help}
         </FormHelperText>
       ) : null}
@@ -196,19 +273,23 @@ export function AutoTextarea({ value, minRows = 2, ...rest }: TextareaProps & { 
 
 const ISO_MONTH = /^\d{4}-\d{2}(-\d{2})?$/
 
-/** Month picker that tolerates legacy values ("2026", "2024-09-01") and an optional "Present" switch. */
+/**
+ * Month picker that tolerates legacy values ("2026", "2024-09-01") and an
+ * optional "Present" switch. The month input takes the enclosing
+ * FormControl's id; the checkbox gets its own `presentId`.
+ */
 export function MonthField({
   value,
   onChange,
   allowPresent,
   presentLabel = 'Present',
-  id,
+  presentId,
 }: {
   value: string
   onChange: (v: string) => void
   allowPresent?: boolean
   presentLabel?: string
-  id?: string
+  presentId?: string
 }) {
   const present = allowPresent && isPresent(value)
   const v = typeof value === 'string' ? value : ''
@@ -217,32 +298,18 @@ export function MonthField({
   return (
     <HStack spacing={2} align="center">
       {present ? (
-        <Input {...inputProps} id={id} value={presentLabel} isReadOnly bg={inputBg} flex={1} tabIndex={-1} />
+        <Input {...inputProps} value={presentLabel} isReadOnly bg={inputBg} flex={1} tabIndex={-1} />
       ) : useMonthInput ? (
-        <Input
-          {...inputProps}
-          id={id}
-          type="month"
-          bg={inputBg}
-          value={v.slice(0, 7)}
-          onChange={(e) => onChange(e.target.value)}
-          flex={1}
-        />
+        <Input {...inputProps} type="month" bg={inputBg} value={v.slice(0, 7)} onChange={(e) => onChange(e.target.value)} flex={1} />
       ) : (
-        <Input
-          {...inputProps}
-          id={id}
-          bg={inputBg}
-          value={v}
-          placeholder="YYYY-MM"
-          onChange={(e) => onChange(e.target.value)}
-          flex={1}
-        />
+        <Input {...inputProps} bg={inputBg} value={v} placeholder="YYYY-MM" onChange={(e) => onChange(e.target.value)} flex={1} />
       )}
       {allowPresent ? (
         <Checkbox
+          id={presentId}
           size="sm"
           isChecked={!!present}
+          isRequired={false}
           onChange={(e) => onChange(e.target.checked ? 'present' : '')}
           colorScheme="purple"
           flexShrink={0}
@@ -254,13 +321,13 @@ export function MonthField({
   )
 }
 
-export function ColorField({ value, onChange, id }: { value: string; onChange: (v: string) => void; id?: string }) {
+export function ColorField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const presets = ['#0059ff', '#111111', '#4f46e5', '#0f766e', '#b91c1c', '#9333ea']
   const { border } = useStudioTokens()
+  const current = (value || '').toLowerCase()
   return (
     <HStack spacing={2} wrap="wrap">
       <Input
-        id={id}
         type="color"
         value={value || '#0059ff'}
         onChange={(e) => onChange(e.target.value)}
@@ -276,17 +343,19 @@ export function ColorField({ value, onChange, id }: { value: string; onChange: (
           as="button"
           type="button"
           aria-label={`Use color ${c}`}
-          aria-pressed={(value || '').toLowerCase() === c}
+          aria-pressed={current === c}
           w="22px"
           h="22px"
           borderRadius="full"
           bg={c}
           border="2px solid"
-          borderColor={(value || '').toLowerCase() === c ? 'var(--accent)' : border}
-          boxShadow={(value || '').toLowerCase() === c ? '0 0 0 2px var(--accent-ring)' : undefined}
+          borderColor={current === c ? 'var(--accent)' : border}
+          boxShadow={current === c ? '0 0 0 2px var(--accent-ring)' : undefined}
           onClick={() => onChange(c)}
-          transition="transform 120ms"
+          transition="transform 120ms var(--ease-out-quart)"
           _hover={{ transform: 'scale(1.1)' }}
+          _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
+          sx={{ '@media (prefers-reduced-motion: reduce)': { transition: 'none', _hover: { transform: 'none' } } }}
         />
       ))}
     </HStack>
@@ -297,10 +366,14 @@ export function ColorField({ value, onChange, id }: { value: string; onChange: (
 
 function SortableBulletRow({
   id,
+  inputId,
   index,
+  count,
+  itemLabel,
   value,
   hidden,
   placeholder,
+  cvPath,
   onChange,
   onKeyDown,
   onPaste,
@@ -309,10 +382,14 @@ function SortableBulletRow({
   inputRef,
 }: {
   id: string
+  inputId: string
   index: number
+  count: number
+  itemLabel: string
   value: string
   hidden: boolean
   placeholder?: string
+  cvPath?: string
   onChange: (v: string) => void
   onKeyDown: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void
   onPaste: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void
@@ -329,6 +406,7 @@ function SortableBulletRow({
     el.style.height = 'auto'
     el.style.height = `${el.scrollHeight + 2}px`
   }, [value])
+  const name = `${itemLabel} ${index + 1} of ${count}`
   return (
     <Flex
       ref={setNodeRef}
@@ -339,11 +417,13 @@ function SortableBulletRow({
       zIndex={isDragging ? 2 : undefined}
       position="relative"
       role="group"
+      aria-label={name}
+      data-cvpath={cvPath}
     >
       <Box
         {...attributes}
         {...listeners}
-        aria-label={`Reorder item ${index + 1}`}
+        aria-label={`Reorder ${name}`}
         color={faint}
         cursor="grab"
         pt="9px"
@@ -351,6 +431,7 @@ function SortableBulletRow({
         _active={{ cursor: 'grabbing' }}
         opacity={0.5}
         _groupHover={{ opacity: 1 }}
+        _focusVisible={{ opacity: 1, outline: '2px solid var(--accent)', borderRadius: 'sm' }}
       >
         <FaGripVertical size={10} />
       </Box>
@@ -359,6 +440,7 @@ function SortableBulletRow({
           taRef.current = el
           inputRef(el)
         }}
+        id={inputId}
         value={value}
         rows={1}
         resize="none"
@@ -370,7 +452,7 @@ function SortableBulletRow({
         textDecoration={hidden ? 'line-through' : undefined}
         color={hidden ? faint : undefined}
         placeholder={placeholder}
-        aria-label={`Item ${index + 1}`}
+        aria-label={hidden ? `${name} (hidden from CV and website)` : name}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
         onPaste={onPaste}
@@ -378,9 +460,14 @@ function SortableBulletRow({
         minH="32px"
         py="6px"
       />
-      <VisibilityToggle hidden={hidden} onToggle={onToggleHidden} label={value ? value.slice(0, 40) : `item ${index + 1}`} size="sm" />
+      <VisibilityToggle
+        hidden={hidden}
+        onToggle={onToggleHidden}
+        label={value.trim() ? `“${value.trim().slice(0, 40)}”` : `${itemLabel.toLowerCase()} ${index + 1}`}
+        size="sm"
+      />
       <IconButton
-        aria-label={`Remove item ${index + 1}`}
+        aria-label={`Remove ${name}`}
         icon={<CloseIcon boxSize="8px" />}
         size="sm"
         variant="ghost"
@@ -400,19 +487,28 @@ function SortableBulletRow({
  *   Paste multi-line → one bullet per line
  */
 export function BulletList({
+  idBase,
+  itemLabel,
   items,
   hiddenIndexes,
   placeholder,
   addLabel = 'Add item',
+  cvPathPrefix,
   onTextChange,
   onOp,
   onPasteLines,
   onToggleHidden,
 }: {
+  /** Prefix for each bullet's unique input id. */
+  idBase: string
+  /** Name of one bullet for screen readers ("Sub-point"). */
+  itemLabel: string
   items: string[]
   hiddenIndexes: number[]
   placeholder?: string
   addLabel?: string
+  /** data-cvpath of the list; each row gets `<prefix>.<index>`. */
+  cvPathPrefix?: string
   onTextChange: (index: number, value: string) => void
   onOp: (op: ListOp) => void
   onPasteLines: (index: number, lines: string[]) => void
@@ -437,7 +533,9 @@ export function BulletList({
     setFocusIdx(null)
   }, [focusIdx, items.length])
 
-  const ids = items.map((_, i) => `b${i}`)
+  // Strings cannot carry an entry key; positions are the identity here and
+  // hidden-bullet indices are remapped by the list operations themselves.
+  const ids = items.map((_, i) => `${idBase}-b${i}`)
   const onDragEnd = (e: DragEndEvent) => {
     if (!e.over || e.active.id === e.over.id) return
     const from = ids.indexOf(String(e.active.id))
@@ -454,10 +552,14 @@ export function BulletList({
               <SortableBulletRow
                 key={ids[i]}
                 id={ids[i]}
+                inputId={`${idBase}-item-${i}`}
                 index={i}
+                count={items.length}
+                itemLabel={itemLabel}
                 value={text}
                 hidden={hiddenIndexes.includes(i)}
                 placeholder={placeholder}
+                cvPath={cvPathPrefix ? `${cvPathPrefix}.${i}` : undefined}
                 inputRef={(el) => (refs.current[i] = el)}
                 onChange={(v) => onTextChange(i, v)}
                 onToggleHidden={() => onToggleHidden(i)}
@@ -514,6 +616,7 @@ export function BulletList({
         py={1}
         borderRadius="md"
         _hover={{ color: 'var(--accent)', bg: 'var(--accent-soft)' }}
+        _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '1px' }}
         onClick={() => {
           onOp({ type: 'insert', index: items.length, item: '' })
           setFocusIdx(items.length)
@@ -533,21 +636,22 @@ export function TagInput({
   tags,
   hiddenIndexes,
   placeholder,
+  cvPathPrefix,
   onOp,
   onPasteTags,
   onToggleHidden,
-  id,
 }: {
   tags: string[]
   hiddenIndexes: number[]
   placeholder?: string
+  /** data-cvpath of the list; each chip gets `<prefix>.<index>`. */
+  cvPathPrefix?: string
   onOp: (op: ListOp) => void
   onPasteTags: (tags: string[]) => void
   onToggleHidden: (index: number) => void
-  id?: string
 }) {
   const [draft, setDraft] = useState('')
-  const { border, inputBg, faint } = useStudioTokens()
+  const { border, inputBg, faint, hiddenFg, hiddenBorder } = useStudioTokens()
   const commit = (raw: string) => {
     const parts = raw
       .split(/[,，\n]/)
@@ -579,21 +683,26 @@ export function TagInput({
             spacing={0}
             borderRadius="4px"
             border="1px solid"
-            borderColor={hidden ? 'orange.300' : border}
+            borderColor={hidden ? hiddenBorder : border}
+            borderStyle={hidden ? 'dashed' : 'solid'}
             bg={hidden ? 'transparent' : 'var(--accent-soft)'}
             fontFamily={monoFont}
             fontSize="11px"
+            data-cvpath={cvPathPrefix ? `${cvPathPrefix}.${i}` : undefined}
           >
-            <Tooltip label={hidden ? 'Hidden — click to show' : 'Click to hide'} hasArrow openDelay={400}>
+            <Tooltip label={hidden ? 'Show' : 'Hide from CV & website'} hasArrow openDelay={300}>
               <Box
                 as="button"
                 type="button"
                 px={2}
                 py="2px"
+                data-vis-toggle=""
                 aria-pressed={hidden}
-                aria-label={`${hidden ? 'Show' : 'Hide'} ${t}`}
+                aria-label={`Hide ${t} from CV and website`}
                 textDecoration={hidden ? 'line-through' : undefined}
-                color={hidden ? 'orange.400' : undefined}
+                color={hidden ? hiddenFg : undefined}
+                borderRadius="3px"
+                _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '1px' }}
                 onClick={() => onToggleHidden(i)}
               >
                 {t}
@@ -606,7 +715,9 @@ export function TagInput({
               px={1.5}
               py="2px"
               color={faint}
+              borderRadius="3px"
               _hover={{ color: 'red.400' }}
+              _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '1px' }}
               onClick={() => onOp({ type: 'remove', index: i })}
             >
               <CloseIcon boxSize="6px" />
@@ -615,7 +726,6 @@ export function TagInput({
         )
       })}
       <Input
-        id={id}
         variant="unstyled"
         size="sm"
         fontSize="13px"

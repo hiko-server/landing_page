@@ -2,13 +2,18 @@
  * Pure document operations for the CV Studio.
  *
  * A document is `{ en: Section[], zh: Section[] }`. Every edit is a pure
- * function Doc → Doc so it can be recorded in undo history. "Linked" edits
- * (visibility + structure) are applied to the other language at the same
- * position when that position exists there with the same shape; text edits
- * are never linked.
+ * function Doc → Doc so it can be recorded in undo history.
+ *
+ * "Linked" edits (visibility + structure) reach the other language only when
+ * the twin position is unambiguous: the section exists there (matched by
+ * sessionName) and EVERY array on the way has the same length in both
+ * languages, so index N means the same entry on both sides. Otherwise the
+ * edit applies to the current language only and the result says so
+ * (`reached: false`). Text edits are never linked.
  */
 
 import {
+  VISIBILITY_KEYS,
   getAt,
   hiddenIndices,
   remapHiddenItems,
@@ -22,9 +27,93 @@ import {
 export type Section = { sessionName: string; [k: string]: any }
 export type Doc = { en: Section[]; zh: Section[] }
 
+/** Result of an edit that may also apply to the other language. */
+export type LinkedResult = { doc: Doc; reached: boolean }
+
 export const otherLang = (l: CvLang): CvLang => (l === 'en' ? 'zh' : 'en')
 
 export const clone = <T,>(x: T): T => JSON.parse(JSON.stringify(x))
+
+const isPlainObject = (v: unknown): v is Record<string | symbol, any> => !!v && typeof v === 'object' && !Array.isArray(v)
+
+// ── Stable in-memory entry keys ───────────────────────────────────────────
+//
+// Every object inside an array (sections, degrees, roles, highlights…) gets
+// a stable key for React keys and drag-and-drop ids. The key is stored under
+// a Symbol, so it survives the spread-based immutable updates but is never
+// serialised: JSON.stringify (save body, drafts, export, dirty check) and
+// Object.keys/entries (public pruning, sync) all ignore symbol properties.
+
+export const ENTRY_KEY: unique symbol = Symbol('cv-studio.entry-key')
+
+let keySeq = 0
+const nextKey = () => `e${(++keySeq).toString(36)}`
+
+/** The in-memory key of an entry (undefined for strings / unkeyed values). */
+export function entryKey(item: unknown): string | undefined {
+  return isPlainObject(item) && typeof item[ENTRY_KEY] === 'string' ? item[ENTRY_KEY] : undefined
+}
+
+function keyNode(node: Record<string | symbol, any>, prev: unknown): Record<string | symbol, any> {
+  let out = node
+  for (const k of Object.keys(node)) {
+    const v = node[k]
+    const p = isPlainObject(prev) ? prev[k] : undefined
+    const next = Array.isArray(v) ? keyArray(v, p) : isPlainObject(v) ? keyNode(v, p) : v
+    if (next !== v) {
+      if (out === node) out = { ...node }
+      out[k] = next
+    }
+  }
+  return out
+}
+
+function keyArray(arr: any[], prevArr: unknown): any[] {
+  const prevList: any[] = Array.isArray(prevArr) ? prevArr : []
+  const present = new Set<string>()
+  for (const it of arr) {
+    const k = entryKey(it)
+    if (k) present.add(k)
+  }
+  const seen = new Set<string>()
+  let out = arr
+  arr.forEach((item, i) => {
+    if (!isPlainObject(item)) return
+    const before = prevList[i]
+    let next = item === before ? item : keyNode(item, before)
+    let k = entryKey(next)
+    if (!k || seen.has(k)) {
+      // Inherit the key of the entry that sat here before (e.g. after a
+      // reveal-all or sync rebuilt the object) unless another entry has it.
+      const inherited = entryKey(before)
+      k = inherited && !present.has(inherited) && !seen.has(inherited) ? inherited : nextKey()
+      next = next === item ? { ...item } : next
+      next[ENTRY_KEY] = k
+    }
+    seen.add(k)
+    if (next !== item) {
+      if (out === arr) out = [...arr]
+      out[i] = next
+    }
+  })
+  return out
+}
+
+/**
+ * Give every object inside an array a unique, stable key. Unchanged subtrees
+ * keep their identity; `prev` (the document before the edit) lets rebuilt
+ * objects keep the key of the entry they replace.
+ */
+export function ensureEntryKeys(doc: Doc, prev?: Doc): Doc {
+  const en = doc.en === prev?.en ? doc.en : keyArray(doc.en, prev?.en)
+  const zh = doc.zh === prev?.zh ? doc.zh : keyArray(doc.zh, prev?.zh)
+  return en === doc.en && zh === doc.zh ? doc : { en, zh }
+}
+
+/** JSON of a document without the in-memory keys (they are symbols, so plain stringify drops them). */
+export const docJson = (doc: Doc): string => JSON.stringify({ en: doc.en, zh: doc.zh })
+
+// ── Cross-language alignment ──────────────────────────────────────────────
 
 /** Translate a path from one language to the other (sections matched by sessionName). */
 export function translatePath(doc: Doc, from: CvLang, path: CvPath): CvPath | null {
@@ -36,20 +125,124 @@ export function translatePath(doc: Doc, from: CvLang, path: CvPath): CvPath | nu
   return [idx, ...path.slice(1)]
 }
 
+/**
+ * The twin of `path` in the other language, or null when it is ambiguous:
+ * the section is missing there, or an array that `path` indexes into has a
+ * different length in the other language.
+ */
+export function alignedTwin(doc: Doc, lang: CvLang, path: CvPath): CvPath | null {
+  const twin = translatePath(doc, lang, path)
+  if (!twin) return null
+  const o = otherLang(lang)
+  for (let i = 1; i < path.length; i++) {
+    if (typeof path[i] !== 'number') continue
+    const mine = getAt(doc[lang], path.slice(0, i))
+    const theirs = getAt(doc[o], twin.slice(0, i))
+    if (!Array.isArray(mine) || !Array.isArray(theirs) || mine.length !== theirs.length) return null
+  }
+  return twin
+}
+
+/**
+ * Twin list path for a structural edit of the list at `listPath`, or null
+ * when the edit cannot be mirrored (ancestors misaligned, or the two lists
+ * have different lengths). A list missing on the twin entry counts as empty.
+ */
+export function listTwin(doc: Doc, lang: CvLang, listPath: CvPath): CvPath | null {
+  const twin = alignedTwin(doc, lang, listPath)
+  if (!twin) return null
+  const mine = getAt(doc[lang], listPath)
+  const theirs = getAt(doc[otherLang(lang)], twin)
+  const theirParent = getAt(doc[otherLang(lang)], twin.slice(0, -1))
+  if (!isPlainObject(theirParent)) return null
+  const myLen = Array.isArray(mine) ? mine.length : 0
+  const theirLen = Array.isArray(theirs) ? theirs.length : 0
+  return myLen === theirLen ? twin : null
+}
+
+/** Length of the twin list (null when the twin position is ambiguous). */
+export function twinListLength(doc: Doc, lang: CvLang, listPath: CvPath): number | null {
+  const twin = alignedTwin(doc, lang, listPath)
+  if (!twin) return null
+  const o = otherLang(lang)
+  if (!isPlainObject(getAt(doc[o], twin.slice(0, -1)))) return null
+  const theirs = getAt(doc[o], twin)
+  return Array.isArray(theirs) ? theirs.length : 0
+}
+
+/** True when a value carries content a person typed (visibility metadata ignored). */
+export function hasContent(v: unknown): boolean {
+  if (typeof v === 'string') return v.trim().length > 0
+  if (typeof v === 'number' || typeof v === 'boolean') return true
+  if (Array.isArray(v)) return v.some(hasContent)
+  if (isPlainObject(v)) {
+    return Object.keys(v).some((k) => !(VISIBILITY_KEYS as readonly string[]).includes(k) && hasContent(v[k]))
+  }
+  return false
+}
+
+/** The other language's item that a linked remove at `index` would delete (undefined when it would not reach). */
+export function twinListItem(doc: Doc, lang: CvLang, listPath: CvPath, index: number): unknown {
+  const twin = listTwin(doc, lang, listPath)
+  if (!twin) return undefined
+  const theirs = getAt(doc[otherLang(lang)], twin)
+  return Array.isArray(theirs) ? theirs[index] : undefined
+}
+
+export type Misalignment = { path: CvPath; mine: number; theirs: number }
+
+/**
+ * Every list inside a section whose length differs between the languages
+ * (outermost difference only; aligned lists are compared entry by entry).
+ * Paths are relative to the section.
+ */
+export function sectionMisalignments(doc: Doc, lang: CvLang, sessionName: string): Misalignment[] {
+  const mine = doc[lang].find((s) => s?.sessionName === sessionName)
+  const theirs = doc[otherLang(lang)].find((s) => s?.sessionName === sessionName)
+  if (!mine || !theirs) return []
+  const out: Misalignment[] = []
+  const walk = (a: any, b: any, path: CvPath) => {
+    if (Array.isArray(a) || Array.isArray(b)) {
+      const la = Array.isArray(a) ? a.length : 0
+      const lb = Array.isArray(b) ? b.length : 0
+      if (la !== lb) {
+        out.push({ path, mine: la, theirs: lb })
+        return
+      }
+      for (let i = 0; i < la; i++) walk(a[i], b[i], [...path, i])
+      return
+    }
+    if (!isPlainObject(a) || !isPlainObject(b)) return
+    for (const k of Object.keys(a)) {
+      if ((VISIBILITY_KEYS as readonly string[]).includes(k)) continue
+      if (Array.isArray(a[k]) || Array.isArray(b[k])) walk(a[k], b[k], [...path, k])
+      else if (isPlainObject(a[k])) walk(a[k], b[k], [...path, k])
+    }
+  }
+  walk(mine, theirs, [])
+  return out
+}
+
+// ── Node edits ────────────────────────────────────────────────────────────
+
 type NodeFn = (node: any) => any
 
-/** Apply `fn` to the node at `path` in `lang` (and, when linked, at the twin path). */
-export function updateNode(doc: Doc, lang: CvLang, path: CvPath, fn: NodeFn, linked: boolean): Doc {
+/** Apply `fn` to the node at `path` in `lang` (and, when linked and aligned, at the twin path). */
+export function updateNode(doc: Doc, lang: CvLang, path: CvPath, fn: NodeFn, linked: boolean): LinkedResult {
   let next: Doc = { ...doc, [lang]: setAt(doc[lang], path, fn(getAt(doc[lang], path))) }
+  let reached = false
   if (linked) {
-    const twin = translatePath(doc, lang, path)
+    const twin = alignedTwin(doc, lang, path)
     if (twin) {
       const o = otherLang(lang)
       const node = getAt(doc[o], twin)
-      if (node && typeof node === 'object') next = { ...next, [o]: setAt(doc[o], twin, fn(node)) }
+      if (isPlainObject(node)) {
+        next = { ...next, [o]: setAt(doc[o], twin, fn(node)) }
+        reached = true
+      }
     }
   }
-  return next
+  return { doc: next, reached }
 }
 
 export function setValue(doc: Doc, lang: CvLang, path: CvPath, value: any): Doc {
@@ -58,15 +251,22 @@ export function setValue(doc: Doc, lang: CvLang, path: CvPath, value: any): Doc 
 
 // ── Visibility ────────────────────────────────────────────────────────────
 
-export function toggleFieldHidden(doc: Doc, lang: CvLang, nodePath: CvPath, field: string, linked: boolean): Doc {
+export function toggleFieldHidden(doc: Doc, lang: CvLang, nodePath: CvPath, field: string, linked: boolean): LinkedResult {
   const node = getAt(doc[lang], nodePath) || {}
   const hide = !(Array.isArray(node.hiddenFields) && node.hiddenFields.includes(field))
+  return setFieldHidden(doc, lang, nodePath, field, hide, linked)
+}
+
+export function setFieldHidden(doc: Doc, lang: CvLang, nodePath: CvPath, field: string, hide: boolean, linked: boolean): LinkedResult {
   return updateNode(doc, lang, nodePath, (n) => withFieldHidden(n || {}, field, hide), linked)
 }
 
-export function toggleEntryHidden(doc: Doc, lang: CvLang, entryPath: CvPath, linked: boolean): Doc {
+export function toggleEntryHidden(doc: Doc, lang: CvLang, entryPath: CvPath, linked: boolean): LinkedResult {
   const node = getAt(doc[lang], entryPath) || {}
-  const hide = node.isVisible !== false
+  return setEntryHidden(doc, lang, entryPath, node.isVisible !== false, linked)
+}
+
+export function setEntryHidden(doc: Doc, lang: CvLang, entryPath: CvPath, hide: boolean, linked: boolean): LinkedResult {
   return updateNode(
     doc,
     lang,
@@ -81,14 +281,39 @@ export function toggleEntryHidden(doc: Doc, lang: CvLang, entryPath: CvPath, lin
   )
 }
 
-export function toggleItemHidden(doc: Doc, lang: CvLang, parentPath: CvPath, field: string, index: number, linked: boolean): Doc {
+export function toggleItemHidden(doc: Doc, lang: CvLang, parentPath: CvPath, field: string, index: number, linked: boolean): LinkedResult {
   const node = getAt(doc[lang], parentPath) || {}
-  const hide = !hiddenIndices(node, field).includes(index)
-  return updateNode(doc, lang, parentPath, (n) => withItemHidden(n || {}, field, index, hide), linked)
+  return setItemHidden(doc, lang, parentPath, field, index, !hiddenIndices(node, field).includes(index), linked)
 }
 
-/** Section-level switch (isVisible = CV, showOnWebsite = website). `true` removes the key (default). */
-export function setSectionFlag(doc: Doc, lang: CvLang, sectionIdx: number, key: 'isVisible' | 'showOnWebsite', on: boolean, linked: boolean): Doc {
+export function setItemHidden(
+  doc: Doc,
+  lang: CvLang,
+  parentPath: CvPath,
+  field: string,
+  index: number,
+  hide: boolean,
+  linked: boolean,
+): LinkedResult {
+  const mine = { ...doc, [lang]: setAt(doc[lang], parentPath, withItemHidden(getAt(doc[lang], parentPath) || {}, field, index, hide)) }
+  if (!linked) return { doc: mine, reached: false }
+  // The bullet list itself must line up too, or index N is a different bullet.
+  const twin = alignedTwin(doc, lang, [...parentPath, field, index])
+  const o = otherLang(lang)
+  const theirNode = twin ? getAt(doc[o], twin.slice(0, -2)) : undefined
+  if (!twin || !isPlainObject(theirNode)) return { doc: mine, reached: false }
+  return { doc: { ...mine, [o]: setAt(doc[o], twin.slice(0, -2), withItemHidden(theirNode, field, index, hide)) }, reached: true }
+}
+
+/** Section-level switch (isVisible = CV, showOnWebsite = website). `true` removes the website key (default). */
+export function setSectionFlag(
+  doc: Doc,
+  lang: CvLang,
+  sectionIdx: number,
+  key: 'isVisible' | 'showOnWebsite',
+  on: boolean,
+  linked: boolean,
+): LinkedResult {
   return updateNode(
     doc,
     lang,
@@ -141,6 +366,7 @@ function applyToList(list: any[], op: ListOp, forTwin: boolean): any[] {
       return next
     case 'duplicate': {
       if (op.index < 0 || op.index >= next.length) return next
+      // JSON clone drops the in-memory key, so the copy gets a fresh one.
       const copy = clone(next[op.index])
       if (copy && typeof copy === 'object') delete copy.isVisible
       next.splice(op.index + 1, 0, copy)
@@ -171,40 +397,56 @@ function listOpOnSections(sections: Section[], listPath: CvPath, op: ListOp, for
 }
 
 /**
- * Structural list edit. Linked only when the twin list exists with the same
- * length (so indices line up); otherwise the twin is left untouched and the
- * return value reports `linkedApplied: false`.
+ * Structural list edit. Mirrored to the other language only when the twin
+ * list is unambiguous (see listTwin); otherwise `reached` is false.
  */
-export function listOp(doc: Doc, lang: CvLang, listPath: CvPath, op: ListOp, linked: boolean): { doc: Doc; linkedApplied: boolean } {
+export function listOp(doc: Doc, lang: CvLang, listPath: CvPath, op: ListOp, linked: boolean): LinkedResult {
   let next: Doc = { ...doc, [lang]: listOpOnSections(doc[lang], listPath, op, false) }
-  let linkedApplied = false
+  let reached = false
   if (linked) {
-    const twin = translatePath(doc, lang, listPath)
-    const o = otherLang(lang)
+    const twin = listTwin(doc, lang, listPath)
     if (twin) {
-      const mine = getAt(doc[lang], listPath)
-      const theirs = getAt(doc[o], twin)
-      const myLen = Array.isArray(mine) ? mine.length : 0
-      const theirParent = getAt(doc[o], twin.slice(0, -1))
-      const theirLen = Array.isArray(theirs) ? theirs.length : theirParent ? 0 : -1
-      if (theirLen === myLen) {
-        next = { ...next, [o]: listOpOnSections(doc[o], twin, op, true) }
-        linkedApplied = true
-      }
+      const o = otherLang(lang)
+      next = { ...next, [o]: listOpOnSections(doc[o], twin, op, true) }
+      reached = true
     }
   }
-  return { doc: next, linkedApplied }
+  return { doc: next, reached }
 }
 
-/** Would a linked list edit reach the other language? (for UI hints) */
-export function canLinkList(doc: Doc, lang: CvLang, listPath: CvPath): boolean {
-  const twin = translatePath(doc, lang, listPath)
-  if (!twin) return false
-  const mine = getAt(doc[lang], listPath)
-  const theirs = getAt(doc[otherLang(lang)], twin)
-  const myLen = Array.isArray(mine) ? mine.length : 0
-  const theirLen = Array.isArray(theirs) ? theirs.length : 0
-  return myLen === theirLen
+/**
+ * Insert several string items (multi-line paste) as one edit. With
+ * `replaceAtIndex` the first value replaces the (empty) item at `index`.
+ * `reached` is true only when every insert was mirrored.
+ */
+export function insertMany(
+  doc: Doc,
+  lang: CvLang,
+  listPath: CvPath,
+  index: number,
+  values: string[],
+  replaceAtIndex: boolean,
+  linked: boolean,
+): LinkedResult {
+  let next = doc
+  let at = index
+  let rest = values
+  if (replaceAtIndex && values.length) {
+    next = setValue(next, lang, [...listPath, index], values[0])
+    rest = values.slice(1)
+    at = index + 1
+  } else if (!replaceAtIndex) {
+    const cur = getAt(next[lang], listPath)
+    const len = Array.isArray(cur) ? cur.length : 0
+    at = Math.min(index + (len > index ? 1 : 0), len)
+  }
+  let reached = linked && rest.length > 0
+  rest.forEach((v, k) => {
+    const r = listOp(next, lang, listPath, { type: 'insert', index: at + k, item: v, twinItem: '' }, linked)
+    next = r.doc
+    if (!r.reached) reached = false
+  })
+  return { doc: next, reached }
 }
 
 // ── Sections ──────────────────────────────────────────────────────────────
@@ -221,30 +463,62 @@ export function moveSection(doc: Doc, lang: CvLang, from: number, to: number, li
     const theirs = doc[o]
       .map((s, i) => ({ s, i }))
       .sort((a, b) => (rank.get(a.s.sessionName) ?? 1000 + a.i) - (rank.get(b.s.sessionName) ?? 1000 + b.i))
-      .map((x) => x.s)
+      .map((y) => y.s)
     next = { ...next, [o]: theirs }
   }
   return next
 }
 
-export function addSection(doc: Doc, lang: CvLang, make: (l: CvLang) => Section | null, linked: boolean): Doc {
+export function addSection(doc: Doc, lang: CvLang, make: (l: CvLang) => Section | null, linked: boolean): LinkedResult {
   const mine = make(lang)
-  if (!mine) return doc
+  if (!mine) return { doc, reached: false }
   let next: Doc = doc
+  let reached = false
   if (!doc[lang].some((s) => s.sessionName === mine.sessionName)) next = { ...next, [lang]: [...doc[lang], mine] }
   if (linked) {
     const o = otherLang(lang)
     const theirs = make(o)
-    if (theirs && !doc[o].some((s) => s.sessionName === theirs.sessionName)) next = { ...next, [o]: [...doc[o], theirs] }
+    if (theirs && !doc[o].some((s) => s.sessionName === theirs.sessionName)) {
+      next = { ...next, [o]: [...doc[o], theirs] }
+      reached = true
+    }
   }
-  return next
+  return { doc: next, reached }
 }
 
-export function removeSection(doc: Doc, lang: CvLang, sessionName: string, linked: boolean): Doc {
+export function removeSection(doc: Doc, lang: CvLang, sessionName: string, linked: boolean): LinkedResult {
   let next: Doc = { ...doc, [lang]: doc[lang].filter((s) => s.sessionName !== sessionName) }
+  let reached = false
   if (linked) {
     const o = otherLang(lang)
-    next = { ...next, [o]: doc[o].filter((s) => s.sessionName !== sessionName) }
+    if (doc[o].some((s) => s.sessionName === sessionName)) {
+      next = { ...next, [o]: doc[o].filter((s) => s.sessionName !== sessionName) }
+      reached = true
+    }
   }
-  return next
+  return { doc: next, reached }
+}
+
+/** Short human preview of a value (first text found), for confirmation dialogs. */
+export function previewText(v: unknown, max = 80): string {
+  const find = (x: unknown): string => {
+    if (typeof x === 'string') return x.trim()
+    if (Array.isArray(x)) {
+      for (const y of x) {
+        const t = find(y)
+        if (t) return t
+      }
+      return ''
+    }
+    if (isPlainObject(x)) {
+      for (const k of Object.keys(x)) {
+        if ((VISIBILITY_KEYS as readonly string[]).includes(k)) continue
+        const t = find(x[k])
+        if (t) return t
+      }
+    }
+    return ''
+  }
+  const t = find(v).replace(/\s+/g, ' ')
+  return t.length > max ? `${t.slice(0, max - 1)}…` : t
 }
