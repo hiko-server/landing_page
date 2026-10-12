@@ -10,7 +10,14 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   res.setHeader('X-RateLimit-Remaining', String(rl.remaining))
   if (!rl.allowed) return res.status(429).json({ error: 'Too many requests, try later' })
   const { token, password } = req.body || {}
-  if (!token || !password) return res.status(400).json({ error: 'Missing fields' })
+  if (typeof token !== 'string' || !/^[0-9a-f]{48}$/.test(token)) {
+    return res.status(400).json({ error: 'Invalid or expired token' })
+  }
+  // Validate BEFORE consuming the single-use token, so a rejected password
+  // doesn't burn the reset link.
+  if (typeof password !== 'string' || password.length < 12 || password.length > 1024) {
+    return res.status(400).json({ error: 'Password must be 12–1024 characters' })
+  }
   ensureAdminFromEnv()
   const admin = readAdmin()
   if (!admin) return res.status(500).json({ error: 'Admin not configured' })

@@ -1,23 +1,13 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { getCookie } from 'cookies-next'
-import jwt from 'jsonwebtoken'
-import { getJwtSecret } from '../../../lib/env'
 import fs from 'fs'
 import path from 'path'
+import crypto from 'crypto'
 import { rateLimit } from '../../../lib/rateLimit'
 import { isR2Configured, r2PutBuffer } from '../../../lib/r2'
 import { uploadR2Key } from '../../../lib/contentStore'
+import { isAdminRequest } from '../../../lib/auth'
 
-function isAuthed(req: NextApiRequest, res: NextApiResponse) {
-  const token = getCookie('cv_admin_token', { req, res }) as string | undefined
-  if (!token) return false
-  try {
-    const decoded = jwt.verify(token, getJwtSecret()) as any
-    return decoded?.role === 'admin'
-  } catch {
-    return false
-  }
-}
+const isAuthed = isAdminRequest
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -43,7 +33,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     'image/jpeg': { ext: '.jpg',  magic: b => b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff },
     'image/webp': { ext: '.webp', magic: b => b.length > 12 && b.toString('ascii', 0, 4) === 'RIFF' && b.toString('ascii', 8, 12) === 'WEBP' },
     'image/gif':  { ext: '.gif',  magic: b => b.length > 6 && b.toString('ascii', 0, 4) === 'GIF8' },
-    'image/avif': { ext: '.avif', magic: b => b.length > 12 && b.toString('ascii', 4, 8) === 'ftyp' },
+    // ISO-BMFF: require an AVIF brand, not just any `ftyp` box (mp4 / heic).
+    'image/avif': { ext: '.avif', magic: b => b.length > 12 && b.toString('ascii', 4, 8) === 'ftyp' && /^avi[fs]$/.test(b.toString('ascii', 8, 12)) },
   }
   const spec = ALLOWED[contentType]
   if (!spec) return res.status(415).json({ error: 'Unsupported image type' })
@@ -59,8 +50,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
   const uploadDir = path.join(process.cwd(), 'public', 'uploads')
   fs.mkdirSync(uploadDir, { recursive: true })
+  // Never overwrite: uploads are served `immutable`, so reusing a name would
+  // pin stale bytes in every cache. Collisions get a short content hash.
+  if (fs.existsSync(path.join(uploadDir, safeName))) {
+    const hash = crypto.createHash('sha256').update(buf).digest('hex').slice(0, 10)
+    const ext = path.extname(safeName)
+    safeName = `${path.basename(safeName, ext)}-${hash}${ext}`
+  }
   const filePath = path.join(uploadDir, safeName)
-  fs.writeFileSync(filePath, buf as unknown as any)
+  if (!fs.existsSync(filePath)) fs.writeFileSync(filePath, buf as unknown as any, { flag: 'wx' })
 
   // Dual-write to R2 if configured. We keep the local file (it's what
   // /uploads/* serves at runtime) and treat R2 as the off-site mirror so a
@@ -76,4 +74,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   const urlPath = `/uploads/${safeName}`
   return res.status(200).json({ url: urlPath, ...(r2Warning ? { r2Warning } : {}) })
+}
+
+// Images arrive as base64 data URLs (~1.37× the file size); the default 1mb
+// body limit rejected anything over ~750KB before the 8MB check could run.
+export const config = {
+  api: {
+    bodyParser: { sizeLimit: '12mb' },
+  },
 }

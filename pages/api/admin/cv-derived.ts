@@ -1,9 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { getCookie } from 'cookies-next'
-import jwt from 'jsonwebtoken'
-import { getJwtSecret } from '../../../lib/env'
 import { deriveCurrentlyCoding } from '../../../lib/currentlyCoding'
 import { readCvData } from '../../../lib/cvdata'
+import { isAdminRequest } from '../../../lib/auth'
+
+const isAuthed = isAdminRequest
 
 /**
  * GET /api/admin/cv-derived
@@ -17,16 +17,6 @@ import { readCvData } from '../../../lib/cvdata'
  * Auth-gated so the operator's CV layout / dates don't leak through an
  * unauthenticated endpoint to scrapers.
  */
-function isAuthed(req: NextApiRequest, res: NextApiResponse): boolean {
-  const token = getCookie('cv_admin_token', { req, res }) as string | undefined
-  if (!token) return false
-  try {
-    return (jwt.verify(token, getJwtSecret()) as { role?: string })?.role === 'admin'
-  } catch {
-    return false
-  }
-}
-
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!isAuthed(req, res)) return res.status(401).json({ error: 'Unauthorized' })
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })

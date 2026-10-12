@@ -1,19 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { getCookie } from 'cookies-next'
-import jwt from 'jsonwebtoken'
-import { getJwtSecret } from '../../../lib/env'
 import { listAll, readOne, writeOne, deleteOne } from '../../../lib/mdx-admin'
 import { rateLimit } from '../../../lib/rateLimit'
+import { isAdminRequest } from '../../../lib/auth'
 
-function isAuthed(req: NextApiRequest, res: NextApiResponse): boolean {
-  const token = getCookie('cv_admin_token', { req, res }) as string | undefined
-  if (!token) return false
-  try {
-    return ((jwt.verify(token, getJwtSecret()) as { role?: string })?.role === 'admin')
-  } catch {
-    return false
-  }
-}
+const isAuthed = isAdminRequest
 
 /** Admin CRUD for project case studies (content/work/*.mdx). Mirror of /api/admin/posts. */
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -33,13 +23,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const rl = rateLimit(req, 30, 10 * 60 * 1000)
     res.setHeader('X-RateLimit-Remaining', String(rl.remaining))
     if (!rl.allowed) return res.status(429).json({ error: 'Too many writes, try later' })
-    const { slug, frontmatter, body } = (req.body || {}) as {
+    const { slug, frontmatter, body, create } = (req.body || {}) as {
+      create?: boolean
       slug?: string
       frontmatter?: Record<string, any>
       body?: string
     }
     if (!slug) return res.status(400).json({ error: 'Missing slug' })
     if (!frontmatter?.title) return res.status(400).json({ error: 'frontmatter.title required' })
+    if (create && readOne('work', slug)) return res.status(409).json({ error: 'A case study with this slug already exists' })
     const result = await writeOne('work', slug, frontmatter, body || '')
     if (!result.ok) return res.status(400).json({ error: result.error })
     return res.status(200).json(result)

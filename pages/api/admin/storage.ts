@@ -1,20 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { getCookie } from 'cookies-next'
-import jwt from 'jsonwebtoken'
-import { getJwtSecret } from '../../../lib/env'
 import { isR2Configured, getR2Bucket, r2ListDetailed } from '../../../lib/r2'
 import { getDb } from '../../../lib/db'
 import { listLocalBackups, BACKUP_CONSTANTS } from '../../../lib/backup'
+import { isAdminRequest } from '../../../lib/auth'
 
-function isAuthed(req: NextApiRequest, res: NextApiResponse): boolean {
-  const token = getCookie('cv_admin_token', { req, res }) as string | undefined
-  if (!token) return false
-  try {
-    return ((jwt.verify(token, getJwtSecret()) as { role?: string })?.role === 'admin')
-  } catch {
-    return false
-  }
-}
+const isAuthed = isAdminRequest
 
 /**
  * Inventory of the content store, surfaced in the admin UI so an operator

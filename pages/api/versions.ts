@@ -8,9 +8,6 @@
  * POST { action:'snapshot', type:'cv'|'home' } → take a manual snapshot
  */
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { getCookie } from 'cookies-next'
-import jwt from 'jsonwebtoken'
-import { getJwtSecret } from '../../lib/env'
 import {
   listSnapshots,
   restoreSnapshot,
@@ -23,24 +20,18 @@ import {
   saveHomeSnapshot,
   readHomeSnapshot,
 } from '../../lib/home'
+import { isAdminRequest } from '../../lib/auth'
 
-function isAuthed(req: NextApiRequest, res: NextApiResponse): boolean {
-  const token = getCookie('cv_admin_token', { req, res }) as string | undefined
-  if (!token) return false
-  try {
-    const decoded = jwt.verify(token, getJwtSecret()) as any
-    return decoded?.role === 'admin'
-  } catch {
-    return false
-  }
-}
+const isAuthed = isAdminRequest
 
 function parseFilename(name: string): { date: string; label: string } {
   // cv_2025-09-09_03-17-28-947.json  or  home_2025-09-09_03-17-28-947.json
   const m = name.match(/^(?:cv|home)_(\d{4}-\d{2}-\d{2})_(\d{2}-\d{2}-\d{2})/)
   if (m) {
-    const dateStr = `${m[1]} ${m[2].replace(/-/g, ':')}`
-    return { date: dateStr, label: new Date(dateStr).toLocaleString() }
+    // Snapshot stamps are UTC (toISOString) — keep the Z so clients convert
+    // to their own timezone instead of misreading it as local time.
+    const dateStr = `${m[1]}T${m[2].replace(/-/g, ':')}Z`
+    return { date: dateStr, label: new Date(dateStr).toUTCString() }
   }
   return { date: '', label: name }
 }
@@ -91,6 +82,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (action === 'restore') {
       if (!filename) return res.status(400).json({ error: 'Missing filename' })
+      // Snapshot the live state first so a restore can itself be undone.
+      try {
+        if (type === 'home') saveHomeSnapshot()
+        else saveSnapshot()
+      } catch (err) {
+        console.warn('versions: snapshot before restore failed', err)
+      }
       const result = type === 'home' ? await restoreHomeSnapshot(filename) : await restoreSnapshot(filename)
       if (!result.ok) return res.status(404).json({ error: result.error })
       return res.status(200).json(result)

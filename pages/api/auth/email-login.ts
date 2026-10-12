@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken'
 import { setCookie } from 'cookies-next'
 import { ensureAdminFromEnv, readAdmin, verifyCredentials } from '../../../lib/admin'
 import { getJwtSecret, isProd } from '../../../lib/env'
-import { rateLimit } from '../../../lib/rateLimit'
+import { ipFromReq, rateLimit } from '../../../lib/rateLimit'
 
 /**
  * POST /api/auth/email-login
@@ -76,7 +76,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   const admin = readAdmin()
   const emailForCheck = admin?.email ? admin.email : creds.email
 
-  const outcome = verifyCredentials(creds.email, creds.password)
+  const outcome = verifyCredentials(creds.email, creds.password, ipFromReq(req))
   if (!outcome.ok) {
     if (outcome.reason === 'locked') {
       res.setHeader('Retry-After', String(Math.ceil(outcome.retryAfterMs / 1000)))

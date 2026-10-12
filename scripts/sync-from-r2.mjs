@@ -87,18 +87,39 @@ async function streamToBuffer(stream) {
   return Buffer.concat(chunks)
 }
 
+/** All objects under `prefix` as { key, mtime (ms), size }. */
 async function listAll(prefix) {
-  const keys = []
+  const objs = []
   let token
   do {
     const out = await s3.send(
       new ListObjectsV2Command({ Bucket: R2_BUCKET, Prefix: prefix, ContinuationToken: token }),
     )
-    for (const obj of out.Contents || []) if (obj.Key) keys.push(obj.Key)
+    for (const obj of out.Contents || []) {
+      if (obj.Key) objs.push({ key: obj.Key, mtime: obj.LastModified ? new Date(obj.LastModified).getTime() : 0, size: obj.Size ?? -1 })
+    }
     token = out.IsTruncated ? out.NextContinuationToken : undefined
   } while (token)
-  return keys
+  return objs
 }
+
+// The local DB now persists across deploys (docker volume). If an earlier R2
+// push failed, R2 holds an OLDER copy than the DB — never let it overwrite a
+// newer local edit. 5s of slack absorbs clock skew between us and R2.
+const SKEW_MS = 5000
+const localPageAt = db.prepare('SELECT updated_at FROM pages WHERE name = ?')
+const localItemAt = db.prepare('SELECT updated_at FROM collection_items WHERE collection = ? AND slug = ?')
+const localKvAt = db.prepare('SELECT updated_at FROM kv WHERE key = ?')
+const tombstonesOf = (collection) => {
+  try {
+    const row = db.prepare('SELECT value FROM kv WHERE key = ?').get(`tombstones:${collection}`)
+    return new Set(row ? JSON.parse(row.value) : [])
+  } catch {
+    return new Set()
+  }
+}
+const localIsNewer = (row, mtime) => !!row && Number(row.updated_at) > mtime + SKEW_MS
+let skipped = 0
 
 async function getText(key) {
   const out = await s3.send(new GetObjectCommand({ Bucket: R2_BUCKET, Key: key }))
@@ -113,52 +134,66 @@ async function main() {
   console.log(`[sync-from-r2] Bucket: ${R2_BUCKET}`)
 
   // pages/
-  for (const key of await listAll('pages/')) {
+  for (const { key, mtime } of await listAll('pages/')) {
     const name = path.basename(key).replace(/\.(mdx|md)$/, '')
     if (!/^[a-z0-9][a-z0-9-_]*$/.test(name)) continue
+    if (localIsNewer(localPageAt.get(name), mtime)) {
+      skipped++
+      continue
+    }
     const raw = await getText(key)
     const parsed = matter(raw)
-    upsertPage.run(name, JSON.stringify(parsed.data), parsed.content, Date.now())
+    upsertPage.run(name, JSON.stringify(parsed.data), parsed.content, mtime || Date.now())
     console.log(`  page ← ${key}`)
   }
 
   // blog/ and work/
   for (const collection of ['blog', 'work']) {
-    for (const key of await listAll(`${collection}/`)) {
+    const dead = tombstonesOf(collection)
+    for (const { key, mtime } of await listAll(`${collection}/`)) {
       const slug = path.basename(key).replace(/\.(mdx|md)$/, '')
       if (!/^[a-z0-9][a-z0-9-_]*$/.test(slug)) continue
+      // Deleted locally (an R2 delete may have failed) — don't resurrect it.
+      if (dead.has(slug) || localIsNewer(localItemAt.get(collection, slug), mtime)) {
+        skipped++
+        continue
+      }
       const raw = await getText(key)
       const parsed = matter(raw)
-      upsertItem.run(
-        collection,
-        slug,
-        JSON.stringify(parsed.data),
-        parsed.content,
-        Date.now(),
-      )
+      upsertItem.run(collection, slug, JSON.stringify(parsed.data), parsed.content, mtime || Date.now())
       console.log(`  ${collection} ← ${key}`)
     }
   }
 
   // data/
-  for (const key of await listAll('data/')) {
+  for (const { key, mtime } of await listAll('data/')) {
     const name = path.basename(key).replace(/\.json$/, '')
     if (!/^[a-z0-9][a-z0-9-_]*$/.test(name)) continue
+    if (localIsNewer(localKvAt.get(name), mtime)) {
+      skipped++
+      continue
+    }
     const raw = await getText(key)
-    upsertKv.run(name, raw, Date.now())
+    upsertKv.run(name, raw, mtime || Date.now())
     console.log(`  kv ← ${key}`)
   }
 
-  // uploads/
-  for (const key of await listAll('uploads/')) {
+  // uploads/ — immutable names; skip files already present with the same size.
+  for (const { key, size } of await listAll('uploads/')) {
     const name = path.basename(key)
     if (!/^[a-zA-Z0-9._-]+$/.test(name)) continue
+    const dest = path.join(UPLOADS_DIR, name)
+    try {
+      if (fs.existsSync(dest) && fs.statSync(dest).size === size) continue
+    } catch {
+      /* re-download */
+    }
     const buf = await getBuffer(key)
-    fs.writeFileSync(path.join(UPLOADS_DIR, name), buf)
+    fs.writeFileSync(dest, buf)
     console.log(`  upload ← ${key}`)
   }
 
-  console.log('[sync-from-r2] OK')
+  console.log(`[sync-from-r2] OK${skipped ? ` (kept ${skipped} newer local item(s))` : ''}`)
   db.close()
 }
 

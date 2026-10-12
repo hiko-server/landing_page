@@ -1,8 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { getCookie } from 'cookies-next'
-import jwt from 'jsonwebtoken'
-import { getJwtSecret } from '../../../../lib/env'
 import { createSnapshot } from '../../../../lib/backup'
+import { isAdminRequest } from '../../../../lib/auth'
+
+const isAuthed = isAdminRequest
 
 /**
  * POST /api/admin/storage/backup
@@ -16,16 +16,6 @@ import { createSnapshot } from '../../../../lib/backup'
  * failed: the operator still has a recoverable artefact on disk and the
  * `r2.error` field surfaces the remote failure.
  */
-function isAuthed(req: NextApiRequest, res: NextApiResponse): boolean {
-  const token = getCookie('cv_admin_token', { req, res }) as string | undefined
-  if (!token) return false
-  try {
-    return (jwt.verify(token, getJwtSecret()) as { role?: string })?.role === 'admin'
-  } catch {
-    return false
-  }
-}
-
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!isAuthed(req, res)) return res.status(401).json({ ok: false, error: 'Unauthorized' })
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' })

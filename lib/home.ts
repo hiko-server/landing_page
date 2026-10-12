@@ -46,7 +46,7 @@ export function listHomeSnapshots(): string[] {
 }
 
 export function restoreHomeSnapshot(filename: string): Promise<StoreError> {
-  const safe = filename.replace(/[^a-zA-Z0-9_.\-]/g, '_')
+  const safe = filename.replace(/[^a-zA-Z0-9_.-]/g, '_')
   const filePath = path.join(homeSnapshotDir, safe)
   if (!fs.existsSync(filePath)) return Promise.resolve({ ok: false, error: 'Snapshot not found' })
   try {
@@ -58,7 +58,7 @@ export function restoreHomeSnapshot(filename: string): Promise<StoreError> {
 }
 
 export function readHomeSnapshot(filename: string): string | null {
-  const safe = filename.replace(/[^a-zA-Z0-9_.\-]/g, '_')
+  const safe = filename.replace(/[^a-zA-Z0-9_.-]/g, '_')
   const filePath = path.join(homeSnapshotDir, safe)
   try {
     if (!fs.existsSync(filePath)) return null
