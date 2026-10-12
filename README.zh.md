@@ -9,7 +9,7 @@
 English → [README.md](./README.md)
 
 [![Repo](https://img.shields.io/badge/GitHub-hiko--server%2Flanding__page-181717?logo=github)](https://github.com/hiko-server/landing_page)
-[![Next.js](https://img.shields.io/badge/Next.js-13.5-black?logo=next.js)](https://nextjs.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-14.2-black?logo=next.js)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Chakra UI](https://img.shields.io/badge/Chakra_UI-2.8-319795?logo=chakraui)](https://chakra-ui.com/)
 [![SQLite](https://img.shields.io/badge/Storage-SQLite-003B57?logo=sqlite)](https://www.sqlite.org/)
@@ -33,10 +33,17 @@ English → [README.md](./README.md)
   gzip tarball；后台提供「立即备份」「拉取最新」两枚按钮。
 - **MDX 内容层**：`/blog`、`/work`（案例研究）、`/now`、`/uses` 全部由
   类型化 MDX 集合驱动，自动生成 OG 图、RSS 与阅读时长。
-- **双语 CV**：`/about` 与 `/cv` 提供 English / 中文 切换；同一份
-  `data/cvdata.json`，共享字段零重复翻译，并带滚动版本历史。
+- **双语 CV**：`/about` 与 `/cv` 提供 English / 中文 切换（支持 `?lang=zh`、
+  `?print=1`），日期与标签按语言格式化，A4 打印 / PDF 每页都有真实页边距，
+  并带滚动版本历史。
+- **CV Studio：每一层都能隐藏 / 显示**——任意**板块**（CV/PDF 与网站分开控制）、
+  任意**条目**（一段学历、一份工作、一条亮点）、任意**字段**（GPA、电话……）以及
+  任意**单条要点或标签**，点眼睛图标即可。被隐藏的内容会在服务端从所有公开页面和
+  公开 API 中**彻底移除**，而不只是视觉上隐藏。EN ↔ 中 联动编辑（可见性与结构保持一致）、
+  两种语言共用一套撤销历史、拖拽排序、自适应宽度的 A4 实时预览（含分页参考线）、
+  本地草稿恢复与覆盖保护。
 - **面向非工程师的后台**：可视化编辑 Hero、品牌、社交、照片墙、博客、
-  案例研究、CV（分屏 Studio + 原始 JSON + 旧版 GUI），以及 Now/Uses。
+  案例研究、CV（Studio + 原始 JSON），以及 Now/Uses。
 - **逐节可见性开关**：首页所有 `[NN]` 板块（Open Source / Tech Stack /
   Activity / Projects / Experience / Certs / Photos / Contact）都可
   从后台直接隐藏，无需改代码。
@@ -65,7 +72,7 @@ English → [README.md](./README.md)
 
 | 层 | 选型 | 取舍说明 |
 |---|---|---|
-| 框架 | **Next.js 13（Pages Router）** | 成熟的 SSR、文件式 API、Edge Middleware |
+| 框架 | **Next.js 14（Pages Router）** | 成熟的 SSR、文件式 API、Edge Middleware |
 | UI | **Chakra UI 2** | 可组合原语，开箱即用的深色模式 |
 | 动效 | **Framer Motion** | Hero 入场、分节 reveal |
 | 内容存储 | **better-sqlite3** + **Cloudflare R2** | 本地优先 + 廉价异地副本 |

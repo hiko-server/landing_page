@@ -9,7 +9,7 @@ backup, and a hardened admin GUI for non-engineers.
 中文版 → [README.zh.md](./README.zh.md)
 
 [![Repo](https://img.shields.io/badge/GitHub-hiko--server%2Flanding__page-181717?logo=github)](https://github.com/hiko-server/landing_page)
-[![Next.js](https://img.shields.io/badge/Next.js-13.5-black?logo=next.js)](https://nextjs.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-14.2-black?logo=next.js)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Chakra UI](https://img.shields.io/badge/Chakra_UI-2.8-319795?logo=chakraui)](https://chakra-ui.com/)
 [![SQLite](https://img.shields.io/badge/Storage-SQLite-003B57?logo=sqlite)](https://www.sqlite.org/)
@@ -35,12 +35,21 @@ backup, and a hardened admin GUI for non-engineers.
 - **MDX writing layer** — `/blog`, `/work` (case studies), `/now`, `/uses`
   pages backed by typed MDX collections with auto-generated OG images,
   RSS feed, and reading-time annotations.
-- **Bilingual CV** — English / 中文 toggle on `/about` and `/cv`; same
-  data file (`data/cvdata.json`), zero translation duplication for shared
-  fields, rolling version history.
+- **Bilingual CV** — English / 中文 on `/about` and `/cv` (`?lang=zh`,
+  `?print=1`), language-aware dates and labels, A4 print/PDF with real
+  per-page margins, rolling version history.
+- **CV Studio with visibility at every level** — hide/show any *section*
+  (separately for the CV/PDF and the website), any *entry* (a degree, a
+  job, a highlight), any *field* (GPA, phone, …) and any single *bullet or
+  tag* with an eye toggle. Hidden content is stripped server-side from
+  every public page and the public API, not just visually hidden.
+  EN ↔ 中 linked editing (visibility + structure stay aligned), one undo
+  history for both languages, drag-and-drop, live fit-to-width A4
+  preview with page-break guides, local draft recovery and an overwrite
+  guard. See [CV visibility model](#cv-visibility-model).
 - **Admin GUI for non-engineers** — visual editors for hero, brands,
-  socials, photo strip, blog posts, case studies, CV (split-pane Studio
-  + raw JSON + legacy GUI), and Now/Uses pages.
+  socials, photo strip, blog posts, case studies, the CV (Studio + raw
+  JSON), and Now/Uses pages.
 - **Per-section visibility** — toggle any `[NN]` row on the home page
   (Open Source, Tech Stack, Activity, Projects, Experience, Certs,
   Photos, Contact) without touching code.
@@ -66,11 +75,30 @@ backup, and a hardened admin GUI for non-engineers.
 
 ---
 
+## CV visibility model
+
+All flags are optional, so existing CV data keeps working unchanged
+(`lib/cvVisibility.ts`):
+
+| Level | Stored as | Effect |
+|---|---|---|
+| Section | `isVisible: false` | not on the A4 CV / PDF |
+| Section | `showOnWebsite: false` | not on `/about` or the home page |
+| Entry (any object in a list) | `isVisible: false` | hidden everywhere |
+| Field | `hiddenFields: ["gpa"]` on the object | hidden everywhere |
+| Bullet / tag | `hiddenItems: { "points": [2] }` on the parent | hidden everywhere |
+
+Public pages call `readPublicCvData('cv' | 'website')`; unauthenticated
+`GET /api/cvdata` returns the same pruned view. Only an admin session gets
+the full document.
+
+---
+
 ## Tech stack
 
 | Layer | Choice | Why |
 |---|---|---|
-| Framework | **Next.js 13 (Pages router)** | Mature SSR, file-routed APIs, edge middleware |
+| Framework | **Next.js 14 (Pages router)** | Mature SSR, file-routed APIs, edge middleware |
 | UI | **Chakra UI 2** | Composable primitives, dark-mode out of the box |
 | Animations | **Framer Motion** | Hero entry, section reveal |
 | Content store | **better-sqlite3** + **Cloudflare R2** | Local-first, cheap off-site replica |
