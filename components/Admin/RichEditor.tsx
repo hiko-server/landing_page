@@ -247,6 +247,7 @@ function Toolbar({
 export default function RichEditor({ value, onChange, minH = '520px', placeholder }: Props) {
   const toast = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const mdxRef = useRef<HTMLTextAreaElement>(null)
   const [tabIndex, setTabIndex] = useState(0) // 0 = GUI, 1 = MDX
   // Track the value we last applied to TipTap so we don't loop when we
   // re-receive the same markdown back from the parent.
@@ -270,6 +271,10 @@ export default function RichEditor({ value, onChange, minH = '520px', placeholde
       }),
     ],
     content: value,
+    // Pages-router SSR: render on the client only (avoids hydration mismatch),
+    // and re-render on every transaction so toolbar active / undo states stay live.
+    immediatelyRender: false,
+    shouldRerenderOnTransaction: true,
     onUpdate: ({ editor: ed }) => {
       // tiptap-markdown exposes `storage.markdown.getMarkdown()`.
       const md = (ed.storage as any).markdown?.getMarkdown?.() ?? ed.getHTML()
@@ -320,8 +325,6 @@ export default function RichEditor({ value, onChange, minH = '520px', placeholde
         return false
       },
     },
-    // SSR-safe init: TipTap renders empty on server, hydrates client-side.
-    immediatelyRender: false,
   })
 
   // Push external value changes (e.g. parent loaded data) into the editor.
@@ -351,10 +354,31 @@ export default function RichEditor({ value, onChange, minH = '520px', placeholde
   const onFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     e.target.value = '' // allow re-selecting the same file
-    if (!file || !editor) return
+    if (!file) return
     try {
       const url = await uploadImage(file)
-      editor.chain().focus().setImage({ src: url, alt: file.name }).run()
+      const alt = file.name.replace(/\.[^.]+$/, '').replace(/[[\]]/g, '')
+      if (tabIndex === 1) {
+        // Raw MDX tab: insert Markdown at the caret instead of routing through
+        // the (hidden) visual editor, which would regenerate — and overwrite —
+        // the MDX typed here.
+        const ta = mdxRef.current
+        const snippet = `![${alt}](${url})`
+        const start = ta ? ta.selectionStart : value.length
+        const end = ta ? ta.selectionEnd : value.length
+        const before = value.slice(0, start)
+        const glue = before && !before.endsWith('\n') ? '\n\n' : ''
+        const next = `${before}${glue}${snippet}\n${value.slice(end)}`
+        onChange(next)
+        requestAnimationFrame(() => {
+          if (!ta) return
+          const pos = before.length + glue.length + snippet.length + 1
+          ta.focus()
+          ta.setSelectionRange(pos, pos)
+        })
+      } else if (editor) {
+        editor.chain().focus().setImage({ src: url, alt }).run()
+      }
     } catch (err: any) {
       toast({ status: 'error', title: err?.message || 'Upload failed' })
     }
@@ -433,9 +457,11 @@ export default function RichEditor({ value, onChange, minH = '520px', placeholde
           </TabPanel>
           <TabPanel px={0}>
             <Textarea
+              ref={mdxRef}
               value={value}
               onChange={(e) => onChange(e.target.value)}
               minH={minH}
+              spellCheck={false}
               fontFamily="var(--font-geist-mono), monospace"
               fontSize="14px"
               placeholder={placeholder}

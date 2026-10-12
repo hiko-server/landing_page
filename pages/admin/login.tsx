@@ -1,19 +1,10 @@
 import { useEffect, useState } from 'react'
-import {
-  Box,
-  Button,
-  Flex,
-  Heading,
-  Input,
-  VStack,
-  Alert,
-  AlertIcon,
-  Link,
-  HStack,
-} from '@chakra-ui/react'
+import { Flex, Link, VStack } from '@chakra-ui/react'
+import NextLink from 'next/link'
 import { useRouter } from 'next/router'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
+import { AuthCard, AuthError, AuthField, AuthSubmit, PasswordField } from '../../components/Admin/AuthCard'
 
 /**
  * Only safe redirect targets are pages under /admin (and not the auth
@@ -36,29 +27,25 @@ function safeNextPath(raw: string | string[] | undefined): string {
 
 export default function AdminLogin() {
   const router = useRouter()
-  const [isMobile] = [false]
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
-    // If the cookie is already valid, bounce straight to the target
-    // (either ?next=… preserved from middleware, or /admin).
-    const checkSession = async () => {
-      try {
-        const res = await fetch('/api/admin/session')
-        if (res.ok) {
-          window.location.replace(safeNextPath(router.query.next))
-        }
-      } catch {
-        // ignore network errors; stay on login
-      }
+    // Wait for the query (?next=…) before deciding where to bounce to.
+    if (!router.isReady) return
+    let alive = true
+    fetch('/api/admin/session')
+      .then((res) => (res.ok ? res.json() : { authenticated: false }))
+      .then((d) => {
+        if (alive && d?.authenticated) window.location.replace(safeNextPath(router.query.next))
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
     }
-    checkSession()
-    // router.query.next is stable after isReady; safe to read once on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router.isReady])
+  }, [router.isReady, router.query.next])
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -75,7 +62,7 @@ export default function AdminLogin() {
         return
       }
       const data = await res.json().catch(() => ({}))
-      setError(data?.error || 'Login failed')
+      setError(data?.error || 'Sign-in failed')
     } catch (err: any) {
       setError(err?.message || 'Network error')
     } finally {
@@ -85,42 +72,47 @@ export default function AdminLogin() {
 
   return (
     <>
-      <CustomHead title="Admin Login" description="Authenticate to edit CV data" />
-      <HeaderFooter isMobile={isMobile}>
-        <Flex align="center" justify="center" p={10}>
-          <Box maxW="md" w="full">
-            <Heading size="md" mb={4}>Admin Login</Heading>
-            {error && (
-              <Alert status="error" mb={3}><AlertIcon />{error}</Alert>
-            )}
-            <form onSubmit={onSubmit}>
-              <VStack align="stretch" spacing={3}>
-                <Input
-                  placeholder="Email"
-                  type="email"
-                  autoComplete="username"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  isDisabled={submitting}
-                />
-                <Input
-                  placeholder="Password"
-                  type="password"
-                  autoComplete="current-password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  isDisabled={submitting}
-                />
-                <Button type="submit" colorScheme="blue" isLoading={submitting} loadingText="Signing in…">
-                  Sign in
-                </Button>
-              </VStack>
-            </form>
-            <HStack mt={3} justify="flex-end">
-              <Link href="/admin/forgot" color="blue.400">Forgot password?</Link>
-            </HStack>
-          </Box>
-        </Flex>
+      <CustomHead title="Admin Login" description="Sign in to manage the site" noindex />
+      <HeaderFooter>
+        <AuthCard
+          title="Sign in"
+          subtitle="Manage the CV, home page, writing and storage."
+          footer={
+            <Flex justify="flex-end">
+              <Link as={NextLink} href="/admin/forgot" color="var(--accent)">
+                Forgot password?
+              </Link>
+            </Flex>
+          }
+        >
+          <AuthError>{error}</AuthError>
+          <form onSubmit={onSubmit} noValidate>
+            <VStack align="stretch" spacing={4}>
+              <AuthField
+                label="Email"
+                type="email"
+                autoComplete="username"
+                inputMode="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                isDisabled={submitting}
+                isRequired
+                autoFocus
+              />
+              <PasswordField
+                label="Password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                isDisabled={submitting}
+                isRequired
+              />
+              <AuthSubmit isLoading={submitting} loadingText="Signing in…" isDisabled={!email || !password}>
+                Sign in
+              </AuthSubmit>
+            </VStack>
+          </form>
+        </AuthCard>
       </HeaderFooter>
     </>
   )

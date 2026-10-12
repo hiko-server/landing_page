@@ -44,7 +44,7 @@ export default function AdminWorkIndex() {
     try {
       const res = await fetch('/api/admin/work')
       if (res.status === 401) {
-        router.replace('/admin/login?from=/admin/work')
+        router.replace(`/admin/login?next=${encodeURIComponent('/admin/work')}`)
         return
       }
       const data = await res.json()
@@ -77,7 +77,7 @@ export default function AdminWorkIndex() {
   return (
     <>
       <CustomHead title="Admin · Work" />
-      <HeaderFooter isMobile={false}>
+      <HeaderFooter>
         <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[6, 10]}>
           <Flex justify="space-between" align="center" mb={6} flexWrap="wrap" gap={3}>
             <Box>

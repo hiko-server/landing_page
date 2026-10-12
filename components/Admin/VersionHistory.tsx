@@ -167,6 +167,8 @@ export default function VersionHistory() {
   const [previewData, setPreviewData] = useState<string>('')
   const [previewLoading, setPreviewLoading] = useState(false)
   const [restoreTarget, setRestoreTarget] = useState<VersionEntry | null>(null)
+  const [restoring, setRestoring] = useState(false)
+  const [listError, setListError] = useState('')
   const { isOpen: isRestoreOpen, onOpen: onRestoreOpen, onClose: onRestoreClose } = useDisclosure()
 
   const panelBg = useColorModeValue('rgba(255,255,255,0.9)', 'rgba(22,28,36,0.85)')
@@ -175,16 +177,20 @@ export default function VersionHistory() {
 
   const fetchVersions = useCallback(async () => {
     setLoading(true)
+    setListError('')
     try {
-      const res = await fetch(`/api/versions?type=${dataType}`)
-      const data = await res.json()
-      if (data.ok) setVersions(data.versions || [])
-    } catch {
-      toast({ status: 'error', title: 'Failed to load versions' })
+      const res = await fetch(`/api/versions?type=${dataType}`, { cache: 'no-store' })
+      if (res.status === 401) throw new Error('Session expired — sign in again.')
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.ok) throw new Error(data?.error || `Server responded ${res.status}`)
+      setVersions(data.versions || [])
+    } catch (e: any) {
+      setVersions([])
+      setListError(e?.message || 'Failed to load versions')
     } finally {
       setLoading(false)
     }
-  }, [dataType, toast])
+  }, [dataType])
 
   useEffect(() => {
     fetchVersions()
@@ -219,8 +225,9 @@ export default function VersionHistory() {
     onOpen()
     try {
       const res = await fetch(`/api/versions?type=${v.type}&file=${encodeURIComponent(v.filename)}&preview=1`)
-      const data = await res.json()
-      if (data.ok) setPreviewData(JSON.stringify(data.data, null, 2))
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.ok) setPreviewData(JSON.stringify(data.data, null, 2))
+      else setPreviewData(`Failed to load preview (${data?.error || res.status})`)
     } catch {
       setPreviewData('Failed to load preview')
     } finally {
@@ -239,7 +246,8 @@ export default function VersionHistory() {
   }
 
   const confirmRestore = async () => {
-    if (!restoreTarget) return
+    if (!restoreTarget || restoring) return
+    setRestoring(true)
     try {
       const res = await fetch(`/api/versions?type=${restoreTarget.type}`, {
         method: 'POST',
@@ -256,6 +264,8 @@ export default function VersionHistory() {
       }
     } catch (e: any) {
       toast({ status: 'error', title: 'Restore failed', description: e.message })
+    } finally {
+      setRestoring(false)
     }
   }
 
@@ -277,7 +287,7 @@ export default function VersionHistory() {
             <FaHistory size={16} />
           </Box>
           <Box>
-            <Heading size="md" fontFamily="'Sora', sans-serif">
+            <Heading size="md">
               Version History
             </Heading>
             <Text fontSize="xs" color={dim}>
@@ -327,9 +337,20 @@ export default function VersionHistory() {
           gap={3}
         >
           <FaHistory size={32} opacity={0.3} />
-          <Text color={dim} fontSize="sm">
-            No snapshots yet. Click &ldquo;Snapshot Now&rdquo; or edit data to auto-create one.
-          </Text>
+          {listError ? (
+            <>
+              <Text color="red.400" fontSize="sm">
+                {listError}
+              </Text>
+              <Button size="sm" variant="outline" onClick={fetchVersions}>
+                Retry
+              </Button>
+            </>
+          ) : (
+            <Text color={dim} fontSize="sm">
+              No snapshots yet. Click &ldquo;Snapshot Now&rdquo; or edit data to auto-create one.
+            </Text>
+          )}
         </Flex>
       ) : (
         <VStack spacing={2} align="stretch">
@@ -432,6 +453,8 @@ export default function VersionHistory() {
                 colorScheme="orange"
                 leftIcon={<FaUndo />}
                 onClick={confirmRestore}
+                isLoading={restoring}
+                loadingText="Restoring"
               >
                 Restore
               </Button>

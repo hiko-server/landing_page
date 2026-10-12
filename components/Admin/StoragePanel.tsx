@@ -259,7 +259,7 @@ export default function StoragePanel() {
     <Box>
       <Flex justify="space-between" align={{ base: 'stretch', md: 'center' }} mb={4} flexWrap="wrap" gap={3}>
         <Box>
-          <Heading size="md" fontFamily="'Sora', sans-serif">
+          <Heading size="md">
             Content Storage
           </Heading>
           <Text fontSize="sm" color={dim}>
@@ -540,7 +540,7 @@ export default function StoragePanel() {
                       Set <Code fontSize="xs">R2_ENDPOINT</Code>, <Code fontSize="xs">R2_BUCKET</Code>,{' '}
                       <Code fontSize="xs">R2_ACCESS_KEY_ID</Code> and{' '}
                       <Code fontSize="xs">R2_SECRET_ACCESS_KEY</Code> in <Code fontSize="xs">.env</Code>, then restart the dev server.
-                      Backups still work locally — they just won't replicate off-site until R2 is wired up.
+                      Backups still work locally — they just won&rsquo;t replicate off-site until R2 is wired up.
                     </AlertDescription>
                   </Box>
                 </Alert>
