@@ -1,10 +1,12 @@
 import React from 'react'
 import type { Project } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'
+import { useReferenceMonth } from '../../lib/clock'
 import { entryRange, field, list } from './fields'
 import { EntryStack, EntryText, EntryTitle, FeatureBullets, MetaLine, SheetEntry, SheetSection } from './primitives'
 
 const ProjectSection = ({ data, lang = 'en' }: { data: Project; lang?: CvLang }) => {
+  const month = useReferenceMonth()
   const items = list(data, 'projectExperience').filter(
     (p) => field(p, 'title') || field(p, 'description') || list(p, 'features').length,
   )
@@ -25,7 +27,7 @@ const ProjectSection = ({ data, lang = 'en' }: { data: Project; lang?: CvLang })
               }
               right={
                 <MetaLine
-                  date={entryRange(pro, lang, { futureEndAsPresent: true })}
+                  date={entryRange(pro, lang, { futureEndAsPresent: true, now: month })}
                   place={field(pro, 'projectLocation')}
                 />
               }

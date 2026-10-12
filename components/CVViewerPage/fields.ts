@@ -10,7 +10,7 @@
  */
 
 import { hiddenIndices, isRedacted, type CvLang } from '../../lib/cvVisibility'
-import { cleanList, cvLabels, formatCvDate, formatCvRange, formatGraduation, isFuture, isPresent } from '../../lib/cvFormat'
+import { cleanList, cvLabels, formatCvDate, formatCvRange, formatGraduation, isFuture, isPresent, type CvNow } from '../../lib/cvFormat'
 
 const isObject = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v)
 
@@ -54,21 +54,22 @@ export function labelled(label: string, value: string, lang: CvLang): string {
 /**
  * Date range of an entry. A hidden start or end is simply absent: a hidden
  * end date shows the start alone (never "Present"); a hidden start shows the
- * end alone.
+ * end alone. Pass `now` (the page's reference month, lib/clock.ts) whenever
+ * `futureEndAsPresent` is set, so server and client agree.
  */
 export function entryRange(
   node: unknown,
   lang: CvLang,
-  opts: { futureEndAsPresent?: boolean; startKey?: string; endKey?: string } = {},
+  opts: { futureEndAsPresent?: boolean; startKey?: string; endKey?: string; now?: CvNow } = {},
 ): string {
   const start = field(node, opts.startKey || 'startDate')
   const end = field(node, opts.endKey || 'endDate')
-  return formatCvRange(start, end, lang, { futureEndAsPresent: opts.futureEndAsPresent })
+  return formatCvRange(start, end, lang, { futureEndAsPresent: opts.futureEndAsPresent, now: opts.now })
 }
 
 /** Graduation line of a degree ("Expected Jun 2026"); '' when the end date is hidden. */
-export function graduation(node: unknown, lang: CvLang): string {
-  return formatGraduation(field(node, 'endDate'), lang)
+export function graduation(node: unknown, lang: CvLang, now?: CvNow): string {
+  return formatGraduation(field(node, 'endDate'), lang, now)
 }
 
 const EXPIRES = { en: 'Expires', zh: '有效期至' } as const
@@ -96,7 +97,7 @@ export type EntryStatus = 'current' | 'upcoming' | 'past' | 'unknown'
  * (or missing) end date is 'unknown' — it must never make an old role look
  * current.
  */
-export function entryStatus(node: unknown, now: Date = new Date()): EntryStatus {
+export function entryStatus(node: unknown, now: CvNow = new Date()): EntryStatus {
   const end = field(node, 'endDate')
   if (!end) return 'unknown'
   if (!isPresent(end) && !isFuture(end, now)) return 'past'

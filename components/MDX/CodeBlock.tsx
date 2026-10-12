@@ -99,7 +99,7 @@ export default function CodeBlock(props: React.HTMLAttributes<HTMLPreElement> & 
         border="1px solid"
         borderColor="page.border"
         bg="page.bg"
-        color={status === 'copied' ? 'var(--accent)' : 'page.fg-secondary'}
+        color={status === 'copied' ? 'accent.text' : 'page.fg-secondary'}
         opacity={status === 'idle' ? 0 : 1}
         _hover={{ color: 'page.fg', borderColor: 'page.border-strong' }}
         _focusVisible={{ opacity: 1, outline: '2px solid var(--accent)', outlineOffset: '1px' }}

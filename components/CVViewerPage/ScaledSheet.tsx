@@ -98,7 +98,7 @@ export default function ScaledSheet({
                   top="-20px"
                   fontFamily="mono"
                   fontSize="11px"
-                  color="#6366f1"
+                  color="accent.600"
                   bg="white"
                   px="6px"
                   borderRadius="3px"

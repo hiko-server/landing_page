@@ -52,7 +52,7 @@ const headingProps = {
     '& .heading-anchor:not(.heading-anchor-icon)::after': {
       content: '"#"',
       ml: '0.35em',
-      color: 'var(--accent)',
+      color: 'accent.text',
       fontFamily: MONO,
       fontWeight: 400,
       opacity: 0,
@@ -60,7 +60,7 @@ const headingProps = {
     },
     '& .heading-anchor:hover::after, & .heading-anchor:focus-visible::after': { opacity: 1 },
     '& .heading-anchor-icon': {
-      color: 'var(--accent)',
+      color: 'accent.text',
       fontFamily: MONO,
       fontWeight: 400,
       opacity: 0,
@@ -91,13 +91,13 @@ function MdxLink({ href, className, children, ...rest }: React.AnchorHTMLAttribu
   if (!safe) return <>{children}</>
   if (isExternal(safe)) {
     return (
-      <ChakraLink href={safe} isExternal color="var(--accent)" className="link-underline" {...rest}>
+      <ChakraLink href={safe} isExternal color="accent.text" className="link-underline" {...rest}>
         {children}
       </ChakraLink>
     )
   }
   return (
-    <ChakraLink as={NextLink} href={safe} color="var(--accent)" className="link-underline" {...rest}>
+    <ChakraLink as={NextLink} href={safe} color="accent.text" className="link-underline" {...rest}>
       {children}
     </ChakraLink>
   )

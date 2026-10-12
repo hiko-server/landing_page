@@ -10,6 +10,7 @@ import type { CvSectionLike } from '../lib/cvVisibility'
 import { deriveCurrentlyCoding, type CurrentlyCoding } from '../lib/currentlyCoding'
 import { heroIdentity, type HeroIdentity } from '../components/LandingPage/heroIdentity'
 import type { WorkIndexItem } from '../components/LandingPage/projectMatch'
+import { referenceMonth } from '../lib/clock'
 
 type Props = {
   home: HomeData | null
@@ -22,6 +23,10 @@ type Props = {
   work: WorkIndexItem[]
   /** schema.org Person facts from PUBLIC website-visible CV data only. */
   personFacts: PersonFacts
+  /** Server reference month ('YYYY-MM', lib/clock.ts) for "Present" / "Expected". */
+  clockMonth: string
+  /** Public home.socials for the persistent header / footer (null = none set). */
+  chromeSocials?: HomeData['socials'] | null
 }
 
 const LandingPage = ({ home, cv, identity, autoCoding, work, personFacts }: Props) => {
@@ -54,9 +59,11 @@ const CV_SECTION_FOR: Array<[SectionKey, string]> = [
 
 export const getServerSideProps: GetServerSideProps<Props> = async () => {
   let home: HomeData | null = null
+  let chromeSocials: HomeData['socials'] | null | undefined
   try {
     const { readPublicHome } = await import('../lib/home')
     home = readPublicHome()
+    chromeSocials = home?.socials ?? null
   } catch {
     /* best effort — render with what we have */
   }
@@ -67,13 +74,20 @@ export const getServerSideProps: GetServerSideProps<Props> = async () => {
   let autoCoding: CurrentlyCoding = { label: '', project: '', note: '' }
   let personFacts: PersonFacts = {}
   try {
-    const { readPublicCvSections } = await import('../lib/cvdata')
+    const { readCvData, readPublicCvSections } = await import('../lib/cvdata')
     // Server-only reads: the name and the "currently coding" fallback are
     // derived here so personalInformation / education never reach the page
     // payload — only the strings the hero actually prints do.
     const derivedFrom = readPublicCvSections('website', ['personalInformation', 'workExperience', 'project', 'education'], ['en', 'zh'])
     const pick = (list: CvSectionLike[], name: string) => list.find((s) => s.sessionName === name)
-    identity = heroIdentity(pick(derivedFrom.en, 'personalInformation'), pick(derivedFrom.zh, 'personalInformation'))
+    // Whether the STORED CV has Personal Info at all (a server-side boolean,
+    // nothing of the section is shipped): one switched off the website must
+    // not bring back the built-in name.
+    const stored = readCvData()
+    const storedHasPersonalInfo = [...stored.en, ...stored.zh].some((s) => s?.sessionName === 'personalInformation')
+    identity = heroIdentity(pick(derivedFrom.en, 'personalInformation'), pick(derivedFrom.zh, 'personalInformation'), {
+      storedHasPersonalInfo,
+    })
     autoCoding = deriveCurrentlyCoding(derivedFrom.en)
     // Structured data: schools and skills the visitor can already see on the
     // site — never contact details (personalInformation is not passed).
@@ -98,5 +112,18 @@ export const getServerSideProps: GetServerSideProps<Props> = async () => {
     }
   }
 
-  return { props: { home, cv: { en, zh: [] }, identity, autoCoding, work, personFacts } }
+  return {
+    props: {
+      home,
+      cv: { en, zh: [] },
+      identity,
+      autoCoding,
+      work,
+      personFacts,
+      clockMonth: referenceMonth(),
+      // Omitted when the home document could not be read: the chrome then
+      // loads the public view itself.
+      ...(chromeSocials !== undefined ? { chromeSocials } : {}),
+    },
+  }
 }

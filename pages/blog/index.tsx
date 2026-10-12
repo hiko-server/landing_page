@@ -146,7 +146,7 @@ export default function BlogIndex({ posts }: Props) {
                           fontWeight={500}
                           fontSize="17px"
                           transition="color 150ms var(--ease-out-quart)"
-                          _groupHover={{ color: 'var(--accent)' }}
+                          _groupHover={{ color: 'accent.text' }}
                           lang={p.lang === 'en' ? undefined : p.lang}
                           style={{ viewTransitionName: `vt-blog-${p.slug}` }}
                         >

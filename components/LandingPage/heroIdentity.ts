@@ -10,8 +10,15 @@
  *     "Li Yanpei"); 中文 name = lastName + firstName with no space for CJK.
  *   - A field the owner hid (isRedacted) is left out — never replaced by
  *     the literal fallback.
- *   - The literals are used only when the CV genuinely carries no name
- *     (section absent, or both name fields empty and not hidden).
+ *   - A Personal Info section that exists in the stored CV but is switched
+ *     off the website (so the public view has none) contributes nothing —
+ *     it is not treated as "no CV". getServerSideProps tells heroIdentity
+ *     whether the stored CV has the section at all (`storedHasPersonalInfo`).
+ *   - The literals are used only when the CV genuinely carries no name: the
+ *     stored CV has no Personal Info section at all, or the section's name
+ *     fields are empty and not hidden. The 中文 / nickname literals are never
+ *     used when the owner hid the EN name, so a hidden name cannot reappear
+ *     through another language.
  *   - The 中文 name is dropped when it would repeat the EN name.
  */
 
@@ -32,9 +39,18 @@ export type HeroIdentity = {
   nick: string
 }
 
+export type HeroIdentityOptions = {
+  /**
+   * Whether the STORED CV (before visibility pruning) has a Personal Info
+   * section in any language. Defaults to "a public section was passed", so
+   * callers without that knowledge keep the old behaviour.
+   */
+  storedHasPersonalInfo?: boolean
+}
+
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
 const isObject = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v)
-const CJK = /[㐀-鿿豈-﫿]/
+const CJK = /[㐀-鿿豈-﫿]/
 
 /** lastName + firstName, space-joined unless both halves are CJK. */
 export function joinName(last: string, first: string): string {
@@ -43,27 +59,36 @@ export function joinName(last: string, first: string): string {
   return CJK.test(last) && CJK.test(first) ? `${last}${first}` : `${last} ${first}`
 }
 
-function nameOf(pi: unknown, fallback: string): string {
-  if (!isObject(pi)) return fallback
+type NameRead = { name: string; hidden: boolean; blank: boolean }
+
+/** The section's name, whether any name part is hidden, and whether it is genuinely blank. */
+function readName(pi: Record<string, any>): NameRead {
   const lastHidden = isRedacted(pi, 'lastName')
   const firstHidden = isRedacted(pi, 'firstName')
-  const joined = joinName(lastHidden ? '' : str(pi.lastName), firstHidden ? '' : str(pi.firstName))
-  if (joined) return joined
-  return lastHidden || firstHidden ? '' : fallback
+  const name = joinName(lastHidden ? '' : str(pi.lastName), firstHidden ? '' : str(pi.firstName))
+  const hidden = lastHidden || firstHidden
+  return { name, hidden, blank: !name && !hidden }
 }
 
 /**
  * @param enPi public (pruned) EN personalInformation section, if any
  * @param zhPi public (pruned) ZH personalInformation section, if any
  */
-export function heroIdentity(enPi: unknown, zhPi: unknown): HeroIdentity {
-  const name = nameOf(enPi, FALLBACK_NAME)
-  const zh = nameOf(zhPi, FALLBACK_NAME_ZH)
-  let nick = FALLBACK_NICK
-  if (isObject(enPi)) nick = isRedacted(enPi, 'nickName') ? '' : str(enPi.nickName)
+export function heroIdentity(enPi: unknown, zhPi: unknown, opts: HeroIdentityOptions = {}): HeroIdentity {
+  const stored = opts.storedHasPersonalInfo ?? (isObject(enPi) || isObject(zhPi))
+  if (!stored) return { name: FALLBACK_NAME, nameZh: FALLBACK_NAME_ZH, nick: FALLBACK_NICK }
+
+  const en = isObject(enPi) ? readName(enPi) : null
+  const zh = isObject(zhPi) ? readName(zhPi) : null
+  // The owner hid (part of) the EN name: no literal may stand in for it anywhere.
+  const enHidden = !!en?.hidden
+
+  const name = en ? (en.blank ? FALLBACK_NAME : en.name) : ''
+  const nameZh = zh ? (zh.blank && !enHidden ? FALLBACK_NAME_ZH : zh.name) : ''
+  const nick = isObject(enPi) && !isRedacted(enPi, 'nickName') ? str(enPi.nickName) : ''
   return {
     name,
-    nameZh: zh && zh !== name ? zh : '',
+    nameZh: nameZh && nameZh !== name ? nameZh : '',
     nick: nick && nick !== name ? nick : '',
   }
 }
@@ -87,7 +112,7 @@ export function heroCopy(tagline: unknown): { role: string; rotating: string[] }
 
 /** Accessible name for the portrait: "Li Yanpei (Lucian)". */
 export function portraitAlt(id: HeroIdentity): string {
-  const base = id.name || id.nick
+  const base = id.name || id.nick || id.nameZh
   if (!base) return 'Portrait'
   return id.nick && id.name ? `${id.name} (${id.nick})` : base
 }

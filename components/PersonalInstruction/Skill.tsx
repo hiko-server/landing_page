@@ -123,7 +123,7 @@ const SkillSection = ({
                     fontFamily={monoFont}
                     fontSize="11px"
                     letterSpacing="0.08em"
-                    color="var(--accent)"
+                    color="accent.text"
                     textTransform="uppercase"
                     mb={2}
                   >

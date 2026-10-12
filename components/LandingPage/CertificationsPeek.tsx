@@ -82,7 +82,7 @@ export default function CertificationsPeek({ cvEn }: { cvEn?: CvSectionLike[] })
                       isExternal
                       rel="noopener noreferrer"
                       {...chip}
-                      _hover={{ textDecoration: 'none', borderColor: 'page.border-strong', color: 'var(--accent)' }}
+                      _hover={{ textDecoration: 'none', borderColor: 'page.border-strong', color: 'accent.text' }}
                       _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
                     >
                       {c.name}

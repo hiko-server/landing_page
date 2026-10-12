@@ -62,7 +62,7 @@ export default function CVSectionShell({
   const surface = useColorModeValue('rgba(255,255,255,0.6)', 'rgba(10,10,10,0.45)')
   const surfaceHover = useColorModeValue('rgba(255,255,255,0.85)', 'rgba(10,10,10,0.65)')
   const labelColor = useColorModeValue('gray.900', 'gray.50')
-  const labelExpanded = 'var(--accent)'
+  const labelExpanded = 'accent.text'
   const indexColor = useColorModeValue('gray.600', 'gray.500')
   const metaColor = useColorModeValue('gray.600', 'gray.500')
   const panelDivider = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.08)')

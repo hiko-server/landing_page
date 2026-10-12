@@ -11,6 +11,8 @@ import { getStaticMdxPage, listPosts, listWork } from '../lib/mdx'
 import { getPage } from '../lib/contentStore'
 import { currentRoles, currentlyCodingSignal, hasSignals, latestPost, latestWork, type NowSignals as Signals } from '../lib/nowSignals'
 import type { MDXRemoteSerializeResult } from 'next-mdx-remote'
+import type { HomeData } from '../lib/homeShape'
+import { referenceMonth } from '../lib/clock'
 
 /**
  * /now — what I'm focused on.
@@ -28,6 +30,10 @@ type Props = {
   updated: string | null
   signals: Signals
   host: string
+  /** Reference month ('YYYY-MM', lib/clock.ts) the signals were composed for. */
+  clockMonth: string
+  /** Public home.socials for the persistent header / footer (null = none set). */
+  chromeSocials?: HomeData['socials'] | null
 }
 
 const mono = 'var(--font-geist-mono), monospace'
@@ -87,11 +93,11 @@ export default function NowPage({ source, updated, signals, host }: Props) {
                     Nothing to report yet: the CV lists no current role and nothing has been published.
                   </Text>
                   <Text fontFamily={mono} fontSize="12px" mt={4} color="page.fg-secondary">
-                    <Link as={NextLink} href="/cv" color="var(--accent)">
+                    <Link as={NextLink} href="/cv" color="accent.text">
                       Read the CV
                     </Link>
                     {' · '}
-                    <Link as={NextLink} href="/blog" color="var(--accent)">
+                    <Link as={NextLink} href="/blog" color="accent.text">
                       Browse the blog
                     </Link>
                   </Text>
@@ -144,6 +150,7 @@ function dateOnly(raw: unknown): string | null {
 
 export const getStaticProps: GetStaticProps<Props> = async () => {
   const now = new Date()
+  const clockMonth = referenceMonth(now)
 
   // Owner-written body (only when it has real content).
   let source: MDXRemoteSerializeResult | null = null
@@ -167,9 +174,12 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
     cvEn = []
   }
   let manualCoding: Record<string, string> | null = null
+  let chromeSocials: HomeData['socials'] | null | undefined
   try {
     const { readPublicHome } = await import('../lib/home')
-    manualCoding = readPublicHome()?.hero?.currentlyCoding ?? null
+    const home = readPublicHome()
+    manualCoding = home?.hero?.currentlyCoding ?? null
+    chromeSocials = home?.socials ?? null
   } catch {
     manualCoding = null
   }
@@ -181,7 +191,7 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
     }
   }
 
-  const roles = currentRoles(cvEn, now)
+  const roles = currentRoles(cvEn, clockMonth)
   const signals: Signals = {
     roles,
     coding: currentlyCodingSignal(cvEn, manualCoding, roles),
@@ -196,6 +206,10 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
       updated,
       signals,
       host: process.env.NEXT_PUBLIC_SITE_HOST || 'lucian-dev.com',
+      clockMonth,
+      // Omitted when the home document could not be read: the chrome then
+      // loads the public view itself.
+      ...(chromeSocials !== undefined ? { chromeSocials } : {}),
     },
     revalidate: 60,
   }

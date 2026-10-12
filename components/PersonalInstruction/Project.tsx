@@ -3,6 +3,7 @@ import { Flex } from '@chakra-ui/react'
 import { Project } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'
 import { cvLabels, formatCvRange } from '../../lib/cvFormat'
+import { useReferenceMonth } from '../../lib/clock'
 import CVSectionShell, { CVRow, CVBullets } from './_CVSectionShell'
 
 const t = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
@@ -16,6 +17,7 @@ const ProjectSection = ({
   data: Project
   lang?: CvLang
 }) => {
+  const month = useReferenceMonth()
   const items = (data?.projectExperience || []).filter((p) => t(p.title) || t(p.description))
   if (!items.length) return null
   return (
@@ -32,7 +34,7 @@ const ProjectSection = ({
             isFirst={i === 0}
             title={t(pro.title) || t(pro.description)}
             subtitle={t(pro.title) ? t(pro.description) || undefined : undefined}
-            period={formatCvRange(pro.startDate, pro.endDate, lang, { futureEndAsPresent: true }) || undefined}
+            period={formatCvRange(pro.startDate, pro.endDate, lang, { futureEndAsPresent: true, now: month }) || undefined}
             location={t(pro.projectLocation) || undefined}
           >
             <CVBullets

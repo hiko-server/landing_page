@@ -147,7 +147,7 @@ function RoleRow({ role, compact, first }: { role: NowRole; compact: boolean; fi
         fontSize="10px"
         letterSpacing="0.14em"
         textTransform="uppercase"
-        color={role.status === 'current' ? 'var(--accent)' : 'page.fg-secondary'}
+        color={role.status === 'current' ? 'accent.text' : 'page.fg-secondary'}
         mb={compact ? 0.5 : [1, 1, 0]}
       >
         {tag}

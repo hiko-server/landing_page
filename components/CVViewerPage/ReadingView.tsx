@@ -1,6 +1,7 @@
 import React from 'react'
 import { Box, Flex, Link, Text } from '@chakra-ui/react'
 import type { CvLang } from '../../lib/cvVisibility'
+import { useReferenceMonth } from '../../lib/clock'
 import { cvLabels, displayUrl, formatCvDate, majorAddsInfo, safeHref } from '../../lib/cvFormat'
 import { composeName } from './PersonalInformation'
 import { bullets, certificateValidity, entries, entryRange, field, graduation, joinParts, labelled, list } from './fields'
@@ -20,6 +21,7 @@ const mono = 'var(--font-geist-mono), ui-monospace, monospace'
 type Section = { sessionName?: string; headerName?: string; [k: string]: any }
 
 export default function ReadingView({ sections, lang }: { sections: Section[]; lang: CvLang }) {
+  const month = useReferenceMonth()
   const visible = entries(sections).filter((s) => s.isVisible !== false)
   let n = 0
   return (
@@ -28,7 +30,7 @@ export default function ReadingView({ sections, lang }: { sections: Section[]; l
         if (section.sessionName === 'personalInformation') {
           return <IdentityCard key={`pi-${i}`} data={section} lang={lang} />
         }
-        const body = renderBody(section, lang)
+        const body = renderBody(section, lang, month)
         if (!body) return null
         n += 1
         const id = `cv-read-${section.sessionName || i}`
@@ -66,7 +68,7 @@ function Card({ id, n, title, children }: { id: string; n: number; title: string
         color="page.fg-secondary"
         mb={3}
       >
-        <Text as="span" aria-hidden color="var(--accent)">
+        <Text as="span" aria-hidden color="accent.text">
           [{String(n).padStart(2, '0')}]
         </Text>{' '}
         {title}
@@ -200,11 +202,11 @@ function MaybeLink({ url, children }: { url: string; children: React.ReactNode }
     <Link
       href={href}
       isExternal={/^https?:/i.test(href)}
-      color="var(--accent)"
+      color="accent.text"
       textDecoration="underline"
       textUnderlineOffset="3px"
       textDecorationColor="var(--accent-ring)"
-      _hover={{ textDecorationColor: 'var(--accent)' }}
+      _hover={{ textDecorationColor: 'accent.text' }}
       wordBreak="break-word"
     >
       {children}
@@ -275,7 +277,8 @@ function IdentityCard({ data, lang }: { data: Section; lang: CvLang }) {
 
 // ── Section bodies ────────────────────────────────────────────────────────
 
-function renderBody(section: Section, lang: CvLang): React.ReactNode {
+/** `month` is the page's reference month (lib/clock.ts) for "Expected" / "Present". */
+function renderBody(section: Section, lang: CvLang, month: string): React.ReactNode {
   const L = cvLabels(lang)
   const dot = ' · '
   switch (section.sessionName) {
@@ -291,7 +294,7 @@ function renderBody(section: Section, lang: CvLang): React.ReactNode {
             const major = majorAddsInfo(degree, field(e, 'major')) ? field(e, 'major') : ''
             const title = joinParts([degree, major], lang === 'zh' ? ' · ' : ', ')
             const school = joinParts([field(e, 'schoolName'), field(e, 'schoolLocation')], ', ')
-            const when = joinParts([formatCvDate(field(e, 'startDate'), lang), graduation(e, lang)], ' – ')
+            const when = joinParts([formatCvDate(field(e, 'startDate'), lang), graduation(e, lang, month)], ' – ')
             const gpa = labelled(L.gpa, field(e, 'gpa'), lang)
             return (
               <Entry key={i} title={title || school} subtitle={title ? school : ''} meta={when}>
@@ -339,7 +342,7 @@ function renderBody(section: Section, lang: CvLang): React.ReactNode {
             <Entry
               key={i}
               title={field(p, 'title')}
-              meta={joinParts([entryRange(p, lang, { futureEndAsPresent: true }), field(p, 'projectLocation')], dot)}
+              meta={joinParts([entryRange(p, lang, { futureEndAsPresent: true, now: month }), field(p, 'projectLocation')], dot)}
             >
               <Body>{field(p, 'description')}</Body>
               <Bullets items={features(p)} />

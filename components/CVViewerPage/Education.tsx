@@ -2,11 +2,13 @@ import React from 'react'
 import type { Education } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'
 import { cvLabels, majorAddsInfo } from '../../lib/cvFormat'
+import { useReferenceMonth } from '../../lib/clock'
 import { field, graduation, joinParts, labelled, list } from './fields'
 import { EntryStack, EntryText, MetaLine, SheetEntry, SheetSection } from './primitives'
 
 const EducationSection = ({ data, lang = 'en' }: { data: Education; lang?: CvLang }) => {
   const L = cvLabels(lang)
+  const month = useReferenceMonth()
   const items = list(data, 'educationExperience').filter(
     (e) => field(e, 'schoolName') || field(e, 'degree') || field(e, 'major') || field(e, 'gpa'),
   )
@@ -24,7 +26,7 @@ const EducationSection = ({ data, lang = 'en' }: { data: Education; lang?: CvLan
             <SheetEntry
               key={k}
               left={<EntryText>{title || school}</EntryText>}
-              right={<MetaLine date={graduation(edu, lang)} place={title ? school : ''} />}
+              right={<MetaLine date={graduation(edu, lang, month)} place={title ? school : ''} />}
             >
               {gpa ? <EntryText italic>• {gpa}</EntryText> : null}
             </SheetEntry>

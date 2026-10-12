@@ -1,8 +1,9 @@
-import React from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Box } from '@chakra-ui/react'
 import Header from '../Header/Header'
 import Footer from '../Footer/Footer'
 import { ChromeContext } from './ChromeContext'
+import { resolveSocialLinks } from './chrome'
 
 /**
  * Page chrome: skip link + sticky <Header> + <main id="main"> + <Footer>.
@@ -16,8 +17,47 @@ import { ChromeContext } from './ChromeContext'
  * The sticky element is the header's own wrapper (a sticky child inside a
  * wrapper of the same height can never move), and it sits above page content
  * in the stacking order.
+ *
+ * Profile links (header drawer, footer) come from the public home.socials:
+ * `socials` is what the current page shipped (`pageProps.chromeSocials`;
+ * null = the home document has no socials). When the first page rendered
+ * did not ship it, the public /api/home view is read once after mount. The
+ * last known value is kept across navigations to pages that do not ship it.
  */
-export default function SiteChrome({ children }: { children: React.ReactNode }) {
+
+/** undefined = this page did not ship the value; null = the home document has none. */
+type SocialsInput = Record<string, unknown> | null | undefined
+
+export default function SiteChrome({ children, socials }: { children: React.ReactNode; socials?: SocialsInput }) {
+  const [known, setKnown] = useState<SocialsInput>(socials)
+  const fetchOnMount = useRef(socials === undefined)
+
+  useEffect(() => {
+    if (socials !== undefined) setKnown(socials)
+  }, [socials])
+
+  useEffect(() => {
+    if (!fetchOnMount.current) return
+    let alive = true
+    fetch('/api/home')
+      .then((r) => (r.ok ? (r.json() as Promise<{ socials?: unknown } | null>) : Promise.reject(new Error(String(r.status)))))
+      .then((home) => {
+        if (!alive) return
+        const value = home && typeof home.socials === 'object' && !Array.isArray(home.socials) ? (home.socials as Record<string, unknown>) : null
+        // A page that shipped its own value in the meantime wins.
+        setKnown((prev) => (prev === undefined ? value : prev))
+      })
+      .catch(() => {
+        // Best effort: the built-in links stay.
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  const effective = socials !== undefined ? socials : known
+  const links = useMemo(() => resolveSocialLinks(effective), [effective])
+
   return (
     <ChromeContext.Provider value>
       <Box display="flex" flexDirection="column" minHeight="100vh" w="full">
@@ -25,7 +65,7 @@ export default function SiteChrome({ children }: { children: React.ReactNode }) 
           Skip to content
         </a>
         <Box position="sticky" top={0} zIndex={40} className="no-print">
-          <Header />
+          <Header socials={links} />
         </Box>
         <Box
           as="main"
@@ -40,7 +80,7 @@ export default function SiteChrome({ children }: { children: React.ReactNode }) 
           {children}
         </Box>
         <Box position="relative" zIndex={1} className="no-print">
-          <Footer />
+          <Footer socials={links} />
         </Box>
       </Box>
     </ChromeContext.Provider>
