@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useId, useRef, useState } from 'react'
 import {
   Badge,
   Box,
@@ -15,13 +15,15 @@ import {
   Text,
   Textarea,
   Tooltip,
+  VisuallyHidden,
+  usePrefersReducedMotion,
 } from '@chakra-ui/react'
 import { AddIcon, ChevronDownIcon, ChevronRightIcon, CopyIcon, DeleteIcon } from '@chakra-ui/icons'
 import { FaEllipsisH, FaGripVertical } from 'react-icons/fa'
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { hiddenIndices, isFieldHidden, type CvPath } from '../../../lib/cvVisibility'
+import { countHidden, hiddenIndices, isFieldHidden, type CvPath } from '../../../lib/cvVisibility'
 import { cvLabels } from '../../../lib/cvFormat'
 import { defaultSpan, isFieldHideable, type FieldDef, type ListDef, type SectionDef } from '../../../lib/cvSections'
 import {
@@ -37,21 +39,26 @@ import {
   monoFont,
   useStudioTokens,
 } from './fields'
-import { useStudio } from './StudioContext'
-import { mappingFor, type ListOp } from './docOps'
+import { cvPathAttr, pathStartsWith, useStudio } from './StudioContext'
+import { entryKey, type ListOp } from './docOps'
+
+const langName = (l: 'en' | 'zh') => (l === 'en' ? 'EN' : '中文')
 
 // ── Single field ──────────────────────────────────────────────────────────
 
 function FieldRenderer({ def, node, nodePath }: { def: FieldDef; node: any; nodePath: CvPath }) {
   const api = useStudio()
+  const fieldId = useId()
   const { inputBg } = useStudioTokens()
   const hidden = isFieldHidden(node, def.key)
   const value = node?.[def.key]
   const path = [...nodePath, def.key]
+  const cvPath = cvPathAttr(api.lang, path)
   const set = (v: any) => api.setValue(path, v)
   const gridColumn = defaultSpan(def) === 2 ? '1 / -1' : undefined
   const str = typeof value === 'string' ? value : ''
   const invalid = !!def.required && !str.trim() && def.kind !== 'bullets' && def.kind !== 'tags'
+  const singular = def.label.replace(/s$/, '')
 
   let control: React.ReactNode
   switch (def.kind) {
@@ -66,6 +73,7 @@ function FieldRenderer({ def, node, nodePath }: { def: FieldDef; node: any; node
           onChange={set}
           allowPresent={def.kind === 'endMonth'}
           presentLabel={cvLabels(api.lang).present}
+          presentId={`${fieldId}-present`}
         />
       )
       break
@@ -76,14 +84,17 @@ function FieldRenderer({ def, node, nodePath }: { def: FieldDef; node: any; node
       const items: string[] = Array.isArray(value) ? value.map((x) => (typeof x === 'string' ? x : String(x ?? ''))) : []
       control = (
         <BulletList
+          idBase={fieldId}
+          itemLabel={singular}
           items={items}
           hiddenIndexes={hiddenIndices(node, def.key)}
           placeholder={def.placeholder}
-          addLabel={`Add ${def.label.toLowerCase().replace(/s$/, '')}`}
+          addLabel={`Add ${singular.toLowerCase()}`}
+          cvPathPrefix={cvPath}
           onTextChange={(i, v) => api.setValue([...path, i], v)}
-          onOp={(op) => api.list(path, op)}
+          onOp={(op) => api.list(path, op, op.type === 'remove' ? `Deleted ${singular.toLowerCase()}` : undefined)}
           onPasteLines={(i, lines) => api.insertMany(path, i, lines, !(items[i] || '').trim())}
-          onToggleHidden={(i) => api.toggleItem(nodePath, def.key, i)}
+          onToggleHidden={(i) => api.toggleItem(nodePath, def.key, i, (items[i] || '').trim() || `${singular} ${i + 1}`)}
         />
       )
       break
@@ -95,9 +106,10 @@ function FieldRenderer({ def, node, nodePath }: { def: FieldDef; node: any; node
           tags={tags}
           hiddenIndexes={hiddenIndices(node, def.key)}
           placeholder={def.placeholder}
+          cvPathPrefix={cvPath}
           onOp={(op) => api.list(path, op)}
           onPasteTags={(vals) => api.insertMany(path, tags.length, vals)}
-          onToggleHidden={(i) => api.toggleItem(nodePath, def.key, i)}
+          onToggleHidden={(i) => api.toggleItem(nodePath, def.key, i, tags[i] || `${singular} ${i + 1}`)}
         />
       )
       break
@@ -118,14 +130,17 @@ function FieldRenderer({ def, node, nodePath }: { def: FieldDef; node: any; node
 
   return (
     <FieldShell
+      fieldId={fieldId}
       label={def.label}
       required={def.required}
       hidden={hidden}
       hideable={isFieldHideable(def)}
-      onToggleHidden={() => api.toggleField(nodePath, def.key)}
+      onToggleHidden={() => api.toggleField(nodePath, def.key, def.label)}
       help={def.help}
       invalid={invalid}
       gridColumn={gridColumn}
+      group={def.kind === 'bullets'}
+      cvPath={cvPath}
     >
       {control}
     </FieldShell>
@@ -134,7 +149,7 @@ function FieldRenderer({ def, node, nodePath }: { def: FieldDef; node: any; node
 
 function FieldGrid({ fields, node, nodePath }: { fields: FieldDef[]; node: any; nodePath: CvPath }) {
   return (
-    <Box display="grid" gridTemplateColumns={{ base: '1fr', md: '1fr 1fr' }} columnGap={3} rowGap={3}>
+    <Box display="grid" gridTemplateColumns={{ base: 'minmax(0, 1fr)', md: 'repeat(2, minmax(0, 1fr))' }} columnGap={3} rowGap={3}>
       {fields.map((f) => (
         <FieldRenderer key={f.key} def={f} node={node} nodePath={nodePath} />
       ))}
@@ -168,27 +183,30 @@ function EntryCard({
   depth: number
 }) {
   const api = useStudio()
+  const panelId = useId()
+  const reduceMotion = usePrefersReducedMotion()
   const { border, borderStrong, dim, faint, surface, hiddenStripe } = useStudioTokens()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
   const hidden = item?.isVisible === false
   const title = (def.titleOf(item) || '').trim()
   const subtitle = (def.subtitleOf?.(item) || '').trim()
-  const hiddenInside =
-    (Array.isArray(item?.hiddenFields) ? item.hiddenFields.length : 0) +
-    Object.values(item?.hiddenItems || {}).reduce((n: number, l: any) => n + (Array.isArray(l) ? l.length : 0), 0)
+  const name = title || `${def.itemNoun} ${index + 1}`
+  // Everything hidden inside: fields, bullets and nested entries at any depth.
+  const hiddenInside = countHidden(item)
 
   const actions = (
     <HStack spacing={0.5} flexShrink={0}>
-      <VisibilityToggle hidden={hidden} onToggle={() => api.toggleEntry(path)} label={title || `${def.itemNoun} ${index + 1}`} />
+      <VisibilityToggle hidden={hidden} onToggle={() => api.toggleEntry(path, name)} label={name} />
       <Menu isLazy placement="bottom-end">
         <MenuButton
           as={IconButton}
-          aria-label={`More actions for ${title || def.itemNoun}`}
+          aria-label={`More actions for ${name}`}
           icon={<FaEllipsisH size={11} />}
           size="xs"
           variant="ghost"
           color={faint}
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
+          onKeyDown={(e: React.KeyboardEvent) => e.stopPropagation()}
         />
         <MenuList fontSize="13px" onClick={(e) => e.stopPropagation()}>
           <MenuItem icon={<CopyIcon />} onClick={() => onOp({ type: 'duplicate', index }, `Duplicated ${def.itemNoun}`)}>
@@ -200,11 +218,7 @@ function EntryCard({
           <MenuItem isDisabled={index === count - 1} onClick={() => onOp({ type: 'move', from: index, to: index + 1 })}>
             Move down
           </MenuItem>
-          <MenuItem
-            icon={<DeleteIcon />}
-            color="red.400"
-            onClick={() => onOp({ type: 'remove', index }, `Deleted ${def.itemNoun}`)}
-          >
+          <MenuItem icon={<DeleteIcon />} color="red.400" onClick={() => onOp({ type: 'remove', index }, `Deleted ${def.itemNoun}`)}>
             Delete
           </MenuItem>
         </MenuList>
@@ -216,10 +230,11 @@ function EntryCard({
     <Box
       {...attributes}
       {...listeners}
-      aria-label={`Reorder ${title || def.itemNoun}`}
+      aria-label={`Reorder ${name}`}
       color={faint}
       cursor="grab"
       _active={{ cursor: 'grabbing' }}
+      _focusVisible={{ outline: '2px solid var(--accent)', borderRadius: 'sm' }}
       p={1}
       onClick={(e) => e.stopPropagation()}
     >
@@ -243,11 +258,19 @@ function EntryCard({
         bg={hidden ? undefined : surface}
         backgroundImage={hidden ? hiddenStripe : undefined}
         p={2}
+        data-cvpath={cvPathAttr(api.lang, path)}
       >
         <Flex gap={1} align="flex-start">
           <Box pt={1}>{handle}</Box>
-          <Box flex={1} minW={0} opacity={hidden ? 0.55 : 1}>
-            <FieldGrid fields={def.fields} node={item} nodePath={path} />
+          <Box flex={1} minW={0}>
+            {hidden ? (
+              <Box mb={1.5}>
+                <HiddenChip label={`${def.itemNoun} hidden`} />
+              </Box>
+            ) : null}
+            <Box opacity={hidden ? 0.55 : 1} _focusWithin={{ opacity: 1 }}>
+              <FieldGrid fields={def.fields} node={item} nodePath={path} />
+            </Box>
           </Box>
           {actions}
         </Flex>
@@ -266,60 +289,72 @@ function EntryCard({
       borderRadius="lg"
       bg={hidden ? undefined : surface}
       backgroundImage={hidden ? hiddenStripe : undefined}
-      boxShadow={isDragging ? 'lg' : expanded ? 'sm' : undefined}
-      transition="border-color 160ms, box-shadow 160ms"
+      boxShadow={isDragging ? 'lg' : undefined}
+      transition="border-color 160ms var(--ease-out-quart)"
       _hover={{ borderColor: borderStrong }}
+      data-cvpath={cvPathAttr(api.lang, path)}
     >
-      <Flex
-        align="center"
-        gap={2}
-        px={2}
-        py={2}
-        cursor="pointer"
-        onClick={onToggleExpanded}
-        role="button"
-        tabIndex={0}
-        aria-expanded={expanded}
-        onKeyDown={(e) => {
-          if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
-            e.preventDefault()
-            onToggleExpanded()
-          }
-        }}
-        _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '-2px', borderRadius: 'lg' }}
-      >
+      <Flex align="center" gap={2} px={2} py={2} cursor="pointer" onClick={onToggleExpanded}>
         {handle}
-        <Box color={faint} flexShrink={0}>
-          {expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
-        </Box>
-        <Box flex={1} minW={0} opacity={hidden ? 0.6 : 1}>
-          <HStack spacing={2} minW={0}>
-            <Text fontSize="13px" fontWeight={600} noOfLines={1} textDecoration={hidden ? 'line-through' : undefined}>
-              {title || <Text as="span" color={faint} fontStyle="italic">Untitled {def.itemNoun}</Text>}
-            </Text>
-            {hidden ? <HiddenChip /> : null}
-            {!hidden && hiddenInside > 0 ? (
-              <Tooltip label={`${hiddenInside} hidden field(s) / item(s) inside`} hasArrow>
-                <Badge variant="subtle" colorScheme="orange" fontFamily={monoFont} fontSize="9px">
+        <Flex
+          as="button"
+          type="button"
+          flex={1}
+          minW={0}
+          align="center"
+          gap={2}
+          textAlign="left"
+          aria-expanded={expanded}
+          aria-controls={panelId}
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggleExpanded()
+          }}
+          borderRadius="md"
+          _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
+        >
+          <Box as="span" color={faint} flexShrink={0}>
+            {expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+          </Box>
+          <Box as="span" display="block" flex={1} minW={0} opacity={hidden ? 0.6 : 1}>
+            <HStack as="span" spacing={2} minW={0}>
+              <Text as="span" fontSize="13px" fontWeight={600} noOfLines={1} textDecoration={hidden ? 'line-through' : undefined}>
+                {title || (
+                  <Text as="span" color={faint} fontStyle="italic">
+                    Untitled {def.itemNoun}
+                  </Text>
+                )}
+              </Text>
+              {hidden ? <HiddenChip /> : null}
+              {!hidden && hiddenInside > 0 ? (
+                <Badge variant="subtle" colorScheme="orange" fontFamily={monoFont} fontSize="9px" flexShrink={0}>
                   {hiddenInside} hidden
+                  <VisuallyHidden> inside</VisuallyHidden>
                 </Badge>
-              </Tooltip>
+              ) : null}
+            </HStack>
+            {subtitle ? (
+              <Text as="span" display="block" fontSize="11px" color={dim} noOfLines={1} mt={0.5}>
+                {subtitle}
+              </Text>
             ) : null}
-          </HStack>
-          {subtitle ? (
-            <Text fontSize="11px" color={dim} noOfLines={1} mt={0.5}>
-              {subtitle}
-            </Text>
-          ) : null}
-        </Box>
+          </Box>
+        </Flex>
         <Text fontFamily={monoFont} fontSize="10px" color={faint} flexShrink={0} display={{ base: 'none', sm: 'block' }}>
           {String(index + 1).padStart(2, '0')}
         </Text>
         {actions}
       </Flex>
-      <Collapse in={expanded} animateOpacity unmountOnExit>
-        <Box px={4} pb={4} pt={2} borderTop="1px solid" borderColor={border} opacity={hidden ? 0.6 : 1}>
-          <FieldGrid fields={def.fields} node={item} nodePath={path} />
+      <Collapse
+        in={expanded}
+        animateOpacity
+        unmountOnExit
+        transition={reduceMotion ? { enter: { duration: 0 }, exit: { duration: 0 } } : undefined}
+      >
+        <Box id={panelId} px={{ base: 3, md: 4 }} pb={4} pt={2} borderTop="1px solid" borderColor={border}>
+          <Box opacity={hidden ? 0.6 : 1} _focusWithin={{ opacity: 1 }}>
+            <FieldGrid fields={def.fields} node={item} nodePath={path} />
+          </Box>
           {(def.lists || []).map((nested) => (
             <Box key={nested.key} mt={4}>
               <EntryList def={nested} parent={item} parentPath={path} depth={depth + 1} />
@@ -335,52 +370,70 @@ function EntryCard({
 
 export function EntryList({ def, parent, parentPath, depth = 0 }: { def: ListDef; parent: any; parentPath: CvPath; depth?: number }) {
   const api = useStudio()
-  const { dim, faint } = useStudioTokens()
+  const { dim, faint, hiddenFg } = useStudioTokens()
   const items: any[] = Array.isArray(parent?.[def.key]) ? parent[def.key] : []
   const listPath = [...parentPath, def.key]
   const listHidden = isFieldHidden(parent, def.key)
-  const [expanded, setExpanded] = useState<Set<number>>(() => (items.length <= 2 ? new Set(items.map((_, i) => i)) : new Set()))
+  // Stable in-memory keys (see docOps ENTRY_KEY): expanded state and drag
+  // ids follow the entry, not its position.
+  const keys = items.map((it, i) => entryKey(it) ?? `${listPath.join('.')}#${i}`)
+  const keySig = keys.join('|')
+  const [expanded, setExpanded] = useState<Set<string>>(() => (items.length <= 2 ? new Set(keys) : new Set()))
+  const pendingExpand = useRef<number | null>(null)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
-  const ids = items.map((_, i) => `${listPath.join('.')}#${i}`)
 
-  /** Structural edit + keep the expanded/collapsed state attached to the same entries. */
+  // Open an entry that was just added / duplicated once it has its key.
+  useEffect(() => {
+    const at = pendingExpand.current
+    if (at === null) return
+    pendingExpand.current = null
+    const k = keySig.split('|')[at]
+    if (k) setExpanded((prev) => new Set(prev).add(k))
+  }, [keySig])
+
+  // Jump-to from the Hidden items panel: open the entry on the target path.
+  const focus = api.focus
+  useEffect(() => {
+    if (!focus || focus.lang !== api.lang) return
+    if (!pathStartsWith(focus.path, listPath) || focus.path.length <= listPath.length) return
+    const idx = focus.path[listPath.length]
+    const k = typeof idx === 'number' ? keySig.split('|')[idx] : undefined
+    if (k) setExpanded((prev) => (prev.has(k) ? prev : new Set(prev).add(k)))
+    // listPath is derived from props on every render; the jump request is the trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus, api.lang])
+
   const runOp = (op: ListOp, label?: string) => {
+    if (op.type === 'insert') pendingExpand.current = op.index
+    if (op.type === 'duplicate' && expanded.has(keys[op.index])) pendingExpand.current = op.index + 1
     api.list(listPath, op, label)
-    const map = mappingFor(op, items.length)
-    setExpanded((prev) => {
-      const next = new Set<number>()
-      prev.forEach((i) => {
-        const j = i < map.length ? map[i] : -1
-        if (j >= 0) next.add(j)
-      })
-      if (op.type === 'insert') next.add(op.index)
-      if (op.type === 'duplicate' && prev.has(op.index)) next.add(op.index + 1)
-      return next
-    })
   }
 
   const onDragEnd = (e: DragEndEvent) => {
     if (!e.over || e.active.id === e.over.id) return
-    const from = ids.indexOf(String(e.active.id))
-    const to = ids.indexOf(String(e.over.id))
+    const from = keys.indexOf(String(e.active.id))
+    const to = keys.indexOf(String(e.over.id))
     if (from >= 0 && to >= 0) runOp({ type: 'move', from, to })
   }
 
-  const allOpen = items.length > 0 && expanded.size >= items.length
+  const allOpen = items.length > 0 && keys.every((k) => expanded.has(k))
+  const twinLen = api.linked ? api.twinLength(listPath) : null
+  const misaligned = twinLen !== null && twinLen !== items.length
+  const other = langName(api.lang === 'en' ? 'zh' : 'en')
 
   return (
     <Box>
-      <Flex align="center" justify="space-between" mb={2} gap={2}>
-        <HStack spacing={2}>
+      <Flex align="center" justify="space-between" mb={2} gap={2} data-cvpath={cvPathAttr(api.lang, listPath)}>
+        <HStack spacing={2} minW={0} flexWrap="wrap">
           <Text
             fontFamily={monoFont}
             fontSize={depth ? '10px' : '11px'}
             letterSpacing="0.1em"
             textTransform="uppercase"
-            color={listHidden ? 'orange.400' : dim}
+            color={listHidden ? hiddenFg : dim}
             textDecoration={listHidden ? 'line-through' : undefined}
           >
             {def.label}
@@ -389,8 +442,18 @@ export function EntryList({ def, parent, parentPath, depth = 0 }: { def: ListDef
             {items.length}
           </Text>
           {listHidden ? <HiddenChip /> : null}
+          {misaligned ? (
+            <Tooltip
+              label={`${other} has ${twinLen} here, so linked add / delete / reorder in this list apply to ${langName(api.lang)} only.`}
+              hasArrow
+            >
+              <Badge variant="outline" colorScheme="orange" fontFamily={monoFont} fontSize="9px" tabIndex={0}>
+                {other} {twinLen}
+              </Badge>
+            </Tooltip>
+          ) : null}
         </HStack>
-        <HStack spacing={1}>
+        <HStack spacing={1} flexShrink={0}>
           {!def.compact && items.length > 1 ? (
             <Button
               size="xs"
@@ -398,37 +461,37 @@ export function EntryList({ def, parent, parentPath, depth = 0 }: { def: ListDef
               fontFamily={monoFont}
               fontSize="10px"
               color={faint}
-              onClick={() => setExpanded(allOpen ? new Set() : new Set(items.map((_, i) => i)))}
+              onClick={() => setExpanded(allOpen ? new Set() : new Set(keys))}
             >
               {allOpen ? 'collapse all' : 'expand all'}
             </Button>
           ) : null}
           {def.hideable ? (
-            <VisibilityToggle hidden={listHidden} onToggle={() => api.toggleField(parentPath, def.key)} label={def.label} />
+            <VisibilityToggle hidden={listHidden} onToggle={() => api.toggleField(parentPath, def.key, def.label)} label={def.label} />
           ) : null}
         </HStack>
       </Flex>
 
-      <Box opacity={listHidden ? 0.5 : 1} transition="opacity 180ms">
+      <Box opacity={listHidden ? 0.5 : 1} _focusWithin={{ opacity: 1 }} transition="opacity 180ms var(--ease-out-quart)">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-          <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+          <SortableContext items={keys} strategy={verticalListSortingStrategy}>
             <Flex direction="column" gap={def.compact ? 1.5 : 2}>
               {items.map((item, i) => (
                 <EntryCard
-                  key={ids[i]}
-                  id={ids[i]}
+                  key={keys[i]}
+                  id={keys[i]}
                   def={def}
                   item={item}
                   index={i}
                   count={items.length}
                   path={[...listPath, i]}
                   onOp={runOp}
-                  expanded={expanded.has(i)}
+                  expanded={expanded.has(keys[i])}
                   onToggleExpanded={() =>
                     setExpanded((prev) => {
                       const next = new Set(prev)
-                      if (next.has(i)) next.delete(i)
-                      else next.add(i)
+                      if (next.has(keys[i])) next.delete(keys[i])
+                      else next.add(keys[i])
                       return next
                     })
                   }
@@ -463,13 +526,14 @@ export function EntryList({ def, parent, parentPath, depth = 0 }: { def: ListDef
 
 export function SectionEditor({ def, section, sectionIdx }: { def?: SectionDef; section: any; sectionIdx: number }) {
   const api = useStudio()
+  const headingId = useId()
   const { inputBg } = useStudioTokens()
 
   if (!def) return <UnknownSectionEditor section={section} sectionIdx={sectionIdx} />
 
   return (
     <Flex direction="column" gap={6}>
-      <FieldShell label="Section heading" hideable={false}>
+      <FieldShell fieldId={headingId} label="Section heading" hideable={false}>
         <Input
           {...inputProps}
           bg={inputBg}
@@ -488,18 +552,22 @@ export function SectionEditor({ def, section, sectionIdx }: { def?: SectionDef; 
 
 function UnknownSectionEditor({ section, sectionIdx }: { section: any; sectionIdx: number }) {
   const api = useStudio()
+  const textId = useId()
   const [text, setText] = useState(() => JSON.stringify(section, null, 2))
   const [error, setError] = useState('')
   const { inputBg } = useStudioTokens()
   return (
     <Box>
-      <Text fontSize="13px" mb={2}>
+      <Text fontSize="13px" mb={2} id={`${textId}-desc`}>
         <Text as="span" fontFamily={monoFont} color="orange.400">
           {section.sessionName}
         </Text>{' '}
         has no visual editor — edit it as JSON. It is kept as-is and is not rendered on the CV.
       </Text>
       <Textarea
+        id={textId}
+        aria-describedby={`${textId}-desc`}
+        aria-label={`${section.sessionName} section JSON`}
         value={text}
         onChange={(e) => {
           setText(e.target.value)
@@ -528,7 +596,7 @@ function UnknownSectionEditor({ section, sectionIdx }: { section: any; sectionId
           Apply JSON
         </Button>
         {error ? (
-          <Text fontSize="12px" color="red.400">
+          <Text fontSize="12px" color="red.400" role="alert">
             {error}
           </Text>
         ) : null}

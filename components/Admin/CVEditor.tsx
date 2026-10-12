@@ -1,5 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogOverlay,
   Box,
   Button,
   Flex,
@@ -12,9 +18,13 @@ import {
   Tabs,
   Text,
   Textarea,
-  useColorModeValue,
+  VisuallyHidden,
+  useDisclosure,
   useToast,
 } from '@chakra-ui/react'
+import { useAdminDirty, useDirtyRegistration } from './AdminDirtyContext'
+import { LOGIN_HREF, readAdminCv, saveCv } from './cvStudio/cvApi'
+import { monoFont, useStudioTokens } from './cvStudio/fields'
 
 /**
  * Raw JSON editor for the CV ({ en: Section[], zh: Section[] }).
@@ -23,9 +33,11 @@ import {
  * only two forgiving fixes (BOM, trailing commas) — text inside strings is
  * never rewritten, so curly quotes in prose survive a save.
  * Version history / restore lives in the dashboard's Versions tab.
+ *
+ * Loads the FULL document from the admin-only endpoint (a public / pruned
+ * copy is refused, never shown) and saves conditionally on the loaded
+ * version, so a newer save from the Studio is never overwritten silently.
  */
-
-const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
 type ParseResult = { ok: true; value: any[] } | { ok: false; error: string }
 
@@ -59,35 +71,48 @@ function parseSections(text: string): ParseResult {
 
 const pretty = (v: unknown) => JSON.stringify(Array.isArray(v) ? v : [], null, 2)
 
+type LoadState = 'loading' | 'ready' | 'error' | 'unauthorized'
+
 export default function CVEditor() {
   const toast = useToast()
+  const { confirmDiscard } = useAdminDirty()
   const [enText, setEnText] = useState('')
   const [zhText, setZhText] = useState('')
   const [baseline, setBaseline] = useState({ en: '', zh: '' })
-  const [loading, setLoading] = useState(true)
+  const [loadState, setLoadState] = useState<LoadState>('loading')
+  const [loadError, setLoadError] = useState('')
   const [saving, setSaving] = useState(false)
+  const [sessionExpired, setSessionExpired] = useState(false)
+  // ETag of the version the text is based on; sent as If-Match on save.
+  const etagRef = useRef<string | null>(null)
+  const conflict = useDisclosure()
+  const cancelRef = useRef<HTMLButtonElement | null>(null)
   const fileRef = useRef<HTMLInputElement | null>(null)
-  const border = useColorModeValue('rgba(0,0,0,0.10)', 'rgba(255,255,255,0.12)')
-  const dim = useColorModeValue('gray.600', 'gray.400')
-  const editorBg = useColorModeValue('white', 'rgba(255,255,255,0.03)')
+  const tabLeaves = useRef(false)
+  const { border, dim, inputBg: editorBg } = useStudioTokens()
 
   const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res = await fetch('/api/cvdata', { cache: 'no-store' })
-      if (!res.ok) throw new Error(`Server responded ${res.status}`)
-      const data = await res.json()
-      const en = pretty(data.en)
-      const zh = pretty(data.zh)
-      setEnText(en)
-      setZhText(zh)
-      setBaseline({ en, zh })
-    } catch (e: any) {
-      toast({ status: 'error', title: 'Failed to load CV data', description: e?.message })
-    } finally {
-      setLoading(false)
+    setLoadState('loading')
+    setLoadError('')
+    const r = await readAdminCv()
+    if (r.kind === 'unauthorized') {
+      setLoadState('unauthorized')
+      return
     }
-  }, [toast])
+    if (r.kind === 'error') {
+      setLoadError(r.error)
+      setLoadState('error')
+      return
+    }
+    const en = pretty(r.doc.en)
+    const zh = pretty(r.doc.zh)
+    etagRef.current = r.etag
+    setEnText(en)
+    setZhText(zh)
+    setBaseline({ en, zh })
+    setSessionExpired(false)
+    setLoadState('ready')
+  }, [])
 
   useEffect(() => {
     load()
@@ -95,38 +120,37 @@ export default function CVEditor() {
 
   const enParsed = useMemo(() => parseSections(enText), [enText])
   const zhParsed = useMemo(() => parseSections(zhText), [zhText])
-  const dirty = !loading && (enText !== baseline.en || zhText !== baseline.zh)
+  const dirty = loadState === 'ready' && (enText !== baseline.en || zhText !== baseline.zh)
   const valid = enParsed.ok && zhParsed.ok
+  useDirtyRegistration('cv-raw', dirty)
 
-  useEffect(() => {
-    const onUnload = (e: BeforeUnloadEvent) => {
-      if (!dirty) return
-      e.preventDefault()
-      e.returnValue = ''
-    }
-    window.addEventListener('beforeunload', onUnload)
-    return () => window.removeEventListener('beforeunload', onUnload)
-  }, [dirty])
-
-  const save = async () => {
-    if (!enParsed.ok || !zhParsed.ok) return
+  /** Save; without `force` the write is conditional on the loaded version (If-Match). */
+  const save = async (force = false) => {
+    if (!enParsed.ok || !zhParsed.ok || saving) return
     setSaving(true)
     try {
-      const res = await fetch('/api/cvdata', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ en: enParsed.value, zh: zhParsed.value }),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(data?.error || `Save failed (${res.status})`)
+      const r = await saveCv({ en: enParsed.value, zh: zhParsed.value }, force ? null : etagRef.current)
+      if (r.kind === 'conflict') {
+        conflict.onOpen()
+        return
+      }
+      conflict.onClose()
+      if (r.kind === 'unauthorized') {
+        setSessionExpired(true)
+        return
+      }
+      if (r.kind === 'error') {
+        toast({ status: 'error', title: 'Save failed', description: r.error, isClosable: true })
+        return
+      }
+      etagRef.current = r.etag
       const en = pretty(enParsed.value)
       const zh = pretty(zhParsed.value)
       setEnText(en)
       setZhText(zh)
       setBaseline({ en, zh })
-      toast({ status: data?.r2Warning ? 'warning' : 'success', title: 'Saved', description: data?.r2Warning })
-    } catch (e: any) {
-      toast({ status: 'error', title: e?.message || 'Save failed' })
+      setSessionExpired(false)
+      toast({ status: r.warning ? 'warning' : 'success', title: 'Saved', description: r.warning })
     } finally {
       setSaving(false)
     }
@@ -151,10 +175,31 @@ export default function CVEditor() {
     }
   }
 
-  if (loading) {
+  if (loadState === 'loading') {
     return (
-      <Flex h="40vh" align="center" justify="center">
+      <Flex h="40vh" align="center" justify="center" role="status">
         <Spinner color="var(--accent)" />
+        <VisuallyHidden>Loading CV JSON</VisuallyHidden>
+      </Flex>
+    )
+  }
+  if (loadState === 'unauthorized' || loadState === 'error') {
+    const expired = loadState === 'unauthorized'
+    return (
+      <Flex h="40vh" align="center" justify="center" direction="column" gap={3} textAlign="center" px={6} role="alert">
+        <Text fontWeight={600}>{expired ? 'Session expired — sign in again' : 'Could not load the CV'}</Text>
+        <Text fontSize="13px" color={dim} maxW="440px">
+          {expired ? 'The JSON editor only opens the full CV for a signed-in admin, so nothing was loaded.' : loadError}
+        </Text>
+        {expired ? (
+          <Button size="sm" as="a" href={LOGIN_HREF} bg="var(--accent)" color="white" _hover={{ opacity: 0.92 }}>
+            Sign in again
+          </Button>
+        ) : (
+          <Button size="sm" onClick={load}>
+            Retry
+          </Button>
+        )}
       </Flex>
     )
   }
@@ -175,6 +220,16 @@ export default function CVEditor() {
         focusBorderColor={parsed.ok ? 'var(--accent)' : 'red.400'}
         sx={{ tabSize: 2 }}
         onKeyDown={(e) => {
+          // Tab indents; Esc first lets the next Tab leave the editor (no keyboard trap).
+          if (e.key === 'Escape') {
+            tabLeaves.current = true
+            return
+          }
+          if (e.key === 'Tab' && (tabLeaves.current || e.shiftKey)) {
+            tabLeaves.current = false
+            return
+          }
+          tabLeaves.current = false
           if (e.key === 'Tab') {
             e.preventDefault()
             const el = e.currentTarget
@@ -185,9 +240,12 @@ export default function CVEditor() {
           }
         }}
       />
-      <Text mt={1.5} fontFamily={monoFont} fontSize="11px" color={parsed.ok ? dim : 'red.400'} aria-live="polite">
-        {parsed.ok ? `✓ valid · ${parsed.value.length} section(s)` : parsed.error}
-      </Text>
+      <Flex mt={1.5} gap={3} justify="space-between" wrap="wrap" fontFamily={monoFont} fontSize="11px">
+        <Text color={parsed.ok ? dim : 'red.400'} aria-live="polite">
+          {parsed.ok ? `✓ valid · ${parsed.value.length} section(s)` : parsed.error}
+        </Text>
+        <Text color={dim}>Tab indents · Esc then Tab leaves the editor</Text>
+      </Flex>
     </Box>
   )
 
@@ -196,7 +254,7 @@ export default function CVEditor() {
       <Flex align="center" gap={2} wrap="wrap">
         <Button
           size="sm"
-          onClick={save}
+          onClick={() => save(false)}
           isLoading={saving}
           isDisabled={!dirty || !valid}
           bg={dirty && valid ? 'var(--accent)' : undefined}
@@ -212,7 +270,7 @@ export default function CVEditor() {
           size="sm"
           variant="outline"
           onClick={() => {
-            if (!dirty || window.confirm('Discard your JSON edits and reload from the server?')) load()
+            if (!dirty || confirmDiscard('Discard your JSON edits and reload from the server?')) load()
           }}
         >
           Reload
@@ -228,17 +286,29 @@ export default function CVEditor() {
           type="file"
           accept="application/json,.json"
           hidden
+          aria-hidden
+          tabIndex={-1}
           onChange={(e) => {
             const f = e.target.files?.[0]
             if (f) onUpload(f)
             e.target.value = ''
           }}
         />
-        <HStack ml="auto" spacing={1.5} fontFamily={monoFont} fontSize="11px" color={dim}>
-          <Box w="7px" h="7px" borderRadius="full" bg={dirty ? 'orange.400' : 'green.400'} />
+        <HStack ml="auto" spacing={1.5} fontFamily={monoFont} fontSize="11px" color={dim} role="status" aria-live="polite">
+          <Box w="7px" h="7px" borderRadius="full" bg={dirty ? 'orange.400' : 'green.400'} aria-hidden />
           <Text>{dirty ? 'unsaved' : 'in sync with server'}</Text>
         </HStack>
       </Flex>
+      {sessionExpired ? (
+        <Flex align="center" gap={3} px={3} py={2} borderRadius="md" bg="rgba(239,68,68,0.10)" wrap="wrap" fontSize="13px" role="alert">
+          <Text flex={1} minW="200px">
+            Session expired — sign in again. Nothing was saved; copy your JSON somewhere safe before leaving this page.
+          </Text>
+          <Button size="xs" as="a" href={LOGIN_HREF} target="_blank" rel="noopener" bg="var(--accent)" color="white" _hover={{ opacity: 0.9 }}>
+            Sign in again
+          </Button>
+        </Flex>
+      ) : null}
       <Text fontSize="12px" color={dim}>
         Visibility keys: <code>isVisible</code> (section on CV / entry shown), <code>showOnWebsite</code>,{' '}
         <code>hiddenFields: [&quot;gpa&quot;]</code>, <code>hiddenItems: {'{'} &quot;points&quot;: [0] {'}'}</code>. The
@@ -258,6 +328,36 @@ export default function CVEditor() {
           <TabPanel px={0}>{editor(zhText, setZhText, zhParsed, 'Chinese')}</TabPanel>
         </TabPanels>
       </Tabs>
+
+      <AlertDialog isOpen={conflict.isOpen} onClose={conflict.onClose} leastDestructiveRef={cancelRef} isCentered>
+        <AlertDialogOverlay>
+          <AlertDialogContent mx={4}>
+            <AlertDialogHeader fontSize="md">The CV changed somewhere else</AlertDialogHeader>
+            <AlertDialogBody fontSize="sm">
+              It was saved from the Studio, another tab or device after this JSON was loaded, so nothing was saved. Reload the
+              latest copy (your JSON edits here will be lost), or overwrite it with your version.
+            </AlertDialogBody>
+            <AlertDialogFooter gap={2} flexWrap="wrap">
+              <Button ref={cancelRef} size="sm" variant="ghost" onClick={conflict.onClose}>
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  conflict.onClose()
+                  load()
+                }}
+              >
+                Reload latest
+              </Button>
+              <Button size="sm" colorScheme="red" onClick={() => save(true)} isLoading={saving}>
+                Overwrite
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
     </Flex>
   )
 }

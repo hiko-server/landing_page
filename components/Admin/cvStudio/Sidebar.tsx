@@ -1,5 +1,5 @@
 import React from 'react'
-import { Badge, Box, Button, Flex, HStack, IconButton, Menu, MenuButton, MenuItem, MenuList, Text, Tooltip } from '@chakra-ui/react'
+import { Badge, Box, Button, Flex, HStack, IconButton, Menu, MenuButton, MenuItem, MenuList, Text, Tooltip, VisuallyHidden } from '@chakra-ui/react'
 import { AddIcon, ChevronDownIcon } from '@chakra-ui/icons'
 import { FaGripVertical } from 'react-icons/fa'
 import { FiFileText, FiGlobe } from 'react-icons/fi'
@@ -9,7 +9,10 @@ import { CSS } from '@dnd-kit/utilities'
 import { countHidden, isSectionOnCv, isSectionOnWebsite } from '../../../lib/cvVisibility'
 import { CV_SECTIONS, SECTION_BY_NAME } from '../../../lib/cvSections'
 import { monoFont, useStudioTokens } from './fields'
-import type { Section } from './docOps'
+import { entryKey, type Section } from './docOps'
+
+/** How a section lines up with the other language (for the alignment badge). */
+export type SectionAlignment = { missing: boolean; lists: number }
 
 function entryCount(section: Section): number {
   const def = SECTION_BY_NAME[section.sessionName]
@@ -72,6 +75,8 @@ function SidebarRow({
   onSelect,
   onToggleCv,
   onToggleWeb,
+  alignment,
+  otherLabel,
 }: {
   section: Section
   id: string
@@ -79,10 +84,16 @@ function SidebarRow({
   onSelect: () => void
   onToggleCv: () => void
   onToggleWeb: () => void
+  alignment?: SectionAlignment
+  otherLabel: string
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
-  const { border, dim, faint } = useStudioTokens()
+  const { border, dim, faint, hiddenFg } = useStudioTokens()
   const def = SECTION_BY_NAME[section.sessionName]
+  const offAlign = !!alignment && (alignment.missing || alignment.lists > 0)
+  const alignText = alignment?.missing
+    ? `Not in ${otherLabel} yet`
+    : `${alignment?.lists || 0} list(s) differ in length from ${otherLabel}`
   const onCv = isSectionOnCv(section)
   const onWeb = isSectionOnWebsite(section)
   const hidden = countHidden(section)
@@ -103,20 +114,10 @@ function SidebarRow({
       _hover={{ borderColor: active ? 'var(--accent)' : border }}
       cursor="pointer"
       onClick={onSelect}
-      role="button"
-      tabIndex={0}
-      aria-current={active ? 'true' : undefined}
-      onKeyDown={(e) => {
-        if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
-          e.preventDefault()
-          onSelect()
-        }
-      }}
       opacity={isDragging ? 0.6 : 1}
       zIndex={isDragging ? 2 : undefined}
       position="relative"
-      transition="background-color 140ms, border-color 140ms"
-      _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '1px' }}
+      transition="background-color 140ms var(--ease-out-quart), border-color 140ms var(--ease-out-quart)"
     >
       <Box
         {...attributes}
@@ -126,24 +127,49 @@ function SidebarRow({
         color={faint}
         p={1}
         _active={{ cursor: 'grabbing' }}
+        _focusVisible={{ outline: '2px solid var(--accent)', borderRadius: 'sm' }}
         onClick={(e) => e.stopPropagation()}
       >
         <FaGripVertical size={10} />
       </Box>
-      <Box flex={1} minW={0} opacity={onCv || onWeb ? 1 : 0.55}>
-        <HStack spacing={1.5}>
-          <Text fontSize="13px" fontWeight={active ? 600 : 500} noOfLines={1}>
+      <Box
+        as="button"
+        type="button"
+        display="block"
+        textAlign="left"
+        flex={1}
+        minW={0}
+        opacity={onCv || onWeb ? 1 : 0.55}
+        aria-current={active ? 'true' : undefined}
+        borderRadius="sm"
+        _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
+        onClick={(e: React.MouseEvent) => {
+          e.stopPropagation()
+          onSelect()
+        }}
+      >
+        <HStack as="span" spacing={1.5}>
+          <Text as="span" fontSize="13px" fontWeight={active ? 600 : 500} noOfLines={1} minW={0}>
             {def?.label || section.sessionName}
           </Text>
           {hidden > 0 ? (
-            <Tooltip label={`${hidden} hidden field(s) / item(s)`} hasArrow>
-              <Badge colorScheme="orange" variant="subtle" fontFamily={monoFont} fontSize="9px" px={1}>
+            <Tooltip label={`${hidden} hidden field(s), item(s) or entries`} hasArrow>
+              <Badge colorScheme="orange" variant="subtle" fontFamily={monoFont} fontSize="9px" px={1} flexShrink={0}>
                 {hidden}
+                <VisuallyHidden> hidden</VisuallyHidden>
               </Badge>
             </Tooltip>
           ) : null}
+          {offAlign ? (
+            <Tooltip label={`${alignText} — linked edits there apply to one language`} hasArrow>
+              <Text as="span" fontFamily={monoFont} fontSize="10px" color={hiddenFg} flexShrink={0}>
+                <span aria-hidden>≠</span>
+                <VisuallyHidden>{alignText}</VisuallyHidden>
+              </Text>
+            </Tooltip>
+          ) : null}
         </HStack>
-        <Text fontFamily={monoFont} fontSize="10px" color={dim} noOfLines={1}>
+        <Text as="span" display="block" fontFamily={monoFont} fontSize="10px" color={dim} noOfLines={1}>
           {section.headerName || section.sessionName}
           {n ? ` · ${n}` : ''}
         </Text>
@@ -162,6 +188,8 @@ export default function Sidebar({
   onToggleCv,
   onToggleWeb,
   onAdd,
+  alignment,
+  otherLabel,
 }: {
   sections: Section[]
   selected: string | null
@@ -170,13 +198,16 @@ export default function Sidebar({
   onToggleCv: (idx: number) => void
   onToggleWeb: (idx: number) => void
   onAdd: (name: string) => void
+  /** Per-section alignment with the other language, keyed by sessionName. */
+  alignment: Record<string, SectionAlignment>
+  otherLabel: string
 }) {
   const { border, dim, faint } = useStudioTokens()
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
-  const ids = sections.map((s, i) => `${s.sessionName}::${i}`)
+  const ids = sections.map((s, i) => entryKey(s) ?? `${s.sessionName}::${i}`)
   const available = CV_SECTIONS.filter((d) => !sections.some((s) => s.sessionName === d.sessionName))
   const onDragEnd = (e: DragEndEvent) => {
     if (!e.over || e.active.id === e.over.id) return
@@ -217,6 +248,8 @@ export default function Sidebar({
                   onSelect={() => onSelect(s.sessionName)}
                   onToggleCv={() => onToggleCv(i)}
                   onToggleWeb={() => onToggleWeb(i)}
+                  alignment={alignment[s.sessionName]}
+                  otherLabel={otherLabel}
                 />
               ))}
             </Flex>
