@@ -1,16 +1,41 @@
-import fs from 'fs'
 import path from 'path'
-import { getKv, putKv, type StoreError } from './contentStore'
+import {
+  getKvWithMeta,
+  listSnapshotFiles,
+  putKv,
+  readSnapshotFile,
+  safeSnapshotName,
+  SNAPSHOT_NOT_FOUND,
+  writeSnapshotFile,
+  type KvPutOptions,
+  type KvPutResult,
+} from './contentStore'
 import { publicCvDoc, type CvAudience, type CvDoc, type CvLang } from './cvVisibility'
 
 const snapshotDir = path.join(process.cwd(), 'data', 'cv_snapshots')
 
-export function readCvData(): { en: any[]; zh: any[] } {
-  const json = getKv<any>('cvdata')
+export type FullCvDoc = { en: any[]; zh: any[] }
+
+/** Accept the stored `{ en, zh }` shape and the legacy bare EN array. */
+function normalizeCv(json: any): FullCvDoc {
   if (!json) return { en: [], zh: [] }
   const en = Array.isArray(json.en) ? json.en : Array.isArray(json) ? json : []
   const zh = Array.isArray(json.zh) ? json.zh : []
   return { en, zh }
+}
+
+/** FULL document with visibility metadata — admin editors only, never public output. */
+export function readCvData(): FullCvDoc {
+  return normalizeCv(getKvWithMeta<any>('cvdata').value)
+}
+
+/**
+ * FULL document plus its version (kv `updated_at`, 0 when no row) for
+ * ETag / If-Match handling in the admin API.
+ */
+export function readCvDataWithVersion(): FullCvDoc & { version: number } {
+  const row = getKvWithMeta<any>('cvdata')
+  return { ...normalizeCv(row.value), version: row.updatedAt }
 }
 
 /**
@@ -40,53 +65,43 @@ export function readPublicCvSections(
   return { en: pick('en'), zh: pick('zh') }
 }
 
-export async function writeCvData(data: { en: any[]; zh: any[] }): Promise<StoreError> {
-  return await putKv('cvdata', data)
+/** Write the full document. Pass `precondition` for an atomic If-Match check. */
+export async function writeCvData(data: FullCvDoc, opts: KvPutOptions = {}): Promise<KvPutResult> {
+  return await putKv('cvdata', data, opts)
 }
 
 // Re-exported for existing importers; implementation is pure (lib/cvSync.ts).
 export { syncStructure, syncLanguage } from './cvSync'
 
+/**
+ * Snapshot the stored CV into data/cv_snapshots (newest 100 kept). Skips the
+ * write when the newest snapshot is identical. A row that is not valid JSON
+ * is snapshotted verbatim so its bytes survive the next save.
+ */
 export function saveSnapshot(): string {
-  const now = new Date()
-  const stamp = now.toISOString().replace(/[:.]/g, '-').replace('T', '_').replace('Z','')
-  const filename = `cv_${stamp}.json`
-  const filePath = path.join(snapshotDir, filename)
-  fs.mkdirSync(snapshotDir, { recursive: true })
-  const current = readCvData()
-  fs.writeFileSync(filePath, JSON.stringify(current, null, 2), 'utf-8')
-  return filename
+  const row = getKvWithMeta<any>('cvdata')
+  const content = row.corrupt && row.raw !== null ? row.raw : JSON.stringify(normalizeCv(row.value), null, 2)
+  return writeSnapshotFile(snapshotDir, 'cv', content)
 }
 
 export function listSnapshots(): string[] {
-  try {
-    return fs.readdirSync(snapshotDir).filter(f => f.endsWith('.json')).sort().reverse()
-  } catch {
-    return []
-  }
+  return listSnapshotFiles(snapshotDir)
 }
 
-export async function restoreSnapshot(filename: string): Promise<StoreError> {
-  // Sanitize like readSnapshot() — never let a caller-supplied name escape the
-  // snapshot dir (path traversal). Same allowlist as the sibling reader.
-  const safe = filename.replace(/[^a-zA-Z0-9_.-]/g, '_')
-  const filePath = path.join(snapshotDir, safe)
-  if (!fs.existsSync(filePath)) return { ok: false, error: 'Snapshot not found' }
+export async function restoreSnapshot(filename: unknown): Promise<KvPutResult> {
+  // Never let a caller-supplied name escape the snapshot dir.
+  if (!safeSnapshotName(filename)) return { ok: false, error: 'Invalid snapshot name' }
+  const raw = readSnapshotFile(snapshotDir, filename)
+  if (raw === null) return { ok: false, error: SNAPSHOT_NOT_FOUND }
+  let data: any
   try {
-    const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'))
-    return await putKv('cvdata', data)
-  } catch (err: any) {
-    return { ok: false, error: err?.message || 'Failed to restore' }
+    data = JSON.parse(raw)
+  } catch {
+    return { ok: false, error: 'Snapshot is not valid JSON' }
   }
+  return await putKv('cvdata', normalizeCv(data))
 }
 
-export function readSnapshot(filename: string): string | null {
-  const safe = filename.replace(/[^a-zA-Z0-9_.-]/g, '_')
-  const filePath = path.join(snapshotDir, safe)
-  try {
-    if (!fs.existsSync(filePath)) return null
-    return fs.readFileSync(filePath, 'utf-8')
-  } catch {
-    return null
-  }
+export function readSnapshot(filename: unknown): string | null {
+  return readSnapshotFile(snapshotDir, filename)
 }

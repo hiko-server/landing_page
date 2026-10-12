@@ -1,11 +1,13 @@
 /**
- * Unified version history API
+ * Unified version history API (admin only)
  * GET  ?type=cv   → list CV file snapshots
  * GET  ?type=home → list Home file snapshots
  * GET  ?type=cv&file=filename&preview=1 → read snapshot JSON (preview)
  * GET  ?type=home&file=filename&preview=1 → read snapshot JSON (preview)
- * POST { action:'restore', type:'cv'|'home', filename } → restore a file snapshot
- * POST { action:'snapshot', type:'cv'|'home' } → take a manual snapshot
+ * POST ?type=cv|home { action:'restore', filename } → restore a file snapshot
+ * POST ?type=cv|home { action:'snapshot' } → take a manual snapshot
+ *
+ * `type` may also be sent in the POST body; the query string wins.
  */
 import type { NextApiRequest, NextApiResponse } from 'next'
 import {
@@ -20,9 +22,18 @@ import {
   saveHomeSnapshot,
   readHomeSnapshot,
 } from '../../lib/home'
+import { kvEtag, restoreErrorStatus, safeSnapshotName } from '../../lib/contentStore'
 import { isAdminRequest } from '../../lib/auth'
+import { sendVersionedJson } from '../../lib/http'
 
 const isAuthed = isAdminRequest
+
+type VersionType = 'cv' | 'home'
+
+function parseType(value: unknown): VersionType | null {
+  if (value === undefined || value === '') return null
+  return value === 'cv' || value === 'home' ? value : null
+}
 
 function parseFilename(name: string): { date: string; label: string } {
   // cv_2025-09-09_03-17-28-947.json  or  home_2025-09-09_03-17-28-947.json
@@ -38,17 +49,25 @@ function parseFilename(name: string): { date: string; label: string } {
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!isAuthed(req, res)) return res.status(401).json({ error: 'Unauthorized' })
+  res.setHeader('Cache-Control', 'no-store')
 
-  const type = (req.query.type as string) || 'cv'
+  const rawType = req.query.type ?? (req.method === 'POST' ? req.body?.type : undefined)
+  const parsedType = parseType(rawType)
+  if (rawType !== undefined && rawType !== '' && !parsedType) {
+    return res.status(400).json({ error: 'type must be "cv" or "home"' })
+  }
+  const type: VersionType = parsedType ?? 'cv'
 
   if (req.method === 'GET') {
-    const file = req.query.file as string | undefined
+    const fileParam = req.query.file
     const preview = req.query.preview === '1'
 
     // Preview a specific snapshot
-    if (file && preview) {
+    if (fileParam !== undefined && preview) {
+      const file = safeSnapshotName(fileParam)
+      if (!file) return res.status(400).json({ error: 'Invalid file name' })
       const raw = type === 'home' ? readHomeSnapshot(file) : readSnapshot(file)
-      if (!raw) return res.status(404).json({ error: 'Not found' })
+      if (raw === null) return res.status(404).json({ error: 'Not found' })
       try {
         return res.status(200).json({ ok: true, data: JSON.parse(raw) })
       } catch {
@@ -81,7 +100,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (action === 'restore') {
-      if (!filename) return res.status(400).json({ error: 'Missing filename' })
+      if (!safeSnapshotName(filename)) return res.status(400).json({ error: 'Missing or invalid filename' })
       // Snapshot the live state first so a restore can itself be undone.
       try {
         if (type === 'home') saveHomeSnapshot()
@@ -90,8 +109,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         console.warn('versions: snapshot before restore failed', err)
       }
       const result = type === 'home' ? await restoreHomeSnapshot(filename) : await restoreSnapshot(filename)
-      if (!result.ok) return res.status(404).json({ error: result.error })
-      return res.status(200).json(result)
+      if (!result.ok) return res.status(restoreErrorStatus(result.error)).json({ error: result.error })
+      const etag = kvEtag(result.updatedAt)
+      return sendVersionedJson(res, 200, { ok: true, etag, ...(result.r2Warning ? { r2Warning: result.r2Warning } : {}) }, etag)
     }
 
     return res.status(400).json({ error: 'Unknown action' })
