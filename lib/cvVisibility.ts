@@ -22,6 +22,13 @@
  * Hidden fields and entries are *removed from public payloads* (not just
  * visually suppressed), so a hidden phone number or GPA never reaches the
  * page HTML, the __NEXT_DATA__ blob or the public JSON API.
+ *
+ * Redaction marker: a hidden field is blanked type-preservingly (so renderers
+ * never crash on a missing string/array) AND its *name* is listed in the
+ * node's `redacted` array. Renderers must use isRedacted() to tell "the owner
+ * hid this" apart from "this is genuinely empty" — e.g. a hidden end date
+ * must not turn a past job into the current one, and a hidden expiry date
+ * must not print "No Expiry". Only key names are exposed, never values.
  */
 
 export type CvSectionLike = { sessionName?: string; [k: string]: any }
@@ -30,6 +37,19 @@ export type CvLang = 'en' | 'zh'
 
 /** Keys that carry visibility metadata rather than content. */
 export const VISIBILITY_KEYS = ['isVisible', 'showOnWebsite', 'hiddenFields', 'hiddenItems'] as const
+
+/** Key added by pruning to public nodes; lists the names of hidden fields. */
+export const REDACTED_KEY = 'redacted' as const
+
+/**
+ * True when `field` was hidden by the owner and blanked during pruning.
+ * Works on public (pruned) nodes; on full editor documents it falls back to
+ * the hiddenFields metadata, so the Studio preview behaves the same way.
+ */
+export function isRedacted(node: any, field: string): boolean {
+  if (Array.isArray(node?.[REDACTED_KEY]) && node[REDACTED_KEY].includes(field)) return true
+  return Array.isArray(node?.hiddenFields) && node.hiddenFields.includes(field)
+}
 
 const isPlainObject = (v: unknown): v is Record<string, any> =>
   !!v && typeof v === 'object' && !Array.isArray(v)
@@ -82,10 +102,12 @@ function pruneNode(node: any): any {
 
   const hidden = new Set<string>(Array.isArray(node.hiddenFields) ? node.hiddenFields : [])
   const out: Record<string, any> = {}
+  const redacted: string[] = []
   for (const [key, value] of Object.entries(node)) {
-    if ((VISIBILITY_KEYS as readonly string[]).includes(key)) continue
+    if ((VISIBILITY_KEYS as readonly string[]).includes(key) || key === REDACTED_KEY) continue
     if (hidden.has(key)) {
       out[key] = blankOf(value)
+      redacted.push(key)
       continue
     }
     if (Array.isArray(value)) {
@@ -96,6 +118,7 @@ function pruneNode(node: any): any {
     }
     out[key] = pruneNode(value)
   }
+  if (redacted.length) out[REDACTED_KEY] = redacted
   return out
 }
 
