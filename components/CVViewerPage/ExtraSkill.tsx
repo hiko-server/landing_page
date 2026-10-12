@@ -1,13 +1,14 @@
 import React from 'react'
 import type { ExtraSkill } from '../../types/cvProps'
-import { cleanList } from '../../lib/cvFormat'
+import { bullets } from './fields'
 import { PlainBullets, SheetSection } from './primitives'
 
 const ExtraSkillSection = ({ data }: { data: ExtraSkill }) => {
-  if (!cleanList(data.points).length) return null
+  const points = bullets(data, 'points')
+  if (!points.length) return null
   return (
     <SheetSection title={data.headerName}>
-      <PlainBullets items={data.points} />
+      <PlainBullets items={points} />
     </SheetSection>
   )
 }

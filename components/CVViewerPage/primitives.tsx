@@ -1,6 +1,7 @@
 import React from 'react'
 import { Box, Flex, Text } from '@chakra-ui/react'
 import { cleanList } from '../../lib/cvFormat'
+import { bullets, entries, field } from './fields'
 
 /**
  * Building blocks of the A4 sheet. Every section renders through these so the
@@ -8,8 +9,10 @@ import { cleanList } from '../../lib/cvFormat'
  * entries with a left content column and a right-aligned italic meta column,
  * and hanging-indent bullets.
  *
- * Inputs are already pruned (lib/cvVisibility.ts), so "hidden" simply means
- * "empty" here — every block quietly renders nothing for empty values.
+ * Inputs are normally pruned (lib/cvVisibility.ts); sections read their
+ * values through ./fields, which also honours `redacted` / hiddenFields, so
+ * a hidden value is "empty" here and every block quietly renders nothing —
+ * MetaLine only draws its "|" when both sides are present.
  */
 
 export function SheetSection({ title, children }: { title?: string; children: React.ReactNode }) {
@@ -120,22 +123,18 @@ export function EntryText({
   )
 }
 
-type Feature = { description?: string; furtherExplanation?: string[] }
-
-/** Bold-ish bullet lines with optional sub-points (features[] shape). */
-export function FeatureBullets({ items }: { items?: Feature[] }) {
-  const list = (Array.isArray(items) ? items : []).filter(
-    (f) => (f?.description || '').trim() || cleanList(f?.furtherExplanation).length,
-  )
+/** Bold-ish bullet lines with optional sub-points (features[] shape). Hidden parts are skipped. */
+export function FeatureBullets({ items }: { items?: readonly unknown[] }) {
+  const list = entries(items)
+    .map((f) => ({ text: field(f, 'description'), sub: bullets(f, 'furtherExplanation') }))
+    .filter((f) => f.text || f.sub.length)
   if (!list.length) return null
   return (
     <Box as="ul" mt="3px" listStyleType="none">
       {list.map((f, i) => (
         <Box as="li" key={i}>
-          {(f.description || '').trim() ? (
-            <Bullet weight={600}>{f.description}</Bullet>
-          ) : null}
-          {cleanList(f.furtherExplanation).map((d, j) => (
+          {f.text ? <Bullet weight={600}>{f.text}</Bullet> : null}
+          {f.sub.map((d, j) => (
             <Bullet key={j} sub>
               {d}
             </Bullet>

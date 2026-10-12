@@ -2,45 +2,46 @@ import React from 'react'
 import { Link } from '@chakra-ui/react'
 import type { Certification } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'
-import { cvLabels, displayUrl, formatCvDate, hrefOf } from '../../lib/cvFormat'
+import { cvLabels, displayUrl, safeHref } from '../../lib/cvFormat'
+import { certificateValidity, field, joinParts, labelled, list } from './fields'
 import { EntryStack, EntryText, EntryTitle, MetaLine, SheetEntry, SheetSection } from './primitives'
-
-const t = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
 const CertificateSection = ({ data, lang = 'en' }: { data: Certification; lang?: CvLang }) => {
   const L = cvLabels(lang)
-  const rows = (data.certifications || []).flatMap((org) =>
-    (org.CertificationList || [])
-      .filter((c) => t(c.certificationName))
+  const rows = list(data, 'certifications').flatMap((org) =>
+    list<any>(org, 'CertificationList')
+      .filter((c) => field(c, 'certificationName'))
       .map((cert) => ({ org, cert })),
   )
   if (!rows.length) return null
-  const sep = lang === 'zh' ? '：' : ': '
   return (
     <SheetSection title={data.headerName}>
       <EntryStack gap="10px">
         {rows.map(({ org, cert }, i) => {
-          const issued = formatCvDate(cert.issuedDate, lang)
-          const range = issued ? `${issued} – ${t(cert.expirationDate) ? formatCvDate(cert.expirationDate, lang) : L.noExpiry}` : ''
+          const url = field(cert, 'credentialURL')
+          const href = safeHref(url)
           return (
             <SheetEntry
               key={i}
               left={
                 <>
-                  <EntryTitle>{cert.certificationName}</EntryTitle>
+                  <EntryTitle>{field(cert, 'certificationName')}</EntryTitle>
                   <EntryText>
-                    {[t(org.issuingOrganization), t(cert.credentialID) ? `${L.credentialId}${sep}${t(cert.credentialID)}` : '']
-                      .filter(Boolean)
-                      .join(' · ')}
+                    {joinParts(
+                      [field(org, 'issuingOrganization'), labelled(L.credentialId, field(cert, 'credentialID'), lang)],
+                      ' · ',
+                    )}
                   </EntryText>
-                  {t(cert.credentialURL) ? (
-                    <Link href={hrefOf(cert.credentialURL)} isExternal fontSize="12px" color="var(--cv-separator-color, blue)" wordBreak="break-all">
-                      {displayUrl(cert.credentialURL)}
+                  {url && href ? (
+                    <Link href={href} isExternal fontSize="12px" color="var(--cv-separator-color, blue)" wordBreak="break-all">
+                      {displayUrl(url)}
                     </Link>
+                  ) : url ? (
+                    <EntryText>{displayUrl(url)}</EntryText>
                   ) : null}
                 </>
               }
-              right={<MetaLine date={range} />}
+              right={<MetaLine date={certificateValidity(cert, lang)} />}
             />
           )
         })}
