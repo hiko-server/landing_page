@@ -1,25 +1,36 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Box,
   Button,
-  Flex,
-  Heading,
-  HStack,
-  Input,
-  Text,
-  useToast,
   FormControl,
   FormLabel,
+  Input,
   SimpleGrid,
+  Skeleton,
+  Stack,
+  useToast,
 } from '@chakra-ui/react'
 import { useRouter } from 'next/router'
 import dynamic from 'next/dynamic'
-import HeaderFooter from '../../layout/HeaderFooter'
-import CustomHead from '../../components/General-UI/CustomHead'
+import { AdminDirtyProvider, useDirtyRegistration } from './AdminDirtyContext'
+import {
+  AdminPageShell,
+  BackLink,
+  LoadErrorNotice,
+  RevalidatedPaths,
+  SaveButton,
+  SaveStatus,
+  SessionExpiredNotice,
+  inputProps,
+  useSaveShortcut,
+  type SaveState,
+} from './shell/ui'
+import { loginHref, parseRevalidated, readJsonObject, saveToastCopy } from './shell/http'
 
-// TipTap pulls in ProseMirror modules that touch the DOM during init; load
-// client-side only so SSR stays stable.
-const RichEditor = dynamic(() => import('./RichEditor'), { ssr: false })
+// TipTap touches the DOM during init — client-side only.
+const RichEditor = dynamic(() => import('./RichEditor'), {
+  ssr: false,
+  loading: () => <Skeleton h="520px" borderRadius="lg" />,
+})
 
 type PageName = 'now' | 'uses'
 
@@ -31,152 +42,240 @@ type Frontmatter = {
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
-// Single-file MDX editor used by /admin/now and /admin/uses. The two pages
-// share the same shape (one .mdx file, no slug list) so the editor is just a
-// thin wrapper that picks which file to load.
-export default function PageEditor({ name }: { name: PageName }) {
+/** gray-matter parses YAML dates into Date objects; normalise to YYYY-MM-DD. */
+function toIsoDay(raw: unknown): string {
+  if (raw instanceof Date && !Number.isNaN(raw.getTime())) return raw.toISOString().slice(0, 10)
+  if (typeof raw === 'string' && raw) return raw.slice(0, 10)
+  return todayISO()
+}
+
+/**
+ * Single-file MDX editor used by /admin/now and /admin/uses. The two pages
+ * share one shape (one document, no slug list), so this picks which to load.
+ */
+function PageEditorInner({ name }: { name: PageName }) {
   const router = useRouter()
   const toast = useToast()
-  const label = name.toUpperCase()
 
   const [fm, setFm] = useState<Frontmatter>({ title: '', description: '', updated: todayISO() })
   const [body, setBody] = useState('')
-  const [loading, setLoading] = useState(true)
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [loadError, setLoadError] = useState('')
+  const [reloadKey, setReloadKey] = useState(0)
+  const [saving, setSaving] = useState(false)
+  const [sessionExpired, setSessionExpired] = useState(false)
+  const [revalidated, setRevalidated] = useState<string[]>([])
+  const [baseline, setBaseline] = useState<string | null>(null)
 
   useEffect(() => {
     let alive = true
-    ;(async () => {
+    setLoadState('loading')
+    setBaseline(null)
+    void (async () => {
       try {
-        const res = await fetch(`/api/admin/page?name=${name}`)
+        const res = await fetch(`/api/admin/page?name=${name}`, { cache: 'no-store' })
         if (res.status === 401) {
-          router.replace(`/admin/login?next=${encodeURIComponent(`/admin/${name}`)}`)
+          router.replace(loginHref(`/admin/${name}`))
           return
         }
-        if (!res.ok) throw new Error()
-        const data = await res.json()
+        const data = await readJsonObject(res)
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
         if (!alive) return
-        // gray-matter parses YAML dates into JS Date objects; coerce to string.
-        const updatedRaw = data.frontmatter?.updated as unknown
-        const updated =
-          updatedRaw instanceof Date
-            ? updatedRaw.toISOString().slice(0, 10)
-            : updatedRaw
-              ? String(updatedRaw).slice(0, 10)
-              : todayISO()
+        const f = (data.frontmatter as Record<string, unknown>) || {}
         setFm({
-          title: String(data.frontmatter?.title ?? label),
-          description: String(data.frontmatter?.description ?? ''),
-          updated,
+          title: String(f.title ?? name.charAt(0).toUpperCase() + name.slice(1)),
+          description: String(f.description ?? ''),
+          updated: toIsoDay(f.updated),
         })
-        setBody(String(data.body ?? ''))
-      } catch {
-        toast({ status: 'error', title: `Failed to load /${name}` })
-      } finally {
-        if (alive) setLoading(false)
+        setBody(typeof data.body === 'string' ? data.body : '')
+        setLoadState('ready')
+      } catch (e: any) {
+        if (!alive) return
+        setLoadError(
+          e?.message === 'Failed to fetch' ? 'network error' : e?.message || 'unknown error'
+        )
+        setLoadState('error')
       }
     })()
     return () => {
       alive = false
     }
+    // router is stable for this purpose; reload only when the page or retry changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name])
+  }, [name, reloadKey])
 
-  const save = async () => {
+  const snapshot = useMemo(() => JSON.stringify({ fm, body }), [fm, body])
+  useEffect(() => {
+    if (loadState === 'ready' && baseline === null) setBaseline(snapshot)
+  }, [loadState, baseline, snapshot])
+  const dirty = loadState === 'ready' && baseline !== null && snapshot !== baseline
+  useDirtyRegistration(`page:${name}`, dirty)
+
+  const save = useCallback(async () => {
+    if (loadState !== 'ready' || saving) return
     if (!fm.title.trim()) {
-      toast({ status: 'error', title: 'Title is required' })
+      toast({ status: 'error', title: 'Title is required', position: 'bottom-right' })
       return
     }
-    const res = await fetch('/api/admin/page', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name,
-        frontmatter: {
-          title: fm.title,
-          description: fm.description || undefined,
-          updated: fm.updated,
-        },
-        body,
-      }),
-    })
-    if (res.ok) {
-      toast({ status: 'success', title: 'Saved (snapshot taken)' })
-    } else {
-      const data = await res.json().catch(() => ({}))
-      toast({ status: 'error', title: data?.error || 'Save failed' })
+    const savedSnapshot = snapshot
+    setSaving(true)
+    let res: Response | null = null
+    try {
+      res = await fetch('/api/admin/page', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          frontmatter: {
+            title: fm.title,
+            description: fm.description || undefined,
+            updated: fm.updated,
+          },
+          body,
+        }),
+      })
+    } catch {
+      res = null
     }
-  }
+    setSaving(false)
+    if (!res) {
+      toast({ status: 'error', title: 'Network error — not saved', position: 'bottom-right' })
+      return
+    }
+    const data = await readJsonObject(res)
+    if (!res.ok) {
+      if (res.status === 401) setSessionExpired(true)
+      toast({
+        status: 'error',
+        title: 'Save failed',
+        description:
+          res.status === 401
+            ? 'Your session has expired. Sign in again in a new tab, then save — your edits are kept.'
+            : res.status === 429
+              ? 'Too many saves in a short time — wait a minute and try again.'
+              : data.error || `HTTP ${res.status}`,
+        position: 'bottom-right',
+        duration: 7000,
+        isClosable: true,
+      })
+      return
+    }
+    const paths = parseRevalidated(data)
+    setSessionExpired(false)
+    setRevalidated(paths)
+    setBaseline(savedSnapshot)
+    toast({ ...saveToastCopy(data), title: 'Saved — snapshot taken', position: 'bottom-right' })
+  }, [loadState, saving, fm, body, name, snapshot, toast])
 
-  const publicHref = useMemo(() => `/${name}`, [name])
+  const canSave = loadState === 'ready' && dirty && !saving
+  useSaveShortcut(canSave, save)
+  const saveState: SaveState =
+    loadState === 'loading'
+      ? 'loading'
+      : loadState === 'error'
+        ? 'error'
+        : saving
+          ? 'saving'
+          : dirty
+            ? 'dirty'
+            : 'clean'
 
   return (
-    <>
-      <CustomHead title={`Admin · /${name}`} />
-      <HeaderFooter isMobile={false}>
-        <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[6, 10]}>
-          <Flex justify="space-between" align="center" mb={6} flexWrap="wrap" gap={3}>
-            <Box>
-              <Text
-                fontFamily="var(--font-geist-mono), monospace"
-                fontSize="11px"
-                color="gray.500"
-                letterSpacing="0.12em"
-                textTransform="uppercase"
-              >
-                [admin] page · {name}
-              </Text>
-              <Heading size="lg" fontWeight={500} letterSpacing="-0.02em">
-                Edit /{name}
-              </Heading>
-            </Box>
-            <HStack>
-              <Button variant="ghost" size="sm" onClick={() => router.push(publicHref)}>
-                View live ↗
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => router.push('/admin')}>
-                ← Admin
-              </Button>
-              <Button colorScheme="purple" size="sm" onClick={save} isDisabled={loading}>
-                Save
-              </Button>
-            </HStack>
-          </Flex>
+    <AdminPageShell
+      headTitle={`Admin · /${name}`}
+      eyebrow={`[admin] page · ${name}`}
+      title={`Edit /${name}`}
+      status={<SaveStatus state={saveState} />}
+      actions={
+        <>
+          <BackLink href="/admin">← Admin</BackLink>
+          <Button
+            as="a"
+            href={`/${name}`}
+            target="_blank"
+            rel="noopener"
+            size="sm"
+            variant="ghost"
+            color="page.fg-secondary"
+          >
+            View live ↗
+          </Button>
+          <SaveButton onSave={save} canSave={canSave} saving={saving} />
+        </>
+      }
+    >
+      <Stack spacing={4}>
+        {loadState === 'error' ? (
+          <LoadErrorNotice
+            what={`/${name}`}
+            error={loadError}
+            onRetry={() => setReloadKey((k) => k + 1)}
+          />
+        ) : null}
+        {sessionExpired ? <SessionExpiredNotice returnPath={`/admin/${name}`} keepEdits /> : null}
+        {revalidated.length ? <RevalidatedPaths paths={revalidated} /> : null}
 
-          <SimpleGrid columns={[1, 2]} spacing={4} mb={4}>
+        {loadState === 'loading' ? (
+          <Stack spacing={4} aria-busy="true" aria-label={`Loading /${name}`}>
+            <Skeleton h="40px" />
+            <Skeleton h="40px" />
+            <Skeleton h="420px" />
+          </Stack>
+        ) : loadState === 'error' ? null : (
+          <Stack spacing={4}>
+            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+              <FormControl isRequired>
+                <FormLabel fontSize="13px">Title</FormLabel>
+                <Input
+                  {...inputProps}
+                  value={fm.title}
+                  onChange={(e) => setFm({ ...fm, title: e.target.value })}
+                />
+              </FormControl>
+              <FormControl>
+                <FormLabel fontSize="13px">Updated</FormLabel>
+                <Input
+                  {...inputProps}
+                  type="date"
+                  value={fm.updated}
+                  onChange={(e) => setFm({ ...fm, updated: e.target.value })}
+                />
+              </FormControl>
+            </SimpleGrid>
+
             <FormControl>
-              <FormLabel fontSize="13px">Title</FormLabel>
-              <Input value={fm.title} onChange={(e) => setFm({ ...fm, title: e.target.value })} />
-            </FormControl>
-            <FormControl>
-              <FormLabel fontSize="13px">Updated</FormLabel>
+              <FormLabel fontSize="13px">Description</FormLabel>
               <Input
-                type="date"
-                value={fm.updated}
-                onChange={(e) => setFm({ ...fm, updated: e.target.value })}
+                {...inputProps}
+                value={fm.description}
+                onChange={(e) => setFm({ ...fm, description: e.target.value })}
+                placeholder="One-line summary for link previews and the meta description"
               />
             </FormControl>
-          </SimpleGrid>
 
-          <FormControl mb={4}>
-            <FormLabel fontSize="13px">Description</FormLabel>
-            <Input
-              value={fm.description}
-              onChange={(e) => setFm({ ...fm, description: e.target.value })}
-              placeholder="One-line summary shown in OG card + meta description"
-            />
-          </FormControl>
+            <FormControl>
+              <FormLabel fontSize="13px" id={`${name}-body-label`}>
+                Body
+              </FormLabel>
+              <RichEditor
+                value={body}
+                onChange={setBody}
+                minH="520px"
+                labelledBy={`${name}-body-label`}
+                placeholder="Write in Markdown. Drag, drop or paste images. Use the MDX tab for JSX components."
+              />
+            </FormControl>
+          </Stack>
+        )}
+      </Stack>
+    </AdminPageShell>
+  )
+}
 
-          <FormControl>
-            <FormLabel fontSize="13px">Body</FormLabel>
-            <RichEditor
-              value={body}
-              onChange={setBody}
-              minH="520px"
-              placeholder="Write in Markdown + MDX. Drag, drop or paste images. Switch to MDX tab for raw JSX."
-            />
-          </FormControl>
-        </Box>
-      </HeaderFooter>
-    </>
+export default function PageEditor({ name }: { name: PageName }) {
+  return (
+    <AdminDirtyProvider>
+      <PageEditorInner name={name} />
+    </AdminDirtyProvider>
   )
 }

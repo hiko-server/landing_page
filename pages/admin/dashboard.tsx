@@ -1,21 +1,20 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
+import NextLink from 'next/link'
+import { useRouter } from 'next/router'
 import {
   Box,
   Button,
   Flex,
-  Heading,
-  HStack,
-  Icon,
-  Tab,
-  TabList,
-  TabPanel,
-  TabPanels,
-  Tabs,
+  Menu,
+  MenuButton,
+  MenuDivider,
+  MenuItem,
+  MenuList,
   Text,
-  useColorModeValue,
   useToast,
 } from '@chakra-ui/react'
-import { SettingsIcon } from '@chakra-ui/icons'
+import { ChevronDownIcon } from '@chakra-ui/icons'
+import { FaHome, FaFileAlt, FaHistory, FaDatabase } from 'react-icons/fa'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 import CVEditor from '../../components/Admin/CVEditor'
@@ -23,189 +22,271 @@ import CVEditorStudio from '../../components/Admin/CVEditorStudio'
 import HomeEditor from '../../components/Admin/HomeEditor'
 import VersionHistory from '../../components/Admin/VersionHistory'
 import StoragePanel from '../../components/Admin/StoragePanel'
-import { useRouter } from 'next/router'
-import Link from 'next/link'
-import { FaHome, FaFileAlt, FaHistory, FaDatabase } from 'react-icons/fa'
+import { AdminDirtyProvider, useAdminDirty } from '../../components/Admin/AdminDirtyContext'
+import { AdminTitleBar, MONO, SITE_HEADER_H, useIsMac } from '../../components/Admin/shell/ui'
+import SegmentedTabs, {
+  tabPanelProps,
+  type SegmentedItem,
+} from '../../components/Admin/shell/SegmentedTabs'
+import {
+  tabShortcutFor,
+  tabShortcutIndex,
+  tabShortcutLabel,
+} from '../../components/Admin/shell/shortcuts'
+import { readJsonObject } from '../../components/Admin/shell/http'
+import {
+  DASHBOARD_TABS,
+  dashboardQuery,
+  parseDashboardQuery,
+  type CvView,
+  type DashboardTab,
+} from '../../components/Admin/shell/dashboardTabs'
 
-const TAB_LABELS = ['Home', 'CV', 'Versions', 'Storage']
-const TAB_KEYS = ['home', 'cv', 'versions', 'storage']
+const TAB_META: Record<DashboardTab, { label: string; icon: SegmentedItem<DashboardTab>['icon'] }> =
+  {
+    home: { label: 'Home', icon: FaHome },
+    cv: { label: 'CV', icon: FaFileAlt },
+    versions: { label: 'Versions', icon: FaHistory },
+    storage: { label: 'Storage', icon: FaDatabase },
+  }
 
-export default function AdminDashboard() {
-  const toast = useToast()
+const CV_VIEW_ITEMS: SegmentedItem<CvView>[] = [
+  { key: 'studio', label: 'Studio' },
+  { key: 'raw', label: 'Raw JSON' },
+]
+
+/** Wide workspace: the CV Studio uses nearly the whole viewport. */
+const WORKSPACE_MAX_W = 'min(100%, 1680px)'
+/** Site header + slim title bar (one row from md up) + content padding. */
+const WORKSPACE_H = `calc(100vh - ${SITE_HEADER_H} - 53px - 32px)`
+
+function isEditable(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null
+  if (!el || typeof el.closest !== 'function') return false
+  return !!el.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]')
+}
+
+function Dashboard() {
   const router = useRouter()
-  const [tabIndex, setTabIndex] = useState(0)
-  const pageBg = useColorModeValue('gray.50', 'gray.900')
-  const dim = useColorModeValue('gray.600', 'gray.400')
-  const tabBorder = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.1)')
-  // Hooks must not be called inside the TAB_LABELS.map() callback below (the
-  // hook-count would change with the list) — resolve the selected-tab bg once here.
-  const tabSelectedBg = useColorModeValue('white', 'gray.700')
+  const toast = useToast()
+  const { confirmDiscard } = useAdminDirty()
+  const isMac = useIsMac()
+  const [tab, setTab] = useState<DashboardTab>('home')
+  const [cvView, setCvView] = useState<CvView>('studio')
 
+  // URL → state (initial load, shared links, /admin cards).
   useEffect(() => {
     if (!router.isReady) return
-    const t = ((router.query.tab as string) || '').toLowerCase()
-    if (t === 'cv') setTabIndex(1)
-    else if (t === 'versions' || t === 'history') setTabIndex(2)
-    else if (t === 'storage') setTabIndex(3)
-    else setTabIndex(0)
-  }, [router.isReady, router.query.tab])
+    const q = parseDashboardQuery(router.query)
+    setTab(q.tab)
+    setCvView(q.view)
+  }, [router.isReady, router.query])
 
-  const sendTest = async () => {
+  const go = useCallback(
+    (nextTab: DashboardTab, nextView: CvView = 'studio') => {
+      if (nextTab === tab && (nextTab !== 'cv' || nextView === cvView)) return false
+      // The visible editor unmounts on switch — ask before dropping its edits.
+      if (!confirmDiscard()) return false
+      setTab(nextTab)
+      setCvView(nextView)
+      router.replace(
+        { pathname: router.pathname, query: dashboardQuery(router.query, nextTab, nextView) },
+        undefined,
+        {
+          shallow: true,
+          scroll: false,
+        }
+      )
+      return true
+    },
+    [tab, cvView, confirmDiscard, router]
+  )
+
+  // Alt+1–4 (⌃1–4 on macOS): never ⌘/Ctrl+digit (browser tabs) or ⌘S/⌘Z (editors).
+  const goRef = useRef(go)
+  goRef.current = go
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.repeat) return
+      const idx = tabShortcutIndex(e, DASHBOARD_TABS.length, {
+        isMac,
+        inEditable: isEditable(e.target),
+      })
+      if (idx === null) return
+      e.preventDefault()
+      if (goRef.current(DASHBOARD_TABS[idx])) {
+        requestAnimationFrame(() =>
+          document.getElementById(`dash-tab-${DASHBOARD_TABS[idx]}`)?.focus()
+        )
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [isMac])
+
+  const sendTestMail = async () => {
     try {
       const res = await fetch('/api/admin/test-mail', { method: 'POST' })
-      const data = await res.json().catch(() => ({}))
-      if (res.ok && !data.skipped) toast({ status: 'success', title: 'Test email sent' })
+      const data = await readJsonObject(res)
+      if (res.ok && !data.skipped)
+        toast({ status: 'success', title: 'Test email sent', position: 'bottom-right' })
       else if (data.skipped)
-        toast({ status: 'warning', title: 'SMTP not configured', description: 'Skipped send' })
-      else toast({ status: 'error', title: 'Test failed', description: data?.error || 'Unknown error' })
-    } catch (e: any) {
-      toast({ status: 'error', title: 'Test failed', description: e?.message })
+        toast({
+          status: 'warning',
+          title: 'SMTP not configured',
+          description: 'Nothing was sent.',
+          position: 'bottom-right',
+        })
+      else
+        toast({
+          status: 'error',
+          title: 'Test email failed',
+          description: data.error || `HTTP ${res.status}`,
+          position: 'bottom-right',
+        })
+    } catch {
+      toast({
+        status: 'error',
+        title: 'Test email failed',
+        description: 'Network error.',
+        position: 'bottom-right',
+      })
     }
   }
 
-  const tabIcons = [FaHome, FaFileAlt, FaHistory, FaDatabase]
-  const tabColors = ['var(--accent)', 'var(--accent)', 'var(--accent)', 'var(--accent)']
+  const tabItems: SegmentedItem<DashboardTab>[] = DASHBOARD_TABS.map((key, i) => ({
+    key,
+    ...TAB_META[key],
+    shortcut: tabShortcutFor(isMac, i),
+    ariaShortcut: `${isMac ? 'Control' : 'Alt'}+${i + 1}`,
+  }))
 
   return (
     <>
-      <CustomHead title="Admin Dashboard" />
+      <CustomHead title="Admin · Dashboard" noindex />
       <HeaderFooter>
-        <Flex direction="column" p={{ base: 4, md: 8 }} gap={6} minH="100vh" bg={pageBg}>
-          {/* Header */}
-          <Flex justify="space-between" align="center" flexWrap="wrap" gap={3}>
-            <Box>
-              <Text
-                fontFamily="var(--font-geist-mono), monospace"
-                fontSize="10px"
-                letterSpacing="0.16em"
-                textTransform="uppercase"
-                color="var(--accent)"
-                mb={1}
-              >
-                Admin
-              </Text>
-              <Heading
-                size="lg"
-                letterSpacing="-0.02em"
-              >
-                Dashboard
-              </Heading>
-              <Text color={dim} fontSize="xs" mt={0.5}>
-                {TAB_LABELS[tabIndex]} &mdash; manage and edit your site content
-              </Text>
-            </Box>
-            <HStack spacing={3}>
-              <Button size="sm" borderRadius="10px" variant="ghost" onClick={sendTest}>
-                Test Email
-              </Button>
-              <Button
-                as={Link}
-                href="/admin/db-config"
-                size="sm"
-                leftIcon={<SettingsIcon />}
-                colorScheme="purple"
-                borderRadius="10px"
-              >
-                DB & Backup
-              </Button>
-            </HStack>
-          </Flex>
-
-          {/* Tabs */}
-          <Tabs
-            variant="unstyled"
-            index={tabIndex}
-            onChange={(i) => {
-              setTabIndex(i)
-              // Keep ?tab= in sync so reloads / shared links land on the same tab.
-              router.replace({ pathname: router.pathname, query: { ...router.query, tab: TAB_KEYS[i] } }, undefined, {
-                shallow: true,
-                scroll: false,
-              })
-            }}
-            isFitted={false}
-            // Only the visible editor is mounted: each editor owns keyboard
-            // shortcuts and its own copy of the data, so hidden ones must not
-            // listen or later overwrite a newer save.
-            isLazy
-            lazyBehavior="unmount"
-          >
-            <TabList
-              bg={useColorModeValue('rgba(255,255,255,0.8)', 'rgba(30,41,59,0.7)')}
-              backdropFilter="blur(10px)"
-              border="1px solid"
-              borderColor={tabBorder}
-              borderRadius="16px"
-              p={1.5}
-              display="inline-flex"
-              gap={1}
-              mb={6}
-              maxW="100%"
-              overflowX="auto"
-              sx={{ scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}
+        <AdminTitleBar
+          eyebrow="[admin]"
+          title="Dashboard"
+          maxW={WORKSPACE_MAX_W}
+          status={
+            <Text
+              display={{ base: 'none', lg: 'block' }}
+              fontFamily={MONO}
+              fontSize="10px"
+              color="page.muted"
+              aria-hidden
             >
-              {TAB_LABELS.map((label, i) => (
-                <Tab
-                  key={label}
-                  flexShrink={0}
-                  borderRadius="12px"
-                  fontWeight={600}
-                  fontSize="sm"
-                  px={5}
-                  py={2}
-                  transition="all 0.2s"
-                  color={dim}
-                  _selected={{
-                    bg: tabSelectedBg,
-                    color: tabColors[i],
-                    boxShadow: 'md',
-                  }}
+              {tabShortcutLabel(isMac, DASHBOARD_TABS.length)} switch tabs
+            </Text>
+          }
+          actions={
+            <Menu placement="bottom-end" isLazy>
+              <MenuButton
+                as={Button}
+                size="sm"
+                variant="ghost"
+                rightIcon={<ChevronDownIcon />}
+                color="page.fg-secondary"
+                _hover={{ bg: 'page.bg-overlay', color: 'page.fg' }}
+                _active={{ bg: 'page.bg-overlay' }}
+              >
+                More
+              </MenuButton>
+              <MenuList bg="page.bg-elevated" borderColor="page.border" fontSize="sm" zIndex={50}>
+                <MenuItem
+                  as={NextLink}
+                  href="/admin"
+                  bg="transparent"
+                  _hover={{ bg: 'page.bg-overlay' }}
+                  _focus={{ bg: 'page.bg-overlay' }}
                 >
-                  <HStack spacing={2}>
-                    <Icon as={tabIcons[i]} boxSize={3.5} />
-                    <Text>{label}</Text>
-                  </HStack>
-                </Tab>
-              ))}
-            </TabList>
+                  All admin tools
+                </MenuItem>
+                <MenuItem
+                  as={NextLink}
+                  href="/admin/db-config"
+                  bg="transparent"
+                  _hover={{ bg: 'page.bg-overlay' }}
+                  _focus={{ bg: 'page.bg-overlay' }}
+                >
+                  MongoDB backup
+                </MenuItem>
+                <MenuDivider borderColor="page.border" />
+                <MenuItem
+                  onClick={sendTestMail}
+                  bg="transparent"
+                  _hover={{ bg: 'page.bg-overlay' }}
+                  _focus={{ bg: 'page.bg-overlay' }}
+                >
+                  Send test email
+                </MenuItem>
+              </MenuList>
+            </Menu>
+          }
+        >
+          <Flex gap={2} align="center" flexWrap="wrap" minW={0}>
+            <SegmentedTabs
+              items={tabItems}
+              value={tab}
+              onSelect={(k) => go(k)}
+              label="Dashboard sections"
+              idPrefix="dash"
+            />
+            {tab === 'cv' ? (
+              <SegmentedTabs
+                items={CV_VIEW_ITEMS}
+                value={cvView}
+                onSelect={(v) => go('cv', v)}
+                label="CV editor"
+                idPrefix="cvview"
+                size="sm"
+              />
+            ) : null}
+          </Flex>
+        </AdminTitleBar>
 
-            <TabPanels>
-              {/* Home */}
-              <TabPanel p={0}>
-                <HomeEditor />
-              </TabPanel>
-
-              {/* CV — Studio is the editor; raw JSON stays for power users. */}
-              <TabPanel p={0}>
-                <Tabs variant="soft-rounded" colorScheme="purple" size="sm" isLazy lazyBehavior="unmount">
-                  <TabList mb={3} gap={1}>
-                    <Tab>Studio</Tab>
-                    <Tab>Raw JSON</Tab>
-                  </TabList>
-                  <TabPanels>
-                    <TabPanel p={0}>
-                      <CVEditorStudio />
-                    </TabPanel>
-                    <TabPanel p={0}>
-                      <CVEditor />
-                    </TabPanel>
-                  </TabPanels>
-                </Tabs>
-              </TabPanel>
-
-              {/* Versions */}
-              <TabPanel p={0}>
-                <VersionHistory />
-              </TabPanel>
-
-              {/* Storage — local SQLite + R2 inventory */}
-              <TabPanel p={0}>
-                <StoragePanel />
-              </TabPanel>
-            </TabPanels>
-          </Tabs>
-        </Flex>
+        <Box
+          {...tabPanelProps('dash', tab)}
+          maxW={WORKSPACE_MAX_W}
+          mx="auto"
+          w="100%"
+          px={{ base: 4, md: 6, lg: 8 }}
+          py={4}
+          _focus={{ outline: 'none' }}
+          sx={{ '--admin-workspace-h': WORKSPACE_H }}
+        >
+          {/*
+            Only the visible editor is mounted: each one owns keyboard
+            shortcuts and its own copy of the data, so a hidden one must not
+            listen or later overwrite a newer save.
+          */}
+          {tab === 'home' ? <HomeEditor /> : null}
+          {tab === 'cv' ? (
+            <Box {...tabPanelProps('cvview', cvView)}>
+              {cvView === 'raw' ? <CVEditor /> : <CVEditorStudio />}
+            </Box>
+          ) : null}
+          {tab === 'versions' ? (
+            <Box maxW="var(--container-content)" mx="auto">
+              <VersionHistory />
+            </Box>
+          ) : null}
+          {tab === 'storage' ? (
+            <Box maxW="var(--container-content)" mx="auto">
+              <StoragePanel />
+            </Box>
+          ) : null}
+        </Box>
       </HeaderFooter>
     </>
+  )
+}
+
+export default function AdminDashboard() {
+  return (
+    <AdminDirtyProvider>
+      <Dashboard />
+    </AdminDirtyProvider>
   )
 }

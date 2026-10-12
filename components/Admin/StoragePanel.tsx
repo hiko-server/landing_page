@@ -1,44 +1,36 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
   AlertDescription,
-  AlertIcon,
-  AlertTitle,
-  Badge,
-  Box,
-  Button,
-  ButtonGroup,
-  Code,
-  Divider,
-  Flex,
-  HStack,
-  Heading,
-  Icon,
-  SimpleGrid,
-  Skeleton,
-  Spinner,
-  Stat,
-  StatLabel,
-  StatNumber,
-  Table,
-  Tag,
-  Tbody,
-  Td,
-  Text,
-  Th,
-  Thead,
-  Tr,
-  useColorModeValue,
-  useDisclosure,
-  useToast,
-} from '@chakra-ui/react'
-import {
   AlertDialog,
   AlertDialogBody,
   AlertDialogContent,
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogOverlay,
+  AlertIcon,
+  AlertTitle,
+  Badge,
+  Box,
+  Button,
+  Code,
+  Flex,
+  HStack,
+  Icon,
+  ListItem,
+  SimpleGrid,
+  Skeleton,
+  Spinner,
+  Table,
+  TableContainer,
+  Tbody,
+  Td,
+  Text,
+  Th,
+  Thead,
+  Tr,
+  UnorderedList,
+  useToast,
 } from '@chakra-ui/react'
 import {
   FaCloud,
@@ -46,12 +38,27 @@ import {
   FaCloudUploadAlt,
   FaDatabase,
   FaSync,
-  FaCheckCircle,
-  FaExclamationTriangle,
   FaArchive,
 } from 'react-icons/fa'
+import { readJsonObject } from './shell/http'
+import { parseRestoreReport, type RestoreReport } from './shell/storageReport'
+import {
+  Eyebrow,
+  MONO,
+  Panel,
+  RevalidatedPaths,
+  outlineButtonProps,
+  primaryButtonProps,
+} from './shell/ui'
 
-type DbRow = { name?: string; collection?: string; slug?: string; key?: string; bytes: number; updated_at: number }
+type DbRow = {
+  name?: string
+  collection?: string
+  slug?: string
+  key?: string
+  bytes: number
+  updated_at: number
+}
 type R2Obj = { key: string; size: number; lastModified: string | null }
 type LocalBackup = { filename: string; bytes: number; mtime: number }
 
@@ -83,6 +90,14 @@ type StoragePayload = {
   now: number
 }
 
+type PullSummary = {
+  at: number
+  key: string | null
+  files: number | null
+  safetySnapshot: string | null
+  report: RestoreReport | null
+}
+
 function fmtBytes(n: number): string {
   if (!n) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB']
@@ -98,7 +113,7 @@ function fmtBytes(n: number): string {
 function fmtDate(ts: number | string | null): string {
   if (!ts) return '—'
   const d = new Date(ts)
-  return d.toLocaleString()
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString()
 }
 
 function fmtRelative(ts: number | null): string {
@@ -109,8 +124,7 @@ function fmtRelative(ts: number | null): string {
   if (mins < 60) return `${mins}m ago`
   const hours = Math.floor(mins / 60)
   if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
+  return `${Math.floor(hours / 24)}d ago`
 }
 
 function groupR2(objects: R2Obj[]): Record<string, R2Obj[]> {
@@ -120,10 +134,148 @@ function groupR2(objects: R2Obj[]): Record<string, R2Obj[]> {
     if (!groups[prefix]) groups[prefix] = []
     groups[prefix].push(o)
   }
-  for (const k of Object.keys(groups)) {
-    groups[k].sort((a, b) => a.key.localeCompare(b.key))
-  }
+  for (const k of Object.keys(groups)) groups[k].sort((a, b) => a.key.localeCompare(b.key))
   return groups
+}
+
+const errText = (e: unknown) =>
+  e instanceof Error ? (e.message === 'Failed to fetch' ? 'Network error' : e.message) : String(e)
+
+/** Mono label + big number, in the public site's stat style. */
+function Stat({
+  label,
+  value,
+  sub,
+}: {
+  label: string
+  value: React.ReactNode
+  sub?: React.ReactNode
+}) {
+  return (
+    <Box minW={0}>
+      <Eyebrow>{label}</Eyebrow>
+      <Text fontSize="lg" fontWeight={600} letterSpacing="-0.02em" mt={1} noOfLines={1}>
+        {value}
+      </Text>
+      {sub ? (
+        <Text fontSize="11px" color="page.fg-secondary" noOfLines={1}>
+          {sub}
+        </Text>
+      ) : null}
+    </Box>
+  )
+}
+
+function HairlineTable({ children, mb = 4 }: { children: React.ReactNode; mb?: number }) {
+  return (
+    <TableContainer border="1px solid" borderColor="page.border" borderRadius="md" mb={mb}>
+      <Table
+        size="sm"
+        variant="simple"
+        sx={{
+          'th, td': { borderColor: 'page.border' },
+          th: {
+            fontFamily: MONO,
+            fontSize: '10px',
+            letterSpacing: '0.12em',
+            color: 'page.fg-secondary',
+          },
+          'tr:last-of-type td': { borderBottom: 'none' },
+        }}
+      >
+        {children}
+      </Table>
+    </TableContainer>
+  )
+}
+
+function CardTitle({
+  icon,
+  title,
+  badge,
+}: {
+  icon: React.ElementType
+  title: string
+  badge?: React.ReactNode
+}) {
+  return (
+    <HStack mb={4} spacing={2}>
+      <Icon as={icon} color="accent.500" boxSize={3.5} aria-hidden />
+      <Text as="h3" fontSize="sm" fontWeight={600}>
+        {title}
+      </Text>
+      <Box ml="auto">{badge}</Box>
+    </HStack>
+  )
+}
+
+function RestoreReportCard({ pull, onDismiss }: { pull: PullSummary; onDismiss: () => void }) {
+  const r = pull.report
+  return (
+    <Panel
+      mb={4}
+      borderColor="accent.500"
+      role="status"
+      aria-live="polite"
+      aria-labelledby="restore-report-title"
+    >
+      <Flex align="flex-start" justify="space-between" gap={3} mb={3}>
+        <Box>
+          <Eyebrow accent>[restore report]</Eyebrow>
+          <Text id="restore-report-title" fontSize="sm" fontWeight={600} mt={1}>
+            Restored {pull.key ? <Code fontSize="xs">{pull.key}</Code> : 'snapshot'} ·{' '}
+            {fmtDate(pull.at)}
+          </Text>
+        </Box>
+        <Button size="xs" variant="ghost" color="page.fg-secondary" onClick={onDismiss}>
+          Dismiss
+        </Button>
+      </Flex>
+      {r ? (
+        <>
+          <SimpleGrid columns={{ base: 2, md: 4 }} spacing={4} mb={3}>
+            <Stat label="Database" value={r.dbReplaced ? 'Replaced' : 'Unchanged'} />
+            <Stat label="Files restored" value={pull.files ?? '—'} />
+            <Stat label="R2 mirrored" value={r.r2Mirrored} sub="objects re-uploaded" />
+            <Stat label="R2 removed" value={r.r2Removed} sub="stale objects deleted" />
+          </SimpleGrid>
+          {r.revalidated.length ? <RevalidatedPaths paths={r.revalidated} /> : null}
+          {r.warnings.length ? (
+            <Alert
+              status="warning"
+              variant="left-accent"
+              borderRadius="md"
+              mt={3}
+              bg="page.bg-elevated"
+              alignItems="flex-start"
+              fontSize="sm"
+            >
+              <AlertIcon mt={0.5} />
+              <Box>
+                <AlertTitle fontSize="sm">
+                  {r.warnings.length} warning{r.warnings.length === 1 ? '' : 's'}
+                </AlertTitle>
+                <UnorderedList fontSize="xs" ml={4} mt={1} spacing={0.5}>
+                  {r.warnings.map((w) => (
+                    <ListItem key={w}>{w}</ListItem>
+                  ))}
+                </UnorderedList>
+              </Box>
+            </Alert>
+          ) : null}
+        </>
+      ) : (
+        <Text fontSize="sm" color="page.fg-secondary">
+          {pull.files ?? '?'} files restored.
+        </Text>
+      )}
+      {pull.safetySnapshot ? (
+        <Text fontSize="xs" color="page.fg-secondary" mt={3}>
+          The replaced state was saved first as <Code fontSize="xs">{pull.safetySnapshot}</Code>.
+        </Text>
+      ) : null}
+    </Panel>
+  )
 }
 
 export default function StoragePanel() {
@@ -132,46 +284,44 @@ export default function StoragePanel() {
   const [err, setErr] = useState<string | null>(null)
   const [backingUp, setBackingUp] = useState(false)
   const [pulling, setPulling] = useState(false)
+  const [confirmPull, setConfirmPull] = useState(false)
+  const [lastPull, setLastPull] = useState<PullSummary | null>(null)
   const toast = useToast()
-  const cardBg = useColorModeValue('white', 'gray.800')
-  const border = useColorModeValue('gray.200', 'gray.700')
-  const dim = useColorModeValue('gray.600', 'gray.400')
-  const subtleBg = useColorModeValue('gray.50', 'gray.900')
-
-  const confirmPull = useDisclosure()
-  const cancelRef = React.useRef<HTMLButtonElement>(null)
+  const cancelRef = useRef<HTMLButtonElement>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
     setErr(null)
     try {
-      const res = await fetch('/api/admin/storage')
-      const json = await res.json()
-      if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`)
-      setData(json)
-    } catch (e: any) {
-      setErr(e?.message || String(e))
+      const res = await fetch('/api/admin/storage', { cache: 'no-store' })
+      const json = await readJsonObject(res)
+      if (res.status === 401) throw new Error('Session expired — sign in again.')
+      if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
+      setData(json as StoragePayload)
+    } catch (e) {
+      setErr(errText(e))
     } finally {
       setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    load()
+    void load()
   }, [load])
 
   const runBackup = useCallback(async () => {
     setBackingUp(true)
     try {
       const res = await fetch('/api/admin/storage/backup', { method: 'POST' })
-      const json = await res.json()
-      if (!res.ok || !json?.ok) {
+      const json = await readJsonObject(res)
+      if (!res.ok || !json.ok) {
         toast({
-          status: 'error',
+          status: res.status === 409 ? 'warning' : 'error',
           title: 'Backup failed',
-          description: json?.error || `HTTP ${res.status}`,
+          description: json.error || `HTTP ${res.status}`,
           duration: 7000,
           isClosable: true,
+          position: 'bottom-right',
         })
         return
       }
@@ -183,6 +333,7 @@ export default function StoragePanel() {
           description: `${summary} → local + R2 (${json.r2.key})`,
           duration: 5000,
           isClosable: true,
+          position: 'bottom-right',
         })
       } else if (json.r2?.error) {
         toast({
@@ -191,6 +342,7 @@ export default function StoragePanel() {
           description: json.r2.error,
           duration: 8000,
           isClosable: true,
+          position: 'bottom-right',
         })
       } else {
         toast({
@@ -199,18 +351,24 @@ export default function StoragePanel() {
           description: `${summary} (R2 not configured)`,
           duration: 5000,
           isClosable: true,
+          position: 'bottom-right',
         })
       }
       await load()
-    } catch (e: any) {
-      toast({ status: 'error', title: 'Backup failed', description: e?.message || String(e) })
+    } catch (e) {
+      toast({
+        status: 'error',
+        title: 'Backup failed',
+        description: errText(e),
+        position: 'bottom-right',
+      })
     } finally {
       setBackingUp(false)
     }
   }, [load, toast])
 
   const runPull = useCallback(async () => {
-    confirmPull.onClose()
+    setConfirmPull(false)
     setPulling(true)
     try {
       const res = await fetch('/api/admin/storage/pull', {
@@ -218,150 +376,175 @@ export default function StoragePanel() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ source: 'r2' }),
       })
-      const json = await res.json()
-      if (!res.ok || !json?.ok) {
+      const json = await readJsonObject(res)
+      if (!res.ok || !json.ok) {
         toast({
-          status: res.status === 503 ? 'warning' : 'error',
+          status: res.status === 503 || res.status === 409 ? 'warning' : 'error',
           title: 'Pull failed',
-          description: json?.error || `HTTP ${res.status}`,
+          description: json.error || `HTTP ${res.status}`,
           duration: 8000,
           isClosable: true,
+          position: 'bottom-right',
         })
         return
       }
-      const restored = json.restored || {}
+      const report = parseRestoreReport(json)
+      setLastPull({
+        at: Date.now(),
+        key: typeof json.key === 'string' ? json.key : null,
+        files: typeof json.restored?.files === 'number' ? json.restored.files : null,
+        safetySnapshot: typeof json.safetySnapshot === 'string' ? json.safetySnapshot : null,
+        report,
+      })
       toast({
-        status: 'success',
+        status: report?.warnings.length ? 'warning' : 'success',
         title: 'Pull complete',
-        description: `${restored.files ?? '?'} files restored${restored.dbReplaced ? ' (DB replaced)' : ''} from ${json.key}`,
+        description: report?.warnings.length
+          ? `${report.warnings.length} warning(s) — see the restore report.`
+          : 'See the restore report below.',
         duration: 6000,
         isClosable: true,
+        position: 'bottom-right',
       })
       await load()
-    } catch (e: any) {
-      toast({ status: 'error', title: 'Pull failed', description: e?.message || String(e) })
+    } catch (e) {
+      toast({
+        status: 'error',
+        title: 'Pull failed',
+        description: errText(e),
+        position: 'bottom-right',
+      })
     } finally {
       setPulling(false)
     }
-  }, [confirmPull, load, toast])
+  }, [load, toast])
 
   const r2Groups = useMemo(() => (data ? groupR2(data.r2.objects) : {}), [data])
   const lastLocalAt = data?.backups?.lastLocalAt ?? null
   const lastR2At = useMemo(() => {
-    if (!data?.r2?.snapshots?.length) return null
-    const ts = data.r2.snapshots[0].lastModified
+    const ts = data?.r2?.snapshots?.[0]?.lastModified
     return ts ? new Date(ts).getTime() : null
   }, [data])
 
   const pullDisabled = !data?.r2?.configured || !data?.r2?.hasLatest
+  const pullHint = !data?.r2?.configured
+    ? 'R2 is not configured'
+    : !data?.r2?.hasLatest
+      ? 'No backups/latest.tgz in R2 yet'
+      : 'Download and restore backups/latest.tgz'
 
   return (
     <Box>
-      <Flex justify="space-between" align={{ base: 'stretch', md: 'center' }} mb={4} flexWrap="wrap" gap={3}>
-        <Box>
-          <Heading size="md">
-            Content Storage
-          </Heading>
-          <Text fontSize="sm" color={dim}>
-            Local SQLite is canonical; Cloudflare R2 is the off-site mirror. Snapshots include the
-            whole DB, uploads, version history and admin/Mongo config.
+      <Flex
+        justify="space-between"
+        align={{ base: 'stretch', md: 'flex-end' }}
+        mb={5}
+        flexWrap="wrap"
+        gap={4}
+      >
+        <Box maxW="62ch">
+          <Eyebrow accent>[storage]</Eyebrow>
+          <Text as="h2" fontSize="lg" fontWeight={600} letterSpacing="-0.02em" mt={1}>
+            Content storage
+          </Text>
+          <Text fontSize="sm" color="page.fg-secondary" mt={1}>
+            Local SQLite is canonical; Cloudflare R2 is the off-site mirror. A snapshot holds the
+            whole database, uploads and version history.
           </Text>
         </Box>
-        <ButtonGroup size="sm" isAttached={false} spacing={2} flexWrap="wrap">
+        <HStack spacing={2} flexWrap="wrap">
           <Button
+            size="sm"
             leftIcon={<Icon as={FaCloudUploadAlt} />}
-            colorScheme="teal"
+            {...primaryButtonProps}
             onClick={runBackup}
             isLoading={backingUp}
-            loadingText="Backing up…"
-            borderRadius="10px"
+            loadingText="Backing up"
           >
             Backup now
           </Button>
           <Button
+            size="sm"
             leftIcon={<Icon as={FaCloudDownloadAlt} />}
-            colorScheme="orange"
-            variant="outline"
-            onClick={() => confirmPull.onOpen()}
+            {...outlineButtonProps}
+            onClick={() => setConfirmPull(true)}
             isDisabled={pullDisabled || pulling}
             isLoading={pulling}
-            loadingText="Pulling…"
-            borderRadius="10px"
-            title={
-              !data?.r2?.configured
-                ? 'R2 not configured'
-                : !data?.r2?.hasLatest
-                ? 'No backups/latest.tgz in R2 yet'
-                : 'Pull and restore backups/latest.tgz'
-            }
+            loadingText="Pulling"
+            title={pullHint}
           >
             Pull latest
           </Button>
           <Button
+            size="sm"
             leftIcon={<Icon as={FaSync} />}
-            onClick={load}
+            onClick={() => void load()}
             isLoading={loading}
             variant="ghost"
-            borderRadius="10px"
+            color="page.fg-secondary"
           >
             Refresh
           </Button>
-        </ButtonGroup>
+        </HStack>
       </Flex>
 
-      {err && (
-        <Alert status="error" borderRadius="md" mb={4}>
+      {lastPull ? <RestoreReportCard pull={lastPull} onDismiss={() => setLastPull(null)} /> : null}
+
+      {err ? (
+        <Alert
+          status="error"
+          variant="left-accent"
+          borderRadius="md"
+          mb={4}
+          bg="page.bg-elevated"
+          role="alert"
+        >
           <AlertIcon />
-          <AlertDescription>{err}</AlertDescription>
+          <AlertDescription fontSize="sm">{err}</AlertDescription>
         </Alert>
-      )}
+      ) : null}
 
-      {loading && !data && (
-        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-          <Skeleton height="200px" borderRadius="md" />
-          <Skeleton height="200px" borderRadius="md" />
+      {loading && !data ? (
+        <SimpleGrid
+          columns={{ base: 1, md: 2 }}
+          spacing={4}
+          aria-busy="true"
+          aria-label="Loading storage status"
+        >
+          <Skeleton height="200px" borderRadius="xl" />
+          <Skeleton height="200px" borderRadius="xl" />
         </SimpleGrid>
-      )}
+      ) : null}
 
-      {data && (
+      {data ? (
         <>
-          {/* ── Snapshot summary strip ───────────────────────────────────── */}
-          <Box
-            bg={subtleBg}
-            border="1px solid"
-            borderColor={border}
-            borderRadius="lg"
-            p={4}
-            mb={4}
-          >
-            <HStack mb={3} spacing={2}>
-              <Icon as={FaArchive} color="purple.400" />
-              <Heading size="sm">Snapshots</Heading>
-              <Badge colorScheme="purple" ml="auto">tarball · whole-site</Badge>
-            </HStack>
-            <SimpleGrid columns={{ base: 2, md: 4 }} spacing={4} mb={3}>
-              <Stat>
-                <StatLabel fontSize="xs">Last local backup</StatLabel>
-                <StatNumber fontSize="md">{fmtRelative(lastLocalAt)}</StatNumber>
-                <Text fontSize="xs" color={dim}>{lastLocalAt ? fmtDate(lastLocalAt) : '—'}</Text>
-              </Stat>
-              <Stat>
-                <StatLabel fontSize="xs">Last R2 snapshot</StatLabel>
-                <StatNumber fontSize="md">{fmtRelative(lastR2At)}</StatNumber>
-                <Text fontSize="xs" color={dim}>{lastR2At ? fmtDate(lastR2At) : '—'}</Text>
-              </Stat>
-              <Stat>
-                <StatLabel fontSize="xs">Local copies</StatLabel>
-                <StatNumber fontSize="md">{data.backups.local.length}</StatNumber>
-              </Stat>
-              <Stat>
-                <StatLabel fontSize="xs">R2 copies</StatLabel>
-                <StatNumber fontSize="md">{data.r2.snapshots.length}</StatNumber>
-              </Stat>
+          <Panel mb={4}>
+            <CardTitle
+              icon={FaArchive}
+              title="Snapshots"
+              badge={
+                <Badge variant="outline" colorScheme="accent" fontFamily={MONO} fontSize="9px">
+                  tarball · whole site
+                </Badge>
+              }
+            />
+            <SimpleGrid columns={{ base: 2, md: 4 }} spacing={4} mb={4}>
+              <Stat
+                label="Last local backup"
+                value={fmtRelative(lastLocalAt)}
+                sub={lastLocalAt ? fmtDate(lastLocalAt) : '—'}
+              />
+              <Stat
+                label="Last R2 snapshot"
+                value={fmtRelative(lastR2At)}
+                sub={lastR2At ? fmtDate(lastR2At) : '—'}
+              />
+              <Stat label="Local copies" value={data.backups.local.length} />
+              <Stat label="R2 copies" value={data.r2.snapshots.length} />
             </SimpleGrid>
 
-            {data.backups.local.length > 0 && (
-              <Table size="sm" variant="simple" mb={2}>
+            {data.backups.local.length > 0 ? (
+              <HairlineTable>
                 <Thead>
                   <Tr>
                     <Th>Local file</Th>
@@ -372,17 +555,27 @@ export default function StoragePanel() {
                 <Tbody>
                   {data.backups.local.slice(0, 5).map((b) => (
                     <Tr key={b.filename}>
-                      <Td><Code fontSize="xs">{b.filename}</Code></Td>
-                      <Td isNumeric fontSize="xs">{fmtBytes(b.bytes)}</Td>
+                      <Td>
+                        <Code fontSize="xs" bg="transparent">
+                          {b.filename}
+                        </Code>
+                      </Td>
+                      <Td isNumeric fontSize="xs">
+                        {fmtBytes(b.bytes)}
+                      </Td>
                       <Td fontSize="xs">{fmtDate(b.mtime)}</Td>
                     </Tr>
                   ))}
                 </Tbody>
-              </Table>
+              </HairlineTable>
+            ) : (
+              <Text fontSize="xs" color="page.fg-secondary">
+                No local snapshots yet. Use <strong>Backup now</strong> to create the first one.
+              </Text>
             )}
 
-            {data.r2.configured && data.r2.snapshots.length > 0 && (
-              <Table size="sm" variant="simple">
+            {data.r2.configured && data.r2.snapshots.length > 0 ? (
+              <HairlineTable mb={0}>
                 <Thead>
                   <Tr>
                     <Th>R2 key</Th>
@@ -395,57 +588,46 @@ export default function StoragePanel() {
                     <Tr key={o.key}>
                       <Td>
                         <HStack spacing={2}>
-                          <Code fontSize="xs">{o.key}</Code>
-                          {o.key === data.backups.r2LatestKey && (
-                            <Badge colorScheme="green" fontSize="2xs">latest alias</Badge>
-                          )}
+                          <Code fontSize="xs" bg="transparent">
+                            {o.key}
+                          </Code>
+                          {o.key === data.backups.r2LatestKey ? (
+                            <Badge colorScheme="green" variant="subtle" fontSize="9px">
+                              latest alias
+                            </Badge>
+                          ) : null}
                         </HStack>
                       </Td>
-                      <Td isNumeric fontSize="xs">{fmtBytes(o.size)}</Td>
+                      <Td isNumeric fontSize="xs">
+                        {fmtBytes(o.size)}
+                      </Td>
                       <Td fontSize="xs">{fmtDate(o.lastModified)}</Td>
                     </Tr>
                   ))}
                 </Tbody>
-              </Table>
-            )}
-
-            {data.backups.local.length === 0 && (
-              <Text fontSize="xs" color={dim} fontStyle="italic">
-                No snapshots yet. Click <strong>Backup now</strong> to create the first one.
-              </Text>
-            )}
-          </Box>
+              </HairlineTable>
+            ) : null}
+          </Panel>
 
           <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4}>
-            {/* ── Local DB ───────────────────────────────────────────── */}
-            <Box bg={cardBg} border="1px solid" borderColor={border} borderRadius="lg" p={5}>
-              <HStack mb={4} spacing={2}>
-                <Icon as={FaDatabase} color="blue.400" />
-                <Heading size="sm">Local SQLite</Heading>
-                <Badge colorScheme="green" ml="auto">
-                  canonical
-                </Badge>
-              </HStack>
+            <Panel>
+              <CardTitle
+                icon={FaDatabase}
+                title="Local SQLite"
+                badge={
+                  <Badge colorScheme="green" variant="subtle" fontSize="9px">
+                    canonical
+                  </Badge>
+                }
+              />
               <SimpleGrid columns={3} spacing={4} mb={5}>
-                <Stat>
-                  <StatLabel fontSize="xs">Pages</StatLabel>
-                  <StatNumber fontSize="2xl">{data.db.totals.pages}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel fontSize="xs">Items</StatLabel>
-                  <StatNumber fontSize="2xl">{data.db.totals.items}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel fontSize="xs">KV</StatLabel>
-                  <StatNumber fontSize="2xl">{data.db.totals.kv}</StatNumber>
-                </Stat>
+                <Stat label="Pages" value={data.db.totals.pages} />
+                <Stat label="Items" value={data.db.totals.items} />
+                <Stat label="KV" value={data.db.totals.kv} />
               </SimpleGrid>
 
-              <Divider mb={3} />
-              <Text fontWeight="600" fontSize="sm" mb={2}>
-                Pages
-              </Text>
-              <Table size="sm" variant="simple" mb={4}>
+              <Eyebrow mb={2}>Pages</Eyebrow>
+              <HairlineTable>
                 <Thead>
                   <Tr>
                     <Th>Name</Th>
@@ -454,20 +636,24 @@ export default function StoragePanel() {
                   </Tr>
                 </Thead>
                 <Tbody>
-                  {data.db.pages.map(r => (
+                  {data.db.pages.map((r) => (
                     <Tr key={r.name}>
-                      <Td><Code fontSize="xs">{r.name}</Code></Td>
-                      <Td isNumeric fontSize="xs">{fmtBytes(r.bytes)}</Td>
+                      <Td>
+                        <Code fontSize="xs" bg="transparent">
+                          {r.name}
+                        </Code>
+                      </Td>
+                      <Td isNumeric fontSize="xs">
+                        {fmtBytes(r.bytes)}
+                      </Td>
                       <Td fontSize="xs">{fmtDate(r.updated_at)}</Td>
                     </Tr>
                   ))}
                 </Tbody>
-              </Table>
+              </HairlineTable>
 
-              <Text fontWeight="600" fontSize="sm" mb={2}>
-                Collection items
-              </Text>
-              <Table size="sm" variant="simple" mb={4}>
+              <Eyebrow mb={2}>Collection items</Eyebrow>
+              <HairlineTable>
                 <Thead>
                   <Tr>
                     <Th>Collection</Th>
@@ -477,21 +663,27 @@ export default function StoragePanel() {
                   </Tr>
                 </Thead>
                 <Tbody>
-                  {data.db.items.map(r => (
+                  {data.db.items.map((r) => (
                     <Tr key={`${r.collection}/${r.slug}`}>
-                      <Td><Tag size="sm" colorScheme="purple">{r.collection}</Tag></Td>
-                      <Td><Code fontSize="xs">{r.slug}</Code></Td>
-                      <Td isNumeric fontSize="xs">{fmtBytes(r.bytes)}</Td>
+                      <Td fontFamily={MONO} fontSize="xs" color="accent.500">
+                        {r.collection}
+                      </Td>
+                      <Td>
+                        <Code fontSize="xs" bg="transparent">
+                          {r.slug}
+                        </Code>
+                      </Td>
+                      <Td isNumeric fontSize="xs">
+                        {fmtBytes(r.bytes)}
+                      </Td>
                       <Td fontSize="xs">{fmtDate(r.updated_at)}</Td>
                     </Tr>
                   ))}
                 </Tbody>
-              </Table>
+              </HairlineTable>
 
-              <Text fontWeight="600" fontSize="sm" mb={2}>
-                Key/value
-              </Text>
-              <Table size="sm" variant="simple">
+              <Eyebrow mb={2}>Key / value</Eyebrow>
+              <HairlineTable mb={0}>
                 <Thead>
                   <Tr>
                     <Th>Key</Th>
@@ -500,145 +692,184 @@ export default function StoragePanel() {
                   </Tr>
                 </Thead>
                 <Tbody>
-                  {data.db.kv.map(r => (
+                  {data.db.kv.map((r) => (
                     <Tr key={r.key}>
-                      <Td><Code fontSize="xs">{r.key}</Code></Td>
-                      <Td isNumeric fontSize="xs">{fmtBytes(r.bytes)}</Td>
+                      <Td>
+                        <Code fontSize="xs" bg="transparent">
+                          {r.key}
+                        </Code>
+                      </Td>
+                      <Td isNumeric fontSize="xs">
+                        {fmtBytes(r.bytes)}
+                      </Td>
                       <Td fontSize="xs">{fmtDate(r.updated_at)}</Td>
                     </Tr>
                   ))}
                 </Tbody>
-              </Table>
-            </Box>
+              </HairlineTable>
+            </Panel>
 
-            {/* ── R2 ────────────────────────────────────────────────── */}
-            <Box bg={cardBg} border="1px solid" borderColor={border} borderRadius="lg" p={5}>
-              <HStack mb={4} spacing={2}>
-                <Icon as={FaCloud} color="orange.400" />
-                <Heading size="sm">Cloudflare R2</Heading>
-                {data.r2.configured ? (
-                  data.r2.ok ? (
-                    <Badge colorScheme="green" ml="auto">
-                      <HStack spacing={1}><Icon as={FaCheckCircle} boxSize={3} /><Text>connected</Text></HStack>
+            <Panel>
+              <CardTitle
+                icon={FaCloud}
+                title="Cloudflare R2"
+                badge={
+                  data.r2.configured ? (
+                    <Badge
+                      colorScheme={data.r2.ok ? 'green' : 'red'}
+                      variant="subtle"
+                      fontSize="9px"
+                    >
+                      {data.r2.ok ? 'connected' : 'error'}
                     </Badge>
                   ) : (
-                    <Badge colorScheme="red" ml="auto">
-                      <HStack spacing={1}><Icon as={FaExclamationTriangle} boxSize={3} /><Text>error</Text></HStack>
+                    <Badge variant="outline" fontSize="9px" color="page.fg-secondary">
+                      not configured
                     </Badge>
                   )
-                ) : (
-                  <Badge colorScheme="gray" ml="auto">Not configured</Badge>
-                )}
-              </HStack>
+                }
+              />
 
-              {!data.r2.configured && (
-                <Alert status="warning" borderRadius="md" mb={3} fontSize="sm">
-                  <AlertIcon />
+              {!data.r2.configured ? (
+                <Alert
+                  status="warning"
+                  variant="left-accent"
+                  borderRadius="md"
+                  mb={3}
+                  fontSize="sm"
+                  bg="page.bg-elevated"
+                  alignItems="flex-start"
+                >
+                  <AlertIcon mt={0.5} />
                   <Box>
                     <AlertTitle fontSize="sm">R2 env vars missing</AlertTitle>
                     <AlertDescription fontSize="xs">
-                      Set <Code fontSize="xs">R2_ENDPOINT</Code>, <Code fontSize="xs">R2_BUCKET</Code>,{' '}
+                      Set <Code fontSize="xs">R2_ENDPOINT</Code>,{' '}
+                      <Code fontSize="xs">R2_BUCKET</Code>,{' '}
                       <Code fontSize="xs">R2_ACCESS_KEY_ID</Code> and{' '}
-                      <Code fontSize="xs">R2_SECRET_ACCESS_KEY</Code> in <Code fontSize="xs">.env</Code>, then restart the dev server.
-                      Backups still work locally — they just won&rsquo;t replicate off-site until R2 is wired up.
+                      <Code fontSize="xs">R2_SECRET_ACCESS_KEY</Code> in{' '}
+                      <Code fontSize="xs">.env</Code>, then restart the server. Backups still work
+                      locally — they just won’t replicate off-site until R2 is wired up.
                     </AlertDescription>
                   </Box>
                 </Alert>
-              )}
+              ) : null}
 
-              {data.r2.error && (
-                <Alert status="error" borderRadius="md" mb={3} fontSize="sm">
-                  <AlertIcon />
+              {data.r2.error ? (
+                <Alert
+                  status="error"
+                  variant="left-accent"
+                  borderRadius="md"
+                  mb={3}
+                  fontSize="sm"
+                  bg="page.bg-elevated"
+                  alignItems="flex-start"
+                >
+                  <AlertIcon mt={0.5} />
                   <Box>
                     <AlertTitle fontSize="sm">R2 request failed</AlertTitle>
                     <AlertDescription fontSize="xs">{data.r2.error}</AlertDescription>
                   </Box>
                 </Alert>
-              )}
+              ) : null}
 
-              <SimpleGrid columns={2} spacing={4} mb={4}>
-                <Stat>
-                  <StatLabel fontSize="xs">Bucket</StatLabel>
-                  <StatNumber fontSize="md" fontFamily="mono">{data.r2.bucket || '—'}</StatNumber>
-                </Stat>
-                <Stat>
-                  <StatLabel fontSize="xs">Objects</StatLabel>
-                  <StatNumber fontSize="2xl">{data.r2.objects.length}</StatNumber>
-                </Stat>
+              <SimpleGrid columns={3} spacing={4} mb={4}>
+                <Stat
+                  label="Bucket"
+                  value={
+                    <Box as="span" fontFamily={MONO} fontSize="sm">
+                      {data.r2.bucket || '—'}
+                    </Box>
+                  }
+                />
+                <Stat label="Objects" value={data.r2.objects.length} />
+                <Stat label="Total size" value={fmtBytes(data.r2.totalSize)} />
               </SimpleGrid>
-              <Text fontSize="xs" color={dim} mb={3}>
-                Total size: <strong>{fmtBytes(data.r2.totalSize)}</strong>
-              </Text>
 
-              {data.r2.ok && data.r2.objects.length === 0 && (
-                <Alert status="info" borderRadius="md" fontSize="sm">
-                  <AlertIcon />
-                  <AlertDescription>
-                    Bucket reachable but empty. Click <strong>Backup now</strong> to push the first snapshot.
-                  </AlertDescription>
-                </Alert>
-              )}
+              {data.r2.ok && data.r2.objects.length === 0 ? (
+                <Text fontSize="sm" color="page.fg-secondary">
+                  Bucket reachable but empty. Use <strong>Backup now</strong> to push the first
+                  snapshot.
+                </Text>
+              ) : null}
 
-              {data.r2.objects.length > 0 &&
-                Object.entries(r2Groups).map(([prefix, objs]) => (
-                  <Box key={prefix} mb={4}>
-                    <HStack mb={2}>
-                      <Tag size="sm" colorScheme="orange">{prefix}/</Tag>
-                      <Text fontSize="xs" color={dim}>{objs.length} object{objs.length === 1 ? '' : 's'}</Text>
-                    </HStack>
-                    <Table size="sm" variant="simple">
-                      <Thead>
-                        <Tr>
-                          <Th>Key</Th>
-                          <Th isNumeric>Size</Th>
-                          <Th>Modified</Th>
+              {Object.entries(r2Groups).map(([prefix, objs]) => (
+                <Box key={prefix}>
+                  <HStack mb={2} spacing={2}>
+                    <Eyebrow color="accent.500">{prefix}/</Eyebrow>
+                    <Text fontSize="xs" color="page.fg-secondary">
+                      {objs.length} object{objs.length === 1 ? '' : 's'}
+                    </Text>
+                  </HStack>
+                  <HairlineTable>
+                    <Thead>
+                      <Tr>
+                        <Th>Key</Th>
+                        <Th isNumeric>Size</Th>
+                        <Th>Modified</Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {objs.map((o) => (
+                        <Tr key={o.key}>
+                          <Td>
+                            <Code fontSize="xs" bg="transparent">
+                              {o.key.slice(prefix.length + 1) || o.key}
+                            </Code>
+                          </Td>
+                          <Td isNumeric fontSize="xs">
+                            {fmtBytes(o.size)}
+                          </Td>
+                          <Td fontSize="xs">{fmtDate(o.lastModified)}</Td>
                         </Tr>
-                      </Thead>
-                      <Tbody>
-                        {objs.map(o => (
-                          <Tr key={o.key}>
-                            <Td>
-                              <Code fontSize="xs">{o.key.slice(prefix.length + 1) || o.key}</Code>
-                            </Td>
-                            <Td isNumeric fontSize="xs">{fmtBytes(o.size)}</Td>
-                            <Td fontSize="xs">{fmtDate(o.lastModified)}</Td>
-                          </Tr>
-                        ))}
-                      </Tbody>
-                    </Table>
-                  </Box>
-                ))}
+                      ))}
+                    </Tbody>
+                  </HairlineTable>
+                </Box>
+              ))}
 
-              {loading && data && <Spinner size="sm" mt={2} />}
-            </Box>
+              {loading ? (
+                <Spinner size="sm" mt={2} color="accent.500" aria-label="Refreshing" />
+              ) : null}
+            </Panel>
           </SimpleGrid>
         </>
-      )}
+      ) : null}
 
-      {/* ── Pull confirmation ─────────────────────────────────────────── */}
       <AlertDialog
-        isOpen={confirmPull.isOpen}
+        isOpen={confirmPull}
         leastDestructiveRef={cancelRef}
-        onClose={confirmPull.onClose}
+        onClose={() => setConfirmPull(false)}
         isCentered
       >
         <AlertDialogOverlay>
-          <AlertDialogContent>
-            <AlertDialogHeader fontSize="lg" fontWeight="bold">
-              Pull latest backup from R2?
-            </AlertDialogHeader>
-            <AlertDialogBody>
-              This will <strong>overwrite</strong> your local SQLite database, uploads,
-              version-history snapshots, and admin/Mongo config with the contents of{' '}
-              <Code fontSize="xs">{data?.backups?.r2LatestKey || 'backups/latest.tgz'}</Code>.
-              <br /><br />
-              Run <em>Backup now</em> first if you want a recovery point for the current state.
+          <AlertDialogContent
+            bg="page.bg-elevated"
+            border="1px solid"
+            borderColor="page.border"
+            mx={4}
+          >
+            <AlertDialogHeader fontSize="md">Pull the latest backup from R2?</AlertDialogHeader>
+            <AlertDialogBody fontSize="sm">
+              This <strong>replaces</strong> the local SQLite database, uploads and version-history
+              snapshots with the contents of{' '}
+              <Code fontSize="xs">{data?.backups?.r2LatestKey || 'backups/latest.tgz'}</Code>. Admin
+              credentials and MongoDB settings are kept.
+              <Text mt={3} color="page.fg-secondary">
+                A safety snapshot of the current state is saved first. Afterwards the R2 mirror is
+                resynced and the public pages are refreshed — you’ll get a report of what changed.
+              </Text>
             </AlertDialogBody>
-            <AlertDialogFooter>
-              <Button ref={cancelRef} onClick={confirmPull.onClose}>
+            <AlertDialogFooter gap={2}>
+              <Button
+                ref={cancelRef}
+                size="sm"
+                {...outlineButtonProps}
+                onClick={() => setConfirmPull(false)}
+              >
                 Cancel
               </Button>
-              <Button colorScheme="orange" onClick={runPull} ml={3} isLoading={pulling}>
+              <Button size="sm" {...primaryButtonProps} onClick={runPull} isLoading={pulling}>
                 Pull and restore
               </Button>
             </AlertDialogFooter>
