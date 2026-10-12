@@ -31,10 +31,22 @@ export async function revalidatePaths(res: NextApiResponse, paths: string[]): Pr
 
 export type Collection = 'blog' | 'work'
 
-/** Public paths that render a collection item (index + detail). */
-export function collectionPaths(collection: Collection, slug?: string): string[] {
+/** Upper bound on detail pages refreshed for one save (ISR covers the rest). */
+export const MAX_SIBLING_PATHS = 50
+
+/**
+ * Public paths that render a collection item: the index, the item's detail
+ * page and — because every detail page shows prev/next and related links —
+ * the other detail pages of the same collection (`siblings`, capped).
+ */
+export function collectionPaths(collection: Collection, slug?: string, siblings: readonly string[] = []): string[] {
   const base = `/${collection}`
-  return slug ? [base, `${base}/${slug}`] : [base]
+  const out = [base]
+  if (slug) out.push(`${base}/${slug}`)
+  for (const s of siblings.slice(0, MAX_SIBLING_PATHS)) {
+    if (typeof s === 'string' && s && s !== slug) out.push(`${base}/${s}`)
+  }
+  return Array.from(new Set(out))
 }
 
 /** Every statically generated public page whose data lives in the content store. */

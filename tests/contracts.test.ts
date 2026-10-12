@@ -55,3 +55,37 @@ test('publicHome drops hidden photos and data of switched-off sections', async (
   assert.equal(out.sections?.brands, false)
   assert.equal(publicHome(null), null)
 })
+
+test('collectionPaths covers index, item and capped siblings', async () => {
+  const { collectionPaths, MAX_SIBLING_PATHS } = await import('../lib/revalidate')
+  assert.deepEqual(collectionPaths('blog'), ['/blog'])
+  assert.deepEqual(collectionPaths('work', 'a', ['a', 'b', '', 'c']), ['/work', '/work/a', '/work/b', '/work/c'])
+  const many = Array.from({ length: MAX_SIBLING_PATHS + 20 }, (_, i) => `s${i}`)
+  assert.equal(collectionPaths('blog', 'x', many).length, 2 + MAX_SIBLING_PATHS)
+})
+
+test('API routes never set a version ETag through res.json (Next would overwrite it)', async () => {
+  const fs = await import('node:fs')
+  const path = await import('node:path')
+  const walk = (dir: string): string[] =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const p = path.join(dir, e.name)
+      return e.isDirectory() ? walk(p) : /\.tsx?$/.test(e.name) ? [p] : []
+    })
+  const offenders = walk(path.join(process.cwd(), 'pages', 'api')).filter((f) =>
+    /setHeader\(\s*['"]ETag['"]/i.test(fs.readFileSync(f, 'utf8')),
+  )
+  assert.deepEqual(offenders, [], 'use sendVersionedJson() from lib/http.ts instead')
+})
+
+test('sendVersionedJson keeps the given ETag and writes JSON', async () => {
+  const { sendVersionedJson } = await import('../lib/http')
+  const headers: Record<string, unknown> = {}
+  let ended: string | undefined
+  const res: any = { statusCode: 0, setHeader: (k: string, v: unknown) => (headers[k.toLowerCase()] = v), end: (b: string) => (ended = b) }
+  sendVersionedJson(res, 409, { error: 'conflict', etag: '"5"' }, '"5"')
+  assert.equal(res.statusCode, 409)
+  assert.equal(headers.etag, '"5"')
+  assert.equal(headers['content-type'], 'application/json; charset=utf-8')
+  assert.deepEqual(JSON.parse(ended!), { error: 'conflict', etag: '"5"' })
+})
