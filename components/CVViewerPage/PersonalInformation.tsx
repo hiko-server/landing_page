@@ -2,20 +2,21 @@ import React from 'react'
 import { Box, Flex, Link, Text } from '@chakra-ui/react'
 import type { PersonalInformation } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'
-import { cvLabels, displayUrl, hrefOf } from '../../lib/cvFormat'
+import { cvLabels, displayUrl, safeHref } from '../../lib/cvFormat'
+import { field, labelled } from './fields'
 
 /**
  * A4 header: name + website on the left, location and contact on the right,
- * optional summary underneath. Hidden fields arrive blank and are skipped;
- * the block disappears entirely only when nothing at all is left to show.
+ * optional summary underneath. Hidden fields (blank + `redacted`, or still
+ * listed in hiddenFields on an editor document) are skipped together with
+ * their label and separator; the block disappears entirely only when nothing
+ * at all is left to show.
  */
 
-const t = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
-
 export function composeName(data: Partial<PersonalInformation>, lang: CvLang): { main: string; aside: string } {
-  const first = t(data.firstName)
-  const last = t(data.lastName)
-  const nick = t(data.nickName)
+  const first = field(data, 'firstName')
+  const last = field(data, 'lastName')
+  const nick = field(data, 'nickName')
   if (lang === 'zh') {
     // Chinese order: family name + given name, preferred name as a quiet aside.
     return { main: `${last}${first}`, aside: nick }
@@ -27,16 +28,15 @@ export function composeName(data: Partial<PersonalInformation>, lang: CvLang): {
 const PersonalInformationSection = ({ data, lang = 'en' }: { data: PersonalInformation; lang?: CvLang }) => {
   const L = cvLabels(lang)
   const { main, aside } = composeName(data, lang)
-  const website = t(data.personalWebsite)
-  const address = t(data.address)
-  const phone = t(data.phoneNumber)
-  const email = t(data.email)
-  const intro = t(data.introduction)
+  const website = field(data, 'personalWebsite')
+  const websiteHref = safeHref(website)
+  const address = field(data, 'address')
+  const phone = field(data, 'phoneNumber')
+  const email = field(data, 'email')
+  const intro = field(data, 'introduction')
 
   const hasHeader = !!(main || aside || website || address || phone || email)
   if (!hasHeader && !intro) return null
-
-  const sep = lang === 'zh' ? '：' : ': '
 
   return (
     <Box as="header" className="cv-sheet-section">
@@ -60,9 +60,9 @@ const PersonalInformationSection = ({ data, lang = 'en' }: { data: PersonalInfor
                 ) : null}
               </Text>
             ) : null}
-            {website ? (
+            {website && websiteHref ? (
               <Link
-                href={hrefOf(website)}
+                href={websiteHref}
                 isExternal
                 color="var(--cv-separator-color, blue)"
                 fontSize="12px"
@@ -71,6 +71,10 @@ const PersonalInformationSection = ({ data, lang = 'en' }: { data: PersonalInfor
               >
                 {displayUrl(website)}
               </Link>
+            ) : website ? (
+              <Text fontSize="12px" mt="2px">
+                {displayUrl(website)}
+              </Text>
             ) : null}
           </Box>
           {address || phone || email ? (
@@ -78,13 +82,13 @@ const PersonalInformationSection = ({ data, lang = 'en' }: { data: PersonalInfor
               {address ? <Text>{address}</Text> : null}
               {phone || email ? (
                 <Text>
-                  {phone ? `${L.phone}${sep}${phone}` : null}
+                  {labelled(L.phone, phone, lang)}
                   {phone && email ? (
                     <Text as="span" px="5px">
                       |
                     </Text>
                   ) : null}
-                  {email ? `${L.email}${sep}${email}` : null}
+                  {labelled(L.email, email, lang)}
                 </Text>
               ) : null}
             </Flex>

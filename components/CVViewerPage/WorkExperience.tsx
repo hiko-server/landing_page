@@ -2,24 +2,23 @@ import React from 'react'
 import { Text } from '@chakra-ui/react'
 import type { Experiences } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'
-import { cleanList, cvLabels, formatCvRange } from '../../lib/cvFormat'
+import { cvLabels } from '../../lib/cvFormat'
+import { bullets, entryRange, field, list } from './fields'
 import { EntryStack, EntryText, EntryTitle, FeatureBullets, MetaLine, SheetEntry, SheetSection } from './primitives'
-
-const t = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
 const WorkExperience = ({ data, lang = 'en' }: { data: Experiences; lang?: CvLang }) => {
   const L = cvLabels(lang)
-  const items = (data.experiences || []).filter(
-    (e) => t(e.jobTitle) || t(e.companyName) || t(e.jobDescription) || (e.features || []).length,
+  const items = list(data, 'experiences').filter(
+    (e) => field(e, 'jobTitle') || field(e, 'companyName') || field(e, 'jobDescription') || list(e, 'features').length,
   )
   if (!items.length) return null
   return (
     <SheetSection title={data.headerName}>
       <EntryStack>
         {items.map((exp, k) => {
-          const title = t(exp.jobTitle)
-          const company = t(exp.companyName)
-          const skills = cleanList(exp.relatedSkills)
+          const title = field(exp, 'jobTitle')
+          const company = field(exp, 'companyName')
+          const skills = bullets(exp, 'relatedSkills')
           return (
             <SheetEntry
               key={k}
@@ -36,12 +35,12 @@ const WorkExperience = ({ data, lang = 'en' }: { data: Experiences; lang?: CvLan
                       {company}
                     </EntryTitle>
                   ) : null}
-                  <EntryText>{t(exp.jobDescription)}</EntryText>
+                  <EntryText>{field(exp, 'jobDescription')}</EntryText>
                 </>
               }
-              right={<MetaLine date={formatCvRange(exp.startDate, exp.endDate, lang)} place={t(exp.location)} />}
+              right={<MetaLine date={entryRange(exp, lang)} place={field(exp, 'location')} />}
             >
-              <FeatureBullets items={exp.features} />
+              <FeatureBullets items={list(exp, 'features')} />
               {skills.length ? (
                 <Text fontSize="12px" fontWeight={300} mt="4px" lineHeight="1.5">
                   {skills.join(' | ')}

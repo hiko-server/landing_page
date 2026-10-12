@@ -40,6 +40,19 @@ import PatentsSection from './Patents'
 export const A4_WIDTH_PX = 794 // 210mm @ 96dpi
 export const A4_HEIGHT_PX = 1123 // 297mm @ 96dpi
 
+/** Every section type the sheet can render (pages load exactly these from the public CV). */
+export const SHEET_SECTIONS = [
+  'personalInformation',
+  'education',
+  'skill',
+  'project',
+  'workExperience',
+  'competitionAwards',
+  'extraSkill',
+  'certification',
+  'patents',
+] as const
+
 function renderSection(section: CVData[number], lang: CvLang): React.ReactNode {
   switch (section.sessionName) {
     case 'personalInformation':
@@ -86,7 +99,7 @@ const CVResult = ({
         <Box
           id="A4Paper"
           as="article"
-          lang={lang === 'zh' ? 'zh-CN' : 'en'}
+          lang={lang === 'zh' ? 'zh-Hans' : 'en'}
           bg="white"
           color="#111"
           w={`${A4_WIDTH_PX}px`}

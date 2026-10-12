@@ -10,7 +10,8 @@ const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : use
  * Uses CSS `zoom` (layout-affecting, so no phantom whitespace the way a
  * `transform: scale` would leave) driven by a ResizeObserver. Before JS runs,
  * stepped breakpoint defaults keep the server-rendered sheet roughly
- * fitted on phones. Print resets the zoom (styles/globals.css).
+ * fitted on phones. Print always resets the zoom to 1 (an `!important`
+ * print rule beats the inline style), so the PDF is true A4 at any width.
  *
  * `zoom="fit"` fits the container width (never upscaling past `maxScale`);
  * a number forces that zoom and lets the container scroll horizontally.
@@ -72,7 +73,10 @@ export default function ScaledSheet({
         mx={zoom === 'fit' ? 'auto' : undefined}
         position="relative"
         style={scale ? ({ zoom: scale } as React.CSSProperties) : undefined}
-        sx={scale ? undefined : { zoom: { base: 0.44, sm: 0.6, md: 0.9, lg: 1 } }}
+        sx={{
+          ...(scale ? null : { zoom: { base: 0.44, sm: 0.6, md: 0.9, lg: 1 } }),
+          '@media print': { zoom: '1 !important' },
+        }}
       >
         <Box ref={sheetRef}>{children}</Box>
         {pageGuides && pages > 1
