@@ -40,6 +40,8 @@ test('kv versions are strictly increasing and readable as metadata', async () =>
   assert.ok(b.updatedAt > a.updatedAt, 'two writes in the same ms still get distinct versions')
   assert.equal(store.getKvMeta('doc')?.updatedAt, b.updatedAt)
   assert.deepEqual(store.getKv('doc'), { n: 2 })
+  // Without R2 there is no replica to fall behind: nothing is queued.
+  assert.deepEqual(db.getDb().prepare('SELECT key FROM r2_pending').all(), [])
 })
 
 test('precondition is evaluated atomically; a failed check writes nothing', async () => {

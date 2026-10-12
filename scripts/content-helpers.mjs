@@ -29,6 +29,7 @@ export const SKEW_MS = 5000
 /** Same bounds as lib/r2.ts: connect 5 s, idle socket 10 s, 3 attempts. */
 export const R2_TIMEOUTS = { connectionMs: 5000, requestMs: 10000, maxAttempts: 3 }
 
+// Must match initSchema() in lib/db.ts (this .mjs cannot import TS).
 const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS pages (
     name TEXT PRIMARY KEY, frontmatter TEXT NOT NULL DEFAULT '{}',
@@ -39,6 +40,9 @@ const SCHEMA_SQL = `
     updated_at INTEGER NOT NULL, PRIMARY KEY (collection, slug));
   CREATE TABLE IF NOT EXISTS kv (
     key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS r2_pending (
+    key TEXT PRIMARY KEY, op TEXT NOT NULL CHECK (op IN ('put', 'delete')),
+    updated_at INTEGER NOT NULL);
   CREATE INDEX IF NOT EXISTS idx_collection_items_updated
     ON collection_items (collection, updated_at DESC);
 `
@@ -205,6 +209,9 @@ export function prettyJson(text) {
  *   tombstoneAt   number | null           — when the collection's tombstone
  *                                            list (containing this slug) was
  *                                            last written; null = not deleted
+ *   pending       boolean                 — the key is in r2_pending: the app's
+ *                                            last upload/delete of it failed,
+ *                                            so R2 is known to be stale
  *
  * Returns one of:
  *   'pull'          fetch R2 and write it locally (when it differs)
@@ -212,20 +219,33 @@ export function prettyJson(text) {
  *   'delete-remote' slug was deleted locally after R2 last saw it
  *   'none'          nothing to do
  *
- * A seed row never wins against R2, whatever its timestamp says; ties within
- * SKEW_MS go to R2 (the dual-write uploads right after the DB write, so R2's
- * LastModified is normally a few ms later than the row it mirrors, and the
- * caller compares content before writing anything).
+ * A pending key is reconciled from the local side unconditionally (push the
+ * row, or delete the remote object when the row is gone) — timestamps cannot
+ * be trusted for it: a save that failed to reach R2 a few seconds after one
+ * that succeeded is still "older" than R2 within the skew window.
+ *
+ * Equal timestamps mean the sync already proved both sides identical (it
+ * stamps the row with the object's LastModified after a pull, a push, or a
+ * content comparison), so nothing is fetched. Otherwise a seed row never wins
+ * against R2, whatever its timestamp says, and ties within SKEW_MS go to R2
+ * (the dual-write uploads right after the DB write, so R2's LastModified is
+ * normally a few ms later than the row it mirrors, and the caller compares
+ * content before writing anything).
  *
  * @param {{
  *   local: { at: number, isSeed: boolean } | null,
  *   remote: { at: number } | null,
  *   tombstoneAt?: number | null,
+ *   pending?: boolean,
  *   skewMs?: number,
  * }} state
  * @returns {'pull' | 'push' | 'delete-remote' | 'none'}
  */
-export function decideSync({ local, remote, tombstoneAt = null, skewMs = SKEW_MS }) {
+export function decideSync({ local, remote, tombstoneAt = null, pending = false, skewMs = SKEW_MS }) {
+  if (pending) {
+    if (local) return 'push'
+    return remote ? 'delete-remote' : 'none'
+  }
   if (remote && !local) {
     if (tombstoneAt !== null && tombstoneAt !== undefined) {
       return remote.at > tombstoneAt + skewMs ? 'pull' : 'delete-remote'
@@ -234,8 +254,14 @@ export function decideSync({ local, remote, tombstoneAt = null, skewMs = SKEW_MS
   }
   if (local && !remote) return 'push'
   if (!local && !remote) return 'none'
+  if (remote.at > 0 && local.at === remote.at) return 'none'
   if (local.isSeed) return 'pull'
   return local.at > remote.at + skewMs ? 'push' : 'pull'
+}
+
+/** Log line for an item imported from R2 that the local DB has no record of. */
+export function remoteOnlyNotice(label) {
+  return `remote-only item imported: ${label} — delete it in the admin if it was removed on purpose`
 }
 
 /** Run `fn` over `items` with at most `limit` in flight; results keep order. */

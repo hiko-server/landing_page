@@ -15,9 +15,17 @@ import Database from 'better-sqlite3'
  *   pages            (name PK, frontmatter, body, updated_at)
  *   collection_items (collection, slug, frontmatter, body, updated_at) PK(collection, slug)
  *   kv               (key PK, value, updated_at)
+ *   r2_pending       (key PK, op 'put'|'delete', updated_at)
  *
  * `frontmatter` columns hold JSON-encoded objects. `body` is the raw MDX
  * body (no frontmatter wrapper). `kv.value` is an opaque JSON blob.
+ *
+ * `r2_pending` lists R2 keys whose last upload/delete failed after all
+ * retries (lib/contentStore.ts, lib/backup.ts): R2 is known to be stale for
+ * them, so the boot sync (scripts/sync-from-r2.mjs) reconciles them from the
+ * local row unconditionally instead of trusting timestamps. `updated_at` is
+ * when the failure was recorded. The same DDL lives in
+ * scripts/content-helpers.mjs — keep the two in step.
  */
 
 const DB_DIR = path.join(process.cwd(), 'data')
@@ -105,6 +113,12 @@ function initSchema(db: Database.Database) {
     CREATE TABLE IF NOT EXISTS kv (
       key        TEXT PRIMARY KEY,
       value      TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS r2_pending (
+      key        TEXT PRIMARY KEY,
+      op         TEXT NOT NULL CHECK (op IN ('put', 'delete')),
       updated_at INTEGER NOT NULL
     );
 

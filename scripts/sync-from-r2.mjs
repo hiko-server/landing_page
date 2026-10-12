@@ -11,18 +11,36 @@
  *   data/*.json              ↔ kv
  *   uploads/*                → public/uploads/<basename>
  *
- * Per key, the newer side wins — judged by real timestamps (R2 LastModified
- * vs the row's updated_at), never by "which one did we read last":
+ * Keys in r2_pending (the app's upload or delete of them failed after every
+ * retry) are reconciled first and unconditionally from the local side: the
+ * row is pushed, or — when the row is gone — the R2 object is deleted. The
+ * pending entry is cleared once that succeeds. R2 is known to be stale for
+ * these keys, so their timestamps are not consulted.
+ *
+ * Every other key: the newer side wins — judged by real timestamps (R2
+ * LastModified vs the row's updated_at), never by "which one did we read last":
+ *   - same timestamp       → nothing to do (the sync stamped the row with the
+ *                            object's LastModified when it last proved them
+ *                            identical), so a settled store costs no GETs.
  *   - R2 newer (or a tie)  → pull it, stamping the row with LastModified, but
  *                            only when the content actually differs.
- *   - local newer          → push the row back to R2 (a dual-write that failed
- *                            earlier is repaired instead of merely skipped).
+ *   - local newer          → compare with the R2 copy and push the row only
+ *                            when it differs (a dual-write that failed earlier
+ *                            is repaired instead of merely skipped).
  *   - local row identical to the file bundled in git (content/*.mdx,
  *     data/*.json) → it is an auto-seeded copy written with Date.now(), not an
  *     edit, so R2 wins regardless of the timestamp.
  *   - slug in the local tombstone list → not resurrected; the stale R2 object
  *     is deleted, unless R2 rewrote it after the deletion (then it is pulled
  *     and the tombstone cleared).
+ * Whenever both sides end up identical (pulled, pushed, or compared equal)
+ * the row's updated_at is set to the object's LastModified, so the next boot
+ * decides 'none' for it.
+ *
+ * A collection that has never had a tombstone row (stores written before
+ * deletions were recorded) cannot tell "never seen here" from "deleted here
+ * while R2 was unreachable". Its remote-only items are still imported, and
+ * each one is logged so the operator can delete it if that was intended.
  * R2 objects that do not parse (bad JSON / YAML) are never written to the DB.
  *
  * All R2 reads happen before the first DB write, and the DB writes land in a
@@ -61,6 +79,7 @@ import {
   parseMdx,
   prettyJson,
   r2Env,
+  remoteOnlyNotice,
   sameJsonText,
   sameMdx,
   serializeMdx,
@@ -97,7 +116,7 @@ try {
 }
 
 const s3 = createS3(cfg)
-const stats = { pulled: 0, pushed: 0, removed: 0, unchanged: 0, invalid: 0, uploads: 0 }
+const stats = { pulled: 0, pushed: 0, removed: 0, unchanged: 0, invalid: 0, uploads: 0, settled: 0 }
 const warnings = []
 const warn = (msg) => {
   warnings.push(msg)
@@ -123,6 +142,13 @@ async function listAll(prefix) {
     token = out.IsTruncated ? out.NextContinuationToken : undefined
   } while (token)
   return objs
+}
+
+/** LastModified (ms) of exactly `key`, as a listing reports it; null when absent. */
+async function statKey(key) {
+  const out = await s3.send(new ListObjectsV2Command({ Bucket: cfg.bucket, Prefix: key, MaxKeys: 1 }))
+  const hit = (out.Contents || []).find((obj) => obj.Key === key)
+  return hit?.LastModified ? new Date(hit.LastModified).getTime() : null
 }
 
 async function getBuffer(key) {
@@ -189,6 +215,22 @@ const upsertKv = db.prepare(
    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
 )
 
+const pageAt = db.prepare('SELECT updated_at FROM pages WHERE name = ?').pluck()
+const itemAt = db.prepare('SELECT updated_at FROM collection_items WHERE collection = ? AND slug = ?').pluck()
+const kvAt = db.prepare('SELECT updated_at FROM kv WHERE key = ?').pluck()
+// Stamps only the row version the sync looked at: a row the app rewrote in
+// the meantime keeps its own (newer) timestamp.
+const stampPage = db.prepare('UPDATE pages SET updated_at = ? WHERE name = ? AND updated_at = ?')
+const stampItem = db.prepare(
+  'UPDATE collection_items SET updated_at = ? WHERE collection = ? AND slug = ? AND updated_at = ?',
+)
+const stampKv = db.prepare('UPDATE kv SET updated_at = ? WHERE key = ? AND updated_at = ?')
+// Clears exactly the pending entry that was acted on; a newer failure the app
+// recorded while the sync ran keeps its entry.
+const clearPendingStmt = db.prepare('DELETE FROM r2_pending WHERE key = ? AND updated_at = ?')
+
+const numOrNull = (v) => (v === undefined || v === null ? null : Number(v))
+
 function mdxLocal(row) {
   try {
     return { at: Number(row.updated_at), doc: { frontmatter: JSON.parse(row.frontmatter), body: row.body } }
@@ -215,6 +257,11 @@ const kvKind = {
   serialize: (doc) => ({ body: prettyJson(doc), contentType: JSON_CT }),
 }
 
+/**
+ * The collection's tombstone list. `tracked` is false when no usable row
+ * exists (never written, or not valid JSON): deletions made before the store
+ * recorded them are then unknown.
+ */
 function readTombstones(collection) {
   try {
     const row = db.prepare('SELECT value, updated_at FROM kv WHERE key = ?').get(`tombstones:${collection}`)
@@ -222,15 +269,31 @@ function readTombstones(collection) {
     return {
       at: row ? Number(row.updated_at) : 0,
       slugs: new Set(Array.isArray(list) ? list.filter((x) => typeof x === 'string') : []),
+      tracked: !!row,
     }
   } catch {
-    return { at: 0, slugs: new Set() }
+    return { at: 0, slugs: new Set(), tracked: false }
   }
 }
 
-/** Every page / item / kv key known on either side, with its local + remote state. */
+/** key → { op, at } for every R2 key whose last app-side upload/delete failed. */
+function readPending() {
+  return new Map(
+    db
+      .prepare('SELECT key, op, updated_at FROM r2_pending')
+      .all()
+      .map((r) => [r.key, { op: r.op, at: Number(r.updated_at) }]),
+  )
+}
+
+/**
+ * Every page / item / kv key known on either side, with its local + remote
+ * state, plus the pending entries no such key claims (nothing exists for them
+ * on either side any more).
+ */
 async function collectEntities() {
   const entities = []
+  const pending = readPending()
 
   const remotePages = await remoteIndex('pages/')
   const localPages = new Map(
@@ -244,8 +307,11 @@ async function collectEntities() {
       key: pageKey(name),
       local: localPages.get(name) || null,
       remote: remotePages.get(name) || null,
+      pending: pending.get(pageKey(name)) || null,
       seed: () => readSeedMdx(`content/${name}.mdx`),
       write: (doc, at) => upsertPage.run(name, JSON.stringify(doc.frontmatter), doc.body, at),
+      currentAt: () => numOrNull(pageAt.get(name)),
+      stamp: (from, to) => stampPage.run(to, name, from).changes > 0,
     })
   }
 
@@ -267,8 +333,12 @@ async function collectEntities() {
         local: local.get(slug) || null,
         remote: remote.get(slug) || null,
         tombstone: tomb.slugs.has(slug) ? { collection, slug, at: tomb.at } : null,
+        untracked: !tomb.tracked,
+        pending: pending.get(itemKey(collection, slug)) || null,
         seed: () => readSeedMdx(`content/${collection}/${slug}.mdx`, `content/${collection}/${slug}.md`),
         write: (doc, at) => upsertItem.run(collection, slug, JSON.stringify(doc.frontmatter), doc.body, at),
+        currentAt: () => numOrNull(itemAt.get(collection, slug)),
+        stamp: (from, to) => stampItem.run(to, collection, slug, from).changes > 0,
       })
     }
   }
@@ -288,17 +358,38 @@ async function collectEntities() {
       key: kvKey(name),
       local: localKv.get(name) || null,
       remote: remoteKv.get(name) || null,
+      pending: pending.get(kvKey(name)) || null,
       seed: () => readSeedJson(name),
       write: (doc, at) => upsertKv.run(name, doc, at),
+      currentAt: () => numOrNull(kvAt.get(name)),
+      stamp: (from, to) => stampKv.run(to, name, from).changes > 0,
     })
   }
 
-  return entities
+  const claimed = new Set(entities.map((e) => e.key))
+  const orphanPending = [...pending].filter(([key]) => !claimed.has(key)).map(([key, p]) => ({ key, ...p }))
+  return { entities, orphanPending }
 }
 
 // ── Plan (network reads only) ────────────────────────────────────────────
+
+/** Fetch and parse the remote copy; null (with a warning) when it does not parse. */
+async function fetchRemoteDoc(e, { reportInvalid }) {
+  const raw = (await getBuffer(e.remote.key)).toString('utf-8')
+  try {
+    return e.parse(raw)
+  } catch (err) {
+    if (reportInvalid) {
+      stats.invalid++
+      warn(`${e.remote.key} is not valid ${e.format} (${err?.message || err}); not imported`)
+    }
+    return null
+  }
+}
+
 async function plan(entities) {
   const writes = []
+  const stamps = []
   const pushes = []
   const deletes = []
 
@@ -309,45 +400,70 @@ async function plan(entities) {
       local: e.local ? { at: e.local.at, isSeed } : null,
       remote: e.remote ? { at: e.remote.at } : null,
       tombstoneAt: e.tombstone ? e.tombstone.at : null,
+      pending: !!e.pending,
     })
 
-    if (action === 'push') {
-      pushes.push(e)
-      return
-    }
     if (action === 'delete-remote') {
       deletes.push(e)
       return
     }
-    if (action !== 'pull') return
-
-    const raw = (await getBuffer(e.remote.key)).toString('utf-8')
-    let doc
-    try {
-      doc = e.parse(raw)
-    } catch (err) {
-      stats.invalid++
-      warn(`${e.remote.key} is not valid ${e.format} (${err?.message || err}); not imported`)
+    if (action === 'push') {
+      // A pending key is pushed as is: R2 is known to be stale for it.
+      // Otherwise skip the upload when R2 already holds the same document
+      // (e.g. rows an older sync re-stamped with its boot time).
+      if (!e.pending && e.remote) {
+        const doc = await fetchRemoteDoc(e, { reportInvalid: false })
+        if (doc !== null && e.same(doc, e.local.doc)) {
+          stats.unchanged++
+          stamps.push({ e, at: e.remote.at })
+          return
+        }
+      }
+      pushes.push(e)
       return
     }
+    if (action !== 'pull') return
+
+    const doc = await fetchRemoteDoc(e, { reportInvalid: true })
+    if (doc === null) return
     if (e.local && e.same(doc, e.local.doc)) {
       stats.unchanged++
+      stamps.push({ e, at: e.remote.at })
       return
     }
     writes.push({ e, doc, at: e.remote.at || Date.now() })
   })
 
-  return { writes, pushes, deletes }
+  return { writes, stamps, pushes, deletes }
 }
 
 // ── Apply ────────────────────────────────────────────────────────────────
-function applyWrites(writes) {
+
+/** Stamp a row with the LastModified of the identical R2 object. */
+function settle(e, at) {
+  if (!(at > 0) || !e.local || e.local.at === at) return
+  if (e.stamp(e.local.at, at)) stats.settled++
+}
+
+function clearPending(e) {
+  if (e.pending) clearPendingStmt.run(e.key, e.pending.at)
+}
+
+/** Pending keys (known-stale R2 objects) are repaired before anything else. */
+const pendingFirst = (list) => [...list.filter((e) => e.pending), ...list.filter((e) => !e.pending)]
+
+function applyWrites({ writes, stamps, orphanPending }) {
   const revived = new Map()
+  const notices = []
   db.transaction(() => {
     for (const { e, doc, at } of writes) {
       e.write(doc, at)
       stats.pulled++
       console.log(`  ${e.label} ← ${e.remote.key}`)
+      // No tombstone row has ever been written for this collection, so a
+      // deletion that failed to reach R2 before the upgrade looks exactly
+      // like this. (An empty store is a fresh restore from R2 — no notice.)
+      if (!e.local && e.untracked && hadContent) notices.push(remoteOnlyNotice(e.label))
       if (e.tombstone) {
         const set = revived.get(e.tombstone.collection) || new Set()
         set.add(e.tombstone.slug)
@@ -360,27 +476,45 @@ function applyWrites(writes) {
       for (const slug of slugs) tomb.slugs.delete(slug)
       upsertKv.run(`tombstones:${collection}`, JSON.stringify(Array.from(tomb.slugs)), Date.now())
     }
+    for (const { e, at } of stamps) settle(e, at)
+    // Pending keys with nothing on either side: there is nothing left to repair.
+    for (const p of orphanPending) clearPendingStmt.run(p.key, p.at)
   })()
+  for (const notice of notices) warn(notice)
 }
 
 async function pushBack(pushes) {
-  await mapLimit(pushes, 4, async (e) => {
+  await mapLimit(pendingFirst(pushes), 4, async (e) => {
+    // The app rewrote (or removed) the row since it was read: its own
+    // dual-write — or the pending entry it records on failure — covers it.
+    if (e.currentAt() !== e.local.at) {
+      console.log(`  ${e.label} changed locally during the sync; not pushed`)
+      return
+    }
     const { body, contentType } = e.serialize(e.local.doc)
     try {
       await putText(e.key, body, contentType)
-      stats.pushed++
-      console.log(`  ${e.label} → ${e.key}`)
     } catch (err) {
       warn(`push ${e.key} failed: ${err?.message || err}`)
+      return
+    }
+    stats.pushed++
+    console.log(`  ${e.label} → ${e.key}${e.pending ? ' (pending upload repaired)' : ''}`)
+    clearPending(e)
+    try {
+      settle(e, await statKey(e.key))
+    } catch (err) {
+      console.warn(`${TAG} could not read back ${e.key} after the push (${err?.message || err}); the next sync compares it.`)
     }
   })
 }
 
 async function deleteStale(deletes) {
-  await mapLimit(deletes, 4, async (e) => {
+  await mapLimit(pendingFirst(deletes), 4, async (e) => {
     try {
       await deleteKey(e.remote.key)
       stats.removed++
+      clearPending(e)
       console.log(`  ${e.label} ✕ ${e.remote.key} (deleted locally)`)
     } catch (err) {
       warn(`delete ${e.remote.key} failed: ${err?.message || err}`)
@@ -425,15 +559,18 @@ async function main() {
   const started = Date.now()
   console.log(`${TAG} Bucket: ${cfg.bucket}`)
 
-  const { writes, pushes, deletes } = await plan(await collectEntities())
-  applyWrites(writes)
+  const { entities, orphanPending } = await collectEntities()
+  const pendingCount = entities.filter((e) => e.pending).length + orphanPending.length
+  if (pendingCount) console.log(`${TAG} ${pendingCount} key(s) left stale in R2 by a failed upload/delete; repairing them first.`)
+  const { writes, stamps, pushes, deletes } = await plan(entities)
+  applyWrites({ writes, stamps, orphanPending })
   await pushBack(pushes)
   await deleteStale(deletes)
   await pullUploads()
 
   console.log(
     `${TAG} OK: pulled ${stats.pulled}, pushed ${stats.pushed}, unchanged ${stats.unchanged}, ` +
-      `removed ${stats.removed}, invalid ${stats.invalid}, uploads ${stats.uploads}, ` +
+      `removed ${stats.removed}, invalid ${stats.invalid}, uploads ${stats.uploads}, settled ${stats.settled}, ` +
       `warnings ${warnings.length} (${Date.now() - started} ms)`,
   )
 }

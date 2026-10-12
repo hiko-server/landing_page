@@ -12,8 +12,11 @@
  *
  * Safe by default: rows that already exist in the DB are left alone (the
  * DB holds the edited, canonical content; the files are only a seed). Pass
- * --force to overwrite existing rows with the files' contents. Slugs deleted
- * through the admin (tombstoned) are not re-imported unless --force is given.
+ * --force to overwrite existing rows with the files' contents; each
+ * overwritten key is recorded in r2_pending so the next boot sync uploads it
+ * (the file's mtime is usually older than R2's copy, which would otherwise
+ * win). Slugs deleted through the admin (tombstoned) are not re-imported
+ * unless --force is given.
  * Invalid JSON seeds are refused rather than written.
  *
  * Run: `yarn content:migrate [--force]`
@@ -22,7 +25,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import matter from 'gray-matter'
-import { SAFE_NAME, openContentDb, parseJson, parseMdx } from './content-helpers.mjs'
+import { SAFE_NAME, itemKey, kvKey, openContentDb, pageKey, parseJson, parseMdx } from './content-helpers.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(__dirname, '..')
@@ -47,6 +50,10 @@ const upsertKv = db.prepare(
   `INSERT INTO kv (key, value, updated_at) VALUES (?, ?, ?)
    ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
 )
+const markPending = db.prepare(
+  `INSERT INTO r2_pending (key, op, updated_at) VALUES (?, 'put', ?)
+   ON CONFLICT(key) DO UPDATE SET op = excluded.op, updated_at = MAX(excluded.updated_at, r2_pending.updated_at + 1)`,
+)
 
 function tombstones(collection) {
   try {
@@ -57,16 +64,23 @@ function tombstones(collection) {
   }
 }
 
-/** Write unless the row exists (or --force), and log what happened. */
-function importRow(label, exists, write) {
+/**
+ * Write unless the row exists (or --force), and log what happened. A forced
+ * overwrite queues its R2 key for upload by the next boot sync.
+ */
+function importRow(label, r2Key, exists, write) {
   if (exists && !FORCE) {
     counts.kept++
     console.log(`  keep ${label} (already in DB; --force to overwrite)`)
     return
   }
   write()
-  if (exists) counts.overwritten++
-  else counts.imported++
+  if (exists) {
+    markPending.run(r2Key, Date.now())
+    counts.overwritten++
+  } else {
+    counts.imported++
+  }
   console.log(`  ${exists ? 'overwrote' : 'imported'} ${label}`)
 }
 
@@ -77,7 +91,7 @@ function importPage(name) {
     return
   }
   const { frontmatter, body } = parseMdx(matter, fs.readFileSync(fp, 'utf-8'))
-  importRow(`page ${name}`, !!pageExists.get(name), () =>
+  importRow(`page ${name}`, pageKey(name), !!pageExists.get(name), () =>
     upsertPage.run(name, JSON.stringify(frontmatter), body, Math.round(fs.statSync(fp).mtimeMs)),
   )
 }
@@ -101,7 +115,7 @@ function importCollection(collection) {
     }
     const fp = path.join(dir, file)
     const { frontmatter, body } = parseMdx(matter, fs.readFileSync(fp, 'utf-8'))
-    importRow(`${collection}/${slug}`, !!itemExists.get(collection, slug), () =>
+    importRow(`${collection}/${slug}`, itemKey(collection, slug), !!itemExists.get(collection, slug), () =>
       upsertItem.run(collection, slug, JSON.stringify(frontmatter), body, Math.round(fs.statSync(fp).mtimeMs)),
     )
   }
@@ -125,7 +139,7 @@ function importKv(key, file) {
     console.log(`  skip kv ${key} (data/${file} is not valid JSON: ${parsed.error})`)
     return
   }
-  importRow(`kv ${key}`, !!kvExists.get(key), () =>
+  importRow(`kv ${key}`, kvKey(key), !!kvExists.get(key), () =>
     upsertKv.run(key, JSON.stringify(parsed.value), Math.round(fs.statSync(fp).mtimeMs)),
   )
 }

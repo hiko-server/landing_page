@@ -16,7 +16,10 @@ import { isR2Configured, r2PutText, r2Delete } from './r2'
  *      (item + tombstone list) run in one transaction.
  *   2. Cloudflare R2 — retried a few times with backoff when configured; if
  *      it still fails we keep the local DB write and surface the error to the
- *      caller as `r2Warning` (a save never fails because R2 is down).
+ *      caller as `r2Warning` (a save never fails because R2 is down). The key
+ *      is then recorded in `r2_pending`, so the next boot sync re-uploads (or
+ *      re-deletes) it from the local row instead of trusting timestamps; a
+ *      later successful upload/delete of the same key clears the entry.
  *
  * Seeds never overwrite: the git seed files only fill a *missing* row. A row
  * that exists but cannot be parsed is reported loudly and treated as absent
@@ -155,18 +158,57 @@ export async function retryAsync<T>(fn: () => Promise<T>, opts: RetryOptions = {
 
 const errMessage = (err: unknown) => (err instanceof Error ? err.message : String(err))
 
-async function r2WithRetry(op: string, key: string, fn: () => Promise<void>): Promise<string | null> {
+// ── Keys R2 is known to be stale for ──────────────────────────────────────
+
+export type R2PendingOp = 'put' | 'delete'
+
+/**
+ * Record that the latest upload/delete of `key` never reached R2. The entry's
+ * timestamp only moves forward, so a sync that read an older entry never
+ * clears this newer failure. Never throws: the caller's DB write already
+ * succeeded and must not be reported as failed.
+ */
+export function markR2Pending(key: string, op: R2PendingOp, now = Date.now()): void {
+  try {
+    getDb()
+      .prepare(
+        `INSERT INTO r2_pending (key, op, updated_at) VALUES (?, ?, ?)
+         ON CONFLICT(key) DO UPDATE SET op = excluded.op, updated_at = MAX(excluded.updated_at, r2_pending.updated_at + 1)`,
+      )
+      .run(key, op, now)
+  } catch (err) {
+    console.error(`[contentStore] could not record pending R2 ${op} for ${key}:`, errMessage(err))
+  }
+}
+
+/**
+ * A successful upload/delete of `key` that started at `startedAt` brought R2
+ * up to date: clear failures recorded before it started (a failure recorded
+ * later belongs to a newer write and stays). Never throws.
+ */
+export function clearR2Pending(key: string, startedAt: number): void {
+  try {
+    getDb().prepare('DELETE FROM r2_pending WHERE key = ? AND updated_at <= ?').run(key, startedAt)
+  } catch (err) {
+    console.error(`[contentStore] could not clear pending R2 state for ${key}:`, errMessage(err))
+  }
+}
+
+async function r2WithRetry(op: R2PendingOp, key: string, fn: () => Promise<void>): Promise<string | null> {
   if (!isR2Configured()) return null
+  const startedAt = Date.now()
   try {
     await retryAsync(fn, {
       onRetry: (err, attempt, delay) =>
         console.warn(`[contentStore] R2 ${op} ${key} failed (attempt ${attempt}), retrying in ${delay} ms:`, errMessage(err)),
     })
-    return null
   } catch (err) {
     console.error(`[contentStore] R2 ${op} ${key} failed after retries:`, errMessage(err))
+    markR2Pending(key, op)
     return errMessage(err)
   }
+  clearR2Pending(key, startedAt)
+  return null
 }
 
 function pushToR2(key: string, body: string, contentType?: string): Promise<string | null> {
