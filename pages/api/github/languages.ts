@@ -1,24 +1,17 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { readHome } from '../../../lib/home'
-import {
-  GhUnavailable,
-  cachedGh,
-  ghFetch,
-  extractGithubUser,
-  setPublicCache,
-} from '../../../lib/github'
+import { GhUnavailable, cachedGh, ghFetch, publicGithubUser, setGhCache } from '../../../lib/github'
 
 type LangMap = Record<string, number>
 
-type Langs = { total: number; breakdown: LangMap }
+/** `available: false` = GitHub unreachable (UI shows an error state); `total: 0` with `available: true` = genuinely none. */
+type Langs = { total: number; breakdown: LangMap; available: boolean }
 
 const TTL = 6 * 60 * 60 * 1000 // 6 hours
 
 async function load(user: string): Promise<Langs> {
   // fetch up to 100 repos (public), then pick top by stargazers to limit language calls
-  const repoRes = await ghFetch(
-    `https://api.github.com/users/${user}/repos?per_page=100&sort=updated`
-  )
+  const login = encodeURIComponent(user)
+  const repoRes = await ghFetch(`https://api.github.com/users/${login}/repos?per_page=100&sort=updated`)
   if (!repoRes.ok) throw new GhUnavailable(`repos ${repoRes.status}`)
   const repos: any[] = await repoRes.json()
   // Select top 30 by stars (then updated)
@@ -40,7 +33,7 @@ async function load(user: string): Promise<Langs> {
   const CONCURRENCY = 8
   const fetchLangs = async (name: string): Promise<LangMap | null> => {
     try {
-      const langRes = await ghFetch(`https://api.github.com/repos/${user}/${name}/languages`)
+      const langRes = await ghFetch(`https://api.github.com/repos/${login}/${encodeURIComponent(name)}/languages`)
       if (!langRes.ok) return null
       return (await langRes.json()) as LangMap
     } catch {
@@ -59,19 +52,22 @@ async function load(user: string): Promise<Langs> {
     }
   }
 
-  return { total, breakdown }
+  return { total, breakdown, available: true }
 }
 
 export default async function handler(_req: NextApiRequest, res: NextApiResponse) {
+  const unavailable: Langs = { total: 0, breakdown: {}, available: false }
   try {
-    const user = extractGithubUser(readHome()?.socials?.github)
-    if (!user) return res.status(200).json({ total: 0, breakdown: {} })
-    const data = await cachedGh<Langs>(`languages:${user}`, TTL, { total: 0, breakdown: {} }, () =>
-      load(user)
-    )
-    setPublicCache(res, 3600)
+    const user = publicGithubUser()
+    if (!user) {
+      setGhCache(res, true, 300)
+      return res.status(200).json({ total: 0, breakdown: {}, available: true })
+    }
+    const data = await cachedGh<Langs>(`languages:${user}`, TTL, unavailable, () => load(user))
+    setGhCache(res, data.available, 3600)
     return res.status(200).json(data)
   } catch {
-    return res.status(200).json({ total: 0, breakdown: {} })
+    setGhCache(res, false)
+    return res.status(200).json(unavailable)
   }
 }

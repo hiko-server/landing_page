@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Box, Flex, Text, useColorModeValue } from '@chakra-ui/react'
+import { Box, Flex, Text } from '@chakra-ui/react'
 import EducationSection from '../PersonalInstruction/Education'
 import ProjectSection from '../PersonalInstruction/Project'
 import SkillSection from '../PersonalInstruction/Skill'
@@ -24,7 +24,12 @@ const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
 type Lang = 'en' | 'zh'
 
-const RENDERED = [
+/**
+ * CV sections this accordion renders (personalInformation is the hero's).
+ * Pages pass exactly this list to readPublicCvSections so nothing else is
+ * shipped in their props.
+ */
+export const CV_WEBSITE_SECTIONS = [
   'education',
   'workExperience',
   'project',
@@ -33,16 +38,16 @@ const RENDERED = [
   'skill',
   'extraSkill',
   'certification',
-]
+] as const
+
+const RENDERED: readonly string[] = CV_WEBSITE_SECTIONS
 
 const LandingCVSections = ({ en, zh }: { en?: any[]; zh?: any[] }) => {
   const [language, setLanguage] = useState<Lang>('en')
-  const cvData: any[] = language === 'zh' ? zh || [] : en || []
-
-  const labelColor = useColorModeValue('gray.600', 'gray.500')
-  const activeFg = useColorModeValue('gray.900', 'gray.50')
-  const inactiveFg = useColorModeValue('gray.600', 'gray.500')
-  const divider = useColorModeValue('rgba(0,0,0,0.10)', 'rgba(255,255,255,0.10)')
+  // Fall back to EN when there is no Chinese CV at all, and hide the toggle.
+  const hasZh = Array.isArray(zh) && zh.some((s: any) => RENDERED.includes(s?.sessionName))
+  const active: Lang = hasZh ? language : 'en'
+  const cvData: any[] = active === 'zh' ? zh || [] : en || []
 
   const langs: Array<{ key: Lang; label: string }> = [
     { key: 'en', label: 'EN' },
@@ -53,39 +58,39 @@ const LandingCVSections = ({ en, zh }: { en?: any[]; zh?: any[] }) => {
     <Box w="100%" maxW="1100px" mx="auto">
       {/* Language toggle — mono pill row, replaces the native select */}
       <Flex align="center" gap={4} mb={[6, 8]}>
-        <Text
-          fontFamily={monoFont}
-          fontSize="11px"
-          letterSpacing="0.08em"
-          color={labelColor}
-          textTransform="uppercase"
-        >
-          Language
+        <Text fontFamily={monoFont} fontSize="11px" letterSpacing="0.08em" color="page.fg-secondary" textTransform="uppercase">
+          {hasZh ? 'Language' : 'CV'}
         </Text>
-        <Box flex="1" h="1px" bg={divider} />
-        <Flex gap={1} fontFamily={monoFont} fontSize="11px" role="group" aria-label="CV language">
-          {langs.map(({ key, label }) => (
-            <Box
-              key={key}
-              as="button"
-              onClick={() => setLanguage(key)}
-              px={3}
-              py={1}
-              letterSpacing="0.08em"
-              color={language === key ? activeFg : inactiveFg}
-              borderBottom="1px solid"
-              borderColor={language === key ? 'var(--accent)' : 'transparent'}
-              sx={{
-                transition: 'color 200ms, border-color 200ms',
-                _hover: { color: activeFg },
-              }}
-              aria-pressed={language === key}
-              aria-label={key === 'en' ? 'English' : '中文'}
-            >
-              {label}
-            </Box>
-          ))}
-        </Flex>
+        <Box flex="1" h="1px" bg="page.border" />
+        {hasZh && (
+          <Flex gap={1} fontFamily={monoFont} fontSize="11px" role="group" aria-label="CV language">
+            {langs.map(({ key, label }) => (
+              <Box
+                key={key}
+                as="button"
+                type="button"
+                onClick={() => setLanguage(key)}
+                px={3}
+                py={1.5}
+                minH="32px"
+                letterSpacing="0.08em"
+                color={active === key ? 'page.fg' : 'page.fg-secondary'}
+                borderBottom="1px solid"
+                borderColor={active === key ? 'var(--accent)' : 'transparent'}
+                sx={{
+                  transition: 'color 200ms, border-color 200ms',
+                  _hover: { color: 'page.fg' },
+                }}
+                _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
+                aria-pressed={active === key}
+                aria-label={key === 'en' ? 'English' : '中文'}
+                lang={key === 'en' ? 'en' : 'zh-Hans'}
+              >
+                {label}
+              </Box>
+            ))}
+          </Flex>
+        )}
       </Flex>
 
       {/*
@@ -94,13 +99,13 @@ const LandingCVSections = ({ en, zh }: { en?: any[]; zh?: any[] }) => {
         sections sit in. Data is already website-pruned server-side; the
         showOnWebsite check is a second guard for unpruned callers.
       */}
-      <Flex direction="column">
+      <Flex direction="column" lang={active === 'zh' ? 'zh-Hans' : undefined}>
         {cvData
           .filter((s: any) => RENDERED.includes(s?.sessionName) && isSectionOnWebsite(s))
           .map((section: any, key: number) => {
             const idx = key + 1
             const k = `${section.sessionName}-${key}`
-            const props = { index: idx, data: section, lang: language }
+            const props = { index: idx, data: section, lang: active }
             switch (section.sessionName) {
               case 'education':
                 return <EducationSection key={k} {...props} />

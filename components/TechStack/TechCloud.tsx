@@ -1,96 +1,115 @@
-import React, { useEffect, useState } from 'react'
-import { Box, Flex, Skeleton, Text, useColorModeValue } from '@chakra-ui/react'
-import { motion } from 'framer-motion'
+import React from 'react'
+import { Box, Flex, Skeleton, Text } from '@chakra-ui/react'
+import { motion, useReducedMotion } from 'framer-motion'
+
+import { useFetchJson } from '../Common/useFetchJson'
+import WidgetNotice from '../Common/WidgetNotice'
 
 type Item = { name: string; version?: string }
 type Group = { label: string; items: Item[] }
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
+const MotionSpan = motion(Box)
 
 /**
  * The site's own stack, grouped (Framework / Interface / Content / Data /
  * Platform / Infrastructure). Data comes from /api/stack, which derives it
  * from package.json so it never goes stale.
+ *
+ * Small labels and versions use page.fg-secondary (≥ 7:1 on both themes);
+ * the loading skeleton has the same row rhythm as the loaded list.
  */
 export default function TechCloud() {
-  const [groups, setGroups] = useState<Group[] | null>(null)
-  const border = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
-  const borderHover = useColorModeValue('rgba(0,0,0,0.22)', 'rgba(255,255,255,0.26)')
-  const label = useColorModeValue('gray.600', 'gray.500')
-  const fg = useColorModeValue('gray.800', 'gray.100')
-  const ver = useColorModeValue('gray.500', 'gray.500')
+  const reduce = useReducedMotion()
+  const { data, error, retry } = useFetchJson<{ groups?: Group[] }>('/api/stack')
+  const groups = data ? (Array.isArray(data.groups) ? data.groups.filter((g) => g?.items?.length) : []) : null
 
-  useEffect(() => {
-    let alive = true
-    fetch('/api/stack')
-      .then((r) => r.json())
-      .then((d) => alive && setGroups(Array.isArray(d.groups) ? d.groups : []))
-      .catch(() => alive && setGroups([]))
-    return () => {
-      alive = false
-    }
-  }, [])
+  if (error) {
+    return (
+      <WidgetNotice kind="error" onRetry={retry}>
+        The stack list couldn’t be loaded.
+      </WidgetNotice>
+    )
+  }
 
-  if (groups && !groups.length) return null
+  if (!groups) {
+    return (
+      <Box w="100%" maxW="1100px" mx="auto" aria-busy="true" aria-label="Loading tech stack">
+        {Array.from({ length: 5 }, (_, i) => (
+          <Flex key={i} direction={{ base: 'column', sm: 'row' }} gap={{ base: 2, sm: 6 }} py={3} borderTop={i ? '1px solid' : undefined} borderColor="page.border">
+            <Skeleton h="12px" w="96px" mt={{ sm: 2 }} borderRadius="sm" startColor="page.bg-elevated" endColor="page.bg-overlay" />
+            <Flex wrap="wrap" gap={2} flex="1">
+              {Array.from({ length: 3 + (i % 2) }, (_, j) => (
+                <Skeleton key={j} h="28px" w={`${72 + ((i + j) % 3) * 24}px`} borderRadius="md" startColor="page.bg-elevated" endColor="page.bg-overlay" />
+              ))}
+            </Flex>
+          </Flex>
+        ))}
+      </Box>
+    )
+  }
+
+  if (!groups.length) {
+    return <WidgetNotice kind="empty">No stack entries to show.</WidgetNotice>
+  }
 
   return (
-    <Box w="100%" maxW="1100px" mx="auto" minH={groups ? undefined : '220px'}>
-      {!groups
-        ? Array.from({ length: 4 }, (_, i) => <Skeleton key={i} h="28px" mb={4} borderRadius="md" opacity={0.4} />)
-        : groups.map((g, gi) => (
-            <Flex
-              key={g.label}
-              direction={{ base: 'column', sm: 'row' }}
-              align={{ base: 'flex-start', sm: 'baseline' }}
-              gap={{ base: 2, sm: 6 }}
-              py={3}
-              borderTop={gi === 0 ? undefined : '1px solid'}
-              borderColor={border}
-            >
-              <Text
-                fontFamily={monoFont}
-                fontSize="10px"
-                letterSpacing="0.14em"
-                textTransform="uppercase"
-                color={label}
-                w={{ sm: '120px' }}
-                flexShrink={0}
+    <Box as="dl" w="100%" maxW="1100px" mx="auto">
+      {groups.map((g, gi) => (
+        <Flex
+          key={g.label}
+          direction={{ base: 'column', sm: 'row' }}
+          align={{ base: 'flex-start', sm: 'baseline' }}
+          gap={{ base: 2, sm: 6 }}
+          py={3}
+          borderTop={gi === 0 ? undefined : '1px solid'}
+          borderColor="page.border"
+        >
+          <Text
+            as="dt"
+            fontFamily={monoFont}
+            fontSize="11px"
+            letterSpacing="0.14em"
+            textTransform="uppercase"
+            color="page.fg-secondary"
+            w={{ sm: '120px' }}
+            flexShrink={0}
+          >
+            {g.label}
+          </Text>
+          <Flex as="dd" wrap="wrap" gap={2} m={0}>
+            {g.items.map((it, i) => (
+              <MotionSpan
+                as="span"
+                key={it.name}
+                initial={reduce ? false : { opacity: 0, y: 6 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: '-40px' }}
+                transition={{ duration: 0.3, delay: gi * 0.04 + i * 0.03, ease: [0.22, 1, 0.36, 1] }}
+                display="inline-flex"
+                alignItems="baseline"
+                gap={1.5}
+                px={2.5}
+                py={1}
+                border="1px solid"
+                borderColor="page.border"
+                borderRadius="md"
+                fontSize="13px"
+                color="page.fg"
+                _hover={{ borderColor: 'page.border-strong' }}
+                sx={{ transitionProperty: 'border-color', transitionDuration: '160ms' }}
               >
-                {g.label}
-              </Text>
-              <Flex wrap="wrap" gap={2}>
-                {g.items.map((it, i) => (
-                  <Box
-                    as={motion.span as any}
-                    key={it.name}
-                    initial={{ opacity: 0, y: 6 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, margin: '-40px' }}
-                    transition={{ duration: 0.3, delay: gi * 0.04 + i * 0.03, ease: [0.22, 1, 0.36, 1] } as any}
-                    display="inline-flex"
-                    alignItems="baseline"
-                    gap={1.5}
-                    px={2.5}
-                    py={1}
-                    border="1px solid"
-                    borderColor={border}
-                    borderRadius="md"
-                    fontSize="13px"
-                    color={fg}
-                    _hover={{ borderColor: borderHover }}
-                    sx={{ transitionProperty: 'border-color', transitionDuration: '160ms' }}
-                  >
-                    {it.name}
-                    {it.version ? (
-                      <Text as="span" fontFamily={monoFont} fontSize="10px" color={ver}>
-                        {it.version}
-                      </Text>
-                    ) : null}
-                  </Box>
-                ))}
-              </Flex>
-            </Flex>
-          ))}
+                {it.name}
+                {it.version ? (
+                  <Text as="span" fontFamily={monoFont} fontSize="10px" color="page.fg-secondary">
+                    {it.version}
+                  </Text>
+                ) : null}
+              </MotionSpan>
+            ))}
+          </Flex>
+        </Flex>
+      ))}
     </Box>
   )
 }

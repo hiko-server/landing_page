@@ -15,6 +15,7 @@
  */
 
 import type { NextApiResponse } from 'next'
+import { readPublicHome } from './home'
 
 // Once GitHub rejects the configured token with a 401, stop sending it for an
 // hour so we don't waste a failing request on every call (a rotated token is
@@ -115,4 +116,19 @@ export async function cachedGh<T>(key: string, ttlMs: number, fallback: T, loade
 /** Let browsers / the CDN reuse public GitHub summaries instead of hitting us per view. */
 export function setPublicCache(res: NextApiResponse, sMaxAge = 600) {
   res.setHeader('Cache-Control', `public, max-age=60, s-maxage=${sMaxAge}, stale-while-revalidate=3600`)
+}
+
+/**
+ * Cache header for a GitHub summary: the normal public cache when the data is
+ * real, a short one when GitHub was unavailable — so an outage response is
+ * not pinned in browsers / the CDN for the full TTL and a retry can recover.
+ */
+export function setGhCache(res: NextApiResponse, available: boolean, sMaxAge = 600) {
+  if (available) setPublicCache(res, sMaxAge)
+  else res.setHeader('Cache-Control', 'public, max-age=15, s-maxage=30')
+}
+
+/** GitHub login from the public home document's socials (server-side). */
+export function publicGithubUser(): string | null {
+  return extractGithubUser(readPublicHome()?.socials?.github)
 }

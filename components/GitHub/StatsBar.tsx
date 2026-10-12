@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react'
-import { Box, Flex, Text, useColorModeValue } from '@chakra-ui/react'
+import { Box, Grid, Skeleton, Text } from '@chakra-ui/react'
 import { motion, useReducedMotion } from 'framer-motion'
+
+import { useFetchJson } from '../Common/useFetchJson'
+import WidgetNotice from '../Common/WidgetNotice'
 
 type Stats = {
   user: string
@@ -10,12 +13,18 @@ type Stats = {
   available?: boolean
 }
 
+const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
+const MotionBox = motion(Box)
+
 /** Eased count-up for the headline number on each stat tile. */
 function useCountUp(target: number, ms = 900) {
   const reduce = useReducedMotion()
   const [val, setVal] = useState(0)
   useEffect(() => {
-    if (!target) return
+    if (!target) {
+      setVal(0)
+      return
+    }
     if (reduce) {
       setVal(target)
       return
@@ -33,101 +42,82 @@ function useCountUp(target: number, ms = 900) {
   return val
 }
 
-/**
- * v6 StatsBar.
- * Replaces v5's three gradient-accented glass cards with one minimal row:
- * huge number + monospace label, separated only by a single horizontal rule.
- * Same visual language as Linear/Vercel team pages.
- */
-const StatItem = ({
-  label,
-  value,
-  delay,
-}: {
-  label: string
-  value: number
-  delay: number
-}) => {
-  const dim = useColorModeValue('gray.600', 'gray.500')
-  const count = useCountUp(value)
+const numberSx = {
+  fontSize: { base: '28px', sm: '36px', md: '44px' },
+  lineHeight: '1',
+  fontWeight: 500,
+  letterSpacing: '-0.03em',
+}
 
+const labelSx = {
+  mt: 2,
+  fontFamily: monoFont,
+  fontSize: { base: '10px', sm: '11px' },
+  letterSpacing: { base: '0.06em', sm: '0.14em' },
+  textTransform: 'uppercase' as const,
+  color: 'page.fg-secondary',
+}
+
+const StatItem = ({ label, value, delay }: { label: string; value: number | null; delay: number }) => {
+  const reduce = useReducedMotion()
+  const count = useCountUp(value ?? 0)
   return (
-    <Box
-      as={motion.div as any}
-      initial={{ opacity: 0, y: 8 }}
+    <MotionBox
+      minW={0}
+      initial={reduce || value === null ? false : { opacity: 0, y: 8 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
-      transition={{ duration: 0.35, delay } as any}
-      flex={1}
-      minW={0}
-      textAlign={['center', 'left']}
+      transition={{ duration: 0.35, delay, ease: [0.22, 1, 0.36, 1] }}
     >
-      <Text
-        fontSize={{ base: '36px', md: '44px' }}
-        lineHeight="1"
-        fontWeight={500}
-        letterSpacing="-0.03em"
-        sx={{ fontVariantNumeric: 'tabular-nums' }}
-      >
-        {count.toLocaleString('en-US')}
-      </Text>
-      <Text
-        mt={2}
-        fontFamily="var(--font-geist-mono), monospace"
-        fontSize="10px"
-        letterSpacing="0.16em"
-        textTransform="uppercase"
-        color={dim}
-      >
-        {label}
-      </Text>
-    </Box>
+      {value === null ? (
+        <Skeleton h={numberSx.fontSize} w="60%" borderRadius="sm" startColor="page.bg-elevated" endColor="page.bg-overlay" />
+      ) : (
+        <Text sx={{ ...numberSx, fontVariantNumeric: 'tabular-nums' }} color="page.fg">
+          {/* Screen readers get the final value, not every animation frame. */}
+          <span aria-hidden>{count.toLocaleString('en-US')}</span>
+          <span className="sr-only">{value.toLocaleString('en-US')}</span>
+        </Text>
+      )}
+      <Text sx={labelSx}>{label}</Text>
+    </MotionBox>
   )
 }
 
+/**
+ * GitHub summary row: three big numbers + mono labels between hairlines.
+ * Loading keeps the final geometry (skeleton numbers), and an outage or a
+ * missing profile becomes an in-place notice rather than "0 · 0 · 0".
+ */
 export default function StatsBar() {
-  const [stats, setStats] = useState<Stats | null>(null)
-  const border = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
+  const { data, error, retry } = useFetchJson<Stats>('/api/github/stats')
+  const failed = error || (data !== null && data.available === false)
+  const empty = data !== null && data.available !== false && !data.user
 
-  useEffect(() => {
-    let alive = true
-    fetch('/api/github/stats')
-      .then((r) => r.json())
-      .then((d) => {
-        if (alive) setStats(d)
-      })
-      .catch(() => {
-        if (alive) setStats({ user: '', public_repos: 0, followers: 0, total_stars: 0, available: false })
-      })
-    return () => {
-      alive = false
-    }
-  }, [])
-
-  // GitHub unreachable / rate-limited: render nothing rather than "0 · 0 · 0".
-  if (stats && (stats.available === false || !stats.user)) return null
-
-  const s: Stats = stats || {
-    user: '',
-    public_repos: 0,
-    followers: 0,
-    total_stars: 0,
+  if (failed || empty) {
+    return (
+      <WidgetNotice kind={failed ? 'error' : 'empty'} onRetry={failed ? retry : undefined} minH={{ base: '72px', md: '116px' }}>
+        {failed ? 'GitHub stats are unavailable right now.' : 'No GitHub profile is linked yet.'}
+      </WidgetNotice>
+    )
   }
 
+  const loading = data === null
   return (
-    <Flex
-      gap={[4, 8, 12]}
+    <Grid
+      as="section"
+      aria-label="GitHub stats"
+      aria-busy={loading || undefined}
+      templateColumns="repeat(3, minmax(0, 1fr))"
+      gap={{ base: 3, sm: 8, md: 12 }}
       w="100%"
       borderTop="1px solid"
       borderBottom="1px solid"
-      borderColor={border}
+      borderColor="page.border"
       py={6}
-      direction={['column', 'row']}
-      align={['stretch', 'baseline']}
     >
-      <StatItem label="Public repos" value={s.public_repos} delay={0} />
-      <StatItem label="Followers" value={s.followers} delay={0.08} />
-      <StatItem label="Total stars" value={s.total_stars} delay={0.16} />
-    </Flex>
+      <StatItem label="Public repos" value={loading ? null : data.public_repos} delay={0} />
+      <StatItem label="Followers" value={loading ? null : data.followers} delay={0.08} />
+      <StatItem label="Total stars" value={loading ? null : data.total_stars} delay={0.16} />
+    </Grid>
   )
 }

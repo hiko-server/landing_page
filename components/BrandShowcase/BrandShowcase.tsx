@@ -1,111 +1,150 @@
-'use client'
-import React from 'react'
-import { Box, Grid, Image, Link, useColorModeValue, Text } from '@chakra-ui/react'
-import { motion } from 'framer-motion'
+import React, { useEffect, useRef, useState } from 'react'
+import { Box, Flex, Text, useColorModeValue } from '@chakra-ui/react'
 
-interface Brand {
-  id: number
-  image: string
-  href: string
-  name: string
-}
+import { safeHref } from '../../lib/cvFormat'
+
+type Brand = { name: string; href: string; image: string }
+
+const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
 /**
- * v6 Brands strip.
- * Replaces v5's white-card + 3D tilt with a calm monochrome row that respects
- * dark mode. Logos sit on transparent ground; in dark mode they desaturate
- * slightly so the row doesn't punch through the dot grid.
+ * Affiliations strip.
+ *
+ * - Centred, wrapping row of equal-width tiles: 2 per row on phones, then as
+ *   many as fit — a short last row is centred, never a lone tile hugging the
+ *   left edge, and nothing overflows at 320px.
+ * - A logo that is missing or fails to load (including one that failed
+ *   before hydration) falls back to a clean text chip with the brand name.
+ * - Links only for safe http(s) URLs; otherwise the tile is static.
  */
+const BrandTile = ({ brand }: { brand: Brand }) => {
+  const imgRef = useRef<HTMLImageElement | null>(null)
+  const [failed, setFailed] = useState(!brand.image)
 
-const SingleBrand = ({ brand }: { brand: Brand }) => {
-  const { image, href, name } = brand
-  const filter = useColorModeValue('grayscale(15%)', 'grayscale(20%) opacity(0.95)')
-  // In dark mode, give the logo a subtle light chip behind it so partner
-  // marks that ship as solid black on transparent backgrounds stay legible
-  // without us touching their colors.
-  const chipBg = useColorModeValue('transparent', 'rgba(255,255,255,0.88)')
-  const chipBorder = useColorModeValue('transparent', 'rgba(255,255,255,0.12)')
+  // An image that errored before React attached onError never fires it again.
+  useEffect(() => {
+    const img = imgRef.current
+    if (img && img.complete && img.naturalWidth === 0) setFailed(true)
+  }, [])
 
-  return (
-    <motion.div
-      whileHover={{ scale: 1.04, y: -2 }}
-      transition={{ type: 'spring', stiffness: 380, damping: 18 }}
-      initial={{ opacity: 0, y: 8 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      // Fluid up to 160px so N columns always fit the row (fixed widths overflowed at md).
-      style={{ width: '100%', maxWidth: 160 }}
+  // Dark mode: logos sit on a light chip so marks drawn in solid black stay legible.
+  const logoChipBg = useColorModeValue('transparent', 'rgba(255,255,255,0.9)')
+  const logoChipBorder = useColorModeValue('transparent', 'rgba(255,255,255,0.12)')
+  const logoFilter = useColorModeValue('grayscale(15%)', 'grayscale(20%)')
+  const href = safeHref(brand.href)
+
+  const tile = (
+    <Flex
+      h="48px"
+      w="100%"
+      align="center"
+      justify="center"
+      px={3}
+      borderRadius="8px"
+      border="1px solid"
+      borderColor={failed ? 'page.border' : logoChipBorder}
+      bg={failed ? 'transparent' : logoChipBg}
+      sx={{ transition: 'border-color 200ms var(--ease-out-quart), transform 200ms var(--ease-out-quart)' }}
     >
-      <Link href={href} isExternal aria-label={name} display="block" _hover={{ textDecoration: 'none' }}>
-        <Box
-          position="relative"
-          h="40px"
-          w="100%"
-          display="flex"
-          alignItems="center"
-          justifyContent="center"
-          bg={chipBg}
-          border="1px solid"
-          borderColor={chipBorder}
-          borderRadius="8px"
-          px={3}
-          transition="background 200ms var(--ease-out-quart)"
+      {failed ? (
+        <Text
+          as="span"
+          fontFamily={monoFont}
+          fontSize="12px"
+          fontWeight={500}
+          letterSpacing="0.08em"
+          textTransform="uppercase"
+          color="page.fg-secondary"
+          noOfLines={1}
+          textAlign="center"
         >
-          <Image
-            src={image}
-            alt={name}
-            objectFit="contain"
-            maxH="28px"
-            maxW="100%"
-            loading="lazy"
-            filter={filter}
-            transition="filter 250ms var(--ease-out-quart)"
-            _hover={{ filter: 'none' }}
-          />
-        </Box>
-      </Link>
-    </motion.div>
+          {brand.name}
+        </Text>
+      ) : (
+        <Box
+          as="img"
+          ref={imgRef}
+          src={brand.image}
+          alt={brand.name}
+          loading="lazy"
+          decoding="async"
+          maxH="28px"
+          maxW="100%"
+          objectFit="contain"
+          onError={() => setFailed(true)}
+          sx={{ filter: logoFilter, transition: 'filter 250ms var(--ease-out-quart)' }}
+        />
+      )}
+    </Flex>
+  )
+
+  return href ? (
+    <Box
+      as="a"
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`${brand.name} (opens in a new tab)`}
+      display="block"
+      borderRadius="8px"
+      sx={{
+        '@media (hover: hover)': {
+          '&:hover > div': { borderColor: 'var(--chakra-colors-page-border-strong)' },
+          '&:hover img': { filter: 'none' },
+        },
+        '@media (hover: hover) and (prefers-reduced-motion: no-preference)': {
+          '&:hover > div': { transform: 'translateY(-2px)' },
+        },
+      }}
+      _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '3px' }}
+    >
+      {tile}
+    </Box>
+  ) : (
+    tile
   )
 }
 
-const Brands = ({
-  brands,
-}: {
-  brands?: { name: string; href: string; image: string }[]
-}) => {
-  const data: Brand[] = (brands || []).map((b, idx) => ({
-    id: idx + 1,
-    name: b.name,
-    href: b.href,
-    image: b.image,
-  }))
-  const labelColor = useColorModeValue('gray.600', 'gray.500')
+const Brands = ({ brands }: { brands?: { name: string; href: string; image: string }[] }) => {
+  const data: Brand[] = (Array.isArray(brands) ? brands : [])
+    .map((b) => ({
+      name: typeof b?.name === 'string' ? b.name.trim() : '',
+      href: typeof b?.href === 'string' ? b.href : '',
+      image: safeHref(b?.image),
+    }))
+    .filter((b) => b.name || b.image)
+    .map((b) => ({ ...b, name: b.name || 'Affiliation' }))
 
   if (!data.length) return null
 
   return (
-    <Box as="section" py={10} w="100%">
-      <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]}>
+    <Box as="section" aria-labelledby="affiliations-label" py={{ base: 8, md: 10 }} w="100%">
+      <Box maxW="var(--container-content)" mx="auto" px={{ base: 4, md: 6, lg: 8 }}>
         <Text
-          fontFamily="var(--font-geist-mono), monospace"
-          fontSize="10px"
+          id="affiliations-label"
+          fontFamily={monoFont}
+          fontSize="11px"
           letterSpacing="0.16em"
           textTransform="uppercase"
-          color={labelColor}
+          color="page.fg-secondary"
           mb={6}
-          textAlign={['center', 'left']}
+          textAlign={{ base: 'center', md: 'left' }}
         >
           Affiliations
         </Text>
-        <Grid
-          placeItems="center"
-          templateColumns={['repeat(2, minmax(0, 1fr))', 'repeat(3, minmax(0, 1fr))', 'repeat(4, minmax(0, 1fr))']}
-          gap={[6, 8, 12]}
-        >
-          {data.map((brand) => (
-            <SingleBrand key={brand.id} brand={brand} />
+        <Flex as="ul" listStyleType="none" wrap="wrap" justify="center" gap={{ base: 3, sm: 4, md: 6 }}>
+          {data.map((brand, i) => (
+            <Box
+              as="li"
+              key={`${brand.name}-${i}`}
+              // Two per row on phones (12px gap), fixed tiles from sm up.
+              flex="0 0 auto"
+              w={{ base: 'calc(50% - 6px)', sm: '148px', md: '160px' }}
+            >
+              <BrandTile brand={brand} />
+            </Box>
           ))}
-        </Grid>
+        </Flex>
       </Box>
     </Box>
   )

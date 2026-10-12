@@ -1,29 +1,41 @@
 import React from 'react'
-
-import LandingCVSections from '../../components/LandingPage/LandingCVSections'
+import type { GetServerSideProps } from 'next'
 import { Flex, Box, Image, Heading } from '@chakra-ui/react'
+
+import LandingCVSections, { CV_WEBSITE_SECTIONS } from '../../components/LandingPage/LandingCVSections'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
-import { absUrl, personNode, breadcrumb, PERSON_ID } from '../../lib/schema'
-// import LanguageBars from '../../components/GitHub/LanguageBars'
+import { absUrl, personNode, personFactsFromCv, breadcrumb, ogImageUrl, PERSON_ID } from '../../lib/schema'
 import ActivityFeed from '../../components/GitHub/ActivityFeed'
 import StatsBar from '../../components/GitHub/StatsBar'
 import SectionReveal from '../../components/General-UI/SectionReveal'
 import AboutHero from '../../components/About/AboutHero'
-// import ProjectSpotlight from '../../components/LandingPage/ProjectSpotlight'
 import ExperienceTimeline from '../../components/LandingPage/ExperienceTimeline'
 import CertificationsPeek from '../../components/LandingPage/CertificationsPeek'
-// import ContactPro from '../../components/Contact/ContactPro'
+import type { CvSectionLike } from '../../lib/cvVisibility'
 
-const About = (props: any) => {
+type Props = {
+  /** Only the brand + tagline the hero prints — not the whole home document. */
+  hero: { brand: string; tagline: string }
+  /** Website-pruned CV, limited to the sections this page renders. */
+  cv: { en: CvSectionLike[]; zh: CvSectionLike[] }
+  githubUser: string | null
+}
 
+/** True when the section is present and carries at least one visible entry. */
+function hasSection(list: CvSectionLike[], name: string, key: string): boolean {
+  const section = list.find((s) => s.sessionName === name)
+  return Array.isArray(section?.[key]) && section[key].length > 0
+}
+
+const About = ({ hero, cv, githubUser }: Props) => {
   return (
     <React.Fragment>
       <CustomHead
         title="About"
-        description="About Li Yanpei (Lucian) — a Hong Kong software engineer (HKMU, UOW College). Background, skills, GitHub activity, and project case studies like WeGreen AI and Carboy."
+        description="About Li Yanpei (Lucian), a software engineer in Hong Kong: background, education, skills, GitHub activity and project case studies."
         url={absUrl('/about')}
-        image={absUrl('/api/og?title=About&kind=page&subtitle=Background%2C%20skills%20%26%20projects')}
+        image={ogImageUrl({ kind: 'page', title: 'About', subtitle: 'Background, skills & projects' })}
         jsonLd={[
           {
             '@context': 'https://schema.org',
@@ -32,7 +44,7 @@ const About = (props: any) => {
             url: absUrl('/about'),
             mainEntity: { '@id': PERSON_ID },
           },
-          personNode(),
+          personNode(personFactsFromCv(cv.en)),
           breadcrumb([
             { name: 'Home', path: '/' },
             { name: 'About', path: '/about' },
@@ -40,61 +52,67 @@ const About = (props: any) => {
         ]}
       />
       <HeaderFooter>
-        <Flex
-          direction="column"
-          alignItems="center"
-          justifyContent="center"
-          p={['20px', '40px']}
-          gap={['20px', '40px']}
-        >
+        <Flex direction="column" alignItems="center" justifyContent="center" px={{ base: 4, md: 10 }} py={{ base: 8, md: 10 }} gap={{ base: 8, md: 10 }}>
           <SectionReveal>
-            <AboutHero
-              brand={props.home?.hero?.brand}
-              tagline={props.home?.hero?.tagline}
-            />
+            <AboutHero brand={hero.brand} tagline={hero.tagline} />
           </SectionReveal>
           <SectionReveal>
-            <StatsBar />
+            <Box w="100%" maxW="1100px" mx="auto">
+              <StatsBar />
+            </Box>
           </SectionReveal>
-          {/* <SectionReveal>
-            <ProjectSpotlight cvEn={props.cv?.en} />
-          </SectionReveal> */}
+          {hasSection(cv.en, 'workExperience', 'experiences') && (
+            <SectionReveal>
+              <Box as="section" aria-labelledby="about-experience" w="100%" maxW="1100px" mx="auto">
+                <Heading as="h2" id="about-experience" size="md" mb={6} fontWeight={500} letterSpacing="-0.01em">
+                  Experience
+                </Heading>
+                <ExperienceTimeline cvEn={cv.en} />
+              </Box>
+            </SectionReveal>
+          )}
+          {hasSection(cv.en, 'certification', 'certifications') && (
+            <SectionReveal>
+              <Box as="section" aria-labelledby="about-certifications" w="100%" maxW="1100px" mx="auto">
+                <Heading as="h2" id="about-certifications" size="md" mb={4} fontWeight={500} letterSpacing="-0.01em">
+                  Certifications
+                </Heading>
+                <CertificationsPeek cvEn={cv.en} />
+              </Box>
+            </SectionReveal>
+          )}
           <SectionReveal>
-            <ExperienceTimeline cvEn={props.cv?.en} />
-          </SectionReveal>
-          <SectionReveal>
-            <CertificationsPeek cvEn={props.cv?.en} />
-          </SectionReveal>
-          {/* 技术语言分布（如需恢复可取消注释） */}
-          <SectionReveal>
-            <Box mt={2} w="100%" maxW="1100px" mx="auto">
-              <Heading as="h3" size="md" mb={2}>
+            <Box as="section" aria-labelledby="about-activity" w="100%" maxW="1100px" mx="auto">
+              <Heading as="h2" id="about-activity" size="md" mb={4} fontWeight={500} letterSpacing="-0.01em">
                 Recent Activity
               </Heading>
               <ActivityFeed />
             </Box>
           </SectionReveal>
-          {props.githubUser ? (
+          {githubUser ? (
             <SectionReveal>
-              <Box mt={2} w="100%" maxW="1100px" mx="auto">
-                <Heading as="h3" size="md" mb={2}>
+              <Box as="section" aria-labelledby="about-contributions" w="100%" maxW="1100px" mx="auto">
+                <Heading as="h2" id="about-contributions" size="md" mb={4} fontWeight={500} letterSpacing="-0.01em">
                   Contributions
                 </Heading>
+                {/* Intrinsic size attributes reserve the chart's box before it loads (no layout shift). */}
                 <Image
-                  src={`https://ghchart.rshah.org/${props.githubUser}`}
-                  alt="GitHub contributions"
+                  src={`https://ghchart.rshah.org/${encodeURIComponent(githubUser)}`}
+                  alt={`GitHub contribution chart for ${githubUser}`}
+                  htmlWidth="663"
+                  htmlHeight="104"
+                  loading="lazy"
+                  decoding="async"
                   w="100%"
+                  h="auto"
                   borderRadius="md"
                 />
               </Box>
             </SectionReveal>
           ) : null}
           <SectionReveal>
-            <LandingCVSections en={props.cv?.en} zh={props.cv?.zh} />
+            <LandingCVSections en={cv.en} zh={cv.zh} />
           </SectionReveal>
-          {/* <SectionReveal>
-            <ContactPro home={props.home} />
-          </SectionReveal> */}
         </Flex>
       </HeaderFooter>
     </React.Fragment>
@@ -102,41 +120,28 @@ const About = (props: any) => {
 }
 
 export default About
-export async function getServerSideProps(context: any) {
-  const host = context.req.headers.host || 'lucian-dev.com'
-  let en: any[] = []
-  let zh: any[] = []
+
+export const getServerSideProps: GetServerSideProps<Props> = async () => {
+  let cv: Props['cv'] = { en: [], zh: [] }
+  let hero: Props['hero'] = { brand: '', tagline: '' }
   let githubUser: string | null = null
-  let home: any = null
   try {
-    // Live CV from the content store (SQLite kv + R2) — same source the admin
-    // editor writes via /api/cvdata. (Was reading the static cvdata.json seed.)
-    try {
-      const { readPublicCvData } = await import('../../lib/cvdata')
-      const cv = readPublicCvData('website')
-      en = cv.en
-      zh = cv.zh
-    } catch {
-    /* best effort — render with what we have */
-  }
-    try {
-      const mod = await import('../../lib/home')
-      home = mod.readHome()
-      const url = home?.socials?.github
-      if (url) {
-        try {
-          const u = new URL(url)
-          const parts = u.pathname.split('/').filter(Boolean)
-          githubUser = parts[0] || null
-        } catch {
-    /* best effort — render with what we have */
-  }
-      }
-    } catch {
-    /* best effort — render with what we have */
-  }
+    // Live CV from the content store, website audience, exactly the sections
+    // rendered here (the accordion's set — it covers the timeline and
+    // certification peek too). personalInformation is not shipped.
+    const { readPublicCvSections } = await import('../../lib/cvdata')
+    cv = readPublicCvSections('website', CV_WEBSITE_SECTIONS, ['en', 'zh'])
   } catch {
     /* best effort — render with what we have */
   }
-  return { props: { host, cv: { en, zh }, githubUser, home } }
+  try {
+    const { readPublicHome } = await import('../../lib/home')
+    const { extractGithubUser } = await import('../../lib/github')
+    const home = readPublicHome()
+    hero = { brand: home?.hero?.brand || '', tagline: home?.hero?.tagline || '' }
+    githubUser = extractGithubUser(home?.socials?.github)
+  } catch {
+    /* best effort — render with what we have */
+  }
+  return { props: { hero, cv, githubUser } }
 }

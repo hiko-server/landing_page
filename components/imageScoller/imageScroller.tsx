@@ -4,6 +4,8 @@ import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { GoArrowLeft, GoArrowRight } from 'react-icons/go'
 import { FaPause, FaPlay } from 'react-icons/fa'
 
+import { safeHref } from '../../lib/cvFormat'
+
 export type ScrollerImage = { url: string; describe?: string; redirectTo?: string; visible?: boolean }
 
 const AUTOPLAY_MS = 6000
@@ -19,7 +21,11 @@ const SWIPE_PX = 60
  *   - every control is a labelled button; captions double as alt text
  */
 const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
-  const data = (images || []).filter((i) => i && i.url && i.visible !== false)
+  // Only safe image sources / link targets reach the DOM (admin-supplied URLs).
+  const data = (images || [])
+    .filter((i) => i && i.visible !== false)
+    .map((i) => ({ ...i, url: safeHref(i.url), redirectTo: safeHref(i.redirectTo) }))
+    .filter((i) => i.url)
   const reduce = useReducedMotion()
   const [index, setIndex] = useState(0)
   const [dir, setDir] = useState(1)
@@ -29,10 +35,6 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
   const [tabHidden, setTabHidden] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
 
-  const frameBg = useColorModeValue('gray.100', 'whiteAlpha.100')
-  const border = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
-  const caption = useColorModeValue('gray.700', 'gray.300')
-  const dim = useColorModeValue('gray.500', 'gray.500')
   const dotIdle = useColorModeValue('rgba(0,0,0,0.18)', 'rgba(255,255,255,0.25)')
 
   const count = data.length
@@ -115,8 +117,8 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
         overflow="hidden"
         borderRadius="lg"
         border="1px solid"
-        borderColor={border}
-        bg={frameBg}
+        borderColor="page.border"
+        bg="page.bg-elevated"
       >
         <AnimatePresence initial={false} custom={dir} mode="popLayout">
           <motion.div
@@ -138,7 +140,14 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
             aria-label={`${index + 1} of ${count}`}
           >
             {current.redirectTo ? (
-              <Link href={current.redirectTo} isExternal rel="noopener noreferrer" display="block" w="100%" h="100%">
+              <Link
+                href={current.redirectTo}
+                isExternal={!current.redirectTo.startsWith('/')}
+                display="block"
+                w="100%"
+                h="100%"
+                _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '-2px' }}
+              >
                 {slide}
               </Link>
             ) : (
@@ -167,7 +176,7 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
         ) : null}
       </Box>
 
-      <Text mt={3} fontSize="13px" color={caption} minH="1.4em" aria-live={autoplay ? 'off' : 'polite'}>
+      <Text mt={3} fontSize="13px" color="page.fg-secondary" minH="1.4em" aria-live={autoplay ? 'off' : 'polite'}>
         {current.describe || ' '}
       </Text>
 
@@ -201,12 +210,12 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
               icon={playing ? <FaPause size={10} /> : <FaPlay size={10} />}
               size="sm"
               variant="ghost"
-              color={dim}
+              color="page.fg-secondary"
               onClick={() => setPlaying((p) => !p)}
               isDisabled={!!reduce}
             />
-            <IconButton aria-label="Previous photo" icon={<GoArrowLeft />} size="sm" variant="outline" borderColor={border} onClick={() => go(-1)} />
-            <IconButton aria-label="Next photo" icon={<GoArrowRight />} size="sm" variant="outline" borderColor={border} onClick={() => go(1)} />
+            <IconButton aria-label="Previous photo" icon={<GoArrowLeft />} size="sm" variant="outline" borderColor="page.border-strong" onClick={() => go(-1)} />
+            <IconButton aria-label="Next photo" icon={<GoArrowRight />} size="sm" variant="outline" borderColor="page.border-strong" onClick={() => go(1)} />
           </HStack>
         </Flex>
       ) : null}
