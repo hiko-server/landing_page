@@ -49,7 +49,7 @@ export default function PageEditor({ name }: { name: PageName }) {
       try {
         const res = await fetch(`/api/admin/page?name=${name}`)
         if (res.status === 401) {
-          router.replace(`/admin/login?from=/admin/${name}`)
+          router.replace(`/admin/login?next=${encodeURIComponent(`/admin/${name}`)}`)
           return
         }
         if (!res.ok) throw new Error()

@@ -12,6 +12,7 @@ import {
   Input,
   SimpleGrid,
   Table,
+  TableContainer,
   Tag,
   TagCloseButton,
   TagLabel,
@@ -27,6 +28,12 @@ import {
   Box,
   Text,
   Flex,
+  Alert,
+  AlertIcon,
+  AlertDescription,
+  Spinner,
+  Kbd,
+  useColorModeValue,
 } from '@chakra-ui/react'
 import { AddIcon, DeleteIcon } from '@chakra-ui/icons'
 // Pure shape import — must NOT come from lib/home.ts (server-only, drags
@@ -95,10 +102,27 @@ export default function HomeEditor() {
     note: '',
   })
 
+  // 'ready' only after a successful load: saving a form that never loaded
+  // would PUT an empty payload over the live home page.
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [loadError, setLoadError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [baseline, setBaseline] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
+
   useEffect(() => {
     const load = async () => {
-      const res = await fetch('/api/home')
-      const data = await res.json()
+      setLoadState('loading')
+      let data: any
+      try {
+        const res = await fetch('/api/home', { cache: 'no-store' })
+        if (!res.ok) throw new Error(`Server responded ${res.status}`)
+        data = await res.json()
+      } catch (e: any) {
+        setLoadError(e?.message || 'Failed to load')
+        setLoadState('error')
+        return
+      }
       if (data) {
         setHero({
           welcome: data.hero?.welcome || '',
@@ -140,6 +164,9 @@ export default function HomeEditor() {
         })
       }
 
+      setBaseline(null) // captured from the rendered state below
+      setLoadState('ready')
+
       // Pull CV-derived defaults in parallel. Best-effort: stays blank
       // on failure so the editor still works.
       try {
@@ -159,7 +186,7 @@ export default function HomeEditor() {
       }
     }
     load()
-  }, [])
+  }, [reloadKey])
 
   const normalizeUrl = (u?: string) => {
     if (!u) return ''
@@ -187,8 +214,8 @@ export default function HomeEditor() {
     }
   }
 
-  const save = async () => {
-    const payload = {
+  const buildPayload = () => {
+    return {
       hero: { ...hero, avatarUrl: normalizeUrl(stripTs(hero.avatarUrl)) },
       socials,
       brands: (brands || []).map((b) => ({
@@ -211,14 +238,84 @@ export default function HomeEditor() {
         reasons: contact.reasons.map((r) => r.trim()).filter(Boolean),
       },
     }
-    const res = await fetch('/api/home', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    if (res.ok) toast({ status: 'success', title: 'Saved' })
-    else toast({ status: 'error', title: 'Save failed (login?)' })
   }
+
+  // Dirty tracking against the last loaded / saved state.
+  const snapshot = JSON.stringify({ hero, socials, brands, quickAccess, photos, sections, contact })
+  useEffect(() => {
+    if (loadState === 'ready' && baseline === null) setBaseline(snapshot)
+  }, [loadState, baseline, snapshot])
+  const dirty = loadState === 'ready' && baseline !== null && snapshot !== baseline
+
+  const save = async () => {
+    if (loadState !== 'ready' || saving) return
+    setSaving(true)
+    try {
+      const res = await fetch('/api/home', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(buildPayload()),
+      })
+      const body = await res.json().catch(() => ({}))
+      if (res.ok) {
+        setBaseline(snapshot)
+        toast({
+          status: body?.r2Warning ? 'warning' : 'success',
+          title: 'Home saved',
+          description: body?.r2Warning,
+          position: 'bottom-right',
+        })
+      } else {
+        toast({
+          status: 'error',
+          title: 'Save failed',
+          description: res.status === 401 ? 'Session expired — sign in again.' : body?.error || `HTTP ${res.status}`,
+          position: 'bottom-right',
+        })
+      }
+    } catch (e: any) {
+      toast({ status: 'error', title: 'Save failed', description: e?.message || 'Network error', position: 'bottom-right' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const validateAndSave = () => {
+    for (const p of photos) {
+      if (p.url && !validateUrl(p.url)) {
+        toast({ status: 'error', title: 'Invalid photo URL', description: p.url, position: 'bottom-right' })
+        return
+      }
+      if (p.redirectTo && !validateUrl(p.redirectTo)) {
+        toast({ status: 'error', title: 'Invalid link URL', description: p.redirectTo, position: 'bottom-right' })
+        return
+      }
+    }
+    save()
+  }
+  const saveRef = useRef(validateAndSave)
+  saveRef.current = validateAndSave
+
+  // ⌘S / Ctrl+S saves; leaving with unsaved changes asks first.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        saveRef.current()
+      }
+    }
+    const onUnload = (e: BeforeUnloadEvent) => {
+      if (!dirty) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    document.addEventListener('keydown', onKey)
+    window.addEventListener('beforeunload', onUnload)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('beforeunload', onUnload)
+    }
+  }, [dirty])
 
   const toggleSection = (key: SectionKey, visible: boolean) => {
     setSections((prev) => ({ ...prev, [key]: visible }))
@@ -251,14 +348,22 @@ export default function HomeEditor() {
     reader.onload = async () => {
       let dataUrl = reader.result as string
       try {
-        dataUrl = await compressImageDataUrl(dataUrl, 1200, 800, 0.8)
-      } catch {}
+        // JPEG stays JPEG; PNG / WebP are re-encoded as WebP so transparent
+        // logos keep their alpha channel; GIFs (animation) are left untouched.
+        if (file.type === 'image/jpeg') dataUrl = await compressImageDataUrl(dataUrl, 1600, 1600, 0.82, 'image/jpeg')
+        else if (file.type === 'image/png' || file.type === 'image/webp')
+          dataUrl = await compressImageDataUrl(dataUrl, 1600, 1600, 0.9, 'image/webp')
+      } catch {
+        /* upload the original */
+      }
+      const ext = (dataUrl.match(/^data:image\/(\w+)/)?.[1] || 'png').replace('jpeg', 'jpg')
+      const stem = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 60) || 'image'
       const res = await fetch('/api/admin/upload-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: file.name, dataUrl }),
+        body: JSON.stringify({ filename: `${Date.now()}-${stem}.${ext}`, dataUrl }),
       })
-      const data = await res.json()
+      const data = await res.json().catch(() => ({}))
       if (res.ok) {
         // add cache-busting to force fresh preview
         const busted =
@@ -266,7 +371,10 @@ export default function HomeEditor() {
         setter(busted)
         toast({ status: 'success', title: 'Image uploaded' })
       } else {
-        toast({ status: 'error', title: data?.error || 'Upload failed' })
+        toast({
+          status: 'error',
+          title: res.status === 413 ? 'Image too large' : data?.error || `Upload failed (${res.status})`,
+        })
       }
     }
     reader.readAsDataURL(file)
@@ -276,7 +384,8 @@ export default function HomeEditor() {
     srcDataUrl: string,
     maxW: number,
     maxH: number,
-    quality: number
+    quality: number,
+    type: 'image/jpeg' | 'image/webp' = 'image/jpeg',
   ): Promise<string> {
     return new Promise((resolve) => {
       const img = new window.Image()
@@ -291,7 +400,9 @@ export default function HomeEditor() {
         const ctx = canvas.getContext('2d')
         if (!ctx) return resolve(srcDataUrl)
         ctx.drawImage(img, 0, 0, width, height)
-        resolve(canvas.toDataURL('image/jpeg', quality))
+        const out = canvas.toDataURL(type, quality)
+        // Browsers that can't encode WebP silently return PNG — keep the original then.
+        resolve(out.startsWith(`data:${type}`) ? out : srcDataUrl)
       }
       img.onerror = () => resolve(srcDataUrl)
       img.src = srcDataUrl
@@ -355,6 +466,30 @@ export default function HomeEditor() {
     setHero((h) => ({ ...h, avatarTransform: { x: 50, y: 50, scale: 1 } }))
   }
 
+  const barBg = useColorModeValue('rgba(255,255,255,0.92)', 'rgba(12,12,12,0.92)')
+  const barBorder = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
+
+  if (loadState === 'loading') {
+    return (
+      <Flex h="40vh" align="center" justify="center">
+        <Spinner color="var(--accent)" />
+      </Flex>
+    )
+  }
+  if (loadState === 'error') {
+    return (
+      <Alert status="error" borderRadius="md" alignItems="center" gap={3} flexWrap="wrap">
+        <AlertIcon />
+        <AlertDescription flex={1} fontSize="sm">
+          Couldn’t load the home page content ({loadError}). Editing is disabled so an empty form can’t overwrite it.
+        </AlertDescription>
+        <Button size="sm" onClick={() => setReloadKey((k) => k + 1)}>
+          Retry
+        </Button>
+      </Alert>
+    )
+  }
+
   return (
     <>
       <Heading size="sm">Hero</Heading>
@@ -405,7 +540,7 @@ export default function HomeEditor() {
             onChange={(e) => {
               const input = e.target as HTMLInputElement
               const f = input.files?.[0]
-              if (f) onUpload(f, (url) => setHero({ ...hero, avatarUrl: url }))
+              if (f) onUpload(f, (url) => setHero((h) => ({ ...h, avatarUrl: url })))
               // clear to allow re-selecting same file
               input.value = ''
             }}
@@ -697,7 +832,8 @@ export default function HomeEditor() {
       <Heading size="sm" mt={6}>
         Brands
       </Heading>
-      <Table variant="simple">
+      <TableContainer overflowX="auto" w="100%">
+      <Table variant="simple" size="sm">
         <Thead>
           <Tr>
             <Th>Name</Th>
@@ -758,11 +894,9 @@ export default function HomeEditor() {
                     const input = e.target as HTMLInputElement
                     const f = input.files?.[0]
                     if (f)
-                      onUpload(f, (url) => {
-                        const arr = [...brands]
-                        arr[idx] = { ...arr[idx], image: url }
-                        setBrands(arr)
-                      })
+                      onUpload(f, (url) =>
+                        setBrands((prev) => prev.map((b, i) => (i === idx ? { ...b, image: url } : b))),
+                      )
                     // clear to allow re-selecting same file
                     input.value = ''
                   }}
@@ -779,6 +913,7 @@ export default function HomeEditor() {
           ))}
         </Tbody>
       </Table>
+      </TableContainer>
       <Button
         leftIcon={<AddIcon />}
         onClick={() =>
@@ -791,7 +926,8 @@ export default function HomeEditor() {
       <Heading size="sm" mt={6}>
         Quick Access
       </Heading>
-      <Table variant="simple">
+      <TableContainer overflowX="auto" w="100%">
+      <Table variant="simple" size="sm">
         <Thead>
           <Tr>
             <Th>Label</Th>
@@ -835,6 +971,7 @@ export default function HomeEditor() {
           ))}
         </Tbody>
       </Table>
+      </TableContainer>
       <Button
         leftIcon={<AddIcon />}
         onClick={() => setQuick([...quickAccess, { label: '', url: '' }])}
@@ -845,7 +982,8 @@ export default function HomeEditor() {
       <Heading size="sm" mt={6}>
         Photos
       </Heading>
-      <Table variant="simple">
+      <TableContainer overflowX="auto" w="100%">
+      <Table variant="simple" size="sm">
         <Thead>
           <Tr>
             <Th>#</Th>
@@ -943,11 +1081,9 @@ export default function HomeEditor() {
                     const input = e.target as HTMLInputElement
                     const f = input.files?.[0]
                     if (f)
-                      onUpload(f, (url) => {
-                        const arr = [...photos]
-                        arr[idx] = { ...arr[idx], url }
-                        setPhotos(arr)
-                      })
+                      onUpload(f, (url) =>
+                        setPhotos((prev) => prev.map((p, i) => (i === idx ? { ...p, url } : p))),
+                      )
                     // clear to allow re-selecting same file
                     input.value = ''
                   }}
@@ -994,6 +1130,7 @@ export default function HomeEditor() {
           ))}
         </Tbody>
       </Table>
+      </TableContainer>
       <Button
         leftIcon={<AddIcon />}
         onClick={() =>
@@ -1135,26 +1272,45 @@ export default function HomeEditor() {
 
       <Divider my={6} />
 
-      <HStack mt={6}>
-        <Button
-          colorScheme="blue"
-          onClick={() => {
-            for (const p of photos) {
-              if (p.url && !validateUrl(p.url)) {
-                toast({ status: 'error', title: 'Invalid photo URL' })
-                return
-              }
-              if (p.redirectTo && !validateUrl(p.redirectTo)) {
-                toast({ status: 'error', title: 'Invalid link URL' })
-                return
-              }
-            }
-            save()
-          }}
-        >
-          Save All
-        </Button>
-      </HStack>
+      {/* Sticky save bar — always reachable, shows unsaved state. */}
+      <Flex
+        position="sticky"
+        bottom={0}
+        zIndex={10}
+        mt={6}
+        mx={{ base: -4, md: -8 }}
+        px={{ base: 4, md: 8 }}
+        py={3}
+        align="center"
+        justify="space-between"
+        gap={3}
+        bg={barBg}
+        backdropFilter="blur(10px)"
+        borderTop="1px solid"
+        borderColor={barBorder}
+      >
+        <HStack spacing={2} fontFamily="var(--font-geist-mono), monospace" fontSize="11px" aria-live="polite">
+          <Box w="7px" h="7px" borderRadius="full" bg={dirty ? 'orange.400' : 'green.400'} />
+          <Text>{saving ? 'saving…' : dirty ? 'unsaved changes' : 'all changes saved'}</Text>
+        </HStack>
+        <HStack spacing={3}>
+          <HStack spacing={1} display={{ base: 'none', md: 'flex' }} opacity={0.7}>
+            <Kbd fontSize="10px">⌘</Kbd>
+            <Kbd fontSize="10px">S</Kbd>
+          </HStack>
+          <Button
+            onClick={validateAndSave}
+            isLoading={saving}
+            loadingText="Saving"
+            isDisabled={!dirty}
+            bg={dirty ? 'var(--accent)' : undefined}
+            color={dirty ? 'white' : undefined}
+            _hover={dirty ? { opacity: 0.92 } : undefined}
+          >
+            Save changes
+          </Button>
+        </HStack>
+      </Flex>
     </>
   )
 }

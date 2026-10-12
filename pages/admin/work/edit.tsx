@@ -55,15 +55,26 @@ export default function AdminWorkEdit() {
     cover: '',
   })
   const [body, setBody] = useState('')
-  const [loading, setLoading] = useState(Boolean(initialSlug))
+  // true until the router query is known (static pages render once with an
+  // empty query) and, when editing, until the item has loaded.
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  // Raw text of the comma-separated list, parsed on blur/save, so typing
+  // ", " or a multi-word item isn't eaten mid-keystroke.
+  const [listText, setListText] = useState('')
+  const parseList = (t: string) => t.split(/[,，]/).map((x) => x.trim()).filter(Boolean)
 
   useEffect(() => {
-    if (!router.isReady || !initialSlug) return
-    ;(async () => {
+    if (!router.isReady) return
+    if (!initialSlug) {
+      setLoading(false)
+      return
+    }
+    void (async () => {
       try {
         const res = await fetch(`/api/admin/work?slug=${encodeURIComponent(initialSlug)}`)
         if (res.status === 401) {
-          router.replace(`/admin/login?from=/admin/work/edit?slug=${initialSlug}`)
+          router.replace(`/admin/login?next=${encodeURIComponent(`/admin/work/edit?slug=${initialSlug}`)}`)
           return
         }
         if (!res.ok) throw new Error()
@@ -81,6 +92,7 @@ export default function AdminWorkEdit() {
           repo: data.frontmatter.repo || '',
           cover: data.frontmatter.cover || '',
         })
+        setListText((data.frontmatter.tech || []).join(', '))
         setBody(data.body || '')
       } catch {
         toast({ status: 'error', title: 'Failed to load case study' })
@@ -100,6 +112,8 @@ export default function AdminWorkEdit() {
       toast({ status: 'error', title: 'Title is required' })
       return
     }
+    const list = parseList(listText)
+    setSaving(true)
     const res = await fetch('/api/admin/work', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -110,7 +124,7 @@ export default function AdminWorkEdit() {
           description: fm.description || undefined,
           role: fm.role || undefined,
           period: fm.period || undefined,
-          tech: fm.tech.length ? fm.tech : undefined,
+          tech: list.length ? list : undefined,
           status: fm.status,
           featured: fm.featured || undefined,
           link: fm.link || undefined,
@@ -118,21 +132,33 @@ export default function AdminWorkEdit() {
           cover: fm.cover || undefined,
         },
         body,
+        // New items must not silently overwrite an existing slug.
+        create: !initialSlug,
       }),
     })
+      .catch(() => null)
+      .finally(() => setSaving(false))
+    if (!res) {
+      toast({ status: 'error', title: 'Network error — not saved' })
+      return
+    }
     if (res.ok) {
+      setFm((f) => ({ ...f, tech: list }))
       toast({ status: 'success', title: 'Saved (snapshot taken)' })
       router.replace(`/admin/work/edit?slug=${encodeURIComponent(slug)}`)
     } else {
       const data = await res.json().catch(() => ({}))
-      toast({ status: 'error', title: data?.error || 'Save failed' })
+      toast({
+        status: 'error',
+        title: res.status === 409 ? `A ${'case study'} with the slug “${slug}” already exists` : data?.error || 'Save failed',
+      })
     }
   }
 
   return (
     <>
       <CustomHead title={initialSlug ? `Admin · Edit ${initialSlug}` : 'Admin · New Case Study'} />
-      <HeaderFooter isMobile={false}>
+      <HeaderFooter>
         <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[6, 10]}>
           <Flex justify="space-between" align="center" mb={6} flexWrap="wrap" gap={3}>
             <Box>
@@ -153,7 +179,7 @@ export default function AdminWorkEdit() {
               <Button variant="ghost" size="sm" onClick={() => router.push('/admin/work')}>
                 ← All case studies
               </Button>
-              <Button colorScheme="purple" size="sm" onClick={save} isDisabled={loading}>
+              <Button colorScheme="purple" size="sm" onClick={save} isDisabled={loading} isLoading={saving}>
                 Save
               </Button>
             </HStack>
@@ -222,16 +248,9 @@ export default function AdminWorkEdit() {
           <FormControl mb={4}>
             <FormLabel fontSize="13px">Tech (comma-separated)</FormLabel>
             <Input
-              value={fm.tech.join(', ')}
-              onChange={(e) =>
-                setFm({
-                  ...fm,
-                  tech: e.target.value
-                    .split(',')
-                    .map((t) => t.trim())
-                    .filter(Boolean),
-                })
-              }
+              value={listText}
+              onChange={(e) => setListText(e.target.value)}
+              onBlur={() => setFm((f) => ({ ...f, tech: parseList(listText) }))}
               placeholder="Next.js, FastAPI, MongoDB"
             />
           </FormControl>

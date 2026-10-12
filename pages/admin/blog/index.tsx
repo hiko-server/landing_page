@@ -38,7 +38,7 @@ export default function AdminBlogIndex() {
     try {
       const res = await fetch('/api/admin/posts')
       if (res.status === 401) {
-        router.replace('/admin/login?from=/admin/blog')
+        router.replace(`/admin/login?next=${encodeURIComponent('/admin/blog')}`)
         return
       }
       const data = await res.json()
@@ -71,7 +71,7 @@ export default function AdminBlogIndex() {
   return (
     <>
       <CustomHead title="Admin · Blog" />
-      <HeaderFooter isMobile={false}>
+      <HeaderFooter>
         <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[6, 10]}>
           <Flex justify="space-between" align="center" mb={6} flexWrap="wrap" gap={3}>
             <Box>
