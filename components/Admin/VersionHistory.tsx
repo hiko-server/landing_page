@@ -1,15 +1,25 @@
 /**
- * VersionHistory – premium admin component
- * Shows file-based snapshots for CV and Home data with preview + restore controls.
+ * VersionHistory — browse the CV / Home snapshots taken before every save and
+ * restore, compare one with the live document as a readable structural diff,
+ * download it, or restore it.
  */
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogOverlay,
+  Badge,
   Box,
   Button,
   Flex,
-  Heading,
   HStack,
   IconButton,
+  Input,
+  InputGroup,
+  InputLeftElement,
   Modal,
   ModalBody,
   ModalCloseButton,
@@ -17,19 +27,35 @@ import {
   ModalFooter,
   ModalHeader,
   ModalOverlay,
-  Select,
+  Skeleton,
+  Spinner,
+  Stack,
   Text,
   Textarea,
-  useColorModeValue,
-  useDisclosure,
-  useToast,
-  VStack,
-  Badge,
   Tooltip,
-  Spinner,
+  useToast,
 } from '@chakra-ui/react'
-import { motion, AnimatePresence } from 'framer-motion'
-import { FaHistory, FaUndo, FaEye, FaCamera, FaDownload, FaCodeBranch } from 'react-icons/fa'
+import { SearchIcon } from '@chakra-ui/icons'
+import { FaCamera, FaDownload, FaUndo, FaExchangeAlt } from 'react-icons/fa'
+import {
+  diffJson,
+  formatDiffValue,
+  type DiffEntry,
+  type DiffKind,
+  type DiffResult,
+} from './shell/jsonDiff'
+import { readJsonObject } from './shell/http'
+import {
+  Eyebrow,
+  MONO,
+  Panel,
+  inputProps,
+  outlineButtonProps,
+  primaryButtonProps,
+} from './shell/ui'
+import SegmentedTabs, { tabPanelProps, type SegmentedItem } from './shell/SegmentedTabs'
+
+type DocType = 'cv' | 'home'
 
 type VersionEntry = {
   filename: string
@@ -37,143 +63,117 @@ type VersionEntry = {
   label: string
   index: number
   isLatest: boolean
-  type: string
+  type: DocType
 }
 
-const GRADIENT_CV = 'linear-gradient(135deg,#dd6b20,#f59e0b)'
-const GRADIENT_HOME = 'linear-gradient(135deg,#0f766e,#14b8a6)'
+const TYPE_ITEMS: SegmentedItem<DocType>[] = [
+  { key: 'cv', label: 'CV' },
+  { key: 'home', label: 'Home page' },
+]
 
-const VersionRow = ({
-  v,
-  onPreview,
-  onRestore,
-  onDownload,
-}: {
-  v: VersionEntry
-  onPreview: (v: VersionEntry) => void
-  onRestore: (v: VersionEntry) => void
-  onDownload: (v: VersionEntry) => void
-}) => {
-  const cardBg = useColorModeValue('rgba(255,255,255,0.7)', 'rgba(30,41,59,0.6)')
-  const border = useColorModeValue('rgba(0,0,0,0.07)', 'rgba(255,255,255,0.1)')
-  const dim = useColorModeValue('gray.600', 'gray.400')
-  const gradient = v.type === 'home' ? GRADIENT_HOME : GRADIENT_CV
+const DOC_LABEL: Record<DocType, string> = { cv: 'CV', home: 'Home page' }
 
-  const formattedDate = v.date
-    ? new Date(v.date).toLocaleString(undefined, {
-        year: 'numeric',
-        month: 'short',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : v.filename
+/** What restoring the snapshot would do to the live document. */
+const KIND_COPY: Record<DiffKind, { label: string; color: string }> = {
+  added: { label: 'would add', color: 'green' },
+  removed: { label: 'would remove', color: 'red' },
+  changed: { label: 'would change', color: 'orange' },
+}
 
+function formatWhen(v: VersionEntry): string {
+  if (!v.date) return v.filename
+  const d = new Date(v.date)
+  if (Number.isNaN(d.getTime())) return v.filename
+  return d.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function errorText(e: unknown, fallback: string): string {
+  if (e instanceof Error)
+    return e.message === 'Failed to fetch' ? 'Network error' : e.message || fallback
+  return fallback
+}
+
+function DiffRow({ e }: { e: DiffEntry }) {
+  const kind = KIND_COPY[e.kind]
   return (
     <Box
-      as={motion.div as any}
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
-      bg={cardBg}
-      border="1px solid"
-      borderColor={border}
-      borderRadius="14px"
-      px={4}
-      py={3}
-      backdropFilter="blur(8px)"
-      position="relative"
-      overflow="hidden"
+      py={2.5}
+      borderBottom="1px solid"
+      borderColor="page.border"
+      _last={{ borderBottom: 'none' }}
     >
-      <Box position="absolute" left={0} top={0} bottom={0} w="3px" bgImage={gradient} />
-      <Flex align="center" justify="space-between" gap={2}>
-        <Flex align="center" gap={3} flex={1} minW={0}>
-          <Box
-            p={2}
-            borderRadius="8px"
-            bgImage={gradient}
-            color="white"
-            flexShrink={0}
-            display="flex"
-            alignItems="center"
-          >
-            <FaCodeBranch size={12} />
-          </Box>
-          <Box minW={0}>
-            <Flex align="center" gap={2}>
-              <Text fontSize="sm" fontWeight="700" noOfLines={1}>
-                {formattedDate}
-              </Text>
-              {v.isLatest && (
-                <Badge
-                  colorScheme={v.type === 'home' ? 'teal' : 'orange'}
-                  variant="subtle"
-                  borderRadius="full"
-                  px={2}
-                  fontSize="10px"
-                >
-                  Latest
-                </Badge>
-              )}
-            </Flex>
-            <Text fontSize="xs" color={dim} noOfLines={1}>
-              {v.filename}
-            </Text>
-          </Box>
-        </Flex>
-        <HStack spacing={1}>
-          <Tooltip label="Preview">
-            <IconButton
-              size="sm"
-              variant="ghost"
-              icon={<FaEye />}
-              aria-label="Preview"
-              onClick={() => onPreview(v)}
-            />
-          </Tooltip>
-          <Tooltip label="Download">
-            <IconButton
-              size="sm"
-              variant="ghost"
-              icon={<FaDownload />}
-              aria-label="Download"
-              onClick={() => onDownload(v)}
-            />
-          </Tooltip>
-          <Tooltip label="Restore this version">
-            <IconButton
-              size="sm"
-              colorScheme={v.type === 'home' ? 'teal' : 'orange'}
-              variant="ghost"
-              icon={<FaUndo />}
-              aria-label="Restore"
-              onClick={() => onRestore(v)}
-            />
-          </Tooltip>
-        </HStack>
+      <Flex gap={2} align="center" flexWrap="wrap" mb={1.5}>
+        <Badge
+          colorScheme={kind.color}
+          variant="subtle"
+          fontSize="10px"
+          textTransform="none"
+          fontFamily={MONO}
+        >
+          {kind.label}
+        </Badge>
+        <Text fontFamily={MONO} fontSize="12px" wordBreak="break-all" color="page.fg">
+          {e.path}
+        </Text>
       </Flex>
+      <Stack spacing={1} fontFamily={MONO} fontSize="12px" pl={{ base: 0, md: 2 }}>
+        {e.kind !== 'added' ? (
+          <Flex gap={2} align="baseline">
+            <Text as="span" color="page.muted" flexShrink={0} w="64px">
+              live
+            </Text>
+            <Text
+              as="span"
+              color="page.fg-secondary"
+              textDecoration={e.kind === 'removed' ? 'line-through' : undefined}
+              wordBreak="break-word"
+            >
+              {formatDiffValue(e.before)}
+            </Text>
+          </Flex>
+        ) : null}
+        {e.kind !== 'removed' ? (
+          <Flex gap={2} align="baseline">
+            <Text as="span" color="page.muted" flexShrink={0} w="64px">
+              snapshot
+            </Text>
+            <Text as="span" color="page.fg" wordBreak="break-word">
+              {formatDiffValue(e.after)}
+            </Text>
+          </Flex>
+        ) : null}
+      </Stack>
     </Box>
   )
 }
 
 export default function VersionHistory() {
   const toast = useToast()
-  const { isOpen, onOpen, onClose } = useDisclosure()
-  const [dataType, setDataType] = useState<'cv' | 'home'>('cv')
+  const [dataType, setDataType] = useState<DocType>('cv')
   const [versions, setVersions] = useState<VersionEntry[]>([])
   const [loading, setLoading] = useState(false)
+  const [listError, setListError] = useState('')
   const [snapshotting, setSnapshotting] = useState(false)
-  const [previewVersion, setPreviewVersion] = useState<VersionEntry | null>(null)
-  const [previewData, setPreviewData] = useState<string>('')
-  const [previewLoading, setPreviewLoading] = useState(false)
+
+  // Compare modal
+  const [compareTarget, setCompareTarget] = useState<VersionEntry | null>(null)
+  const [compareLoading, setCompareLoading] = useState(false)
+  const [compareError, setCompareError] = useState('')
+  const [snapshotData, setSnapshotData] = useState<unknown>(undefined)
+  const [diff, setDiff] = useState<DiffResult | null>(null)
+  const [view, setView] = useState<'changes' | 'raw'>('changes')
+  const [filter, setFilter] = useState('')
+
+  // Restore confirmation
   const [restoreTarget, setRestoreTarget] = useState<VersionEntry | null>(null)
   const [restoring, setRestoring] = useState(false)
-  const [listError, setListError] = useState('')
-  const { isOpen: isRestoreOpen, onOpen: onRestoreOpen, onClose: onRestoreClose } = useDisclosure()
-
-  const panelBg = useColorModeValue('rgba(255,255,255,0.9)', 'rgba(22,28,36,0.85)')
-  const border = useColorModeValue('rgba(0,0,0,0.07)', 'rgba(255,255,255,0.1)')
-  const dim = useColorModeValue('gray.600', 'gray.400')
+  const cancelRef = useRef<HTMLButtonElement>(null)
 
   const fetchVersions = useCallback(async () => {
     setLoading(true)
@@ -181,19 +181,19 @@ export default function VersionHistory() {
     try {
       const res = await fetch(`/api/versions?type=${dataType}`, { cache: 'no-store' })
       if (res.status === 401) throw new Error('Session expired — sign in again.')
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok || !data.ok) throw new Error(data?.error || `Server responded ${res.status}`)
-      setVersions(data.versions || [])
-    } catch (e: any) {
+      const data = await readJsonObject(res)
+      if (!res.ok || !data.ok) throw new Error(data.error || `Server responded ${res.status}`)
+      setVersions(Array.isArray(data.versions) ? data.versions : [])
+    } catch (e) {
       setVersions([])
-      setListError(e?.message || 'Failed to load versions')
+      setListError(errorText(e, 'Failed to load versions'))
     } finally {
       setLoading(false)
     }
   }, [dataType])
 
   useEffect(() => {
-    fetchVersions()
+    void fetchVersions()
   }, [fetchVersions])
 
   const takeSnapshot = async () => {
@@ -204,45 +204,66 @@ export default function VersionHistory() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'snapshot' }),
       })
-      const data = await res.json()
-      if (data.ok) {
-        toast({ status: 'success', title: `Snapshot saved: ${data.file}` })
-        fetchVersions()
-      } else {
-        throw new Error(data.error)
-      }
-    } catch (e: any) {
-      toast({ status: 'error', title: 'Snapshot failed', description: e.message })
+      const data = await readJsonObject(res)
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      toast({
+        status: 'success',
+        title: 'Snapshot saved',
+        description: data.file,
+        position: 'bottom-right',
+      })
+      void fetchVersions()
+    } catch (e) {
+      toast({
+        status: 'error',
+        title: 'Snapshot failed',
+        description: errorText(e, 'Unknown error'),
+        position: 'bottom-right',
+      })
     } finally {
       setSnapshotting(false)
     }
   }
 
-  const handlePreview = async (v: VersionEntry) => {
-    setPreviewVersion(v)
-    setPreviewData('')
-    setPreviewLoading(true)
-    onOpen()
+  const openCompare = async (v: VersionEntry) => {
+    setCompareTarget(v)
+    setCompareLoading(true)
+    setCompareError('')
+    setSnapshotData(undefined)
+    setDiff(null)
+    setFilter('')
+    setView('changes')
+    const liveUrl = v.type === 'home' ? '/api/admin/home' : '/api/admin/cvdata'
+    let haveSnapshot = false
     try {
-      const res = await fetch(`/api/versions?type=${v.type}&file=${encodeURIComponent(v.filename)}&preview=1`)
-      const data = await res.json().catch(() => ({}))
-      if (res.ok && data.ok) setPreviewData(JSON.stringify(data.data, null, 2))
-      else setPreviewData(`Failed to load preview (${data?.error || res.status})`)
-    } catch {
-      setPreviewData('Failed to load preview')
+      const [snapRes, liveRes] = await Promise.all([
+        fetch(`/api/versions?type=${v.type}&file=${encodeURIComponent(v.filename)}&preview=1`, {
+          cache: 'no-store',
+        }),
+        fetch(liveUrl, { cache: 'no-store' }),
+      ])
+      const snap = await readJsonObject(snapRes)
+      if (!snapRes.ok || !snap.ok) throw new Error(snap.error || `Snapshot: HTTP ${snapRes.status}`)
+      setSnapshotData(snap.data)
+      haveSnapshot = true
+      if (liveRes.status === 401) throw new Error('Session expired — sign in again to compare.')
+      if (!liveRes.ok) throw new Error(`Live version: HTTP ${liveRes.status}`)
+      const live: unknown = await liveRes.json()
+      setDiff(diffJson(live, snap.data))
+    } catch (e) {
+      setCompareError(errorText(e, 'Failed to load'))
+      // The snapshot itself is still worth showing when only the live side failed.
+      if (haveSnapshot) setView('raw')
     } finally {
-      setPreviewLoading(false)
+      setCompareLoading(false)
     }
   }
 
-  const handleDownload = (v: VersionEntry) => {
-    const url = `/api/${v.type === 'home' ? 'home' : 'cvdata'}?download=1&file=${encodeURIComponent(v.filename)}`
-    window.open(url, '_blank')
-  }
+  const closeCompare = () => setCompareTarget(null)
 
-  const handleRestoreClick = (v: VersionEntry) => {
-    setRestoreTarget(v)
-    onRestoreOpen()
+  const download = (v: VersionEntry) => {
+    const url = `/api/${v.type === 'home' ? 'home' : 'cvdata'}?download=1&file=${encodeURIComponent(v.filename)}`
+    window.open(url, '_blank', 'noopener')
   }
 
   const confirmRestore = async () => {
@@ -254,203 +275,401 @@ export default function VersionHistory() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'restore', filename: restoreTarget.filename }),
       })
-      const data = await res.json()
-      if (data.ok) {
-        toast({ status: 'success', title: 'Restored successfully', description: `Rolled back to ${restoreTarget.filename}` })
-        onRestoreClose()
-        fetchVersions()
-      } else {
-        throw new Error(data.error)
-      }
-    } catch (e: any) {
-      toast({ status: 'error', title: 'Restore failed', description: e.message })
+      const data = await readJsonObject(res)
+      if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`)
+      toast({
+        status: data.r2Warning ? 'warning' : 'success',
+        title: `${DOC_LABEL[restoreTarget.type]} restored`,
+        description:
+          data.r2Warning ||
+          `Rolled back to ${restoreTarget.filename}. The previous live state was snapshotted first.`,
+        position: 'bottom-right',
+        duration: 6000,
+      })
+      setRestoreTarget(null)
+      setCompareTarget(null)
+      void fetchVersions()
+    } catch (e) {
+      toast({
+        status: 'error',
+        title: 'Restore failed',
+        description: errorText(e, 'Unknown error'),
+        position: 'bottom-right',
+      })
     } finally {
       setRestoring(false)
     }
   }
 
-  const gradient = dataType === 'home' ? GRADIENT_HOME : GRADIENT_CV
+  const shown = useMemo(() => {
+    if (!diff) return []
+    const q = filter.trim().toLowerCase()
+    if (!q) return diff.entries
+    return diff.entries.filter(
+      (e) =>
+        e.path.toLowerCase().includes(q) ||
+        formatDiffValue(e.before).toLowerCase().includes(q) ||
+        formatDiffValue(e.after).toLowerCase().includes(q)
+    )
+  }, [diff, filter])
+
+  const rawSnapshot = useMemo(
+    () =>
+      snapshotData === undefined
+        ? ''
+        : typeof snapshotData === 'string'
+          ? snapshotData
+          : JSON.stringify(snapshotData, null, 2),
+    [snapshotData]
+  )
 
   return (
-    <Box
-      bg={panelBg}
-      border="1px solid"
-      borderColor={border}
-      borderRadius="20px"
-      backdropFilter="blur(14px)"
-      p={{ base: 5, md: 7 }}
-    >
-      {/* Header */}
-      <Flex align="center" justify="space-between" mb={6} flexWrap="wrap" gap={3}>
-        <Flex align="center" gap={3}>
-          <Box p={2} borderRadius="10px" bgImage={gradient} color="white" display="flex" alignItems="center">
-            <FaHistory size={16} />
-          </Box>
-          <Box>
-            <Heading size="md">
-              Version History
-            </Heading>
-            <Text fontSize="xs" color={dim}>
-              File-based snapshots — auto-saved on every edit
-            </Text>
-          </Box>
-        </Flex>
-
-        <HStack spacing={3}>
-          <Select
-            size="sm"
+    <Box>
+      <Flex
+        align={{ base: 'stretch', md: 'flex-end' }}
+        justify="space-between"
+        gap={4}
+        mb={5}
+        flexWrap="wrap"
+      >
+        <Box maxW="60ch">
+          <Eyebrow accent>[versions]</Eyebrow>
+          <Text as="h2" fontSize="lg" fontWeight={600} letterSpacing="-0.02em" mt={1}>
+            Version history
+          </Text>
+          <Text fontSize="sm" color="page.fg-secondary" mt={1}>
+            A snapshot is taken before every save and every restore. Compare one with what’s live,
+            download it, or roll back to it.
+          </Text>
+        </Box>
+        <HStack spacing={2} flexWrap="wrap">
+          <SegmentedTabs
+            items={TYPE_ITEMS}
             value={dataType}
-            onChange={(e) => setDataType(e.target.value as 'cv' | 'home')}
-            w="140px"
-            borderRadius="10px"
-          >
-            <option value="cv">CV Data</option>
-            <option value="home">Home Data</option>
-          </Select>
+            onSelect={setDataType}
+            label="Document"
+            idPrefix="ver"
+            size="sm"
+          />
           <Button
             size="sm"
             leftIcon={<FaCamera />}
-            colorScheme={dataType === 'home' ? 'teal' : 'orange'}
-            borderRadius="10px"
+            {...outlineButtonProps}
             isLoading={snapshotting}
+            loadingText="Saving"
             onClick={takeSnapshot}
           >
-            Snapshot Now
+            Snapshot now
           </Button>
         </HStack>
       </Flex>
 
-      {/* Versions list */}
-      {loading ? (
-        <Flex justify="center" py={10}>
-          <Spinner size="lg" color={dataType === 'home' ? 'teal.400' : 'orange.400'} />
-        </Flex>
-      ) : versions.length === 0 ? (
-        <Flex
-          direction="column"
-          align="center"
-          justify="center"
-          py={12}
-          border="2px dashed"
-          borderColor={border}
-          borderRadius="16px"
-          gap={3}
-        >
-          <FaHistory size={32} opacity={0.3} />
-          {listError ? (
-            <>
-              <Text color="red.400" fontSize="sm">
-                {listError}
-              </Text>
-              <Button size="sm" variant="outline" onClick={fetchVersions}>
-                Retry
-              </Button>
-            </>
-          ) : (
-            <Text color={dim} fontSize="sm">
-              No snapshots yet. Click &ldquo;Snapshot Now&rdquo; or edit data to auto-create one.
+      <Panel p={0} overflow="hidden" {...tabPanelProps('ver', dataType)}>
+        {loading ? (
+          <Stack p={4} spacing={3} aria-busy="true" aria-label="Loading versions">
+            <Skeleton h="44px" />
+            <Skeleton h="44px" />
+            <Skeleton h="44px" />
+          </Stack>
+        ) : listError ? (
+          <Flex
+            direction="column"
+            align="center"
+            gap={3}
+            py={10}
+            px={4}
+            textAlign="center"
+            role="alert"
+          >
+            <Text color="red.400" fontSize="sm">
+              {listError}
             </Text>
-          )}
-        </Flex>
-      ) : (
-        <VStack spacing={2} align="stretch">
-          <AnimatePresence>
+            <Button size="sm" {...outlineButtonProps} onClick={() => void fetchVersions()}>
+              Retry
+            </Button>
+          </Flex>
+        ) : versions.length === 0 ? (
+          <Text color="page.fg-secondary" fontSize="sm" py={10} px={4} textAlign="center">
+            No {DOC_LABEL[dataType]} snapshots yet. Use “Snapshot now”, or save an edit to create
+            one.
+          </Text>
+        ) : (
+          <Box as="ul" listStyleType="none" aria-label={`${DOC_LABEL[dataType]} snapshots`}>
             {versions.map((v) => (
-              <VersionRow
+              <Flex
+                as="li"
                 key={v.filename}
-                v={v}
-                onPreview={handlePreview}
-                onRestore={handleRestoreClick}
-                onDownload={handleDownload}
-              />
+                align="center"
+                justify="space-between"
+                gap={3}
+                px={{ base: 3, md: 4 }}
+                py={3}
+                borderBottom="1px solid"
+                borderColor="page.border"
+                _last={{ borderBottom: 'none' }}
+                _hover={{ bg: 'page.bg-elevated' }}
+                flexWrap="wrap"
+              >
+                <Box minW={0} flex="1 1 220px">
+                  <Flex align="center" gap={2}>
+                    <Text fontSize="sm" fontWeight={600}>
+                      {formatWhen(v)}
+                    </Text>
+                    {v.isLatest ? (
+                      <Badge
+                        variant="outline"
+                        colorScheme="accent"
+                        fontSize="9px"
+                        fontFamily={MONO}
+                      >
+                        latest
+                      </Badge>
+                    ) : null}
+                  </Flex>
+                  <Text
+                    fontSize="11px"
+                    fontFamily={MONO}
+                    color="page.fg-secondary"
+                    noOfLines={1}
+                    title={v.filename}
+                  >
+                    {v.filename}
+                  </Text>
+                </Box>
+                <HStack spacing={1}>
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    leftIcon={<FaExchangeAlt />}
+                    color="page.fg-secondary"
+                    onClick={() => void openCompare(v)}
+                  >
+                    Compare
+                  </Button>
+                  <Tooltip label="Download JSON" openDelay={300}>
+                    <IconButton
+                      size="xs"
+                      variant="ghost"
+                      color="page.fg-secondary"
+                      icon={<FaDownload />}
+                      aria-label={`Download ${v.filename}`}
+                      onClick={() => download(v)}
+                    />
+                  </Tooltip>
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    leftIcon={<FaUndo />}
+                    color="page.fg-secondary"
+                    onClick={() => setRestoreTarget(v)}
+                  >
+                    Restore
+                  </Button>
+                </HStack>
+              </Flex>
             ))}
-          </AnimatePresence>
-        </VStack>
-      )}
+          </Box>
+        )}
+      </Panel>
 
-      {/* Preview Modal */}
-      <Modal isOpen={isOpen} onClose={onClose} size="4xl" scrollBehavior="inside">
-        <ModalOverlay backdropFilter="blur(8px)" />
-        <ModalContent borderRadius="20px">
-          <ModalHeader>
-            <Flex align="center" gap={2}>
-              <FaEye />
-              <Text>Preview: {previewVersion?.filename}</Text>
-            </Flex>
+      {/* Compare modal */}
+      <Modal isOpen={!!compareTarget} onClose={closeCompare} size="4xl" scrollBehavior="inside">
+        <ModalOverlay backdropFilter="blur(6px)" />
+        <ModalContent
+          bg="page.bg"
+          border="1px solid"
+          borderColor="page.border"
+          mx={{ base: 2, md: 4 }}
+        >
+          <ModalHeader pb={2}>
+            <Eyebrow accent>[compare] {compareTarget ? DOC_LABEL[compareTarget.type] : ''}</Eyebrow>
+            <Text fontSize="md" fontWeight={600} mt={1}>
+              {compareTarget ? formatWhen(compareTarget) : ''} vs live
+            </Text>
+            <Text
+              fontSize="11px"
+              fontFamily={MONO}
+              color="page.fg-secondary"
+              fontWeight={400}
+              noOfLines={1}
+            >
+              {compareTarget?.filename}
+            </Text>
           </ModalHeader>
           <ModalCloseButton />
           <ModalBody>
-            {previewLoading ? (
-              <Flex justify="center" py={8}><Spinner /></Flex>
+            {compareLoading ? (
+              <Flex justify="center" py={10} role="status" aria-label="Loading comparison">
+                <Spinner color="accent.500" />
+              </Flex>
             ) : (
-              <Textarea
-                value={previewData}
-                readOnly
-                rows={30}
-                fontFamily="monospace"
-                fontSize="xs"
-                resize="vertical"
-              />
+              <Stack spacing={3}>
+                {compareError ? (
+                  <Text fontSize="sm" color="red.400" role="alert">
+                    Couldn’t build the comparison: {compareError}
+                  </Text>
+                ) : null}
+                <Flex justify="space-between" align="center" gap={3} flexWrap="wrap">
+                  <SegmentedTabs
+                    items={[
+                      { key: 'changes', label: diff ? `Changes (${diff.total})` : 'Changes' },
+                      { key: 'raw', label: 'Snapshot JSON' },
+                    ]}
+                    value={view}
+                    onSelect={setView}
+                    label="Comparison view"
+                    idPrefix="cmp"
+                    size="sm"
+                  />
+                  {diff && diff.total > 0 ? (
+                    <HStack
+                      spacing={3}
+                      fontFamily={MONO}
+                      fontSize="11px"
+                      color="page.fg-secondary"
+                      aria-label="Summary"
+                    >
+                      <Text>+{diff.counts.added} add</Text>
+                      <Text>−{diff.counts.removed} remove</Text>
+                      <Text>~{diff.counts.changed} change</Text>
+                    </HStack>
+                  ) : null}
+                </Flex>
+
+                <Box {...tabPanelProps('cmp', view)}>
+                  {view === 'raw' ? (
+                    <Textarea
+                      value={rawSnapshot}
+                      readOnly
+                      rows={24}
+                      fontFamily={MONO}
+                      fontSize="xs"
+                      resize="vertical"
+                      bg="page.bg-elevated"
+                      borderColor="page.border"
+                      aria-label="Snapshot JSON"
+                    />
+                  ) : diff ? (
+                    diff.total === 0 ? (
+                      <Text fontSize="sm" color="page.fg-secondary" py={6} textAlign="center">
+                        Identical to the live version — restoring it would change nothing.
+                      </Text>
+                    ) : (
+                      <Stack spacing={3}>
+                        <Text fontSize="sm" color="page.fg-secondary">
+                          Restoring this snapshot would make these changes to the live{' '}
+                          {compareTarget ? DOC_LABEL[compareTarget.type] : ''}:
+                        </Text>
+                        <InputGroup size="sm">
+                          <InputLeftElement pointerEvents="none">
+                            <SearchIcon color="page.muted" />
+                          </InputLeftElement>
+                          <Input
+                            {...inputProps}
+                            value={filter}
+                            onChange={(e) => setFilter(e.target.value)}
+                            placeholder="Filter by path or value"
+                            aria-label="Filter changes"
+                            borderRadius="md"
+                          />
+                        </InputGroup>
+                        <Box border="1px solid" borderColor="page.border" borderRadius="md" px={3}>
+                          {shown.length ? (
+                            shown.map((e) => <DiffRow key={`${e.kind}:${e.path}`} e={e} />)
+                          ) : (
+                            <Text fontSize="sm" color="page.fg-secondary" py={4}>
+                              No changes match “{filter}”.
+                            </Text>
+                          )}
+                        </Box>
+                        {diff.total > diff.entries.length ? (
+                          <Text fontSize="xs" color="page.fg-secondary">
+                            Showing the first {diff.entries.length} of {diff.total} differences.
+                            Download the snapshot for the full document.
+                          </Text>
+                        ) : null}
+                      </Stack>
+                    )
+                  ) : null}
+                </Box>
+              </Stack>
             )}
           </ModalBody>
-          <ModalFooter>
-            <HStack>
-              {previewVersion && (
+          <ModalFooter gap={2} flexWrap="wrap">
+            {compareTarget ? (
+              <>
                 <Button
-                  colorScheme={previewVersion.type === 'home' ? 'teal' : 'orange'}
-                  leftIcon={<FaUndo />}
-                  onClick={() => {
-                    onClose()
-                    handleRestoreClick(previewVersion)
-                  }}
+                  size="sm"
+                  variant="ghost"
+                  leftIcon={<FaDownload />}
+                  onClick={() => download(compareTarget)}
                 >
-                  Restore This Version
+                  Download
                 </Button>
-              )}
-              <Button variant="ghost" onClick={onClose}>Close</Button>
-            </HStack>
+                <Button
+                  size="sm"
+                  {...primaryButtonProps}
+                  leftIcon={<FaUndo />}
+                  onClick={() => setRestoreTarget(compareTarget)}
+                >
+                  Restore this version
+                </Button>
+              </>
+            ) : null}
+            <Button size="sm" {...outlineButtonProps} onClick={closeCompare}>
+              Close
+            </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
 
-      {/* Restore Confirm Modal */}
-      <Modal isOpen={isRestoreOpen} onClose={onRestoreClose} size="md">
-        <ModalOverlay backdropFilter="blur(8px)" />
-        <ModalContent borderRadius="20px">
-          <ModalHeader>
-            <Flex align="center" gap={2}>
-              <FaUndo />
-              <Text>Confirm Restore</Text>
-            </Flex>
-          </ModalHeader>
-          <ModalCloseButton />
-          <ModalBody>
-            <VStack align="start" spacing={3}>
-              <Text>
-                Are you sure you want to restore{' '}
-                <strong>{restoreTarget?.type === 'home' ? 'Home' : 'CV'} data</strong> to this version?
-              </Text>
-              <Box
-                p={3}
-                bg="orange.50"
-                borderRadius="12px"
+      {/* Restore confirmation */}
+      <AlertDialog
+        isOpen={!!restoreTarget}
+        leastDestructiveRef={cancelRef}
+        onClose={() => setRestoreTarget(null)}
+        isCentered
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent
+            bg="page.bg-elevated"
+            border="1px solid"
+            borderColor="page.border"
+            mx={4}
+          >
+            <AlertDialogHeader fontSize="md">
+              Restore the {restoreTarget ? DOC_LABEL[restoreTarget.type] : ''} to this version?
+            </AlertDialogHeader>
+            <AlertDialogBody fontSize="sm">
+              <Text
+                fontFamily={MONO}
+                fontSize="12px"
+                p={2}
+                borderRadius="md"
                 border="1px solid"
-                borderColor="orange.200"
-                w="100%"
+                borderColor="page.border"
+                bg="page.bg"
+                wordBreak="break-all"
               >
-                <Text fontSize="sm" color="orange.700" fontFamily="monospace">
-                  {restoreTarget?.filename}
-                </Text>
-              </Box>
-              <Text fontSize="sm" color="gray.500">
-                ⚠️ The current live data will be overwritten. A snapshot of the current state will be saved automatically before restoring.
+                {restoreTarget?.filename}
               </Text>
-            </VStack>
-          </ModalBody>
-          <ModalFooter>
-            <HStack>
+              <Text mt={3} color="page.fg-secondary">
+                The live version is replaced and goes live immediately. A snapshot of the current
+                state is saved first, so this can be undone from this list.
+              </Text>
+            </AlertDialogBody>
+            <AlertDialogFooter gap={2}>
               <Button
-                colorScheme="orange"
+                ref={cancelRef}
+                size="sm"
+                {...outlineButtonProps}
+                onClick={() => setRestoreTarget(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                {...primaryButtonProps}
                 leftIcon={<FaUndo />}
                 onClick={confirmRestore}
                 isLoading={restoring}
@@ -458,11 +677,10 @@ export default function VersionHistory() {
               >
                 Restore
               </Button>
-              <Button variant="ghost" onClick={onRestoreClose}>Cancel</Button>
-            </HStack>
-          </ModalFooter>
-        </ModalContent>
-      </Modal>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
     </Box>
   )
 }

@@ -1,18 +1,28 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  Alert,
+  AlertDescription,
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogOverlay,
+  AlertIcon,
   Box,
   Button,
   HStack,
   IconButton,
-  Input,
+  ListItem,
   Tab,
   TabList,
   TabPanel,
   TabPanels,
   Tabs,
+  Text,
   Textarea,
   Tooltip,
-  useColorModeValue,
+  UnorderedList,
   useToast,
 } from '@chakra-ui/react'
 import { useEditor, EditorContent, type Editor } from '@tiptap/react'
@@ -37,6 +47,9 @@ import {
   FaUndo,
   FaRedo,
 } from 'react-icons/fa'
+import { detectMdxRisks, type MdxRisk } from './shell/mdxRisk'
+import { uploadImageFile } from './shell/http'
+import { MONO, outlineButtonProps, primaryButtonProps } from './shell/ui'
 
 /**
  * RichEditor — dual-mode WYSIWYG / raw-MDX editor used by all admin content
@@ -44,25 +57,19 @@ import {
  *
  * Architecture:
  *   - Single source of truth is the markdown string the parent owns (`value`).
- *   - GUI tab mounts TipTap with `tiptap-markdown` so it round-trips md⇆html.
- *   - MDX tab is a plain Textarea — the escape hatch for custom JSX/MDX
- *     blocks that TipTap can't model. Switching tabs flushes the editor's
- *     markdown back to the parent so no edits are lost.
+ *   - The Visual tab is TipTap with `tiptap-markdown` (md ⇆ ProseMirror).
+ *   - The MDX tab is a plain textarea — the escape hatch for JSX / MDX that
+ *     TipTap can't model.
  *
- * Image upload:
- *   - Toolbar button, drag-and-drop and clipboard paste all hit
- *     /api/admin/upload-image. The endpoint stores under /public/uploads/ and
- *     returns a public URL, which is inserted at the caret as `![](url)`.
+ * MDX safety: TipTap re-serialises the whole document on the first edit, so
+ * JSX components, import/export lines, {expressions}, GFM tables and
+ * footnotes would be dropped or escaped. Whenever content arrives from
+ * outside (load, reload) it is scanned first; if any of those constructs are
+ * present the editor opens on the MDX tab with a warning that lists what the
+ * visual editor would rewrite, and switching to Visual asks first.
  *
- * Why TipTap (vs Novel/BlockNote/lexical):
- *   - ProseMirror under the hood — the same engine Linear, Substack and
- *     GitLab use. Plugin ecosystem is the broadest in the JS editor space.
- *   - `tiptap-markdown` provides lossless markdown round-trip out of the box.
- *   - Tiny bundle compared to Novel.sh's full Notion clone (~120kB vs ~400kB).
- *
- * MDX caveat: TipTap renders markdown, so JSX like `<MyComponent/>` or
- * `<Callout>...</Callout>` will be preserved as inline HTML when switching
- * GUI → MDX, but cannot be edited visually. Use the MDX tab for those blocks.
+ * Image upload: toolbar button, drag-and-drop and clipboard paste all go to
+ * /api/admin/upload-image; failures (network, 413, non-JSON) become a toast.
  */
 
 type Props = {
@@ -70,32 +77,16 @@ type Props = {
   onChange: (next: string) => void
   minH?: string
   placeholder?: string
+  /** id of the visible label, wired to both editing surfaces. */
+  labelledBy?: string
 }
 
-// File -> dataURL helper for the upload-image endpoint contract.
-function fileToDataURL(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result))
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
-  })
-}
+const VISUAL = 0
+const RAW = 1
 
-async function uploadImage(file: File): Promise<string> {
-  const dataUrl = await fileToDataURL(file)
-  const safeName = `${Date.now()}-${file.name}`
-  const res = await fetch('/api/admin/upload-image', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filename: safeName, dataUrl }),
-  })
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}))
-    throw new Error(data?.error || 'Upload failed')
-  }
-  const { url } = await res.json()
-  return url as string
+function getMarkdown(ed: Editor): string {
+  const storage = ed.storage as unknown as { markdown?: { getMarkdown?: () => string } }
+  return storage.markdown?.getMarkdown?.() ?? ed.getHTML()
 }
 
 function ToolbarButton({
@@ -111,33 +102,30 @@ function ToolbarButton({
   isActive?: boolean
   isDisabled?: boolean
 }) {
-  const activeBg = useColorModeValue('purple.100', 'whiteAlpha.300')
   return (
     <Tooltip label={label} openDelay={300} hasArrow placement="top">
       <IconButton
         aria-label={label}
+        aria-pressed={isActive === undefined ? undefined : isActive}
         icon={icon}
         size="sm"
         variant="ghost"
         onClick={onClick}
         isDisabled={isDisabled}
-        bg={isActive ? activeBg : undefined}
-        borderRadius="6px"
+        color={isActive ? 'accent.500' : 'page.fg-secondary'}
+        bg={isActive ? 'var(--accent-soft)' : undefined}
+        _hover={{ bg: 'page.bg-overlay', color: 'page.fg' }}
+        borderRadius="md"
       />
     </Tooltip>
   )
 }
 
-function Toolbar({
-  editor,
-  onPickImage,
-}: {
-  editor: Editor | null
-  onPickImage: () => void
-}) {
-  const border = useColorModeValue('gray.200', 'whiteAlpha.200')
-  const bg = useColorModeValue('white', 'gray.800')
+function Divider() {
+  return <Box w="1px" h="20px" bg="page.border" mx={1} aria-hidden />
+}
 
+function Toolbar({ editor, onPickImage }: { editor: Editor | null; onPickImage: () => void }) {
   if (!editor) return null
 
   const setLink = () => {
@@ -153,12 +141,14 @@ function Toolbar({
 
   return (
     <HStack
+      role="toolbar"
+      aria-label="Formatting"
       spacing={1}
-      p={2}
+      p={1.5}
       borderBottom="1px solid"
-      borderColor={border}
-      bg={bg}
-      borderTopRadius="6px"
+      borderColor="page.border"
+      bg="page.bg-elevated"
+      borderTopRadius="lg"
       flexWrap="wrap"
       position="sticky"
       top={0}
@@ -183,7 +173,7 @@ function Toolbar({
         isActive={editor.isActive('italic')}
       />
       <ToolbarButton
-        label="Strike"
+        label="Strikethrough"
         icon={<FaStrikethrough size={12} />}
         onClick={() => editor.chain().focus().toggleStrike().run()}
         isActive={editor.isActive('strike')}
@@ -194,7 +184,7 @@ function Toolbar({
         onClick={() => editor.chain().focus().toggleCode().run()}
         isActive={editor.isActive('code')}
       />
-      <Box w="1px" h="20px" bg={border} mx={1} />
+      <Divider />
       <ToolbarButton
         label="Bullet list"
         icon={<FaListUl size={12} />}
@@ -202,7 +192,7 @@ function Toolbar({
         isActive={editor.isActive('bulletList')}
       />
       <ToolbarButton
-        label="Ordered list"
+        label="Numbered list"
         icon={<FaListOl size={12} />}
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
         isActive={editor.isActive('orderedList')}
@@ -224,10 +214,15 @@ function Toolbar({
         icon={<FaMinus size={12} />}
         onClick={() => editor.chain().focus().setHorizontalRule().run()}
       />
-      <Box w="1px" h="20px" bg={border} mx={1} />
-      <ToolbarButton label="Link" icon={<FaLink size={12} />} onClick={setLink} isActive={editor.isActive('link')} />
+      <Divider />
+      <ToolbarButton
+        label="Link"
+        icon={<FaLink size={12} />}
+        onClick={setLink}
+        isActive={editor.isActive('link')}
+      />
       <ToolbarButton label="Insert image" icon={<FaImage size={12} />} onClick={onPickImage} />
-      <Box w="1px" h="20px" bg={border} mx={1} />
+      <Divider />
       <ToolbarButton
         label="Undo (⌘Z)"
         icon={<FaUndo size={12} />}
@@ -244,24 +239,98 @@ function Toolbar({
   )
 }
 
-export default function RichEditor({ value, onChange, minH = '520px', placeholder }: Props) {
+function RiskList({ risks }: { risks: MdxRisk[] }) {
+  return (
+    <UnorderedList spacing={1} mt={1.5} ml={4} fontSize="xs">
+      {risks.map((r) => (
+        <ListItem key={r.kind}>
+          <Text as="span" fontWeight={600}>
+            {r.label}
+          </Text>{' '}
+          ({r.count}) — {r.effect}.{' '}
+          <Text as="span" fontFamily={MONO} color="page.fg-secondary">
+            line{r.lines.length > 1 ? 's' : ''} {r.lines.join(', ')}
+            {r.count > r.lines.length ? ', …' : ''}
+          </Text>
+        </ListItem>
+      ))}
+    </UnorderedList>
+  )
+}
+
+const tabStyle = {
+  fontSize: '12px',
+  fontFamily: MONO,
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase' as const,
+  px: 3,
+  py: 1.5,
+  borderRadius: 'md',
+  color: 'page.fg-secondary',
+  _selected: {
+    color: 'page.fg',
+    bg: 'page.bg',
+    boxShadow: '0 0 0 1px var(--chakra-colors-page-border-strong)',
+  },
+  _focusVisible: { boxShadow: '0 0 0 2px var(--accent-ring)' },
+}
+
+export default function RichEditor({
+  value,
+  onChange,
+  minH = '520px',
+  placeholder,
+  labelledBy,
+}: Props) {
   const toast = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const mdxRef = useRef<HTMLTextAreaElement>(null)
-  const [tabIndex, setTabIndex] = useState(0) // 0 = GUI, 1 = MDX
-  // Track the value we last applied to TipTap so we don't loop when we
-  // re-receive the same markdown back from the parent.
-  const lastCommittedRef = useRef<string>(value)
+  const cancelRef = useRef<HTMLButtonElement>(null)
+
+  const risks = useMemo(() => detectMdxRisks(value), [value])
+  // Content with constructs the visual editor would destroy opens on MDX.
+  const [tabIndex, setTabIndex] = useState(() => (detectMdxRisks(value).length ? RAW : VISUAL))
+  const [confirmVisual, setConfirmVisual] = useState(false)
+  // The last markdown string this component produced (either surface).
+  // Anything else arriving through `value` came from outside (load, reload).
+  const lastEmitted = useRef<string>(value)
+  // What TipTap currently holds, to avoid re-applying identical content.
+  const lastApplied = useRef<string>(value)
+
+  const emit = useCallback(
+    (md: string) => {
+      lastEmitted.current = md
+      onChange(md)
+    },
+    [onChange]
+  )
+  const emitRef = useRef(emit)
+  emitRef.current = emit
+
+  const notifyUploadError = useCallback(
+    (err: unknown) =>
+      toast({
+        status: 'error',
+        title: 'Image upload failed',
+        description: err instanceof Error ? err.message : String(err),
+        position: 'bottom-right',
+      }),
+    [toast]
+  )
+  const notifyRef = useRef(notifyUploadError)
+  notifyRef.current = notifyUploadError
 
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ codeBlock: { HTMLAttributes: { class: 'tt-codeblock' } } }),
       Image.configure({ inline: false, allowBase64: true, HTMLAttributes: { class: 'tt-image' } }),
-      Link.configure({ openOnClick: false, autolink: true, HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' } }),
+      Link.configure({
+        openOnClick: false,
+        autolink: true,
+        HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' },
+      }),
       Placeholder.configure({ placeholder: placeholder || 'Write something…' }),
       Typography,
-      // tiptap-markdown bridges Markdown ↔ ProseMirror. Linkify keeps raw URLs
-      // formatted; transformPastedText preserves Markdown pasted from a doc.
       Markdown.configure({
         html: true,
         linkify: true,
@@ -276,78 +345,83 @@ export default function RichEditor({ value, onChange, minH = '520px', placeholde
     immediatelyRender: false,
     shouldRerenderOnTransaction: true,
     onUpdate: ({ editor: ed }) => {
-      // tiptap-markdown exposes `storage.markdown.getMarkdown()`.
-      const md = (ed.storage as any).markdown?.getMarkdown?.() ?? ed.getHTML()
-      lastCommittedRef.current = md
-      onChange(md)
+      const md = getMarkdown(ed)
+      lastApplied.current = md
+      emitRef.current(md)
     },
     editorProps: {
       attributes: {
         class: 'tt-prose',
+        role: 'textbox',
+        'aria-multiline': 'true',
+        ...(labelledBy ? { 'aria-labelledby': labelledBy } : {}),
       },
-      // Drag-and-drop images.
       handleDrop(view, event) {
         const files = event.dataTransfer?.files
         if (!files || files.length === 0) return false
         const imageFile = Array.from(files).find((f) => f.type.startsWith('image/'))
         if (!imageFile) return false
         event.preventDefault()
-        uploadImage(imageFile)
-          .then((url) => {
-            const { schema } = view.state
-            const node = schema.nodes.image.create({ src: url, alt: imageFile.name })
-            const tr = view.state.tr.replaceSelectionWith(node)
-            view.dispatch(tr)
+        uploadImageFile(imageFile)
+          .then(({ url }) => {
+            const node = view.state.schema.nodes.image.create({
+              src: url,
+              alt: imageFile.name.replace(/\.[^.]+$/, ''),
+            })
+            view.dispatch(view.state.tr.replaceSelectionWith(node))
           })
-          .catch((e) => toast({ status: 'error', title: e?.message || 'Upload failed' }))
+          .catch((e) => notifyRef.current(e))
         return true
       },
-      // Paste images from clipboard.
       handlePaste(view, event) {
         const items = event.clipboardData?.items
         if (!items) return false
         for (const item of Array.from(items)) {
-          if (item.type.startsWith('image/')) {
-            const file = item.getAsFile()
-            if (!file) continue
-            event.preventDefault()
-            uploadImage(file)
-              .then((url) => {
-                const { schema } = view.state
-                const node = schema.nodes.image.create({ src: url, alt: file.name })
-                const tr = view.state.tr.replaceSelectionWith(node)
-                view.dispatch(tr)
-              })
-              .catch((e) => toast({ status: 'error', title: e?.message || 'Upload failed' }))
-            return true
-          }
+          if (!item.type.startsWith('image/')) continue
+          const file = item.getAsFile()
+          if (!file) continue
+          event.preventDefault()
+          uploadImageFile(file)
+            .then(({ url }) => {
+              const node = view.state.schema.nodes.image.create({ src: url, alt: '' })
+              view.dispatch(view.state.tr.replaceSelectionWith(node))
+            })
+            .catch((e) => notifyRef.current(e))
+          return true
         }
         return false
       },
     },
   })
 
-  // Push external value changes (e.g. parent loaded data) into the editor.
+  // External value changes (load / reload): re-check for MDX constructs and
+  // sync TipTap without emitting an update.
   useEffect(() => {
-    if (!editor) return
-    if (value === lastCommittedRef.current) return
-    const md = (editor.storage as any).markdown?.getMarkdown?.() ?? editor.getHTML()
-    if (md === value) return
-    lastCommittedRef.current = value
-    editor.commands.setContent(value || '', { emitUpdate: false })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, editor])
-
-  // When switching to GUI tab, push the latest raw MDX into the editor so
-  // edits made in the Textarea show up immediately.
-  useEffect(() => {
-    if (!editor) return
-    if (tabIndex === 0 && value !== lastCommittedRef.current) {
-      lastCommittedRef.current = value
+    if (value === lastEmitted.current) return
+    lastEmitted.current = value
+    if (detectMdxRisks(value).length) setTabIndex(RAW)
+    if (editor && value !== lastApplied.current) {
+      lastApplied.current = value
       editor.commands.setContent(value || '', { emitUpdate: false })
     }
+  }, [value, editor])
+
+  // Entering the visual tab: load the latest raw text typed in the MDX tab.
+  useEffect(() => {
+    if (!editor || tabIndex !== VISUAL || value === lastApplied.current) return
+    lastApplied.current = value
+    editor.commands.setContent(value || '', { emitUpdate: false })
+    // Only on tab change: typing in the visual editor updates lastApplied itself.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tabIndex])
+  }, [tabIndex, editor])
+
+  const onTabChange = (i: number) => {
+    if (i === VISUAL && risks.length) {
+      setConfirmVisual(true)
+      return
+    }
+    setTabIndex(i)
+  }
 
   const onPickImage = useCallback(() => fileInputRef.current?.click(), [])
 
@@ -356,20 +430,25 @@ export default function RichEditor({ value, onChange, minH = '520px', placeholde
     e.target.value = '' // allow re-selecting the same file
     if (!file) return
     try {
-      const url = await uploadImage(file)
+      const { url, warning } = await uploadImageFile(file)
+      if (warning)
+        toast({
+          status: 'warning',
+          title: 'Image uploaded',
+          description: warning,
+          position: 'bottom-right',
+        })
       const alt = file.name.replace(/\.[^.]+$/, '').replace(/[[\]]/g, '')
-      if (tabIndex === 1) {
-        // Raw MDX tab: insert Markdown at the caret instead of routing through
-        // the (hidden) visual editor, which would regenerate — and overwrite —
-        // the MDX typed here.
+      if (tabIndex === RAW) {
+        // Raw tab: insert Markdown at the caret instead of routing through
+        // the (hidden) visual editor, which would re-serialise the MDX.
         const ta = mdxRef.current
         const snippet = `![${alt}](${url})`
         const start = ta ? ta.selectionStart : value.length
         const end = ta ? ta.selectionEnd : value.length
         const before = value.slice(0, start)
         const glue = before && !before.endsWith('\n') ? '\n\n' : ''
-        const next = `${before}${glue}${snippet}\n${value.slice(end)}`
-        onChange(next)
+        emit(`${before}${glue}${snippet}\n${value.slice(end)}`)
         requestAnimationFrame(() => {
           if (!ta) return
           const pos = before.length + glue.length + snippet.length + 1
@@ -379,24 +458,52 @@ export default function RichEditor({ value, onChange, minH = '520px', placeholde
       } else if (editor) {
         editor.chain().focus().setImage({ src: url, alt }).run()
       }
-    } catch (err: any) {
-      toast({ status: 'error', title: err?.message || 'Upload failed' })
+    } catch (err) {
+      notifyUploadError(err)
     }
   }
 
-  const border = useColorModeValue('gray.200', 'whiteAlpha.200')
-  const editorBg = useColorModeValue('white', 'gray.900')
-
   return (
     <Box>
-      <Tabs index={tabIndex} onChange={setTabIndex} variant="soft-rounded" colorScheme="purple" size="sm" mb={3}>
-        <TabList>
-          <Tab>GUI</Tab>
-          <Tab>MDX</Tab>
+      <Tabs index={tabIndex} onChange={onTabChange} variant="unstyled" size="sm">
+        <TabList
+          display="inline-flex"
+          gap={1}
+          p={1}
+          mb={3}
+          border="1px solid"
+          borderColor="page.border"
+          borderRadius="lg"
+          bg="page.bg-elevated"
+          aria-label="Editor mode"
+        >
+          <Tab {...tabStyle}>Visual</Tab>
+          <Tab {...tabStyle}>MDX</Tab>
         </TabList>
+
+        {risks.length ? (
+          <Alert
+            status="warning"
+            variant="left-accent"
+            borderRadius="md"
+            mb={3}
+            alignItems="flex-start"
+            bg="page.bg-elevated"
+            fontSize="sm"
+          >
+            <AlertIcon mt={0.5} />
+            <AlertDescription>
+              {tabIndex === RAW
+                ? 'This body uses MDX the visual editor can’t represent — keep editing it here. Editing it visually would rewrite:'
+                : 'Typing in the visual editor will re-save the whole body and rewrite:'}
+              <RiskList risks={risks} />
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
         <TabPanels>
-          <TabPanel px={0}>
-            <Box border="1px solid" borderColor={border} borderRadius="8px" bg={editorBg}>
+          <TabPanel p={0}>
+            <Box border="1px solid" borderColor="page.border-strong" borderRadius="lg" bg="page.bg">
               <Toolbar editor={editor} onPickImage={onPickImage} />
               <Box
                 px={4}
@@ -407,84 +514,151 @@ export default function RichEditor({ value, onChange, minH = '520px', placeholde
                   '.tt-prose': { minHeight: minH, outline: 'none' },
                   '.tt-prose p.is-editor-empty:first-of-type::before': {
                     content: 'attr(data-placeholder)',
-                    color: 'gray.400',
+                    color: 'page.muted',
                     float: 'left',
                     height: 0,
                     pointerEvents: 'none',
                   },
-                  '.tt-prose h1': { fontSize: '28px', fontWeight: 600, mt: 4, mb: 2 },
-                  '.tt-prose h2': { fontSize: '22px', fontWeight: 600, mt: 4, mb: 2 },
+                  '.tt-prose h1': {
+                    fontSize: '28px',
+                    fontWeight: 600,
+                    mt: 4,
+                    mb: 2,
+                    letterSpacing: '-0.02em',
+                  },
+                  '.tt-prose h2': {
+                    fontSize: '22px',
+                    fontWeight: 600,
+                    mt: 4,
+                    mb: 2,
+                    letterSpacing: '-0.015em',
+                  },
                   '.tt-prose h3': { fontSize: '18px', fontWeight: 600, mt: 3, mb: 2 },
                   '.tt-prose p': { my: 2, lineHeight: 1.7 },
                   '.tt-prose ul, .tt-prose ol': { pl: 6, my: 2 },
                   '.tt-prose ul': { listStyleType: 'disc' },
                   '.tt-prose ol': { listStyleType: 'decimal' },
                   '.tt-prose blockquote': {
-                    borderLeft: '3px solid',
-                    borderColor: border,
+                    borderLeft: '2px solid',
+                    borderColor: 'page.border-strong',
                     pl: 4,
-                    color: 'gray.500',
+                    color: 'page.fg-secondary',
                     my: 3,
                   },
                   '.tt-prose code': {
-                    fontFamily: 'var(--font-geist-mono), monospace',
+                    fontFamily: MONO,
                     fontSize: '0.9em',
-                    bg: useColorModeValue('gray.100', 'whiteAlpha.100'),
+                    bg: 'page.bg-overlay',
                     px: 1,
-                    borderRadius: '3px',
+                    borderRadius: 'sm',
                   },
                   '.tt-prose pre.tt-codeblock': {
-                    fontFamily: 'var(--font-geist-mono), monospace',
+                    fontFamily: MONO,
                     fontSize: '13px',
-                    bg: useColorModeValue('gray.50', 'blackAlpha.500'),
+                    bg: 'page.bg-elevated',
+                    border: '1px solid',
+                    borderColor: 'page.border',
                     p: 3,
-                    borderRadius: '6px',
+                    borderRadius: 'md',
                     overflow: 'auto',
                     my: 3,
                   },
-                  '.tt-prose img.tt-image': {
-                    maxWidth: '100%',
-                    borderRadius: '6px',
-                    my: 3,
+                  '.tt-prose pre.tt-codeblock code': { bg: 'transparent', px: 0 },
+                  '.tt-prose img.tt-image': { maxWidth: '100%', borderRadius: 'md', my: 3 },
+                  '.tt-prose a': {
+                    color: 'accent.500',
+                    textDecoration: 'underline',
+                    textUnderlineOffset: '2px',
                   },
-                  '.tt-prose a': { color: 'purple.400', textDecoration: 'underline' },
-                  '.tt-prose hr': { my: 4, borderColor: border },
+                  '.tt-prose hr': { my: 4, borderColor: 'page.border' },
                 }}
               >
                 <EditorContent editor={editor} />
               </Box>
             </Box>
           </TabPanel>
-          <TabPanel px={0}>
+          <TabPanel p={0}>
             <Textarea
               ref={mdxRef}
               value={value}
-              onChange={(e) => onChange(e.target.value)}
+              onChange={(e) => emit(e.target.value)}
               minH={minH}
               spellCheck={false}
-              fontFamily="var(--font-geist-mono), monospace"
+              fontFamily={MONO}
               fontSize="14px"
+              lineHeight={1.6}
               placeholder={placeholder}
+              aria-labelledby={labelledBy}
+              borderColor="page.border-strong"
+              focusBorderColor="accent.500"
+              bg="page.bg"
             />
-            <HStack mt={2} spacing={2}>
-              <Button size="xs" variant="outline" onClick={onPickImage}>
+            <HStack mt={2} spacing={3} flexWrap="wrap">
+              <Button size="xs" {...outlineButtonProps} onClick={onPickImage}>
                 Upload image → insert ![]()
               </Button>
-              <Box fontSize="11px" color="gray.500" fontFamily="var(--font-geist-mono), monospace">
-                Raw MDX — JSX components live here.
-              </Box>
+              <Text fontSize="11px" color="page.fg-secondary" fontFamily={MONO}>
+                Raw MDX — JSX components, tables and footnotes are safe here.
+              </Text>
             </HStack>
           </TabPanel>
         </TabPanels>
       </Tabs>
 
-      <Input
+      <input
         ref={fileInputRef}
         type="file"
         accept="image/*"
-        display="none"
+        hidden
         onChange={onFileSelected}
+        aria-hidden
+        tabIndex={-1}
       />
+
+      <AlertDialog
+        isOpen={confirmVisual}
+        leastDestructiveRef={cancelRef}
+        onClose={() => setConfirmVisual(false)}
+        isCentered
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent
+            bg="page.bg-elevated"
+            border="1px solid"
+            borderColor="page.border"
+            mx={4}
+          >
+            <AlertDialogHeader fontSize="md">Open the visual editor?</AlertDialogHeader>
+            <AlertDialogBody fontSize="sm">
+              The first edit there re-saves the whole body in plain Markdown, which rewrites:
+              <RiskList risks={risks} />
+              <Text mt={3} color="page.fg-secondary">
+                Viewing is harmless; nothing changes until you type.
+              </Text>
+            </AlertDialogBody>
+            <AlertDialogFooter gap={2}>
+              <Button
+                ref={cancelRef}
+                size="sm"
+                {...outlineButtonProps}
+                onClick={() => setConfirmVisual(false)}
+              >
+                Stay in MDX
+              </Button>
+              <Button
+                size="sm"
+                {...primaryButtonProps}
+                onClick={() => {
+                  setConfirmVisual(false)
+                  setTabIndex(VISUAL)
+                }}
+              >
+                Open visual editor
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
     </Box>
   )
 }

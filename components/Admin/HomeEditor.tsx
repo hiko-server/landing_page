@@ -1,11 +1,15 @@
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useCallback, useEffect, useState, useRef } from 'react'
 import {
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogContent,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogOverlay,
   Button,
   Checkbox,
-  Divider,
   FormControl,
   FormLabel,
-  Heading,
   HStack,
   IconButton,
   Image,
@@ -28,17 +32,27 @@ import {
   Box,
   Text,
   Flex,
-  Alert,
-  AlertIcon,
-  AlertDescription,
   Spinner,
-  Kbd,
-  useColorModeValue,
+  Stack,
 } from '@chakra-ui/react'
 import { AddIcon, DeleteIcon } from '@chakra-ui/icons'
 // Pure shape import — must NOT come from lib/home.ts (server-only, drags
 // better-sqlite3 into the client bundle). lib/homeShape.ts has no Node deps.
 import { HOME_SECTION_META, type SectionKey } from '../../lib/homeShape'
+import { useAdminDirty, useDirtyRegistration } from './AdminDirtyContext'
+import { readJsonObject, uploadFilename, uploadImageDataUrl, fileToDataUrl } from './shell/http'
+import {
+  LoadErrorNotice,
+  MONO,
+  SaveButton,
+  SaveStatus,
+  SectionLabel,
+  SessionExpiredNotice,
+  outlineButtonProps,
+  primaryButtonProps,
+  useSaveShortcut,
+  type SaveState,
+} from './shell/ui'
 
 type Brand = { name: string; href: string; image: string }
 type Quick = { label: string; url: string }
@@ -53,8 +67,20 @@ const DEFAULT_CONTACT_REASONS = [
   'Other',
 ]
 
+const RETURN_PATH = '/admin/dashboard?tab=home'
+
+const TABLE_SX = {
+  'th, td': { borderColor: 'page.border' },
+  th: { fontFamily: MONO, fontSize: '10px', letterSpacing: '0.12em', color: 'page.fg-secondary' },
+  'tbody tr:last-of-type td': { borderBottom: 'none' },
+}
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+
+type LoadState = 'loading' | 'ready' | 'error' | 'session'
+
 export default function HomeEditor() {
   const toast = useToast()
+  const { confirmDiscard, clear } = useAdminDirty()
   const [hero, setHero] = useState({
     welcome: '',
     brand: '',
@@ -93,87 +119,98 @@ export default function HomeEditor() {
   const [newReason, setNewReason] = useState('')
   // CV-derived defaults for the "currently coding" chip. Shown as input
   // placeholders so the operator can see what will auto-fill if they
-  // leave a field blank. Auth-gated server endpoint; falls back to empty
-  // on any fetch error (no UX regression — placeholders just show generic
-  // examples).
+  // leave a field blank. Best-effort: stays empty on any fetch error.
   const [ccAuto, setCcAuto] = useState<{ label: string; project: string; note: string }>({
     label: '',
     project: '',
     note: '',
   })
 
-  // 'ready' only after a successful load: saving a form that never loaded
-  // would PUT an empty payload over the live home page.
-  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
+  // 'ready' only after a successful load of the ADMIN view: saving a form
+  // that never loaded (or was filled from the public, pruned view) would
+  // PUT an incomplete document over the live home page.
+  const [loadState, setLoadState] = useState<LoadState>('loading')
   const [loadError, setLoadError] = useState('')
   const [saving, setSaving] = useState(false)
   const [baseline, setBaseline] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
+  // ETag of the version this form was loaded from / last saved as.
+  const etagRef = useRef<string | null>(null)
+  // Set when a save hit a newer version (409); holds that version's ETag.
+  const [conflictEtag, setConflictEtag] = useState<string | null>(null)
+  const [conflictMessage, setConflictMessage] = useState('')
+  const [sessionExpired, setSessionExpired] = useState(false)
+  const conflictCancelRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
+    let alive = true
     const load = async () => {
       setLoadState('loading')
+      setSessionExpired(false)
       let data: any
       try {
-        const res = await fetch('/api/home', { cache: 'no-store' })
+        const res = await fetch('/api/admin/home', { cache: 'no-store' })
+        if (res.status === 401 || (res.ok && res.headers.get('X-Home-View') !== 'admin')) {
+          if (alive) setLoadState('session')
+          return
+        }
         if (!res.ok) throw new Error(`Server responded ${res.status}`)
         data = await res.json()
+        etagRef.current = res.headers.get('ETag')
       } catch (e: any) {
-        setLoadError(e?.message || 'Failed to load')
+        if (!alive) return
+        setLoadError(
+          e?.message === 'Failed to fetch' ? 'network error' : e?.message || 'Failed to load'
+        )
         setLoadState('error')
         return
       }
-      if (data) {
-        setHero({
-          welcome: data.hero?.welcome || '',
-          brand: data.hero?.brand || '',
-          tagline: data.hero?.tagline || '',
-          avatarUrl: data.hero?.avatarUrl || '',
-          phone: data.hero?.phone || '',
-          email: data.hero?.email || '',
-          avatarTransform: {
-            x: data.hero?.avatarTransform?.x ?? 50,
-            y: data.hero?.avatarTransform?.y ?? 50,
-            scale: data.hero?.avatarTransform?.scale ?? 1,
-          },
-          currentlyCoding: {
-            label: data.hero?.currentlyCoding?.label ?? '',
-            project: data.hero?.currentlyCoding?.project ?? '',
-            note: data.hero?.currentlyCoding?.note ?? '',
-          },
-        })
-        setSocials({
-          github: data.socials?.github || '',
-          gitlab: data.socials?.gitlab || '',
-          linkedin: data.socials?.linkedin || '',
-          whatsapp: data.socials?.whatsapp || '',
-        })
-        setBrands(Array.isArray(data.brands) ? data.brands : [])
-        setQuick(Array.isArray(data.quickAccess) ? data.quickAccess : [])
-        setPhotos(Array.isArray(data.photos) ? data.photos : [])
-        setSections(
-          data.sections && typeof data.sections === 'object' ? data.sections : {},
-        )
-        setContact({
-          heading: data.contact?.heading || '',
-          blurb: data.contact?.blurb || '',
-          eyebrow: data.contact?.eyebrow || '',
-          reasons: Array.isArray(data.contact?.reasons)
-            ? data.contact.reasons.filter((r: unknown) => typeof r === 'string')
-            : [],
-        })
-      }
-
+      if (!alive) return
+      setHero({
+        welcome: data?.hero?.welcome || '',
+        brand: data?.hero?.brand || '',
+        tagline: data?.hero?.tagline || '',
+        avatarUrl: data?.hero?.avatarUrl || '',
+        phone: data?.hero?.phone || '',
+        email: data?.hero?.email || '',
+        avatarTransform: {
+          x: data?.hero?.avatarTransform?.x ?? 50,
+          y: data?.hero?.avatarTransform?.y ?? 50,
+          scale: data?.hero?.avatarTransform?.scale ?? 1,
+        },
+        currentlyCoding: {
+          label: data?.hero?.currentlyCoding?.label ?? '',
+          project: data?.hero?.currentlyCoding?.project ?? '',
+          note: data?.hero?.currentlyCoding?.note ?? '',
+        },
+      })
+      setSocials({
+        github: data?.socials?.github || '',
+        gitlab: data?.socials?.gitlab || '',
+        linkedin: data?.socials?.linkedin || '',
+        whatsapp: data?.socials?.whatsapp || '',
+      })
+      setBrands(Array.isArray(data?.brands) ? data.brands : [])
+      setQuick(Array.isArray(data?.quickAccess) ? data.quickAccess : [])
+      setPhotos(Array.isArray(data?.photos) ? data.photos : [])
+      setSections(data?.sections && typeof data.sections === 'object' ? data.sections : {})
+      setContact({
+        heading: data?.contact?.heading || '',
+        blurb: data?.contact?.blurb || '',
+        eyebrow: data?.contact?.eyebrow || '',
+        reasons: Array.isArray(data?.contact?.reasons)
+          ? data.contact.reasons.filter((r: unknown) => typeof r === 'string')
+          : [],
+      })
       setBaseline(null) // captured from the rendered state below
       setLoadState('ready')
 
-      // Pull CV-derived defaults in parallel. Best-effort: stays blank
-      // on failure so the editor still works.
+      // CV-derived defaults for the placeholders. Best-effort.
       try {
-        const dr = await fetch('/api/admin/cv-derived')
-        if (dr.ok) {
-          const dj = await dr.json()
-          if (dj?.currentlyCoding) {
+        const dr = await fetch('/api/admin/cv-derived', { cache: 'no-store' })
+        if (dr.ok && alive) {
+          const dj = await readJsonObject(dr)
+          if (dj.currentlyCoding) {
             setCcAuto({
               label: dj.currentlyCoding.label || '',
               project: dj.currentlyCoding.project || '',
@@ -182,10 +219,13 @@ export default function HomeEditor() {
           }
         }
       } catch {
-        // ignore — placeholders just stay generic
+        // placeholders just stay generic
       }
     }
-    load()
+    void load()
+    return () => {
+      alive = false
+    }
   }, [reloadKey])
 
   const normalizeUrl = (u?: string) => {
@@ -199,15 +239,11 @@ export default function HomeEditor() {
   const stripTs = (u?: string) => {
     if (!u) return ''
     try {
-      const base =
-        typeof window !== 'undefined'
-          ? window.location.origin
-          : 'http://localhost'
+      const base = typeof window !== 'undefined' ? window.location.origin : 'http://localhost'
       const url = new URL(u, base)
       url.searchParams.delete('__ts')
       // return path + query + hash for same-origin, or full URL for absolute
-      if (url.origin === base)
-        return url.pathname + (url.search || '') + (url.hash || '')
+      if (url.origin === base) return url.pathname + (url.search || '') + (url.hash || '')
       return url.toString()
     } catch {
       return u.replace(/([?&])__ts=\d+(&|$)/, (p1, p2) => (p2 ? p1 : ''))
@@ -226,9 +262,7 @@ export default function HomeEditor() {
       photos: (photos || []).map((p) => ({
         ...p,
         url: normalizeUrl(stripTs(p.url)),
-        redirectTo: p.redirectTo
-          ? normalizeUrl(stripTs(p.redirectTo))
-          : undefined,
+        redirectTo: p.redirectTo ? normalizeUrl(stripTs(p.redirectTo)) : undefined,
       })),
       sections,
       contact: {
@@ -246,76 +280,116 @@ export default function HomeEditor() {
     if (loadState === 'ready' && baseline === null) setBaseline(snapshot)
   }, [loadState, baseline, snapshot])
   const dirty = loadState === 'ready' && baseline !== null && snapshot !== baseline
+  useDirtyRegistration('home', dirty)
 
-  const save = async () => {
+  /**
+   * PUT the form. `ifMatch` is the version the edit is based on: normally the
+   * loaded ETag; after a conflict, "Overwrite" passes the newer version's
+   * ETag to replace it deliberately.
+   */
+  const save = async (ifMatch: string | null) => {
     if (loadState !== 'ready' || saving) return
+    const savedSnapshot = snapshot
     setSaving(true)
     try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (ifMatch) headers['If-Match'] = ifMatch
       const res = await fetch('/api/home', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(buildPayload()),
       })
-      const body = await res.json().catch(() => ({}))
+      const body = await readJsonObject(res)
       if (res.ok) {
-        setBaseline(snapshot)
+        const etag = (typeof body.etag === 'string' && body.etag) || res.headers.get('ETag')
+        if (etag) etagRef.current = etag
+        setBaseline(savedSnapshot)
+        setConflictEtag(null)
+        setSessionExpired(false)
         toast({
-          status: body?.r2Warning ? 'warning' : 'success',
-          title: 'Home saved',
-          description: body?.r2Warning,
+          status: body.r2Warning ? 'warning' : 'success',
+          title: body.unchanged ? 'Nothing to save — already live' : 'Home saved',
+          description: body.r2Warning,
           position: 'bottom-right',
         })
-      } else {
-        toast({
-          status: 'error',
-          title: 'Save failed',
-          description: res.status === 401 ? 'Session expired — sign in again.' : body?.error || `HTTP ${res.status}`,
-          position: 'bottom-right',
-        })
+        return
       }
+      if (res.status === 409) {
+        setConflictEtag(
+          (typeof body.etag === 'string' && body.etag) || res.headers.get('ETag') || '*'
+        )
+        setConflictMessage(typeof body.message === 'string' ? body.message : '')
+        return
+      }
+      if (res.status === 401) setSessionExpired(true)
+      toast({
+        status: 'error',
+        title: 'Save failed',
+        description:
+          res.status === 401
+            ? 'Your session has expired. Sign in again in a new tab, then save — your edits are kept.'
+            : res.status === 429
+              ? 'Too many saves in a short time — wait a minute and try again.'
+              : body.error || `HTTP ${res.status}`,
+        position: 'bottom-right',
+        duration: 7000,
+        isClosable: true,
+      })
     } catch (e: any) {
-      toast({ status: 'error', title: 'Save failed', description: e?.message || 'Network error', position: 'bottom-right' })
+      toast({
+        status: 'error',
+        title: 'Save failed',
+        description:
+          e?.message === 'Failed to fetch'
+            ? 'Network error — not saved.'
+            : e?.message || 'Network error — not saved.',
+        position: 'bottom-right',
+      })
     } finally {
       setSaving(false)
     }
   }
 
-  const validateAndSave = () => {
+  const validateUrl = (u: string) => /^\//.test(u) || /^https?:\/\//i.test(u)
+
+  const validateAndSave = (ifMatch: string | null = etagRef.current) => {
     for (const p of photos) {
       if (p.url && !validateUrl(p.url)) {
-        toast({ status: 'error', title: 'Invalid photo URL', description: p.url, position: 'bottom-right' })
+        toast({
+          status: 'error',
+          title: 'Invalid photo URL',
+          description: p.url,
+          position: 'bottom-right',
+        })
         return
       }
       if (p.redirectTo && !validateUrl(p.redirectTo)) {
-        toast({ status: 'error', title: 'Invalid link URL', description: p.redirectTo, position: 'bottom-right' })
+        toast({
+          status: 'error',
+          title: 'Invalid link URL',
+          description: p.redirectTo,
+          position: 'bottom-right',
+        })
         return
       }
     }
-    save()
+    void save(ifMatch)
   }
-  const saveRef = useRef(validateAndSave)
-  saveRef.current = validateAndSave
 
-  // ⌘S / Ctrl+S saves; leaving with unsaved changes asks first.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 's') {
-        e.preventDefault()
-        saveRef.current()
-      }
-    }
-    const onUnload = (e: BeforeUnloadEvent) => {
-      if (!dirty) return
-      e.preventDefault()
-      e.returnValue = ''
-    }
-    document.addEventListener('keydown', onKey)
-    window.addEventListener('beforeunload', onUnload)
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      window.removeEventListener('beforeunload', onUnload)
-    }
-  }, [dirty])
+  const canSave = loadState === 'ready' && dirty && !saving
+  useSaveShortcut(canSave && !conflictEtag, () => validateAndSave())
+
+  const reloadLatest = useCallback(() => {
+    if (
+      !confirmDiscard(
+        'Reload the latest saved version? Your unsaved home page edits will be discarded.'
+      )
+    )
+      return
+    clear('home')
+    setConflictEtag(null)
+    setReloadKey((k) => k + 1)
+  }, [confirmDiscard, clear])
 
   const toggleSection = (key: SectionKey, visible: boolean) => {
     setSections((prev) => ({ ...prev, [key]: visible }))
@@ -338,46 +412,51 @@ export default function HomeEditor() {
     setContact((c) => ({ ...c, reasons: [...DEFAULT_CONTACT_REASONS] }))
   }
 
-  const validateUrl = (u: string) => /^\//.test(u) || /^https?:\/\//i.test(u)
+  /**
+   * Compress (JPEG stays JPEG; PNG / WebP → WebP to keep alpha; GIF untouched)
+   * and upload. Every failure — unreadable file, network error, a 413 or
+   * other non-JSON error page — ends in a toast, never an unhandled rejection.
+   */
   const onUpload = async (file: File, setter: (url: string) => void) => {
-    if (file.size > 8 * 1024 * 1024) {
-      toast({ status: 'error', title: 'File too large (>8MB)' })
+    if (file.size > MAX_UPLOAD_BYTES) {
+      toast({
+        status: 'error',
+        title: 'Image is too large — the limit is 8 MB.',
+        position: 'bottom-right',
+      })
       return
     }
-    const reader = new FileReader()
-    reader.onload = async () => {
-      let dataUrl = reader.result as string
+    try {
+      let dataUrl = await fileToDataUrl(file)
       try {
-        // JPEG stays JPEG; PNG / WebP are re-encoded as WebP so transparent
-        // logos keep their alpha channel; GIFs (animation) are left untouched.
-        if (file.type === 'image/jpeg') dataUrl = await compressImageDataUrl(dataUrl, 1600, 1600, 0.82, 'image/jpeg')
+        if (file.type === 'image/jpeg')
+          dataUrl = await compressImageDataUrl(dataUrl, 1600, 1600, 0.82, 'image/jpeg')
         else if (file.type === 'image/png' || file.type === 'image/webp')
           dataUrl = await compressImageDataUrl(dataUrl, 1600, 1600, 0.9, 'image/webp')
       } catch {
         /* upload the original */
       }
       const ext = (dataUrl.match(/^data:image\/(\w+)/)?.[1] || 'png').replace('jpeg', 'jpg')
-      const stem = file.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 60) || 'image'
-      const res = await fetch('/api/admin/upload-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: `${Date.now()}-${stem}.${ext}`, dataUrl }),
+      const { url, warning } = await uploadImageDataUrl(
+        uploadFilename(file.name || 'image', ext),
+        dataUrl
+      )
+      // Cache-bust so the preview shows the new file; stripped again on save.
+      setter(url + (url.includes('?') ? '&' : '?') + '__ts=' + Date.now())
+      toast({
+        status: warning ? 'warning' : 'success',
+        title: 'Image uploaded',
+        description: warning,
+        position: 'bottom-right',
       })
-      const data = await res.json().catch(() => ({}))
-      if (res.ok) {
-        // add cache-busting to force fresh preview
-        const busted =
-          data.url + (data.url.includes('?') ? '&' : '?') + '__ts=' + Date.now()
-        setter(busted)
-        toast({ status: 'success', title: 'Image uploaded' })
-      } else {
-        toast({
-          status: 'error',
-          title: res.status === 413 ? 'Image too large' : data?.error || `Upload failed (${res.status})`,
-        })
-      }
+    } catch (err) {
+      toast({
+        status: 'error',
+        title: 'Image upload failed',
+        description: err instanceof Error ? err.message : String(err),
+        position: 'bottom-right',
+      })
     }
-    reader.readAsDataURL(file)
   }
 
   async function compressImageDataUrl(
@@ -385,7 +464,7 @@ export default function HomeEditor() {
     maxW: number,
     maxH: number,
     quality: number,
-    type: 'image/jpeg' | 'image/webp' = 'image/jpeg',
+    type: 'image/jpeg' | 'image/webp' = 'image/jpeg'
   ): Promise<string> {
     return new Promise((resolve) => {
       const img = new window.Image()
@@ -419,8 +498,7 @@ export default function HomeEditor() {
     dragging: boolean
   }>({ startX: 0, startY: 0, startPosX: 50, startPosY: 50, dragging: false })
 
-  const clamp = (v: number, min: number, max: number) =>
-    Math.max(min, Math.min(max, v))
+  const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v))
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (!frameRef.current) return
@@ -441,16 +519,8 @@ export default function HomeEditor() {
     const dx = e.clientX - dragState.current.startX
     const dy = e.clientY - dragState.current.startY
     // translate pixel delta to % of frame
-    const nx = clamp(
-      dragState.current.startPosX + (dx / rect.width) * 100,
-      0,
-      100
-    )
-    const ny = clamp(
-      dragState.current.startPosY + (dy / rect.height) * 100,
-      0,
-      100
-    )
+    const nx = clamp(dragState.current.startPosX + (dx / rect.width) * 100, 0, 100)
+    const ny = clamp(dragState.current.startPosY + (dy / rect.height) * 100, 0, 100)
     setHero((h) => ({
       ...h,
       avatarTransform: { ...h.avatarTransform, x: nx, y: ny },
@@ -466,33 +536,39 @@ export default function HomeEditor() {
     setHero((h) => ({ ...h, avatarTransform: { x: 50, y: 50, scale: 1 } }))
   }
 
-  const barBg = useColorModeValue('rgba(255,255,255,0.92)', 'rgba(12,12,12,0.92)')
-  const barBorder = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
-
   if (loadState === 'loading') {
     return (
-      <Flex h="40vh" align="center" justify="center">
-        <Spinner color="var(--accent)" />
+      <Flex
+        h="40vh"
+        align="center"
+        justify="center"
+        role="status"
+        aria-label="Loading the home page content"
+      >
+        <Spinner color="accent.500" />
       </Flex>
     )
   }
+  if (loadState === 'session') return <SessionExpiredNotice returnPath={RETURN_PATH} />
   if (loadState === 'error') {
     return (
-      <Alert status="error" borderRadius="md" alignItems="center" gap={3} flexWrap="wrap">
-        <AlertIcon />
-        <AlertDescription flex={1} fontSize="sm">
-          Couldn’t load the home page content ({loadError}). Editing is disabled so an empty form can’t overwrite it.
-        </AlertDescription>
-        <Button size="sm" onClick={() => setReloadKey((k) => k + 1)}>
-          Retry
-        </Button>
-      </Alert>
+      <LoadErrorNotice
+        what="the home page content"
+        error={loadError}
+        onRetry={() => setReloadKey((k) => k + 1)}
+      />
     )
   }
 
+  const saveState: SaveState = saving ? 'saving' : dirty ? 'dirty' : 'clean'
+
   return (
-    <>
-      <Heading size="sm">Hero</Heading>
+    <Box maxW="var(--container-content)" mx="auto">
+      <SectionLabel
+        index={1}
+        title="Hero"
+        hint="Greeting, name, tagline, avatar and contact details at the top of the home page."
+      />
       <SimpleGrid columns={[1, 2]} gap={4}>
         <FormControl>
           <FormLabel>Welcome</FormLabel>
@@ -503,10 +579,7 @@ export default function HomeEditor() {
         </FormControl>
         <FormControl>
           <FormLabel>Brand</FormLabel>
-          <Input
-            value={hero.brand}
-            onChange={(e) => setHero({ ...hero, brand: e.target.value })}
-          />
+          <Input value={hero.brand} onChange={(e) => setHero({ ...hero, brand: e.target.value })} />
         </FormControl>
         <FormControl gridColumn="1 / -1">
           <FormLabel>Tagline</FormLabel>
@@ -560,7 +633,7 @@ export default function HomeEditor() {
                 borderRadius="full"
                 overflow="hidden"
                 border="1px solid"
-                borderColor="gray.300"
+                borderColor="page.border-strong"
                 // Grid overlay (industry standard alignment aid)
                 _before={{
                   content: '""',
@@ -612,21 +685,20 @@ export default function HomeEditor() {
                     h="full"
                     align="center"
                     justify="center"
-                    color="gray.400"
-                    bg="gray.50"
+                    color="page.muted"
+                    bg="page.bg-elevated"
                   >
                     <Text>No avatar</Text>
                   </Flex>
                 )}
               </Box>
               <HStack mt={3} spacing={3}>
-                <Button size="sm" onClick={resetAvatarTransform}>
+                <Button size="sm" {...outlineButtonProps} onClick={resetAvatarTransform}>
                   Reset
                 </Button>
-                <Text fontSize="sm" color="gray.600">
-                  X: {Math.round(hero.avatarTransform.x)}% · Y:{' '}
-                  {Math.round(hero.avatarTransform.y)}% · Scale:{' '}
-                  {hero.avatarTransform.scale.toFixed(2)}
+                <Text fontSize="sm" color="page.fg-secondary">
+                  X: {Math.round(hero.avatarTransform.x)}% · Y: {Math.round(hero.avatarTransform.y)}
+                  % · Scale: {hero.avatarTransform.scale.toFixed(2)}
                 </Text>
               </HStack>
             </Box>
@@ -697,17 +769,11 @@ export default function HomeEditor() {
 
         <FormControl>
           <FormLabel>Phone</FormLabel>
-          <Input
-            value={hero.phone}
-            onChange={(e) => setHero({ ...hero, phone: e.target.value })}
-          />
+          <Input value={hero.phone} onChange={(e) => setHero({ ...hero, phone: e.target.value })} />
         </FormControl>
         <FormControl>
           <FormLabel>Email</FormLabel>
-          <Input
-            value={hero.email}
-            onChange={(e) => setHero({ ...hero, email: e.target.value })}
-          />
+          <Input value={hero.email} onChange={(e) => setHero({ ...hero, email: e.target.value })} />
         </FormControl>
 
         {/*
@@ -726,16 +792,14 @@ export default function HomeEditor() {
         <FormControl gridColumn="1 / -1">
           <FormLabel>
             Currently coding chip
-            <Text as="span" color="gray.500" fontWeight="normal" fontSize="xs" ml={2}>
+            <Text as="span" color="page.fg-secondary" fontWeight="normal" fontSize="xs" ml={2}>
               shown under avatar on home · blank = auto-fill from CV
             </Text>
           </FormLabel>
           <SimpleGrid columns={[1, 3]} gap={3}>
             <Input
               placeholder={
-                ccAuto.label
-                  ? `auto: ${ccAuto.label}`
-                  : 'Top label (e.g. currently coding)'
+                ccAuto.label ? `auto: ${ccAuto.label}` : 'Top label (e.g. currently coding)'
               }
               value={hero.currentlyCoding.label}
               onChange={(e) =>
@@ -747,9 +811,7 @@ export default function HomeEditor() {
             />
             <Input
               placeholder={
-                ccAuto.project
-                  ? `auto: ${ccAuto.project}`
-                  : 'Project line (e.g. WeGreen AI · COT)'
+                ccAuto.project ? `auto: ${ccAuto.project}` : 'Project line (e.g. WeGreen AI · COT)'
               }
               value={hero.currentlyCoding.project}
               onChange={(e) =>
@@ -761,9 +823,7 @@ export default function HomeEditor() {
             />
             <Input
               placeholder={
-                ccAuto.note
-                  ? `auto: ${ccAuto.note}`
-                  : 'Footer note (e.g. self-taught · since 2022)'
+                ccAuto.note ? `auto: ${ccAuto.note}` : 'Footer note (e.g. self-taught · since 2022)'
               }
               value={hero.currentlyCoding.note}
               onChange={(e) =>
@@ -774,26 +834,28 @@ export default function HomeEditor() {
               }
             />
           </SimpleGrid>
-          <Text mt={2} fontSize="xs" color="gray.500">
+          <Text mt={2} fontSize="xs" color="page.fg-secondary">
             Auto-derived now:{' '}
-            <Text as="span" color="gray.700" fontFamily="mono">
+            <Text as="span" color="page.fg" fontFamily={MONO}>
               {ccAuto.label || '—'}
             </Text>
             {' · '}
-            <Text as="span" color="gray.700" fontFamily="mono">
+            <Text as="span" color="page.fg" fontFamily={MONO}>
               {ccAuto.project || '—'}
             </Text>
             {' · '}
-            <Text as="span" color="gray.700" fontFamily="mono">
+            <Text as="span" color="page.fg" fontFamily={MONO}>
               {ccAuto.note || '—'}
             </Text>
           </Text>
         </FormControl>
       </SimpleGrid>
 
-      <Heading size="sm" mt={6}>
-        Socials
-      </Heading>
+      <SectionLabel
+        index={2}
+        title="Socials"
+        hint="Profile URLs for GitHub, GitLab, LinkedIn and WhatsApp."
+      />
       <SimpleGrid columns={[1, 2]} gap={4}>
         <FormControl>
           <FormLabel>GitHub</FormLabel>
@@ -813,345 +875,391 @@ export default function HomeEditor() {
           <FormLabel>LinkedIn</FormLabel>
           <Input
             value={socials.linkedin}
-            onChange={(e) =>
-              setSocials({ ...socials, linkedin: e.target.value })
-            }
+            onChange={(e) => setSocials({ ...socials, linkedin: e.target.value })}
           />
         </FormControl>
         <FormControl>
           <FormLabel>WhatsApp</FormLabel>
           <Input
             value={socials.whatsapp}
-            onChange={(e) =>
-              setSocials({ ...socials, whatsapp: e.target.value })
-            }
+            onChange={(e) => setSocials({ ...socials, whatsapp: e.target.value })}
           />
         </FormControl>
       </SimpleGrid>
 
-      <Heading size="sm" mt={6}>
-        Brands
-      </Heading>
-      <TableContainer overflowX="auto" w="100%">
-      <Table variant="simple" size="sm">
-        <Thead>
-          <Tr>
-            <Th>Name</Th>
-            <Th>Link</Th>
-            <Th>Image</Th>
-            <Th>Upload</Th>
-            <Th></Th>
-          </Tr>
-        </Thead>
-        <Tbody>
-          {brands.map((b, idx) => (
-            <Tr key={idx}>
-              <Td>
-                <Input
-                  value={b.name}
-                  onChange={(e) => {
-                    const arr = [...brands]
-                    arr[idx] = { ...arr[idx], name: e.target.value }
-                    setBrands(arr)
-                  }}
-                />
-              </Td>
-              <Td>
-                <Input
-                  value={b.href}
-                  onChange={(e) => {
-                    const arr = [...brands]
-                    arr[idx] = { ...arr[idx], href: e.target.value }
-                    setBrands(arr)
-                  }}
-                />
-              </Td>
-              <Td>
-                <Input
-                  value={b.image}
-                  onChange={(e) => {
-                    const arr = [...brands]
-                    arr[idx] = { ...arr[idx], image: e.target.value }
-                    setBrands(arr)
-                  }}
-                />
-                {/* brand image preview */}
-                {b.image ? (
-                  <Image
-                    src={normalizeUrl(b.image)}
-                    alt={b.name || 'brand'}
-                    boxSize="60px"
-                    objectFit="cover"
-                    mt={2}
-                  />
-                ) : null}
-              </Td>
-              <Td>
-                <Input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const input = e.target as HTMLInputElement
-                    const f = input.files?.[0]
-                    if (f)
-                      onUpload(f, (url) =>
-                        setBrands((prev) => prev.map((b, i) => (i === idx ? { ...b, image: url } : b))),
-                      )
-                    // clear to allow re-selecting same file
-                    input.value = ''
-                  }}
-                />
-              </Td>
-              <Td>
-                <IconButton
-                  aria-label="delete"
-                  icon={<DeleteIcon />}
-                  onClick={() => setBrands(brands.filter((_, i) => i !== idx))}
-                />
-              </Td>
+      <SectionLabel
+        index={3}
+        title="Brands"
+        hint="Affiliation names, links and logos, in display order."
+      />
+      <TableContainer
+        overflowX="auto"
+        w="100%"
+        border="1px solid"
+        borderColor="page.border"
+        borderRadius="lg"
+        sx={TABLE_SX}
+      >
+        <Table variant="simple" size="sm">
+          <Thead>
+            <Tr>
+              <Th>Name</Th>
+              <Th>Link</Th>
+              <Th>Image</Th>
+              <Th>Upload</Th>
+              <Th></Th>
             </Tr>
-          ))}
-        </Tbody>
-      </Table>
+          </Thead>
+          <Tbody>
+            {brands.map((b, idx) => (
+              <Tr key={idx}>
+                <Td>
+                  <Input
+                    value={b.name}
+                    aria-label={`Brand ${idx + 1} name`}
+                    onChange={(e) => {
+                      const arr = [...brands]
+                      arr[idx] = { ...arr[idx], name: e.target.value }
+                      setBrands(arr)
+                    }}
+                  />
+                </Td>
+                <Td>
+                  <Input
+                    value={b.href}
+                    aria-label={`Brand ${idx + 1} link`}
+                    onChange={(e) => {
+                      const arr = [...brands]
+                      arr[idx] = { ...arr[idx], href: e.target.value }
+                      setBrands(arr)
+                    }}
+                  />
+                </Td>
+                <Td>
+                  <Input
+                    value={b.image}
+                    aria-label={`Brand ${idx + 1} image URL`}
+                    onChange={(e) => {
+                      const arr = [...brands]
+                      arr[idx] = { ...arr[idx], image: e.target.value }
+                      setBrands(arr)
+                    }}
+                  />
+                  {/* brand image preview */}
+                  {b.image ? (
+                    <Image
+                      src={normalizeUrl(b.image)}
+                      alt={b.name || 'brand'}
+                      boxSize="60px"
+                      objectFit="cover"
+                      mt={2}
+                    />
+                  ) : null}
+                </Td>
+                <Td>
+                  <Input
+                    type="file"
+                    aria-label={`Upload brand ${idx + 1} image`}
+                    accept="image/*"
+                    onChange={(e) => {
+                      const input = e.target as HTMLInputElement
+                      const f = input.files?.[0]
+                      if (f)
+                        onUpload(f, (url) =>
+                          setBrands((prev) =>
+                            prev.map((b, i) => (i === idx ? { ...b, image: url } : b))
+                          )
+                        )
+                      // clear to allow re-selecting same file
+                      input.value = ''
+                    }}
+                  />
+                </Td>
+                <Td>
+                  <IconButton
+                    aria-label={`Remove brand ${idx + 1}`}
+                    size="sm"
+                    variant="ghost"
+                    color="page.fg-secondary"
+                    _hover={{ color: 'red.400', bg: 'page.bg-overlay' }}
+                    icon={<DeleteIcon />}
+                    onClick={() => setBrands(brands.filter((_, i) => i !== idx))}
+                  />
+                </Td>
+              </Tr>
+            ))}
+          </Tbody>
+        </Table>
       </TableContainer>
       <Button
-        leftIcon={<AddIcon />}
-        onClick={() =>
-          setBrands([...brands, { name: '', href: '', image: '' }])
-        }
+        size="sm"
+        mt={3}
+        {...outlineButtonProps}
+        leftIcon={<AddIcon boxSize={2.5} />}
+        onClick={() => setBrands([...brands, { name: '', href: '', image: '' }])}
       >
-        Add Brand
+        Add brand
       </Button>
 
-      <Heading size="sm" mt={6}>
-        Quick Access
-      </Heading>
-      <TableContainer overflowX="auto" w="100%">
-      <Table variant="simple" size="sm">
-        <Thead>
-          <Tr>
-            <Th>Label</Th>
-            <Th>URL</Th>
-            <Th></Th>
-          </Tr>
-        </Thead>
-        <Tbody>
-          {quickAccess.map((q, idx) => (
-            <Tr key={idx}>
-              <Td>
-                <Input
-                  value={q.label}
-                  onChange={(e) => {
-                    const arr = [...quickAccess]
-                    arr[idx] = { ...arr[idx], label: e.target.value }
-                    setQuick(arr)
-                  }}
-                />
-              </Td>
-              <Td>
-                <Input
-                  value={q.url}
-                  onChange={(e) => {
-                    const arr = [...quickAccess]
-                    arr[idx] = { ...arr[idx], url: e.target.value }
-                    setQuick(arr)
-                  }}
-                />
-              </Td>
-              <Td>
-                <IconButton
-                  aria-label="delete"
-                  icon={<DeleteIcon />}
-                  onClick={() =>
-                    setQuick(quickAccess.filter((_, i) => i !== idx))
-                  }
-                />
-              </Td>
+      <SectionLabel index={4} title="Quick access" hint="Shortcut links, in display order." />
+      <TableContainer
+        overflowX="auto"
+        w="100%"
+        border="1px solid"
+        borderColor="page.border"
+        borderRadius="lg"
+        sx={TABLE_SX}
+      >
+        <Table variant="simple" size="sm">
+          <Thead>
+            <Tr>
+              <Th>Label</Th>
+              <Th>URL</Th>
+              <Th></Th>
             </Tr>
-          ))}
-        </Tbody>
-      </Table>
+          </Thead>
+          <Tbody>
+            {quickAccess.map((q, idx) => (
+              <Tr key={idx}>
+                <Td>
+                  <Input
+                    value={q.label}
+                    aria-label={`Quick link ${idx + 1} label`}
+                    onChange={(e) => {
+                      const arr = [...quickAccess]
+                      arr[idx] = { ...arr[idx], label: e.target.value }
+                      setQuick(arr)
+                    }}
+                  />
+                </Td>
+                <Td>
+                  <Input
+                    value={q.url}
+                    aria-label={`Quick link ${idx + 1} URL`}
+                    onChange={(e) => {
+                      const arr = [...quickAccess]
+                      arr[idx] = { ...arr[idx], url: e.target.value }
+                      setQuick(arr)
+                    }}
+                  />
+                </Td>
+                <Td>
+                  <IconButton
+                    aria-label={`Remove quick link ${idx + 1}`}
+                    size="sm"
+                    variant="ghost"
+                    color="page.fg-secondary"
+                    _hover={{ color: 'red.400', bg: 'page.bg-overlay' }}
+                    icon={<DeleteIcon />}
+                    onClick={() => setQuick(quickAccess.filter((_, i) => i !== idx))}
+                  />
+                </Td>
+              </Tr>
+            ))}
+          </Tbody>
+        </Table>
       </TableContainer>
       <Button
-        leftIcon={<AddIcon />}
+        size="sm"
+        mt={3}
+        {...outlineButtonProps}
+        leftIcon={<AddIcon boxSize={2.5} />}
         onClick={() => setQuick([...quickAccess, { label: '', url: '' }])}
       >
-        Add Quick Link
+        Add quick link
       </Button>
 
-      <Heading size="sm" mt={6}>
-        Photos
-      </Heading>
-      <TableContainer overflowX="auto" w="100%">
-      <Table variant="simple" size="sm">
-        <Thead>
-          <Tr>
-            <Th>#</Th>
-            <Th>Preview</Th>
-            <Th>Image URL</Th>
-            <Th>Description</Th>
-            <Th>Link</Th>
-            <Th>Visible</Th>
-            <Th>Upload</Th>
-            <Th>Order</Th>
-            <Th></Th>
-          </Tr>
-        </Thead>
-        <Tbody>
-          {photos.map((p, idx) => (
-            <Tr
-              key={idx}
-              draggable
-              onDragStart={(e) =>
-                e.dataTransfer.setData('text/plain', String(idx))
-              }
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault()
-                const from = Number(e.dataTransfer.getData('text/plain'))
-                if (Number.isNaN(from)) return
-                const arr = [...photos]
-                const [moved] = arr.splice(from, 1)
-                arr.splice(idx, 0, moved)
-                setPhotos(arr)
-              }}
-            >
-              <Td>{idx + 1}</Td>
-              <Td>
-                {p.url ? (
-                  <Image
-                    src={normalizeUrl(p.url)}
-                    alt="preview"
-                    boxSize="60px"
-                    objectFit="cover"
-                  />
-                ) : null}
-              </Td>
-              <Td>
-                <Input
-                  value={p.url}
-                  onChange={(e) => {
-                    const val = e.target.value
-                    const arr = [...photos]
-                    arr[idx] = { ...arr[idx], url: val }
-                    setPhotos(arr)
-                  }}
-                  isInvalid={!!p.url && !validateUrl(p.url)}
-                />
-              </Td>
-              <Td>
-                <Input
-                  value={p.describe || ''}
-                  onChange={(e) => {
-                    const arr = [...photos]
-                    arr[idx] = { ...arr[idx], describe: e.target.value }
-                    setPhotos(arr)
-                  }}
-                />
-              </Td>
-              <Td>
-                <Input
-                  value={p.redirectTo || ''}
-                  onChange={(e) => {
-                    const val = e.target.value
-                    const arr = [...photos]
-                    arr[idx] = { ...arr[idx], redirectTo: val }
-                    setPhotos(arr)
-                  }}
-                  isInvalid={!!p.redirectTo && !validateUrl(p.redirectTo)}
-                />
-              </Td>
-              <Td>
-                <Checkbox
-                  isChecked={p.visible !== false}
-                  onChange={(e) => {
-                    const arr = [...photos]
-                    arr[idx] = { ...arr[idx], visible: e.target.checked }
-                    setPhotos(arr)
-                  }}
-                >
-                  Visible
-                </Checkbox>
-              </Td>
-              <Td>
-                <Input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    const input = e.target as HTMLInputElement
-                    const f = input.files?.[0]
-                    if (f)
-                      onUpload(f, (url) =>
-                        setPhotos((prev) => prev.map((p, i) => (i === idx ? { ...p, url } : p))),
-                      )
-                    // clear to allow re-selecting same file
-                    input.value = ''
-                  }}
-                />
-              </Td>
-              <Td>
-                <HStack>
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      if (idx === 0) return
-                      const arr = [...photos]
-                      const t = arr[idx - 1]
-                      arr[idx - 1] = arr[idx]
-                      arr[idx] = t
-                      setPhotos(arr)
-                    }}
-                  >
-                    ↑
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      if (idx === photos.length - 1) return
-                      const arr = [...photos]
-                      const t = arr[idx + 1]
-                      arr[idx + 1] = arr[idx]
-                      arr[idx] = t
-                      setPhotos(arr)
-                    }}
-                  >
-                    ↓
-                  </Button>
-                </HStack>
-              </Td>
-              <Td>
-                <IconButton
-                  aria-label="delete"
-                  icon={<DeleteIcon />}
-                  onClick={() => setPhotos(photos.filter((_, i) => i !== idx))}
-                />
-              </Td>
+      <SectionLabel
+        index={5}
+        title="Photos"
+        hint="Gallery images. Drag rows or use the arrows to reorder; untick Visible to hide one without deleting it."
+      />
+      <TableContainer
+        overflowX="auto"
+        w="100%"
+        border="1px solid"
+        borderColor="page.border"
+        borderRadius="lg"
+        sx={TABLE_SX}
+      >
+        <Table variant="simple" size="sm">
+          <Thead>
+            <Tr>
+              <Th>#</Th>
+              <Th>Preview</Th>
+              <Th>Image URL</Th>
+              <Th>Description</Th>
+              <Th>Link</Th>
+              <Th>Visible</Th>
+              <Th>Upload</Th>
+              <Th>Order</Th>
+              <Th></Th>
             </Tr>
-          ))}
-        </Tbody>
-      </Table>
+          </Thead>
+          <Tbody>
+            {photos.map((p, idx) => (
+              <Tr
+                key={idx}
+                draggable
+                onDragStart={(e) => e.dataTransfer.setData('text/plain', String(idx))}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  const from = Number(e.dataTransfer.getData('text/plain'))
+                  if (Number.isNaN(from)) return
+                  const arr = [...photos]
+                  const [moved] = arr.splice(from, 1)
+                  arr.splice(idx, 0, moved)
+                  setPhotos(arr)
+                }}
+              >
+                <Td>{idx + 1}</Td>
+                <Td>
+                  {p.url ? (
+                    <Image
+                      src={normalizeUrl(p.url)}
+                      alt="preview"
+                      boxSize="60px"
+                      objectFit="cover"
+                    />
+                  ) : null}
+                </Td>
+                <Td>
+                  <Input
+                    value={p.url}
+                    aria-label={`Photo ${idx + 1} image URL`}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      const arr = [...photos]
+                      arr[idx] = { ...arr[idx], url: val }
+                      setPhotos(arr)
+                    }}
+                    isInvalid={!!p.url && !validateUrl(p.url)}
+                  />
+                </Td>
+                <Td>
+                  <Input
+                    value={p.describe || ''}
+                    aria-label={`Photo ${idx + 1} description`}
+                    onChange={(e) => {
+                      const arr = [...photos]
+                      arr[idx] = { ...arr[idx], describe: e.target.value }
+                      setPhotos(arr)
+                    }}
+                  />
+                </Td>
+                <Td>
+                  <Input
+                    value={p.redirectTo || ''}
+                    aria-label={`Photo ${idx + 1} link`}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      const arr = [...photos]
+                      arr[idx] = { ...arr[idx], redirectTo: val }
+                      setPhotos(arr)
+                    }}
+                    isInvalid={!!p.redirectTo && !validateUrl(p.redirectTo)}
+                  />
+                </Td>
+                <Td>
+                  <Checkbox
+                    isChecked={p.visible !== false}
+                    onChange={(e) => {
+                      const arr = [...photos]
+                      arr[idx] = { ...arr[idx], visible: e.target.checked }
+                      setPhotos(arr)
+                    }}
+                  >
+                    Visible
+                  </Checkbox>
+                </Td>
+                <Td>
+                  <Input
+                    type="file"
+                    aria-label={`Upload photo ${idx + 1}`}
+                    accept="image/*"
+                    onChange={(e) => {
+                      const input = e.target as HTMLInputElement
+                      const f = input.files?.[0]
+                      if (f)
+                        onUpload(f, (url) =>
+                          setPhotos((prev) => prev.map((p, i) => (i === idx ? { ...p, url } : p)))
+                        )
+                      // clear to allow re-selecting same file
+                      input.value = ''
+                    }}
+                  />
+                </Td>
+                <Td>
+                  <HStack>
+                    <IconButton
+                      size="sm"
+                      variant="ghost"
+                      color="page.fg-secondary"
+                      aria-label={`Move photo ${idx + 1} up`}
+                      icon={<span aria-hidden>↑</span>}
+                      isDisabled={idx === 0}
+                      onClick={() => {
+                        if (idx === 0) return
+                        const arr = [...photos]
+                        const t = arr[idx - 1]
+                        arr[idx - 1] = arr[idx]
+                        arr[idx] = t
+                        setPhotos(arr)
+                      }}
+                    />
+                    <IconButton
+                      size="sm"
+                      variant="ghost"
+                      color="page.fg-secondary"
+                      aria-label={`Move photo ${idx + 1} down`}
+                      icon={<span aria-hidden>↓</span>}
+                      isDisabled={idx === photos.length - 1}
+                      onClick={() => {
+                        if (idx === photos.length - 1) return
+                        const arr = [...photos]
+                        const t = arr[idx + 1]
+                        arr[idx + 1] = arr[idx]
+                        arr[idx] = t
+                        setPhotos(arr)
+                      }}
+                    />
+                  </HStack>
+                </Td>
+                <Td>
+                  <IconButton
+                    aria-label={`Remove photo ${idx + 1}`}
+                    size="sm"
+                    variant="ghost"
+                    color="page.fg-secondary"
+                    _hover={{ color: 'red.400', bg: 'page.bg-overlay' }}
+                    icon={<DeleteIcon />}
+                    onClick={() => setPhotos(photos.filter((_, i) => i !== idx))}
+                  />
+                </Td>
+              </Tr>
+            ))}
+          </Tbody>
+        </Table>
       </TableContainer>
       <Button
-        leftIcon={<AddIcon />}
+        size="sm"
+        mt={3}
+        {...outlineButtonProps}
+        leftIcon={<AddIcon boxSize={2.5} />}
         onClick={() =>
-          setPhotos([
-            ...(photos || []),
-            { url: '', describe: '', redirectTo: '', visible: true },
-          ])
+          setPhotos([...(photos || []), { url: '', describe: '', redirectTo: '', visible: true }])
         }
       >
-        Add Photo
+        Add photo
       </Button>
 
       {/* ── Section visibility ─────────────────────────────────────── */}
-      <Heading size="sm" mt={8}>
-        Visibility
-      </Heading>
-      <Text fontSize="xs" color="gray.500" mt={1} mb={3}>
-        Toggle which [NN] rows appear on the home page. Hiding a row also
-        removes its anchor + scroll target — the numbering on the rest of
-        the page stays the same because labels are static.
-      </Text>
+      <SectionLabel
+        index={6}
+        title="Visibility"
+        hint="Toggle which [NN] rows appear on the home page. Hiding a row also removes its anchor and scroll target — the numbering of the rest stays the same because labels are static."
+      />
       <SimpleGrid columns={[1, 2, 3]} gap={3}>
         {HOME_SECTION_META.map(({ key, label, hint }) => {
           const visible = sections[key] !== false
@@ -1163,12 +1271,9 @@ export default function HomeEditor() {
               p={3}
               borderWidth="1px"
               borderRadius="md"
-              borderColor={visible ? 'green.300' : 'gray.200'}
-              bg={visible ? 'green.50' : 'gray.50'}
-              _dark={{
-                borderColor: visible ? 'green.700' : 'gray.700',
-                bg: visible ? 'rgba(34,197,94,0.08)' : 'rgba(255,255,255,0.02)',
-              }}
+              borderColor={visible ? 'accent.500' : 'page.border'}
+              bg={visible ? 'var(--accent-soft)' : 'page.bg-elevated'}
+              transition="border-color 180ms var(--ease-out-quart), background-color 180ms var(--ease-out-quart)"
             >
               <Checkbox
                 isChecked={visible}
@@ -1179,7 +1284,7 @@ export default function HomeEditor() {
                 <Text fontSize="sm" fontWeight={600}>
                   {label}
                 </Text>
-                <Text fontSize="xs" color="gray.500" mt={0.5}>
+                <Text fontSize="xs" color="page.fg-secondary" mt={0.5}>
                   {hint}
                 </Text>
               </Box>
@@ -1189,16 +1294,18 @@ export default function HomeEditor() {
       </SimpleGrid>
 
       {/* ── Contact panel copy ─────────────────────────────────────── */}
-      <Heading size="sm" mt={8}>
-        Contact panel
-      </Heading>
-      <Text fontSize="xs" color="gray.500" mt={1} mb={3}>
-        Headings + reasons-dropdown options shown on the home contact
-        section. Leave a field blank to use the built-in default
-        (heading = brand name, blurb = &ldquo;I usually reply within 24 hours.&rdquo;,
-        eyebrow = &ldquo;▸ Reach me&rdquo;). Reasons default to the original
-        six when the list is empty.
-      </Text>
+      <SectionLabel
+        index={7}
+        title="Contact panel"
+        hint={
+          <>
+            Heading and reasons dropdown of the home contact section. Leave a field blank to use the
+            built-in default (heading = brand name, blurb = &ldquo;I usually reply within 24
+            hours.&rdquo;, eyebrow = &ldquo;▸ Reach me&rdquo;). Reasons fall back to the original
+            six when the list is empty.
+          </>
+        }
+      />
       <SimpleGrid columns={[1, 2]} gap={3}>
         <FormControl>
           <FormLabel>Eyebrow</FormLabel>
@@ -1229,28 +1336,36 @@ export default function HomeEditor() {
       <Box mt={4}>
         <FormLabel mb={2}>
           Reasons (dropdown)
-          <Text as="span" color="gray.500" fontWeight="normal" fontSize="xs" ml={2}>
+          <Text as="span" color="page.fg-secondary" fontWeight="normal" fontSize="xs" ml={2}>
             empty list = use defaults
           </Text>
         </FormLabel>
         <Wrap spacing={2} mb={3}>
           {contact.reasons.length === 0 && (
-            <Text fontSize="xs" color="gray.500" fontStyle="italic">
+            <Text fontSize="xs" color="page.fg-secondary" fontStyle="italic">
               No custom reasons — the dropdown will show:{' '}
               <strong>{DEFAULT_CONTACT_REASONS.join(', ')}</strong>
             </Text>
           )}
           {contact.reasons.map((r, idx) => (
             <WrapItem key={`${r}-${idx}`}>
-              <Tag size="md" colorScheme="purple" borderRadius="full" variant="subtle">
+              <Tag
+                size="md"
+                borderRadius="full"
+                variant="outline"
+                color="page.fg"
+                boxShadow="inset 0 0 0 1px var(--chakra-colors-page-border-strong)"
+              >
                 <TagLabel>{r}</TagLabel>
                 <TagCloseButton onClick={() => removeReason(idx)} />
               </Tag>
             </WrapItem>
           ))}
         </Wrap>
-        <HStack>
+        <Flex gap={2} flexWrap="wrap">
           <Input
+            flex="1 1 200px"
+            aria-label="New reason"
             placeholder="Add a reason (e.g. Speaking engagement)"
             value={newReason}
             onChange={(e) => setNewReason(e.target.value)}
@@ -1261,56 +1376,113 @@ export default function HomeEditor() {
               }
             }}
           />
-          <Button onClick={addReason} leftIcon={<AddIcon />}>
+          <Button
+            size="sm"
+            {...outlineButtonProps}
+            onClick={addReason}
+            leftIcon={<AddIcon boxSize={2.5} />}
+            flexShrink={0}
+          >
             Add
           </Button>
-          <Button variant="outline" onClick={restoreDefaultReasons}>
+          <Button
+            size="sm"
+            variant="ghost"
+            color="page.fg-secondary"
+            onClick={restoreDefaultReasons}
+            flexShrink={0}
+          >
             Restore defaults
           </Button>
-        </HStack>
+        </Flex>
       </Box>
 
-      <Divider my={6} />
-
       {/* Sticky save bar — always reachable, shows unsaved state. */}
-      <Flex
+      <Stack
         position="sticky"
         bottom={0}
         zIndex={10}
-        mt={6}
-        mx={{ base: -4, md: -8 }}
-        px={{ base: 4, md: 8 }}
+        mt={10}
+        mx={{ base: -4, md: -6, lg: -8 }}
+        px={{ base: 4, md: 6, lg: 8 }}
         py={3}
-        align="center"
-        justify="space-between"
-        gap={3}
-        bg={barBg}
-        backdropFilter="blur(10px)"
+        spacing={3}
+        bg="page.surface"
+        backdropFilter="saturate(180%) blur(14px)"
         borderTop="1px solid"
-        borderColor={barBorder}
+        borderColor="page.border"
       >
-        <HStack spacing={2} fontFamily="var(--font-geist-mono), monospace" fontSize="11px" aria-live="polite">
-          <Box w="7px" h="7px" borderRadius="full" bg={dirty ? 'orange.400' : 'green.400'} />
-          <Text>{saving ? 'saving…' : dirty ? 'unsaved changes' : 'all changes saved'}</Text>
-        </HStack>
-        <HStack spacing={3}>
-          <HStack spacing={1} display={{ base: 'none', md: 'flex' }} opacity={0.7}>
-            <Kbd fontSize="10px">⌘</Kbd>
-            <Kbd fontSize="10px">S</Kbd>
-          </HStack>
-          <Button
-            onClick={validateAndSave}
-            isLoading={saving}
-            loadingText="Saving"
-            isDisabled={!dirty}
-            bg={dirty ? 'var(--accent)' : undefined}
-            color={dirty ? 'white' : undefined}
-            _hover={dirty ? { opacity: 0.92 } : undefined}
+        {sessionExpired ? <SessionExpiredNotice returnPath={RETURN_PATH} keepEdits /> : null}
+        <Flex align="center" justify="space-between" gap={3} flexWrap="wrap">
+          <SaveStatus state={saveState} />
+          <SaveButton
+            onSave={() => validateAndSave()}
+            canSave={canSave && !conflictEtag}
+            saving={saving}
+            label="Save changes"
+          />
+        </Flex>
+      </Stack>
+
+      {/* Someone (another tab, a restore, a pull) saved since this form loaded. */}
+      <AlertDialog
+        isOpen={!!conflictEtag}
+        leastDestructiveRef={conflictCancelRef}
+        onClose={() => setConflictEtag(null)}
+        isCentered
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent
+            bg="page.bg-elevated"
+            border="1px solid"
+            borderColor="page.border"
+            mx={4}
           >
-            Save changes
-          </Button>
-        </HStack>
-      </Flex>
-    </>
+            <AlertDialogHeader fontSize="md">
+              The home page changed since you opened it
+            </AlertDialogHeader>
+            <AlertDialogBody fontSize="sm">
+              <Text>
+                {conflictMessage ||
+                  'A newer version was saved elsewhere — another tab, a version restore or a storage pull.'}
+              </Text>
+              <Text mt={3} color="page.fg-secondary">
+                <strong>Reload</strong> discards your edits and loads the latest version.{' '}
+                <strong>Overwrite</strong> replaces the latest version with this form (a snapshot of
+                it is kept, so it can be restored from Versions).
+              </Text>
+            </AlertDialogBody>
+            <AlertDialogFooter gap={2} flexWrap="wrap">
+              <Button
+                ref={conflictCancelRef}
+                size="sm"
+                variant="ghost"
+                onClick={() => setConflictEtag(null)}
+              >
+                Cancel
+              </Button>
+              <Button size="sm" {...outlineButtonProps} onClick={reloadLatest}>
+                Reload latest
+              </Button>
+              <Button
+                size="sm"
+                {...primaryButtonProps}
+                bg="red.500"
+                _hover={{ bg: 'red.600' }}
+                _active={{ bg: 'red.700' }}
+                isLoading={saving}
+                onClick={() => {
+                  const target = conflictEtag
+                  setConflictEtag(null)
+                  validateAndSave(target)
+                }}
+              >
+                Overwrite
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
+    </Box>
   )
 }
