@@ -56,7 +56,7 @@ const CertificateSection = ({
                   color="page.fg-secondary"
                   textTransform="uppercase"
                   sx={{
-                    _hover: { color: 'var(--accent)', textDecoration: 'none' },
+                    _hover: { color: 'accent.text', textDecoration: 'none' },
                   }}
                 >
                   {org.issuingOrganization}{' '}
@@ -94,7 +94,7 @@ const CertificateSection = ({
                       isExternal
                       fontFamily={monoFont}
                       fontSize="11px"
-                      color="var(--accent)"
+                      color="accent.text"
                       letterSpacing="0.04em"
                       sx={{
                         _hover: { textDecoration: 'underline' },

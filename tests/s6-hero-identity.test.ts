@@ -45,6 +45,31 @@ test('hidden name fields are respected on pruned and editor documents', () => {
   assert.equal(allHidden.nick, 'Lucian')
 })
 
+test('a Personal Info section switched off the website never brings back the literals', () => {
+  // Stored CV has the section, public view has none (both languages off the website).
+  assert.deepEqual(heroIdentity(undefined, undefined, { storedHasPersonalInfo: true }), { name: '', nameZh: '', nick: '' })
+  // EN on the website, ZH section off: no literal 中文 name is added.
+  assert.deepEqual(heroIdentity(pi(), undefined, { storedHasPersonalInfo: true }), { name: 'Li Yanpei', nameZh: '', nick: 'Lucian' })
+  // ZH only on the website: the 中文 name stands alone, no EN literal.
+  assert.deepEqual(heroIdentity(undefined, piZh(), { storedHasPersonalInfo: true }), { name: '', nameZh: '李彦霈', nick: '' })
+  // Only a stored CV with no Personal Info at all uses the built-in identity.
+  assert.deepEqual(heroIdentity(undefined, undefined, { storedHasPersonalInfo: false }), {
+    name: FALLBACK_NAME,
+    nameZh: FALLBACK_NAME_ZH,
+    nick: 'Lucian',
+  })
+})
+
+test('an EN name the owner hid cannot reappear through the 中文 or nickname literals', () => {
+  const hiddenEn = prune(pi({ hiddenFields: ['firstName', 'lastName', 'nickName'] }))
+  assert.deepEqual(heroIdentity(hiddenEn, undefined), { name: '', nameZh: '', nick: '' })
+  assert.deepEqual(heroIdentity(hiddenEn, undefined, { storedHasPersonalInfo: true }), { name: '', nameZh: '', nick: '' })
+  // A blank (not hidden) ZH name next to a hidden EN name stays blank too.
+  assert.deepEqual(heroIdentity(hiddenEn, piZh({ firstName: '', lastName: '' })), { name: '', nameZh: '', nick: '' })
+  // …while a 中文 name the owner left visible is still shown.
+  assert.deepEqual(heroIdentity(hiddenEn, piZh()), { name: '', nameZh: '李彦霈', nick: '' })
+})
+
 test('the 中文 name and nickname are dropped when they repeat the EN name', () => {
   const id = heroIdentity(pi({ nickName: 'Li Yanpei' }), piZh({ firstName: 'Yanpei', lastName: 'Li' }))
   assert.equal(id.nameZh, '')
@@ -61,5 +86,6 @@ test('tagline: first phrase is the role, the rest rotate; no raw pipes', () => {
 test('portrait alt text', () => {
   assert.equal(portraitAlt({ name: 'Li Yanpei', nameZh: '', nick: 'Lucian' }), 'Li Yanpei (Lucian)')
   assert.equal(portraitAlt({ name: '', nameZh: '', nick: 'Lucian' }), 'Lucian')
+  assert.equal(portraitAlt({ name: '', nameZh: '李彦霈', nick: '' }), '李彦霈')
   assert.equal(portraitAlt({ name: '', nameZh: '', nick: '' }), 'Portrait')
 })

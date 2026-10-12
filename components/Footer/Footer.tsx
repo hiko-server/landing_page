@@ -1,8 +1,9 @@
 import React from 'react'
 import NextLink from 'next/link'
 import { Box, Flex, Text, Link, Divider } from '@chakra-ui/react'
-import { PRIMARY_LINKS, SOCIAL_LINKS } from '../Chrome/chrome'
+import { PRIMARY_LINKS, SOCIAL_LINKS, type SocialLink } from '../Chrome/chrome'
 import { useBrandHost } from '../Chrome/useBrandHost'
+import { referenceYear, useReferenceMonth } from '../../lib/clock'
 
 /**
  * v6 Footer — rendered once by components/Chrome/SiteChrome.
@@ -12,13 +13,16 @@ import { useBrandHost } from '../Chrome/useBrandHost'
  *   2. Social links (new tab) + copyright
  *
  * Colours are semantic tokens, so the footer is right on the first paint in
- * both colour modes.
+ * both colour modes. The year comes from the page's reference month
+ * (lib/clock.ts), so the server HTML and the hydrating client agree.
  */
 
 const MONO = 'var(--font-geist-mono), ui-monospace, monospace'
 
-const Footer: React.FC = () => {
+/** `socials`: the profile links to show (SiteChrome resolves them from home.socials). */
+const Footer = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] }) => {
   const brand = useBrandHost()
+  const year = referenceYear(useReferenceMonth())
 
   return (
     <Box
@@ -66,7 +70,7 @@ const Footer: React.FC = () => {
             gap={4}
           >
             <Flex gap={5} wrap="wrap" fontFamily={MONO} fontSize="11px" color="page.fg-subtle">
-              {SOCIAL_LINKS.map((s) => (
+              {socials.map((s) => (
                 <Link
                   key={s.name}
                   href={s.url}
@@ -83,7 +87,10 @@ const Footer: React.FC = () => {
 
             <Flex gap={3} alignItems="center" fontFamily={MONO} fontSize="11px" color="page.fg-subtle">
               <Text as="span">
-                © {new Date().getFullYear()}{' '}
+                ©{' '}
+                <Text as="span" suppressHydrationWarning>
+                  {year}
+                </Text>{' '}
                 <Link as={NextLink} href="/" _hover={{ color: 'page.fg', textDecoration: 'none' }}>
                   {brand}
                 </Link>

@@ -7,7 +7,9 @@ import { semanticColors } from './color'
  * Locked design tokens:
  *   bg:     #050505 (dark) / #fdfdfd (light)
  *   fg:     #fafafa (dark) / #0a0a0a (light)
- *   accent: #6366f1 (indigo-500) — single brand color, no gradients
+ *   accent: #6366f1 (indigo-500) — single brand color, no gradients; small
+ *           text uses 'accent.text' and filled buttons 'accent.solid'
+ *           (contrast-safe shades of the same indigo, see theme/color.ts)
  *   font:   Geist Sans (display + body) + Geist Mono (labels/code)
  *   grid:   8px base, 1100px max content width
  *   easing: cubic-bezier(0.22, 1, 0.36, 1) (use --ease-out-quart from globals.css)
@@ -116,10 +118,10 @@ const theme = {
         code: { whiteSpace: 'pre-wrap', fontFamily: 'var(--font-geist-mono), monospace' },
         // Tables behave naturally inside their container
         table: { width: '100%', borderCollapse: 'collapse', tableLayout: 'auto' },
-        // Selection uses the brand accent
+        // Selection uses the brand accent (the contrast-safe solid shade).
         '::selection': {
-          background: '#6366f1',
-          color: 'white',
+          background: semanticColors['accent.solid'].light,
+          color: semanticColors['accent.fg'].light,
         },
       },
     },

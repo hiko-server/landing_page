@@ -14,7 +14,7 @@
  */
 
 import type { CvSectionLike } from './cvVisibility'
-import { formatCvDate, majorAddsInfo } from './cvFormat'
+import { formatCvDate, majorAddsInfo, type CvNow } from './cvFormat'
 import { deriveCurrentlyCoding, type CurrentlyCoding } from './currentlyCoding'
 import { formatPostDate, isoDate } from './postDate'
 import { entryRange, entryStatus, field, graduation, joinParts, list } from '../components/CVViewerPage/fields'
@@ -51,8 +51,11 @@ export type NowSignals = {
 const section = (cv: CvSectionLike[] | null | undefined, name: string) =>
   (Array.isArray(cv) ? cv : []).find((s) => s?.sessionName === name)
 
-/** Roles and studies that are running now or have a confirmed future start. */
-export function currentRoles(cv: CvSectionLike[] | null | undefined, now: Date = new Date()): NowRole[] {
+/**
+ * Roles and studies that are running now or have a confirmed future start.
+ * `now` is a Date or the page's 'YYYY-MM' reference month (lib/clock.ts).
+ */
+export function currentRoles(cv: CvSectionLike[] | null | undefined, now: CvNow = new Date()): NowRole[] {
   const out: NowRole[] = []
 
   for (const e of list(section(cv, 'workExperience'), 'experiences')) {
@@ -68,7 +71,7 @@ export function currentRoles(cv: CvSectionLike[] | null | undefined, now: Date =
       title: title || org,
       org: title ? org : '',
       location: field(e, 'location'),
-      when: status === 'upcoming' ? (start ? `Starts ${start}` : '') : entryRange(e, 'en'),
+      when: status === 'upcoming' ? (start ? `Starts ${start}` : '') : entryRange(e, 'en', { now }),
     })
   }
 
@@ -87,7 +90,7 @@ export function currentRoles(cv: CvSectionLike[] | null | undefined, now: Date =
       title: title || org,
       org: title ? org : '',
       location: field(e, 'schoolLocation'),
-      when: status === 'upcoming' ? (start ? `Starts ${start}` : '') : joinParts([start, graduation(e, 'en')], ' – '),
+      when: status === 'upcoming' ? (start ? `Starts ${start}` : '') : joinParts([start, graduation(e, 'en', now)], ' – '),
     })
   }
 

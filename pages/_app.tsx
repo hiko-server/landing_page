@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import type { AppProps } from 'next/app'
 import Head from 'next/head'
 import localFont from 'next/font/local'
@@ -18,6 +18,9 @@ import { RouteTransitionGate, useRouteViewTransitions } from '../components/Chro
 import { resolveHtmlLang, routeHasChrome } from '../components/Chrome/chrome'
 import ScrollToTop from '../components/ScrollToTop/ScrollToTop'
 import ScrollProgressBar from '../components/General-UI/ScrollProgressBar'
+import { HtmlLangContext } from '../components/Common/htmlLang'
+import { RestoreScrollOnMount, useDeferredScrollRestore } from '../components/Common/scrollRestore'
+import { ClockProvider } from '../lib/clock'
 
 // v6 typography — self-hosted variable fonts so the build never depends on
 // Google Fonts being reachable (some networks throttle / block fonts.gstatic.com,
@@ -68,6 +71,12 @@ const App = ({ Component, pageProps, router }: AppProps) => {
   const pageKey = pageKeyOf(router.asPath)
   const withChrome = routeHasChrome(router.pathname)
   const viewTransitions = useRouteViewTransitions(router.events, pageKey)
+  // Back / Forward: Next restores the scroll position (experimental.
+  // scrollRestoration). The framer-motion fallback below swaps pages only
+  // after the old one has faded out, so the position is re-applied once the
+  // new page mounts; with view transitions Next's own restore already lands
+  // on the new page (see components/Common/scrollRestore.ts).
+  useDeferredScrollRestore(!viewTransitions, pageKey)
 
   useEffect(() => {
     if (!gtag.GA_TRACKING_ID) return
@@ -78,11 +87,15 @@ const App = ({ Component, pageProps, router }: AppProps) => {
   }, [router.events])
 
   // <html lang> follows the page's `lang` prop (contract E): _document sets it
-  // on the server, this keeps it right across client-side navigations.
-  const lang = resolveHtmlLang(pageProps?.lang)
+  // on the server, this keeps it right across client-side navigations. It is
+  // re-applied on every route change (not only when the value differs), and a
+  // page whose language changes on the client (the /cv toggle) reports it
+  // through HtmlLangContext instead of touching the element itself.
+  const [reportedLang, setReportedLang] = useState<string | null>(null)
+  const lang = resolveHtmlLang(reportedLang ?? pageProps?.lang)
   useEffect(() => {
     document.documentElement.lang = lang
-  }, [lang])
+  }, [lang, router.asPath])
 
   // Browsers with the View Transitions API animate route changes natively
   // (see components/Chrome/RouteTransitions.tsx), so the framer-motion wrapper
@@ -100,6 +113,7 @@ const App = ({ Component, pageProps, router }: AppProps) => {
           exit={{ opacity: 0, y: -8 }}
           transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
         >
+          {viewTransitions ? null : <RestoreScrollOnMount pageKey={pageKey} />}
           <Component key={pageKey} {...pageProps} />
         </motion.div>
       </AnimatePresence>
@@ -117,7 +131,13 @@ const App = ({ Component, pageProps, router }: AppProps) => {
           <style key="font-variables" dangerouslySetInnerHTML={{ __html: FONT_VARIABLES_CSS }} />
         </Head>
         <ThemeColorMeta />
-        {withChrome ? <SiteChrome>{page}</SiteChrome> : page}
+        {/* Server-computed reference month (pageProps.clockMonth) so time-based
+            text renders identically on the server and while hydrating. */}
+        <ClockProvider month={pageProps?.clockMonth}>
+          <HtmlLangContext.Provider value={setReportedLang}>
+            {withChrome ? <SiteChrome socials={pageProps?.chromeSocials}>{page}</SiteChrome> : page}
+          </HtmlLangContext.Provider>
+        </ClockProvider>
         <ScrollToTop />
         <ScrollProgressBar />
       </MotionConfig>

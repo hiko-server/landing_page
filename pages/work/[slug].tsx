@@ -149,7 +149,7 @@ export default function WorkCase({ slug, frontmatter, source, readingMinutes, to
                 {link && (
                   <>
                     <Sep />
-                    <Link href={link} isExternal color="var(--accent)" className="link-underline">
+                    <Link href={link} isExternal color="accent.text" className="link-underline">
                       Visit site ↗
                     </Link>
                   </>
@@ -157,7 +157,7 @@ export default function WorkCase({ slug, frontmatter, source, readingMinutes, to
                 {repo && (
                   <>
                     <Sep />
-                    <Link href={repo} isExternal color="var(--accent)" className="link-underline">
+                    <Link href={repo} isExternal color="accent.text" className="link-underline">
                       Source ↗
                     </Link>
                   </>

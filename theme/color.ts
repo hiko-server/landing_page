@@ -49,7 +49,19 @@ export const semanticColors = {
   'page.float-bg': { light: 'rgba(255,255,255,0.82)', dark: 'rgba(15,15,15,0.82)' },
   /** Idle indicator dots. */
   'page.dot-idle': { light: 'rgba(0,0,0,0.18)', dark: 'rgba(255,255,255,0.22)' },
+  /** Text on accent.solid (buttons, the skip link, text selection). */
   'accent.fg': { light: '#ffffff', dark: '#ffffff' },
+  /**
+   * Accent-coloured TEXT (links, eyebrows, active labels, [NN] counters).
+   * The brand accent itself (#6366f1) is 4.4:1 on paper and under 4.5:1 on
+   * the elevated dark surfaces, so small text uses indigo-600 on light and
+   * indigo-400 on dark. Borders, dots, rules and focus rings keep --accent.
+   */
+  'accent.text': { light: '#4f46e5', dark: '#818cf8' },
+  /** Filled accent background behind accent.fg text (≥ 4.5:1 with white in both modes). */
+  'accent.solid': { light: '#4f46e5', dark: '#4f46e5' },
+  'accent.solid-hover': { light: '#4338ca', dark: '#4338ca' },
+  'accent.solid-active': { light: '#3730a3', dark: '#3730a3' },
 } as const satisfies Record<string, ModePair>
 
 export type SemanticColorName = keyof typeof semanticColors

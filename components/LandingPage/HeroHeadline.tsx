@@ -34,7 +34,9 @@ export default function HeroHeadline({
   /** Stagger index of the first element (the hero reveals top → bottom). */
   startStep?: number
 }) {
-  const headline = identity.name || identity.nick
+  // EN name (or nickname) leads; when the owner shows only the 中文 name it leads alone.
+  const primary = identity.name || identity.nick
+  const headline = primary || identity.nameZh
   const brandText = (brand || '').trim()
   // Paint only a domain-style suffix (".dev") in the accent, as the header does.
   const dot = brandText.lastIndexOf('.')
@@ -60,7 +62,7 @@ export default function HeroHeadline({
           <span>
             {brandHead}
             {brandTail && (
-              <Box as="span" color="var(--accent)">
+              <Box as="span" color="accent.text">
                 {brandTail}
               </Box>
             )}
@@ -80,8 +82,8 @@ export default function HeroHeadline({
             color="page.fg"
             sx={revealSx(startStep + 1)}
           >
-            {headline}
-            {identity.nameZh && (
+            {primary || <span lang="zh-Hans">{identity.nameZh}</span>}
+            {primary && identity.nameZh && (
               <Box as="span" fontWeight={300} color="page.fg-secondary" whiteSpace="nowrap">
                 <Box as="span" aria-hidden>
                   {' / '}
@@ -178,11 +180,11 @@ function Typewriter({ phrases }: { phrases: string[] }) {
           {longest}▍
         </Box>
         <Box as="span" pl="1.4em" position="relative">
-          <Box as="span" position="absolute" left={0} color="var(--accent)">
+          <Box as="span" position="absolute" left={0} color="accent.text">
             {'>'}
           </Box>
           {shown}
-          <Box as="span" ml="2px" color="var(--accent)" className={reduce ? undefined : 'hero-caret'}>
+          <Box as="span" ml="2px" color="accent.text" className={reduce ? undefined : 'hero-caret'}>
             ▍
           </Box>
         </Box>

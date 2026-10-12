@@ -4,6 +4,8 @@
  * tests/s5-chrome.test.ts.
  */
 
+import { safeHref } from '../../lib/cvFormat'
+
 export type NavLink = { name: string; url: string }
 
 /** Primary navigation — header (lg+), mobile drawer and footer all render this list. */
@@ -18,23 +20,51 @@ export const PRIMARY_LINKS: readonly NavLink[] = [
   { name: 'Contact', url: '/contact' },
 ]
 
+/**
+ * Built-in profile links, keyed like home.socials. They are only the fallback
+ * for when the home document has no socials (see resolveSocialLinks); the
+ * owner's Home editor values drive the header, footer and hero.
+ */
 export const SOCIAL_LINKS = [
-  { name: 'GitHub', url: 'https://github.com/HikoPLi' },
-  { name: 'GitLab', url: 'https://gitlab.com/HikoPLi' },
-  { name: 'LinkedIn', url: 'https://www.linkedin.com/in/liyanpeihiko/' },
-  { name: 'WhatsApp', url: 'https://wa.me/85200000000' },
+  { key: 'github', name: 'GitHub', url: 'https://github.com/HikoPLi' },
+  { key: 'gitlab', name: 'GitLab', url: 'https://gitlab.com/HikoPLi' },
+  { key: 'linkedin', name: 'LinkedIn', url: 'https://www.linkedin.com/in/liyanpeihiko/' },
+  { key: 'whatsapp', name: 'WhatsApp', url: 'https://wa.me/85200000000' },
 ] as const
 
 export type SocialName = (typeof SOCIAL_LINKS)[number]['name']
+export type SocialKey = (typeof SOCIAL_LINKS)[number]['key']
+export type SocialLink = { key: SocialKey; name: SocialName; url: string }
+
+/**
+ * Profile links to render from the PUBLIC home.socials object:
+ *   - no socials object at all (no home document yet) → the built-in links;
+ *   - a channel whose key is missing → its built-in link;
+ *   - a channel whose key is present but blank → removed (the owner cleared it);
+ *   - otherwise the owner's URL, if it is a safe href (else removed).
+ */
+export function resolveSocialLinks(socials: unknown): SocialLink[] {
+  if (!socials || typeof socials !== 'object' || Array.isArray(socials)) return SOCIAL_LINKS.map((s) => ({ ...s }))
+  const own = socials as Record<string, unknown>
+  const out: SocialLink[] = []
+  for (const s of SOCIAL_LINKS) {
+    if (!(s.key in own) || own[s.key] === undefined) {
+      out.push({ ...s })
+      continue
+    }
+    const url = safeHref(own[s.key])
+    if (url) out.push({ key: s.key, name: s.name, url })
+  }
+  return out
+}
 
 /**
  * Routes that render WITHOUT the persistent header/footer (matched against
- * router.pathname, i.e. the page file's route pattern):
- *  - /admin/db-config is a standalone setup screen with its own back button;
- *  - /500 and /_error stay dependency-light so they render even when
- *    something upstream is failing.
+ * router.pathname, i.e. the page file's route pattern): /500 and /_error stay
+ * dependency-light so they render even when something upstream is failing.
+ * Every other route, admin screens included, gets the persistent chrome.
  */
-export const CHROMELESS_ROUTES: readonly string[] = ['/admin/db-config', '/500', '/_error']
+export const CHROMELESS_ROUTES: readonly string[] = ['/500', '/_error']
 
 export function routeHasChrome(pathname: string): boolean {
   return !CHROMELESS_ROUTES.includes(pathname)

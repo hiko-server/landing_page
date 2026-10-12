@@ -12,6 +12,8 @@ import HeroHeadline from './HeroHeadline'
 import HeroAmbient from '../Background/HeroAmbient'
 import SectionLabel from '../General-UI/SectionLabel'
 import { heroCopy, portraitAlt, type HeroIdentity } from './heroIdentity'
+import { resolveSocialLinks, type SocialName } from '../Chrome/chrome'
+import { referenceYear, useReferenceMonth } from '../../lib/clock'
 import { revealSx, settleSx } from './heroReveal'
 
 /**
@@ -30,12 +32,12 @@ import { revealSx, settleSx } from './heroReveal'
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
-const SOCIALS: Array<{ key: keyof HomeData['socials']; name: string; icon: React.ReactElement; fallback: string }> = [
-  { key: 'github', name: 'GitHub', icon: <FaGithub />, fallback: 'https://github.com/HikoPLi' },
-  { key: 'gitlab', name: 'GitLab', icon: <FaGitlab />, fallback: 'https://gitlab.com/HikoPLi' },
-  { key: 'linkedin', name: 'LinkedIn', icon: <FaLinkedin />, fallback: 'https://www.linkedin.com/in/liyanpeihiko/' },
-  { key: 'whatsapp', name: 'WhatsApp', icon: <FaWhatsapp />, fallback: 'https://wa.me/85200000000' },
-]
+const SOCIAL_ICONS: Record<SocialName, React.ReactElement> = {
+  GitHub: <FaGithub />,
+  GitLab: <FaGitlab />,
+  LinkedIn: <FaLinkedin />,
+  WhatsApp: <FaWhatsapp />,
+}
 
 const clamp = (v: number, min: number, max: number, fallback: number) =>
   Number.isFinite(v) ? Math.max(min, Math.min(max, v)) : fallback
@@ -61,7 +63,10 @@ const PersonalInfo = ({
   const avatarSrc = safeHref(home?.hero?.avatarUrl) || '/images/hikoAvator.png'
   const alt = portraitAlt(identity)
 
-  const socials = SOCIALS.map((s) => ({ ...s, href: safeHref(home?.socials?.[s.key] || s.fallback) })).filter((s) => s.href)
+  // A channel the owner cleared in the Home editor is removed; the built-in
+  // links are used only when the home document has no socials at all.
+  const socials = resolveSocialLinks(home?.socials)
+  const year = referenceYear(useReferenceMonth())
 
   // Admin value per line wins; blank lines fall back to the CV-derived value.
   const cc = home?.hero?.currentlyCoding
@@ -121,7 +126,7 @@ const PersonalInfo = ({
               >
                 <li>Hong Kong</li>
                 <li>Mandarin · Cantonese · English</li>
-                <li suppressHydrationWarning>Available · {new Date().getFullYear()}</li>
+                <li suppressHydrationWarning>Available · {year}</li>
               </Flex>
 
               <Flex
@@ -137,12 +142,12 @@ const PersonalInfo = ({
                   href="/cv"
                   h="44px"
                   px={6}
-                  bg="var(--accent)"
-                  color="white"
+                  bg="accent.solid"
+                  color="accent.fg"
                   fontSize="14px"
                   fontWeight={500}
-                  _hover={{ bg: '#4f46e5' }}
-                  _active={{ bg: '#4338ca' }}
+                  _hover={{ bg: 'accent.solid-hover' }}
+                  _active={{ bg: 'accent.solid-active' }}
                   _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '3px' }}
                 >
                   View CV →
@@ -171,11 +176,11 @@ const PersonalInfo = ({
                         <Tooltip label={s.name} placement="top" hasArrow openDelay={300}>
                           <IconButton
                             as="a"
-                            href={s.href}
+                            href={s.url}
                             target="_blank"
                             rel="noopener noreferrer"
                             aria-label={`${s.name} (opens in a new tab)`}
-                            icon={s.icon}
+                            icon={SOCIAL_ICONS[s.name]}
                             variant="outline"
                             h="44px"
                             w="44px"

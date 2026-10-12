@@ -9,6 +9,7 @@
  */
 
 import type { CvLang } from './cvVisibility'
+import { isReferenceMonth, monthIndex, referenceMonth } from './clock'
 
 const PRESENT_MARKERS = new Set(['now', 'present', 'current', 'ongoing', 'today', '至今', '现在', '今'])
 
@@ -30,13 +31,23 @@ export function parseCvDate(value: unknown): Ym | null {
   return { y, m: mo }
 }
 
-/** True when the date lies after the current month (e.g. an expected graduation). */
-export function isFuture(value: unknown, now = new Date()): boolean {
+/**
+ * "Now" for the time-based helpers below: a 'YYYY-MM' reference month (what
+ * server-rendered pages pass, see lib/clock.ts) or a Date, which is read in
+ * the site's time zone so server and browser agree on the month.
+ */
+export type CvNow = Date | string
+
+function nowIndex(now: CvNow): number {
+  return monthIndex(isReferenceMonth(now) ? now : referenceMonth(now instanceof Date && !Number.isNaN(now.getTime()) ? now : new Date()))
+}
+
+/** True when the date lies after the reference month (e.g. an expected graduation). */
+export function isFuture(value: unknown, now: CvNow = new Date()): boolean {
   const d = parseCvDate(value)
   if (!d) return false
-  const cur = now.getFullYear() * 12 + now.getMonth()
   const val = d.y * 12 + ((d.m ?? 12) - 1)
-  return val > cur
+  return val > nowIndex(now)
 }
 
 export const CV_LABELS = {
@@ -103,19 +114,19 @@ export function formatCvRange(
   start: unknown,
   end: unknown,
   lang: CvLang = 'en',
-  opts: { futureEndAsPresent?: boolean } = {},
+  opts: { futureEndAsPresent?: boolean; now?: CvNow } = {},
 ): string {
   const s = formatCvDate(start, lang)
-  const e = opts.futureEndAsPresent && isFuture(end) ? cvLabels(lang).present : formatCvDate(end, lang)
+  const e = opts.futureEndAsPresent && isFuture(end, opts.now) ? cvLabels(lang).present : formatCvDate(end, lang)
   if (s && e) return s === e ? s : `${s} – ${e}`
   return s || e
 }
 
-/** "Expected Jun 2026" for a future graduation date, else the plain date. */
-export function formatGraduation(end: unknown, lang: CvLang = 'en'): string {
+/** "Expected Jun 2026" for a graduation date after `now`, else the plain date. */
+export function formatGraduation(end: unknown, lang: CvLang = 'en', now?: CvNow): string {
   const e = formatCvDate(end, lang)
   if (!e) return ''
-  return isFuture(end) ? `${cvLabels(lang).expected} ${e}` : e
+  return isFuture(end, now) ? `${cvLabels(lang).expected} ${e}` : e
 }
 
 /** Strip protocol / trailing slash for display ("https://a.com/" → "a.com"). */

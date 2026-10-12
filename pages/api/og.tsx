@@ -140,8 +140,12 @@ export default function handler(req: NextRequest) {
     {
       width: 1200,
       height: 630,
+      // Lower-case key on purpose: ImageResponse builds its headers as
+      // { 'cache-control': <1-year immutable default>, ...headers }, so only
+      // the identical key REPLACES the default. 'Cache-Control' would be a
+      // second key and both values would be sent joined in one header.
       headers: {
-        'Cache-Control': CACHE_CONTROL,
+        'cache-control': CACHE_CONTROL,
       },
     },
   )

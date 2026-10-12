@@ -153,7 +153,7 @@ export default function BlogPost({ slug, frontmatter, source, readingMinutes, to
                     <Flex as="ul" aria-label="Tags" listStyleType="none" gap={2} wrap="wrap" m={0} p={0}>
                       {tags.map((t) => (
                         <Box as="li" key={t}>
-                          <Tag size="sm" variant="outline" fontSize="10px" fontFamily={MONO}>
+                          <Tag size="sm" variant="outline" fontSize="10px" fontFamily={MONO} color="page.fg-secondary" boxShadow="inset 0 0 0px 1px var(--chakra-colors-page-border-strong)">
                             {t}
                           </Tag>
                         </Box>

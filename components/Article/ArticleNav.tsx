@@ -113,7 +113,7 @@ export default function ArticleNav({
                         display="block"
                         fontWeight={500}
                         color="page.fg"
-                        _groupHover={{ color: 'var(--accent)' }}
+                        _groupHover={{ color: 'accent.text' }}
                         transition="color 150ms var(--ease-out-quart)"
                         lang={item.lang === 'en' ? undefined : item.lang}
                       >

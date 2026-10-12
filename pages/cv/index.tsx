@@ -1,6 +1,6 @@
 import { Box, Button, ButtonGroup, Flex, HStack, Text, useToast } from '@chakra-ui/react'
 import { FaFilePdf, FaLink, FaPrint } from 'react-icons/fa'
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/router'
 import type { GetServerSideProps } from 'next'
 
@@ -12,11 +12,17 @@ import CustomHead from '../../components/General-UI/CustomHead'
 import SectionLabel from '../../components/General-UI/SectionLabel'
 import { absUrl, personNode, personFactsFromCv, breadcrumb, personRef, ogImageUrl, CV_ALTERNATES, PERSON_NAME } from '../../lib/schema'
 import type { CvLang } from '../../lib/cvVisibility'
+import type { HomeData } from '../../lib/homeShape'
+import { referenceMonth } from '../../lib/clock'
+import { useReportHtmlLang } from '../../components/Common/htmlLang'
+import { useBottomBarOffset } from '../../components/Common/useBottomBarOffset'
 
 /**
  * /cv — bilingual CV.
  *
- *   ?lang=zh   open the Chinese version (shareable; the toggle keeps the URL in sync)
+ *   ?lang=zh   open the Chinese version (shareable; the toggle keeps the URL in sync,
+ *              and the URL is the source of truth, so client-side navigation to
+ *              /cv or /cv?lang=zh always shows the matching language)
  *   ?print=1   open the browser's print / Save-as-PDF dialog once rendered
  *
  * Data is the CV-scoped public view (hidden sections / entries / fields are
@@ -31,10 +37,21 @@ import type { CvLang } from '../../lib/cvVisibility'
  */
 
 type View = 'reading' | 'a4'
-type Props = { en: any[]; zh: any[]; initialLang: CvLang; lang: string }
+type Props = {
+  en: any[]
+  zh: any[]
+  initialLang: CvLang
+  lang: string
+  /** Server reference month ('YYYY-MM', lib/clock.ts) for "Present" / "Expected". */
+  clockMonth: string
+  /** Public home.socials for the persistent header / footer (null = none set). */
+  chromeSocials?: HomeData['socials'] | null
+}
 
 const mono = 'var(--font-geist-mono), monospace'
 const htmlLang = (l: CvLang) => (l === 'zh' ? 'zh-Hans' : 'en')
+/** ?lang=zh (or the legacy ?lang=cn) → Chinese; anything else → English. */
+const cvLangOf = (q: unknown): CvLang => (q === 'zh' || q === 'cn' ? 'zh' : 'en')
 
 /** Copy text to the clipboard; falls back to a hidden textarea where the async API is unavailable. */
 async function copyText(text: string): Promise<boolean> {
@@ -100,14 +117,24 @@ const COPY = {
 const CVPage = ({ en, zh, initialLang }: Props) => {
   const router = useRouter()
   const toast = useToast()
-  const [language, setLanguage] = useState<CvLang>(initialLang)
+  // The URL is the source of truth for the language: the toggle writes ?lang
+  // with a shallow replace, and a client-side navigation to /cv or
+  // /cv?lang=zh (⌘K palette, links) changes the query without remounting this
+  // page. Only this page's own URL counts: while the page fades out after
+  // leaving /cv the router already describes the next page, and the CV must
+  // keep the language it was showing.
+  const [ownPath] = useState(router.pathname)
+  const fromUrl = router.isReady && router.pathname === ownPath ? cvLangOf(router.query.lang) : null
+  const [language, setLanguage] = useState<CvLang>(fromUrl ?? initialLang)
+  if (fromUrl && fromUrl !== language) setLanguage(fromUrl)
   const [view, setView] = useState<View>('reading')
   const cvData = language === 'zh' ? zh : en
   const T = COPY[language]
+  const actionBar = useRef<HTMLDivElement>(null)
+  useBottomBarOffset(actionBar)
 
   const switchLang = useCallback(
     (l: CvLang) => {
-      setLanguage(l)
       const query = { ...router.query }
       if (l === 'zh') query.lang = 'zh'
       else delete query.lang
@@ -117,17 +144,9 @@ const CVPage = ({ en, zh, initialLang }: Props) => {
     [router],
   )
 
-  // Keep <html lang> in step with the client-side language toggle (the
-  // server sets it from props.lang); other pages default to English.
-  useEffect(() => {
-    document.documentElement.lang = htmlLang(language)
-  }, [language])
-  useEffect(
-    () => () => {
-      document.documentElement.lang = 'en'
-    },
-    [],
-  )
+  // <html lang> belongs to _app; report the language actually on screen
+  // (the toggle does not change props.lang). Withdrawn when the page unmounts.
+  useReportHtmlLang(htmlLang(language))
 
   // ?print=1 → print once fonts are ready (so CJK glyphs don't print as fallbacks).
   useEffect(() => {
@@ -167,7 +186,7 @@ const CVPage = ({ en, zh, initialLang }: Props) => {
     fontFamily: mono,
     fontSize: '11px',
     letterSpacing: '0.04em',
-    _hover: { borderColor: 'var(--accent)', color: 'var(--accent)' },
+    _hover: { borderColor: 'var(--accent)', color: 'accent.text' },
   } as const
 
   const segmented = (active: boolean) =>
@@ -175,7 +194,7 @@ const CVPage = ({ en, zh, initialLang }: Props) => {
       fontFamily: mono,
       fontSize: '12px',
       borderColor: active ? 'var(--accent)' : 'page.border-strong',
-      color: active ? 'var(--accent)' : 'page.fg-secondary',
+      color: active ? 'accent.text' : 'page.fg-secondary',
       bg: active ? 'var(--accent-soft)' : 'transparent',
       zIndex: active ? 1 : undefined,
       _hover: { borderColor: 'var(--accent)' },
@@ -282,6 +301,7 @@ const CVPage = ({ en, zh, initialLang }: Props) => {
 
           {/* Phones: sticky action bar */}
           <Flex
+            ref={actionBar}
             className="no-print"
             as="nav"
             aria-label={T.actions}
@@ -310,12 +330,12 @@ const CVPage = ({ en, zh, initialLang }: Props) => {
               h="44px"
               px={3}
               onClick={() => window.print()}
-              bg="var(--accent)"
-              color="white"
+              bg="accent.solid"
+              color="accent.fg"
               fontSize="13px"
               fontWeight={600}
-              _hover={{ bg: '#4f46e5' }}
-              _active={{ bg: '#4338ca' }}
+              _hover={{ bg: 'accent.solid-hover' }}
+              _active={{ bg: 'accent.solid-active' }}
               isDisabled={!cvData.length}
             >
               <Box as={FaFilePdf} aria-hidden display={{ base: 'none', sm: 'inline-block' }} mr={2} />
@@ -333,13 +353,13 @@ const CVPage = ({ en, zh, initialLang }: Props) => {
               onClick={() => switchLang(language === 'zh' ? 'en' : 'zh')}
               aria-label={`EN / 中文 — ${T.switchTo}`}
             >
-              <Text as="span" aria-hidden color={language === 'en' ? 'var(--accent)' : 'page.fg-secondary'}>
+              <Text as="span" aria-hidden color={language === 'en' ? 'accent.text' : 'page.fg-secondary'}>
                 EN
               </Text>
               <Text as="span" aria-hidden px={1.5} color="page.muted">
                 /
               </Text>
-              <Text as="span" aria-hidden lang="zh-Hans" color={language === 'zh' ? 'var(--accent)' : 'page.fg-secondary'}>
+              <Text as="span" aria-hidden lang="zh-Hans" color={language === 'zh' ? 'accent.text' : 'page.fg-secondary'}>
                 中文
               </Text>
             </Button>
@@ -383,7 +403,22 @@ export const getServerSideProps: GetServerSideProps<Props> = async (context) => 
   } catch {
     /* best effort — render with what we have */
   }
-  const q = context.query.lang
-  const initialLang: CvLang = q === 'zh' || q === 'cn' ? 'zh' : 'en'
-  return { props: { en, zh, initialLang, lang: htmlLang(initialLang) } }
+  let chromeSocials: HomeData['socials'] | null | undefined
+  try {
+    const { readPublicHome } = await import('../../lib/home')
+    chromeSocials = readPublicHome()?.socials ?? null
+  } catch {
+    /* the chrome loads the public home view itself */
+  }
+  const initialLang = cvLangOf(context.query.lang)
+  return {
+    props: {
+      en,
+      zh,
+      initialLang,
+      lang: htmlLang(initialLang),
+      clockMonth: referenceMonth(),
+      ...(chromeSocials !== undefined ? { chromeSocials } : {}),
+    },
+  }
 }

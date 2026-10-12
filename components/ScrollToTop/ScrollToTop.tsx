@@ -5,6 +5,9 @@ import { ChevronUpIcon } from '@chakra-ui/icons'
 /** Show the button once the visitor is this far down the page (px). */
 const SHOW_AFTER = 400
 
+/** 16px above a sticky bottom bar when the page has one, else 24px + safe area. */
+const BOTTOM = 'calc(var(--bottom-bar-h, calc(8px + env(safe-area-inset-bottom, 0px))) + 16px)'
+
 /**
  * Floating "back to top" control (all routes).
  *
@@ -13,6 +16,11 @@ const SHOW_AFTER = 400
  *   keyboard and screen-reader users land where the viewport did, instead of
  *   on a button that has just disappeared.
  * - Scroll position is sampled at most once per frame.
+ * - Never covers a page's sticky bottom action bar (the /cv bar on phones):
+ *   such pages publish the bar's height as --bottom-bar-h
+ *   (components/Common/useBottomBarOffset.ts) and the button floats 16px
+ *   above it; the bar's own height already includes the safe-area inset.
+ *   Without a bar it keeps 24px + the safe-area inset from the bottom edge.
  */
 const ScrollToTop: React.FC = () => {
   const [isVisible, setIsVisible] = useState(false)
@@ -46,7 +54,7 @@ const ScrollToTop: React.FC = () => {
       icon={<ChevronUpIcon boxSize={5} />}
       onClick={scrollToTop}
       position="fixed"
-      bottom="calc(24px + env(safe-area-inset-bottom, 0px))"
+      bottom={BOTTOM}
       right="calc(16px + env(safe-area-inset-right, 0px))"
       zIndex={30}
       size="md"

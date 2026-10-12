@@ -50,7 +50,7 @@ const PatentsSection = ({
                     borderColor={chipBorder}
                     borderRadius="4px"
                   >
-                    <Text as="span" fontFamily="mono" fontSize="10px" color="var(--accent)" pt="3px" flexShrink={0}>
+                    <Text as="span" fontFamily="mono" fontSize="10px" color="accent.text" pt="3px" flexShrink={0}>
                       {String(j + 1).padStart(2, '0')}
                     </Text>
                     <Text as="span" fontSize="13px" color={text} lineHeight="1.5">

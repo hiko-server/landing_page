@@ -27,6 +27,7 @@ import CommandPalette from '../General-UI/CommandPalette'
 import {
   PRIMARY_LINKS,
   SOCIAL_LINKS,
+  type SocialLink,
   type SocialName,
   formatAge,
   isActiveRoute,
@@ -140,7 +141,8 @@ function ThemeIcon() {
   )
 }
 
-const Header = () => {
+/** `socials`: the profile links to offer in the drawer (SiteChrome resolves them from home.socials). */
+const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] }) => {
   const router = useRouter()
   const toast = useToast()
   const [isAdmin, setIsAdmin] = useState(false)
@@ -261,7 +263,7 @@ const Header = () => {
             >
               <Text as="span">{brandHead}</Text>
               {brandTail && (
-                <Text as="span" color="var(--accent)">
+                <Text as="span" color="accent.text">
                   {brandTail}
                 </Text>
               )}
@@ -483,7 +485,7 @@ const Header = () => {
               <Box>
                 <DrawerLabel>Elsewhere</DrawerLabel>
                 <Flex gap={2} wrap="wrap">
-                  {SOCIAL_LINKS.map((s) => (
+                  {socials.map((s) => (
                     <IconButton
                       key={s.name}
                       as="a"

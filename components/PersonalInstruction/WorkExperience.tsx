@@ -43,10 +43,10 @@ const WorkExperience = ({
                   <Link
                     href={safeHref(exp.companyURL)}
                     isExternal
-                    color="var(--accent)"
+                    color="accent.text"
                     sx={{
                       borderBottom: '1px solid transparent',
-                      _hover: { borderBottomColor: 'var(--accent)', textDecoration: 'none' },
+                      _hover: { borderBottomColor: 'accent.text', textDecoration: 'none' },
                     }}
                   >
                     {exp.companyName}

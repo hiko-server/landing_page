@@ -8,9 +8,16 @@ const nextConfig = {
   // Don't publish full client source (incl. the admin UI) as .map files.
   productionBrowserSourceMaps: false,
   poweredByHeader: false,
-  // Required on Next 14 so instrumentation.ts runs on server/edge startup and
-  // loads the Sentry init for each runtime. (Stable/removed in Next 15.)
-  experimental: { instrumentationHook: true },
+  experimental: {
+    // Required on Next 14 so instrumentation.ts runs on server/edge startup and
+    // loads the Sentry init for each runtime. (Stable/removed in Next 15.)
+    instrumentationHook: true,
+    // Back / Forward return to the previous scroll position instead of the
+    // top. Next saves each history entry's position and restores it in the
+    // commit that renders the page; pages/_app.tsx re-applies it after the
+    // framer-motion page swap (components/Common/scrollRestore.ts).
+    scrollRestoration: true,
+  },
   // The server SDK (imported by instrumentation.ts) pulls in OpenTelemetry's
   // runtime instrumentation, which loads modules through a computed require.
   // Webpack flags that as "Critical dependency" although it is intended and

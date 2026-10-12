@@ -13,6 +13,8 @@ import AboutHero from '../../components/About/AboutHero'
 import ExperienceTimeline from '../../components/LandingPage/ExperienceTimeline'
 import CertificationsPeek from '../../components/LandingPage/CertificationsPeek'
 import type { CvSectionLike } from '../../lib/cvVisibility'
+import type { HomeData } from '../../lib/homeShape'
+import { referenceMonth } from '../../lib/clock'
 
 type Props = {
   /** Only the brand + tagline the hero prints — not the whole home document. */
@@ -20,6 +22,10 @@ type Props = {
   /** Website-pruned CV, limited to the sections this page renders. */
   cv: { en: CvSectionLike[]; zh: CvSectionLike[] }
   githubUser: string | null
+  /** Server reference month ('YYYY-MM', lib/clock.ts) for "Present" / "Expected". */
+  clockMonth: string
+  /** Public home.socials for the persistent header / footer (null = none set). */
+  chromeSocials?: HomeData['socials'] | null
 }
 
 /** True when the section is present and carries at least one visible entry. */
@@ -125,6 +131,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async () => {
   let cv: Props['cv'] = { en: [], zh: [] }
   let hero: Props['hero'] = { brand: '', tagline: '' }
   let githubUser: string | null = null
+  let chromeSocials: HomeData['socials'] | null | undefined
   try {
     // Live CV from the content store, website audience, exactly the sections
     // rendered here (the accordion's set — it covers the timeline and
@@ -140,8 +147,19 @@ export const getServerSideProps: GetServerSideProps<Props> = async () => {
     const home = readPublicHome()
     hero = { brand: home?.hero?.brand || '', tagline: home?.hero?.tagline || '' }
     githubUser = extractGithubUser(home?.socials?.github)
+    chromeSocials = home?.socials ?? null
   } catch {
     /* best effort — render with what we have */
   }
-  return { props: { hero, cv, githubUser } }
+  return {
+    props: {
+      hero,
+      cv,
+      githubUser,
+      clockMonth: referenceMonth(),
+      // Omitted when the home document could not be read: the chrome then
+      // loads the public view itself.
+      ...(chromeSocials !== undefined ? { chromeSocials } : {}),
+    },
+  }
 }

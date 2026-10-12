@@ -5,6 +5,7 @@ import { GoArrowLeft, GoArrowRight } from 'react-icons/go'
 
 import { entryRange, field, list } from '../CVViewerPage/fields'
 import type { CvSectionLike } from '../../lib/cvVisibility'
+import { useReferenceMonth } from '../../lib/clock'
 import { chipList, matchCaseStudy, type WorkIndexItem } from './projectMatch'
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
@@ -40,6 +41,7 @@ const STATUS_LABEL: Record<string, string> = {
  *   - "More" reveals the project's highlights in place.
  */
 export default function ProjectSpotlight({ cvEn, work }: { cvEn?: CvSectionLike[]; work?: WorkIndexItem[] }) {
+  const month = useReferenceMonth()
   const cards: Card[] = useMemo(() => {
     const section = Array.isArray(cvEn) ? cvEn.find((s) => s?.sessionName === 'project') : undefined
     const seen = new Set<string>()
@@ -55,7 +57,7 @@ export default function ProjectSpotlight({ cvEn, work }: { cvEn?: CvSectionLike[
           key: `${i}-${title}`,
           title: title || description,
           description: title ? description : '',
-          period: entryRange(p, 'en', { futureEndAsPresent: true }),
+          period: entryRange(p, 'en', { futureEndAsPresent: true, now: month }),
           location: field(p, 'projectLocation'),
           features: list(p, 'features')
             .map((f: any) => field(f, 'description'))
@@ -67,7 +69,7 @@ export default function ProjectSpotlight({ cvEn, work }: { cvEn?: CvSectionLike[
       })
       .filter((c): c is Card => c !== null)
       .slice(0, 6)
-  }, [cvEn, work])
+  }, [cvEn, work, month])
 
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const [edges, setEdges] = useState({ start: true, end: false })
@@ -178,7 +180,7 @@ export default function ProjectSpotlight({ cvEn, work }: { cvEn?: CvSectionLike[
                 fontSize="12px"
                 letterSpacing="0.04em"
                 sx={{ scrollSnapAlign: 'start', transition: 'border-color 200ms var(--ease-out-quart), color 200ms var(--ease-out-quart)' }}
-                _hover={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+                _hover={{ borderColor: 'var(--accent)', color: 'accent.text' }}
                 _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
               >
                 All case studies →
@@ -327,7 +329,7 @@ function ProjectCard({ card }: { card: Card }) {
             </Box>
           )}
           {href && (
-            <Text as="span" aria-hidden color="var(--accent)">
+            <Text as="span" aria-hidden color="accent.text">
               Read case study →
             </Text>
           )}

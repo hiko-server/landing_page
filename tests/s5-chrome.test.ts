@@ -7,10 +7,12 @@ import path from 'node:path'
 import {
   CHROMELESS_ROUTES,
   PRIMARY_LINKS,
+  SOCIAL_LINKS,
   formatAge,
   isActiveRoute,
   normalizeHost,
   resolveHtmlLang,
+  resolveSocialLinks,
   routeHasChrome,
   shouldRecheckSession,
   splitBrand,
@@ -30,12 +32,37 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 // ── chrome routing ──────────────────────────────────────────────────────────
 
-test('chrome is rendered on content and admin routes, not on standalone screens', () => {
-  for (const p of ['/', '/about', '/blog/[slug]', '/work', '/cv', '/404', '/admin/dashboard', '/admin/login']) {
+test('chrome is rendered on content and admin routes, not on the error screens', () => {
+  // /admin/db-config renders AdminPageShell → HeaderFooter, so it must sit
+  // under the persistent chrome (no header/footer remount on entry / exit).
+  for (const p of ['/', '/about', '/blog/[slug]', '/work', '/cv', '/404', '/admin/dashboard', '/admin/login', '/admin/db-config']) {
     assert.equal(routeHasChrome(p), true, p)
   }
+  assert.deepEqual([...CHROMELESS_ROUTES], ['/500', '/_error'])
   for (const p of CHROMELESS_ROUTES) assert.equal(routeHasChrome(p), false, p)
-  assert.equal(routeHasChrome('/admin/db-config'), false)
+})
+
+test('profile links follow the public home.socials; built-ins only when there is none', () => {
+  const builtIn = SOCIAL_LINKS.map((s) => s.url)
+  assert.deepEqual(resolveSocialLinks(undefined).map((s) => s.url), builtIn)
+  assert.deepEqual(resolveSocialLinks(null).map((s) => s.url), builtIn)
+  assert.deepEqual(resolveSocialLinks([]).map((s) => s.url), builtIn)
+  // A cleared channel is removed — no literal comes back for it.
+  const cleared = resolveSocialLinks({ github: 'https://github.com/someone', gitlab: '', linkedin: '   ', whatsapp: '' })
+  assert.deepEqual(cleared, [{ key: 'github', name: 'GitHub', url: 'https://github.com/someone' }])
+  assert.ok(!JSON.stringify(cleared).includes('wa.me'))
+  // A key that is absent keeps its built-in link; bare domains gain https://.
+  const partial = resolveSocialLinks({ github: 'github.com/x' })
+  assert.deepEqual(
+    partial.map((s) => s.url),
+    ['https://github.com/x', ...builtIn.slice(1)],
+  )
+  // Unsafe values never become links.
+  assert.deepEqual(resolveSocialLinks({ github: 'javascript:alert(1)', gitlab: '', linkedin: '', whatsapp: '' }), [])
+  // Callers get copies, never the shared constant.
+  const a = resolveSocialLinks(undefined)
+  a[0].url = 'changed'
+  assert.equal(SOCIAL_LINKS[0].url, 'https://github.com/HikoPLi')
 })
 
 test('active nav matching is exact for home and segment-prefixed otherwise', () => {
@@ -262,6 +289,51 @@ test('readable text tokens meet WCAG AA (4.5:1) on every page background in both
   }
 })
 
+/** rgba(r, g, b, a) composited over an opaque hex background. */
+function over(rgba: string, bg: string): string {
+  const m = rgba.match(/rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)/)
+  assert.ok(m, `parsable rgba: ${rgba}`)
+  const a = Number(m[4])
+  const ch = (i: number, fg: number) => Math.round(fg * a + parseInt(bg.slice(i, i + 2), 16) * (1 - a))
+  return '#' + [ch(1, Number(m[1])), ch(3, Number(m[2])), ch(5, Number(m[3]))].map((v) => v.toString(16).padStart(2, '0')).join('')
+}
+
+test('accent text meets AA on every page background and on the accent-soft wash, in both modes', () => {
+  const css = readFileSync(path.join(ROOT, 'styles/globals.css'), 'utf8')
+  const soft = css.match(/--accent-soft:\s*(rgba\([^)]*\))/)?.[1]
+  assert.ok(soft, '--accent-soft is declared in globals.css')
+  for (const mode of ['light', 'dark'] as const) {
+    const text = semanticColors['accent.text'][mode]
+    for (const b of ['page.bg', 'page.bg-elevated', 'page.bg-overlay'] as const) {
+      const bg = semanticColors[b][mode]
+      const plain = contrast(text, bg)
+      assert.ok(plain >= 4.5, `accent.text on ${b} (${mode}) = ${plain.toFixed(2)}`)
+      // Active segmented buttons: accent text on the accent-soft wash.
+      const washed = contrast(text, over(soft, bg))
+      assert.ok(washed >= 4.5, `accent.text on accent-soft over ${b} (${mode}) = ${washed.toFixed(2)}`)
+    }
+  }
+})
+
+test('white-on-accent buttons meet AA in every state and both modes', () => {
+  for (const mode of ['light', 'dark'] as const) {
+    for (const bg of ['accent.solid', 'accent.solid-hover', 'accent.solid-active'] as const) {
+      const ratio = contrast(semanticColors['accent.fg'][mode], semanticColors[bg][mode])
+      assert.ok(ratio >= 4.5, `accent.fg on ${bg} (${mode}) = ${ratio.toFixed(2)}`)
+    }
+  }
+  // The skip link and text selection use the same solid pair.
+  const css = readFileSync(path.join(ROOT, 'styles/globals.css'), 'utf8')
+  assert.match(css, /\.skip-nav\s*\{[^}]*background:\s*var\(--chakra-colors-accent-solid/)
+})
+
+test('the brand accent stays a decorative/UI colour with at least 3:1 on the page backgrounds', () => {
+  for (const mode of ['light', 'dark'] as const) {
+    const ratio = contrast(palette.accent, semanticColors['page.bg'][mode])
+    assert.ok(ratio >= 3, `accent on page.bg (${mode}) = ${ratio.toFixed(2)}`)
+  }
+})
+
 test('v6 palette and existing token names are intact', () => {
   assert.equal(palette.ink, '#050505')
   assert.equal(palette.paper, '#fdfdfd')
@@ -311,21 +383,22 @@ function loadNextConfig(env: Record<string, string>) {
       '-e',
       // `sentry` reports whether @sentry/nextjs was loaded at all — the only
       // reliable signal that the config was wrapped by withSentryConfig.
-      "const c = require('./next.config.js'); const sentry = Object.keys(require.cache).some((k) => /[\\\\/]@sentry[\\\\/]nextjs[\\\\/]/.test(k)); process.stdout.write(JSON.stringify({ webpack: typeof c.webpack, output: c.output, headers: typeof c.headers, sentry }))",
+      "const c = require('./next.config.js'); const sentry = Object.keys(require.cache).some((k) => /[\\\\/]@sentry[\\\\/]nextjs[\\\\/]/.test(k)); process.stdout.write(JSON.stringify({ webpack: typeof c.webpack, output: c.output, headers: typeof c.headers, sentry, scrollRestoration: c.experimental && c.experimental.scrollRestoration }))",
     ],
     { cwd: ROOT, env: { PATH: process.env.PATH ?? '', NODE_ENV: 'production', ...env }, encoding: 'utf8' },
   )
-  return JSON.parse(out) as { webpack: string; output: string; headers: string; sentry: boolean }
+  return JSON.parse(out) as { webpack: string; output: string; headers: string; sentry: boolean; scrollRestoration: boolean }
 }
 
 test('next.config is only wrapped with Sentry when a DSN is set at build time', () => {
   const plain = loadNextConfig({})
   // The base config always has a webpack hook (it silences two known
   // OpenTelemetry warnings) but never loads the Sentry build plugin.
-  assert.deepEqual(plain, { webpack: 'function', output: 'standalone', headers: 'function', sentry: false })
+  assert.deepEqual(plain, { webpack: 'function', output: 'standalone', headers: 'function', sentry: false, scrollRestoration: true })
   const wrapped = loadNextConfig({ NEXT_PUBLIC_SENTRY_DSN: 'https://public@o0.ingest.sentry.io/0' })
   assert.equal(wrapped.sentry, true)
   assert.equal(wrapped.webpack, 'function')
   assert.equal(wrapped.output, 'standalone')
   assert.equal(wrapped.headers, 'function')
+  assert.equal(wrapped.scrollRestoration, true)
 })

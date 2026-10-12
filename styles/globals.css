@@ -15,7 +15,9 @@
   --dot-color: rgba(0, 0, 0, 0.05);
   --rule-color: rgba(0, 0, 0, 0.08);
 
-  /* Single brand accent (locked: indigo-500) */
+  /* Single brand accent (locked: indigo-500) — borders, dots, rules, focus
+     rings. Small accent TEXT uses the Chakra token 'accent.text' and filled
+     buttons 'accent.solid' (contrast-safe shades, theme/color.ts). */
   --accent: #6366f1;
   --accent-soft: rgba(99, 102, 241, 0.10);
   --accent-ring: rgba(99, 102, 241, 0.35);
@@ -32,6 +34,10 @@
 
   /* Live status green */
   --live-green: #22c55e;
+
+  /* --bottom-bar-h is set (in px) on <html> only while a page shows a sticky
+     bottom action bar on phones (components/Common/useBottomBarOffset.ts);
+     floating controls such as scroll-to-top sit above it. Unset otherwise. */
 }
 
 [data-theme='dark'],
@@ -107,8 +113,8 @@
   top: -100%;
   left: 0.5rem;
   padding: 0.5rem 0.75rem;
-  background: var(--accent);
-  color: white;
+  background: var(--chakra-colors-accent-solid, #4f46e5);
+  color: var(--chakra-colors-accent-fg, #ffffff);
   border-radius: 0.5rem;
   font-family: var(--font-geist-mono), ui-monospace, monospace;
   font-size: 12px;
