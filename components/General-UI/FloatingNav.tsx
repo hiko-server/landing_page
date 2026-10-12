@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Box, Flex, Tooltip, useColorModeValue } from '@chakra-ui/react'
+import { Box, Flex, Tooltip } from '@chakra-ui/react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 /**
@@ -16,10 +16,6 @@ export default function FloatingNav() {
   const [targets, setTargets] = useState<Target[]>([])
   const [active, setActive] = useState<string | null>(null)
   const [visible, setVisible] = useState(false)
-
-  const navBg = useColorModeValue('rgba(255,255,255,0.82)', 'rgba(15,15,15,0.82)')
-  const navBorder = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.10)')
-  const dotIdle = useColorModeValue('rgba(0,0,0,0.18)', 'rgba(255,255,255,0.22)')
 
   useEffect(() => {
     const els = Array.from(document.querySelectorAll<HTMLElement>('[data-nav-label][id]'))
@@ -52,6 +48,9 @@ export default function FloatingNav() {
     if (!el) return
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
     el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
+    // Move keyboard / screen-reader focus with the jump (sections are not
+    // focusable by default).
+    if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1')
     el.focus({ preventScroll: true })
   }
 
@@ -79,9 +78,9 @@ export default function FloatingNav() {
               listStyleType="none"
               direction="column"
               gap={1}
-              bg={navBg}
+              bg="page.float-bg"
               border="1px solid"
-              borderColor={navBorder}
+              borderColor="page.border"
               borderRadius="full"
               py={2}
               px={1}
@@ -112,7 +111,7 @@ export default function FloatingNav() {
                           w={on ? '8px' : '6px'}
                           h={on ? '8px' : '6px'}
                           borderRadius="full"
-                          bg={on ? 'var(--accent)' : dotIdle}
+                          bg={on ? 'var(--accent)' : 'page.dot-idle'}
                           boxShadow={on ? '0 0 0 3px var(--accent-soft)' : undefined}
                           transition="all 200ms var(--ease-out-quart)"
                         />

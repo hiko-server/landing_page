@@ -1,5 +1,5 @@
 import React from 'react'
-import { Box, Text, useColorModeValue } from '@chakra-ui/react'
+import { Box, Text } from '@chakra-ui/react'
 
 /**
  * v6 signature: monospace section marker with trailing rule.
@@ -29,7 +29,6 @@ export default function SectionLabel({
   /** Heading level for the document outline (visual style is identical). */
   as?: 'h1' | 'h2' | 'h3' | 'p'
 }) {
-  const muted = useColorModeValue('gray.600', 'gray.500')
   const padded = typeof n === 'number' ? String(n).padStart(2, '0') : n
 
   return (
@@ -41,7 +40,9 @@ export default function SectionLabel({
       fontSize="11px"
       letterSpacing="0.12em"
       textTransform="uppercase"
-      color={muted}
+      // AA-contrast subtle token (CSS variable): legible at 11px in both modes
+      // and correct on the first paint.
+      color="page.fg-subtle"
     >
       <Text as={as} whiteSpace="nowrap" fontSize="inherit" fontWeight="inherit" letterSpacing="inherit" lineHeight="inherit" m={0}>
         <Text as="span" aria-hidden>

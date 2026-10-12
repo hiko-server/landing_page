@@ -1,4 +1,5 @@
 import { extendTheme } from '@chakra-ui/react'
+import { semanticColors } from './color'
 
 /**
  * v6 "Indigo Precision" theme.
@@ -61,19 +62,15 @@ const fonts = {
   mono: 'var(--font-geist-mono), ui-monospace, "SF Mono", Consolas, monospace',
 }
 
+// Semantic tokens compile to CSS variables keyed off `data-theme` (set by the
+// pre-paint colour-mode script in pages/_document.tsx), so anything styled
+// with them is correct on the first paint for light AND dark visitors — unlike
+// useColorModeValue, which can only resolve after hydration. Values live in
+// theme/color.ts (contrast-tested).
 const semanticTokens = {
-  colors: {
-    'page.bg': { default: '#fdfdfd', _dark: '#050505' },
-    'page.bg-elevated': { default: '#f5f5f5', _dark: '#161616' },
-    'page.bg-overlay': { default: '#ededed', _dark: '#1a1a1a' },
-    'page.fg': { default: '#0a0a0a', _dark: '#fafafa' },
-    'page.fg-secondary': { default: '#525252', _dark: '#a1a1a1' },
-    'page.muted': { default: '#a1a1a1', _dark: '#525252' },
-    'page.border': { default: 'rgba(0,0,0,0.08)', _dark: 'rgba(255,255,255,0.10)' },
-    'page.border-strong': { default: 'rgba(0,0,0,0.16)', _dark: 'rgba(255,255,255,0.20)' },
-    'page.surface': { default: 'rgba(255,255,255,0.7)', _dark: 'rgba(22,22,22,0.7)' },
-    'accent.fg': { default: 'white', _dark: 'white' },
-  },
+  colors: Object.fromEntries(
+    Object.entries(semanticColors).map(([name, { light, dark }]) => [name, { default: light, _dark: dark }]),
+  ),
 }
 
 const theme = {
@@ -82,17 +79,23 @@ const theme = {
     fonts,
     semanticTokens,
     config: {
-      // v6 is dark-first; light remains available via toggle
+      // Deliberate: v6 is dark-first. A first-time visitor always gets the
+      // brand's dark look (no system-preference switch); an explicit toggle is
+      // remembered (localStorage, applied before first paint by the
+      // ColorModeScript in pages/_document.tsx).
       initialColorMode: 'dark',
       useSystemColorMode: false,
     },
     styles: {
-      global: ({ colorMode }) => ({
+      global: {
         '*, *::before, *::after': { boxSizing: 'border-box' },
         'html, body, #__next': { height: '100%' },
         body: {
-          bg: colorMode === 'dark' ? '#050505' : '#fdfdfd',
-          color: colorMode === 'dark' ? '#fafafa' : '#0a0a0a',
+          // Token (CSS variable) colours, not colorMode branches: the server
+          // renders one stylesheet for everyone, and data-theme picks the
+          // right values before paint — no dark flash for light-mode visitors.
+          bg: 'page.bg',
+          color: 'page.fg',
           fontFamily:
             'var(--font-geist-sans), Inter, ui-sans-serif, system-ui, sans-serif',
           fontFeatureSettings: '"ss01", "ss02", "cv11"',
@@ -118,7 +121,7 @@ const theme = {
           background: '#6366f1',
           color: 'white',
         },
-      }),
+      },
     },
   }),
 }

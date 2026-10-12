@@ -152,6 +152,28 @@
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
+ * View transitions — client-side route changes (components/Chrome/
+ * RouteTransitions.tsx starts them only when motion is allowed).
+ *
+ * The page cross-fades as one snapshot: the persistent header is identical in
+ * both states, so it stays put while the content changes underneath it.
+ * Elements that share a `view-transition-name` across two pages (e.g. a blog
+ * card title and the post's <h1>: `vt-blog-<slug>`) morph between their old
+ * and new boxes on the same curve.
+ * ──────────────────────────────────────────────────────────────────────── */
+/* Same duration + curve on both halves keeps the UA's plus-lighter
+   cross-fade at full opacity throughout (no dip on unchanged pixels). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 220ms;
+  animation-timing-function: var(--ease-out-quart);
+}
+::view-transition-group(*) {
+  animation-duration: 320ms;
+  animation-timing-function: var(--ease-out-quart);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
  * Reduced motion — respect user preference everywhere.
  * ──────────────────────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
@@ -162,6 +184,11 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }
 

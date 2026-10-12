@@ -1,6 +1,6 @@
 import React from 'react'
 import { Box, BoxProps } from '@chakra-ui/react'
-import { motion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
 
 const MotionBox = motion(Box)
 
@@ -25,14 +25,20 @@ type Props = BoxProps & { children: React.ReactNode }
  *   states. Callers can still override via the spread.
  */
 
+const EASE_OUT_QUART = [0.22, 1, 0.36, 1] as const
+
 export default function SectionReveal({ children, ...rest }: Props) {
+  // Under prefers-reduced-motion the section appears as soon as it enters the
+  // viewport — no rise (MotionConfig already drops transforms) and no fade.
+  // Only `transition` depends on it, so server and client markup match.
+  const reduceMotion = useReducedMotion()
   return (
     <MotionBox
       width="100%"
       initial={{ opacity: 0, y: 24 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.2 }}
-      transition={{ duration: 0.35, ease: 'easeOut' }}
+      transition={reduceMotion ? { duration: 0 } : { duration: 0.35, ease: EASE_OUT_QUART }}
       {...rest}
     >
       {children}
