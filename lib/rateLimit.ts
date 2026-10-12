@@ -1,52 +1,54 @@
 import type { NextApiRequest } from 'next'
-
-type Bucket = { count: number; resetAt: number }
-const buckets = new Map<string, Bucket>()
-const MAX_BUCKETS = 10_000
+import { getClientIpHeaderName, getTrustedProxySpec } from './env'
+import { ipBucket, parseCidrList, pickClientIp, type Cidr } from './security/ip'
+import { sharedLimiter } from './security/rateLimitCore'
 
 /**
- * Optional allow-list of reverse-proxy addresses (comma separated). When set,
- * client-IP headers are only believed if the TCP peer is one of these, so a
- * request that reaches the app port directly can't spoof a fresh IP per call.
- * Unset (default) keeps the previous behaviour: trust Cloudflare / nginx headers.
+ * Per-client rate limiting for the Node API routes.
+ *
+ * Client address (see lib/security/ip.ts):
+ *   - TRUST_CLIENT_IP_HEADER names the header that carries the real client IP
+ *     (default `cf-connecting-ip`: the site sits behind Cloudflare Tunnel and
+ *     Cloudflare overwrites that header at its edge). `none` = socket peer only.
+ *   - TRUSTED_PROXY_IPS (IPs and/or CIDRs, comma separated) restricts header
+ *     trust to requests whose TCP peer is one of those proxies. Unset = trust
+ *     the header from any peer (the app port is bound to 127.0.0.1, so only
+ *     the local cloudflared can reach it).
+ *   - IPv6 clients are bucketed by /64.
  */
-const TRUSTED_PROXIES = (process.env.TRUSTED_PROXY_IPS || '')
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean)
 
-function peerOf(req: NextApiRequest): string {
-  return ((req.socket?.remoteAddress as string) || 'unknown').replace(/^::ffff:/, '')
-}
+let cachedSpec: string | null = null
+let cachedTrusted: Cidr[] = []
 
-export function ipFromReq(req: NextApiRequest): string {
-  const peer = peerOf(req)
-  if (TRUSTED_PROXIES.length && !TRUSTED_PROXIES.includes(peer)) return peer
-  // Cloudflare fronts this site and sets CF-Connecting-IP to the real client
-  // address (CF overwrites it at its edge). Prefer it, then nginx's X-Real-IP,
-  // before falling back to the socket peer. The left-most X-Forwarded-For hop
-  // is attacker-supplied and deliberately ignored.
-  const cf = req.headers['cf-connecting-ip']
-  if (typeof cf === 'string' && cf.trim()) return cf.trim()
-  const realIp = req.headers['x-real-ip']
-  if (typeof realIp === 'string' && realIp.trim()) return realIp.trim()
-  return peer
-}
-
-function sweep(now: number) {
-  if (buckets.size < MAX_BUCKETS) return
-  buckets.forEach((b, k) => {
-    if (b.resetAt <= now) buckets.delete(k)
-  })
-  // Still full (sustained flood of unique keys) → drop the oldest half.
-  if (buckets.size >= MAX_BUCKETS) {
-    const keys = Array.from(buckets.keys())
-    for (let i = 0; i < keys.length / 2; i++) buckets.delete(keys[i])
+function trustedProxies(): Cidr[] {
+  const spec = getTrustedProxySpec()
+  if (spec !== cachedSpec) {
+    cachedSpec = spec
+    cachedTrusted = parseCidrList(spec)
   }
+  return cachedTrusted
 }
+
+/** The client's address, normalised (IPv4 dotted / RFC 5952 IPv6), or 'unknown'. */
+export function ipFromReq(req: NextApiRequest): string {
+  const headerName = getClientIpHeaderName()
+  return pickClientIp({
+    peer: String(req.socket?.remoteAddress || 'unknown'),
+    headerName,
+    headerValue: headerName ? req.headers[headerName] : undefined,
+    trusted: trustedProxies(),
+  })
+}
+
+/** Rate-limit identity of the client: its IPv4 address, or its IPv6 /64. */
+export function clientKey(req: NextApiRequest): string {
+  return ipBucket(ipFromReq(req))
+}
+
+const limiter = () => sharedLimiter('api')
 
 /**
- * Fixed-window limiter, keyed per (route, client IP) so browsing one endpoint
+ * Fixed-window limiter, keyed per (route, client) so browsing one endpoint
  * (e.g. the contact nonce fetched on every page view) can't exhaust the
  * budget of another (login, contact submit). `scope` overrides the route key.
  */
@@ -57,18 +59,5 @@ export function rateLimit(
   scope?: string,
 ): { allowed: boolean; remaining: number; resetAt: number } {
   const route = scope || (req.url || '').split('?')[0] || 'global'
-  const key = `${route}|${ipFromReq(req)}`
-  const now = Date.now()
-  sweep(now)
-  const bucket = buckets.get(key)
-  if (!bucket || bucket.resetAt <= now) {
-    const resetAt = now + windowMs
-    buckets.set(key, { count: 1, resetAt })
-    return { allowed: true, remaining: limit - 1, resetAt }
-  }
-  if (bucket.count < limit) {
-    bucket.count += 1
-    return { allowed: true, remaining: limit - bucket.count, resetAt: bucket.resetAt }
-  }
-  return { allowed: false, remaining: 0, resetAt: bucket.resetAt }
+  return limiter().hit(`${route}|${clientKey(req)}`, limit, windowMs)
 }

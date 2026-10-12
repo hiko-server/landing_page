@@ -1,11 +1,23 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { deleteCookie } from 'cookies-next'
 import { consumeResetToken, ensureAdminFromEnv, readAdmin, updatePassword } from '../../../lib/admin'
+import { ADMIN_COOKIE } from '../../../lib/auth'
 import { rateLimit } from '../../../lib/rateLimit'
 
+/**
+ * POST /api/auth/reset-password { token, password }
+ *
+ * A successful reset also bumps the session version (lib/admin
+ * updatePassword), which signs out every device — including whoever may have
+ * been holding a stolen session.
+ */
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-  // Throttle per IP so a reset token can't be brute-forced. Mirrors the limit
-  // on request-reset; every other auth route is rate-limited but this wasn't.
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST')
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
+  res.setHeader('Cache-Control', 'no-store')
+  // Throttle per IP so a reset token can't be brute-forced.
   const rl = rateLimit(req, 5, 10 * 60 * 1000)
   res.setHeader('X-RateLimit-Remaining', String(rl.remaining))
   if (!rl.allowed) return res.status(429).json({ error: 'Too many requests, try later' })
@@ -24,6 +36,6 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   const ok = consumeResetToken(token)
   if (!ok) return res.status(400).json({ error: 'Invalid or expired token' })
   updatePassword(password)
+  deleteCookie(ADMIN_COOKIE, { req, res, path: '/' })
   return res.status(200).json({ ok: true })
 }
-

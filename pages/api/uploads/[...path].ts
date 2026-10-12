@@ -3,6 +3,7 @@ import fs from 'fs'
 import path from 'path'
 import { isR2Configured, r2GetBuffer } from '../../../lib/r2'
 import { uploadR2Key } from '../../../lib/contentStore'
+import { isValidUploadName } from '../../../lib/security/uploadName'
 
 /**
  * Runtime file server for /uploads/* .
@@ -58,9 +59,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const segments = Array.isArray(raw) ? raw : raw ? [raw] : []
   const name = segments.join('/')
 
-  // Uploads are a flat namespace of sanitised filenames. Reject anything that
-  // isn't a single safe segment so this can never become a path-traversal hole.
-  if (!name || name.includes('/') || name.includes('..') || !/^[a-zA-Z0-9._-]+$/.test(name)) {
+  // Uploads are a flat namespace of sanitised filenames (lib/security/uploadName
+  // — the same rule the upload endpoint produces). Anything else is refused,
+  // so this can never become a path-traversal hole.
+  if (segments.length !== 1 || !isValidUploadName(name)) {
     return res.status(400).end('Bad request')
   }
 

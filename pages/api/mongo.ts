@@ -10,6 +10,8 @@ import { isAdminRequest } from '../../lib/auth'
 import { readCvData, writeCvData, saveSnapshot } from '../../lib/cvdata'
 import { readHome, writeHome, saveHomeSnapshot } from '../../lib/home'
 import { getPage, listItems, putItem, putPage } from '../../lib/contentStore'
+import { maskMongoUri, redactMongoSecrets } from '../../lib/security/mongoUri'
+import { revalidatePaths, collectionPaths, STATIC_CONTENT_PATHS } from '../../lib/revalidate'
 
 /**
  * POST /api/mongo — optional MongoDB backup target (admin only).
@@ -48,11 +50,6 @@ function configureDnsOnce() {
   } catch {
     /* platform refused — keep system resolvers */
   }
-}
-
-/** "mongodb+srv://user:secret@host/db" → "mongodb+srv://user:••••@host/db" */
-function maskUri(uri: string): string {
-  return uri.replace(/(\/\/[^:/@]+):([^@]+)@/, '$1:••••@')
 }
 
 const getAllFiles = (dirPath: string, out: string[] = []): string[] => {
@@ -94,10 +91,10 @@ function readStoredConfig(): { url: string; dbName: string } | null {
 /** Config for the browser — credentials are always masked, never sent back. */
 function readConfig(env: ReturnType<typeof getMongoConfig>) {
   if (env.fromEnv) {
-    return { fromEnv: true, config: { url: maskUri(env.uri), username: '', password: '', dbName: env.dbName } }
+    return { fromEnv: true, config: { url: maskMongoUri(env.uri), username: '', password: '', dbName: env.dbName } }
   }
   const stored = readStoredConfig()
-  if (stored) return { fromEnv: false, config: { url: maskUri(stored.url), username: '', password: '', dbName: stored.dbName } }
+  if (stored) return { fromEnv: false, config: { url: maskMongoUri(stored.url), username: '', password: '', dbName: stored.dbName } }
   return { fromEnv: false, config: null }
 }
 
@@ -170,6 +167,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const wants = (part: string) => scope === 'all' || scope === part || (part === 'configs' && (scope === 'cv' || scope === 'home'))
 
   let client: MongoClient | null = null
+  // Every URI that may carry the password; error text is scrubbed of all of them.
+  const knownUris: string[] = [cfg.url]
   try {
     configureDnsOnce()
     // mongodb+srv:// requires a working DNS SRV lookup. Resolve via
@@ -177,6 +176,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let effectiveUrl = cfg.url
     try {
       effectiveUrl = await resolveMongoSrvUrl(cfg.url)
+      knownUris.push(effectiveUrl)
     } catch (srvErr: any) {
       const msg = srvErr?.message || String(srvErr)
       throw new Error(
@@ -349,6 +349,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       counts.images = n
     }
 
+    const restoredPaths: string[] = []
     if (wants('content')) {
       const docs = await db.collection('mdx_content').find({}).toArray()
       let n = 0
@@ -357,9 +358,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         const parsed = matter(String(doc.body ?? ''))
         const page = rel.match(/^(now|uses)\.mdx?$/)
         const item = rel.match(/^(blog|work)\/([a-z0-9][a-z0-9-]*)\.mdx?$/i)
-        if (page) note(await putPage(page[1], parsed.data, parsed.content))
-        else if (item) note(await putItem(item[1], item[2], parsed.data, parsed.content))
-        else continue
+        if (page) {
+          note(await putPage(page[1], parsed.data, parsed.content))
+          restoredPaths.push(`/${page[1]}`)
+        } else if (item) {
+          note(await putItem(item[1], item[2], parsed.data, parsed.content))
+          restoredPaths.push(...collectionPaths(item[1].toLowerCase() as 'blog' | 'work', item[2]))
+        } else continue
         n++
       }
       counts.content = n
@@ -380,14 +385,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       counts.snapshots = n
     }
 
+    // Restored editorial content must show up on the statically generated
+    // pages now, not after the ISR window.
+    const revalidateFailed = restoredPaths.length ? await revalidatePaths(res, [...STATIC_CONTENT_PATHS, ...restoredPaths]) : []
+    if (revalidateFailed.length) warnings.push(`Could not refresh ${revalidateFailed.join(', ')} (they update within 60 s)`)
+
     return res.status(200).json({
       ok: warnings.length === 0,
       message: warnings.length ? `Restored with warnings: ${warnings.join('; ')}` : 'Restore successful',
       counts,
     })
   } catch (error: any) {
-    console.error('Mongo Error:', error?.message || error)
-    const raw = maskUri(error?.message || String(error))
+    const raw = redactMongoSecrets(error?.message || String(error), knownUris)
+    console.error('Mongo Error:', raw)
     const code = error?.code || error?.codeName || error?.name
     let hint: string | undefined
     if (/ENOTFOUND|EAI_AGAIN|getaddrinfo/i.test(raw)) {
