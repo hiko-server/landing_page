@@ -13,6 +13,7 @@ import {
   FaClock,
   FaToolbox,
   FaHdd,
+  FaInbox,
 } from 'react-icons/fa'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
@@ -21,6 +22,17 @@ import { Eyebrow, MONO } from '../../components/Admin/shell/ui'
 type Card = { title: string; desc: string; href: string; icon: IconType }
 
 const GROUPS: Array<{ label: string; cards: Card[] }> = [
+  {
+    label: 'Messages',
+    cards: [
+      {
+        title: 'Inbox',
+        desc: 'Messages from the contact form — kept even when email isn’t configured.',
+        href: '/admin/dashboard?tab=inbox',
+        icon: FaInbox,
+      },
+    ],
+  },
   {
     label: 'Profile',
     cards: [

@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken'
 import { rateLimit } from '../../lib/rateLimit'
 import { sendMail } from '../../lib/mailer'
 import { getJwtSecret } from '../../lib/env'
+import { appendInboxMessage } from '../../lib/inbox'
 
 /**
  * Contact endpoint.
@@ -75,39 +76,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // 6. Deliver — and NEVER drop the message silently. If SMTP is unconfigured
     // or the send fails, persist to the bind-mounted data dir so the message is
     // recoverable, and log loudly (captured by Sentry once a DSN is set).
+    // With no recipient configured the message is still kept in the Inbox below.
     const to = process.env.NOTIFY_EMAIL || process.env.ADMIN_EMAIL
-    if (!to) return res.status(500).json({ error: 'Recipient not configured' })
 
     let delivered = false
-    try {
-      const result = await sendMail({
-        to,
-        subject: `[Contact] ${safeSubject}`,
-        text: `From: ${safeName} <${safeEmail}>\n\n${safeMessage}`,
-        // Hitting "Reply" answers the visitor directly.
-        replyTo: safeEmail,
-      })
-      delivered = !!result?.ok
-    } catch (e) {
-      console.error('[contact] sendMail threw', e)
-    }
-    let persisted = false
-    if (!delivered) {
+    if (to) {
       try {
-        const fs = await import('fs')
-        const path = await import('path')
-        const dir = path.join(process.cwd(), 'data')
-        fs.mkdirSync(dir, { recursive: true })
-        fs.appendFileSync(
-          path.join(dir, 'contact-inbox.jsonl'),
-          JSON.stringify({ at: new Date().toISOString(), name: safeName, email: safeEmail, subject: safeSubject, message: safeMessage }) + '\n',
-          'utf-8',
-        )
-        persisted = true
-        console.error('[contact] mail NOT delivered — saved to data/contact-inbox.jsonl')
+        const result = await sendMail({
+          to,
+          subject: `[Contact] ${safeSubject}`,
+          text: `From: ${safeName} <${safeEmail}>\n\n${safeMessage}`,
+          // Hitting "Reply" answers the visitor directly.
+          replyTo: safeEmail,
+        })
+        delivered = !!result?.ok
       } catch (e) {
-        console.error('[contact] FAILED to persist fallback contact message', e)
+        console.error('[contact] sendMail threw', e)
       }
+    }
+    // Every message is also kept in the admin Inbox (data/contact-inbox.jsonl,
+    // bind-mounted), with whether the email went out — the owner can always
+    // read and answer it from /admin/dashboard?tab=inbox, even without SMTP.
+    let persisted = false
+    try {
+      appendInboxMessage({ name: safeName, email: safeEmail, subject: safeSubject, message: safeMessage, delivered })
+      persisted = true
+      if (!delivered) console.error('[contact] mail NOT delivered — message kept in the admin Inbox')
+    } catch (e) {
+      console.error('[contact] FAILED to store the contact message in the inbox', e)
     }
     // Only claim success when the message actually exists somewhere.
     if (!delivered && !persisted) {
