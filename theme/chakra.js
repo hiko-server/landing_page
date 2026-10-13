@@ -193,7 +193,8 @@ const theme = {
           fontFeatureSettings: '"ss01", "ss02", "cv11"',
           letterSpacing: 0,
           maxWidth: '100vw',
-          overflowX: 'hidden',
+          // clip (not hidden): never a scroll container, so view-timelines track the viewport.
+          overflowX: 'clip',
           // 8×8 dot grid signature background. The dot color flips with theme
           // via the CSS variable defined in styles/globals.css.
           backgroundImage:

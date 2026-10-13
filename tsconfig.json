@@ -32,7 +32,6 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    "lib/gtag.js",
     "lib/csp.js"
   ]
 }
