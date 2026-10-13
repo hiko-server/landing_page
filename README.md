@@ -185,6 +185,13 @@ Public pages call `readPublicCvData('cv' | 'website')`; unauthenticated
 `GET /api/cvdata` returns the same pruned view. Only an admin session gets
 the full document.
 
+Publication rules hold whatever the switches say: the PDF-only photo of
+Personal Info (`photo`, `photoOnPdf`) is removed from every public view —
+the server-side PDF reads it through `readCvPdfPhoto(lang)` — a
+recommendation is public only when its `permission` is `true`, and the
+Studio's dismissed readiness checks (`readinessDismissed`) never leave the
+admin.
+
 ---
 
 ## Tech stack
@@ -318,6 +325,7 @@ All variables are documented in [`.env.example`](./.env.example). Headlines:
 | MongoDB backup | `MONGODB_URI`, `MONGODB_DB_NAME` | optional |
 | Cloudflare R2 | `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_REQUIRED` | optional |
 | Scheduled backups | `BACKUP_INTERVAL_HOURS` (default 24, `0` disables) | optional |
+| Contact retention | `CONTACT_RETENTION_DAYS` (default 365, `0` keeps messages until deleted) | optional |
 | Logging | `LOG_LEVEL` (`debug` / `info` / `warn` / `error`) | optional |
 | Cloudflare purge | `CF_ZONE_ID`, `CF_API_TOKEN` | optional — nothing is sent unless both are set |
 | IndexNow | `INDEXNOW_KEY` (8–128 of `[A-Za-z0-9-]`) | optional — off unless set |
@@ -481,6 +489,20 @@ third-party script and no cookie.
   `content.db`, R2 sync or restores). Raw page views are kept 35 days, raw
   Web Vitals 30 days, daily roll-ups 400 days.
 - `/colophon` states the same facts publicly.
+
+### Contact messages
+
+- The form says what is kept and for how long, next to the Send button.
+  A message (name, e-mail, subject, message and the optional structured
+  details: reason, kind, company, a link, a timeline) is stored in
+  `data/contact-inbox.jsonl` and, with SMTP, e-mailed to the owner. The
+  link is https-only and never fetched by the server.
+- Messages older than `CONTACT_RETENTION_DAYS` (default 365) are deleted by
+  a nightly job (03:00 Hong Kong, `lib/inboxRetention.ts`); listings hide
+  them before that, a restore never merges them back, and full-site
+  snapshots older than the period are pruned too (the newest one is always
+  kept). Deploy backups (`/root/landing_page-backups`, ten newest) also hold
+  a copy of `data/` and rotate by count.
 
 ---
 
@@ -669,7 +691,7 @@ overlay and follow a contact message into the Inbox.
 | `/blog/[slug]` | Post: syntax highlighting, table of contents, lightbox images |
 | `/now` | "What I'm doing now" page (MDX) |
 | `/uses` | Tools, hardware, services page (MDX) |
-| `/contact` | Contact page: form, availability, copy buttons, vCard + QR |
+| `/contact` | Contact page (ISR): structured form with privacy notice, availability, copy buttons, vCard + QR |
 | `/colophon` | How the site is built, privacy, changelog, deployed commit |
 | `/feed.xml`, `/work/feed.xml`, `/feed.json` | Full-content RSS (writing, case studies) and JSON Feed |
 | `/sitemap.xml` | Sitemap with EN / 中 CV alternates |
@@ -691,7 +713,7 @@ are gated by the middleware.
 | `/admin/forgot` + `/admin/reset` | Email-based reset flow |
 | `/admin` | Status hub: what needs attention, live counts, links to the editors |
 | `/admin/dashboard?tab=home` | HomeEditor — hero, contact, visibility, brands, photos |
-| `/admin/dashboard?tab=cv` | CV Studio (per-field visibility, hidden-items panel, A4 / website preview) + raw JSON |
+| `/admin/dashboard?tab=cv` | CV Studio (per-field visibility, hidden-items panel, recruiter-readiness checks — `&panel=readiness`, A4 / website preview) + raw JSON |
 | `/admin/dashboard?tab=versions` | Version-history rollback |
 | `/admin/dashboard?tab=storage` | SQLite + R2 inventory, manual Backup / Pull |
 | `/admin/dashboard?tab=inbox` | Contact Inbox — read, reply by e-mail, mark, delete |

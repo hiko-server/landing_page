@@ -8,6 +8,53 @@ portfolio CMS, no public package). Entries are grouped by release date.
 
 ## [Unreleased]
 
+### cv-studio-contact
+
+- **Recruiter readiness in CV Studio (E9)**: a *Readiness* panel runs
+  deterministic checks on the A4 CV in both languages — dates out of
+  order, EN / 中文 dates or e-mails that disagree (and the CV vs the home
+  page's e-mail), “expected 2025” or “in progress” after the date, future
+  tense in finished roles, missing dates, entries with nothing to read,
+  weak openings (“Participated in”, “Responsible for”, “参与”, “负责” …),
+  too few measurable results, more than two A4 pages, missing links,
+  published case studies the CV does not point to (or that point at a
+  hidden project), entries shown in one language only and recommendations
+  without permission. Each finding jumps to its field or can be dismissed
+  (stored with the CV, back when the text changes); nothing is rewritten.
+  The admin status hub shows the count and lists issues to fix first.
+- **Chinese CV conventions (E10)**: the Home editor's availability gains a
+  job intent for the Chinese CV (roles in Chinese, city; “Available from”
+  as 到岗时间), printed as 求职意向 at the top of /cv/zh while the status is
+  open or limited; an optional **self-assessment** section (自我评价); an
+  optional **PDF-only photo** per language, off by default, never on the
+  website, in search, JSON-LD or the vCard (the server-side PDF reads it
+  through `readCvPdfPhoto(lang)` / `lib/cvLocale pdfPhoto`).
+- **Work authorisation (CRIT-work-status)**: an owner-written right-to-work
+  line in English and Chinese, shown on the contact page's availability
+  card, next to the hiring fields of the form and in the CV header (/cv,
+  /cv/zh); never inferred, never in JSON-LD or the vCard.
+- **Recommendations (E11)**: a CV Studio section for quotes entered with
+  each person's permission (quote, name, role, relation, date, source
+  link). Entries without permission never leave the admin; the section's CV
+  / Website switches choose /cv, /about or both; nothing renders until an
+  entry exists. Plain figure / blockquote markup, no review schema.
+- **Structured contact form (E12)**: each reason has a kind (role,
+  freelance, collaboration, other — set per reason in the Home editor, the
+  built-in reasons have defaults) and picking it discloses a few optional
+  fields: company, a job posting / brief link (https only, never fetched),
+  a timeline. They are sent as their own fields, capped, stored with the
+  Inbox message (`meta`) and shown there as a card with the kind as a
+  badge; the confirmation offers the CV, the contact card and the booking
+  link. Nonce, human check, honeypot and caps are unchanged.
+- **Contact privacy and retention (I11)**: the form states what is kept,
+  why and for how long; messages older than `CONTACT_RETENTION_DAYS`
+  (default 365, `0` off) are deleted every night, hidden from listings
+  before that and never merged back by a restore; snapshots older than the
+  period are pruned (the newest is kept). /colophon describes the inbox.
+- **/contact is statically generated (G1)**: ISR with a 300 s window on top
+  of on-demand regeneration after every home save, restore, storage pull or
+  Mongo restore; the build-time copy regenerates on the first request.
+
 ## [2.3.0] — 2026-10-13
 
 A research round across eight directions (UI, motion, reading, recruiter
