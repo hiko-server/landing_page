@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useId, useState } from 'react'
 import {
   Box,
   Button,
@@ -13,10 +13,13 @@ import {
   ModalHeader,
   ModalOverlay,
   SimpleGrid,
+  Switch,
   Text,
 } from '@chakra-ui/react'
 import { DASHBOARD_TABS } from './dashboardTabs'
 import { adminShortcutGroups, isHelpShortcut, type ShortcutGroup, type ShortcutItem } from './shortcuts'
+import { useShortcutsEnabled } from '../../Chrome/useShortcutsEnabled'
+import { getShortcutsEnabled, isImeComposing, setShortcutsEnabled } from '../../../lib/keyboardShortcuts'
 
 /**
  * "?" keyboard shortcuts overlay for every admin page (mounted by the admin
@@ -24,6 +27,10 @@ import { adminShortcutGroups, isHelpShortcut, type ShortcutGroup, type ShortcutI
  * implements (shortcuts.ts adminShortcutGroups plus the authoring group
  * below), with ⌘ / Ctrl labels for the current platform. Chakra Modal: focus
  * is trapped while open and returns to the trigger on close.
+ *
+ * Its switch turns every single-character shortcut off and on (WCAG 2.1.4,
+ * lib/keyboardShortcuts) — "?" itself included; the trigger button and the
+ * ⌘K palette still open this sheet and that setting.
  */
 
 /**
@@ -91,11 +98,13 @@ function usePlatformIsMac(): boolean {
 export default function ShortcutsOverlay({ showTrigger = true }: { showTrigger?: boolean }) {
   const [open, setOpen] = useState(false)
   const isMac = usePlatformIsMac()
+  const shortcutsOn = useShortcutsEnabled()
+  const switchId = useId()
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.repeat) return
-      if (!isHelpShortcut(e, isEditable(e.target))) return
+      if (e.defaultPrevented || e.repeat || isImeComposing(e)) return
+      if (!isHelpShortcut(e, isEditable(e.target)) || !getShortcutsEnabled()) return
       // Another dialog owns the keyboard (its own focus trap); don't stack.
       if (!open && document.querySelector('[role="dialog"][aria-modal="true"], [role="alertdialog"]')) return
       e.preventDefault()
@@ -118,7 +127,7 @@ export default function ShortcutsOverlay({ showTrigger = true }: { showTrigger?:
           _hover={{ color: 'page.fg', bg: 'page.bg-overlay' }}
           onClick={() => setOpen(true)}
           aria-label="Keyboard shortcuts"
-          aria-keyshortcuts="Shift+?"
+          aria-keyshortcuts={shortcutsOn ? 'Shift+?' : undefined}
           aria-haspopup="dialog"
           px={2}
         >
@@ -140,6 +149,23 @@ export default function ShortcutsOverlay({ showTrigger = true }: { showTrigger?:
           </ModalHeader>
           <ModalCloseButton />
           <ModalBody pb={6}>
+            <Flex align="center" justify="space-between" gap={4} mb={6} p={3} border="1px solid" borderColor="page.border" borderRadius="md">
+              <Box>
+                <Text as="label" htmlFor={switchId} display="block" fontSize="sm" fontWeight={500} color="page.fg" cursor="pointer">
+                  Single-key shortcuts
+                </Text>
+                <Text id={`${switchId}-hint`} fontSize="xs" color="page.fg-secondary">
+                  ? here, / and G then a letter on the site, E on a post. Keys with {isMac ? '⌘ / ⌃ / ⌥' : 'Ctrl / Alt'} always work.
+                </Text>
+              </Box>
+              <Switch
+                id={switchId}
+                isChecked={shortcutsOn}
+                onChange={(e) => setShortcutsEnabled(e.target.checked)}
+                aria-describedby={`${switchId}-hint`}
+                colorScheme="purple"
+              />
+            </Flex>
             <SimpleGrid columns={{ base: 1, md: 2 }} spacingX={8} spacingY={6}>
               {groups.map((g) => (
                 <Box as="section" key={g.title} aria-label={g.title}>

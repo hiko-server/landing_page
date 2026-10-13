@@ -106,7 +106,9 @@ backup, and a hardened admin GUI for non-engineers.
   `/feed.json`, listed under *Subscribe* in the footer.
 - **Command palette 3.0** (⌘K / `/`) — loads on demand, searches the full
   content through `/api/search-index`, and gives the signed-in owner an
-  *Admin* group with a route-aware *Edit this page*.
+  *Admin* group with a route-aware *Edit this page*. Its *Keyboard
+  shortcuts: on/off* action (also in the admin `?` sheet) turns the
+  single-key shortcuts (`/`, `G` then a letter) off, per browser.
 - **Motion with restraint** — circular theme reveal, directional route
   transitions with a pinned header; everything is off under
   `prefers-reduced-motion`, and decorative surfaces have `forced-colors`

@@ -21,8 +21,8 @@ import { bullets, entries, field } from './fields'
  * MetaLine only draws its "|" when both sides are present.
  */
 
-/** Space kept above an anchored section / entry when the page scrolls to it. */
-export const ANCHOR_SCROLL_MARGIN = '96px'
+/** Extra air above an anchored section / entry when the page scrolls to it (html { scroll-padding-top } in globals.css clears the sticky header). */
+export const ANCHOR_SCROLL_MARGIN = '24px'
 
 export function SheetSection({ title, id, children }: { title?: string; id?: string; children: React.ReactNode }) {
   return (

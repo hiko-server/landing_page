@@ -30,9 +30,35 @@ import { resolveSocialLinks } from './chrome'
 /** undefined = this page did not ship the value; null = the home document has none. */
 type SocialsInput = Record<string, unknown> | null | undefined
 
+/** CSS custom property on <html> with the sticky header's rendered height (globals.css scroll-padding-top). */
+export const HEADER_HEIGHT_VAR = '--header-h'
+
 export default function SiteChrome({ children, socials }: { children: React.ReactNode; socials?: SocialsInput }) {
   const [known, setKnown] = useState<SocialsInput>(socials)
   const fetchOnMount = useRef(socials === undefined)
+  const headerRef = useRef<HTMLDivElement | null>(null)
+
+  // Keyboard focus and anchor jumps clear the sticky header through
+  // html { scroll-padding-top } (globals.css). Its fallback is the header's
+  // usual height, right for the server HTML; this keeps the value exact
+  // whenever the header renders at another height (zoom, a wrapped line,
+  // hidden for print).
+  useEffect(() => {
+    const el = headerRef.current
+    if (!el) return
+    const root = document.documentElement
+    const apply = () => {
+      root.style.setProperty(HEADER_HEIGHT_VAR, `${Math.ceil(el.getBoundingClientRect().height)}px`)
+    }
+    apply()
+    if (typeof ResizeObserver === 'undefined') return () => root.style.removeProperty(HEADER_HEIGHT_VAR)
+    const observer = new ResizeObserver(apply)
+    observer.observe(el)
+    return () => {
+      observer.disconnect()
+      root.style.removeProperty(HEADER_HEIGHT_VAR)
+    }
+  }, [])
 
   useEffect(() => {
     if (socials !== undefined) setKnown(socials)
@@ -70,7 +96,7 @@ export default function SiteChrome({ children, socials }: { children: React.Reac
         </a>
         {/* Its own view-transition snapshot: the header stays pinned while
             route transitions slide / fade the page beneath it (globals.css). */}
-        <Box position="sticky" top={0} zIndex={40} className="no-print" lang={chromeLang} style={{ viewTransitionName: 'site-header' }}>
+        <Box ref={headerRef} position="sticky" top={0} zIndex={40} className="no-print" lang={chromeLang} style={{ viewTransitionName: 'site-header' }}>
           <Header socials={links} />
         </Box>
         <Box

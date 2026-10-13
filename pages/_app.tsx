@@ -16,6 +16,7 @@ import { pageKeyOf } from '../lib/viewTransition'
 import SiteChrome from '../components/Chrome/SiteChrome'
 import ThemeColorMeta from '../components/Chrome/ThemeColorMeta'
 import { RouteTransitionGate, useRouteViewTransitions } from '../components/Chrome/RouteTransitions'
+import { useFocusMainOnPageChange } from '../components/Chrome/routeFocus'
 import { resolveHtmlLang, routeHasChrome } from '../components/Chrome/chrome'
 import ScrollToTop from '../components/ScrollToTop/ScrollToTop'
 import ScrollProgressBar from '../components/General-UI/ScrollProgressBar'
@@ -90,6 +91,9 @@ const App = ({ Component, pageProps, router }: AppProps) => {
   // new page mounts; with view transitions Next's own restore already lands
   // on the new page (see components/Common/scrollRestore.ts).
   useDeferredScrollRestore(!viewTransitions, pageKey)
+  // After a page change, keyboard focus starts in the new page's <main>
+  // instead of staying on the header link (components/Chrome/routeFocus.ts).
+  useFocusMainOnPageChange(router.events, pageKey)
 
   // Cookieless first-party page views and real Core Web Vitals from
   // visitors' browsers (lib/analytics/client.ts). reportWebVital is defined

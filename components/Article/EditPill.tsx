@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react'
 import NextLink from 'next/link'
 import { Box } from '@chakra-ui/react'
 import { ADMIN_HINT_COOKIE } from '../../lib/adminHint'
+import { getShortcutsEnabled, isImeComposing } from '../../lib/keyboardShortcuts'
+import { useShortcutsEnabled } from '../Chrome/useShortcutsEnabled'
 
 /**
  * Owner-only "Edit" pill in an article header, linking to the admin editor.
@@ -10,7 +12,9 @@ import { ADMIN_HINT_COOKIE } from '../../lib/adminHint'
  * visitor (and the CDN) receives never contains it. It appears only when
  * the non-secret admin hint cookie (lib/adminHint ADMIN_HINT_COOKIE, set by lib/auth on
  * admin session endpoints) is present AND GET /api/admin/session confirms a
- * valid session — the hint alone never shows it. Shortcut: E (ignored while typing).
+ * valid session — the hint alone never shows it. Shortcut: E (ignored while
+ * typing or composing, and off with the other single-key shortcuts —
+ * lib/keyboardShortcuts).
  */
 
 /**
@@ -34,6 +38,7 @@ export function isTypingTarget(target: EventTarget | null): boolean {
 
 export default function EditPill({ kind, slug }: { kind: 'blog' | 'work'; slug: string }) {
   const [admin, setAdmin] = useState(false)
+  const shortcutsOn = useShortcutsEnabled()
   const href = `/admin/${kind}/edit?slug=${encodeURIComponent(slug)}`
 
   useEffect(() => {
@@ -50,7 +55,8 @@ export default function EditPill({ kind, slug }: { kind: 'blog' | 'work'; slug: 
     if (!admin) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'e' && e.key !== 'E') return
-      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || e.defaultPrevented || isTypingTarget(e.target)) return
+      if (e.metaKey || e.ctrlKey || e.altKey || e.repeat || e.defaultPrevented || isImeComposing(e) || isTypingTarget(e.target)) return
+      if (!getShortcutsEnabled()) return
       e.preventDefault()
       window.location.assign(href)
     }
@@ -64,8 +70,8 @@ export default function EditPill({ kind, slug }: { kind: 'blog' | 'work'; slug: 
     <Box
       as={NextLink}
       href={href}
-      aria-keyshortcuts="E"
-      title="Edit (E)"
+      aria-keyshortcuts={shortcutsOn ? 'E' : undefined}
+      title={shortcutsOn ? 'Edit (E)' : 'Edit'}
       display="inline-flex"
       alignItems="center"
       gap={1.5}

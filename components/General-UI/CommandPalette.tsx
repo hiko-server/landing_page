@@ -29,7 +29,9 @@ import { copyText } from '../MDX/clipboard'
 import { NAV_SHORTCUTS, adminEditTarget, shortcutLabelFor } from '../Chrome/chrome'
 import { useChromeLang } from '../Chrome/chromeLang'
 import { useChromeToast } from '../Chrome/useChromeToast'
+import { useShortcutsEnabled } from '../Chrome/useShortcutsEnabled'
 import { toggleThemeWithTransition } from '../../lib/themeTransition'
+import { setShortcutsEnabled } from '../../lib/keyboardShortcuts'
 
 /**
  * ⌘K command palette (loaded on demand by CommandPaletteLazy).
@@ -78,7 +80,13 @@ type Row = { item: Item; group: Group; indices: number[]; detail?: Detail }
 
 type RecentRecord = { id: string; label: string; href?: string; group: Item['group'] }
 
-export type CommandPaletteProps = { isOpen: boolean; onClose: () => void; isAdmin?: boolean }
+export type CommandPaletteProps = {
+  isOpen: boolean
+  onClose: () => void
+  isAdmin?: boolean
+  /** False when the palette closes because the visitor left the page (focus then moves to the new page). */
+  returnFocusOnClose?: boolean
+}
 
 const HIKO_EMAIL = 'hi@lucian-dev.com'
 const RECENT_KEY = 'cmdk:recent:v1'
@@ -242,13 +250,14 @@ async function fetchUnreadCount(signal: AbortSignal): Promise<number | null> {
   return full.ok ? unreadOf(await full.json().catch(() => null)) : null
 }
 
-export default function CommandPalette({ isOpen, onClose, isAdmin = false }: CommandPaletteProps) {
+export default function CommandPalette({ isOpen, onClose, isAdmin = false, returnFocusOnClose = true }: CommandPaletteProps) {
   const router = useRouter()
   const toast = useChromeToast()
   // The palette's own text is English; results in another language carry their own lang.
   const chromeLang = useChromeLang()
   const reduceMotion = usePrefersReducedMotion()
   const { colorMode, toggleColorMode } = useColorMode()
+  const shortcutsOn = useShortcutsEnabled()
   const baseId = useId()
   const listId = `${baseId}-list`
   const optId = (i: number) => `${baseId}-opt-${i}`
@@ -465,6 +474,25 @@ export default function CommandPalette({ isOpen, onClose, isAdmin = false }: Com
         keywords: 'dark light mode appearance colour color',
       },
       {
+        // WCAG 2.1.4: single-character shortcuts ("/", "G then …", "E", "?")
+        // can be turned off; ⌘K / Ctrl+K keeps working either way.
+        id: 'action:shortcuts',
+        group: 'Actions',
+        kind: 'action',
+        label: `Keyboard shortcuts: ${shortcutsOn ? 'on' : 'off'}`,
+        hint: shortcutsOn ? 'turn off single-key shortcuts' : 'turn on single-key shortcuts',
+        run: () => {
+          const next = !shortcutsOn
+          setShortcutsEnabled(next)
+          toast(
+            next
+              ? { status: 'success', title: 'Keyboard shortcuts on', description: '/ opens this palette; G then a letter jumps to a page.' }
+              : { status: 'success', title: 'Keyboard shortcuts off', description: `Single-key shortcuts are off. ${isMac ? '⌘K' : 'Ctrl+K'} still opens this palette.` },
+          )
+        },
+        keywords: 'keyboard shortcuts hotkeys keys single key disable enable turn on off accessibility',
+      },
+      {
         id: 'action:copy-link',
         group: 'Actions',
         kind: 'action',
@@ -516,7 +544,7 @@ export default function CommandPalette({ isOpen, onClose, isAdmin = false }: Com
       else if (doc.kind === 'work') list.push(docItem(doc, 'Work'))
     }
     return list
-  }, [isAdmin, editTarget, unread, index, colorMode, toggleColorMode, copyAndToast, backUpNow, logOut])
+  }, [isAdmin, editTarget, unread, index, colorMode, toggleColorMode, shortcutsOn, isMac, toast, copyAndToast, backUpNow, logOut])
 
   const recentItems: Item[] = useMemo(() => {
     const out: Item[] = []
@@ -705,7 +733,7 @@ export default function CommandPalette({ isOpen, onClose, isAdmin = false }: Com
               {item.badge || item.group}
             </Text>
           )}
-          {!searching && item.shortcut && <Key>{item.shortcut}</Key>}
+          {!searching && shortcutsOn && item.shortcut && <Key>{item.shortcut}</Key>}
           {item.external && (
             <Text as="span" aria-hidden color="page.fg-secondary" fontSize="12px">
               ↗
@@ -758,7 +786,7 @@ export default function CommandPalette({ isOpen, onClose, isAdmin = false }: Com
       motionPreset="none"
       isCentered={false}
       initialFocusRef={inputRef}
-      returnFocusOnClose={restoreFocus}
+      returnFocusOnClose={restoreFocus && returnFocusOnClose}
     >
       <ModalOverlay backdropFilter="blur(12px)" bg="rgba(0,0,0,0.45)" />
       <ModalContent
@@ -854,7 +882,13 @@ export default function CommandPalette({ isOpen, onClose, isAdmin = false }: Com
                   <div>
                     <dt>Open / close palette</dt>
                     <dd>
-                      <Key>{mod}</Key> <Key>K</Key> <Text as="span">or</Text> <Key>/</Key>
+                      <Key>{mod}</Key> <Key>K</Key>
+                      {shortcutsOn && (
+                        <>
+                          {' '}
+                          <Text as="span">or</Text> <Key>/</Key>
+                        </>
+                      )}
                     </dd>
                   </div>
                   <div>
@@ -863,14 +897,21 @@ export default function CommandPalette({ isOpen, onClose, isAdmin = false }: Com
                       <Key>↑</Key> <Key>↓</Key> <Key>↵</Key>
                     </dd>
                   </div>
-                  {pageShortcuts.map((it) => (
-                    <div key={it.id}>
-                      <dt>Go to {it.label}</dt>
-                      <dd>
-                        <Key>{it.shortcut}</Key>
-                      </dd>
+                  {shortcutsOn ? (
+                    pageShortcuts.map((it) => (
+                      <div key={it.id}>
+                        <dt>Go to {it.label}</dt>
+                        <dd>
+                          <Key>{it.shortcut}</Key>
+                        </dd>
+                      </div>
+                    ))
+                  ) : (
+                    <div>
+                      <dt>Single-key shortcuts</dt>
+                      <dd>off</dd>
                     </div>
-                  ))}
+                  )}
                 </Box>
               </Box>
             )}
