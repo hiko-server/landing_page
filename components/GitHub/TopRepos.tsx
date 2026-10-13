@@ -111,6 +111,7 @@ function RepoGrid({ repos, asOf }: { repos: GhRepo[]; asOf?: number }) {
     <MotionGrid
       as="ul"
       ref={setListRef}
+      data-reveal-list=""
       className="hover-list"
       listStyleType="none"
       templateColumns={COLUMNS}
@@ -126,7 +127,7 @@ function RepoGrid({ repos, asOf }: { repos: GhRepo[]; asOf?: number }) {
         const summary = repoSummary(r, now)
         const fromText = !!(r.blurb || r.description)
         return (
-          <MotionLi as="li" key={r.id} variants={variants.item} display="flex">
+          <MotionLi as="li" key={r.id} variants={variants.item} data-reveal-item="" display="flex">
             <Link
               href={safeHref(r.html_url)}
               isExternal

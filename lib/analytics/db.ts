@@ -12,7 +12,10 @@ import Database from 'better-sqlite3'
  *   hits       raw page views, kept 35 days. No IP, no user agent: `visitor`
  *              is a 16-hex hash of a daily-rotating salt held only in memory
  *              (lib/analytics/ingest), so it cannot be linked across days.
- *   vitals     raw Core Web Vitals samples, kept 30 days.
+ *   vitals     raw Core Web Vitals samples, kept 30 days; one row per
+ *              measurement (`vkey`: a hash of route, metric and the browser's
+ *              random web-vitals instance id — a re-reported CLS / INP
+ *              replaces its value; NULL for events sent without an id).
  *   daily      per day × path: views, unique visitors     ┐ rolled up from the
  *   refs_daily per day × referrer host: unique visitors   │ raw rows once a UTC
  *   dims_daily per day × (site | country | device |       │ day is over; kept
@@ -78,7 +81,8 @@ const SCHEMA = `
     value  REAL NOT NULL,
     rating TEXT NOT NULL,
     device TEXT,
-    nav    TEXT
+    nav    TEXT,
+    vkey   TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_vitals_day ON vitals (day, route, name);
 
@@ -87,6 +91,18 @@ const SCHEMA = `
     value TEXT NOT NULL
   );
 `
+
+/**
+ * Upgrades a store created before a column existed (CREATE TABLE IF NOT
+ * EXISTS leaves an old table as it was), then creates the indexes on those
+ * columns. Idempotent.
+ */
+function migrate(db: Database.Database) {
+  const vitalsColumns = db.prepare('PRAGMA table_info(vitals)').all() as Array<{ name: string }>
+  if (!vitalsColumns.some((c) => c.name === 'vkey')) db.exec('ALTER TABLE vitals ADD COLUMN vkey TEXT')
+  // NULL keys are distinct in a SQLite UNIQUE index: rows without a key never conflict.
+  db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_vitals_key ON vitals (vkey)')
+}
 
 export function getAnalyticsDb(): Database.Database {
   const cached = g.__analyticsDb
@@ -98,6 +114,7 @@ export function getAnalyticsDb(): Database.Database {
     if (String(db.pragma('journal_mode', { simple: true })).toLowerCase() !== 'wal') db.pragma('journal_mode = WAL')
     db.pragma('synchronous = NORMAL')
     db.exec(SCHEMA)
+    migrate(db)
   } catch (err) {
     db.close()
     throw err

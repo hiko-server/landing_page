@@ -151,7 +151,8 @@ test('rendered footnotes: targets clear the sticky header; refs and back links a
   const { html, css } = await render(tree)
   assert.match(html, /<section[^>]*data-footnotes[^>]*>\s*<h2[^>]*id="footnote-label"[^>]*>注释<\/h2>/)
   assert.match(html, /<li[^>]*id="user-content-fn-1"/)
-  assert.match(css, /\[id\^="user-content-fn"\]\{scroll-margin-top:88px;?\}/)
+  // COR-4: the header clearance once (no html scroll-padding adds it again) plus 16px of air.
+  assert.match(css, /\[id\^="user-content-fn"\]\{scroll-margin-top:calc\(var\(--header-h\) \+ 16px \+ 16px\);?\}/)
   assert.match(css, /a\[data-footnote-ref\][^{]*\{[^}]*color:var\(--chakra-colors-accent-text\)[^}]*text-decoration:underline/, 'refs and back links are underlined, not marked by colour alone')
   assert.match(css, /section\[data-footnotes\]\{[^}]*border-top:1px solid/)
 })

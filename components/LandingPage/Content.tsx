@@ -21,6 +21,7 @@ import FloatingNav from '../General-UI/FloatingNav'
 // Pure shape — must NOT import from lib/home (server-only / better-sqlite3).
 import { isSectionVisible, type HomeData, type SectionKey } from '../../lib/homeShape'
 import type { CvSectionLike } from '../../lib/cvVisibility'
+import { clearOfHeader } from '../../lib/anchorOffset'
 import { list } from '../CVViewerPage/fields'
 import type { GithubSummary } from '../Common/githubEvents'
 import type { WorkIndexItem, WritingItem } from './projectMatch'
@@ -200,11 +201,10 @@ const Content = ({
   ]
   const visible = sections.filter((s) => isSectionVisible(home, s.key))
 
-  // Anchor targets land a little below the sticky header (html
-  // { scroll-padding-top } in globals.css clears the header itself), and
-  // focus (for keyboard users jumping via the section nav) doesn't paint an
-  // outline box.
-  const sectionSx = { scrollMarginTop: '8px', '&:focus': { outline: 'none' } }
+  // Anchor targets land a little below the sticky header (the header's
+  // height + 16px + 8px of air, lib/anchorOffset.ts), and focus (for
+  // keyboard users jumping via the section nav) doesn't paint an outline box.
+  const sectionSx = { scrollMarginTop: clearOfHeader('8px'), '&:focus': { outline: 'none' } }
 
   return (
     <Box

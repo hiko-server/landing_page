@@ -31,6 +31,7 @@ import { AddIcon } from '@chakra-ui/icons'
 // Pure shape import — must NOT come from lib/home.ts (server-only, drags
 // better-sqlite3 into the client bundle). lib/homeShape.ts has no Node deps.
 import { HOME_SECTION_META, type HomeFieldError, type SectionKey } from '../../lib/homeShape'
+import { currentlyCodingPlaceholder, mergeCurrentlyCoding } from '../../lib/currentlyCoding'
 import { useAdminDirty, useDirtyRegistration } from './AdminDirtyContext'
 import { readJsonObject } from './shell/http'
 import { useLocalDraft } from './shell/useLocalDraft'
@@ -404,10 +405,15 @@ export default function HomeEditor({ onUnsavedSource }: { onUnsavedSource?: (get
       <Input value={socials[key]} onChange={(e) => set.socials((s) => ({ ...s, [key]: e.target.value }))} />
     </FormControl>
   )
+  // Placeholders and the preview follow the visitor-facing merge
+  // (lib/currentlyCoding mergeCurrentlyCoding): a typed project replaces the
+  // CV chip, so its CV label / note are not offered as "auto" next to it.
+  const ccPreview = mergeCurrentlyCoding(hero.currentlyCoding, ccAuto)
+  const ccPreviewLines = [ccPreview.label, ccPreview.project, ccPreview.note].filter(Boolean)
   const ccField = (key: 'label' | 'project' | 'note', fallback: string) => (
     <Input
       aria-label={`Currently coding — ${key}`}
-      placeholder={ccAuto[key] ? `auto: ${ccAuto[key]}` : fallback}
+      placeholder={currentlyCodingPlaceholder(key, hero.currentlyCoding, ccAuto) ?? fallback}
       value={hero.currentlyCoding[key]}
       onChange={(e) => set.hero((h) => ({ ...h, currentlyCoding: { ...h.currentlyCoding, [key]: e.target.value } }))}
     />
@@ -577,15 +583,17 @@ export default function HomeEditor({ onUnsavedSource }: { onUnsavedSource?: (get
         {heroField('email', 'Email')}
 
         {/*
-          "Currently coding" chip: admin > CV > nothing. A typed value wins;
-          blank fields auto-fill from the CV (current company, earliest year,
-          generic label); the placeholders show what that would be now.
+          "Currently coding" chip: admin > CV > nothing. A typed project
+          replaces the CV chip (its label defaults to "currently coding", the
+          CV's note is not attached); otherwise blank fields auto-fill from
+          the CV's current role or study (organisation, role, label). The
+          placeholders and "Visitors see" show the result now.
         */}
         <FormControl gridColumn="1 / -1">
           <FormLabel>
             Currently coding chip
             <Text as="span" color="page.fg-secondary" fontWeight="normal" fontSize="xs" ml={2}>
-              shown under avatar on home · blank = auto-fill from CV
+              shown under avatar on home · blank = auto-fill from CV (a typed project replaces the CV chip)
             </Text>
           </FormLabel>
           <SimpleGrid columns={[1, 3]} gap={3}>
@@ -593,18 +601,16 @@ export default function HomeEditor({ onUnsavedSource }: { onUnsavedSource?: (get
             {ccField('project', 'Project line (e.g. WeGreen AI · COT)')}
             {ccField('note', 'Footer note (e.g. self-taught · since 2022)')}
           </SimpleGrid>
-          <Text mt={2} fontSize="xs" color="page.fg-secondary">
-            Auto-derived now:{' '}
+          <Text mt={2} fontSize="xs" color="page.fg-secondary" data-testid="cc-preview">
+            Visitors see:{' '}
             <Text as="span" color="page.fg" fontFamily={MONO}>
-              {ccAuto.label || '—'}
+              {ccPreviewLines.length ? ccPreviewLines.join(' · ') : '— (chip hidden)'}
             </Text>
-            {' · '}
-            <Text as="span" color="page.fg" fontFamily={MONO}>
-              {ccAuto.project || '—'}
-            </Text>
-            {' · '}
-            <Text as="span" color="page.fg" fontFamily={MONO}>
-              {ccAuto.note || '—'}
+          </Text>
+          <Text mt={1} fontSize="xs" color="page.fg-secondary">
+            From the CV now:{' '}
+            <Text as="span" fontFamily={MONO}>
+              {ccAuto.project ? [ccAuto.label, ccAuto.project, ccAuto.note].filter(Boolean).join(' · ') : 'nothing current'}
             </Text>
           </Text>
         </FormControl>

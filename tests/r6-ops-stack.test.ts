@@ -41,6 +41,26 @@ test('Sentry is never listed (the integration was removed); Platform is auth and
   assert.ok(!STACK_PACKAGES.some((name) => name.startsWith('@sentry/')))
 })
 
+test('OPS-1: the stack list and the static /colophon read no runtime Sentry DSN', () => {
+  for (const f of ['lib/stack.ts', 'pages/colophon.tsx', 'pages/uses.tsx', 'pages/api/stack.ts']) {
+    if (!fs.existsSync(path.join(ROOT, f))) continue
+    assert.doesNotMatch(read(f), /SENTRY_DSN|@sentry\//, f)
+  }
+  // The same stack whatever the environment says.
+  const saved = { a: process.env.SENTRY_DSN, b: process.env.NEXT_PUBLIC_SENTRY_DSN }
+  try {
+    const without = buildStack(PKG, '22.0.0')
+    process.env.SENTRY_DSN = 'https://key@o0.ingest.sentry.io/0'
+    process.env.NEXT_PUBLIC_SENTRY_DSN = 'https://key@o0.ingest.sentry.io/0'
+    assert.deepEqual(buildStack(PKG, '22.0.0'), without)
+  } finally {
+    if (saved.a === undefined) delete process.env.SENTRY_DSN
+    else process.env.SENTRY_DSN = saved.a
+    if (saved.b === undefined) delete process.env.NEXT_PUBLIC_SENTRY_DSN
+    else process.env.NEXT_PUBLIC_SENTRY_DSN = saved.b
+  }
+})
+
 test('installedVersions prefers the build snapshot, falls back to node_modules, and never throws', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'r6-stack-'))
   try {

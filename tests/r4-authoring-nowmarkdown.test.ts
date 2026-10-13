@@ -1,5 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
 import { publicSections } from '../lib/cvVisibility'
 import { buildNowSignals, escapeMarkdownText, signalSources, signalsToMarkdown } from '../lib/nowMarkdown'
 
@@ -50,14 +52,40 @@ test('one H2 per block, bullets, upcoming roles marked, links as absolute site p
   const md = signalsToMarkdown('now', signals())
   assert.deepEqual(
     md.split('\n').filter((l) => l.startsWith('## ')),
-    ['## Currently', '## Currently coding', '## Latest writing', '## Latest case study'],
+    ['## Currently', '## Building', '## Latest writing', '## Latest case study'],
   )
   assert.ok(md.includes('- **Software Engineer**, Visible Labs · Tokyo'))
   assert.ok(md.includes('- Next: **MSc, Computer Science**, Future University'))
-  assert.ok(md.includes('- Building: **Portfolio CMS** — drafts & history'))
+  assert.ok(md.includes('- **Portfolio CMS** — drafts & history'))
+  assert.ok(!md.includes('Building:'), 'the label heads the block; it is not repeated as a prefix')
   const links = [...md.matchAll(/\]\(([^)]+)\)/g)].map((m) => m[1])
   assert.deepEqual(links, ['/blog/latest-post', '/work/case-study'])
   assert.ok(links.every((l) => l.startsWith('/') && !l.startsWith('//')))
+})
+
+test('COR-5: the coding block is headed by the chip label (capitalized, escaped), and a CV-derived chip never repeats "Currently"', () => {
+  const build = (manualCoding: Record<string, string> | null, cvWebsiteEn = publicSections(cv, 'website')) =>
+    buildNowSignals({ cvWebsiteEn, manualCoding, posts: [], work: [], now: '2026-10' })
+  // CV-derived chip: it names Visible Labs, already the first "Currently" entry → no coding block.
+  const derived = build(null)
+  assert.equal(derived.coding, null)
+  const md = signalsToMarkdown('now', derived)
+  assert.deepEqual(md.split('\n').filter((l) => l.startsWith('## ')), ['## Currently'])
+  assert.equal(md.match(/Visible Labs/g)?.length, 1, 'the current role is listed once')
+  // A study the CV derives is not put under a "coding" heading either.
+  const studyOnly = publicSections(
+    [{ sessionName: 'education', educationExperience: [{ schoolName: 'Uni', degree: 'MSc', startDate: '2026-09', endDate: 'Present' }] }],
+    'website',
+  )
+  const study = signalsToMarkdown('now', build(null, studyOnly))
+  assert.ok(!/coding/i.test(study), study)
+  assert.deepEqual(study.split('\n').filter((l) => l.startsWith('## ')), ['## Currently'])
+  // Owner project with a label: heading = capitalized label; with no label, the default heading.
+  assert.match(signalsToMarkdown('now', build({ label: 'shipping *now*', project: 'Carboy', note: '' })), /^## Shipping \\\*now\\\*\n\n- \*\*Carboy\*\*$/m)
+  assert.match(signalsToMarkdown('now', build({ label: '', project: 'Carboy', note: 'v2' })), /^## Currently coding\n\n- \*\*Carboy\*\* — v2$/m)
+  // The page uses the same signal (pages/now.tsx → currentlyCodingSignal), so page and draft agree.
+  const page = fs.readFileSync(path.join(process.cwd(), 'pages/now.tsx'), 'utf8')
+  assert.match(page, /coding: currentlyCodingSignal\(cvEn, manualCoding, clockMonth\)/)
 })
 
 test('text is escaped so it cannot become MDX JSX or an expression', () => {

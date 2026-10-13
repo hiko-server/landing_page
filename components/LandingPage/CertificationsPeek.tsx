@@ -49,9 +49,9 @@ export default function CertificationsPeek({ cvEn }: { cvEn?: CvSectionLike[] })
 
   return (
     <Box w="100%" maxW="1100px" mx="auto">
-      <motion.div ref={reveal.ref} initial={false} animate={revealVariant(reveal.phase)} variants={stagger}>
+      <motion.div ref={reveal.ref} data-reveal-list="" initial={false} animate={revealVariant(reveal.phase)} variants={stagger}>
         {orgs.map((org) => (
-          <motion.section key={org.key} aria-label={org.name || undefined} variants={row} style={{ marginBottom: 24 }}>
+          <motion.section key={org.key} aria-label={org.name || undefined} variants={row} data-reveal-item="" style={{ marginBottom: 24 }}>
             {org.name && (
               <Text as="h3" fontFamily={monoFont} fontSize="11px" letterSpacing="0.14em" textTransform="uppercase" color="page.fg-secondary" mb={3}>
                 <Box as="span" aria-hidden mr={1.5}>

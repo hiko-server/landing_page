@@ -260,6 +260,7 @@ export default function ActivityFeed({ initialData }: { initialData?: GhEventsPa
       <MotionOl
         as="ol"
         ref={reveal.ref}
+        data-reveal-list=""
         className="hover-list"
         listStyleType="none"
         direction="column"
@@ -270,7 +271,7 @@ export default function ActivityFeed({ initialData }: { initialData?: GhEventsPa
         animate={revealVariant(reveal.phase)}
       >
         {groups.map((g, i) => (
-          <MotionLi as="li" key={g.key} position="relative" variants={variants.row}>
+          <MotionLi as="li" key={g.key} position="relative" variants={variants.row} data-reveal-item="">
             <Box
               as="span"
               aria-hidden

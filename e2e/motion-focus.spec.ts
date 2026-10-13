@@ -170,7 +170,15 @@ test('after a client navigation, everything in the first viewport is visible in 
 test('focus moves to <main> after a page change, never under the sticky header', async ({ page }) => {
   await page.goto('/')
   await settle(page)
-  expect(await page.evaluate(() => getComputedStyle(document.documentElement).scrollPaddingTop)).toBe('73px')
+  // The header offset is a scroll margin on targets inside <main>, not a root scroll padding (UX-1).
+  expect(
+    await page.evaluate(() => ({
+      root: getComputedStyle(document.documentElement).scrollPaddingTop,
+      main: getComputedStyle(document.getElementById('main')!).scrollMarginTop,
+      link: getComputedStyle(document.querySelector('main a[href]')!).scrollMarginTop,
+      headerLink: getComputedStyle(document.querySelector('header a[href]')!).scrollMarginTop,
+    })),
+  ).toEqual({ root: 'auto', main: '73px', link: '73px', headerLink: '0px' })
 
   // Keyboard-activated header link: focus lands in the new page.
   await primaryNav(page, 'About').focus()
@@ -212,6 +220,117 @@ test('focus moves to <main> after a page change, never under the sticky header',
       if (problem) covered.push(problem)
     }
     expect(covered, `${path}: focused controls under the sticky header`).toEqual([])
+  }
+})
+
+/** Scrolls the window to `y` (clamped to the page) and returns the settled scrollY. */
+async function scrollToY(page: Page, y: number): Promise<number> {
+  await page.evaluate((target) => window.scrollTo(0, Math.min(target, document.documentElement.scrollHeight - innerHeight)), y)
+  return settledScrollY(page)
+}
+
+/** scrollY once it has stopped changing for two frames. */
+async function settledScrollY(page: Page): Promise<number> {
+  await page.waitForFunction(
+    () =>
+      new Promise<boolean>((resolve) => {
+        const y = scrollY
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve(scrollY === y)))
+      }),
+  )
+  return page.evaluate(() => Math.round(scrollY))
+}
+
+const focusedIn = (page: Page, selector: string) => page.evaluate((sel) => !!document.activeElement?.closest(sel), selector)
+
+test('focus moving into the sticky header never scrolls the page: Shift+Tab / Tab, closing the ⌘K palette', async ({ page, isMobile }) => {
+  test.skip(!!isMobile, 'desktop header')
+  await page.goto('/about')
+  await settle(page)
+  const y0 = await scrollToY(page, 1500)
+  expect(y0, 'the page scrolls').toBeGreaterThan(300)
+
+  // Focus on <main> (as after a page change), then Shift+Tab into the header and Tab / Shift+Tab across it.
+  await page.locator('#main').evaluate((el: HTMLElement) => el.focus({ preventScroll: true }))
+  for (const key of ['Shift+Tab', 'Shift+Tab', 'Shift+Tab', 'Tab', 'Tab']) {
+    await page.keyboard.press(key)
+    expect(await focusedIn(page, 'header'), `${key}: focus in the header`).toBe(true)
+    expect(await settledScrollY(page), `${key} moved focus within the header`).toBe(y0)
+  }
+
+  // ⌘K from a header control, then Escape: focus returns to that control, the page stays put.
+  await page.getByRole('button', { name: 'Open command palette' }).click()
+  const palette = page.getByRole('dialog', { name: /command palette/i })
+  await expect(palette).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(palette).toHaveCount(0)
+  await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute('aria-label'))).toBe('Open command palette')
+  expect(await settledScrollY(page), 'closing the palette').toBe(y0)
+})
+
+test('heading, section and footnote anchors land just below the sticky header (not under it, not offset twice)', async ({ page }) => {
+  /** Gap between the header's bottom edge and the target's top once scrolling settled; `clamped` when the page could not scroll further. */
+  const landing = async (selector: string) => {
+    await settledScrollY(page)
+    return page.evaluate((sel) => {
+      const el = document.querySelector(sel)!
+      const header = document.querySelector('header')!
+      const max = document.documentElement.scrollHeight - innerHeight
+      return { gap: Math.round(el.getBoundingClientRect().top - header.getBoundingClientRect().bottom), clamped: scrollY <= 0 || scrollY >= max - 1 }
+    }, selector)
+  }
+  const expectJustBelow = (where: string, r: { gap: number; clamped: boolean }) => {
+    expect(r.gap, `${where}: not under the header`).toBeGreaterThanOrEqual(0)
+    // header + 16px + a little air per target; a second header offset would add 73px more.
+    if (!r.clamped) expect(r.gap, `${where}: just below the header`).toBeLessThanOrEqual(56)
+  }
+
+  // /colophon sections (always present): "On this page" links.
+  await page.goto('/colophon')
+  await settle(page)
+  for (const id of ['hosting', 'privacy']) {
+    if ((await page.locator(`#${id}`).count()) === 0) continue
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await page.evaluate((hash) => {
+      location.hash = hash
+    }, id)
+    expectJustBelow(`/colophon#${id}`, await landing(`#${id}`))
+  }
+
+  // Footnotes inside rendered Markdown (the release notes' prose): a reference and its note,
+  // placed mid-page, exactly as remark-gfm renders them.
+  const prose = page.locator('main .article-prose').nth(1)
+  if ((await prose.count()) > 0) {
+    await prose.evaluate((el) => {
+      el.insertAdjacentHTML(
+        'afterbegin',
+        '<p>Claim<sup><a href="#user-content-fn-e2e" id="user-content-fnref-e2e" data-footnote-ref="">1</a></sup></p>',
+      )
+      el.insertAdjacentHTML(
+        'beforeend',
+        '<section data-footnotes=""><ol><li id="user-content-fn-e2e"><p>Note <a href="#user-content-fnref-e2e" data-footnote-backref="">↩</a></p></li></ol></section>',
+      )
+    })
+    await page.locator('#user-content-fnref-e2e').evaluate((el) => el.scrollIntoView({ block: 'center' }))
+    await page.locator('#user-content-fnref-e2e').click()
+    expectJustBelow('footnote', await landing('#user-content-fn-e2e'))
+    await page.locator('[data-footnote-backref][href="#user-content-fnref-e2e"]').click()
+    expectJustBelow('footnote back link', await landing('#user-content-fnref-e2e'))
+  }
+
+  // Article headings, when the store has a post.
+  await page.goto('/blog')
+  const post = await page.locator('main a[href^="/blog/"]').first().getAttribute('href').catch(() => null)
+  if (!post) return
+  await page.goto(post)
+  await settle(page)
+  const ids = await page.locator('main .article-prose :is(h2, h3)[id]').evaluateAll((els) => els.map((el) => el.id))
+  for (const id of ids.slice(1, 3)) {
+    await page.evaluate(() => window.scrollTo(0, 0))
+    await page.evaluate((hash) => {
+      location.hash = hash
+    }, id)
+    expectJustBelow(`${post}#${id}`, await landing(`[id="${id}"]`))
   }
 })
 
@@ -285,5 +404,51 @@ test.describe('mobile menu', () => {
     await expect(page.getByRole('dialog')).toHaveCount(0)
     // The menu closed because the page changed: focus is in the new page, not on the hamburger.
     await expect.poll(() => page.evaluate(() => document.activeElement?.id)).toBe('main')
+  })
+
+  test('closing the menu returns focus to the hamburger without scrolling the page', async ({ page }) => {
+    await page.goto('/about')
+    await settle(page)
+    const y0 = await scrollToY(page, 1500)
+    expect(y0, 'the page scrolls').toBeGreaterThan(300)
+    await page.getByRole('button', { name: 'Open menu' }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+    await expect.poll(() => page.evaluate(() => document.activeElement?.getAttribute('aria-label'))).toBe('Open menu')
+    expect(await settledScrollY(page), 'focus back on the header button').toBe(y0)
+  })
+
+  test('Tab into and across the /cv bottom action bar never scrolls the page', async ({ page }) => {
+    await page.goto('/cv')
+    await settle(page)
+    const bar = page.locator('nav[data-bottom-bar]')
+    test.skip(!(await bar.isVisible()), 'no action bar on this page')
+    const y0 = await scrollToY(page, 900)
+    expect(y0, 'the page scrolls').toBeGreaterThan(200)
+    // Focus the last control before the bar (in DOM order) without scrolling, then Tab into the bar.
+    const entered = await page.evaluate(() => {
+      const nav = document.querySelector('nav[data-bottom-bar]')!
+      const focusable = Array.from(document.querySelectorAll<HTMLElement>('main a[href], main button:not([disabled]), main [tabindex="0"]')).filter(
+        (el) => el.checkVisibility() && !nav.contains(el) && el.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING,
+      )
+      const before = focusable[focusable.length - 1]
+      if (!before) return false
+      before.focus({ preventScroll: true })
+      return true
+    })
+    expect(entered).toBe(true)
+    const y1 = await settledScrollY(page)
+    await page.keyboard.press('Tab')
+    expect(await focusedIn(page, 'nav[data-bottom-bar]'), 'Tab entered the bar').toBe(true)
+    expect(await settledScrollY(page), 'Tab into the bar').toBe(y1)
+    const controls = await bar.locator('a[href], button:not([disabled])').count()
+    for (let i = 1; i < controls; i++) {
+      await page.keyboard.press('Tab')
+      expect(await focusedIn(page, 'nav[data-bottom-bar]')).toBe(true)
+      expect(await settledScrollY(page), `Tab ${i} within the bar`).toBe(y1)
+    }
+    await page.keyboard.press('Shift+Tab')
+    expect(await settledScrollY(page), 'Shift+Tab within the bar').toBe(y1)
   })
 })

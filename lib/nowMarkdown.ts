@@ -69,6 +69,8 @@ export function escapeMarkdownText(text: string): string {
     .trim()
 }
 
+const capitalize = (text: string) => (text ? text[0].toUpperCase() + text.slice(1) : text)
+
 /** An absolute site path safe for a Markdown link destination, else null. */
 function sitePath(href: string): string | null {
   if (!/^\/(?!\/)/.test(href)) return null
@@ -97,9 +99,10 @@ function nowMarkdown(s: NowPageSignals): string {
   const blocks: string[] = []
   if (s.roles.length) blocks.push(['## Currently', '', ...s.roles.map(roleLine)].join('\n'))
   if (s.coding) {
-    const label = s.coding.label ? `${escapeMarkdownText(s.coding.label)}: ` : ''
+    // Headed by the chip's own label, like the page (components/Now/NowSignals.tsx).
+    const heading = capitalize(escapeMarkdownText(s.coding.label)) || 'Currently coding'
     const note = s.coding.note ? ` — ${escapeMarkdownText(s.coding.note)}` : ''
-    blocks.push(['## Currently coding', '', `- ${label}**${escapeMarkdownText(s.coding.project)}**${note}`].join('\n'))
+    blocks.push([`## ${heading}`, '', `- **${escapeMarkdownText(s.coding.project)}**${note}`].join('\n'))
   }
   if (s.post) blocks.push(['## Latest writing', '', linkLine(s.post)].join('\n'))
   if (s.work) blocks.push(['## Latest case study', '', linkLine(s.work)].join('\n'))

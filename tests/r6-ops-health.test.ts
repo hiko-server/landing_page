@@ -108,6 +108,41 @@ test('a wrong, malformed or unconfigured token and a forged cookie get the publi
   }
 })
 
+test('SEC-1: a malformed (undecodable) session or hint cookie gets the public answer, never a 500', async () => {
+  for (const cookie of ['cv_admin_token=%E0%A4%A', 'cv_admin_token=%', 'cv_admin_hint=%E0%A4%A']) {
+    const r = await call({ cookie })
+    assert.equal(r.status, 200, cookie)
+    assert.deepEqual(Object.keys(r.body), ['status'], cookie)
+  }
+  // Even with a monitor token configured, the cookie only means "no session".
+  process.env.HEALTH_TOKEN = TOKEN
+  try {
+    const r = await call({ cookie: 'cv_admin_token=%E0%A4%A' })
+    assert.equal(r.status, 200)
+    assert.deepEqual(Object.keys(r.body), ['status'])
+  } finally {
+    delete process.env.HEALTH_TOKEN
+  }
+})
+
+test('SEC-1: lib/auth reads an undecodable cookie as absent, from the parsed cookies or the raw header', async () => {
+  const { readAdminClaims, isAdminRequest, hasAdminHint, readCookie } = await import('../lib/auth')
+  const res = { getHeader: () => undefined, setHeader: () => undefined } as any
+  const parsed = { headers: {}, cookies: { cv_admin_token: '%E0%A4%A', cv_admin_hint: '%E0%A4%A' } } as any
+  const header = { headers: { cookie: 'cv_admin_token=%E0%A4%A; cv_admin_hint=%E0%A4%A' } } as any
+  for (const req of [parsed, header]) {
+    assert.doesNotThrow(() => readAdminClaims(req, res))
+    assert.equal(readAdminClaims(req, res), null)
+    assert.equal(isAdminRequest(req, res), false)
+    assert.equal(hasAdminHint(req, res), false)
+    assert.equal(readCookie(req, res, 'cv_admin_token'), undefined)
+  }
+  // A well-formed cookie still reads (and still verifies).
+  const token = jwt.sign({ role: 'admin', email: 'owner@example.test' }, SECRET, { algorithm: 'HS256' })
+  assert.equal(readCookie({ headers: {}, cookies: { cv_admin_hint: '1' } } as any, res, 'cv_admin_hint'), '1')
+  assert.equal(isAdminRequest({ headers: {}, cookies: { cv_admin_token: token } } as any, res), true)
+})
+
 test('HEALTH_TOKEN bearer and an admin session get the full detail', async () => {
   process.env.HEALTH_TOKEN = TOKEN
   try {

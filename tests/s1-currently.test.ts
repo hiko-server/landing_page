@@ -1,6 +1,15 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { CODING_LABEL, STUDYING_LABEL, deriveCurrentlyCoding, mergeCurrentlyCoding } from '../lib/currentlyCoding'
+import fs from 'node:fs'
+import path from 'node:path'
+import {
+  CODING_LABEL,
+  OWN_PROJECT_NOTE_PLACEHOLDER,
+  STUDYING_LABEL,
+  currentlyCodingPlaceholder,
+  deriveCurrentlyCoding,
+  mergeCurrentlyCoding,
+} from '../lib/currentlyCoding'
 import { publicSections } from '../lib/cvVisibility'
 
 // The site's reference month (lib/clock.ts) — what the pages pass.
@@ -122,4 +131,43 @@ test('mergeCurrentlyCoding: the owner’s project carries only the owner’s lin
   // Nothing derived: never a lone derived label — only what the owner typed.
   assert.deepEqual(mergeCurrentlyCoding(null, { label: '', project: '', note: '' }), { label: '', project: '', note: '' })
   assert.deepEqual(mergeCurrentlyCoding({ label: 'open to work' }, deriveCurrentlyCoding([], NOW)), { label: 'open to work', project: '', note: '' })
+})
+
+test('COR-3: the Home editor placeholders follow the merge — a typed project never shows the CV label / note as "auto"', () => {
+  const derived = { label: STUDYING_LABEL, project: 'CUHK', note: 'MSc' }
+  const ph = (manual: Record<string, string> | null) => ({
+    label: currentlyCodingPlaceholder('label', manual, derived),
+    project: currentlyCodingPlaceholder('project', manual, derived),
+    note: currentlyCodingPlaceholder('note', manual, derived),
+  })
+  // Blank form: every line would come from the CV chip.
+  assert.deepEqual(ph(null), { label: `auto: ${STUDYING_LABEL}`, project: 'auto: CUHK', note: 'auto: MSc' })
+  assert.deepEqual(ph({ label: 'now', project: '', note: '' }), { label: `auto: ${STUDYING_LABEL}`, project: 'auto: CUHK', note: 'auto: MSc' })
+  // A typed project replaces the CV chip: its blank label is "currently coding", its note stays blank.
+  assert.deepEqual(ph({ label: '', project: 'Carboy', note: '' }), { label: `auto: ${CODING_LABEL}`, project: 'auto: CUHK', note: OWN_PROJECT_NOTE_PLACEHOLDER })
+  // Every placeholder says what mergeCurrentlyCoding really shows for a blank line.
+  for (const manual of [null, { label: '', project: '', note: '' }, { label: '', project: 'Carboy', note: '' }]) {
+    const shown = mergeCurrentlyCoding(manual, derived)
+    const p = ph(manual)
+    for (const key of ['label', 'note'] as const) {
+      if (p[key]?.startsWith('auto: ')) assert.equal(p[key], `auto: ${shown[key]}`, `${key} with ${JSON.stringify(manual)}`)
+      else assert.equal(shown[key], '', `${key} with ${JSON.stringify(manual)}: nothing auto-filled`)
+    }
+  }
+  // Nothing current in the CV: no "auto" lines (generic examples instead).
+  const none = { label: '', project: '', note: '' }
+  for (const key of ['label', 'project', 'note'] as const) assert.equal(currentlyCodingPlaceholder(key, null, none), null)
+  // A derived label without a project never fills (mergeCurrentlyCoding ignores it too).
+  assert.equal(currentlyCodingPlaceholder('label', null, { label: CODING_LABEL, project: '', note: 'x' }), null)
+})
+
+test('COR-3: the Home editor previews what visitors see through the shared merge', () => {
+  const src = fs.readFileSync(path.join(process.cwd(), 'components/Admin/HomeEditor.tsx'), 'utf8')
+  assert.match(src, /import \{ currentlyCodingPlaceholder, mergeCurrentlyCoding \} from '\.\.\/\.\.\/lib\/currentlyCoding'/)
+  assert.match(src, /mergeCurrentlyCoding\(hero\.currentlyCoding, ccAuto\)/)
+  assert.match(src, /currentlyCodingPlaceholder\(key, hero\.currentlyCoding, ccAuto\)/)
+  assert.match(src, /Visitors see/)
+  assert.match(src, /a typed project replaces the CV chip/)
+  assert.doesNotMatch(src, /earliest year/)
+  assert.doesNotMatch(src, /ccAuto\[key\] \? `auto: /, 'no per-field CV placeholder that ignores the merge')
 })

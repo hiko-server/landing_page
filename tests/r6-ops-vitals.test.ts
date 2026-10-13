@@ -14,23 +14,31 @@ import { parseEvents } from '../lib/analytics/ingest'
 
 const metric = (over: Partial<WebVitalMetric> = {}): WebVitalMetric => ({ id: 'v4-1-1', name: 'LCP', value: 1234.5, navigationType: 'navigate', ...over })
 
-test('the collector keeps one event per metric instance (dedupe by id) with the metric navigation type', () => {
+test('the collector keeps the LATEST value per metric instance (id) with the metric navigation type', () => {
   const c = createVitalsCollector('/blog')
   assert.equal(c.add(metric()), true)
-  // web-vitals reports a CLS / INP instance again on every hide with a new value.
-  assert.equal(c.add(metric({ value: 9999 })), false)
+  // web-vitals reports a CLS / INP instance again on every hide with a new value: the later value wins.
   assert.equal(c.add(metric({ id: 'v4-1-2', name: 'CLS', value: 0.02, navigationType: 'back-forward-cache' })), true)
+  assert.equal(c.add(metric({ id: 'v4-1-2', name: 'CLS', value: 0.31, navigationType: 'navigate' })), true)
+  assert.equal(c.add(metric({ id: 'v4-1-2', name: 'CLS', value: 0.31 })), false, 'an unchanged repeat is ignored')
   assert.equal(c.add(metric({ id: 'v4-1-3', name: 'TTFB', value: 80, navigationType: 'back_forward' })), true)
   assert.deepEqual(c.drain(), [
     [
-      { t: 'v', route: '/blog', name: 'LCP', value: 1234.5, nav: 'navigate' },
-      { t: 'v', route: '/blog', name: 'CLS', value: 0.02, nav: 'back-forward-cache' },
-      { t: 'v', route: '/blog', name: 'TTFB', value: 80, nav: 'back-forward' },
+      { t: 'v', route: '/blog', name: 'LCP', value: 1234.5, nav: 'navigate', k: 'v4-1-1' },
+      // The larger later value is kept, in the instance's first position, with its first navigation type.
+      { t: 'v', route: '/blog', name: 'CLS', value: 0.31, nav: 'back-forward-cache', k: 'v4-1-2' },
+      { t: 'v', route: '/blog', name: 'TTFB', value: 80, nav: 'back-forward', k: 'v4-1-3' },
     ],
   ])
   assert.deepEqual(c.drain(), [], 'drain empties the queue')
-  // An already sent instance stays deduplicated after a flush.
-  assert.equal(c.add(metric({ value: 1 })), false)
+  // An already sent value is not sent again…
+  assert.equal(c.add(metric({ id: 'v4-1-2', name: 'CLS', value: 0.31 })), false)
+  assert.deepEqual(c.drain(), [])
+  // …but a CLS that grew after it was sent is: the same instance (k), the new value.
+  assert.equal(c.add(metric({ id: 'v4-1-2', name: 'CLS', value: 0.45 })), true)
+  assert.deepEqual(c.drain(), [[{ t: 'v', route: '/blog', name: 'CLS', value: 0.45, nav: 'back-forward-cache', k: 'v4-1-2' }]])
+  // An id reused under another metric name is not a re-report of that instance.
+  assert.equal(c.add(metric({ id: 'v4-1-2', name: 'INP', value: 200 })), false)
 })
 
 test('FID, unknown names, non-finite values and unmeasured routes are ignored; the fallback nav is used only when needed', () => {
@@ -62,10 +70,16 @@ test('batches hold at most 10 events, and every event passes the ingest parser u
   for (let i = 0; i < 23; i++) c.add(metric({ id: `id-${i}`, name: i % 2 ? 'FCP' : 'TTFB', value: 100 + i }))
   const batches = c.drain()
   assert.deepEqual(batches.map((b) => b.length), [10, 10, 3])
-  for (const event of batches.flat()) assert.deepEqual(Object.keys(event).sort(), ['name', 'nav', 'route', 't', 'value'])
+  // No visitor identifiers: the only id is the web-vitals instance id (random per page load and metric).
+  for (const event of batches.flat()) assert.deepEqual(Object.keys(event).sort(), ['k', 'name', 'nav', 'route', 't', 'value'])
   const parsed = parseEvents(JSON.stringify(batches[0]))
   assert.equal(parsed.length, 10)
   assert.ok(parsed.every((e) => e.t === 'v' && e.route === '/about'))
+  assert.deepEqual(
+    parsed.map((e) => (e.t === 'v' ? e.key : null)),
+    batches[0].map((e) => e.k),
+    'ingest reads the instance id',
+  )
 })
 
 test('reportWebVital queues the landing page vitals and flushes them in one beacon when the tab is hidden', async () => {
@@ -99,13 +113,36 @@ test('reportWebVital queues the landing page vitals and flushes them in one beac
     assert.equal(beacons.length, 1)
     assert.equal(beacons[0].url, '/api/a')
     assert.deepEqual(JSON.parse(beacons[0].body), [
-      { t: 'v', route: '/blog', name: 'TTFB', value: 90, nav: 'navigate' },
-      { t: 'v', route: '/blog', name: 'FCP', value: 800, nav: 'navigate' },
-      { t: 'v', route: '/blog', name: 'LCP', value: 1500, nav: 'navigate' },
-      { t: 'v', route: '/blog', name: 'CLS', value: 0, nav: 'reload' },
+      { t: 'v', route: '/blog', name: 'TTFB', value: 90, nav: 'navigate', k: 'ttfb' },
+      { t: 'v', route: '/blog', name: 'FCP', value: 800, nav: 'navigate', k: 'fcp' },
+      { t: 'v', route: '/blog', name: 'LCP', value: 1500, nav: 'navigate', k: 'lcp' },
+      { t: 'v', route: '/blog', name: 'CLS', value: 0, nav: 'reload', k: 'cls' },
     ])
     listeners.pagehide[0]()
     assert.equal(beacons.length, 1, 'an empty queue sends nothing')
+
+    // Back to the tab: layout shifts and a slow interaction happen after the first hide.
+    doc.visibilityState = 'visible'
+    listeners.visibilitychange[0]()
+    assert.equal(beacons.length, 1)
+    // web-vitals reports the same CLS instance again (larger) and the INP on the next hide.
+    reportWebVital(metric({ id: 'cls', name: 'CLS', value: 0.18, navigationType: 'reload' }))
+    reportWebVital(metric({ id: 'inp', name: 'INP', value: 350 }))
+    doc.visibilityState = 'hidden'
+    listeners.visibilitychange[0]()
+    assert.equal(beacons.length, 2, 'the final CLS / INP are sent on the next hide')
+    assert.deepEqual(JSON.parse(beacons[1].body), [
+      { t: 'v', route: '/blog', name: 'CLS', value: 0.18, nav: 'reload', k: 'cls' },
+      { t: 'v', route: '/blog', name: 'INP', value: 350, nav: 'navigate', k: 'inp' },
+    ])
+    // pagehide right after (unload): nothing new, nothing re-sent.
+    listeners.pagehide[0]()
+    assert.equal(beacons.length, 2)
+    // A last INP update that arrives at unload goes out on pagehide.
+    reportWebVital(metric({ id: 'inp', name: 'INP', value: 420 }))
+    listeners.pagehide[0]()
+    assert.equal(beacons.length, 3)
+    assert.deepEqual(JSON.parse(beacons[2].body), [{ t: 'v', route: '/blog', name: 'INP', value: 420, nav: 'navigate', k: 'inp' }])
   } finally {
     g.window = saved.window
     g.document = saved.document

@@ -333,4 +333,38 @@ test.describe('print', () => {
     })
     expect(details).toEqual({ during: true, after: false })
   })
+
+  test('row staggers still waiting below the fold print visible, without scrolling (/ and /about)', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium', 'Chromium-only print checks')
+    /** Animated rows of the stagger lists whose effective opacity is below 1, or that are still offset / scaled. */
+    const hiddenRows = () =>
+      page.evaluate(() => {
+        const effectiveOpacity = (el: Element | null) => {
+          let o = 1
+          for (let n = el; n; n = n.parentElement) o *= parseFloat(getComputedStyle(n).opacity)
+          return o
+        }
+        const rows = Array.from(document.querySelectorAll('main [data-reveal-list] > *, main [data-reveal-list] [data-reveal-item]'))
+        return rows
+          .filter((el) => effectiveOpacity(el) < 0.99 || getComputedStyle(el).transform !== 'none')
+          .map((el) => `${el.tagName.toLowerCase()}.${(el.getAttribute('class') || '').split(' ')[0]} "${(el.textContent || '').trim().slice(0, 30)}"`)
+      })
+    let waited = 0
+    for (const path of ['/', '/about']) {
+      await page.emulateMedia({ media: 'screen' })
+      await page.goto(path)
+      await settle(page)
+      if ((await page.locator('main [data-reveal-list]').count()) === 0) continue
+      // Rows below the fold wait hidden (inline opacity 0) until they scroll in; nothing scrolls here.
+      await page.waitForFunction(() => document.querySelectorAll('main [data-reveal-list] [style*="opacity: 0"]').length > 0, undefined, { timeout: 3000 }).catch(() => undefined)
+      const before = (await hiddenRows()).length
+      waited += before
+      expect(await page.evaluate(() => scrollY), `${path}: not scrolled`).toBe(0)
+      await page.emulateMedia({ media: 'print' })
+      expect(await hiddenRows(), `${path}: rows hidden in print (${before} were hidden on screen)`).toEqual([])
+    }
+    // The check means something only when some rows were really waiting.
+    expect(waited, 'some stagger rows were hidden below the fold before printing').toBeGreaterThan(0)
+    await page.emulateMedia({ media: 'screen' })
+  })
 })

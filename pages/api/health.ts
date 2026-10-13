@@ -40,9 +40,16 @@ import { bearerMatches } from '../../lib/security/bearer'
  */
 type ContentState = { home: boolean; cvdata: boolean; pages: number; items: number }
 
-/** True when the request may see the operational detail. */
+/**
+ * True when the request may see the operational detail. Never throws: a
+ * malformed header or cookie means "no detail", never a failed probe.
+ */
 function mayReadDetail(req: NextApiRequest, res: NextApiResponse): boolean {
-  return bearerMatches(req.headers?.authorization, process.env.HEALTH_TOKEN) || isAdminRequest(req, res)
+  try {
+    return bearerMatches(req.headers?.authorization, process.env.HEALTH_TOKEN) || isAdminRequest(req, res)
+  } catch {
+    return false
+  }
 }
 
 export default withApi('health', (req, res, ctx) => {

@@ -48,13 +48,23 @@
   --header-h: 57px;
 }
 
-/* Keyboard focus, in-page anchors and scrollIntoView() land clear of the
-   sticky header (WCAG 2.2 SC 2.4.11, technique C43) and of a page's sticky
-   bottom bar. Per-element scroll-margin-top values only add a little air on
-   top of this, never the header height again. */
-html {
-  scroll-padding-top: calc(var(--header-h) + 16px);
-  scroll-padding-bottom: var(--bottom-bar-h, 0px);
+/* Keyboard focus, in-page anchors, the skip link and scrollIntoView() land
+   clear of the sticky header (WCAG 2.2 SC 2.4.11, technique C43) and of a
+   page's sticky bottom bar — through scroll margins on the targets inside
+   <main>, never html { scroll-padding }: a root scroll padding also covers
+   the sticky header's own controls and the bottom bar's, so focus moving
+   into them (closing the menu or the palette, Tab / Shift+Tab, Tab into the
+   /cv action bar) scrolled the page by hundreds of pixels to "reveal" what
+   was already on screen. Zero specificity: a component's own scroll margin
+   (lib/anchorOffset.ts clearOfHeader: the header + 16px + its air) wins. A
+   sticky bottom bar (data-bottom-bar) and its controls are left out. */
+:where(#main),
+:where(#main)
+  :where([id], a, button, input, select, textarea, summary, [tabindex], [contenteditable]):where(
+    :not([data-bottom-bar], [data-bottom-bar] *)
+  ) {
+  scroll-margin-top: calc(var(--header-h) + 16px);
+  scroll-margin-bottom: var(--bottom-bar-h, 0px);
 }
 
 [data-theme='dark'],
@@ -721,6 +731,17 @@ button:hover .nudge-ne {
   }
   .print-parent {
     position: static !important;
+  }
+  /* Scroll reveals (lib/reveal.ts): the rows of a stagger list below the
+     fold wait with an inline opacity 0 / offset (framer-motion) until they
+     scroll into view — a print made before that must still show them. Only
+     the animated rows of marked stagger lists (data-reveal-list on the
+     container, data-reveal-item on each animated row or bar); the section
+     wrappers have their own print rule (General-UI/SectionReveal.tsx). */
+  [data-reveal-list] > *,
+  [data-reveal-list] [data-reveal-item] {
+    opacity: 1 !important;
+    transform: none !important;
   }
   a[href]::after {
     content: '';

@@ -48,6 +48,11 @@ import {
  *   - Stored per view: time, UTC day, path, referrer HOST (only when it is
  *     another site and a plausible hostname), country (Cloudflare's
  *     cf-ipcountry), coarse device and browser family, page language.
+ *   - Stored per Web Vitals measurement: time, UTC day, route, metric, value,
+ *     rating, coarse device, navigation type and vitalKey() — a hash of the
+ *     browser's random per-page-load instance id, so a CLS / INP reported
+ *     again replaces its earlier value (it names a measurement, not a
+ *     visitor, and is never linked to a page view).
  *
  * Abuse budgets (lib/analytics/limits; in memory only, no new stored data):
  * events — not beacons — are counted per client (IPv4 address / IPv6 /64)
@@ -75,10 +80,13 @@ export const BOT_UA =
 // ── Pure parsing (unit-tested) ────────────────────────────────────────────
 
 export type PageviewEvent = { t: 'pv'; path: string; referrer: string | null; lang: string | null }
-export type VitalEvent = { t: 'v'; route: string; name: VitalName; value: number; nav: NavType | null }
+/** `key`: the web-vitals instance id the browser sent (null when absent or malformed: the event is stored as a new row). */
+export type VitalEvent = { t: 'v'; route: string; name: VitalName; value: number; nav: NavType | null; key: string | null }
 export type AnalyticsEvent = PageviewEvent | VitalEvent
 
 const LANG_RE = /^[a-z]{2,3}(?:-[a-z0-9]{2,8})?$/
+/** A web-vitals instance id ("v5-1760000000000-1234567890123"): short, URL-safe characters only. */
+const VITAL_KEY_RE = /^[A-Za-z0-9._:-]{1,64}$/
 
 function parseOne(raw: unknown): AnalyticsEvent | null {
   if (!raw || typeof raw !== 'object') return null
@@ -94,7 +102,8 @@ function parseOne(raw: unknown): AnalyticsEvent | null {
     const route = normalizeTrackedPath(o.route)
     if (!route || !isVitalName(o.name) || !isVitalValueInRange(o.name, o.value)) return null
     const value = o.name === 'CLS' ? Math.round(o.value * 10_000) / 10_000 : Math.round(o.value)
-    return { t: 'v', route, name: o.name, value, nav: normalizeNavType(o.nav) }
+    const key = typeof o.k === 'string' && VITAL_KEY_RE.test(o.k) ? o.k : null
+    return { t: 'v', route, name: o.name, value, nav: normalizeNavType(o.nav), key }
   }
   return null
 }
@@ -203,6 +212,16 @@ export function visitorHash(salt: Buffer, host: string, ip: string, ua: string):
   return crypto.createHash('sha256').update(salt).update(`\n${host}\n${ip}\n${ua}`).digest('hex').slice(0, 16)
 }
 
+/**
+ * Row key of one Web Vitals measurement: a one-way hash of the route, the
+ * metric and the browser's random web-vitals instance id. The id's
+ * timestamp never reaches the database, and route + metric are part of the
+ * key, so a crafted event can only ever replace a row of its own kind.
+ */
+export function vitalKey(route: string, name: string, key: string): string {
+  return crypto.createHash('sha256').update(`vital\n${route}\n${name}\n${key}`).digest('hex').slice(0, 32)
+}
+
 // ── Process state (globalThis: survives dev hot reloads, one per process) ─
 
 type HitRow = {
@@ -225,6 +244,8 @@ type VitalRow = {
   rating: string
   device: string
   nav: string | null
+  /** vitalKey() of the instance, or null (an event without one is always a new row). */
+  vkey: string | null
 }
 
 type IngestState = {
@@ -356,6 +377,7 @@ export function ingest(req: NextApiRequest, now: number = Date.now()): { accepte
         rating: rateVital(e.name, e.value),
         device,
         nav: e.nav,
+        vkey: e.key ? vitalKey(e.route, e.name, e.key) : null,
       })
     }
   }
@@ -382,9 +404,13 @@ export function flushNow(now: number = Date.now()) {
         `INSERT INTO hits (ts, day, path, ref_host, country, device, browser, visitor, lang)
          VALUES (@ts, @day, @path, @ref_host, @country, @device, @browser, @visitor, @lang)`,
       )
+      // One row per measurement: a CLS / INP the browser reports again
+      // (same instance key) replaces its earlier value — the latest is final
+      // — instead of adding a second sample. Rows without a key never conflict.
       const insertVital = db.prepare(
-        `INSERT INTO vitals (ts, day, route, name, value, rating, device, nav)
-         VALUES (@ts, @day, @route, @name, @value, @rating, @device, @nav)`,
+        `INSERT INTO vitals (ts, day, route, name, value, rating, device, nav, vkey)
+         VALUES (@ts, @day, @route, @name, @value, @rating, @device, @nav, @vkey)
+         ON CONFLICT(vkey) DO UPDATE SET value = excluded.value, rating = excluded.rating`,
       )
       db.transaction(() => {
         for (const h of hits) insertHit.run(h)

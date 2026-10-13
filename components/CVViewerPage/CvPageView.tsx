@@ -399,11 +399,13 @@ export default function CvPageView({
             </Text>
           )}
 
-          {/* Phones: sticky action bar */}
+          {/* Phones: sticky action bar. data-bottom-bar: focusing its own
+              controls never scrolls the page (globals.css scroll margins). */}
           <Flex
             ref={actionBar}
             className="no-print"
             as="nav"
+            data-bottom-bar=""
             aria-label={T.actions}
             display={{ base: 'flex', md: 'none' }}
             position="sticky"

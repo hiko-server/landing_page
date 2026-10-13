@@ -6,7 +6,8 @@
  *     respecting visibility: an entry whose end date is hidden is never
  *     treated as current
  *   - the "currently coding" chip (home.hero.currentlyCoding merged with the
- *     CV-derived default, exactly like the home page)
+ *     CV-derived default, exactly like the home page), unless it only
+ *     repeats a role or study the "Currently" list already shows
  *   - the latest blog post and the latest case study
  *
  * Pure and dependency-light (no DB access) so it is unit-tested; the page's
@@ -99,12 +100,22 @@ export function currentRoles(cv: CvSectionLike[] | null | undefined, now: CvNow 
   return out.sort((a, b) => (a.status === b.status ? 0 : a.status === 'current' ? -1 : 1))
 }
 
+const sameText = (a: string, b: string) => !!a && a.trim().toLowerCase() === b.trim().toLowerCase()
+
+/** True when `project` names a current entry of `roles` (its organisation or its title). */
+export function namesCurrentRole(project: string, roles: readonly NowRole[]): boolean {
+  return roles.some((r) => r.status === 'current' && (sameText(r.org, project) || sameText(r.title, project)))
+}
+
 /**
- * The "currently coding" chip exactly as the home page shows it: the owner's
- * Home editor lines merged with the CV-derived chip (lib/currentlyCoding.ts),
- * which only ever names a role or study that is current in `now` — the same
- * entries the "Currently" list shows. /now needs a project line, so a chip
- * without one is null.
+ * The "currently coding" signal of /now: the chip as the home page shows it
+ * — the owner's Home editor lines merged with the CV-derived chip
+ * (lib/currentlyCoding.ts) — unless it would only repeat the "Currently"
+ * list. A chip derived from the CV (the owner typed no project) names a role
+ * or study that is current in `now`, which that list already shows, so it is
+ * left out; an owner-named project is always kept. /now needs a project
+ * line, so a chip without one is null. The page (pages/now.tsx) and its
+ * Markdown draft (lib/nowMarkdown.ts) both use this, so they agree.
  */
 export function currentlyCodingSignal(
   cvWebsiteEn: CvSectionLike[] | null | undefined,
@@ -112,7 +123,10 @@ export function currentlyCodingSignal(
   now: CvNow = new Date(),
 ): CurrentlyCoding | null {
   const chip = mergeCurrentlyCoding(manual, deriveCurrentlyCoding(cvWebsiteEn, now))
-  return chip.project ? chip : null
+  if (!chip.project) return null
+  const ownProject = typeof manual?.project === 'string' && manual.project.trim() !== ''
+  if (!ownProject && namesCurrentRole(chip.project, currentRoles(cvWebsiteEn, now))) return null
+  return chip
 }
 
 type PostLike = { permalink: string; frontmatter: { title?: string; description?: string; date?: string } }

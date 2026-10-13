@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { getCookie, setCookie } from 'cookies-next'
+import { setCookie } from 'cookies-next'
 import { ensureAdminFromEnv, loginGate, loginLockState, loginPressure, readAdmin, verifyCredentials } from '../../../lib/admin'
-import { ADMIN_COOKIE, ADMIN_SESSION_TTL_S, setAdminHint, signAdminToken } from '../../../lib/auth'
+import { ADMIN_COOKIE, ADMIN_SESSION_TTL_S, readCookie, setAdminHint, signAdminToken } from '../../../lib/auth'
 import { withApi } from '../../../lib/apiHandler'
 import { getJwtSecret, isProd } from '../../../lib/env'
 import { clientKey, rateLimit, rateLimitNetwork } from '../../../lib/rateLimit'
@@ -93,7 +93,7 @@ export default withApi('auth/email-login', async (req: NextApiRequest, res: Next
   if (lock.locked) return throttled(res, lock.retryAfterMs)
 
   const secret = getJwtSecret()
-  const device = verifyKnownDevice(secret, getCookie(KNOWN_DEVICE_COOKIE, { req, res }))
+  const device = verifyKnownDevice(secret, readCookie(req, res, KNOWN_DEVICE_COOKIE))
   const admission = loginGate().admit(() => verifyCredentials(creds.email, creds.password, bucket), {
     bypass: device !== null,
   })

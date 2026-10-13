@@ -1,6 +1,7 @@
 import React from 'react'
 import { Box, Flex, Text } from '@chakra-ui/react'
 import { cleanList } from '../../lib/cvFormat'
+import { clearOfHeader } from '../../lib/anchorOffset'
 import { bullets, entries, field } from './fields'
 
 /**
@@ -21,8 +22,8 @@ import { bullets, entries, field } from './fields'
  * MetaLine only draws its "|" when both sides are present.
  */
 
-/** Extra air above an anchored section / entry when the page scrolls to it (html { scroll-padding-top } in globals.css clears the sticky header). */
-export const ANCHOR_SCROLL_MARGIN = '24px'
+/** Scroll margin of an anchored section / entry: clear of the sticky header, plus 24px of air (lib/anchorOffset.ts). */
+export const ANCHOR_SCROLL_MARGIN = clearOfHeader('24px')
 
 export function SheetSection({ title, id, children }: { title?: string; id?: string; children: React.ReactNode }) {
   return (

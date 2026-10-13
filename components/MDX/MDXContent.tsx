@@ -6,6 +6,7 @@ import { toJsxRuntime, type Components, type Jsx } from 'hast-util-to-jsx-runtim
 import type { Root as HastRoot } from 'hast'
 import { safeHref } from '../../lib/cvFormat'
 import { printableLinkUrl, textOfNode } from '../../lib/print'
+import { clearOfHeader } from '../../lib/anchorOffset'
 import CodeBlock, { CodeFigure } from './CodeBlock'
 import ArticleFigure, { FigCaption, InsideLinkContext, MdxImage } from './Figure'
 import YouTube from './YouTube'
@@ -41,6 +42,9 @@ import YouTube from './YouTube'
 
 const MONO = 'var(--font-geist-mono), monospace'
 
+/** Scroll margin of a jump target (heading, footnote, back link): the sticky header + 16px + 16px of air. */
+const ANCHOR_MARGIN = clearOfHeader('16px')
+
 const Prose = ({ children, as = 'article', ...rest }: ChakraProps & { children: ReactNode; as?: 'article' | 'div' }) => (
   <Box
     as={as}
@@ -55,8 +59,9 @@ const Prose = ({ children, as = 'article', ...rest }: ChakraProps & { children: 
       '& h1, & h2, & h3, & h4, & h5, & h6': { color: 'page.fg' },
       '& section[data-footnotes]': { mt: 12, pt: 6, borderTop: '1px solid', borderColor: 'page.border', fontSize: '0.875em' },
       '& section[data-footnotes] p': { mb: 2 },
-      // Footnotes (user-content-fn-*) and references (user-content-fnref-*): clear the 56px sticky header.
-      '& [id^="user-content-fn"]': { scrollMarginTop: '88px' },
+      // Footnotes (user-content-fn-*) and references (user-content-fnref-*):
+      // clear the sticky header, with the same air as a heading.
+      '& [id^="user-content-fn"]': { scrollMarginTop: ANCHOR_MARGIN },
       // Underlined, not colour alone: they sit inside running text (WCAG 1.4.1).
       '& a[data-footnote-ref], & a[data-footnote-backref]': {
         color: 'accent.text',
@@ -81,9 +86,8 @@ const headingProps = {
   fontFamily: 'var(--font-geist-sans), Inter, sans-serif',
   letterSpacing: '-0.02em',
   fontWeight: 600,
-  // A little air above a jumped-to heading; html { scroll-padding-top }
-  // (globals.css) already clears the sticky header.
-  scrollMarginTop: '16px',
+  // Clear of the sticky header, with a little air above a jumped-to heading.
+  scrollMarginTop: ANCHOR_MARGIN,
   position: 'relative' as const,
   sx: {
     '& .heading-anchor': { color: 'inherit', textDecoration: 'none' },

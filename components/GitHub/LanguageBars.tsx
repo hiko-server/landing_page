@@ -103,6 +103,7 @@ export default function LanguageBars({ initialData }: { initialData?: GhLanguage
     <MotionFlex
       as="ul"
       ref={reveal.ref}
+      data-reveal-list=""
       listStyleType="none"
       direction="column"
       gap={3}
@@ -112,7 +113,7 @@ export default function LanguageBars({ initialData }: { initialData?: GhLanguage
       animate={revealVariant(reveal.phase)}
     >
       {items.map(({ name, pct }) => (
-        <MotionBox as="li" key={name} variants={variants.row}>
+        <MotionBox as="li" key={name} variants={variants.row} data-reveal-item="">
           <Flex align="center" justify="space-between" mb={1} h="21px">
             <Flex align="center" gap={2}>
               <Box as="span" aria-hidden w="8px" h="8px" borderRadius="full" bg={colorFor(name)} flexShrink={0} />
@@ -127,6 +128,7 @@ export default function LanguageBars({ initialData }: { initialData?: GhLanguage
           <Box aria-hidden w="100%" h="6px" bg="page.bg-overlay" borderRadius="full" overflow="hidden">
             <MotionBox
               variants={variants.bar}
+              data-reveal-item=""
               w={`${Math.max(pct, 0.5)}%`}
               h="100%"
               bg={colorFor(name)}
