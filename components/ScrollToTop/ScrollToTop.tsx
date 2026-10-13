@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { IconButton } from '@chakra-ui/react'
 import { ChevronUpIcon } from '@chakra-ui/icons'
+import { useChromeLang } from '../Chrome/chromeLang'
 
 /** Show the button once the visitor is this far down the page (px). */
 const SHOW_AFTER = 400
@@ -24,6 +25,7 @@ const BOTTOM = 'calc(var(--bottom-bar-h, calc(8px + env(safe-area-inset-bottom, 
  */
 const ScrollToTop: React.FC = () => {
   const [isVisible, setIsVisible] = useState(false)
+  const chromeLang = useChromeLang()
 
   useEffect(() => {
     let frame = 0
@@ -69,6 +71,7 @@ const ScrollToTop: React.FC = () => {
       _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
       className="no-print glass"
       aria-label="Scroll to top"
+      lang={chromeLang}
       title="Scroll to top"
       display={isVisible ? 'inline-flex' : 'none'}
     />

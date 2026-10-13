@@ -650,14 +650,27 @@ button:hover .nudge-ne {
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
- * Print — hide all chrome, restore white background, isolate the CV A4 sheet.
- * Triggered by `window.print()` from the /cv toolbar.
+ * Print — hide all chrome, print on white in the light palette, isolate the
+ * CV A4 sheet.
  *
- * The CV print scope: only #print-area children remain visible; everything
- * else (header, footer, dot grid, controls) is hidden. The A4Paper element
- * is restored to exact 210x297mm dimensions on real paper.
+ * Every page: paper margins of its own (the visitor's paper size), dark
+ * mode mapped back to the light colours (the semantic --chakra-colors-*
+ * variables are remapped in theme/chakra.js from theme/color.ts; the few
+ * plain CSS variables and code colours below), external link URLs printed
+ * after the link text in article prose (lib/print.ts marks them), and closed
+ * <details> opened for the print (lib/print.ts, beforeprint).
+ *
+ * The CV (/cv, `window.print()` from its toolbar): a named `cv` page — A4,
+ * no paper margin, because the sheet carries its own (cloned onto every page)
+ * — and only #print-area children remain visible; everything else (header,
+ * footer, dot grid, controls) is hidden. The A4Paper element is restored to
+ * exact 210x297mm dimensions on real paper.
  * ──────────────────────────────────────────────────────────────────────── */
 @page {
+  margin: 18mm 16mm;
+}
+
+@page cv {
   size: A4;
   margin: 0;
 }
@@ -665,7 +678,6 @@ button:hover .nudge-ne {
 @media print {
   html,
   body {
-    width: 210mm !important;
     height: auto !important;
     margin: 0 !important;
     padding: 0 !important;
@@ -675,6 +687,20 @@ button:hover .nudge-ne {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     overflow: visible !important;
+  }
+  /* The inline color-scheme the colour-mode script sets would keep form
+     controls and other UA colours dark. */
+  html {
+    color-scheme: light !important;
+  }
+  [data-theme='dark'],
+  .chakra-ui-dark {
+    --dot-color: rgba(0, 0, 0, 0.05);
+    --rule-color: rgba(0, 0, 0, 0.08);
+  }
+  .chakra-ui-dark [data-rehype-pretty-code-figure] code span,
+  [data-theme='dark'] [data-rehype-pretty-code-figure] code span {
+    color: var(--shiki-light);
   }
 
   .no-print {
@@ -686,8 +712,23 @@ button:hover .nudge-ne {
   a[href]::after {
     content: '';
   }
+  .article-prose a[data-print-url] {
+    overflow-wrap: anywhere;
+  }
+  .article-prose a[data-print-url]::after {
+    content: ' (' attr(data-print-url) ')';
+    font-size: 0.85em;
+    color: var(--chakra-colors-page-fg-secondary);
+  }
 
-  /* When a #print-area exists (the /cv page) → isolate it. */
+  /* When a #print-area exists (the /cv page) → the cv page, isolated. */
+  html:has(#print-area),
+  body:has(#print-area) {
+    width: 210mm !important;
+  }
+  body:has(#print-area) {
+    page: cv;
+  }
   body:has(#print-area) * {
     visibility: hidden !important;
   }

@@ -1,5 +1,5 @@
 import React from 'react'
-import { Box, Flex, Text, useColorModeValue } from '@chakra-ui/react'
+import { Box, Flex, Text } from '@chakra-ui/react'
 import { Skill } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'
 import { cleanList, cvLabels } from '../../lib/cvFormat'
@@ -26,12 +26,13 @@ const SkillSection = ({
   lang?: CvLang
 }) => {
   const L = cvLabels(lang)
-  const subColor = useColorModeValue('gray.600', 'gray.400')
-  const labelColor = useColorModeValue('gray.600', 'gray.500')
-  const divider = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.08)')
-  const bulletColor = useColorModeValue('gray.700', 'gray.300')
-  const techBg = useColorModeValue('rgba(0,0,0,0.025)', 'rgba(255,255,255,0.03)')
-  const techBorder = useColorModeValue('rgba(0,0,0,0.06)', 'rgba(255,255,255,0.07)')
+  // Semantic tokens (first-paint correct in both modes, see _CVSectionShell).
+  const subColor = 'page.fg-secondary'
+  const labelColor = 'page.fg-subtle'
+  const divider = 'page.border'
+  const bulletColor = 'page.fg-prose'
+  const techBg = 'page.hover'
+  const techBorder = 'page.border'
 
   const langs = (data?.languages || []).filter((l) => (l.language || '').trim())
   const techs = (data?.technical || [])

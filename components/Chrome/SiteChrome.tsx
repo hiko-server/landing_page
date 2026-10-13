@@ -3,6 +3,7 @@ import { Box } from '@chakra-ui/react'
 import Header from '../Header/Header'
 import Footer from '../Footer/Footer'
 import { ChromeContext } from './ChromeContext'
+import { useChromeLang } from './chromeLang'
 import { resolveSocialLinks } from './chrome'
 
 /**
@@ -58,16 +59,18 @@ export default function SiteChrome({ children, socials }: { children: React.Reac
 
   const effective = socials !== undefined ? socials : known
   const links = useMemo(() => resolveSocialLinks(effective), [effective])
+  // lang="en" on the English chrome when the page is in another language.
+  const chromeLang = useChromeLang()
 
   return (
     <ChromeContext.Provider value>
       <Box display="flex" flexDirection="column" minHeight="100vh" w="full">
-        <a className="skip-nav no-print" href="#main">
+        <a className="skip-nav no-print" href="#main" lang={chromeLang}>
           Skip to content
         </a>
         {/* Its own view-transition snapshot: the header stays pinned while
             route transitions slide / fade the page beneath it (globals.css). */}
-        <Box position="sticky" top={0} zIndex={40} className="no-print" style={{ viewTransitionName: 'site-header' }}>
+        <Box position="sticky" top={0} zIndex={40} className="no-print" lang={chromeLang} style={{ viewTransitionName: 'site-header' }}>
           <Header socials={links} />
         </Box>
         <Box
@@ -82,7 +85,7 @@ export default function SiteChrome({ children, socials }: { children: React.Reac
         >
           {children}
         </Box>
-        <Box position="relative" zIndex={1} className="no-print">
+        <Box position="relative" zIndex={1} className="no-print" lang={chromeLang}>
           <Footer socials={links} />
         </Box>
       </Box>

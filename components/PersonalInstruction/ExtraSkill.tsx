@@ -1,5 +1,5 @@
 import React from 'react'
-import { Box, Flex, Text, useColorModeValue } from '@chakra-ui/react'
+import { Box, Flex, Text } from '@chakra-ui/react'
 import { ExtraSkill } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'
 import { cleanList, cvLabels } from '../../lib/cvFormat'
@@ -20,8 +20,9 @@ const ExtraSkillSection = ({
   data: ExtraSkill
   lang?: CvLang
 }) => {
-  const divider = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.08)')
-  const subColor = useColorModeValue('gray.600', 'gray.400')
+  // Semantic tokens (first-paint correct in both modes, see _CVSectionShell).
+  const divider = 'page.border'
+  const subColor = 'page.fg-secondary'
   const points = cleanList(data?.points)
   if (!points.length) return null
   return (

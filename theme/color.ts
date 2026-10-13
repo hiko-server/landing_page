@@ -43,8 +43,13 @@ export const semanticColors = {
   'page.surface': { light: 'rgba(255,255,255,0.7)', dark: 'rgba(22,22,22,0.7)' },
   /** Hover / active wash behind nav items and ghost buttons. */
   'page.hover': { light: 'rgba(0,0,0,0.04)', dark: 'rgba(255,255,255,0.06)' },
-  /** Translucent sticky-header glass (paired with backdrop blur). */
-  'page.header-bg': { light: 'rgba(253,253,253,0.75)', dark: 'rgba(5,5,5,0.75)' },
+  /**
+   * Translucent sticky-header glass (paired with backdrop blur). Opaque
+   * enough that the header text keeps AA (≥ 4.5:1) even over the opposite
+   * extreme scrolling underneath it — the white CV sheet in dark mode, a
+   * dark photo in light mode (checked in tests/r5fix-theme-a11y.test.ts).
+   */
+  'page.header-bg': { light: 'rgba(253,253,253,0.92)', dark: 'rgba(5,5,5,0.92)' },
   /** Translucent footer glass. */
   'page.footer-bg': { light: 'rgba(253,253,253,0.5)', dark: 'rgba(5,5,5,0.5)' },
   /** Floating panels (section navigator, scroll-to-top). */
@@ -71,6 +76,14 @@ export const semanticColors = {
   'status.open': { light: '#15803d', dark: '#4ade80' },
   'status.limited': { light: '#b45309', dark: '#fbbf24' },
   'status.closed': { light: '#525252', dark: '#a1a1a1' },
+  /** Hairline border of a "live" status chip (decorative, paired with status.open text). */
+  'status.open-border': { light: 'rgba(21,128,61,0.35)', dark: 'rgba(74,222,128,0.35)' },
+  /**
+   * Form validation messages and the required-field asterisk. Chakra's
+   * red.500 is 4.05:1 on paper at 12px; this pair (red.600 / red.300) is
+   * ≥ 4.5:1 on every page background in both modes.
+   */
+  'status.error': { light: '#c53030', dark: '#fc8181' },
 } as const satisfies Record<string, ModePair>
 
 export type SemanticColorName = keyof typeof semanticColors
@@ -80,13 +93,17 @@ export function themeColorFor(mode: 'light' | 'dark'): string {
   return mode === 'light' ? palette.paper : palette.ink
 }
 
+/** The CSS custom property Chakra compiles a semantic colour to ('page.fg' → '--chakra-colors-page-fg'). */
+export function chakraColorVar(name: string): string {
+  return `--chakra-colors-${name.replace(/\./g, '-')}`
+}
+
 /**
- * Legacy shape still read by components/General-UI/CustomHead.tsx for its
- * `<meta name="theme-color">` fallback. It now resolves to the v6 brand
- * background instead of the retired v5 blue.
+ * Print always lands on white paper, so every semantic colour takes its light
+ * (paper) value there whatever the screen theme is — otherwise a page printed
+ * in dark mode puts near-white text on white. theme/chakra.js emits these
+ * under `@media print`.
  */
-export const VPColor: Record<string, Record<string, string>> = {
-  index: {
-    blue: palette.ink,
-  },
+export function printColorVariables(): Record<string, string> {
+  return Object.fromEntries(Object.entries(semanticColors).map(([name, { light }]) => [chakraColorVar(name), light]))
 }

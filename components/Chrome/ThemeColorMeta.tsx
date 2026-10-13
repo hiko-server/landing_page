@@ -1,18 +1,13 @@
-import Head from 'next/head'
-import { useColorMode } from '@chakra-ui/react'
-import { themeColorFor } from '../../theme/color'
+import { useEffect } from 'react'
+import { syncThemeColorMeta } from './themeColor'
 
 /**
- * Browser-UI colour (mobile address bar, PWA title bar) that follows the
- * active colour mode. The explicit `key` keeps next/head from collapsing it
- * into a page-level theme-color tag, and as the earlier tag in <head> it is
- * the one browsers apply.
+ * Keeps the single `<meta name="theme-color">` (rendered by pages/_document,
+ * corrected before first paint) in step with the colour mode on screen after
+ * hydration — the theme toggle rewrites `data-theme`, this follows it.
+ * See ./themeColor.ts.
  */
 export default function ThemeColorMeta() {
-  const { colorMode } = useColorMode()
-  return (
-    <Head>
-      <meta key="theme-color-mode" name="theme-color" content={themeColorFor(colorMode)} />
-    </Head>
-  )
+  useEffect(() => syncThemeColorMeta(document, MutationObserver), [])
+  return null
 }

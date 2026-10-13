@@ -1,6 +1,6 @@
 import React, { useMemo, useRef } from 'react'
 import type { GetStaticProps } from 'next'
-import { Box, Heading, Text, Flex, SimpleGrid, useColorModeValue } from '@chakra-ui/react'
+import { Box, Heading, Text, Flex, SimpleGrid } from '@chakra-ui/react'
 import NextLink from 'next/link'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
@@ -84,9 +84,10 @@ function Cover({
 }
 
 function WorkCard({ w, featured, first }: { w: WorkItem; featured: boolean; first: boolean }) {
-  // AA contrast on both themes (#22c55e / #a855f7 at 10px failed on light).
-  const liveColor = useColorModeValue('green.700', 'green.300')
-  const featuredColor = useColorModeValue('purple.700', 'purple.300')
+  // Semantic tokens: AA at 10px in both modes and right on the first paint
+  // (useColorModeValue rendered the dark branch on the server).
+  const liveColor = 'status.open'
+  const featuredColor = 'accent.text'
   const fm = w.frontmatter
   const cover = w.coverImage
 
@@ -98,7 +99,7 @@ function WorkCard({ w, featured, first }: { w: WorkItem; featured: boolean; firs
       textTransform="uppercase"
       color={fm.status === 'live' ? liveColor : 'page.fg-secondary'}
       border="1px solid"
-      borderColor={fm.status === 'live' ? '#22c55e44' : 'page.border'}
+      borderColor={fm.status === 'live' ? 'status.open-border' : 'page.border'}
       px={2}
       py={0.5}
       borderRadius="sm"

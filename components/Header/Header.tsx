@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Box, Text, Button, useDisclosure, Flex, IconButton, Link, useToast, useColorMode, Kbd } from '@chakra-ui/react'
+import { Box, Text, Button, useDisclosure, Flex, IconButton, Link, useColorMode, Kbd } from '@chakra-ui/react'
 import NextLink from 'next/link'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/router'
@@ -19,6 +19,7 @@ import {
   splitBrand,
 } from '../Chrome/chrome'
 import { useBrandHost } from '../Chrome/useBrandHost'
+import { useChromeToast } from '../Chrome/useChromeToast'
 import { useFetchJson } from '../Common/useFetchJson'
 import { MenuIcon } from '../Icons/brand'
 import { toggleThemeWithTransition } from '../../lib/themeTransition'
@@ -132,7 +133,7 @@ function LiveStatusPill() {
 /** `socials`: the profile links to offer in the drawer (SiteChrome resolves them from home.socials). */
 const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] }) => {
   const router = useRouter()
-  const toast = useToast()
+  const toast = useChromeToast()
   const [isAdmin, setIsAdmin] = useState(false)
   const { isOpen, onOpen, onClose } = useDisclosure()
   const { isOpen: cmdkOpen, onOpen: openCmdk, onClose: closeCmdk } = useDisclosure()

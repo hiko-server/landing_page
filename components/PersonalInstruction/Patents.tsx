@@ -1,5 +1,5 @@
 import React from 'react'
-import { Box, Flex, Text, useColorModeValue } from '@chakra-ui/react'
+import { Box, Flex, Text } from '@chakra-ui/react'
 import { Patents } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'
 import { cleanList, cvLabels, formatCvDate } from '../../lib/cvFormat'
@@ -17,9 +17,10 @@ const PatentsSection = ({
   lang?: CvLang
 }) => {
   const L = cvLabels(lang)
-  const text = useColorModeValue('gray.700', 'gray.300')
-  const chipBg = useColorModeValue('rgba(0,0,0,0.04)', 'rgba(255,255,255,0.06)')
-  const chipBorder = useColorModeValue('rgba(0,0,0,0.06)', 'rgba(255,255,255,0.08)')
+  // Semantic tokens (first-paint correct in both modes, see _CVSectionShell).
+  const text = 'page.fg-prose'
+  const chipBg = 'page.hover'
+  const chipBorder = 'page.border'
   const groups = (data?.patentExperience || []).filter((g) => t(g.title) || cleanList(g.patents).length)
   if (!groups.length) return null
   const total = groups.reduce((n, g) => n + cleanList(g.patents).length, 0)

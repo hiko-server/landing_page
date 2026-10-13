@@ -7,7 +7,6 @@ import {
   Box,
   Flex,
   Text,
-  useColorModeValue,
 } from '@chakra-ui/react'
 
 /**
@@ -30,6 +29,11 @@ import {
  *
  * Width matches the rest of the page (1100px max), spacing uses the
  * site's 8px base.
+ *
+ * Colours are semantic tokens (CSS variables keyed off data-theme, set before
+ * first paint), never useColorModeValue: that hook renders the dark branch on
+ * the server, so light-mode visitors saw borders and surfaces repaint after
+ * hydration.
  */
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
@@ -57,15 +61,15 @@ export default function CVSectionShell({
   children,
   defaultOpen = false,
 }: CVSectionShellProps) {
-  const border = useColorModeValue('rgba(0,0,0,0.10)', 'rgba(255,255,255,0.12)')
-  const borderHover = useColorModeValue('rgba(0,0,0,0.20)', 'rgba(255,255,255,0.22)')
-  const surface = useColorModeValue('rgba(255,255,255,0.6)', 'rgba(10,10,10,0.45)')
-  const surfaceHover = useColorModeValue('rgba(255,255,255,0.85)', 'rgba(10,10,10,0.65)')
-  const labelColor = useColorModeValue('gray.900', 'gray.50')
+  const border = 'page.border'
+  const borderHover = 'page.border-strong'
+  const surface = 'page.surface'
+  const surfaceHover = 'page.float-bg'
+  const labelColor = 'page.fg'
   const labelExpanded = 'accent.text'
-  const indexColor = useColorModeValue('gray.600', 'gray.500')
-  const metaColor = useColorModeValue('gray.600', 'gray.500')
-  const panelDivider = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.08)')
+  const indexColor = 'page.fg-subtle'
+  const metaColor = 'page.fg-subtle'
+  const panelDivider = 'page.border'
 
   const padded = (n: number) => String(n).padStart(2, '0')
 
@@ -244,13 +248,12 @@ export function CVRow({
   children,
   isFirst,
 }: CVRowProps) {
-  const divider = useColorModeValue('rgba(0,0,0,0.08)', 'rgba(255,255,255,0.08)')
-  const titleColor = useColorModeValue('gray.900', 'gray.50')
+  const divider = 'page.border'
+  const titleColor = 'page.fg'
   // Subtitle (school name, company name, project description) carries real
-  // content — bump light-side to gray.700 (~6.5:1) so it's clearly readable,
-  // not just barely-AA at gray.600.
-  const subColor = useColorModeValue('gray.700', 'gray.400')
-  const metaColor = useColorModeValue('gray.600', 'gray.500')
+  // content: the secondary text token (≥ 7:1 on paper), not the subtle one.
+  const subColor = 'page.fg-secondary'
+  const metaColor = 'page.fg-subtle'
 
   return (
     <Box
@@ -337,8 +340,8 @@ export function CVBullets({
   items: Array<{ description: string; furtherExplanation?: string[] }>
 }) {
   const accentDot = 'var(--accent)'
-  const text = useColorModeValue('gray.700', 'gray.300')
-  const subText = useColorModeValue('gray.600', 'gray.400')
+  const text = 'page.fg-prose'
+  const subText = 'page.fg-secondary'
 
   if (!items?.length) return null
   return (
@@ -385,9 +388,9 @@ export function CVBullets({
  * Inline tag list (e.g. relatedSkills) — pill tags with mono font.
  */
 export function CVTagList({ tags }: { tags: string[] }) {
-  const tagBg = useColorModeValue('rgba(0,0,0,0.04)', 'rgba(255,255,255,0.06)')
-  const tagFg = useColorModeValue('gray.700', 'gray.300')
-  const tagBorder = useColorModeValue('rgba(0,0,0,0.06)', 'rgba(255,255,255,0.08)')
+  const tagBg = 'page.hover'
+  const tagFg = 'page.fg-prose'
+  const tagBorder = 'page.border'
 
   if (!tags?.length) return null
   return (
