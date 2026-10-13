@@ -4,13 +4,14 @@ import { getJwtSecret } from '../../../lib/env'
 import { rateLimit } from '../../../lib/rateLimit'
 import { challengeHash, newChallenge } from '../../../lib/security/contactChallenge'
 import { withApi } from '../../../lib/apiHandler'
+import { contactRetentionDays } from '../../../lib/retention'
 
 /**
  * Signed nonce for the contact form's lightweight human-check.
  *
  * Flow:
  *   1. Client GET /api/contact/nonce on form mount → receives short-lived JWT
- *      and a small sum to show ({ token, challenge: { a, b } })
+ *      and a small sum to show ({ token, challenge: { a, b }, retentionDays })
  *   2. Client posts nonce + the visitor's answer + an empty honeypot
  *   3. POST /api/contact verifies: nonce valid + ≥2s elapsed + honeypot empty
  *      + correct answer (HMAC bound to the nonce id, lib/security/
@@ -45,7 +46,9 @@ export default withApi('contact/nonce', (req, res, { log }) => {
       { expiresIn: '30m', audience: 'contact-form', algorithm: 'HS256' },
     )
     res.setHeader('Cache-Control', 'no-store')
-    return res.status(200).json({ token, challenge })
+    // The form's privacy notice states the period (pages that are not
+    // regenerated with the server's env, e.g. the home page form, read it here).
+    return res.status(200).json({ token, challenge, retentionDays: contactRetentionDays() })
   } catch (err) {
     log.error('contact nonce: mint failed', { err })
     return res.status(500).json({ error: 'Nonce mint failed' })

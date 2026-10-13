@@ -72,6 +72,7 @@ test('defaults and rejected values', () => {
     roles: [],
     from: '',
     bookingUrl: '',
+    workStatus: '',
   })
   assert.equal(
     availabilityView({ status: 'open', bookingUrl: 'javascript:alert(1)' })?.bookingUrl,

@@ -13,6 +13,38 @@
  * the same on server and client.
  */
 
+import { isHttpsUrl } from './url'
+
+export { isHttpsUrl }
+
+/**
+ * Kinds of contact inquiry (lib/inquiry.ts builds the form behaviour on
+ * them). Declared here so the home document's validation needs no more than
+ * this file — the home page bundles homeShape, not the inquiry model.
+ */
+export const INQUIRY_INTENTS = ['role', 'freelance', 'collab', 'other'] as const
+export type InquiryIntent = (typeof INQUIRY_INTENTS)[number]
+
+export function isInquiryIntent(v: unknown): v is InquiryIntent {
+  return typeof v === 'string' && (INQUIRY_INTENTS as readonly string[]).includes(v)
+}
+
+/**
+ * The owner's reason → kind mapping restricted to the given reasons, without
+ * 'other' values (the default) — what is stored in home.contact.intents.
+ */
+export function cleanIntentMap(reasons: readonly string[], intents: unknown): Record<string, InquiryIntent> {
+  const out: Record<string, InquiryIntent> = {}
+  if (!intents || typeof intents !== 'object' || Array.isArray(intents)) return out
+  const src = intents as Record<string, unknown>
+  for (const r of reasons) {
+    const key = typeof r === 'string' ? r.trim() : ''
+    const v = src[key]
+    if (key && isInquiryIntent(v) && v !== 'other') out[key] = v
+  }
+  return out
+}
+
 export type HomeData = {
   hero: {
     welcome: string
@@ -80,6 +112,13 @@ export type HomeData = {
     eyebrow?: string
     /** Dropdown choices. Empty array hides the dropdown entirely. */
     reasons?: string[]
+    /**
+     * Kind of inquiry behind each custom reason (reason label → intent); it
+     * decides which structured fields the form discloses (lib/inquiry.ts).
+     * Reasons without an entry are 'other'. Ignored while `reasons` is empty
+     * (the built-in reasons have a built-in mapping).
+     */
+    intents?: Record<string, InquiryIntent>
   }
   /**
    * Work availability shown on the contact page and in the command palette.
@@ -109,6 +148,21 @@ export type HomeAvailability = {
   from?: string
   /** https:// booking link (Cal.com, Calendly, …). */
   bookingUrl?: string
+  /**
+   * Job intent on the Chinese CV (求职意向): target roles in Chinese and the
+   * city. Shown on /cv/zh with `from` as the start date (到岗时间), only when
+   * filled and the status is not 'closed'.
+   */
+  roles_zh?: string[]
+  city_zh?: string
+  /**
+   * Right-to-work line in the owner's own words (e.g. "Hong Kong permanent
+   * resident — no sponsorship needed"), English and Chinese. Shown on the
+   * contact availability card and the CV header when filled; never part of
+   * JSON-LD or the vCard, and never inferred.
+   */
+  workStatus?: string
+  workStatus_zh?: string
   /** ms epoch of the last availability edit. */
   updatedAt?: number
 }
@@ -138,6 +192,8 @@ export const HOME_LIMITS = {
   availabilityLabelMax: 120,
   rolesMax: 12,
   roleMax: 60,
+  cityMax: 60,
+  workStatusMax: 160,
   siteNameMax: 80,
 } as const
 
@@ -218,17 +274,6 @@ export function publicHome(home: HomeData | null | undefined): HomeData | null {
 
 export type HomeFieldError = { path: string; message: string }
 
-/** An absolute https:// URL with a host and no embedded credentials. */
-export function isHttpsUrl(value: unknown): value is string {
-  if (typeof value !== 'string' || !value.trim() || /\s/.test(value.trim())) return false
-  try {
-    const u = new URL(value.trim())
-    return u.protocol === 'https:' && !!u.hostname && !u.username && !u.password
-  } catch {
-    return false
-  }
-}
-
 /** `YYYY-MM` with a real month. */
 export function isYearMonth(value: unknown): value is string {
   return typeof value === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(value)
@@ -279,17 +324,34 @@ function normalizeAvailability(
       errors.push({ path: `availability.${key}`, message: `Keep it under ${HOME_LIMITS.availabilityLabelMax} characters.` })
     } else if (v) out[key] = v
   }
-  if (a.roles !== undefined && a.roles !== null) {
-    if (!Array.isArray(a.roles) || a.roles.some((r) => typeof r !== 'string')) {
-      errors.push({ path: 'availability.roles', message: 'Roles must be a list of text.' })
+  for (const key of ['roles', 'roles_zh'] as const) {
+    const list = a[key]
+    if (list === undefined || list === null) continue
+    if (!Array.isArray(list) || list.some((r) => typeof r !== 'string')) {
+      errors.push({ path: `availability.${key}`, message: 'Roles must be a list of text.' })
     } else {
-      const roles = Array.from(new Set(a.roles.map((r: string) => r.trim()).filter(Boolean)))
+      const roles = Array.from(new Set(list.map((r: string) => r.trim()).filter(Boolean)))
       if (roles.length > HOME_LIMITS.rolesMax) {
-        errors.push({ path: 'availability.roles', message: `At most ${HOME_LIMITS.rolesMax} roles.` })
+        errors.push({ path: `availability.${key}`, message: `At most ${HOME_LIMITS.rolesMax} roles.` })
       } else if (roles.some((r) => r.length > HOME_LIMITS.roleMax)) {
-        errors.push({ path: 'availability.roles', message: `Each role must be under ${HOME_LIMITS.roleMax} characters.` })
-      } else if (roles.length) out.roles = roles
+        errors.push({ path: `availability.${key}`, message: `Each role must be under ${HOME_LIMITS.roleMax} characters.` })
+      } else if (roles.length) out[key] = roles
     }
+  }
+  const lines: Array<['city_zh' | 'workStatus' | 'workStatus_zh', number]> = [
+    ['city_zh', HOME_LIMITS.cityMax],
+    ['workStatus', HOME_LIMITS.workStatusMax],
+    ['workStatus_zh', HOME_LIMITS.workStatusMax],
+  ]
+  for (const [key, max] of lines) {
+    if (a[key] === undefined || a[key] === null) continue
+    if (typeof a[key] !== 'string') {
+      errors.push({ path: `availability.${key}`, message: 'Must be text.' })
+      continue
+    }
+    const v = trimmed(a[key]).replace(/[\r\n]+/g, ' ')
+    if (v.length > max) errors.push({ path: `availability.${key}`, message: `Keep it under ${max} characters.` })
+    else if (v) out[key] = v
   }
   const from = trimmed(a.from)
   if (from) {
@@ -427,6 +489,23 @@ export function normalizeHomeWrite(
   const site = normalizeSite(input.site, errors)
   if (site) home.site = site
   else delete home.site
+
+  if (input.contact && typeof input.contact === 'object' && !Array.isArray(input.contact)) {
+    const contact = { ...input.contact }
+    const raw: unknown = contact.intents
+    if (raw !== undefined && raw !== null && (typeof raw !== 'object' || Array.isArray(raw))) {
+      errors.push({ path: 'contact.intents', message: 'Reason kinds must map each reason to a kind.' })
+    } else {
+      // Only the owner's own reasons carry a mapping; 'other' is the default and not stored.
+      const own = Array.isArray(contact.reasons)
+        ? contact.reasons.map((r) => (typeof r === 'string' ? r.trim() : '')).filter(Boolean)
+        : []
+      const intents = own.length ? cleanIntentMap(own, raw) : {}
+      if (Object.keys(intents).length) contact.intents = intents
+      else delete contact.intents
+      home.contact = contact
+    }
+  }
 
   if (input.sections && typeof input.sections === 'object') {
     for (const [k, v] of Object.entries(input.sections)) {

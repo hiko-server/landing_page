@@ -23,6 +23,7 @@ import { isValidUploadName } from './security/uploadName'
 // @ts-expect-error -- tar-stream ships no type declarations (typed below).
 import tarStream from 'tar-stream'
 import { inboxFile, mergeInboxText } from './inbox'
+import { contactRetentionDays, retentionCutoff } from './retention'
 import { log } from './log'
 
 // A static import (not require) so the standalone tracer bundles the package
@@ -67,8 +68,10 @@ const tar = tarStream as {
  *     fails fast with StorageBusyError instead of interleaving.
  *
  * Retention: the newest LOCAL_KEEP tarballs are kept in data/backups and the
- * newest R2_KEEP in R2 (plus backups/latest.tgz). Only files this module
- * names (snapshot-*.tgz) are ever pruned.
+ * newest R2_KEEP in R2 (plus backups/latest.tgz). Snapshots older than the
+ * contact-message retention period (CONTACT_RETENTION_DAYS, default 365) are
+ * pruned as well — they carry the inbox — except the newest one. Only files
+ * this module names (snapshot-*.tgz) are ever pruned.
  *
  * R2 layout (S3-compatible):
  *   backups/<name>.tgz      ← every successful snapshot
@@ -174,6 +177,29 @@ export function snapshotFilename(d = new Date(), suffix = crypto.randomBytes(3).
 export function selectForPruning<T extends { name: string }>(items: T[], keep: number, timeOf: (t: T) => number): T[] {
   const sorted = [...items].sort((a, b) => timeOf(b) - timeOf(a) || b.name.localeCompare(a.name))
   return sorted.slice(Math.max(0, keep))
+}
+
+/**
+ * Snapshots to prune: those beyond the newest `keep`, plus — when
+ * `cutoff` is set — every snapshot taken before it, except the newest of
+ * all (a site that sat unchanged for longer than the period keeps its one
+ * restorable copy). Snapshots carry the contact inbox, so this keeps backups
+ * inside the contact-message retention period (CONTACT_RETENTION_DAYS).
+ */
+export function selectBackupVictims<T extends { name: string }>(
+  items: T[],
+  keep: number,
+  timeOf: (t: T) => number,
+  cutoff: number | null,
+  alsoKeep: string | null = null,
+): T[] {
+  const sorted = [...items].sort((a, b) => timeOf(b) - timeOf(a) || b.name.localeCompare(a.name))
+  const newest = alsoKeep ?? sorted[0]?.name ?? null
+  const victims = new Set(selectForPruning(items, keep, timeOf))
+  if (cutoff !== null) {
+    for (const it of sorted) if (it.name !== newest && timeOf(it) > 0 && timeOf(it) < cutoff) victims.add(it)
+  }
+  return sorted.filter((it) => victims.has(it))
 }
 
 /** Run `fn` over `items` with at most `limit` in flight. */
@@ -332,12 +358,17 @@ async function buildLocalSnapshot(reason: SnapshotReason): Promise<{
   }
 }
 
+/** Snapshots taken before this instant hold contact messages past their retention period. */
+function backupCutoff(now = Date.now()): number | null {
+  return retentionCutoff(now, contactRetentionDays())
+}
+
 function pruneLocalBackups(keepFilename: string, warnings: string[]): string[] {
   const candidates = listLocalBackups()
     .filter((b) => SNAPSHOT_FILE_RE.test(b.filename) && b.filename !== keepFilename)
     .map((b) => ({ ...b, name: b.filename }))
-  // The snapshot just written counts towards the limit.
-  const victims = selectForPruning(candidates, LOCAL_KEEP - 1, (b) => b.mtime)
+  // The snapshot just written counts towards the limit (and is the newest one kept).
+  const victims = selectBackupVictims(candidates, LOCAL_KEEP - 1, (b) => b.mtime, backupCutoff(), keepFilename)
   const removed: string[] = []
   for (const v of victims) {
     try {
@@ -354,7 +385,7 @@ async function pruneR2Backups(warnings: string[]): Promise<string[]> {
   const objs = (await r2ListDetailed(R2_PREFIX))
     .filter((o) => o.key !== R2_LATEST_KEY && SNAPSHOT_FILE_RE.test(o.key.slice(R2_PREFIX.length)))
     .map((o) => ({ ...o, name: o.key }))
-  const victims = selectForPruning(objs, R2_KEEP, (o) => Date.parse(o.lastModified || '') || 0)
+  const victims = selectBackupVictims(objs, R2_KEEP, (o) => Date.parse(o.lastModified || '') || 0, backupCutoff())
   const removed: string[] = []
   await mapLimit(victims, 4, async (v) => {
     try {

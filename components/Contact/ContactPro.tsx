@@ -24,11 +24,26 @@ import { FaGithub, FaGitlab, FaLinkedin, FaWhatsapp } from 'react-icons/fa'
 import { motion, useReducedMotion } from 'framer-motion'
 
 import { safeHref } from '../../lib/cvFormat'
+import {
+  INQUIRY_LIMITS,
+  INQUIRY_TIMELINES,
+  INTENT_FIELDS,
+  INTENT_FIELD_COPY,
+  TIMELINE_LABEL,
+  inquiryRows,
+  intentOf,
+  isInquiryTimeline,
+  reasonsOf,
+  type InquiryIntent,
+} from '../../lib/inquiry'
 import CopyButton from '../General-UI/CopyButton'
 import EmailText from '../Common/EmailText'
 import {
+  EMPTY_INQUIRY,
   MESSAGE_MAX,
+  inquiryPayload,
   isContactValid,
+  privacyNoticeText,
   submitHint,
   validateContact,
   visibleErrors,
@@ -55,15 +70,20 @@ type HomeData = {
     blurb?: string
     eyebrow?: string
     reasons?: string[]
+    /** Reason → inquiry kind (lib/inquiry.ts). */
+    intents?: Record<string, string>
   }
+  /** Public availability (the home page passes the whole public home view). */
+  availability?: Availability | null
 }
+
+type Availability = { status?: string; bookingUrl?: string; workStatus?: string }
 
 const MotionBox = motion(Box)
 
 // Built-in defaults — used when home.json's contact block is missing or
-// any individual field is blank. Kept in sync with HomeEditor's
-// DEFAULT_CONTACT_REASONS so the admin and renderer agree.
-const DEFAULT_REASONS = ['Project Inquiry', 'Hiring', 'Collaboration', 'Consulting', 'Mentorship', 'Other']
+// any individual field is blank. The built-in reasons live in lib/inquiry
+// (DEFAULT_REASONS) with their inquiry kinds.
 const DEFAULT_EYEBROW = '▸ Reach me'
 const DEFAULT_BLURB = 'I usually reply within 24 hours.'
 
@@ -88,7 +108,34 @@ const inputProps = {
   _invalid: { borderColor: 'red.500', boxShadow: '0 0 0 1px var(--chakra-colors-red-500)' },
 } as const
 
-type Sent = { name: string; email: string; subject: string }
+/** The confirmation's follow-up links (CV, contact card, booking). */
+const nextStepProps = {
+  variant: 'outline',
+  size: 'sm',
+  h: '36px',
+  borderColor: 'page.border-strong',
+  color: 'page.fg',
+  fontFamily: monoFont,
+  fontSize: '12px',
+  fontWeight: 400,
+  _hover: { borderColor: 'var(--accent)', color: 'accent.text', textDecoration: 'none' },
+  _focusVisible: { outline: '2px solid var(--accent)', outlineOffset: '3px' },
+} as const
+
+type Sent = { name: string; email: string; subject: string; intent: InquiryIntent }
+
+/** Heading of the disclosed structured fields per inquiry kind. */
+const DISCLOSURE_TITLE: Record<Exclude<InquiryIntent, 'other'>, string> = {
+  role: 'About the role',
+  freelance: 'About the project',
+  collab: 'About the collaboration',
+}
+
+/** Owner's https booking link, '' otherwise (never another scheme). */
+function bookingHref(url: unknown): string {
+  const href = safeHref(url)
+  return /^https:\/\//i.test(href) ? href : ''
+}
 
 /**
  * Rows of the form that sit side by side once the form itself is at least
@@ -116,13 +163,20 @@ const actionRow = {
  *     exactly what is still missing.
  *   - On success the form is replaced in place by a confirmation (animated
  *     check, what was sent, "Send another"), and focus moves to it.
- *   - API contract unchanged: GET /api/contact/nonce, then POST /api/contact
- *     with { name, email, subject, message, nonce, mathAnswer, hp }.
+ *   - API: GET /api/contact/nonce, then POST /api/contact with { name,
+ *     email, subject, message, nonce, mathAnswer, hp } plus the structured
+ *     inquiry { reason, intent, company?, roleUrl?, timeline? }.
+ *   - Progressive disclosure: the chosen reason's kind (lib/inquiry.ts —
+ *     role / freelance / collab / other) reveals a few optional fields
+ *     (company, a link, a timeline), announced politely to screen readers.
  *   - Human check: signed nonce (server-verified, ≥ 2s old) + visible sum +
  *     hidden honeypot. Drafts autosave locally and clear on send.
+ *   - A privacy notice under the actions says what is kept, why and for how
+ *     long (`retentionDays`, else the value the nonce endpoint reports).
  *   - E-mail / phone render through EmailText (Cloudflare-safe, no hydration
  *     mismatch) with morphing copy buttons; /contact adds "Save contact
- *     (.vcf)" and a QR code for the vCard (`vcard`).
+ *     (.vcf)" and a QR code for the vCard (`vcard`). The confirmation offers
+ *     the CV, the contact card and the owner's booking link.
  */
 export default function ContactPro({
   home,
@@ -130,6 +184,9 @@ export default function ContactPro({
   headingAs = 'h2',
   hideBlurb,
   vcard,
+  availability: availabilityProp,
+  retentionDays: retentionProp,
+  cvHref = '/cv',
 }: {
   home?: HomeData
   formOnly?: boolean
@@ -139,20 +196,27 @@ export default function ContactPro({
   hideBlurb?: boolean
   /** "Save contact (.vcf)" link and, from md up, a QR code (inline SVG, lib/qr.ts) of the same URL. */
   vcard?: { href: string; qrSvg?: string | null }
+  /** Public availability (booking link, right-to-work line); defaults to `home.availability`. */
+  availability?: Availability | null
+  /** Contact-message retention in days (0 = kept until deleted); omitted = learnt from the nonce endpoint. */
+  retentionDays?: number
+  /** Where "Read my CV" points after sending. */
+  cvHref?: string
 }) {
   const reduce = useReducedMotion()
 
   // Admin copy wins when non-blank; blank / missing entries use the defaults.
-  const reasons = useMemo(() => {
-    const list = (home?.contact?.reasons || []).map((r) => (typeof r === 'string' ? r.trim() : '')).filter(Boolean)
-    return list.length ? list : DEFAULT_REASONS
-  }, [home?.contact?.reasons])
+  const reasons = useMemo(() => reasonsOf(home?.contact), [home?.contact])
   const eyebrowText = (home?.contact?.eyebrow ?? '').trim() || DEFAULT_EYEBROW
   const headingText = (home?.contact?.heading ?? '').trim() || home?.hero?.brand || 'Contact'
   const blurbText = (home?.contact?.blurb ?? '').trim() || DEFAULT_BLURB
   const email = (home?.hero?.email || '').trim()
   const phone = (home?.hero?.phone || '').trim()
   const mailtoBase = email ? safeHref(`mailto:${email}`) : ''
+  const availability = availabilityProp === undefined ? home?.availability : availabilityProp
+  const booking = availability?.status ? bookingHref(availability.bookingUrl) : ''
+  const workStatus = availability?.status && typeof availability.workStatus === 'string' ? availability.workStatus.trim() : ''
+  const vcardHref = vcard?.href || '/api/vcard'
 
   const [values, setValues] = useState<ContactValues>({
     name: '',
@@ -161,9 +225,33 @@ export default function ContactPro({
     subject: '',
     message: '',
     mathAnswer: '',
+    ...EMPTY_INQUIRY,
   })
   const set = (k: keyof ContactValues) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setValues((v) => ({ ...v, [k]: e.target.value }))
+  const intent = intentOf(values.reason, home?.contact)
+  // The structured fields appear once the visitor picks a reason (or a draft
+  // brings one back), so the form starts short; the kind is sent either way.
+  const [reasonChosen, setReasonChosen] = useState(false)
+  const shownIntent: InquiryIntent = reasonChosen ? intent : 'other'
+  const disclosed = INTENT_FIELDS[shownIntent]
+  const copy = shownIntent === 'other' ? null : INTENT_FIELD_COPY[shownIntent]
+  const payloadOf = (v: ContactValues) => ({ ...inquiryPayload(v, shownIntent), intent })
+
+  // Retention period for the privacy notice: the page's value, else what the nonce endpoint reports.
+  const [nonceRetention, setNonceRetention] = useState<number | null>(null)
+  const retentionDays = typeof retentionProp === 'number' ? retentionProp : nonceRetention
+
+  // Announce newly disclosed fields (not on the first render).
+  const [disclosureNote, setDisclosureNote] = useState('')
+  const lastIntent = useRef(shownIntent)
+  useEffect(() => {
+    if (lastIntent.current === shownIntent) return
+    lastIntent.current = shownIntent
+    setDisclosureNote(
+      copy ? `Added optional fields: ${disclosed.map((f) => copy[f].label).join(', ')}.` : 'No extra fields for this reason.',
+    )
+  }, [shownIntent, copy, disclosed])
 
   const [touched, setTouched] = useState<Partial<Record<ContactField, boolean>>>({})
   const touch = (k: ContactField) => () => setTouched((t) => (t[k] ? t : { ...t, [k]: true }))
@@ -179,7 +267,7 @@ export default function ContactPro({
   const [mathPair, setMathPair] = useState<{ a: number; b: number } | null>(null)
   const expectedMath = mathPair ? mathPair.a + mathPair.b : null
 
-  const errors = validateContact(values, expectedMath)
+  const errors = validateContact(values, expectedMath, shownIntent)
   const valid = isContactValid(errors)
   const shown = visibleErrors(errors, touched, attempted)
   const hint = submitHint(errors)
@@ -202,6 +290,7 @@ export default function ContactPro({
       nonceAtRef.current = Date.now()
       setNonce(d.token)
       setMathPair({ a: c.a, b: c.b })
+      if (Number.isInteger(d?.retentionDays) && d.retentionDays >= 0) setNonceRetention(d.retentionDays)
       setNonceErr(null)
       return d.token as string
     } catch {
@@ -220,6 +309,23 @@ export default function ContactPro({
       fetchNonce()
     }
   }, [nonce, fetchNonce])
+
+  /**
+   * WCAG 2.4.11: a tall control (the message box) that receives focus while
+   * partly under the sticky header is "in view" for the browser, which then
+   * does not scroll. Bring it clear — scrollIntoView honours the controls'
+   * scroll-margin-top (styles/globals.css), so it lands below the header.
+   */
+  const onFormFocus = useCallback(
+    (e: React.FocusEvent<HTMLFormElement>) => {
+      warmNonce()
+      const el = e.target as HTMLElement
+      const header = document.querySelector('header')
+      if (!header || typeof el.scrollIntoView !== 'function') return
+      if (el.getBoundingClientRect().top < header.getBoundingClientRect().bottom) el.scrollIntoView({ block: 'nearest' })
+    },
+    [warmNonce],
+  )
 
   // Load the challenge once the form is on screen (not on every page view
   // that never reaches the form).
@@ -252,13 +358,13 @@ export default function ContactPro({
     return fetchNonce()
   }, [fetchNonce])
 
-  // Draft autosave (name / email / reason / subject / message only).
+  // Draft autosave (everything but the human-check answer), in this browser only.
   useEffect(() => {
     if (sent) return
     const id = setTimeout(() => {
-      const { name, email: em, reason, subject, message } = values
+      const { name, email: em, reason, subject, message, company, roleUrl, timeline } = values
       try {
-        localStorage.setItem(DRAFT_KEY, JSON.stringify({ name, email: em, reason, subject, message }))
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ name, email: em, reason, subject, message, company, roleUrl, timeline }))
       } catch {
         /* storage unavailable — drafts are a convenience only */
       }
@@ -279,7 +385,14 @@ export default function ContactPro({
         reason: reasons.includes(str(d.reason)) ? str(d.reason) : reasons[0],
         subject: str(d.subject),
         message: str(d.message).slice(0, MESSAGE_MAX),
+        company: str(d.company).slice(0, INQUIRY_LIMITS.companyMax),
+        roleUrl: str(d.roleUrl).slice(0, INQUIRY_LIMITS.roleUrlMax),
+        timeline: isInquiryTimeline(d.timeline) ? d.timeline : '',
       }))
+      // A draft that picked a reason (or filled its fields) shows them again.
+      if ((reasons.includes(str(d.reason)) && str(d.reason) !== reasons[0]) || str(d.company) || str(d.roleUrl) || isInquiryTimeline(d.timeline)) {
+        setReasonChosen(true)
+      }
     } catch {
       /* ignore malformed draft */
     }
@@ -293,7 +406,8 @@ export default function ContactPro({
     } catch {
       /* ignore */
     }
-    setValues({ name: '', email: '', reason: reasons[0], subject: '', message: '', mathAnswer: '' })
+    setValues({ name: '', email: '', reason: reasons[0], subject: '', message: '', mathAnswer: '', ...EMPTY_INQUIRY })
+    setReasonChosen(false)
     setTouched({})
     setAttempted(false)
     setServerError(null)
@@ -339,14 +453,15 @@ export default function ContactPro({
           name: values.name.trim(),
           email: values.email.trim(),
           subject,
-          message: `Reason: ${values.reason}\n\n${values.message}`,
+          message: values.message,
+          ...payloadOf(values),
           nonce: token,
           mathAnswer: Number(values.mathAnswer),
           hp: honeypot, // expected to be ''
         }),
       })
       if (res.ok) {
-        setSent({ name: values.name.trim(), email: values.email.trim(), subject })
+        setSent({ name: values.name.trim(), email: values.email.trim(), subject, intent })
         resetForm()
         // A nonce is single-purpose; take a fresh one for any follow-up.
         setNonce(null)
@@ -355,6 +470,7 @@ export default function ContactPro({
         const d = await res.json().catch(() => ({}))
         // Each challenge allows one attempt: take a fresh one after a miss.
         if (d?.code === 'BAD_CHALLENGE') await refreshChallenge()
+        if (d?.field === 'roleUrl') setTouched((t) => ({ ...t, roleUrl: true }))
         setServerError(typeof d?.error === 'string' && d.error ? d.error : 'The message couldn’t be sent. Please try again.')
       }
     } catch {
@@ -544,17 +660,45 @@ export default function ContactPro({
               </Text>
               .
             </Text>
+            <Box as="nav" aria-label="While you wait" w="100%" mt={1}>
+              <Text fontFamily={monoFont} fontSize="11px" letterSpacing="0.16em" textTransform="uppercase" color="page.fg-secondary" mb={2.5}>
+                ▸ While you wait
+              </Text>
+              <Flex as="ul" listStyleType="none" m={0} p={0} gap={2} flexWrap="wrap">
+                <li>
+                  <Button as="a" href={cvHref} {...nextStepProps}>
+                    {sent.intent === 'role' ? 'Read my CV' : 'See my CV'}
+                  </Button>
+                </li>
+                <li>
+                  <Button as="a" href={vcardHref} download="Li-Yanpei.vcf" {...nextStepProps}>
+                    Save contact (.vcf)
+                  </Button>
+                </li>
+                {booking ? (
+                  <li>
+                    <Button as="a" href={booking} target="_blank" rel="noopener noreferrer" {...nextStepProps}>
+                      Book a call
+                      <Box as="span" aria-hidden className="nudge-ne" display="inline-block" ml={1.5}>
+                        ↗
+                      </Box>
+                      <span className="sr-only"> (opens in a new tab)</span>
+                    </Button>
+                  </li>
+                ) : null}
+              </Flex>
+            </Box>
             <Button
-              variant="outline"
+              variant="ghost"
               size="md"
-              mt={2}
-              borderColor="page.border-strong"
-              color="page.fg"
+              mt={1}
+              px={0}
+              color="page.fg-secondary"
               fontFamily={monoFont}
               fontSize="13px"
               fontWeight={400}
               onClick={sendAnother}
-              _hover={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+              _hover={{ color: 'var(--accent)', bg: 'transparent' }}
             >
               Send another message
             </Button>
@@ -568,7 +712,7 @@ export default function ContactPro({
             <chakra.form
               ref={formRef}
               onSubmit={onSubmit}
-              onFocus={warmNonce}
+              onFocus={onFormFocus}
               noValidate
               aria-describedby={serverError ? 'contact-server-error' : undefined}
               sx={{ containerType: 'inline-size' }}
@@ -599,7 +743,14 @@ export default function ContactPro({
                 <Flex gap={4} align="flex-start" sx={responsiveRow}>
                   <FormControl flex={1} minW={0}>
                     <FormLabel {...labelProps}>Reason</FormLabel>
-                    <Select value={values.reason} onChange={set('reason')} {...inputProps}>
+                    <Select
+                      value={values.reason}
+                      onChange={(e) => {
+                        set('reason')(e)
+                        setReasonChosen(true)
+                      }}
+                      {...inputProps}
+                    >
                       {reasons.map((r) => (
                         <option key={r} value={r}>
                           {r}
@@ -618,6 +769,100 @@ export default function ContactPro({
                     <FormErrorMessage fontSize="12px">{shown.subject}</FormErrorMessage>
                   </FormControl>
                 </Flex>
+
+                {/* Progressive disclosure: the reason's kind adds a few optional fields. */}
+                <Box aria-live="polite" className="sr-only">
+                  {disclosureNote}
+                </Box>
+                {copy && shownIntent !== 'other' ? (
+                  <MotionBox
+                    key={shownIntent}
+                    as="fieldset"
+                    data-inquiry={shownIntent}
+                    border="1px solid"
+                    borderColor="page.border"
+                    borderRadius="md"
+                    p={{ base: 3, md: 4 }}
+                    m={0}
+                    minW={0}
+                    initial={reduce ? false : { opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                  >
+                    <Text
+                      as="legend"
+                      fontFamily={monoFont}
+                      fontSize="11px"
+                      letterSpacing="0.16em"
+                      textTransform="uppercase"
+                      color="page.fg-secondary"
+                      px={1.5}
+                      mx={-1.5}
+                    >
+                      {DISCLOSURE_TITLE[shownIntent]}{' '}
+                      <Text as="span" letterSpacing="0.04em" textTransform="none" opacity={0.85}>
+                        · optional
+                      </Text>
+                    </Text>
+                    <VStack spacing={4} align="stretch" mt={1}>
+                      <Flex gap={4} align="flex-start" sx={responsiveRow}>
+                        {disclosed.includes('company') ? (
+                          <FormControl flex={1} minW={0}>
+                            <FormLabel {...labelProps}>{copy.company.label}</FormLabel>
+                            <Input
+                              value={values.company}
+                              onChange={set('company')}
+                              maxLength={INQUIRY_LIMITS.companyMax}
+                              autoComplete="organization"
+                              placeholder={copy.company.placeholder}
+                              {...inputProps}
+                            />
+                          </FormControl>
+                        ) : null}
+                        {disclosed.includes('roleUrl') ? (
+                          <FormControl isInvalid={!!shown.roleUrl} flex={1} minW={0}>
+                            <FormLabel {...labelProps}>{copy.roleUrl.label}</FormLabel>
+                            <Input
+                              type="url"
+                              inputMode="url"
+                              value={values.roleUrl}
+                              onChange={set('roleUrl')}
+                              onBlur={touch('roleUrl')}
+                              maxLength={INQUIRY_LIMITS.roleUrlMax}
+                              autoComplete="url"
+                              placeholder={copy.roleUrl.placeholder}
+                              {...inputProps}
+                            />
+                            <FormErrorMessage fontSize="12px">{shown.roleUrl}</FormErrorMessage>
+                          </FormControl>
+                        ) : null}
+                      </Flex>
+                      {disclosed.includes('timeline') ? (
+                        <FormControl minW={0} sx={{ '@container (min-width: 30rem)': { maxWidth: 'calc(50% - 8px)' } }}>
+                          <FormLabel {...labelProps}>{copy.timeline.label}</FormLabel>
+                          <Select value={values.timeline} onChange={set('timeline')} {...inputProps}>
+                            <option value="">Not sure / skip</option>
+                            {INQUIRY_TIMELINES.map((t) => (
+                              <option key={t} value={t}>
+                                {TIMELINE_LABEL[t]}
+                              </option>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      ) : null}
+                      {shownIntent === 'role' && workStatus ? (
+                        <Text fontSize="13px" color="page.fg-secondary" lineHeight="1.55" data-work-status="">
+                          <Text as="span" fontFamily={monoFont} fontSize="11px" letterSpacing="0.04em" mr={2}>
+                            work authorisation
+                          </Text>
+                          <Text as="span" color="page.fg">
+                            {workStatus}
+                          </Text>
+                        </Text>
+                      ) : null}
+                    </VStack>
+                  </MotionBox>
+                ) : null}
 
                 <FormControl isRequired isInvalid={!!shown.message}>
                   <FormLabel {...labelProps}>Message</FormLabel>
@@ -754,7 +999,10 @@ export default function ContactPro({
                     <Button
                       as="a"
                       href={`${mailtoBase}?subject=${encodeURIComponent(values.subject.trim() || values.reason)}&body=${encodeURIComponent(
-                        `Reason: ${values.reason}\n\n${values.message}`,
+                        `${inquiryRows(payloadOf(values))
+                          .filter((r) => r.key !== 'intent')
+                          .map((r) => `${r.label}: ${r.value}`)
+                          .join('\n')}\n\n${values.message}`,
                       )}`}
                       variant="ghost"
                       ml="auto"
@@ -777,11 +1025,58 @@ export default function ContactPro({
                     {hint}
                   </Text>
                 )}
+                <PrivacyNotice retentionDays={retentionDays} />
               </VStack>
             </chakra.form>
           </>
         )}
       </MotionBox>
+    </Flex>
+  )
+}
+
+/**
+ * What happens to a message (I11): kept in the owner's private inbox only to
+ * reply, and for how long. Two lines are reserved so the sentence about the
+ * period — known later on pages that learn it from the nonce endpoint —
+ * never shifts the layout.
+ */
+function PrivacyNotice({ retentionDays }: { retentionDays: number | null }) {
+  return (
+    <Flex
+      id="contact-privacy"
+      gap={2.5}
+      align="flex-start"
+      pt={3}
+      borderTop="1px solid"
+      borderColor="page.border"
+      fontSize="12px"
+      lineHeight="1.6"
+      color="page.fg-secondary"
+      minH="58px"
+    >
+      <Box as="svg" aria-hidden viewBox="0 0 16 16" w="14px" h="14px" mt="3px" flexShrink={0} color="page.fg-secondary">
+        <path
+          d="M8 1.5 2.5 3.6v4.1c0 3.2 2.3 5.9 5.5 6.8 3.2-.9 5.5-3.6 5.5-6.8V3.6L8 1.5Z"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.3"
+          strokeLinejoin="round"
+        />
+      </Box>
+      <Text m={0}>
+        {privacyNoticeText(retentionDays)}{' '}
+        <Link
+          href="/colophon#privacy"
+          color="accent.text"
+          textDecoration="underline"
+          textUnderlineOffset="3px"
+          textDecorationColor="var(--accent-ring)"
+          _hover={{ textDecorationColor: 'currentColor' }}
+        >
+          How this site handles data
+        </Link>
+      </Text>
     </Flex>
   )
 }

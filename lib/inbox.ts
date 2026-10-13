@@ -1,6 +1,8 @@
 import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
+import { parseInquiryMeta, type InquiryMeta } from './inquiry'
+import { contactRetentionDays, isExpired, retentionCutoff } from './retention'
 
 /**
  * Contact inbox — every message sent through the public contact form.
@@ -28,6 +30,14 @@ import crypto from 'crypto'
  * Deleted ids are remembered (the newest MAX_DELETED_IDS) so restoring an
  * older backup, which merges its copy of the log into the live one, does not
  * bring deleted messages back.
+ *
+ * Retention (CONTACT_RETENTION_DAYS, lib/retention.ts; default 365 days):
+ * purgeExpiredInbox() removes older messages (run nightly by
+ * lib/inboxRetention.ts), listings never show them in the meantime, and a
+ * restore never merges them back.
+ *
+ * A message may carry `meta`: the structured part of the inquiry (reason,
+ * kind, company, link, timeline — lib/inquiry.ts). Older lines have none.
  */
 
 export type InboxMessage = {
@@ -40,6 +50,8 @@ export type InboxMessage = {
   /** true = emailed to the owner, false = email failed/unconfigured, null = unknown (older entries). */
   delivered: boolean | null
   read: boolean
+  /** Structured inquiry fields; absent on older messages and when the visitor gave none. */
+  meta?: InquiryMeta
 }
 
 export type InboxStorage = {
@@ -60,6 +72,8 @@ export type InboxListing = {
   /** The log holds older messages beyond what was read for this listing. */
   truncated: boolean
   storage: InboxStorage
+  /** Messages older than this many days are deleted automatically (0 = never). */
+  retentionDays: number
 }
 
 export type InboxPauseReason = 'daily-limit' | 'inbox-full'
@@ -242,6 +256,7 @@ function parseLine(raw: string): Parsed | null {
   }
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null
   const id = lineId(line)
+  const meta = parseInquiryMeta(obj.meta)
   return {
     id,
     line,
@@ -253,6 +268,7 @@ function parseLine(raw: string): Parsed | null {
       subject: str(obj.subject, 300),
       message: str(obj.message, 10_000),
       delivered: typeof obj.delivered === 'boolean' ? obj.delivered : null,
+      ...(meta ? { meta } : {}),
     },
   }
 }
@@ -334,9 +350,10 @@ export function inboxCapacity(now = Date.now()): InboxCapacity {
 
 // ── Writes ──────────────────────────────────────────────────────────────
 
-type NewMessage = { name: string; email: string; subject: string; message: string; delivered: boolean }
+type NewMessage = { name: string; email: string; subject: string; message: string; delivered: boolean; meta?: InquiryMeta }
 
 function messageLine(m: NewMessage, now: number): string {
+  const meta = parseInquiryMeta(m.meta)
   return JSON.stringify({
     at: new Date(now).toISOString(),
     name: m.name,
@@ -344,6 +361,7 @@ function messageLine(m: NewMessage, now: number): string {
     subject: m.subject,
     message: m.message,
     delivered: m.delivered,
+    ...(meta ? { meta } : {}),
   })
 }
 
@@ -381,11 +399,17 @@ export function storeInboxMessage(m: NewMessage, now = Date.now()): StoreResult 
 
 // ── Reads ───────────────────────────────────────────────────────────────
 
-/** Newest first; at most MAX_LISTED messages, read from the tail of the log. */
-export function listInbox(now = Date.now()): InboxListing {
+/**
+ * Newest first; at most MAX_LISTED messages, read from the tail of the log.
+ * Messages past the retention period are left out even before the nightly
+ * purge has removed them.
+ */
+export function listInbox(now = Date.now(), retentionDays = contactRetentionDays()): InboxListing {
   const { parsed, truncated, size } = readWindow()
   const { read } = readState()
+  const cutoff = retentionCutoff(now, retentionDays)
   const messages = parsed
+    .filter((p) => !isExpired(p.msg.at, cutoff))
     .map((p) => ({ ...p.msg, read: read.has(p.id) }))
     .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
   const day = utcDay(now)
@@ -398,6 +422,7 @@ export function listInbox(now = Date.now()): InboxListing {
     total: messages.length,
     truncated,
     storage: { bytes: size, maxBytes: MAX_INBOX_BYTES, storedToday, dailyLimit: DAILY_STORE_LIMIT, paused },
+    retentionDays: Math.max(0, retentionDays),
   }
 }
 
@@ -451,6 +476,30 @@ function copyRest(src: string, from: number, out: number) {
 export function deleteInbox(ids: readonly string[]): number {
   const wanted = new Set(ids.filter(isInboxId))
   if (!wanted.size) return 0
+  return removeLines((id) => wanted.has(id))
+}
+
+/**
+ * Delete every message older than the retention period (lib/retention.ts).
+ * Lines whose timestamp cannot be read are kept. Returns how many were
+ * removed; 0 when retention is off. Their ids join the deleted list, and
+ * mergeInboxText() refuses expired lines anyway, so no restore revives them.
+ */
+export function purgeExpiredInbox(now = Date.now(), retentionDays = contactRetentionDays()): number {
+  const cutoff = retentionCutoff(now, retentionDays)
+  if (cutoff === null) return 0
+  return removeLines((_id, line) => {
+    const p = parseLine(line)
+    return !!p && isExpired(p.msg.at, cutoff)
+  })
+}
+
+/**
+ * Rewrite the log without the lines `drop` selects (streamed, atomic tmp +
+ * rename, lines appended meanwhile carried over), forget their read flags
+ * and remember their ids as deleted. Returns how many were removed.
+ */
+function removeLines(drop: (id: string, line: string) => boolean): number {
   const file = inboxFile()
   if (!fileStat(file)) return 0
   const tmp = `${file}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`
@@ -470,7 +519,7 @@ export function deleteInbox(ids: readonly string[]): number {
       const line = raw.trim()
       if (!line) return
       const id = lineId(line)
-      if (wanted.has(id)) {
+      if (drop(id, line)) {
         removedIds.add(id)
         return
       }
@@ -501,19 +550,20 @@ export function deleteInbox(ids: readonly string[]): number {
 /**
  * Merge messages from another copy of the log (e.g. a restored backup) into
  * the live inbox without ever dropping a message: only lines not already
- * present — and not deleted by the owner — are appended. Returns how many
- * were added.
+ * present — not deleted by the owner and not past the retention period —
+ * are appended. Returns how many were added.
  */
-export function mergeInboxText(otherText: string): number {
+export function mergeInboxText(otherText: string, now = Date.now(), retentionDays = contactRetentionDays()): number {
   const file = inboxFile()
   const skip = new Set(readState().deleted)
+  const cutoff = retentionCutoff(now, retentionDays)
   scanLines(file, (raw) => {
     const line = raw.trim()
     if (line) skip.add(lineId(line))
   })
   const additions: string[] = []
   for (const p of parseLines(otherText)) {
-    if (skip.has(p.id)) continue
+    if (skip.has(p.id) || isExpired(p.msg.at, cutoff)) continue
     skip.add(p.id)
     additions.push(p.line + '\n')
   }

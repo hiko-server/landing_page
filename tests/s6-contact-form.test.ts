@@ -2,7 +2,17 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { MESSAGE_MAX, isContactValid, submitHint, validateContact, visibleErrors, type ContactValues } from '../components/Common/contactForm'
 
-const ok: ContactValues = { name: 'Ada', email: 'ada@example.com', reason: 'Hiring', subject: '', message: 'Hello', mathAnswer: '7' }
+const ok: ContactValues = {
+  name: 'Ada',
+  email: 'ada@example.com',
+  reason: 'Hiring',
+  subject: '',
+  message: 'Hello',
+  mathAnswer: '7',
+  company: '',
+  roleUrl: '',
+  timeline: '',
+}
 
 test('a complete form is valid; the reason stands in for a blank subject', () => {
   const e = validateContact(ok, 7)

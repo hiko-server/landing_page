@@ -86,7 +86,7 @@ test('GET without summary (or with another value) keeps the full listing', async
     const res = await call('GET', query)
     assert.equal(res.statusCode, 200)
     assert.equal(res.headers['cache-control'], 'no-store')
-    assert.deepEqual(Object.keys(res.body).sort(), ['messages', 'storage', 'total', 'truncated', 'unread'])
+    assert.deepEqual(Object.keys(res.body).sort(), ['messages', 'retention', 'retentionDays', 'storage', 'total', 'truncated', 'unread'])
     assert.equal(res.body.messages.length, 3)
     assert.equal(res.body.total, 3)
     assert.equal(res.body.unread, 3)
