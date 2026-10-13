@@ -76,3 +76,21 @@ updates:
     labels:
       - dependencies
       - github-actions
+
+  # Base images: the Dockerfile pins node:22-alpine by digest, so rebuilt
+  # upstream images (OS security fixes) arrive here as digest-bump PRs.
+  - package-ecosystem: docker
+    directory: '/'
+    schedule:
+      interval: weekly
+      day: monday
+      time: '03:00'
+      timezone: Asia/Hong_Kong
+    open-pull-requests-limit: 2
+    labels:
+      - dependencies
+      - docker
+    ignore:
+      # Stay on the Node 22 LTS line; a major runtime bump is a deliberate change.
+      - dependency-name: 'node'
+        update-types: ['version-update:semver-major']

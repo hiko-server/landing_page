@@ -12,11 +12,14 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   build:
-    name: typecheck + lint + test + build
+    name: typecheck + lint + test + build + perf budget
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -28,9 +31,7 @@ jobs:
           node-version: '22'
           cache: 'yarn'
 
-      # Yarn — project uses yarn.lock as the source of truth. (The previous
-      # `npm ci` invocation here was a no-op at best and broke every push
-      # at worst because it tried to read a non-existent package-lock.json.)
+      # Yarn — yarn.lock is the source of truth.
       - name: Install
         run: yarn install --frozen-lockfile
 
@@ -56,14 +57,15 @@ jobs:
           NEXT_PUBLIC_SITE_HOST: example.com
         run: yarn build
 
+      # Shared first-load JS, per-page JS, shared CSS and preloaded fonts
+      # against the thresholds in scripts/perf-budget.mjs.
+      - name: Performance budget
+        run: node scripts/perf-budget.mjs
+
   audit:
-    name: dependency audit (advisory only)
+    name: dependency audit (blocking)
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    # Soft-fail: known-issues we accept (e.g. transitive devDeps with no
-    # patched version) shouldn't block PRs, but the report shows up in
-    # the Actions log for review.
-    continue-on-error: true
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
@@ -71,27 +73,65 @@ jobs:
         with:
           node-version: '22'
           cache: 'yarn'
-      - run: yarn install --frozen-lockfile
-      - name: Yarn audit (high+ severity only)
-        run: yarn audit --level high
+      - run: yarn install --frozen-lockfile --ignore-scripts
+
+      # Fails on any high/critical advisory in production dependencies that
+      # is not allowlisted (with a reason and an expiry) in
+      # security/audit-allowlist.json, and on expired allowlist entries.
+      - name: Audit production dependencies
+        run: node scripts/check-audit.mjs --report audit-report.json
+
+      - name: Keep the full audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-report
+          path: audit-report.json
+          if-no-files-found: ignore
+          retention-days: 30
 
   docker:
-    name: docker image smoke test
+    name: docker image smoke + E2E
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
+    env:
+      # The container bootstraps its admin account from these; the admin E2E
+      # specs sign in with the same values. CI-only placeholders, not secrets.
+      ADMIN_EMAIL: ci@example.com
+      ADMIN_PASS: ci-e2e-placeholder-not-a-secret
+      DOCKER_BUILDKIT: '1'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Same build the server runs (`docker compose up -d --build`): no
-      # data/content.db in the context, public identifiers as build args.
+      # The production host merges docker-compose.override.yml (a copy of the
+      # example) over the base file: whatever the merge publishes must be bound
+      # to loopback only, with the site on 127.0.0.1:3002.
+      - name: Compose config publishes loopback only
+        run: |
+          set -eu
+          touch .env
+          docker compose -f docker-compose.yml config --format json > "$RUNNER_TEMP/base.json"
+          docker compose -f docker-compose.yml -f docker-compose.override.example.yml config --format json > "$RUNNER_TEMP/merged.json"
+          for f in base merged; do
+            jq -e '[.services[].ports[]?] | length > 0 and all(.host_ip == "127.0.0.1")' "$RUNNER_TEMP/$f.json"
+          done
+          jq -e '[.services[].ports[]?] | length == 1' "$RUNNER_TEMP/merged.json"
+          jq -e '[.services[].ports[]? | select((.published | tostring) == "3002" and .target == 3000)] | length == 1' "$RUNNER_TEMP/merged.json"
+          jq -e '.services["landing-page"].logging.driver == "local"' "$RUNNER_TEMP/merged.json"
+          rm .env
+
+      # Same build the server runs (scripts/deploy.sh → docker compose build):
+      # no data/content.db in the context, public identifiers as build args.
       - name: Build image
         run: |
           docker build \
             --build-arg NEXT_PUBLIC_SITE_HOST=example.com \
             --build-arg NEXT_PUBLIC_PRODUCT_NAME=PortfolioStudio \
+            --build-arg NEXT_PUBLIC_BUILD_SHA="${GITHUB_SHA::7}" \
             -t landing-page:ci .
+          docker image ls landing-page:ci
 
       # Fresh, EMPTY bind-mounted data + uploads dirs and no R2 env: the
       # container must start, seed itself from the bundled files and serve.
@@ -102,8 +142,8 @@ jobs:
           docker run -d --name lp -p 127.0.0.1:3000:3000 \
             -e NODE_ENV=production \
             -e JWT_SECRET=ci-smoke-placeholder-not-a-real-secret-32chars \
-            -e ADMIN_EMAIL=ci@example.com \
-            -e ADMIN_PASS=ci-placeholder-not-real \
+            -e ADMIN_EMAIL \
+            -e ADMIN_PASS \
             -e SITE_URL=http://127.0.0.1:3000 \
             -v "$RUNNER_TEMP/data:/app/data" \
             -v "$RUNNER_TEMP/uploads:/app/public/uploads" \
@@ -135,6 +175,43 @@ jobs:
           # Runs as the image's non-root user and could write the mounted data dir.
           test "$(docker exec lp id -u)" = 1001
           test -f "$RUNNER_TEMP/data/content.db"
+          # The image optimizer is disabled (GHSA-2xp9-vwfh-vxw4): 404, never a resize.
+          test "$(curl -s -o /dev/null -w '%{http_code}' 'http://127.0.0.1:3000/_next/image?url=%2Ffavicon.ico&w=64&q=75')" = 404
+
+      - name: Setup Node (E2E runner)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'yarn'
+
+      - name: Install E2E dependencies
+        run: yarn install --frozen-lockfile --ignore-scripts
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
+
+      # Public pages in four projects (desktop, tablet, phone, reduced motion)
+      # plus the admin and contact flows, all against the exact image above.
+      - name: E2E (Playwright + axe)
+        env:
+          E2E_BASE_URL: http://127.0.0.1:3000
+        run: |
+          npx playwright install --with-deps chromium
+          yarn e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
 
       # dumb-init must forward SIGTERM to the server: stopping has to finish
       # well before docker's 10 s SIGKILL fallback.

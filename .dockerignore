@@ -21,7 +21,20 @@ build
 *.zip
 .dockerignore
 README.md
-docker
+README.zh.md
+docs
+# Test suites, reports and CI-only material: not needed to build or run the app
+# (and `next build` type-checks every .ts it can see).
+tests
+e2e
+playwright-report
+test-results
+blob-report
+security
+audit-report.json
+# Server-local deploy state.
+docker-compose.override.yml
+.deployed-sha
 
 # Secrets & runtime-only data — keep out of the build context and image layers.
 .env

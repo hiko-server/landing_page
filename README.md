@@ -9,7 +9,7 @@ backup, and a hardened admin GUI for non-engineers.
 中文版 → [README.zh.md](./README.zh.md)
 
 [![Repo](https://img.shields.io/badge/GitHub-hiko--server%2Flanding__page-181717?logo=github)](https://github.com/hiko-server/landing_page)
-[![Next.js](https://img.shields.io/badge/Next.js-14.2-black?logo=next.js)](https://nextjs.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-15.5-black?logo=next.js)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Chakra UI](https://img.shields.io/badge/Chakra_UI-2.8-319795?logo=chakraui)](https://chakra-ui.com/)
 [![SQLite](https://img.shields.io/badge/Storage-SQLite-003B57?logo=sqlite)](https://www.sqlite.org/)
@@ -33,11 +33,11 @@ backup, and a hardened admin GUI for non-engineers.
   images, version-history snapshots, and admin/Mongo config into one
   gzipped tar. Manual *Backup now* / *Pull latest* buttons in the admin.
 - **MDX writing layer** — `/blog`, `/work` (case studies), `/now`, `/uses`
-  pages backed by typed MDX collections with auto-generated OG images,
-  RSS feed, and reading-time annotations.
-- **Bilingual CV** — English / 中文 on `/about` and `/cv` (`?lang=zh`,
-  `?print=1`), language-aware dates and labels, A4 print/PDF with real
-  per-page margins, rolling version history.
+  pages backed by typed MDX collections, compiled on the server (no `eval`
+  in the browser), with brand-font social cards and full-content feeds.
+- **Bilingual CV** — English at `/cv`, Chinese at `/cv/zh` (the legacy
+  `/cv?lang=zh` answers 308), `?print=1`, language-aware dates and labels,
+  A4 print/PDF with real per-page margins, rolling version history.
 - **CV Studio with visibility at every level** — hide/show any *section*
   (separately for the CV/PDF and the website), any *entry* (a degree, a
   job, a highlight), any *field* (GPA, phone, …) and any single *bullet or
@@ -78,6 +78,93 @@ backup, and a hardened admin GUI for non-engineers.
 
 ---
 
+## New in this release
+
+**For visitors**
+
+- **Geist typography** (sans, mono, variable italic), self-hosted under the
+  OFL; the old 780 KB of preloaded Inter / JetBrains Mono is gone.
+- **Chinese CV at its own URL** — `/cv/zh` with `lang="zh-Hans"`, a Chinese
+  title, description, social card and JSON-LD; `/cv?lang=zh|cn` redirects
+  (308) and keeps `print=1`. Stable per-entry anchors (`#cv-<section>-<n>`)
+  and a print-only QR code that links the live CV.
+- **`/colophon`** — how the site is built: stack, fonts, hosting, the
+  privacy model, the changelog and the deployed commit.
+- **Home** — responsive pre-baked hero image, word-staggered headline,
+  cursor-lit cards, a scroll-driven career rail, skills taken from the CV,
+  a *Writing & case studies* section and a full-width Field Notes strip with
+  a shared-element lightbox. GitHub data (owner-featured repos, meaningful
+  stats, an indigo contribution graph) is rendered into the HTML.
+- **Contact** — an availability card (only when the owner sets one), copy
+  buttons, a vCard (`/api/vcard`) and a QR code to save it.
+- **Articles** — GitHub-flavoured Markdown, zero-layout-shift images with
+  `srcset` and tap-to-zoom, YouTube and Figure components, case-study
+  covers, heading anchors and a table of contents.
+- **Discoverability** — titles that carry the owner's name, ProfilePage /
+  Person JSON-LD, social cards in the brand font, and full-content feeds:
+  `/feed.xml` (RSS with per-item language), `/work/feed.xml` and
+  `/feed.json`, listed under *Subscribe* in the footer.
+- **Command palette 3.0** (⌘K / `/`) — loads on demand, searches the full
+  content through `/api/search-index`, and gives the signed-in owner an
+  *Admin* group with a route-aware *Edit this page*.
+- **Motion with restraint** — circular theme reveal, directional route
+  transitions with a pinned header; everything is off under
+  `prefers-reduced-motion`, and decorative surfaces have `forced-colors`
+  fallbacks.
+
+**For the owner**
+
+- **Status hub** on `/admin`: unread messages, drafts, backup age, pending
+  R2 writes and missing configuration, each with its action.
+- **Edits that are never lost** — local draft recovery plus `If-Match`
+  conflict checks (a *Changed elsewhere* dialog instead of a silent
+  overwrite) for posts, case studies, `/now`, `/uses` and the home page.
+- **History, recently deleted and undo-delete** for posts, case studies and
+  pages.
+- **Compile-checked publishing** — an MDX error is reported with its line
+  and column before anything is saved; *Publish…* runs a pre-publish
+  checklist (title and description length, image alt text, remote images,
+  broken internal links); side-by-side live preview with the real renderer
+  and Draft Mode at the real URL.
+- **Rich editor** — slash-command menu and bubble menus for links and image
+  alt text.
+- **Image pipeline without an on-request optimizer** — uploads are resized
+  into WebP variants with their dimensions recorded (existing uploads can
+  be backfilled), and remote images can be imported in one click through
+  the SSRF-safe fetcher.
+- **Home editor** — sortable photo / logo / link cards (mouse, touch and
+  keyboard), availability, featured repositories, logo scale, site name.
+- **Safer navigation** — *Save and leave / Discard / Stay* instead of a
+  browser confirm, a relative "Saved · 12 s ago" status, and a `?`
+  shortcuts overlay on every admin page.
+- **Analytics tab** — first-party, cookieless page views and real-user Core
+  Web Vitals (see [Privacy](#privacy-first-party-analytics)).
+- **Scheduled backups** — change-aware whole-site snapshots every
+  `BACKUP_INTERVAL_HOURS` (default 24), with the backup age in
+  `/api/health` and the Storage panel.
+- **Operability** — structured JSON logs with request ids (`LOG_LEVEL`),
+  error boundaries per page region.
+
+**Security and delivery**
+
+- Next.js 15.5; the image optimizer is disabled (`/_next/image` answers
+  404 — GHSA-2xp9-vwfh-vxw4); the production CSP has no `'unsafe-eval'`.
+- HTTP → HTTPS (308) for the public host and the legacy CV redirect in the
+  middleware; server-side fetches of admin- or content-supplied URLs go
+  through `lib/security/safeFetch.ts`.
+- The server's compose override is no longer tracked (loopback-only
+  example), container logs rotate, the base image is pinned by digest and
+  the release image carries only the traced runtime.
+- CI gates: a blocking production-dependency audit with an expiring
+  allowlist, a performance budget, and Playwright + axe end-to-end tests
+  against the exact Docker image.
+- [`scripts/deploy.sh`](#deploying-to-production) — health-checked deploy
+  with backups and automatic rollback.
+- [Versioned Cloudflare configuration](#cloudflare) plus env-gated cache
+  purge and IndexNow on every revalidation.
+
+---
+
 ## CV visibility model
 
 All flags are optional, so existing CV data keeps working unchanged
@@ -101,16 +188,19 @@ the full document.
 
 | Layer | Choice | Why |
 |---|---|---|
-| Framework | **Next.js 14 (Pages router)** | Mature SSR, file-routed APIs, edge middleware |
+| Framework | **Next.js 15 (Pages router)** | Mature SSR/ISR, file-routed APIs, edge middleware |
 | UI | **Chakra UI 2** | Composable primitives, dark-mode out of the box |
 | Animations | **Framer Motion** | Hero entry, section reveal |
 | Content store | **better-sqlite3** + **Cloudflare R2** | Local-first, cheap off-site replica |
-| Writing | **MDX** via `next-mdx-remote` + `rehype-pretty-code` | Syntax-highlighted prose |
+| Writing | **MDX** via `unified` (remark-parse, remark-mdx, remark-gfm, remark-rehype) + `rehype-pretty-code` | Compiled to a HAST tree on the server, rendered without `eval` |
+| Typography | **Geist / Geist Mono** (self-hosted, OFL) | One variable family for UI, prose and code |
 | Backup tarball | **`tar-stream` + `node:zlib`** | One-file atomic snapshot |
 | Backup destination | **MongoDB GridFS** *(optional)* | Mirror images + JSON when configured |
 | Email | **Nodemailer** | Contact form + password reset |
 | Auth | **scrypt + `jsonwebtoken` + `jose` (edge)** | Lockout-aware login, edge JWT verify |
 | Editor | **TipTap** (rich) + **Monaco-style JSON** | Block editor for posts + raw JSON for CV |
+| Images | **sharp** at upload time | WebP variants + dimensions; no on-request optimizer |
+| Testing | **node:test**, **Playwright** + **axe-core** | Unit tests, browser E2E and WCAG 2.2 AA checks in CI |
 
 ---
 
@@ -150,8 +240,12 @@ the full document.
 │   ├── admin/           # Gated UI: dashboard, login, forgot, reset, …
 │   ├── blog/, work/, now, uses, about, cv, …
 │   └── index.tsx
-├── scripts/             # CLI helpers (migrate / push / pull / list)
-├── middleware.ts        # Security headers + admin auth gate
+├── scripts/             # CLI helpers: content migrate / push / pull / list,
+│                        # deploy.sh, cloudflare-config, check-audit, perf-budget
+├── e2e/                 # Playwright + axe end-to-end suites
+├── security/            # audit-allowlist.json (reviewed, expiring exceptions)
+├── tests/               # node:test unit tests
+├── middleware.ts        # Edge redirects, security headers, CSRF, admin gate
 └── public/              # Static assets
 ```
 
@@ -197,10 +291,11 @@ Visit:
 yarn build && yarn start
 ```
 
-Or with Docker:
+Or with Docker (see [Docker](#docker) for the server override):
 
 ```bash
-docker compose up --build
+cp docker-compose.override.example.yml docker-compose.override.yml   # once
+docker compose up -d --build
 ```
 
 ---
@@ -216,10 +311,13 @@ All variables are documented in [`.env.example`](./.env.example). Headlines:
 | Site identity | `NEXT_PUBLIC_PRODUCT_NAME`, `NEXT_PUBLIC_SITE_HOST`, `SITE_URL` | recommended |
 | Mailer | `SMTP_HOST/PORT/USER/PASS`, `FROM_EMAIL`, `NOTIFY_EMAIL` | optional — silently skipped when unset |
 | Contact captcha | none — built-in nonce + math + honeypot | n/a |
-| GitHub | `GITHUB_TOKEN` (PAT, read-only) | recommended (raises API limit 60→5000/h) |
+| GitHub | `GITHUB_TOKEN` (fine-grained, public repositories read-only, no permissions) | recommended (raises API limit 60→5000/h) |
 | MongoDB backup | `MONGODB_URI`, `MONGODB_DB_NAME` | optional |
 | Cloudflare R2 | `R2_ENDPOINT`, `R2_BUCKET`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_REQUIRED` | optional |
-| Feature flags | `ENABLE_DEMO` | optional |
+| Scheduled backups | `BACKUP_INTERVAL_HOURS` (default 24, `0` disables) | optional |
+| Logging | `LOG_LEVEL` (`debug` / `info` / `warn` / `error`) | optional |
+| Cloudflare purge | `CF_ZONE_ID`, `CF_API_TOKEN` | optional — nothing is sent unless both are set |
+| IndexNow | `INDEXNOW_KEY` (8–128 of `[A-Za-z0-9-]`) | optional — off unless set |
 
 > The repo never commits a real `.env`. `.env.example` contains placeholders
 > only — copy and fill in for your own deployment.
@@ -312,6 +410,19 @@ handle, swap the file, then mirror trees back over the live ones.
   compare, pruned on every read.
 - **Admin pages**: `X-Robots-Tag: noindex, nofollow, noarchive` and
   `Cache-Control: no-store` to keep them out of search and caches.
+- **Edge redirects** (middleware, GET/HEAD, 308): plain-HTTP requests for
+  the configured public host (`SITE_URL` / `NEXT_PUBLIC_SITE_HOST`, never a
+  loopback name) go to HTTPS — the visitor's scheme comes from Cloudflare's
+  `cf-visitor`, else `X-Forwarded-Proto`; `/api/health` is exempt. The
+  legacy `/cv?lang=zh|cn` goes to `/cv/zh`.
+- **No image optimizer**: `images.unoptimized` — `/_next/image` answers
+  404, so no request ever reaches sharp/libheif (GHSA-2xp9-vwfh-vxw4).
+  Images are resized once, at upload time.
+- **CSP** without `'unsafe-eval'` in production (MDX renders from a
+  server-built tree).
+- **SSRF**: every server-side fetch of a URL that comes from content or an
+  admin goes through `lib/security/safeFetch.ts` (public addresses only,
+  size, redirect and time limits).
 
 ### Section visibility
 
@@ -343,6 +454,29 @@ what visitors will see if they leave a row blank.
 
 ---
 
+## Privacy: first-party analytics
+
+The Analytics tab is fed by the site itself (`POST /api/a`); there is no
+third-party script and no cookie.
+
+- **Nothing is recorded** when the browser sends `DNT: 1` or `Sec-GPC: 1`,
+  for bots, for the signed-in owner (`cv_admin_token` / `cv_admin_hint`
+  cookie) and for paths outside the public pages.
+- **No IP address and no user agent are stored.** A visitor is
+  `sha256(daily salt + site host + IP + user agent)` truncated to 16 hex
+  characters. The salt is random, rotates at UTC midnight and exists only
+  in memory, so the same person cannot be linked across days (a restart
+  also starts a new salt).
+- What a page view keeps: path, referrer host (only when it is another
+  site), country (Cloudflare's `cf-ipcountry`), coarse device and browser
+  class, page language. Web Vitals keep route, metric, value and rating.
+- **Storage and retention**: a separate `data/analytics.db` (never part of
+  `content.db`, R2 sync or restores). Raw page views are kept 35 days, raw
+  Web Vitals 30 days, daily roll-ups 400 days.
+- `/colophon` states the same facts publicly.
+
+---
+
 ## CLI scripts
 
 ```bash
@@ -350,6 +484,12 @@ yarn content:migrate    # filesystem → SQLite (idempotent)
 yarn content:pull       # R2 → SQLite (overwrites; uses .env)
 yarn content:push       # SQLite → R2 (overwrites; uses .env)
 yarn content:list       # list R2 objects
+yarn check              # tsc + ESLint + unit tests
+yarn e2e                # Playwright + axe against E2E_BASE_URL (default http://127.0.0.1:3000)
+yarn audit:deps         # production-dependency audit gate (security/audit-allowlist.json)
+node scripts/perf-budget.mjs          # performance budget over the last `yarn build`
+node --env-file=.env scripts/cloudflare-config.mjs --dry-run   # Cloudflare zone config
+scripts/deploy.sh                     # deploy main to production
 ```
 
 ---
@@ -357,8 +497,28 @@ yarn content:list       # list R2 objects
 ## Docker
 
 ```bash
-docker compose up --build
+cp docker-compose.override.example.yml docker-compose.override.yml   # once per host
+docker compose up -d --build
 ```
+
+`docker-compose.override.yml` is **not tracked**: each host keeps its own
+copy, made from `docker-compose.override.example.yml`. The example binds the
+site to `127.0.0.1:3002` only (the Cloudflare Tunnel connects there; CI
+asserts that the merged config publishes nothing beyond loopback), replaces
+the named volumes with bind mounts of `./data` and `./public/uploads`, and
+rotates container logs (`local` driver, 5 × 10 MB). The production server
+was migrated once — its locally modified, previously tracked override was
+set aside, the deletion pulled, and the server copy put back;
+`scripts/deploy.sh` does exactly that automatically.
+
+The image is built with BuildKit (`# syntax=docker/dockerfile:1.7`): yarn
+and Next caches live in cache mounts, both stages use `node:22-alpine`
+pinned by digest (Dependabot proposes digest bumps), glibc sharp binaries
+are dropped (Alpine runs musl), and the release stage carries only Next's
+traced standalone output — a build-time check proves the content scripts'
+modules (`better-sqlite3`, `gray-matter`, `@aws-sdk/client-s3`, `sharp`)
+load from it. `NEXT_PUBLIC_BUILD_SHA` (set by the deploy script) puts the
+deployed commit on `/colophon`.
 
 The bundled `docker-entrypoint.sh` (under `dumb-init`) runs
 `sync-from-r2.mjs` on boot — reconciling the local SQLite store with the R2
@@ -374,20 +534,136 @@ time.
 
 ---
 
+## Deploying to production
+
+`scripts/deploy.sh` is the only deploy path. It runs on your machine and
+drives the server over `ssh vultr_tokyo` (an alias in `~/.ssh/config`). The
+server has no GitHub credentials: the new commits travel as a git bundle.
+
+```bash
+git switch main && git pull && git push   # main == origin/main, CI green
+scripts/deploy.sh                         # --force rebuilds the deployed commit
+```
+
+1. **Preflight** — clean tree, on `main`, `main` pushed to `origin`, the
+   server reachable and its HEAD an ancestor of `main` (fast-forward only).
+2. **Backups** in `/root/landing_page-backups/<UTC timestamp>/`: an online
+   SQLite backup of `content.db` (and `analytics.db`) through the running
+   container's better-sqlite3 `.backup()`, a tar of `data/` (without its own
+   `backups/`) and `public/uploads/`, copies of `.env` and the compose
+   override; the running image is tagged `…:pre-<timestamp>`.
+3. **Update** — the checkout fast-forwards from the bundle. The server's own
+   `data/home.json` and `docker-compose.override.yml` are kept byte for
+   byte; any other local modification stops the deploy.
+4. **Build** — `docker compose build` while the old container keeps serving.
+   A failed build resets the checkout; nothing else changed.
+5. **Switch** — `docker compose up -d --no-build`, then wait for the
+   container to be `healthy` and log `[warm-isr] regenerated`, for
+   `/api/health` to report `"status":"ok"`, and for the port to be bound to
+   `127.0.0.1` only.
+6. **Smoke test** through `https://lucian-dev.com`: the main pages, feeds,
+   sitemap, health and the legacy CV redirect (cache-busting query, so the
+   new origin answers).
+7. **Rollback** on any failure after the switch: `docker tag
+   …:pre-<timestamp> …:latest && docker compose up -d --no-build`, the
+   checkout reset, the failed container's last 100 log lines and the backup
+   paths printed. On success: `.deployed-sha`, image pruning (the three
+   newest rollback images are kept).
+
+Afterwards, run the public E2E suite against production:
+
+```bash
+E2E_BASE_URL=https://lucian-dev.com yarn e2e --grep-invert @admin
+```
+
+---
+
+## Cloudflare
+
+`scripts/cloudflare-config.mjs` keeps the zone configuration in the
+repository and applies it idempotently (read each setting / ruleset, write
+only what differs, print the diff; `--dry-run` writes nothing; exits 1 on
+any API error). Rules it manages carry a `lp_` ref; rules added in the
+dashboard are kept.
+
+- Zone settings: **Always Use HTTPS** on, **Email Address Obfuscation**
+  off (its rewritten markup broke React hydration).
+- Configuration rule for the site host: email obfuscation off, Web
+  Analytics (RUM) injection off — the site has its own analytics and its
+  CSP stays unchanged.
+- Redirect rule: `www.<host>` → `https://<host><path>` (308, query kept);
+  the proxied `www` CNAME is created when missing.
+- Cache rules: the public pages, feeds, sitemap, `/api/og`, `/api/stack`,
+  `/api/search-index` and `/api/github/*` are cache-eligible with the edge
+  TTL taken from the origin (`s-maxage` from ISR pages; server-rendered
+  pages send `no-store` and stay uncached); `/admin*`, `/api/admin*`,
+  `/api/auth*` and any request with the admin session cookie bypass the
+  cache.
+
+```bash
+CF_API_TOKEN=… CF_ZONE_ID=… node scripts/cloudflare-config.mjs --dry-run
+CF_API_TOKEN=… CF_ZONE_ID=… node scripts/cloudflare-config.mjs
+```
+
+Token scopes for this one-off run: Zone Settings:Edit, Config Rules:Edit,
+Cache Rules:Edit, Dynamic Redirect:Edit, DNS:Edit, and optionally Account
+Analytics:Edit (without it the script prints the manual dashboard step to
+turn Web Analytics' automatic setup off).
+
+At runtime, with `CF_ZONE_ID` + `CF_API_TOKEN` (a token with Cache Purge
+only) every on-demand revalidation purges the refreshed URLs — plus the
+feeds, sitemap and search index when posts or case studies change — in
+batches of 30; with `INDEXNOW_KEY` the page URLs are submitted to IndexNow
+(the key is served at `/api/indexnow-key`). Both are fire-and-forget with a
+3 s timeout, logged, and never fail a save; without the env nothing is
+sent.
+
+---
+
+## Quality gates
+
+CI (`.github/workflows/ci.yml`) runs on every push and pull request:
+
+| Job | What must pass |
+|---|---|
+| build | `tsc`, ESLint with zero warnings, unit tests, `next build`, and the performance budget (`scripts/perf-budget.mjs`: shared and per-page first-load JS, shared CSS, number and weight of preloaded fonts) |
+| audit | `scripts/check-audit.mjs`: no high/critical advisory in production dependencies unless allowlisted in `security/audit-allowlist.json` with a reason and an expiry date; expired entries fail too. The full report is kept as an artifact |
+| docker | the merged compose config publishes loopback only; the image builds, starts on an empty data volume, serves, warms its ISR pages and stops gracefully; then the Playwright + axe suite runs against that exact container |
+
+The E2E suite (`e2e/`) checks every public page on desktop, tablet, phone
+and reduced-motion profiles: one visible `h1`, `lang` (`zh-Hans` on
+`/cv/zh`), title and description, no serious or critical axe violations
+(WCAG 2.0–2.2 A/AA), no horizontal scroll, 24 × 24 px touch targets on
+phones (inline text links exempt), nothing animating under reduced motion,
+theme persistence, the ⌘K palette and the legacy redirect — and it fails on
+any console error, uncaught exception or CSP violation. The `@admin`
+specs (CI only) sign in, hide and restore a CV field end to end, provoke a
+*Changed elsewhere* conflict between two editors, open the shortcuts
+overlay and follow a contact message into the Inbox.
+
+---
+
 ## Public routes
 
 | Route | Description |
 |---|---|
 | `/` | Home — composed `[NN]` sections, gated by visibility |
 | `/about` | Long-form intro + GitHub stats + bilingual CV stack |
-| `/cv` | Printable CV (browser print-to-PDF target) |
+| `/cv` | Printable CV in English (browser print-to-PDF target, `?print=1`) |
+| `/cv/zh` | The same CV in Chinese (`/cv?lang=zh` redirects here) |
 | `/work` | Case-study index (MDX) |
 | `/work/[slug]` | Case study page with cover image + body |
-| `/blog` | Blog index with tag filters + RSS link |
-| `/blog/[slug]` | Post with rehype-pretty-code + reading time |
+| `/blog` | Blog index with tag filters + feed links |
+| `/blog/[slug]` | Post: syntax highlighting, table of contents, lightbox images |
 | `/now` | "What I'm doing now" page (MDX) |
 | `/uses` | Tools, hardware, services page (MDX) |
-| `/contact` | Dedicated contact page (same component as the home [09]) |
+| `/contact` | Contact page: form, availability, copy buttons, vCard + QR |
+| `/colophon` | How the site is built, privacy, changelog, deployed commit |
+| `/feed.xml`, `/work/feed.xml`, `/feed.json` | Full-content RSS (writing, case studies) and JSON Feed |
+| `/sitemap.xml` | Sitemap with EN / 中 CV alternates |
+| `/api/search-index` | Public search documents for the command palette |
+| `/api/vcard` | vCard of the public contact details |
+| `/api/health` | Health: store, content, backup age, pending R2 writes |
 
 API surface lives under `/api/*`; admin-only endpoints under `/api/admin/*`
 are gated by the middleware.
@@ -400,16 +676,19 @@ are gated by the middleware.
 |---|---|
 | `/admin/login` | Sign-in (covert: no nav link; reachable via ⌘K palette or URL) |
 | `/admin/forgot` + `/admin/reset` | Email-based reset flow |
-| `/admin` | Portal — links to the editors below |
+| `/admin` | Status hub: what needs attention, live counts, links to the editors |
 | `/admin/dashboard?tab=home` | HomeEditor — hero, contact, visibility, brands, photos |
 | `/admin/dashboard?tab=cv` | CV Studio (per-field visibility, hidden-items panel, A4 / website preview) + raw JSON |
 | `/admin/dashboard?tab=versions` | Version-history rollback |
 | `/admin/dashboard?tab=storage` | SQLite + R2 inventory, manual Backup / Pull |
 | `/admin/dashboard?tab=inbox` | Contact Inbox — read, reply by e-mail, mark, delete |
-| `/admin/blog`, `/admin/blog/edit?slug=…` | Blog post manager |
+| `/admin/dashboard?tab=analytics` | First-party page views, referrers, devices and real-user Web Vitals |
+| `/admin/blog`, `/admin/blog/edit?slug=…` | Blog post manager: drafts, publish checklist, live preview, history |
 | `/admin/work`, `/admin/work/edit?slug=…` | Case-study manager |
 | `/admin/now`, `/admin/uses` | One-off page editors |
 | `/admin/db-config` | MongoDB connection + manual backup/restore |
+
+Press `?` on any admin page for the keyboard shortcuts.
 
 <div align="center">
   <img src="docs/screenshots/admin-cv-studio.png" alt="CV Editor Studio" width="780" />

@@ -1,0 +1,31 @@
+# Server-local overrides for the production host.
+#
+#   cp docker-compose.override.example.yml docker-compose.override.yml
+#
+# docker-compose.override.yml is gitignored: each host keeps its own copy and
+# `docker compose` merges it over docker-compose.yml automatically.
+# scripts/deploy.sh preserves the server's copy across deploys.
+services:
+  landing-page:
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+    # Loopback only. The site is reached through the Cloudflare Tunnel
+    # (cloudflared on the host → 127.0.0.1:3002); nothing else may reach the
+    # container directly. Never publish 0.0.0.0 here — CI asserts the merged
+    # config binds 127.0.0.1 only.
+    ports: !override
+      - "127.0.0.1:3002:3000"
+    # Bind mounts on the same targets replace the named volumes of
+    # docker-compose.yml, so the live data sits in the checkout's ./data and
+    # ./public/uploads (owned by uid 1001, the image's non-root user).
+    volumes:
+      - ./data:/app/data
+      - ./public/uploads:/app/public/uploads
+    networks: !override
+      - default
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "5"

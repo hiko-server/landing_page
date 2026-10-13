@@ -42,8 +42,20 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-#.tar
-hiko-easilycv-frontend-ts-staging-temp.tar
+# Playwright (yarn e2e) output
+/playwright-report/
+/test-results/
+/blob-report/
+/playwright/.cache/
+
+# CI audit report (scripts/check-audit.mjs --report)
+/audit-report.json
+
+# Server-local compose overrides: copy docker-compose.override.example.yml.
+# Never tracked — it holds host-specific ports, mounts and networks.
+docker-compose.override.yml
+# Written by scripts/deploy.sh on the server.
+.deployed-sha
 
 # local data (persisted content, credentials)
 data/
