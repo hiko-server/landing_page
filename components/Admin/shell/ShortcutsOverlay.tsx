@@ -16,15 +16,60 @@ import {
   Text,
 } from '@chakra-ui/react'
 import { DASHBOARD_TABS } from './dashboardTabs'
-import { adminShortcutGroups, isHelpShortcut } from './shortcuts'
+import { adminShortcutGroups, isHelpShortcut, type ShortcutGroup, type ShortcutItem } from './shortcuts'
 
 /**
  * "?" keyboard shortcuts overlay for every admin page (mounted by the admin
  * title bar and the /admin index). Lists the bindings the admin really
- * implements (shortcuts.ts adminShortcutGroups), with ⌘ / Ctrl labels for
- * the current platform. Chakra Modal: focus is trapped while open and
- * returns to the trigger on close.
+ * implements (shortcuts.ts adminShortcutGroups plus the authoring group
+ * below), with ⌘ / Ctrl labels for the current platform. Chakra Modal: focus
+ * is trapped while open and returns to the trigger on close.
  */
+
+/**
+ * Authoring bindings of the writing editors (posts, case studies and the
+ * Now / Uses pages — every editor built on RichEditor + LivePreview):
+ *   - ⌘⇧P / Ctrl+Shift+P — LivePreview's document keydown listener: shows or
+ *     hides the side preview at xl and above, switches the Write | Preview
+ *     tabs below xl.
+ *   - "/" — opens the block menu in both editor tabs (the Visual tab's slash
+ *     extension and the MDX textarea's slash trigger).
+ *   - ⌘K / Ctrl+K — RichEditor's ProseMirror handleKeyDown: link form, Visual
+ *     tab only.
+ */
+export function authoringShortcutGroup(isMac: boolean): ShortcutGroup {
+  const mod = isMac ? '⌘' : 'Ctrl'
+  const shift = isMac ? '⇧' : 'Shift'
+  return {
+    title: 'Posts, case studies & pages',
+    items: [
+      { keys: [mod, shift, 'P'], label: 'Show / hide the live preview (Write | Preview on smaller screens)' },
+      { keys: ['/'], label: 'Block menu (Visual and MDX tabs)' },
+      { keys: [mod, 'K'], label: 'Add or edit a link (Visual tab)' },
+    ],
+  }
+}
+
+const SHIFT_GLYPHS = new Set(['⇧', 'Shift'])
+
+/** Platform-neutral identity of a binding: ⌘/Ctrl and ⇧/Shift compare equal. */
+function bindingKey(item: ShortcutItem): string {
+  return item.keys.map((k) => (k === '⌘' || k === 'Ctrl' ? 'Mod' : SHIFT_GLYPHS.has(k) ? 'Shift' : k)).join('+')
+}
+
+/**
+ * Every group the overlay shows: the shared admin groups with any authoring
+ * binding removed (so it is listed once, with the precise wording above),
+ * empty groups dropped, then the authoring group.
+ */
+export function overlayShortcutGroups(isMac: boolean, tabCount: number): ShortcutGroup[] {
+  const authoring = authoringShortcutGroup(isMac)
+  const authoringKeys = new Set(authoring.items.map(bindingKey))
+  const shared = adminShortcutGroups(isMac, tabCount)
+    .map((g) => ({ ...g, items: g.items.filter((it) => !authoringKeys.has(bindingKey(it))) }))
+    .filter((g) => g.items.length > 0)
+  return [...shared, authoring]
+}
 
 const MONO = 'var(--font-geist-mono), ui-monospace, "SF Mono", Consolas, monospace'
 
@@ -60,7 +105,7 @@ export default function ShortcutsOverlay({ showTrigger = true }: { showTrigger?:
     return () => document.removeEventListener('keydown', onKey)
   }, [open])
 
-  const groups = adminShortcutGroups(isMac, DASHBOARD_TABS.length)
+  const groups = overlayShortcutGroups(isMac, DASHBOARD_TABS.length)
 
   return (
     <>

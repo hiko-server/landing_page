@@ -24,18 +24,60 @@ import { absUrl, ogImageUrl, personAuthor } from '../lib/schema'
 type Props = {
   tree: MDXRendered<PageFrontmatter>['tree'] | null
   updated: string | null
+  /** The write-up's own frontmatter description ('' when none). */
+  ownDescription: string
   stack: StackGroup[]
 }
 
 const mono = 'var(--font-geist-mono), monospace'
+/** Short lede / OG subtitle while the write-up is empty. */
 const BUILT_DESCRIPTION = 'The stack, hosting and tooling behind lucian-dev.com.'
 
-export default function UsesPage({ tree, updated, stack }: Props) {
+/**
+ * Meta descriptions (all 70–160 characters, CustomHead's window). Each one
+ * only names what that variant of the page actually shows: the stack list
+ * (its groups: Framework, Interface, Content, Data, Platform,
+ * Infrastructure), the colophon pointer, or the owner's write-up.
+ */
+export const USES_DESCRIPTIONS = {
+  /** Empty write-up, stack listed. */
+  built:
+    'The stack, hosting and tooling behind lucian-dev.com: framework, interface, content pipeline, storage, monitoring and where it runs.',
+  /** Empty write-up and the stack could not be read: the page points to the colophon. */
+  builtNoStack:
+    'How lucian-dev.com is built and hosted. The colophon covers the hosting, fonts, privacy and changelog behind the site.',
+  /** Write-up followed by the stack. */
+  written:
+    'The tools and setup Li Yanpei (Lucian) relies on for engineering work, plus the stack, hosting and tooling behind lucian-dev.com.',
+  /** Write-up only (the stack could not be read). */
+  writtenNoStack:
+    'The tools and setup Li Yanpei (Lucian) relies on for day-to-day engineering work, in his own words on lucian-dev.com.',
+} as const
+
+/**
+ * The page's meta description. With a write-up, the owner's own frontmatter
+ * description wins (CustomHead falls back to the default below when it is
+ * shorter than 70 characters and clamps it at 160).
+ */
+export function usesDescription({
+  written,
+  hasStack,
+  ownDescription,
+}: {
+  written: boolean
+  hasStack: boolean
+  ownDescription?: string
+}): { description: string; fallbackDescription?: string } {
+  if (!written) return { description: hasStack ? USES_DESCRIPTIONS.built : USES_DESCRIPTIONS.builtNoStack }
+  const fallback = hasStack ? USES_DESCRIPTIONS.written : USES_DESCRIPTIONS.writtenNoStack
+  const own = (ownDescription || '').trim()
+  return own ? { description: own, fallbackDescription: fallback } : { description: fallback }
+}
+
+export default function UsesPage({ tree, updated, ownDescription, stack }: Props) {
   const written = !!tree
   const title = written ? 'Tools & setup.' : 'How this site is built'
-  const description = written
-    ? 'The tools, hardware, and software Li Yanpei (Lucian) relies on for engineering work, and how this site is built.'
-    : BUILT_DESCRIPTION
+  const { description, fallbackDescription } = usesDescription({ written, hasStack: stack.length > 0, ownDescription })
 
   const colophonLink = (
     <Text fontSize={['15px', '16px']} color="page.fg-secondary" mt={[8, 10]}>
@@ -58,6 +100,7 @@ export default function UsesPage({ tree, updated, stack }: Props) {
       <CustomHead
         title={written ? 'Uses' : 'How this site is built'}
         description={description}
+        fallbackDescription={fallbackDescription}
         url={absUrl('/uses')}
         image={ogImageUrl({
           kind: 'page',
@@ -220,6 +263,7 @@ function StackList({ groups }: { groups: StackGroup[] }) {
 export const getStaticProps: GetStaticProps<Props> = async () => {
   let tree: Props['tree'] = null
   let updated: string | null = null
+  let ownDescription = ''
   try {
     if ((getPage('uses')?.body || '').trim()) {
       const page = await getStaticMdxPage('uses')
@@ -227,14 +271,19 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
       const raw = page?.frontmatter.updated as unknown
       updated =
         raw instanceof Date ? raw.toISOString().slice(0, 10) : raw ? String(raw).slice(0, 10) : null
+      const desc = page?.frontmatter.description as unknown
+      ownDescription = tree && typeof desc === 'string' ? desc.trim() : ''
     }
   } catch {
     tree = null
+    updated = null
+    ownDescription = ''
   }
   return {
     props: {
       tree,
       updated,
+      ownDescription,
       stack: readStack().groups,
     },
     revalidate: 60,
