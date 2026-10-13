@@ -122,5 +122,12 @@ export function handleErrorEvent(e: Event): void {
   }
   const ev = e as ErrorEvent
   if (!(ev instanceof ErrorEvent)) return
-  reportClientError({ kind: 'error', error: ev.error, message: ev.message, filename: ev.filename, lineno: ev.lineno, colno: ev.colno })
+  reportClientError({
+    kind: 'error',
+    error: ev.error,
+    message: ev.message,
+    filename: ev.filename,
+    lineno: ev.lineno,
+    colno: ev.colno,
+  })
 }

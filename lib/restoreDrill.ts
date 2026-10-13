@@ -3,7 +3,13 @@ import path from 'path'
 import crypto from 'crypto'
 import Database from 'better-sqlite3'
 import { getAnalyticsDb } from './analytics/db'
-import { BACKUP_CONSTANTS, SNAPSHOT_FILE_RE, extractTarball, listLocalBackups, type SnapshotManifest } from './backup'
+import {
+  BACKUP_CONSTANTS,
+  SNAPSHOT_FILE_RE,
+  extractTarball,
+  listLocalBackups,
+  type SnapshotManifest,
+} from './backup'
 import { getDb } from './db'
 import { getR2Bucket, isR2Configured, r2GetBuffer } from './r2'
 import { log } from './log'
@@ -85,7 +91,9 @@ export class DrillBusyError extends Error {
 const errMsg = (err: unknown) => (err instanceof Error ? err.message : String(err))
 
 /** RESTORE_DRILL_INTERVAL_HOURS: unset → 168, 0 → disabled, else clamped to [1, 576]. */
-export function drillIntervalHours(raw: string | undefined = process.env.RESTORE_DRILL_INTERVAL_HOURS): number {
+export function drillIntervalHours(
+  raw: string | undefined = process.env.RESTORE_DRILL_INTERVAL_HOURS
+): number {
   if (raw === undefined || raw.trim() === '') return DEFAULT_DRILL_INTERVAL_HOURS
   const n = Number(raw)
   if (!Number.isFinite(n) || n < 0) return DEFAULT_DRILL_INTERVAL_HOURS
@@ -100,7 +108,8 @@ export type LiveCounts = { pages: number; collection_items: number; kv: number }
 type Counts = { pages: number; collection_items: number; kv: number }
 
 function countsOf(db: Database.Database): Counts {
-  const n = (t: string) => Number((db.prepare(`SELECT count(*) AS n FROM ${t}`).get() as { n: number }).n) || 0
+  const n = (t: string) =>
+    Number((db.prepare(`SELECT count(*) AS n FROM ${t}`).get() as { n: number }).n) || 0
   return { pages: n('pages'), collection_items: n('collection_items'), kv: n('kv') }
 }
 
@@ -109,7 +118,9 @@ const fmtCounts = (c: Counts) => `${c.pages} pages, ${c.collection_items} articl
 /** Bodies of published articles, newest first (drafts are skipped). */
 function publishedBodies(db: Database.Database): Array<{ ref: string; body: string }> {
   const rows = db
-    .prepare(`SELECT collection, slug, frontmatter, body FROM collection_items ORDER BY updated_at DESC`)
+    .prepare(
+      `SELECT collection, slug, frontmatter, body FROM collection_items ORDER BY updated_at DESC`
+    )
     .all() as Array<{ collection: string; slug: string; frontmatter: string; body: string }>
   const out: Array<{ ref: string; body: string }> = []
   for (const r of rows) {
@@ -131,16 +142,22 @@ function publishedBodies(db: Database.Database): Array<{ ref: string; body: stri
 export async function checkExtractedSnapshot(
   dir: string,
   manifest: SnapshotManifest | null,
-  opts: { live: LiveCounts; compile: (body: string) => Promise<unknown> },
+  opts: { live: LiveCounts; compile: (body: string) => Promise<unknown> }
 ): Promise<DrillCheck[]> {
   const checks: DrillCheck[] = []
-  const add = (id: string, label: string, status: CheckStatus, detail: string) => checks.push({ id, label, status, detail })
+  const add = (id: string, label: string, status: CheckStatus, detail: string) =>
+    checks.push({ id, label, status, detail })
 
   if (!manifest || manifest.version !== 1 || !Array.isArray(manifest.files)) {
     add('archive', 'Archive', 'fail', 'The archive has no readable MANIFEST.json.')
     return checks
   }
-  add('archive', 'Archive', 'pass', `Extracted ${manifest.files.length} files listed in the manifest.`)
+  add(
+    'archive',
+    'Archive',
+    'pass',
+    `Extracted ${manifest.files.length} files listed in the manifest.`
+  )
 
   // files
   const missing: string[] = []
@@ -169,13 +186,28 @@ export async function checkExtractedSnapshot(
   }
   const problems = [
     missing.length ? `${missing.length} missing (${missing.slice(0, 3).join(', ')})` : '',
-    sizeMismatch.length ? `${sizeMismatch.length} with a different size (${sizeMismatch.slice(0, 3).join(', ')})` : '',
-    hashMismatch.length ? `${hashMismatch.length} with a different checksum (${hashMismatch.slice(0, 3).join(', ')})` : '',
+    sizeMismatch.length
+      ? `${sizeMismatch.length} with a different size (${sizeMismatch.slice(0, 3).join(', ')})`
+      : '',
+    hashMismatch.length
+      ? `${hashMismatch.length} with a different checksum (${hashMismatch.slice(0, 3).join(', ')})`
+      : '',
   ].filter(Boolean)
   if (problems.length) add('files', 'Files', 'fail', `Manifest entries ${problems.join('; ')}.`)
   else if (hashed === 0) {
-    add('files', 'Files', 'warn', 'Every file is present with its recorded size; this snapshot predates per-file checksums.')
-  } else add('files', 'Files', 'pass', `All ${manifest.files.length} files match their recorded size and SHA-256.`)
+    add(
+      'files',
+      'Files',
+      'warn',
+      'Every file is present with its recorded size; this snapshot predates per-file checksums.'
+    )
+  } else
+    add(
+      'files',
+      'Files',
+      'pass',
+      `All ${manifest.files.length} files match their recorded size and SHA-256.`
+    )
 
   // database
   const dbFile = path.join(dir, 'db', 'content.db')
@@ -187,15 +219,27 @@ export async function checkExtractedSnapshot(
   let db: Database.Database | null = null
   try {
     db = new Database(dbFile, { fileMustExist: true })
-    const integrity = (db.pragma('integrity_check') as Array<{ integrity_check: string }>).map((r) => r.integrity_check)
-    if (integrity.length === 1 && integrity[0] === 'ok') add('integrity', 'Database integrity', 'pass', 'PRAGMA integrity_check: ok.')
+    const integrity = (db.pragma('integrity_check') as Array<{ integrity_check: string }>).map(
+      (r) => r.integrity_check
+    )
+    if (integrity.length === 1 && integrity[0] === 'ok')
+      add('integrity', 'Database integrity', 'pass', 'PRAGMA integrity_check: ok.')
     else {
-      add('integrity', 'Database integrity', 'fail', `PRAGMA integrity_check: ${integrity.slice(0, 3).join('; ')}`)
+      add(
+        'integrity',
+        'Database integrity',
+        'fail',
+        `PRAGMA integrity_check: ${integrity.slice(0, 3).join('; ')}`
+      )
       return checks
     }
 
     const tables = new Set(
-      (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>).map((r) => r.name),
+      (
+        db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{
+          name: string
+        }>
+      ).map((r) => r.name)
     )
     const absent = REQUIRED_TABLES.filter((t) => !tables.has(t))
     if (absent.length) {
@@ -215,7 +259,7 @@ export async function checkExtractedSnapshot(
           ? `This build migrates the copy from v${report.from} to v${report.to}.`
           : report.ahead
             ? `The copy is at v${before}, newer than this build (v${report.latest}); it opens on the additive schema.`
-            : `The copy is already at v${before}.`,
+            : `The copy is already at v${before}.`
       )
     } catch (err) {
       add('migrations', 'Migrations', 'fail', errMsg(err))
@@ -226,7 +270,10 @@ export async function checkExtractedSnapshot(
     let rowsStatus: CheckStatus = 'pass'
     let rowsDetail = `Snapshot holds ${fmtCounts(counts)}.`
     if (recorded) {
-      const same = recorded.pages === counts.pages && recorded.collection_items === counts.collection_items && recorded.kv === counts.kv
+      const same =
+        recorded.pages === counts.pages &&
+        recorded.collection_items === counts.collection_items &&
+        recorded.kv === counts.kv
       if (!same) {
         rowsStatus = 'fail'
         rowsDetail = `Snapshot holds ${fmtCounts(counts)}, but its manifest recorded ${fmtCounts(recorded)}.`
@@ -240,20 +287,31 @@ export async function checkExtractedSnapshot(
       const parts = (['pages', 'collection_items', 'kv'] as const)
         .map((k) => [k, delta(k)] as const)
         .filter(([, d]) => d !== 0)
-        .map(([k, d]) => `${d > 0 ? '+' : ''}${d} ${k === 'collection_items' ? 'articles' : k === 'kv' ? 'kv rows' : 'pages'}`)
-      rowsDetail += parts.length ? ` The live store has ${parts.join(', ')} since.` : ' The live store has the same counts.'
+        .map(
+          ([k, d]) =>
+            `${d > 0 ? '+' : ''}${d} ${k === 'collection_items' ? 'articles' : k === 'kv' ? 'kv rows' : 'pages'}`
+        )
+      rowsDetail += parts.length
+        ? ` The live store has ${parts.join(', ')} since.`
+        : ' The live store has the same counts.'
     }
     add('rows', 'Row counts', rowsStatus, rowsDetail)
 
     const articles = publishedBodies(db)
-    if (!articles.length) add('render', 'Article render', 'pass', 'The snapshot has no published article to render.')
+    if (!articles.length)
+      add('render', 'Article render', 'pass', 'The snapshot has no published article to render.')
     else {
       const first = articles[0]
       try {
         await opts.compile(first.body)
         add('render', 'Article render', 'pass', `${first.ref} compiles with the public renderer.`)
       } catch (err) {
-        add('render', 'Article render', 'fail', `${first.ref} does not compile: ${errMsg(err).slice(0, 200)}`)
+        add(
+          'render',
+          'Article render',
+          'fail',
+          `${first.ref} does not compile: ${errMsg(err).slice(0, 200)}`
+        )
       }
     }
   } catch (err) {
@@ -265,17 +323,28 @@ export async function checkExtractedSnapshot(
 
   // uploads
   const uploadsDir = path.join(dir, 'uploads')
-  const uploads = fs.existsSync(uploadsDir) ? fs.readdirSync(uploadsDir, { withFileTypes: true }).filter((e) => e.isFile()) : []
+  const uploads = fs.existsSync(uploadsDir)
+    ? fs.readdirSync(uploadsDir, { withFileTypes: true }).filter((e) => e.isFile())
+    : []
   const unservable = uploads.filter((e) => !isValidUploadName(e.name)).map((e) => e.name)
   if (unservable.length) {
-    add('uploads', 'Images', 'warn', `${unservable.length} file(s) would not be restored (names the file server cannot serve): ${unservable.slice(0, 3).join(', ')}.`)
+    add(
+      'uploads',
+      'Images',
+      'warn',
+      `${unservable.length} file(s) would not be restored (names the file server cannot serve): ${unservable.slice(0, 3).join(', ')}.`
+    )
   } else add('uploads', 'Images', 'pass', `${uploads.length} image file(s), all restorable.`)
 
   // inbox
   const inbox = path.join(dir, 'data', 'inbox', 'contact-inbox.jsonl')
-  if (!fs.existsSync(inbox)) add('inbox', 'Contact inbox', 'pass', 'No contact inbox in this snapshot.')
+  if (!fs.existsSync(inbox))
+    add('inbox', 'Contact inbox', 'pass', 'No contact inbox in this snapshot.')
   else {
-    const lines = fs.readFileSync(inbox, 'utf8').split('\n').filter((l) => l.trim())
+    const lines = fs
+      .readFileSync(inbox, 'utf8')
+      .split('\n')
+      .filter((l) => l.trim())
     let bad = 0
     for (const l of lines) {
       try {
@@ -284,7 +353,13 @@ export async function checkExtractedSnapshot(
         bad++
       }
     }
-    if (bad) add('inbox', 'Contact inbox', 'warn', `${bad} of ${lines.length} line(s) are not valid JSON and would be skipped by the merge.`)
+    if (bad)
+      add(
+        'inbox',
+        'Contact inbox',
+        'warn',
+        `${bad} of ${lines.length} line(s) are not valid JSON and would be skipped by the merge.`
+      )
     else add('inbox', 'Contact inbox', 'pass', `${lines.length} line(s), all readable.`)
   }
 
@@ -295,7 +370,11 @@ export async function checkExtractedSnapshot(
 export function summarizeChecks(checks: DrillCheck[]): { status: DrillStatus; summary: string } {
   const failed = checks.filter((c) => c.status === 'fail')
   const warned = checks.filter((c) => c.status === 'warn')
-  if (failed.length) return { status: 'failed', summary: `Failed: ${failed.map((c) => c.label.toLowerCase()).join(', ')}.` }
+  if (failed.length)
+    return {
+      status: 'failed',
+      summary: `Failed: ${failed.map((c) => c.label.toLowerCase()).join(', ')}.`,
+    }
   return {
     status: 'passed',
     summary: warned.length
@@ -306,9 +385,17 @@ export function summarizeChecks(checks: DrillCheck[]): { status: DrillStatus; su
 
 // ── Running a drill ───────────────────────────────────────────────────────
 
-type DrillGlobal = typeof globalThis & { __restoreDrillRunning?: boolean; __storageOperation?: string | null }
+type DrillGlobal = typeof globalThis & {
+  __restoreDrillRunning?: boolean
+  __storageOperation?: string | null
+}
 
-type SnapshotSource = { source: 'r2' | 'local'; name: string; buf: Buffer; offsiteNote: DrillCheck | null }
+type SnapshotSource = {
+  source: 'r2' | 'local'
+  name: string
+  buf: Buffer
+  offsiteNote: DrillCheck | null
+}
 
 async function pickSnapshot(): Promise<SnapshotSource | null> {
   let offsiteNote: DrillCheck | null = null
@@ -320,10 +407,20 @@ async function pickSnapshot(): Promise<SnapshotSource | null> {
           source: 'r2',
           name: BACKUP_CONSTANTS.R2_LATEST_KEY,
           buf,
-          offsiteNote: { id: 'source', label: 'Source', status: 'pass', detail: `Drilled the off-site copy r2://${getR2Bucket()}/${BACKUP_CONSTANTS.R2_LATEST_KEY}.` },
+          offsiteNote: {
+            id: 'source',
+            label: 'Source',
+            status: 'pass',
+            detail: `Drilled the off-site copy r2://${getR2Bucket()}/${BACKUP_CONSTANTS.R2_LATEST_KEY}.`,
+          },
         }
       }
-      offsiteNote = { id: 'source', label: 'Source', status: 'warn', detail: `R2 has no ${BACKUP_CONSTANTS.R2_LATEST_KEY}; drilled the newest local snapshot instead.` }
+      offsiteNote = {
+        id: 'source',
+        label: 'Source',
+        status: 'warn',
+        detail: `R2 has no ${BACKUP_CONSTANTS.R2_LATEST_KEY}; drilled the newest local snapshot instead.`,
+      }
     } catch (err) {
       offsiteNote = {
         id: 'source',
@@ -340,7 +437,12 @@ async function pickSnapshot(): Promise<SnapshotSource | null> {
     source: 'local',
     name: local.filename,
     buf,
-    offsiteNote: offsiteNote || { id: 'source', label: 'Source', status: 'pass', detail: `Drilled the newest local snapshot ${local.filename} (R2 is not configured).` },
+    offsiteNote: offsiteNote || {
+      id: 'source',
+      label: 'Source',
+      status: 'pass',
+      detail: `Drilled the newest local snapshot ${local.filename} (R2 is not configured).`,
+    },
   }
 }
 
@@ -356,7 +458,8 @@ function liveCounts(): LiveCounts {
 function removeStaleScratch() {
   try {
     for (const name of fs.readdirSync(BACKUP_CONSTANTS.BACKUPS_DIR)) {
-      if (name.startsWith('_drill-')) fs.rmSync(path.join(BACKUP_CONSTANTS.BACKUPS_DIR, name), { recursive: true, force: true })
+      if (name.startsWith('_drill-'))
+        fs.rmSync(path.join(BACKUP_CONSTANTS.BACKUPS_DIR, name), { recursive: true, force: true })
     }
   } catch {
     // No backups dir yet.
@@ -374,7 +477,11 @@ export type CompileArticle = (body: string) => Promise<unknown>
  * instrumentation.ts (the schedule), whose bundle must not pull in the MDX
  * renderer and the React modules behind it.
  */
-export async function runRestoreDrill(trigger: DrillTrigger, compile: CompileArticle, now: () => number = Date.now): Promise<DrillResult> {
+export async function runRestoreDrill(
+  trigger: DrillTrigger,
+  compile: CompileArticle,
+  now: () => number = Date.now
+): Promise<DrillResult> {
   const g = globalThis as DrillGlobal
   if (g.__restoreDrillRunning) throw new DrillBusyError('restore drill')
   if (g.__storageOperation) throw new DrillBusyError(g.__storageOperation)
@@ -399,7 +506,10 @@ export async function runRestoreDrill(trigger: DrillTrigger, compile: CompileArt
         checks: [],
       })
     }
-    scratch = path.join(BACKUP_CONSTANTS.BACKUPS_DIR, `_drill-${started}-${crypto.randomBytes(3).toString('hex')}`)
+    scratch = path.join(
+      BACKUP_CONSTANTS.BACKUPS_DIR,
+      `_drill-${started}-${crypto.randomBytes(3).toString('hex')}`
+    )
     fs.mkdirSync(scratch, { recursive: true, mode: 0o700 })
     const checks: DrillCheck[] = []
     if (picked.offsiteNote) checks.push(picked.offsiteNote)
@@ -407,10 +517,17 @@ export async function runRestoreDrill(trigger: DrillTrigger, compile: CompileArt
     try {
       manifest = await extractTarball(picked.buf, scratch)
     } catch (err) {
-      checks.push({ id: 'archive', label: 'Archive', status: 'fail', detail: `The archive does not extract: ${errMsg(err)}` })
+      checks.push({
+        id: 'archive',
+        label: 'Archive',
+        status: 'fail',
+        detail: `The archive does not extract: ${errMsg(err)}`,
+      })
     }
     if (!checks.some((c) => c.id === 'archive')) {
-      checks.push(...(await checkExtractedSnapshot(scratch, manifest, { live: liveCounts(), compile })))
+      checks.push(
+        ...(await checkExtractedSnapshot(scratch, manifest, { live: liveCounts(), compile }))
+      )
     }
     const { status, summary } = summarizeChecks(checks)
     const createdAt = manifest?.createdAt ? Date.parse(manifest.createdAt) : NaN
@@ -439,7 +556,7 @@ function recordDrill(result: DrillResult): DrillResult {
     const info = db
       .prepare(
         `INSERT INTO restore_drills (ran_at, duration_ms, trigger, status, source, snapshot, snapshot_at, bytes, summary, checks)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         result.ranAt,
@@ -451,15 +568,23 @@ function recordDrill(result: DrillResult): DrillResult {
         result.snapshotAt,
         result.bytes,
         result.summary,
-        JSON.stringify(result.checks),
+        JSON.stringify(result.checks)
       )
-    db.prepare(`DELETE FROM restore_drills WHERE id NOT IN (SELECT id FROM restore_drills ORDER BY ran_at DESC, id DESC LIMIT ?)`).run(DRILL_KEEP)
+    db.prepare(
+      `DELETE FROM restore_drills WHERE id NOT IN (SELECT id FROM restore_drills ORDER BY ran_at DESC, id DESC LIMIT ?)`
+    ).run(DRILL_KEEP)
     result.id = Number(info.lastInsertRowid)
   } catch (err) {
     log.error('could not record the restore drill result', { err })
   }
-  const fields = { status: result.status, source: result.source, snapshot: result.snapshot, ms: result.durationMs }
-  if (result.status === 'failed') log.warn('restore drill failed', { ...fields, summary: result.summary })
+  const fields = {
+    status: result.status,
+    source: result.source,
+    snapshot: result.snapshot,
+    ms: result.durationMs,
+  }
+  if (result.status === 'failed')
+    log.warn('restore drill failed', { ...fields, summary: result.summary })
   else log.info('restore drill finished', fields)
   return result
 }
@@ -529,11 +654,17 @@ type ScheduleGlobal = typeof globalThis & { __restoreDrillSchedule?: ScheduleRun
 
 function runtime(): ScheduleRuntime {
   const g = globalThis as ScheduleGlobal
-  if (!g.__restoreDrillSchedule) g.__restoreDrillSchedule = { started: false, intervalHours: 0, nextAt: null }
+  if (!g.__restoreDrillSchedule)
+    g.__restoreDrillSchedule = { started: false, intervalHours: 0, nextAt: null }
   return g.__restoreDrillSchedule
 }
 
-export type DrillScheduleStatus = { enabled: boolean; intervalHours: number; nextAt: number | null; running: boolean }
+export type DrillScheduleStatus = {
+  enabled: boolean
+  intervalHours: number
+  nextAt: number | null
+  running: boolean
+}
 
 export function restoreDrillSchedule(): DrillScheduleStatus {
   const rt = runtime()
@@ -546,8 +677,14 @@ export function restoreDrillSchedule(): DrillScheduleStatus {
 }
 
 /** When the first scheduled drill after boot is due (pure; unit-tested). */
-export function firstDrillDelay(lastRanAt: number | null, intervalMs: number, now: number, random: number): number {
-  const bootDelay = FIRST_RUN_MIN_MS + Math.floor(Math.max(0, Math.min(1, random)) * FIRST_RUN_SPREAD_MS)
+export function firstDrillDelay(
+  lastRanAt: number | null,
+  intervalMs: number,
+  now: number,
+  random: number
+): number {
+  const bootDelay =
+    FIRST_RUN_MIN_MS + Math.floor(Math.max(0, Math.min(1, random)) * FIRST_RUN_SPREAD_MS)
   if (lastRanAt === null) return bootDelay
   return Math.max(bootDelay, lastRanAt + intervalMs - now)
 }
@@ -590,7 +727,8 @@ export function startRestoreDrillSchedule(opts: DrillScheduleOptions = {}): { st
     return { stop: () => {} }
   }
   const setT = opts.setTimeoutFn ?? ((fn: () => void, ms: number) => setTimeout(fn, ms))
-  const clearT = opts.clearTimeoutFn ?? ((h: unknown) => clearTimeout(h as ReturnType<typeof setTimeout>))
+  const clearT =
+    opts.clearTimeoutFn ?? ((h: unknown) => clearTimeout(h as ReturnType<typeof setTimeout>))
   const now = opts.now ?? Date.now
   const run = opts.run ?? (() => triggerScheduledDrill())
   const intervalMs = intervalHours * HOUR_MS
@@ -623,7 +761,12 @@ export function startRestoreDrillSchedule(opts: DrillScheduleOptions = {}): { st
   }
 
   rt.started = true
-  const first = firstDrillDelay(latestRanDrill()?.ranAt ?? null, intervalMs, now(), (opts.random ?? Math.random)())
+  const first = firstDrillDelay(
+    latestRanDrill()?.ranAt ?? null,
+    intervalMs,
+    now(),
+    (opts.random ?? Math.random)()
+  )
   schedule(first)
   log.info('restore drills scheduled', { intervalHours, firstRunInMs: first })
   return {
@@ -638,16 +781,25 @@ export function startRestoreDrillSchedule(opts: DrillScheduleOptions = {}): { st
 }
 
 /** Health warnings about drills (empty when fine). Safe to publish: no details. */
-export function restoreDrillWarnings(latest: DrillResult | null, schedule: DrillScheduleStatus, hasBackups: boolean, now = Date.now()): string[] {
+export function restoreDrillWarnings(
+  latest: DrillResult | null,
+  schedule: DrillScheduleStatus,
+  hasBackups: boolean,
+  now = Date.now()
+): string[] {
   if (!hasBackups) return []
-  if (latest && latest.status === 'failed') return ['The last restore drill failed; details are in the admin System panel.']
+  if (latest && latest.status === 'failed')
+    return ['The last restore drill failed; details are in the admin System panel.']
   if (schedule.enabled && schedule.intervalHours > 0) {
     const staleMs = 2 * schedule.intervalHours * HOUR_MS
     if (!latest || latest.status === 'skipped') {
       // Only once the first drill had time to run since boot.
-      if (process.uptime() * 1000 > FIRST_RUN_MIN_MS + FIRST_RUN_SPREAD_MS + HOUR_MS) return ['No restore drill has run yet.']
+      if (process.uptime() * 1000 > FIRST_RUN_MIN_MS + FIRST_RUN_SPREAD_MS + HOUR_MS)
+        return ['No restore drill has run yet.']
     } else if (now - latest.ranAt > staleMs) {
-      return [`The last restore drill ran ${Math.round((now - latest.ranAt) / HOUR_MS)} h ago (schedule: every ${schedule.intervalHours} h).`]
+      return [
+        `The last restore drill ran ${Math.round((now - latest.ranAt) / HOUR_MS)} h ago (schedule: every ${schedule.intervalHours} h).`,
+      ]
     }
   }
   return []

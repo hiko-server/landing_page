@@ -39,10 +39,15 @@ export default withApi('admin/errors', (req, res) => {
     if (fp !== undefined) {
       if (!isFingerprint(fp)) return res.status(400).json({ error: 'Invalid fingerprint' })
       const one = getError(fp)
-      return one ? res.status(200).json({ error: one }) : res.status(404).json({ error: 'Not found' })
+      return one
+        ? res.status(200).json({ error: one })
+        : res.status(404).json({ error: 'Not found' })
     }
     const raw = typeof req.query.status === 'string' ? req.query.status : 'open'
-    const status = raw === 'all' || (ERROR_STATUSES as readonly string[]).includes(raw) ? (raw as ErrorStatus | 'all') : 'open'
+    const status =
+      raw === 'all' || (ERROR_STATUSES as readonly string[]).includes(raw)
+        ? (raw as ErrorStatus | 'all')
+        : 'open'
     return res.status(200).json({ errors: listErrors({ status }), totals: errorTotals() })
   }
 
@@ -54,8 +59,14 @@ export default withApi('admin/errors', (req, res) => {
   if (req.method === 'PATCH') {
     const fps = fingerprintsOf(req.body)
     const status = (req.body as { status?: unknown } | null)?.status
-    if (!fps || typeof status !== 'string' || !(ERROR_STATUSES as readonly string[]).includes(status)) {
-      return res.status(400).json({ error: 'Send { fingerprints: [...], status: "open" | "resolved" | "ignored" }' })
+    if (
+      !fps ||
+      typeof status !== 'string' ||
+      !(ERROR_STATUSES as readonly string[]).includes(status)
+    ) {
+      return res
+        .status(400)
+        .json({ error: 'Send { fingerprints: [...], status: "open" | "resolved" | "ignored" }' })
     }
     return res.status(200).json({ changed: setErrorStatus(fps, status as ErrorStatus) })
   }
@@ -65,7 +76,8 @@ export default withApi('admin/errors', (req, res) => {
       return res.status(200).json({ deleted: deleteResolvedErrors() })
     }
     const fps = fingerprintsOf(req.body)
-    if (!fps) return res.status(400).json({ error: 'Send { fingerprints: [...] } or { resolved: true }' })
+    if (!fps)
+      return res.status(400).json({ error: 'Send { fingerprints: [...] } or { resolved: true }' })
     return res.status(200).json({ deleted: deleteErrors(fps) })
   }
 

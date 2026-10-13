@@ -2,7 +2,12 @@ import { withApi } from '../../../lib/apiHandler'
 import { isAdminRequest } from '../../../lib/auth'
 import { rateLimit } from '../../../lib/rateLimit'
 import { compileMdx } from '../../../lib/mdx'
-import { DrillBusyError, listRestoreDrills, restoreDrillSchedule, runRestoreDrill } from '../../../lib/restoreDrill'
+import {
+  DrillBusyError,
+  listRestoreDrills,
+  restoreDrillSchedule,
+  runRestoreDrill,
+} from '../../../lib/restoreDrill'
 
 /**
  * Restore drills (lib/restoreDrill.ts), admin only, never cached:
@@ -22,14 +27,17 @@ export default withApi('admin/restore-drill', async (req, res, ctx) => {
   }
   if (req.method === 'POST') {
     const rl = rateLimit(req, 6, 60 * 60_000, 'admin:restore-drill')
-    if (!rl.allowed) return res.status(429).json({ error: 'Six drills an hour is the limit — try again later.' })
+    if (!rl.allowed)
+      return res.status(429).json({ error: 'Six drills an hour is the limit — try again later.' })
     try {
       const drill = await runRestoreDrill('manual', (body) => compileMdx(body))
       return res.status(200).json({ drill })
     } catch (err) {
       if (err instanceof DrillBusyError) return res.status(409).json({ error: err.message })
       ctx.log.error('restore drill crashed', { err })
-      return res.status(500).json({ error: 'The drill could not run; the error is in the System panel.' })
+      return res
+        .status(500)
+        .json({ error: 'The drill could not run; the error is in the System panel.' })
     }
   }
   res.setHeader('Allow', 'GET, POST')

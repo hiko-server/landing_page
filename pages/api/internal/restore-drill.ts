@@ -11,7 +11,8 @@ import { DrillBusyError, runRestoreDrill } from '../../../lib/restoreDrill'
  */
 export default withApi('internal/restore-drill', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store')
-  if (req.method !== 'POST' || !isInternalJobRequest(req)) return res.status(404).json({ error: 'Not found' })
+  if (req.method !== 'POST' || !isInternalJobRequest(req))
+    return res.status(404).json({ error: 'Not found' })
   try {
     const drill = await runRestoreDrill('scheduled', (body) => compileMdx(body))
     return res.status(200).json({ drill })

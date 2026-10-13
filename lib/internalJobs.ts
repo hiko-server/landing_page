@@ -58,6 +58,9 @@ export async function triggerInternalJob(job: string): Promise<unknown> {
   })
   const body = (await res.json().catch(() => ({}))) as { error?: string }
   if (res.status === 409) throw new InternalJobBusyError(body.error || 'busy')
-  if (!res.ok) throw new Error(`internal job ${job} answered HTTP ${res.status}${body.error ? `: ${body.error}` : ''}`)
+  if (!res.ok)
+    throw new Error(
+      `internal job ${job} answered HTTP ${res.status}${body.error ? `: ${body.error}` : ''}`
+    )
   return body
 }

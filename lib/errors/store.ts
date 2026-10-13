@@ -145,7 +145,10 @@ function toRow(r: RawRow): ErrorRow {
 }
 
 /** Add one sighting of `browser` to a tally, keeping the most frequent families. */
-export function tallyBrowser(tally: Record<string, number>, browser: string | null | undefined): Record<string, number> {
+export function tallyBrowser(
+  tally: Record<string, number>,
+  browser: string | null | undefined
+): Record<string, number> {
   if (!browser) return tally
   const next = { ...tally, [browser]: (tally[browser] || 0) + 1 }
   const entries = Object.entries(next).sort((a, b) => b[1] - a[1])
@@ -156,7 +159,7 @@ function bumpDropped(day: string) {
   const db = getAnalyticsDb()
   db.prepare(
     `INSERT INTO meta (key, value) VALUES (?, '1')
-     ON CONFLICT(key) DO UPDATE SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT)`,
+     ON CONFLICT(key) DO UPDATE SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT)`
   ).run(`errors.dropped.${day}`)
 }
 
@@ -169,12 +172,20 @@ export function pruneErrors(now = Date.now(), force = false): void {
   const db = getAnalyticsDb()
   const DAY = 86_400_000
   db.transaction(() => {
-    db.prepare(`DELETE FROM errors WHERE status = 'open' AND last_seen < ?`).run(now - ERROR_LIMITS.openDays * DAY)
-    db.prepare(`DELETE FROM errors WHERE status != 'open' AND last_seen < ?`).run(now - ERROR_LIMITS.closedDays * DAY)
+    db.prepare(`DELETE FROM errors WHERE status = 'open' AND last_seen < ?`).run(
+      now - ERROR_LIMITS.openDays * DAY
+    )
+    db.prepare(`DELETE FROM errors WHERE status != 'open' AND last_seen < ?`).run(
+      now - ERROR_LIMITS.closedDays * DAY
+    )
     const keepFrom = dayMinus(day, ERROR_LIMITS.dailyKeepDays)
     db.prepare(`DELETE FROM error_daily WHERE day < ?`).run(keepFrom)
-    db.prepare(`DELETE FROM error_daily WHERE fingerprint NOT IN (SELECT fingerprint FROM errors)`).run()
-    db.prepare(`DELETE FROM meta WHERE key LIKE 'errors.dropped.%' AND key < ?`).run(`errors.dropped.${keepFrom}`)
+    db.prepare(
+      `DELETE FROM error_daily WHERE fingerprint NOT IN (SELECT fingerprint FROM errors)`
+    ).run()
+    db.prepare(`DELETE FROM meta WHERE key LIKE 'errors.dropped.%' AND key < ?`).run(
+      `errors.dropped.${keepFrom}`
+    )
   })()
 }
 
@@ -198,9 +209,9 @@ export function recordError(e: ErrorEventInput, now = Date.now()): RecordOutcome
 
   const db = getAnalyticsDb()
   return db.transaction((): RecordOutcome => {
-    const existing = db.prepare('SELECT browsers, status FROM errors WHERE fingerprint = ?').get(e.fingerprint) as
-      | { browsers: string; status: ErrorStatus }
-      | undefined
+    const existing = db
+      .prepare('SELECT browsers, status FROM errors WHERE fingerprint = ?')
+      .get(e.fingerprint) as { browsers: string; status: ErrorStatus } | undefined
     if (!existing) {
       const n = (db.prepare('SELECT count(*) AS n FROM errors').get() as { n: number }).n
       if (n >= ERROR_LIMITS.maxFingerprints) {
@@ -210,7 +221,7 @@ export function recordError(e: ErrorEventInput, now = Date.now()): RecordOutcome
       db.prepare(
         `INSERT INTO errors (fingerprint, source, kind, name, message, stack, path, route, count,
                              first_seen, last_seen, first_release, last_release, browsers, status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, 'open')`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, 'open')`
       ).run(
         e.fingerprint,
         e.source,
@@ -224,7 +235,7 @@ export function recordError(e: ErrorEventInput, now = Date.now()): RecordOutcome
         now,
         e.release || null,
         e.release || null,
-        JSON.stringify(tallyBrowser({}, e.browser)),
+        JSON.stringify(tallyBrowser({}, e.browser))
       )
     } else {
       const browsers = JSON.stringify(tallyBrowser(parseBrowsers(existing.browsers), e.browser))
@@ -242,7 +253,7 @@ export function recordError(e: ErrorEventInput, now = Date.now()): RecordOutcome
            status = CASE WHEN ? THEN 'open' ELSE status END,
            resolved_at = CASE WHEN ? THEN NULL ELSE resolved_at END,
            regressed_at = CASE WHEN ? THEN ? ELSE regressed_at END
-         WHERE fingerprint = ?`,
+         WHERE fingerprint = ?`
       ).run(
         now,
         e.message,
@@ -255,12 +266,12 @@ export function recordError(e: ErrorEventInput, now = Date.now()): RecordOutcome
         regressed ? 1 : 0,
         regressed ? 1 : 0,
         now,
-        e.fingerprint,
+        e.fingerprint
       )
     }
     db.prepare(
       `INSERT INTO error_daily (day, fingerprint, count) VALUES (?, ?, 1)
-       ON CONFLICT(day, fingerprint) DO UPDATE SET count = count + 1`,
+       ON CONFLICT(day, fingerprint) DO UPDATE SET count = count + 1`
     ).run(day, e.fingerprint)
     return existing ? 'recorded' : 'new'
   })()
@@ -289,48 +300,69 @@ function dailySeries(fingerprints: string[], days: number, now: number): Map<str
 export type ErrorListItem = ErrorRow & { daily: number[] }
 
 /** Errors with `status` (or all), most recently seen first, each with a 14-day series. */
-export function listErrors(opts: { status?: ErrorStatus | 'all'; limit?: number } = {}, now = Date.now()): ErrorListItem[] {
+export function listErrors(
+  opts: { status?: ErrorStatus | 'all'; limit?: number } = {},
+  now = Date.now()
+): ErrorListItem[] {
   pruneErrors(now)
   const limit = Math.min(500, Math.max(1, opts.limit ?? 200))
   const status = opts.status ?? 'open'
   const rows = (
     status === 'all'
       ? getAnalyticsDb().prepare('SELECT * FROM errors ORDER BY last_seen DESC LIMIT ?').all(limit)
-      : getAnalyticsDb().prepare('SELECT * FROM errors WHERE status = ? ORDER BY last_seen DESC LIMIT ?').all(status, limit)
+      : getAnalyticsDb()
+          .prepare('SELECT * FROM errors WHERE status = ? ORDER BY last_seen DESC LIMIT ?')
+          .all(status, limit)
   ) as RawRow[]
   const series = dailySeries(
     rows.map((r) => r.fingerprint),
     14,
-    now,
+    now
   )
   return rows.map((r) => ({ ...toRow(r), daily: series.get(r.fingerprint) || [] }))
 }
 
 /** One error with a 30-day series, or null. */
 export function getError(fingerprint: string, now = Date.now()): ErrorListItem | null {
-  const row = getAnalyticsDb().prepare('SELECT * FROM errors WHERE fingerprint = ?').get(fingerprint) as RawRow | undefined
+  const row = getAnalyticsDb()
+    .prepare('SELECT * FROM errors WHERE fingerprint = ?')
+    .get(fingerprint) as RawRow | undefined
   if (!row) return null
   return { ...toRow(row), daily: dailySeries([fingerprint], 30, now).get(fingerprint) || [] }
 }
 
 export function errorTotals(now = Date.now()): ErrorTotals {
   const db = getAnalyticsDb()
-  const byStatus = db.prepare('SELECT status, count(*) AS n FROM errors GROUP BY status').all() as Array<{
+  const byStatus = db
+    .prepare('SELECT status, count(*) AS n FROM errors GROUP BY status')
+    .all() as Array<{
     status: ErrorStatus
     n: number
   }>
   const n = (st: ErrorStatus) => byStatus.find((r) => r.status === st)?.n ?? 0
   const today = utcDay(now)
   const sum = (from: string) =>
-    Number((db.prepare('SELECT coalesce(sum(count), 0) AS n FROM error_daily WHERE day >= ?').get(from) as { n: number }).n) || 0
-  const dropped = db.prepare('SELECT value FROM meta WHERE key = ?').get(`errors.dropped.${today}`) as { value: string } | undefined
+    Number(
+      (
+        db
+          .prepare('SELECT coalesce(sum(count), 0) AS n FROM error_daily WHERE day >= ?')
+          .get(from) as { n: number }
+      ).n
+    ) || 0
+  const dropped = db
+    .prepare('SELECT value FROM meta WHERE key = ?')
+    .get(`errors.dropped.${today}`) as { value: string } | undefined
   return {
     open: n('open'),
     resolved: n('resolved'),
     ignored: n('ignored'),
     eventsToday: sum(today),
     events7d: sum(dayMinus(today, 6)),
-    new24h: (db.prepare('SELECT count(*) AS n FROM errors WHERE first_seen >= ?').get(now - 86_400_000) as { n: number }).n,
+    new24h: (
+      db
+        .prepare('SELECT count(*) AS n FROM errors WHERE first_seen >= ?')
+        .get(now - 86_400_000) as { n: number }
+    ).n,
     droppedToday: Number(dropped?.value) || 0,
   }
 }
@@ -342,12 +374,16 @@ export function isFingerprint(v: unknown): v is string {
 }
 
 /** Set the triage status of some errors. Returns how many rows changed. */
-export function setErrorStatus(fingerprints: string[], status: ErrorStatus, now = Date.now()): number {
+export function setErrorStatus(
+  fingerprints: string[],
+  status: ErrorStatus,
+  now = Date.now()
+): number {
   const valid = fingerprints.filter(isFingerprint)
   if (!valid.length) return 0
   const db = getAnalyticsDb()
   const stmt = db.prepare(
-    `UPDATE errors SET status = ?, resolved_at = CASE WHEN ? = 'open' THEN NULL ELSE ? END WHERE fingerprint = ?`,
+    `UPDATE errors SET status = ?, resolved_at = CASE WHEN ? = 'open' THEN NULL ELSE ? END WHERE fingerprint = ?`
   )
   let changed = 0
   db.transaction(() => {
@@ -377,7 +413,9 @@ export function deleteResolvedErrors(): number {
   let changed = 0
   db.transaction(() => {
     changed = db.prepare(`DELETE FROM errors WHERE status = 'resolved'`).run().changes
-    db.prepare('DELETE FROM error_daily WHERE fingerprint NOT IN (SELECT fingerprint FROM errors)').run()
+    db.prepare(
+      'DELETE FROM error_daily WHERE fingerprint NOT IN (SELECT fingerprint FROM errors)'
+    ).run()
   })()
   return changed
 }

@@ -9,7 +9,13 @@ import { schemaStatus, type SchemaStatus } from './dbMigrations'
 import { errorTotals, type ErrorTotals } from './errors/store'
 import { logEntryTotal, recentLogEntries, type LogEntry } from './logBuffer'
 import { isR2Configured } from './r2'
-import { latestRestoreDrill, restoreDrillSchedule, restoreDrillWarnings, type DrillResult, type DrillScheduleStatus } from './restoreDrill'
+import {
+  latestRestoreDrill,
+  restoreDrillSchedule,
+  restoreDrillWarnings,
+  type DrillResult,
+  type DrillScheduleStatus,
+} from './restoreDrill'
 import { CONTENT_MIGRATIONS } from '../scripts/db/content/index.mjs'
 import { ANALYTICS_MIGRATIONS } from '../scripts/db/analytics/index.mjs'
 import { AUTH_MIGRATIONS } from '../scripts/db/auth/index.mjs'
@@ -32,11 +38,22 @@ export type DatabaseInfo = {
   error: string | null
 }
 
-export type DiskInfo = { path: string; freeBytes: number; totalBytes: number; usedPct: number } | null
+export type DiskInfo = {
+  path: string
+  freeBytes: number
+  totalBytes: number
+  usedPct: number
+} | null
 
 export type SystemSnapshot = {
   now: number
-  release: { sha: string | null; nodeVersion: string; startedAt: number; uptimeS: number; env: string }
+  release: {
+    sha: string | null
+    nodeVersion: string
+    startedAt: number
+    uptimeS: number
+    env: string
+  }
   memory: { rssBytes: number; heapUsedBytes: number; heapTotalBytes: number }
   disk: DiskInfo
   databases: DatabaseInfo[]
@@ -65,7 +82,12 @@ export function diskInfo(dir: string): DiskInfo {
     const total = Number(s.blocks) * Number(s.bsize)
     const free = Number(s.bavail) * Number(s.bsize)
     if (!Number.isFinite(total) || total <= 0) return null
-    return { path: dir, freeBytes: free, totalBytes: total, usedPct: Math.round(((total - free) / total) * 1000) / 10 }
+    return {
+      path: dir,
+      freeBytes: free,
+      totalBytes: total,
+      usedPct: Math.round(((total - free) / total) * 1000) / 10,
+    }
   } catch {
     return null
   }
@@ -76,13 +98,27 @@ export function diskWarnings(disk: DiskInfo): string[] {
   if (!disk) return []
   const freePct = (disk.freeBytes / disk.totalBytes) * 100
   if (freePct < 10 || disk.freeBytes < 1024 ** 3) {
-    return [`Disk space is low: ${(disk.freeBytes / 1024 ** 3).toFixed(1)} GB free (${freePct.toFixed(0)} %).`]
+    return [
+      `Disk space is low: ${(disk.freeBytes / 1024 ** 3).toFixed(1)} GB free (${freePct.toFixed(0)} %).`,
+    ]
   }
   return []
 }
 
-function databaseInfo(name: DatabaseInfo['name'], file: string, open: () => Parameters<typeof schemaStatus>[1], migrations: Parameters<typeof schemaStatus>[2]): DatabaseInfo {
-  const info: DatabaseInfo = { name, file: path.relative(process.cwd(), file), bytes: sizeOf(file), walBytes: sizeOf(`${file}-wal`), schema: null, error: null }
+function databaseInfo(
+  name: DatabaseInfo['name'],
+  file: string,
+  open: () => Parameters<typeof schemaStatus>[1],
+  migrations: Parameters<typeof schemaStatus>[2]
+): DatabaseInfo {
+  const info: DatabaseInfo = {
+    name,
+    file: path.relative(process.cwd(), file),
+    bytes: sizeOf(file),
+    walBytes: sizeOf(`${file}-wal`),
+    schema: null,
+    error: null,
+  }
   try {
     info.schema = schemaStatus(name, open(), migrations)
     info.bytes = sizeOf(file)
@@ -107,12 +143,15 @@ export function systemSnapshot(now = Date.now()): SystemSnapshot {
   ]
   for (const d of databases) {
     if (d.error) warnings.push(`The ${d.name} database cannot be opened: ${d.error}`)
-    else if (d.schema?.state === 'behind') warnings.push(`The ${d.name} database has pending migrations.`)
+    else if (d.schema?.state === 'behind')
+      warnings.push(`The ${d.name} database has pending migrations.`)
   }
 
   let pending: number | null = null
   try {
-    pending = Number((getDb().prepare('SELECT count(*) AS n FROM r2_pending').get() as { n: number }).n) || 0
+    pending =
+      Number((getDb().prepare('SELECT count(*) AS n FROM r2_pending').get() as { n: number }).n) ||
+      0
   } catch {
     pending = null
   }
@@ -133,7 +172,10 @@ export function systemSnapshot(now = Date.now()): SystemSnapshot {
   let errors: ErrorTotals | null = null
   try {
     errors = errorTotals(now)
-    if (errors.new24h > 0) warnings.push(`${errors.new24h} new error${errors.new24h === 1 ? '' : 's'} in the last 24 hours.`)
+    if (errors.new24h > 0)
+      warnings.push(
+        `${errors.new24h} new error${errors.new24h === 1 ? '' : 's'} in the last 24 hours.`
+      )
   } catch {
     errors = null
   }

@@ -11,9 +11,16 @@ import { sanitize, type LogFields, type LogLevel } from './log'
 export const LOG_RING_SIZE = 200
 const MAX_FIELDS_CHARS = 1200
 
-export type LogEntry = { ts: number; level: Extract<LogLevel, 'warn' | 'error'>; msg: string; fields: string | null }
+export type LogEntry = {
+  ts: number
+  level: Extract<LogLevel, 'warn' | 'error'>
+  msg: string
+  fields: string | null
+}
 
-type RingGlobal = typeof globalThis & { __logRing?: { entries: LogEntry[]; next: number; total: number } }
+type RingGlobal = typeof globalThis & {
+  __logRing?: { entries: LogEntry[]; next: number; total: number }
+}
 
 function ring() {
   const g = globalThis as RingGlobal
@@ -21,7 +28,12 @@ function ring() {
   return g.__logRing
 }
 
-export function pushLogEntry(level: LogLevel, msg: string, fields: LogFields, now = Date.now()): void {
+export function pushLogEntry(
+  level: LogLevel,
+  msg: string,
+  fields: LogFields,
+  now = Date.now()
+): void {
   if (level !== 'warn' && level !== 'error') return
   const r = ring()
   let json: string | null = null
@@ -41,7 +53,9 @@ export function pushLogEntry(level: LogLevel, msg: string, fields: LogFields, no
 export function recentLogEntries(limit = 50, level?: 'warn' | 'error'): LogEntry[] {
   const r = ring()
   const ordered =
-    r.entries.length < LOG_RING_SIZE ? [...r.entries] : [...r.entries.slice(r.next), ...r.entries.slice(0, r.next)]
+    r.entries.length < LOG_RING_SIZE
+      ? [...r.entries]
+      : [...r.entries.slice(r.next), ...r.entries.slice(0, r.next)]
   return ordered
     .reverse()
     .filter((e) => !level || e.level === level)

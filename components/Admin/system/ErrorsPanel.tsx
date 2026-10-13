@@ -27,7 +27,12 @@ import { browserTally, kindLabel, seriesTotal, sourceLabel, sparkHeights } from 
 
 type Filter = ErrorStatus | 'all'
 const FILTERS: Filter[] = ['open', 'resolved', 'ignored', 'all']
-const FILTER_LABEL: Record<Filter, string> = { open: 'Open', resolved: 'Resolved', ignored: 'Ignored', all: 'All' }
+const FILTER_LABEL: Record<Filter, string> = {
+  open: 'Open',
+  resolved: 'Resolved',
+  ignored: 'Ignored',
+  all: 'All',
+}
 
 /** 14 bars, decorative: the count is in the text next to it. */
 function Sparkline({ series }: { series: number[] }) {
@@ -36,9 +41,26 @@ function Sparkline({ series }: { series: number[] }) {
   const gap = 2
   const h = 22
   return (
-    <Box as="svg" viewBox={`0 0 ${heights.length * (w + gap)} ${h}`} w={`${heights.length * (w + gap)}px`} h={`${h}px`} aria-hidden flexShrink={0} color="accent.500">
+    <Box
+      as="svg"
+      viewBox={`0 0 ${heights.length * (w + gap)} ${h}`}
+      w={`${heights.length * (w + gap)}px`}
+      h={`${h}px`}
+      aria-hidden
+      flexShrink={0}
+      color="accent.500"
+    >
       {heights.map((v, i) => (
-        <rect key={i} x={i * (w + gap)} y={h - Math.max(1, v * h)} width={w} height={Math.max(1, v * h)} rx={1} fill="currentColor" opacity={v > 0 ? 1 : 0.25} />
+        <rect
+          key={i}
+          x={i * (w + gap)}
+          y={h - Math.max(1, v * h)}
+          width={w}
+          height={Math.max(1, v * h)}
+          rx={1}
+          fill="currentColor"
+          opacity={v > 0 ? 1 : 0.25}
+        />
       ))}
     </Box>
   )
@@ -64,7 +86,8 @@ export default function ErrorsPanel() {
     try {
       const res = await fetch(`/api/admin/errors?status=${f}`, { cache: 'no-store' })
       const json = await readJsonObject(res)
-      if (!res.ok) throw new Error(typeof json.error === 'string' ? json.error : `HTTP ${res.status}`)
+      if (!res.ok)
+        throw new Error(typeof json.error === 'string' ? json.error : `HTTP ${res.status}`)
       setErrors(Array.isArray(json.errors) ? (json.errors as ErrorListItem[]) : [])
       setTotals((json.totals as ErrorTotals) || null)
       setNow(Date.now())
@@ -79,13 +102,26 @@ export default function ErrorsPanel() {
     void load(filter)
   }, [filter, load])
 
-  const change = async (method: 'PATCH' | 'DELETE', body: Record<string, unknown>, key: string, done: string) => {
+  const change = async (
+    method: 'PATCH' | 'DELETE',
+    body: Record<string, unknown>,
+    key: string,
+    done: string
+  ) => {
     setBusy(key)
     try {
-      const res = await fetch('/api/admin/errors', { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      const res = await fetch('/api/admin/errors', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
       const json = await readJsonObject(res)
       if (!res.ok) {
-        toast({ status: 'error', title: 'Not changed', description: typeof json.error === 'string' ? json.error : `HTTP ${res.status}` })
+        toast({
+          status: 'error',
+          title: 'Not changed',
+          description: typeof json.error === 'string' ? json.error : `HTTP ${res.status}`,
+        })
         return
       }
       toast({ status: 'success', title: done })
@@ -105,10 +141,24 @@ export default function ErrorsPanel() {
   return (
     <Box>
       <Flex justify="space-between" align="center" gap={3} flexWrap="wrap" mb={4}>
-        <SegmentedTabs items={items} value={filter} onSelect={setFilter} label="Errors by status" idPrefix="errfilter" size="sm" />
+        <SegmentedTabs
+          items={items}
+          value={filter}
+          onSelect={setFilter}
+          label="Errors by status"
+          idPrefix="errfilter"
+          size="sm"
+        />
         <Flex gap={2} flexWrap="wrap">
           {filter === 'resolved' && errors?.length ? (
-            <Button size="sm" {...outlineButtonProps} isLoading={busy === 'clear'} onClick={() => void change('DELETE', { resolved: true }, 'clear', 'Resolved errors deleted')}>
+            <Button
+              size="sm"
+              {...outlineButtonProps}
+              isLoading={busy === 'clear'}
+              onClick={() =>
+                void change('DELETE', { resolved: true }, 'clear', 'Resolved errors deleted')
+              }
+            >
               Delete resolved
             </Button>
           ) : null}
@@ -119,7 +169,8 @@ export default function ErrorsPanel() {
       </Flex>
       {totals ? (
         <Text fontSize="xs" color="page.fg-secondary" mb={3} className="tnum">
-          {totals.eventsToday} event{totals.eventsToday === 1 ? '' : 's'} today · {totals.events7d} in 7 days
+          {totals.eventsToday} event{totals.eventsToday === 1 ? '' : 's'} today · {totals.events7d}{' '}
+          in 7 days
           {totals.droppedToday ? ` · ${totals.droppedToday} dropped by the limits today` : ''}
         </Text>
       ) : null}
@@ -142,32 +193,76 @@ export default function ErrorsPanel() {
             ))}
           </Box>
         ) : errors.length === 0 ? (
-          <Box border="1px dashed" borderColor="page.border" borderRadius="lg" px={5} py={8} textAlign="center">
+          <Box
+            border="1px dashed"
+            borderColor="page.border"
+            borderRadius="lg"
+            px={5}
+            py={8}
+            textAlign="center"
+          >
             <Text fontSize="sm" fontWeight={600}>
-              {filter === 'open' ? 'No open errors' : `No ${FILTER_LABEL[filter].toLowerCase()} errors`}
+              {filter === 'open'
+                ? 'No open errors'
+                : `No ${FILTER_LABEL[filter].toLowerCase()} errors`}
             </Text>
             <Text fontSize="xs" color="page.fg-secondary" mt={1} maxW="52ch" mx="auto">
-              Errors in visitors’ browsers, server errors and Content-Security-Policy violations appear here, grouped by cause — without addresses, cookies or query strings.
+              Errors in visitors’ browsers, server errors and Content-Security-Policy violations
+              appear here, grouped by cause — without addresses, cookies or query strings.
             </Text>
           </Box>
         ) : (
-          <Accordion allowMultiple as="ul" listStyleType="none" border="1px solid" borderColor="page.border" borderRadius="lg">
+          <Accordion
+            allowMultiple
+            as="ul"
+            listStyleType="none"
+            border="1px solid"
+            borderColor="page.border"
+            borderRadius="lg"
+          >
             {errors.map((e) => {
               const total14 = seriesTotal(e.daily)
               return (
-                <AccordionItem as="li" key={e.fingerprint} borderColor="page.border" _first={{ borderTop: 'none' }} _last={{ borderBottom: 'none' }}>
+                <AccordionItem
+                  as="li"
+                  key={e.fingerprint}
+                  borderColor="page.border"
+                  _first={{ borderTop: 'none' }}
+                  _last={{ borderBottom: 'none' }}
+                >
                   <h3>
-                    <AccordionButton px={{ base: 3, md: 4 }} py={3} gap={3} alignItems="flex-start" _hover={{ bg: 'page.bg-overlay' }}>
+                    <AccordionButton
+                      px={{ base: 3, md: 4 }}
+                      py={3}
+                      gap={3}
+                      alignItems="flex-start"
+                      _hover={{ bg: 'page.bg-overlay' }}
+                    >
                       <Box flex={1} minW={0} textAlign="left">
                         <Flex gap={2} align="center" flexWrap="wrap" mb={1}>
-                          <Badge colorScheme={SOURCE_TONE[e.source] || 'gray'} variant="subtle" fontFamily={MONO} fontSize="9px">
+                          <Badge
+                            colorScheme={SOURCE_TONE[e.source] || 'gray'}
+                            variant="subtle"
+                            fontFamily={MONO}
+                            fontSize="9px"
+                          >
                             {sourceLabel(e.source)}
                           </Badge>
-                          <Text as="span" fontFamily={MONO} fontSize="10px" color="page.fg-secondary">
+                          <Text
+                            as="span"
+                            fontFamily={MONO}
+                            fontSize="10px"
+                            color="page.fg-secondary"
+                          >
                             {kindLabel(e.kind)}
                           </Text>
                           {e.regressedAt && e.status === 'open' ? (
-                            <Badge colorScheme="red" variant="outline" fontFamily={MONO} fontSize="9px">
+                            <Badge
+                              colorScheme="red"
+                              variant="outline"
+                              fontFamily={MONO}
+                              fontSize="9px"
+                            >
                               regressed
                             </Badge>
                           ) : null}
@@ -181,8 +276,16 @@ export default function ErrorsPanel() {
                           {e.name && !e.message.startsWith(e.name) ? `${e.name}: ` : ''}
                           {e.message}
                         </Text>
-                        <Text fontFamily={MONO} fontSize="11px" color="page.fg-secondary" mt={0.5} noOfLines={1} className="tnum">
-                          {[e.path, e.route].filter(Boolean).join(' · ') || '—'} · last {relativeTime(e.lastSeen, now)}
+                        <Text
+                          fontFamily={MONO}
+                          fontSize="11px"
+                          color="page.fg-secondary"
+                          mt={0.5}
+                          noOfLines={1}
+                          className="tnum"
+                        >
+                          {[e.path, e.route].filter(Boolean).join(' · ') || '—'} · last{' '}
+                          {relativeTime(e.lastSeen, now)}
                         </Text>
                       </Box>
                       <Flex direction="column" align="flex-end" gap={1} flexShrink={0}>
@@ -196,16 +299,27 @@ export default function ErrorsPanel() {
                     </AccordionButton>
                   </h3>
                   <AccordionPanel px={{ base: 3, md: 4 }} pb={4}>
-                    <Flex gap={4} flexWrap="wrap" fontSize="xs" color="page.fg-secondary" className="tnum" mb={3}>
+                    <Flex
+                      gap={4}
+                      flexWrap="wrap"
+                      fontSize="xs"
+                      color="page.fg-secondary"
+                      className="tnum"
+                      mb={3}
+                    >
                       <Text>First seen {absoluteTime(e.firstSeen)}</Text>
                       <Text>Last seen {absoluteTime(e.lastSeen)}</Text>
                       {e.firstRelease || e.lastRelease ? (
                         <Text>
                           Build {e.firstRelease?.slice(0, 7) || '?'}
-                          {e.lastRelease && e.lastRelease !== e.firstRelease ? ` → ${e.lastRelease.slice(0, 7)}` : ''}
+                          {e.lastRelease && e.lastRelease !== e.firstRelease
+                            ? ` → ${e.lastRelease.slice(0, 7)}`
+                            : ''}
                         </Text>
                       ) : null}
-                      {Object.keys(e.browsers).length ? <Text>{browserTally(e.browsers)}</Text> : null}
+                      {Object.keys(e.browsers).length ? (
+                        <Text>{browserTally(e.browsers)}</Text>
+                      ) : null}
                     </Flex>
                     {e.stack ? (
                       <Code
@@ -232,21 +346,70 @@ export default function ErrorsPanel() {
                     )}
                     <Flex gap={2} mt={3} flexWrap="wrap">
                       {e.status !== 'resolved' ? (
-                        <Button size="xs" {...outlineButtonProps} isLoading={busy === `res:${e.fingerprint}`} onClick={() => void change('PATCH', { fingerprints: [e.fingerprint], status: 'resolved' }, `res:${e.fingerprint}`, 'Marked resolved')}>
+                        <Button
+                          size="xs"
+                          {...outlineButtonProps}
+                          isLoading={busy === `res:${e.fingerprint}`}
+                          onClick={() =>
+                            void change(
+                              'PATCH',
+                              { fingerprints: [e.fingerprint], status: 'resolved' },
+                              `res:${e.fingerprint}`,
+                              'Marked resolved'
+                            )
+                          }
+                        >
                           Resolve
                         </Button>
                       ) : null}
                       {e.status !== 'open' ? (
-                        <Button size="xs" {...outlineButtonProps} isLoading={busy === `open:${e.fingerprint}`} onClick={() => void change('PATCH', { fingerprints: [e.fingerprint], status: 'open' }, `open:${e.fingerprint}`, 'Reopened')}>
+                        <Button
+                          size="xs"
+                          {...outlineButtonProps}
+                          isLoading={busy === `open:${e.fingerprint}`}
+                          onClick={() =>
+                            void change(
+                              'PATCH',
+                              { fingerprints: [e.fingerprint], status: 'open' },
+                              `open:${e.fingerprint}`,
+                              'Reopened'
+                            )
+                          }
+                        >
                           Reopen
                         </Button>
                       ) : null}
                       {e.status !== 'ignored' ? (
-                        <Button size="xs" variant="ghost" isLoading={busy === `ign:${e.fingerprint}`} onClick={() => void change('PATCH', { fingerprints: [e.fingerprint], status: 'ignored' }, `ign:${e.fingerprint}`, 'Ignored — it stays counted but never reopens')}>
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          isLoading={busy === `ign:${e.fingerprint}`}
+                          onClick={() =>
+                            void change(
+                              'PATCH',
+                              { fingerprints: [e.fingerprint], status: 'ignored' },
+                              `ign:${e.fingerprint}`,
+                              'Ignored — it stays counted but never reopens'
+                            )
+                          }
+                        >
                           Ignore
                         </Button>
                       ) : null}
-                      <Button size="xs" variant="ghost" color="red.400" isLoading={busy === `del:${e.fingerprint}`} onClick={() => void change('DELETE', { fingerprints: [e.fingerprint] }, `del:${e.fingerprint}`, 'Deleted')}>
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        color="red.400"
+                        isLoading={busy === `del:${e.fingerprint}`}
+                        onClick={() =>
+                          void change(
+                            'DELETE',
+                            { fingerprints: [e.fingerprint] },
+                            `del:${e.fingerprint}`,
+                            'Deleted'
+                          )
+                        }
+                      >
                         Delete
                       </Button>
                     </Flex>

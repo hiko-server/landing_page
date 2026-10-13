@@ -32,7 +32,13 @@ export function formatDuration(ms: number): string {
 export type ErrorSourceName = 'client' | 'server' | 'csp'
 
 export function sourceLabel(source: string): string {
-  return source === 'client' ? 'Browser' : source === 'server' ? 'Server' : source === 'csp' ? 'CSP' : source
+  return source === 'client'
+    ? 'Browser'
+    : source === 'server'
+      ? 'Server'
+      : source === 'csp'
+        ? 'CSP'
+        : source
 }
 
 const KIND: Record<string, string> = {
@@ -72,5 +78,11 @@ export function browserTally(browsers: Record<string, number>): string {
 
 /** Drill check status → badge colour scheme. */
 export function checkTone(status: string): 'green' | 'orange' | 'red' | 'gray' {
-  return status === 'pass' || status === 'passed' ? 'green' : status === 'warn' ? 'orange' : status === 'fail' || status === 'failed' ? 'red' : 'gray'
+  return status === 'pass' || status === 'passed'
+    ? 'green'
+    : status === 'warn'
+      ? 'orange'
+      : status === 'fail' || status === 'failed'
+        ? 'red'
+        : 'gray'
 }

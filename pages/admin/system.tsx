@@ -2,7 +2,10 @@ import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/router'
 import { Box } from '@chakra-ui/react'
 import { AdminPageShell } from '../../components/Admin/shell/ui'
-import SegmentedTabs, { tabPanelProps, type SegmentedItem } from '../../components/Admin/shell/SegmentedTabs'
+import SegmentedTabs, {
+  tabPanelProps,
+  type SegmentedItem,
+} from '../../components/Admin/shell/SegmentedTabs'
 import HealthPanel from '../../components/Admin/system/HealthPanel'
 import ErrorsPanel from '../../components/Admin/system/ErrorsPanel'
 
@@ -33,9 +36,12 @@ export default function AdminSystem() {
       const query = { ...router.query }
       if (next === 'errors') query.view = 'errors'
       else delete query.view
-      void router.replace({ pathname: router.pathname, query }, undefined, { shallow: true, scroll: false })
+      void router.replace({ pathname: router.pathname, query }, undefined, {
+        shallow: true,
+        scroll: false,
+      })
     },
-    [router],
+    [router]
   )
 
   return (
@@ -43,9 +49,20 @@ export default function AdminSystem() {
       headTitle="Admin · System"
       eyebrow="[admin]"
       title="System"
-      actions={<SegmentedTabs items={VIEWS} value={view} onSelect={go} label="System sections" idPrefix="system" size="sm" />}
+      actions={
+        <SegmentedTabs
+          items={VIEWS}
+          value={view}
+          onSelect={go}
+          label="System sections"
+          idPrefix="system"
+          size="sm"
+        />
+      }
     >
-      <Box {...tabPanelProps('system', view)}>{view === 'errors' ? <ErrorsPanel /> : <HealthPanel onShowErrors={() => go('errors')} />}</Box>
+      <Box {...tabPanelProps('system', view)}>
+        {view === 'errors' ? <ErrorsPanel /> : <HealthPanel onShowErrors={() => go('errors')} />}
+      </Box>
     </AdminPageShell>
   )
 }

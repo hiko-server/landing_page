@@ -84,7 +84,8 @@ export function parseClientError(body: unknown): ClientErrorReport | null {
   if (!rawMessage.trim() && !rawStack.trim()) return null
   // Cross-origin scripts report only "Script error." — nothing actionable, and never ours.
   if (/^script error\.?$/i.test(rawMessage.trim()) && !rawStack.trim()) return null
-  if (isExtensionNoise(rawFile, rawStack.split('\n').find((l) => /\bat\s|@/.test(l)) || '')) return null
+  if (isExtensionNoise(rawFile, rawStack.split('\n').find((l) => /\bat\s|@/.test(l)) || ''))
+    return null
   const line = Number.isInteger(o.l) && (o.l as number) > 0 ? (o.l as number) : null
   const col = Number.isInteger(o.c) && (o.c as number) > 0 ? (o.c as number) : null
   const file = rawFile ? stripQuery(rawFile) : ''
@@ -113,7 +114,8 @@ export function parseCspReports(body: unknown): CspViolation[] {
   if (Array.isArray(data)) {
     for (const r of data.slice(0, MAX_CSP_REPORTS)) {
       const rec = r as Record<string, unknown>
-      if (rec && rec.type === 'csp-violation' && rec.body && typeof rec.body === 'object') raw.push(rec.body as Record<string, unknown>)
+      if (rec && rec.type === 'csp-violation' && rec.body && typeof rec.body === 'object')
+        raw.push(rec.body as Record<string, unknown>)
     }
   } else if (data && typeof data === 'object') {
     const legacy = (data as Record<string, unknown>)['csp-report']
@@ -125,7 +127,12 @@ export function parseCspReports(body: unknown): CspViolation[] {
       for (const k of keys) if (typeof r[k] === 'string') return (r[k] as string).slice(0, 2000)
       return ''
     }
-    const directive = str('effective-directive', 'effectiveDirective', 'violated-directive', 'violatedDirective')
+    const directive = str(
+      'effective-directive',
+      'effectiveDirective',
+      'violated-directive',
+      'violatedDirective'
+    )
       .split(' ')[0]
       .toLowerCase()
     if (!/^[a-z-]{3,40}$/.test(directive)) continue
@@ -149,8 +156,10 @@ export function parseCspReports(body: unknown): CspViolation[] {
 /** "inline", "eval", "data", or the blocked URL's origin + path (no query). */
 export function describeBlocked(raw: string): string {
   const s = raw.trim()
-  if (!s || s === 'inline' || s === 'eval' || s === 'wasm-eval' || s === 'trusted-types-policy') return s || 'inline'
-  if (/^(data|blob|about|filesystem):?$/i.test(s) || /^(data|blob|about|filesystem):/i.test(s)) return s.split(':')[0].toLowerCase()
+  if (!s || s === 'inline' || s === 'eval' || s === 'wasm-eval' || s === 'trusted-types-policy')
+    return s || 'inline'
+  if (/^(data|blob|about|filesystem):?$/i.test(s) || /^(data|blob|about|filesystem):/i.test(s))
+    return s.split(':')[0].toLowerCase()
   try {
     const u = new URL(s)
     return scrubText(`${u.origin}${u.pathname}`, 300)
@@ -162,7 +171,8 @@ export function describeBlocked(raw: string): string {
 export function clientErrorEvent(r: ClientErrorReport, ua: string, siteHost = ''): ErrorEventInput {
   const message = scrubText(r.message) || '(no message)'
   const stack = scrubStack(r.stack, siteHost ? [`https://${siteHost}`, `http://${siteHost}`] : [])
-  const frame = topFrame(stack) || (r.file ? stripQuery(r.file).replace(/^https?:\/\/[^/]+/, '') : '')
+  const frame =
+    topFrame(stack) || (r.file ? stripQuery(r.file).replace(/^https?:\/\/[^/]+/, '') : '')
   return {
     fingerprint: fingerprintOf(['client', r.kind, r.name, groupingMessage(message), frame]),
     source: 'client',
@@ -209,7 +219,8 @@ export function errorDropReason(req: Pick<NextApiRequest, 'headers'>): string | 
   const origin = header(req, 'origin')
   if (origin && origin !== 'null') {
     try {
-      if (new URL(origin).host.toLowerCase() !== header(req, 'host').toLowerCase()) return 'cross-site'
+      if (new URL(origin).host.toLowerCase() !== header(req, 'host').toLowerCase())
+        return 'cross-site'
     } catch {
       return 'cross-site'
     }
@@ -222,7 +233,10 @@ function isCspContentType(type: string): boolean {
 }
 
 /** Ingest one POST. Returns how many events were stored and why the rest were not. */
-export function ingestErrorReport(req: NextApiRequest, now = Date.now()): { recorded: number; dropped?: string } {
+export function ingestErrorReport(
+  req: NextApiRequest,
+  now = Date.now()
+): { recorded: number; dropped?: string } {
   const drop = errorDropReason(req)
   if (drop) return { recorded: 0, dropped: drop }
   const ua = header(req, 'user-agent')
@@ -239,9 +253,17 @@ export function ingestErrorReport(req: NextApiRequest, now = Date.now()): { reco
 
   const ip = ipFromReq(req)
   const limiter = sharedLimiter('errors', 5_000)
-  let allowed = takeUnits(limiter, `c|${ipBucket(ip)}`, CLIENT_EVENTS_PER_MIN, events.length, 60_000, now)
+  let allowed = takeUnits(
+    limiter,
+    `c|${ipBucket(ip)}`,
+    CLIENT_EVENTS_PER_MIN,
+    events.length,
+    60_000,
+    now
+  )
   const net = networkOf(ip)
-  if (net && allowed) allowed = takeUnits(limiter, `n|${net}`, NETWORK_EVENTS_PER_MIN, allowed, 60_000, now)
+  if (net && allowed)
+    allowed = takeUnits(limiter, `n|${net}`, NETWORK_EVENTS_PER_MIN, allowed, 60_000, now)
   if (!allowed) return { recorded: 0, dropped: 'rate-limited' }
 
   let recorded = 0

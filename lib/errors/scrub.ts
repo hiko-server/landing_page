@@ -60,7 +60,9 @@ export function scrubText(raw: unknown, max = MAX_MESSAGE): string {
     .replace(IPV6_RE, '[ip]')
     .replace(IPV4_RE, (ip) => (ip.split('.').every((p) => Number(p) <= 255) ? '[ip]' : ip))
     .replace(LONG_HEX_RE, '[hex]')
-    .replace(LONG_B64_RE, (m) => (/[0-9]/.test(m) && /[a-z]/.test(m) && /[A-Z]/.test(m) ? '[token]' : m))
+    .replace(LONG_B64_RE, (m) =>
+      /[0-9]/.test(m) && /[a-z]/.test(m) && /[A-Z]/.test(m) ? '[token]' : m
+    )
     .replace(LONG_DIGITS_RE, '[number]')
   s = s.trim()
   if (s.length > max) s = `${s.slice(0, max - 1)}…`
@@ -162,10 +164,16 @@ export function topFrame(stack: string): string {
 
 /** 32-hex fingerprint over the grouping parts. */
 export function fingerprintOf(parts: readonly (string | null | undefined)[]): string {
-  return crypto.createHash('sha256').update(parts.map((p) => p || '').join('\n')).digest('hex').slice(0, 32)
+  return crypto
+    .createHash('sha256')
+    .update(parts.map((p) => p || '').join('\n'))
+    .digest('hex')
+    .slice(0, 32)
 }
 
 /** Build sha when it looks like one, else null. */
 export function normalizeRelease(raw: unknown): string | null {
-  return typeof raw === 'string' && /^[0-9a-f]{7,40}$/i.test(raw.trim()) ? raw.trim().toLowerCase() : null
+  return typeof raw === 'string' && /^[0-9a-f]{7,40}$/i.test(raw.trim())
+    ? raw.trim().toLowerCase()
+    : null
 }

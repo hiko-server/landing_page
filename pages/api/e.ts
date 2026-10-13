@@ -21,7 +21,9 @@ export default withApi('e', (req, res, ctx) => {
     if (outcome.dropped) ctx.log.debug('error report not recorded', { reason: outcome.dropped })
   } catch (err) {
     // Not ctx.log.error: an error recorded about recording errors would loop.
-    ctx.log.warn('error report ingest failed', { reason: err instanceof Error ? err.message : String(err) })
+    ctx.log.warn('error report ingest failed', {
+      reason: err instanceof Error ? err.message : String(err),
+    })
   }
   return res.status(204).end()
 })

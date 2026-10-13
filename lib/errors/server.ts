@@ -1,6 +1,14 @@
 import { setLogObserver, type LogFields, type LogLevel } from '../log'
 import { pushLogEntry } from '../logBuffer'
-import { fingerprintOf, groupingMessage, normalizeErrorPath, normalizeRelease, scrubStack, scrubText, topFrame } from './scrub'
+import {
+  fingerprintOf,
+  groupingMessage,
+  normalizeErrorPath,
+  normalizeRelease,
+  scrubStack,
+  scrubText,
+  topFrame,
+} from './scrub'
 import { recordError } from './store'
 
 /**
@@ -33,7 +41,10 @@ export type ServerErrorContext = {
   msg?: string | null
 }
 
-type CaptureGlobal = typeof globalThis & { __errorCaptureBusy?: boolean; __errorCaptureInstalled?: boolean }
+type CaptureGlobal = typeof globalThis & {
+  __errorCaptureBusy?: boolean
+  __errorCaptureInstalled?: boolean
+}
 
 function appOrigins(): string[] {
   const cwd = process.cwd()
@@ -46,14 +57,24 @@ export function captureServerError(err: unknown, ctx: ServerErrorContext): void 
   if (g.__errorCaptureBusy) return
   g.__errorCaptureBusy = true
   try {
-    const e = err instanceof Error ? err : new Error(typeof err === 'string' ? err : 'Non-Error value thrown')
+    const e =
+      err instanceof Error
+        ? err
+        : new Error(typeof err === 'string' ? err : 'Non-Error value thrown')
     const name = /^[A-Za-z_$][\w$.]{0,63}$/.test(e.name) ? e.name : 'Error'
     const base = scrubText(e.message) || '(no message)'
     const message = scrubText(ctx.msg ? `${ctx.msg}: ${base}` : base)
     const stack = scrubStack(e.stack || '', appOrigins())
     const route = ctx.route ? scrubText(ctx.route, 120) : null
     recordError({
-      fingerprint: fingerprintOf(['server', ctx.kind, name, groupingMessage(message), route, topFrame(stack)]),
+      fingerprint: fingerprintOf([
+        'server',
+        ctx.kind,
+        name,
+        groupingMessage(message),
+        route,
+        topFrame(stack),
+      ]),
       source: 'server',
       kind: /^[a-z][a-z-]{0,23}$/.test(ctx.kind) ? ctx.kind : 'server',
       name,
@@ -66,7 +87,9 @@ export function captureServerError(err: unknown, ctx: ServerErrorContext): void 
     })
   } catch (recordErr) {
     try {
-      process.stderr.write(`[errors] could not record a server error: ${recordErr instanceof Error ? recordErr.message : String(recordErr)}\n`)
+      process.stderr.write(
+        `[errors] could not record a server error: ${recordErr instanceof Error ? recordErr.message : String(recordErr)}\n`
+      )
     } catch {
       // stderr unavailable: nothing more to do.
     }

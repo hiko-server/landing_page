@@ -11,7 +11,8 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-for (const k of ['R2_ENDPOINT', 'R2_BUCKET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY']) delete process.env[k]
+for (const k of ['R2_ENDPOINT', 'R2_BUCKET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY'])
+  delete process.env[k]
 
 const prevCwd = process.cwd()
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sa-drill-'))
@@ -27,7 +28,10 @@ before(async () => {
   process.chdir(tmp)
   fs.mkdirSync(path.join(tmp, 'data'), { recursive: true })
   fs.mkdirSync(path.join(tmp, 'public', 'uploads'), { recursive: true })
-  fs.writeFileSync(path.join(tmp, 'public', 'uploads', 'cover.png'), Buffer.from('89504e470d0a1a0a', 'hex'))
+  fs.writeFileSync(
+    path.join(tmp, 'public', 'uploads', 'cover.png'),
+    Buffer.from('89504e470d0a1a0a', 'hex')
+  )
   drill = await import('../lib/restoreDrill')
   backup = await import('../lib/backup')
   db = await import('../lib/db')
@@ -35,9 +39,15 @@ before(async () => {
   jobs = await import('../lib/internalJobs')
   const d = db.getDb()
   const now = Date.now()
-  d.prepare(`INSERT INTO pages (name, frontmatter, body, updated_at) VALUES ('now', '{}', 'Now body', ?)`).run(now)
-  d.prepare(`INSERT INTO collection_items (collection, slug, frontmatter, body, updated_at) VALUES ('blog', 'hello', '{"title":"Hello"}', '# Hello', ?)`).run(now)
-  d.prepare(`INSERT INTO collection_items (collection, slug, frontmatter, body, updated_at) VALUES ('blog', 'draft', '{"title":"D","draft":true}', 'draft body', ?)`).run(now - 1)
+  d.prepare(
+    `INSERT INTO pages (name, frontmatter, body, updated_at) VALUES ('now', '{}', 'Now body', ?)`
+  ).run(now)
+  d.prepare(
+    `INSERT INTO collection_items (collection, slug, frontmatter, body, updated_at) VALUES ('blog', 'hello', '{"title":"Hello"}', '# Hello', ?)`
+  ).run(now)
+  d.prepare(
+    `INSERT INTO collection_items (collection, slug, frontmatter, body, updated_at) VALUES ('blog', 'draft', '{"title":"D","draft":true}', 'draft body', ?)`
+  ).run(now - 1)
   d.prepare(`INSERT INTO kv (key, value, updated_at) VALUES ('home', '{}', ?)`).run(now)
 })
 after(() => {
@@ -83,18 +93,25 @@ test('the drill restores the newest snapshot into a scratch folder and every che
       ['render', 'pass'],
       ['uploads', 'pass'],
       ['inbox', 'pass'],
-    ],
+    ]
   )
   assert.equal(compiled, '# Hello', 'the newest PUBLISHED article is rendered, not the draft')
   assert.match(r.checks.find((c) => c.id === 'rows')!.detail, /same counts/)
-  assert.equal(fs.readdirSync(backup.BACKUP_CONSTANTS.BACKUPS_DIR).filter((n) => n.startsWith('_drill-')).length, 0, 'scratch removed')
+  assert.equal(
+    fs.readdirSync(backup.BACKUP_CONSTANTS.BACKUPS_DIR).filter((n) => n.startsWith('_drill-'))
+      .length,
+    0,
+    'scratch removed'
+  )
   const listed = drill.listRestoreDrills(5)
   assert.equal(listed[0].id, r.id)
   assert.equal(listed[0].checks.length, r.checks.length)
 })
 
 test('a render failure, a live store that moved on, and a busy store are reported', async () => {
-  db.getDb().prepare(`INSERT INTO kv (key, value, updated_at) VALUES ('extra', '{}', ?)`).run(Date.now())
+  db.getDb()
+    .prepare(`INSERT INTO kv (key, value, updated_at) VALUES ('extra', '{}', ?)`)
+    .run(Date.now())
   const r = await drill.runRestoreDrill('manual', async () => {
     throw new Error('Unexpected token at 3:1')
   })
@@ -113,10 +130,16 @@ test('a render failure, a live store that moved on, and a busy store are reporte
 })
 
 /** Extract the newest snapshot into a fresh directory for tampering. */
-async function extracted(): Promise<{ dir: string; manifest: import('../lib/backup').SnapshotManifest }> {
+async function extracted(): Promise<{
+  dir: string
+  manifest: import('../lib/backup').SnapshotManifest
+}> {
   const newest = backup.listLocalBackups().find((b) => backup.SNAPSHOT_FILE_RE.test(b.filename))!
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sa-drill-x-'))
-  const manifest = (await backup.extractTarball(fs.readFileSync(path.join(backup.BACKUP_CONSTANTS.BACKUPS_DIR, newest.filename)), dir))!
+  const manifest = (await backup.extractTarball(
+    fs.readFileSync(path.join(backup.BACKUP_CONSTANTS.BACKUPS_DIR, newest.filename)),
+    dir
+  ))!
   return { dir, manifest }
 }
 
@@ -145,16 +168,28 @@ test('tampered, truncated or incomplete snapshots fail the checks', async () => 
     assert.equal((await statusOf(lying)).rows, 'fail')
 
     // A manifest from before checksums and counts: warnings, not failures.
-    const old = { ...manifest, files: manifest.files.filter((f) => f.path !== 'uploads/cover.png').map(({ path: p, bytes: b }) => ({ path: p, bytes: b })) }
+    const old = {
+      ...manifest,
+      files: manifest.files
+        .filter((f) => f.path !== 'uploads/cover.png')
+        .map(({ path: p, bytes: b }) => ({ path: p, bytes: b })),
+    }
     delete (old as { counts?: unknown }).counts
     const s = await statusOf(old)
     assert.deepEqual([s.files, s.rows], ['warn', 'warn'])
 
     // A corrupt database.
-    fs.writeFileSync(path.join(dir, 'db', 'content.db'), Buffer.from('SQLite format 3\u0000 but then garbage'.padEnd(4096, 'x')))
+    fs.writeFileSync(
+      path.join(dir, 'db', 'content.db'),
+      Buffer.from('SQLite format 3\u0000 but then garbage'.padEnd(4096, 'x'))
+    )
     assert.equal((await statusOf(old)).integrity, 'fail')
 
-    assert.equal((await drill.checkExtractedSnapshot(dir, null, { live: null, compile: compileOk }))[0].status, 'fail', 'no manifest')
+    assert.equal(
+      (await drill.checkExtractedSnapshot(dir, null, { live: null, compile: compileOk }))[0].status,
+      'fail',
+      'no manifest'
+    )
   } finally {
     fs.rmSync(dir, { recursive: true, force: true })
   }
@@ -171,17 +206,37 @@ test('pure helpers: interval env, first-run delay, summaries and health warnings
   const now = Date.UTC(2026, 9, 13)
   assert.equal(drill.firstDrillDelay(null, week, now, 0), 30 * 60_000)
   assert.equal(drill.firstDrillDelay(null, week, now, 1), 45 * 60_000)
-  assert.equal(drill.firstDrillDelay(now - 3_600_000, week, now, 0), week - 3_600_000, 'waits for the interval since the last drill')
-  assert.equal(drill.firstDrillDelay(now - 2 * week, week, now, 0), 30 * 60_000, 'an overdue drill runs soon after boot')
+  assert.equal(
+    drill.firstDrillDelay(now - 3_600_000, week, now, 0),
+    week - 3_600_000,
+    'waits for the interval since the last drill'
+  )
+  assert.equal(
+    drill.firstDrillDelay(now - 2 * week, week, now, 0),
+    30 * 60_000,
+    'an overdue drill runs soon after boot'
+  )
 
-  assert.deepEqual(drill.summarizeChecks([{ id: 'a', label: 'Files', status: 'warn', detail: '' }]), { status: 'passed', summary: 'Restorable, with 1 warning (files).' })
+  assert.deepEqual(
+    drill.summarizeChecks([{ id: 'a', label: 'Files', status: 'warn', detail: '' }]),
+    { status: 'passed', summary: 'Restorable, with 1 warning (files).' }
+  )
   assert.equal(drill.summarizeChecks([]).summary, 'Restorable: every check passed.')
 
   const schedule = { enabled: true, intervalHours: 168, nextAt: null, running: false }
   const failed = { status: 'failed', ranAt: now } as import('../lib/restoreDrill').DrillResult
-  assert.deepEqual(drill.restoreDrillWarnings(failed, schedule, true, now), ['The last restore drill failed; details are in the admin System panel.'])
-  assert.deepEqual(drill.restoreDrillWarnings(failed, schedule, false, now), [], 'no backups, nothing to drill')
-  const stale = { status: 'passed', ranAt: now - 3 * week } as import('../lib/restoreDrill').DrillResult
+  assert.deepEqual(drill.restoreDrillWarnings(failed, schedule, true, now), [
+    'The last restore drill failed; details are in the admin System panel.',
+  ])
+  assert.deepEqual(
+    drill.restoreDrillWarnings(failed, schedule, false, now),
+    [],
+    'no backups, nothing to drill'
+  )
+  const stale = {
+    status: 'passed',
+    ranAt: now - 3 * week,
+  } as import('../lib/restoreDrill').DrillResult
   assert.match(drill.restoreDrillWarnings(stale, schedule, true, now)[0], /ran 504 h ago/)
 })
 
@@ -230,11 +285,50 @@ test('internal jobs: only this process (loopback + per-process token) may trigge
   const token = jobs.internalJobToken()
   assert.match(token, /^[0-9a-f]{64}$/)
   assert.equal(jobs.internalJobToken(), token, 'stable per process')
-  const req = (remoteAddress: string, t?: string) => ({ socket: { remoteAddress }, headers: t === undefined ? {} : { [jobs.INTERNAL_TOKEN_HEADER]: t } }) as any
+  const req = (remoteAddress: string, t?: string) =>
+    ({
+      socket: { remoteAddress },
+      headers: t === undefined ? {} : { [jobs.INTERNAL_TOKEN_HEADER]: t },
+    }) as any
   assert.equal(jobs.isInternalJobRequest(req('127.0.0.1', token)), true)
   assert.equal(jobs.isInternalJobRequest(req('::ffff:127.0.0.1', token)), true)
   assert.equal(jobs.isInternalJobRequest(req('::1', token)), true)
   assert.equal(jobs.isInternalJobRequest(req('172.18.0.1', token)), false, 'not loopback')
-  assert.equal(jobs.isInternalJobRequest(req('127.0.0.1', token.replace(/.$/, (c) => (c === '0' ? '1' : '0')))), false)
+  assert.equal(
+    jobs.isInternalJobRequest(
+      req(
+        '127.0.0.1',
+        token.replace(/.$/, (c) => (c === '0' ? '1' : '0'))
+      )
+    ),
+    false
+  )
   assert.equal(jobs.isInternalJobRequest(req('127.0.0.1')), false)
+})
+
+test('triggerInternalJob posts to this server with the token and maps 409 to busy', async () => {
+  const http = await import('node:http')
+  const seen: Array<{ url?: string; ok: boolean }> = []
+  let reply = 200
+  const server = http.createServer((req, res) => {
+    seen.push({ url: req.url, ok: jobs.isInternalJobRequest(req as any) })
+    res.writeHead(reply, { 'content-type': 'application/json' })
+    res.end(JSON.stringify(reply === 200 ? { drill: { status: 'passed' } } : { error: 'A backup is running' }))
+  })
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()))
+  const prevPort = process.env.PORT
+  process.env.PORT = String((server.address() as { port: number }).port)
+  try {
+    assert.deepEqual(await jobs.triggerInternalJob('restore-drill'), { drill: { status: 'passed' } })
+    assert.deepEqual(seen, [{ url: '/api/internal/restore-drill', ok: true }])
+    reply = 409
+    await assert.rejects(jobs.triggerInternalJob('restore-drill'), jobs.InternalJobBusyError)
+    reply = 500
+    await assert.rejects(jobs.triggerInternalJob('restore-drill'), /HTTP 500/)
+    await assert.rejects(jobs.triggerInternalJob('../etc'), /invalid job name/)
+  } finally {
+    if (prevPort === undefined) delete process.env.PORT
+    else process.env.PORT = prevPort
+    await new Promise<void>((resolve) => server.close(() => resolve()))
+  }
 })
