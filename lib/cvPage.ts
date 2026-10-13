@@ -23,14 +23,13 @@ import type { HomeData } from './homeShape'
 import type { PersonFacts } from './schema'
 import type { SkillEvidence } from './skillEvidence'
 import { referenceMonth } from './clock'
+import { revalidateAfter } from './isr'
 
 /** Time-based regeneration of /cv and /cv/zh (on-demand revalidation does the rest). */
 export const CV_REVALIDATE_SECONDS = 60
 
-/** True while `next build` prerenders pages. */
-export function isBuildPhase(): boolean {
-  return process.env.NEXT_PHASE === 'phase-production-build'
-}
+/** True while `next build` prerenders pages (lib/isr, shared by every ISR page). */
+export { isBuildPhase } from './isr'
 
 export type CvPageData = {
   /** Public 'cv'-audience sections of this page's language (evidence links resolved). */
@@ -143,6 +142,6 @@ export async function loadCvPageProps(lang: CvLang): Promise<{ props: CvPageData
       // Omitted when the home document could not be read: the chrome then loads the public view itself.
       ...(src.socials !== undefined ? { chromeSocials: src.socials as HomeData['socials'] | null } : {}),
     },
-    revalidate: isBuildPhase() ? 1 : CV_REVALIDATE_SECONDS,
+    revalidate: revalidateAfter(CV_REVALIDATE_SECONDS),
   }
 }

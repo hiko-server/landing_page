@@ -27,3 +27,23 @@ test('(c) the /about rail downloads the server-rendered PDF in the language the 
   await expect(pdf).toHaveAttribute('href', '/cv/zh.pdf')
   await expect(rail.getByRole('link', { name: /View CV/ })).toHaveAttribute('href', '/cv/zh')
 })
+
+// ── (d) home-about-isr + cv-docs + cv-studio-contact: ISR coherence ─────────
+
+test('(d) /, /about, /cv, /cv/zh and /contact are all served from the ISR cache with their windows', async ({ request }) => {
+  // A copy prerendered during the build (or not yet warmed) still says 1 s; the regenerated one says the page's window.
+  const windows: Record<string, number> = { '/': 3600, '/about': 3600, '/cv': 60, '/cv/zh': 60, '/contact': 300 }
+  for (const [path, seconds] of Object.entries(windows)) {
+    await expect
+      .poll(
+        async () => {
+          const res = await request.get(path)
+          expect(res.status(), path).toBe(200)
+          expect(res.headers()['x-nextjs-cache'], `${path} is an ISR page`).toMatch(/HIT|STALE|MISS/)
+          return /s-maxage=(\d+)/.exec(res.headers()['cache-control'] || '')?.[1]
+        },
+        { message: `${path} s-maxage`, timeout: 20_000, intervals: [250, 500, 1000, 2000] },
+      )
+      .toBe(String(seconds))
+  }
+})

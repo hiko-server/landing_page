@@ -15,6 +15,7 @@
 import type { HomeData } from './homeShape'
 import { absUrl } from './schema'
 import { contactRetentionDays } from './retention'
+import { revalidateAfter } from './isr'
 
 export type ContactHome = {
   hero: { email?: string; phone?: string; brand?: string }
@@ -67,7 +68,6 @@ export async function loadContactPage(): Promise<{ props: ContactPageProps; reva
   } catch {
     /* the panel keeps the .vcf link without the QR code */
   }
-  const building = process.env.NEXT_PHASE === 'phase-production-build'
   return {
     props: {
       home,
@@ -76,6 +76,6 @@ export async function loadContactPage(): Promise<{ props: ContactPageProps; reva
       retentionDays: contactRetentionDays(),
       ...(chromeSocials !== undefined ? { chromeSocials } : {}),
     },
-    revalidate: building ? 1 : CONTACT_REVALIDATE_SECONDS,
+    revalidate: revalidateAfter(CONTACT_REVALIDATE_SECONDS),
   }
 }

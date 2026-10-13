@@ -17,6 +17,13 @@
 
 /** Seconds between time-based regenerations of / and /about. */
 export const PROFILE_REVALIDATE_SECONDS = 3600
+// The other ISR pages keep the windows their streams chose (wave 2A):
+//   /cv, /cv/zh   60 s   lib/cvPage CV_REVALIDATE_SECONDS (a hidden CV entry
+//                        leaves every edge cache within a minute even
+//                        without Cloudflare purge configured)
+//   /contact     300 s   lib/contactPage CONTACT_REVALIDATE_SECONDS
+// All of them use revalidateAfter, so a build-time copy (empty store) asks
+// for regeneration on the first request.
 
 /** Window of a page rendered by `next build` (no content store in the image). */
 export const BUILD_REVALIDATE_SECONDS = 1
