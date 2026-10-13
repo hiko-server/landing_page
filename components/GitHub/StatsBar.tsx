@@ -1,46 +1,12 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Box, Grid, Skeleton, Text } from '@chakra-ui/react'
-import { motion, useReducedMotion } from 'framer-motion'
+import { useInView, useReducedMotion } from 'framer-motion'
 
 import { useFetchJson } from '../Common/useFetchJson'
 import WidgetNotice from '../Common/WidgetNotice'
-
-type Stats = {
-  user: string
-  public_repos: number
-  followers: number
-  total_stars: number
-  available?: boolean
-}
+import { statTiles, type GhStats } from '../Common/githubEvents'
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
-const MotionBox = motion(Box)
-
-/** Eased count-up for the headline number on each stat tile. */
-function useCountUp(target: number, ms = 900) {
-  const reduce = useReducedMotion()
-  const [val, setVal] = useState(0)
-  useEffect(() => {
-    if (!target) {
-      setVal(0)
-      return
-    }
-    if (reduce) {
-      setVal(target)
-      return
-    }
-    let raf = 0
-    const start = performance.now()
-    const tick = (t: number) => {
-      const p = Math.min(1, (t - start) / ms)
-      setVal(Math.round(target * (1 - Math.pow(1 - p, 3))))
-      if (p < 1) raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [target, ms, reduce])
-  return val
-}
 
 const numberSx = {
   fontSize: { base: '28px', sm: '36px', md: '44px' },
@@ -58,38 +24,92 @@ const labelSx = {
   color: 'page.fg-secondary',
 }
 
-const StatItem = ({ label, value, delay }: { label: string; value: number | null; delay: number }) => {
-  const reduce = useReducedMotion()
-  const count = useCountUp(value ?? 0)
-  return (
-    <MotionBox
-      minW={0}
-      initial={reduce || value === null ? false : { opacity: 0, y: 8 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ duration: 0.35, delay, ease: [0.22, 1, 0.36, 1] }}
-    >
-      {value === null ? (
-        <Skeleton h={numberSx.fontSize} w="60%" borderRadius="sm" startColor="page.bg-elevated" endColor="page.bg-overlay" />
-      ) : (
-        <Text sx={{ ...numberSx, fontVariantNumeric: 'tabular-nums' }} color="page.fg">
-          {/* Screen readers get the final value, not every animation frame. */}
-          <span aria-hidden>{count.toLocaleString('en-US')}</span>
-          <span className="sr-only">{value.toLocaleString('en-US')}</span>
-        </Text>
-      )}
-      <Text sx={labelSx}>{label}</Text>
-    </MotionBox>
-  )
+/**
+ * The 0–9 strip of one digit column, as generated content: the digits are
+ * painted by CSS, so the DOM text (copy, reader mode, crawlers) is only the
+ * real value in the sr-only span next to it.
+ */
+const stripSx = {
+  '&::before': {
+    content: '"0\\A 1\\A 2\\A 3\\A 4\\A 5\\A 6\\A 7\\A 8\\A 9"',
+    whiteSpace: 'pre',
+  },
 }
 
 /**
- * GitHub summary row: three big numbers + mono labels between hairlines.
- * Loading keeps the final geometry (skeleton numbers), and an outage or a
- * missing profile becomes an in-place notice rather than "0 · 0 · 0".
+ * Without JavaScript the columns would stay at 0: show the final digits.
+ * An author `!important` declaration beats the non-important inline --d.
  */
-export default function StatsBar() {
-  const { data, error, retry } = useFetchJson<Stats>('/api/github/stats')
+const NO_SCRIPT_CSS = '.stat-roll .digit>span{--d:var(--f)!important}'
+
+type DigitStyle = React.CSSProperties & { '--d': number; '--f': number; '--i': number }
+
+/**
+ * A number that rolls into place: each digit is a `.digit` column whose
+ * inner strip translates to the digit (globals.css: 900 ms, 60 ms stagger
+ * per column). React renders once; the roll starts when the tile is 60 % in
+ * view. Reduced motion shows the final digits at once.
+ */
+function DigitRoll({ value }: { value: number }) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const inView = useInView(ref, { once: true, amount: 0.6 })
+  const reduce = useReducedMotion()
+  const [rolled, setRolled] = useState(false)
+  useEffect(() => {
+    if (reduce || inView) setRolled(true)
+  }, [reduce, inView])
+
+  const text = Math.max(0, Math.floor(value)).toLocaleString('en-US')
+  let digitIndex = 0
+  return (
+    <Text as="span" ref={ref} className="stat-roll tnum" display="inline-flex" sx={{ ...numberSx, fontVariantNumeric: 'tabular-nums' }} color="page.fg">
+      <span aria-hidden style={{ display: 'inline-flex' }}>
+        {Array.from(text).map((ch, i) => {
+          if (ch < '0' || ch > '9') return <span key={i}>{ch}</span>
+          const d = Number(ch)
+          const style: DigitStyle = { '--d': rolled ? d : 0, '--f': d, '--i': digitIndex++ }
+          return (
+            <span key={i} className="digit">
+              <Box as="span" style={style} sx={stripSx} />
+            </span>
+          )
+        })}
+      </span>
+      <span className="sr-only">{text}</span>
+    </Text>
+  )
+}
+
+const StatItem = ({ label, value }: { label: string; value: number }) => (
+  <Box minW={0}>
+    <DigitRoll value={value} />
+    <Text sx={labelSx}>{label}</Text>
+  </Box>
+)
+
+const SKELETON_TILES = 3
+
+/** Loading tile: the loaded geometry, no label text (the set of tiles is not known yet). */
+const StatSkeleton = () => (
+  <Box minW={0}>
+    <Skeleton h={numberSx.fontSize} w="60%" borderRadius="sm" startColor="page.bg-elevated" endColor="page.bg-overlay" />
+    <Skeleton mt={2} h={{ base: '12px', sm: '14px' }} w="70%" borderRadius="sm" startColor="page.bg-elevated" endColor="page.bg-overlay" />
+  </Box>
+)
+
+const columns = (n: number) => ({
+  base: `repeat(${Math.min(n, n === 4 ? 2 : 3)}, minmax(0, 1fr))`,
+  md: `repeat(${n}, minmax(0, 1fr))`,
+})
+
+/**
+ * GitHub summary row: big numbers + mono labels between hairlines.
+ * Server-rendered when `initialData` is passed; otherwise loading keeps the
+ * final geometry (skeleton numbers). An outage or a missing profile becomes
+ * an in-place notice rather than "0 · 0 · 0".
+ */
+export default function StatsBar({ initialData }: { initialData?: GhStats | null }) {
+  const { data, error, retry } = useFetchJson<GhStats>('/api/github/stats', { initialData })
   const failed = error || (data !== null && data.available === false)
   const empty = data !== null && data.available !== false && !data.user
 
@@ -101,23 +121,28 @@ export default function StatsBar() {
     )
   }
 
-  const loading = data === null
+  const tiles = data ? statTiles(data) : null
+  const count = tiles ? tiles.length : SKELETON_TILES
   return (
     <Grid
       as="section"
       aria-label="GitHub stats"
-      aria-busy={loading || undefined}
-      templateColumns="repeat(3, minmax(0, 1fr))"
-      gap={{ base: 3, sm: 8, md: 12 }}
+      aria-busy={!tiles || undefined}
+      templateColumns={columns(count)}
+      columnGap={{ base: 3, sm: 8, md: 12 }}
+      rowGap={6}
       w="100%"
       borderTop="1px solid"
       borderBottom="1px solid"
       borderColor="page.border"
       py={6}
     >
-      <StatItem label="Public repos" value={loading ? null : data.public_repos} delay={0} />
-      <StatItem label="Followers" value={loading ? null : data.followers} delay={0.08} />
-      <StatItem label="Total stars" value={loading ? null : data.total_stars} delay={0.16} />
+      <noscript>
+        <style>{NO_SCRIPT_CSS}</style>
+      </noscript>
+      {tiles
+        ? tiles.map((t) => <StatItem key={t.label} label={t.label} value={t.value} />)
+        : Array.from({ length: SKELETON_TILES }, (_, i) => <StatSkeleton key={i} />)}
     </Grid>
   )
 }

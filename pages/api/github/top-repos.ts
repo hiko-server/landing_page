@@ -1,56 +1,35 @@
-import type { NextApiRequest, NextApiResponse } from 'next'
-import { GhUnavailable, cachedGh, ghFetch, publicGithubUser, setGhCache } from '../../../lib/github'
+import { withApi } from '../../../lib/apiHandler'
+import { allowRead, setGhCache } from '../../../lib/github'
+import { githubContext, loadRepoChoices, loadTopRepos, noProfileSummary, type GhTopRepos } from '../../../lib/githubData'
 
-type Repo = {
-  id: number
-  name: string
-  html_url: string
-  description: string | null
-  stargazers_count: number
-  forks_count: number
-  language: string | null
-  updated_at: string
-}
-
-/** `available: false` = GitHub unreachable (UI shows an error state); `repos: []` with `available: true` = genuinely none. */
-type Payload = { repos: Repo[]; available: boolean }
-
-const TTL = 10 * 60 * 1000
-
-async function load(user: string): Promise<Payload> {
-  const gh = await ghFetch(`https://api.github.com/users/${encodeURIComponent(user)}/repos?per_page=100&sort=updated`)
-  if (!gh.ok) throw new GhUnavailable(`repos ${gh.status}`)
-  const list = (await gh.json()) as Repo[]
-  const repos = list
-    .filter((r) => !r.name.startsWith('.'))
-    .sort((a, b) => b.stargazers_count - a.stargazers_count || Date.parse(b.updated_at) - Date.parse(a.updated_at))
-    .slice(0, 6)
-    .map(({ id, name, html_url, description, stargazers_count, forks_count, language, updated_at }) => ({
-      id,
-      name,
-      html_url,
-      description,
-      stargazers_count,
-      forks_count,
-      language,
-      updated_at,
-    }))
-  return { repos, available: true }
-}
-
-export default async function handler(_req: NextApiRequest, res: NextApiResponse) {
-  const unavailable: Payload = { repos: [], available: false }
+/**
+ * GET /api/github/top-repos — the owner's featured repositories first (home
+ * `openSource.featured`, in their order, with blurbs), then the rest of their
+ * own work by stars / recency, six in all.
+ *
+ * GET /api/github/top-repos?all=1 — every public non-fork repository as
+ * `{name, description, language, stargazers_count, pushed_at}` for the admin
+ * featured-repo picker.
+ *
+ * `available: false` = GitHub unreachable; `repos: []` with
+ * `available: true` = genuinely none (or no profile linked).
+ */
+export default withApi('github/top-repos', async (req, res, ctx) => {
+  if (!allowRead(req, res)) return
+  const all = req.query.all === '1'
   try {
-    const user = publicGithubUser()
+    const { home, user } = githubContext()
     if (!user) {
       setGhCache(res, true, 300)
-      return res.status(200).json({ repos: [], available: true })
+      return res.status(200).json(all ? { repos: [], available: true } : noProfileSummary().topRepos)
     }
-    const data = await cachedGh(`top-repos:${user}`, TTL, unavailable, () => load(user))
+    const data = all ? await loadRepoChoices(user) : await loadTopRepos(user, home)
     setGhCache(res, data.available, 600)
     return res.status(200).json(data)
-  } catch {
+  } catch (err) {
+    ctx.log.warn('GitHub repositories unavailable', { err, all })
+    const unavailable: GhTopRepos = { repos: [], available: false }
     setGhCache(res, false)
     return res.status(200).json(unavailable)
   }
-}
+})

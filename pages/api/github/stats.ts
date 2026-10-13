@@ -1,50 +1,38 @@
-import type { NextApiRequest, NextApiResponse } from 'next'
-import { GhUnavailable, cachedGh, ghFetch, publicGithubUser, setGhCache } from '../../../lib/github'
+import { withApi } from '../../../lib/apiHandler'
+import { allowRead, setGhCache } from '../../../lib/github'
+import { githubContext, loadStats, noProfileSummary, type GhStats } from '../../../lib/githubData'
 
-type Stats = {
-  user: string
-  public_repos: number
-  followers: number
-  total_stars: number
-  /**
-   * false when GitHub couldn't be reached — the UI shows an error state
-   * instead of zeros. `user: ''` with `available: true` = no profile configured.
-   */
-  available: boolean
-}
-
-const TTL = 4 * 60 * 60 * 1000 // 4 hours
-
-async function load(user: string): Promise<Stats> {
-  const uRes = await ghFetch(`https://api.github.com/users/${encodeURIComponent(user)}`)
-  if (!uRes.ok) throw new GhUnavailable(`user ${uRes.status}`)
-  const u = await uRes.json()
-  const rRes = await ghFetch(`https://api.github.com/users/${encodeURIComponent(user)}/repos?per_page=100&sort=updated`)
-  const repos = rRes.ok ? ((await rRes.json()) as any[]) : []
-  const total_stars = repos.reduce((sum, r) => sum + (r?.stargazers_count || 0), 0)
-  return {
-    user,
-    public_repos: Number(u.public_repos) || repos.length || 0,
-    followers: Number(u.followers) || 0,
-    total_stars,
-    available: true,
-  }
-}
-
-export default async function handler(_req: NextApiRequest, res: NextApiResponse) {
-  const empty: Stats = { user: '', public_repos: 0, followers: 0, total_stars: 0, available: false }
+/**
+ * GET /api/github/stats — the Open Source tiles: public repos, contributions
+ * in the last year, language count, plus followers / total stars when the
+ * owner opted in (`showVanity`). `available: false` = GitHub unreachable
+ * (the UI shows an error state, never zeros); `user: ''` with
+ * `available: true` = no GitHub profile linked.
+ */
+export default withApi('github/stats', async (req, res, ctx) => {
+  if (!allowRead(req, res)) return
   try {
-    const user = publicGithubUser()
-    // No GitHub profile configured: nothing to show, but nothing is broken either.
+    const { home, user } = githubContext()
     if (!user) {
       setGhCache(res, true, 300)
-      return res.status(200).json({ ...empty, available: true })
+      return res.status(200).json(noProfileSummary().stats)
     }
-    const data = await cachedGh(`stats:${user}`, TTL, { ...empty, user }, () => load(user))
+    const data = await loadStats(user, home)
     setGhCache(res, data.available, 1800)
     return res.status(200).json(data)
-  } catch {
+  } catch (err) {
+    ctx.log.warn('GitHub stats unavailable', { err })
+    const unavailable: GhStats = {
+      user: '',
+      public_repos: 0,
+      followers: 0,
+      total_stars: 0,
+      languages: null,
+      contributions: null,
+      showVanity: false,
+      available: false,
+    }
     setGhCache(res, false)
-    return res.status(200).json(empty)
+    return res.status(200).json(unavailable)
   }
-}
+})
