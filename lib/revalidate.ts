@@ -25,6 +25,10 @@ import { uploadNamesIn } from './uploadVariants'
  * content. Used where a stale copy matters: hiding a CV entry must take
  * effect (CV_PAGE_PATHS, HOME_PAGE_PATHS).
  *
+ * Then the persisted copies of pages that no longer exist are removed
+ * (forgetVanishedPages below, lib/isrPages), so a deleted or unpublished
+ * page can never come back from disk after a restart.
+ *
  * Every path that did refresh is then handed to the edge (`notifyEdge`):
  * purged from the Cloudflare cache when CF_ZONE_ID + CF_API_TOKEN are set and
  * pushed to IndexNow when INDEXNOW_KEY is set. Both are fire-and-forget.
@@ -46,9 +50,29 @@ export async function revalidatePaths(res: NextApiResponse, paths: string[], opt
   await pass(unique)
   const again = unique.filter((p) => opts.confirm?.includes(p) && !failed.includes(p))
   if (again.length) await pass(again)
+  await forgetVanishedPages()
   const refreshed = unique.filter((p) => !failed.includes(p))
   if (refreshed.length) void notifyEdge(refreshed)
   return failed
+}
+
+/**
+ * A page that turned into a 404 keeps its last 200 copy on disk, which a
+ * restart would serve again (lib/isrCache). Every write that can make a
+ * page disappear — deleting, unpublishing or renaming a post or case study,
+ * hiding the last paper, a snapshot / backup / Mongo restore, a storage
+ * pull — ends here, so this removes the persisted copies of the posts, case
+ * studies and /publications page that no longer exist (lib/isrPages). Best
+ * effort; it never fails the write.
+ */
+async function forgetVanishedPages(): Promise<void> {
+  try {
+    const { forgetVanishedContentPages } = await import('./isrPages')
+    const { paths } = forgetVanishedContentPages()
+    if (paths.length) log.info('removed the persisted copies of pages that no longer exist', { paths })
+  } catch (err) {
+    log.warn('could not remove the persisted copies of pages that no longer exist', { err })
+  }
 }
 
 const runningRevalidations = new Map<string, Promise<void>>()

@@ -263,7 +263,8 @@ test('the persisted /publications page is removed (server start); other pages ar
   for (const f of files.others) assert.equal(fs.existsSync(f), true)
   assert.deepEqual(forgetPersistedPublicationsPage(), [], 'nothing left to remove')
   assert.deepEqual(forgetPersistedPublicationsPage(path.join(tmp, 'missing')), [], 'no cache directory: nothing to do')
-  assert.match(fs.readFileSync(path.join(originalCwd, 'instrumentation.ts'), 'utf8'), /forgetPersistedPublicationsPage\(\)/)
+  // At server start the general clean-up runs (lib/isrPages: /publications without a paper, gone posts and case studies).
+  assert.match(fs.readFileSync(path.join(originalCwd, 'instrumentation.ts'), 'utf8'), /forgetVanishedContentPages\(\)/)
 })
 
 test('chrome: the nav link, the edit target and analytics know /publications', () => {

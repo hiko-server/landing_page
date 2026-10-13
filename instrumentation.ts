@@ -13,9 +13,11 @@
 //   - adds `Cache-Control: no-transform` to HTML documents
 //     (lib/htmlNoTransform: keeps Cloudflare from injecting its analytics
 //     beacon);
-//   - drops the persisted /publications page, which then renders afresh
-//     (lib/publicationsCache: Next keeps a 200 copy on disk even after the
-//     page turned 404).
+//   - removes the persisted copies of ISR pages whose content no longer
+//     exists — deleted or unpublished posts and case studies, /publications
+//     without a public paper (lib/isrPages: Next keeps the last 200 copy on
+//     disk even after a page turned 404, and would serve it again). Like
+//     everything imported here it must not reach React client APIs.
 // `onRequestError` records errors thrown while rendering a page or running
 // its data function (API routes catch their own errors in lib/apiHandler,
 // whose log line the capture above records).
@@ -85,15 +87,15 @@ export async function register() {
       const { installHtmlNoTransform } = await import('./lib/htmlNoTransform')
       installHtmlNoTransform()
       try {
-        const { forgetPersistedPublicationsPage } = await import('./lib/publicationsCache')
-        const removed = forgetPersistedPublicationsPage()
-        if (removed.length) {
+        const { forgetVanishedContentPages } = await import('./lib/isrPages')
+        const { paths } = forgetVanishedContentPages()
+        if (paths.length) {
           const { log } = await import('./lib/log')
-          log.info('removed the persisted /publications page; it renders afresh', { files: removed.length })
+          log.info('removed the persisted copies of pages that no longer exist; they answer 404', { paths })
         }
       } catch (err) {
         const { log } = await import('./lib/log')
-        log.warn('could not remove the persisted /publications page', { err })
+        log.warn('could not remove the persisted copies of pages that no longer exist', { err })
       }
     }
   }

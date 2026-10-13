@@ -14,7 +14,7 @@
  */
 
 import { HIDDEN_ITEM_MARK, hiddenIndices, isRedacted } from '../cvVisibility'
-import { safeHref } from '../cvFormat'
+import { safeHref } from '../url'
 import { normalizeDoi } from './doi'
 import {
   PAPERS_KEY,

@@ -13,7 +13,6 @@
  */
 
 import { listPosts, listWork } from './mdx'
-import { forgetPersistedPublicationsPage } from './publicationsCache'
 import { hasPublicationsPage } from './publicationsData'
 import { CV_PAGE_PATHS, STATIC_CONTENT_PATHS, collectionPaths } from './revalidate'
 
@@ -40,9 +39,9 @@ export function publicationsNavPaths(): string[] {
 /**
  * Remember whether /publications exists before a CV write; afterwards
  * `pathsIfChanged()` lists the ISR pages to regenerate (none when the
- * answer did not change). When /publications just disappeared, its
- * persisted copy is removed too (lib/publicationsCache), so a restart can
- * never serve it again.
+ * answer did not change). When /publications just disappeared, the
+ * revalidation round that follows also removes its persisted copy
+ * (lib/revalidate → lib/isrPages), so a restart can never serve it again.
  */
 export function trackPublicationsNav(): { pathsIfChanged: () => string[] } {
   const before = hasPublicationsPage()
@@ -50,7 +49,6 @@ export function trackPublicationsNav(): { pathsIfChanged: () => string[] } {
     pathsIfChanged: () => {
       const now = hasPublicationsPage()
       if (now === before) return []
-      if (!now) forgetPersistedPublicationsPage()
       return publicationsNavPaths()
     },
   }

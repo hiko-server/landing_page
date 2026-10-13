@@ -142,25 +142,9 @@ export function hrefOf(url: unknown): string {
   return /^https?:\/\//i.test(u) ? u : `https://${u}`
 }
 
-/**
- * Href for admin-supplied links rendered on public pages. Allows only
- * http(s), mailto: and tel: (plus same-site paths starting with a single
- * "/"); bare domains get https://. Anything else — javascript:, data:,
- * vbscript:, protocol-relative "//evil" — yields '' so callers render text
- * instead of a link.
- */
-export function safeHref(url: unknown): string {
-  if (typeof url !== 'string') return ''
-  const u = url.trim()
-  if (!u) return ''
-  if (/^\/(?!\/)/.test(u)) return u
-  if (/^(mailto|tel):/i.test(u)) return u
-  if (/^https?:\/\//i.test(u)) return u
-  // Any other explicit scheme (javascript:, data:, …) or protocol-relative URL is refused.
-  if (/^[a-z][a-z0-9+.-]*:/i.test(u) || u.startsWith('//')) return ''
-  // Bare domain ("lucian-dev.com/x"): must look like a host.
-  return /^[\w-]+(\.[\w-]+)+([/?#].*)?$/.test(u) ? `https://${u}` : ''
-}
+// safeHref lives in ./url (dependency-free: server code that must not reach
+// React, such as lib/publications for the instrumentation bundle, uses it).
+export { safeHref } from './url'
 
 /** Drop empty / whitespace-only strings from a bullet list. */
 export function cleanList(list: unknown): string[] {
