@@ -5,6 +5,7 @@ import { publicNameZh } from '../../components/CVViewerPage/PersonalInformation'
 import type { HomeData } from '../../lib/homeShape'
 import { referenceMonth } from '../../lib/clock'
 import { absUrl, type PersonFacts } from '../../lib/schema'
+import { cvHeaderExtras, type CvHeaderExtras } from '../../lib/cvLocale'
 
 /**
  * /cv — the English CV (the Chinese one is /cv/zh; the legacy /cv?lang=zh
@@ -36,9 +37,13 @@ export const getServerSideProps: GetServerSideProps<CvPageProps> = async () => {
     /* the node keeps its built-in defaults */
   }
   let chromeSocials: HomeData['socials'] | null | undefined
+  let headerExtras: CvHeaderExtras | null = null
   try {
     const { readPublicHome } = await import('../../lib/home')
-    chromeSocials = readPublicHome()?.socials ?? null
+    const home = readPublicHome()
+    chromeSocials = home?.socials ?? null
+    // The owner's right-to-work line (availability), when set.
+    headerExtras = cvHeaderExtras(home?.availability, 'en')
   } catch {
     /* the chrome loads the public home view itself */
   }
@@ -58,6 +63,7 @@ export const getServerSideProps: GetServerSideProps<CvPageProps> = async () => {
       nameZh,
       personFacts,
       qrSvg,
+      headerExtras,
       ...(chromeSocials !== undefined ? { chromeSocials } : {}),
     },
   }

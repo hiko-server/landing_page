@@ -12,6 +12,8 @@ import ContributionGraph from '../../components/GitHub/ContributionGraph'
 import ErrorBoundary, { WidgetFallback } from '../../components/Common/ErrorBoundary'
 import SectionReveal from '../../components/General-UI/SectionReveal'
 import AboutHero from '../../components/About/AboutHero'
+import AboutRecommendations from '../../components/About/Recommendations'
+import { recommendationsSection } from '../../components/CVViewerPage/recommendationView'
 import ExperienceTimeline from '../../components/LandingPage/ExperienceTimeline'
 import CertificationsPeek from '../../components/LandingPage/CertificationsPeek'
 import { heroIdentity, type HeroIdentity } from '../../components/LandingPage/heroIdentity'
@@ -39,6 +41,8 @@ type Props = {
   clockMonth: string
   /** Public home.socials for the persistent header / footer (null = none set). */
   chromeSocials?: HomeData['socials'] | null
+  /** Website-pruned Recommendations section (permitted entries only), or null. */
+  recommendations?: CvSectionLike | null
 }
 
 /** Server-side ceiling for the GitHub summary; the page never waits longer on GitHub. */
@@ -54,7 +58,7 @@ const githubFallback = (p: { reset?: () => void }) => <WidgetFallback reset={p.r
 
 const sectionHeading = { size: 'md', fontWeight: 500, letterSpacing: '-0.01em' } as const
 
-const About = ({ hero, identity, cv, githubUser, github, work, personFacts }: Props) => {
+const About = ({ hero, identity, cv, githubUser, github, work, personFacts, recommendations }: Props) => {
   return (
     <React.Fragment>
       <CustomHead
@@ -126,6 +130,11 @@ const About = ({ hero, identity, cv, githubUser, github, work, personFacts }: Pr
               </ErrorBoundary>
             </Box>
           </SectionReveal>
+          {recommendations ? (
+            <SectionReveal>
+              <AboutRecommendations section={recommendations} />
+            </SectionReveal>
+          ) : null}
           <SectionReveal>
             <LandingCVSections en={cv.en} zh={cv.zh} work={work} />
           </SectionReveal>
@@ -177,6 +186,16 @@ export const getServerSideProps: GetServerSideProps<Props> = async () => {
     /* best effort — render with what we have */
   }
 
+  // Recommendations (E11): the website view of the English CV keeps only
+  // entries with permission; the section renders only when one is left.
+  let recommendations: CvSectionLike | null = null
+  try {
+    const { readPublicCvSections } = await import('../../lib/cvdata')
+    recommendations = recommendationsSection(readPublicCvSections('website', ['recommendations'], ['en']).en)
+  } catch {
+    /* no recommendations section */
+  }
+
   try {
     // The site-wide Person entity: the same facts the home and CV pages emit.
     personFacts = (await import('../../lib/personFacts')).loadPersonFacts()
@@ -225,6 +244,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async () => {
       github,
       work,
       personFacts,
+      recommendations,
       clockMonth: referenceMonth(),
       // Omitted when the home document could not be read: the chrome then
       // loads the public view itself.

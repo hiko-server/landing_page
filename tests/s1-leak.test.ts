@@ -13,7 +13,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { CV_SECTIONS, type ListDef, type FieldKind } from '../lib/cvSections'
-import { getAt, isRedacted, publicCvDoc, setAt, type CvAudience, type CvDoc, type CvPath } from '../lib/cvVisibility'
+import { PRIVATE_SECTION_FIELDS, getAt, isRedacted, publicCvDoc, setAt, type CvAudience, type CvDoc, type CvPath } from '../lib/cvVisibility'
 import { STUDYING_LABEL, deriveCurrentlyCoding } from '../lib/currentlyCoding'
 
 const AUDIENCES: CvAudience[] = ['cv', 'website', 'any']
@@ -30,8 +30,15 @@ function fill(kind: FieldKind): unknown {
   if (kind === 'endMonth') return 'Present'
   if (kind === 'month') return '2020-01'
   if (kind === 'color') return '#123456'
+  // Consent flags on (recommendations), so permitted entries are public and testable.
+  if (kind === 'switch') return true
+  if (kind === 'image') return '/uploads/filler-photo.webp'
   return 'filler text'
 }
+
+/** Owner-only fields (the PDF photo): never public, hidden or not — checked on their own below. */
+const isPrivateSlot = (sectionName: string, slot: { ownerPath: CvPath; field: string }) =>
+  slot.ownerPath.length === 1 && (PRIVATE_SECTION_FIELDS[sectionName] || []).includes(slot.field)
 
 function buildEntry(list: ListDef): Record<string, any> {
   const entry: Record<string, any> = {}
@@ -134,10 +141,10 @@ function resolvePruned(full: any[], pruned: any[], path: CvPath): any {
 const slots: Slot[] = []
 buildDoc().en.forEach((section, i) => collectSlots(section, [i], [], [], slots))
 
-test('fixture covers all 9 sections, nested lists and bullets', () => {
-  assert.equal(CV_SECTIONS.length, 9)
+test('fixture covers all 11 sections, nested lists and bullets', () => {
+  assert.equal(CV_SECTIONS.length, 11)
   const sections = new Set(slots.map((s) => s.path[0]))
-  assert.equal(sections.size, 9)
+  assert.equal(sections.size, 11)
   assert.ok(slots.some((s) => s.index !== undefined && s.entryPaths.length === 2), 'bullet inside a nested list (features[].furtherExplanation)')
   assert.ok(slots.some((s) => s.lists.length === 2), 'nested object list (certifications[].CertificationList)')
 })
@@ -145,6 +152,7 @@ test('fixture covers all 9 sections, nested lists and bullets', () => {
 test('a hidden sentinel never reaches any public view or the derived chip, and hidden names are listed in `redacted`', () => {
   let cases = 0
   for (const slot of slots) {
+    if (isPrivateSlot(CV_SECTIONS[slot.path[0] as number].sessionName, slot)) continue
     const isDate = /date/i.test(slot.field)
     const sentinel = isDate ? DATE_SENTINEL : TEXT_SENTINEL
     const needle = isDate ? DATE_NEEDLE : TEXT_SENTINEL
@@ -181,6 +189,37 @@ test('a hidden sentinel never reaches any public view or the derived chip, and h
     }
   }
   assert.ok(cases > 500, `exercised ${cases} hide cases`)
+})
+
+test('owner-only fields (the PDF photo and its switch) never reach any public view, even unhidden', () => {
+  const doc = buildDoc()
+  const pi = doc.en.findIndex((s) => s.sessionName === 'personalInformation')
+  const planted: CvDoc = {
+    en: setAt(setAt(doc.en, [pi, 'photo'], '/uploads/ZZ-PHOTO-SENTINEL.webp'), [pi, 'photoOnPdf'], true),
+    zh: setAt(setAt(doc.zh, [pi, 'photo'], '/uploads/ZZ-PHOTO-SENTINEL.webp'), [pi, 'photoOnPdf'], true),
+  }
+  for (const audience of AUDIENCES) {
+    const text = JSON.stringify(publicCvDoc(planted, audience))
+    assert.ok(!text.includes('ZZ-PHOTO-SENTINEL'), `photo leaked to '${audience}'`)
+    assert.ok(!text.includes('"photoOnPdf"'), `photo switch leaked to '${audience}'`)
+    assert.ok(!text.includes('"photo"'), `photo key leaked to '${audience}'`)
+  }
+})
+
+test('a recommendation without permission never reaches any public view', () => {
+  const doc = buildDoc()
+  const ri = doc.en.findIndex((s) => s.sessionName === 'recommendations')
+  for (const flag of [false, undefined, 'yes', 1] as unknown[]) {
+    let en = setAt(doc.en, [ri, 'items', 0, 'quote'], TEXT_SENTINEL)
+    en = setAt(en, [ri, 'items', 0, 'permission'], flag)
+    for (const audience of AUDIENCES) {
+      const pub = publicCvDoc({ en, zh: [] }, audience)
+      assert.ok(!JSON.stringify(pub).includes(TEXT_SENTINEL), `permission ${String(flag)} leaked to '${audience}'`)
+      const section = pub.en.find((s) => s.sessionName === 'recommendations')
+      assert.equal(section?.items.length, 1, 'the permitted entry stays')
+      assert.ok(!('permission' in section!.items[0]), 'the consent flag itself is not published')
+    }
+  }
 })
 
 test('the derived chip does pick up visible values (so the leak checks above are meaningful)', () => {

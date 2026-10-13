@@ -6,6 +6,8 @@ import { cvLabels, displayUrl, formatCvDate, majorAddsInfo, safeHref } from '../
 import EmailText from '../Common/EmailText'
 import { composeName } from './PersonalInformation'
 import { ANCHOR_SCROLL_MARGIN } from './primitives'
+import { useCvHeaderLines } from './HeaderExtras'
+import { recommendationCredit, recommendationItems, type RecommendationView } from './recommendationView'
 import {
   bullets,
   certificateValidity,
@@ -270,6 +272,9 @@ function IdentityCard({ data, lang }: { data: Section; lang: CvLang }) {
   if (email) contacts.push({ label: L.email, node: <MaybeLink url={`mailto:${email}`}><EmailText value={email} /></MaybeLink> })
   if (phone) contacts.push({ label: L.phone, node: <MaybeLink url={`tel:${phone.replace(/[^\d+]/g, '')}`}><EmailText value={phone} /></MaybeLink> })
   if (address) contacts.push({ label: lang === 'zh' ? '地址' : 'Based in', node: address })
+  // Owner-entered lines from the availability (求职意向, right-to-work) — /cv pages provide them.
+  const extras = useCvHeaderLines(lang)
+  if (main || aside || contacts.length || intro) for (const l of extras) contacts.push({ label: l.label, node: l.value })
   if (!main && !aside && !contacts.length && !intro) return null
 
   return (
@@ -516,9 +521,58 @@ function renderBody(section: Section, lang: CvLang, month: string): React.ReactN
       if (!points.length) return null
       return <Bullets items={points.map((text) => ({ text }))} />
     }
+    case 'selfAssessment': {
+      const text = field(section, 'text')
+      const points = bullets(section, 'points')
+      if (!text && !points.length) return null
+      return (
+        <Box mt={-2}>
+          <Body>{text}</Body>
+          <Bullets items={points.map((t) => ({ text: t }))} />
+        </Box>
+      )
+    }
+    case 'recommendations': {
+      const items = recommendationItems(section)
+      if (!items.length) return null
+      return (
+        <Entries
+          items={items.map(({ item, index }) => ({
+            anchor: cvEntryAnchor('recommendations', index),
+            node: <RecommendationQuote item={item} lang={lang} />,
+          }))}
+        />
+      )
+    }
     default:
       return null
   }
+}
+
+function RecommendationQuote({ item, lang }: { item: RecommendationView; lang: CvLang }) {
+  return (
+    <Box as="figure" m={0}>
+      <Box
+        as="blockquote"
+        m={0}
+        pl={4}
+        borderLeft="2px solid"
+        borderColor="var(--accent)"
+        fontSize={{ base: '15px', sm: '16px' }}
+        lineHeight="1.65"
+        color="page.fg"
+        cite={item.sourceUrl || undefined}
+      >
+        {item.quote}
+      </Box>
+      <Text as="figcaption" mt={2} pl={4} fontSize="14px" lineHeight="1.5" color="page.fg-secondary">
+        <Text as="span" fontWeight={600} color="page.fg">
+          {item.sourceUrl ? <MaybeLink url={item.sourceUrl}>{item.name}</MaybeLink> : item.name}
+        </Text>
+        {recommendationCredit(item, lang) ? ` — ${recommendationCredit(item, lang)}` : ''}
+      </Text>
+    </Box>
+  )
 }
 
 function SubHeading({ children }: { children: React.ReactNode }) {

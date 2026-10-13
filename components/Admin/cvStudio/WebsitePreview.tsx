@@ -12,6 +12,8 @@ import { publicSections, isSectionOnWebsite, type CvLang } from '../../../lib/cv
 import { SECTION_BY_NAME } from '../../../lib/cvSections'
 import { monoFont, useStudioTokens } from './fields'
 import type { Section } from './docOps'
+import AboutRecommendations from '../../About/Recommendations'
+import { recommendationsSection } from '../../CVViewerPage/recommendationView'
 
 /**
  * What a visitor sees in the CV stack on /about, for the language being
@@ -49,8 +51,11 @@ function renderSection(section: any, index: number, lang: CvLang) {
 
 export default function WebsitePreview({ sections, lang }: { sections: Section[]; lang: CvLang }) {
   const { dim, border } = useStudioTokens()
-  const shown = useMemo(() => publicSections(sections, 'website').filter((s) => RENDERED.includes(String(s.sessionName))), [sections])
-  const off = sections.filter((s) => RENDERED.includes(s.sessionName) && !isSectionOnWebsite(s))
+  const pub = useMemo(() => publicSections(sections, 'website'), [sections])
+  const shown = useMemo(() => pub.filter((s) => RENDERED.includes(String(s.sessionName))), [pub])
+  // /about shows the English recommendations above the CV stack (permitted entries only).
+  const recommendations = lang === 'en' ? recommendationsSection(pub) : null
+  const off = sections.filter((s) => [...RENDERED, 'recommendations'].includes(s.sessionName) && !isSectionOnWebsite(s))
 
   return (
     <Box bg="page.bg" minH="100%" px={{ base: 3, md: 5 }} py={5}>
@@ -60,6 +65,11 @@ export default function WebsitePreview({ sections, lang }: { sections: Section[]
         </Text>
         <Box flex={1} h="1px" bg={border} />
       </Flex>
+      {recommendations ? (
+        <Box mb={8}>
+          <AboutRecommendations section={recommendations} />
+        </Box>
+      ) : null}
       {shown.length ? (
         <Flex direction="column">
           {shown.map((section, i) => (

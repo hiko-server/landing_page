@@ -19,6 +19,8 @@ export type FieldKind =
   | 'color'
   | 'bullets' // string[] edited one line per bullet
   | 'tags' // string[] edited as chips
+  | 'image' // uploaded image URL ('/uploads/…' or https://)
+  | 'switch' // boolean on / off
 
 export interface FieldDef {
   key: string
@@ -92,6 +94,22 @@ export const CV_SECTIONS: SectionDef[] = [
       { key: 'address', label: 'Location', kind: 'text', span: 2 },
       { key: 'introduction', label: 'Summary', kind: 'textarea', span: 2 },
       { key: 'separatorColor', label: 'Accent / rule color', kind: 'color', hideable: false },
+      {
+        key: 'photo',
+        label: 'Photo (PDF only)',
+        kind: 'image',
+        span: 2,
+        hideable: false,
+        help: 'Optional ID-style photo for the downloadable PDF of this language. Never shown on the website, in search results, the structured data (JSON-LD) or the vCard.',
+      },
+      {
+        key: 'photoOnPdf',
+        label: 'Put the photo on this language’s PDF',
+        kind: 'switch',
+        span: 2,
+        hideable: false,
+        help: 'Off by default. EN and 中文 are separate PDFs: switch it on in each language where a photo is expected.',
+      },
     ],
   },
   {
@@ -270,6 +288,49 @@ export const CV_SECTIONS: SectionDef[] = [
     ],
   },
   {
+    sessionName: 'selfAssessment',
+    label: 'Self-assessment',
+    description: 'A short personal statement (自我评价) — customary at the end of a Chinese CV. Shown only when filled.',
+    headerDefault: { en: 'SELF-ASSESSMENT', zh: '自我评价' },
+    fields: [
+      { key: 'text', label: 'Statement', kind: 'textarea', span: 2, placeholder: 'A few sentences in your own words' },
+      { key: 'points', label: 'Points', kind: 'bullets', span: 2, placeholder: 'Optional: one strength per line' },
+    ],
+  },
+  {
+    sessionName: 'recommendations',
+    label: 'Recommendations',
+    description:
+      'Quotes from people you worked with, entered by you with their permission. Use the CV and Website switches to choose /cv, /about or both; nothing shows until an entry has permission.',
+    headerDefault: { en: 'RECOMMENDATIONS', zh: '推荐语' },
+    lists: [
+      {
+        key: 'items',
+        label: 'Recommendations',
+        itemNoun: 'recommendation',
+        fields: [
+          { key: 'quote', label: 'Quote', kind: 'textarea', span: 2, required: true, placeholder: 'Their words, verbatim' },
+          { key: 'name', label: 'Name', kind: 'text', required: true },
+          { key: 'role', label: 'Their role', kind: 'text', placeholder: 'Title, organisation' },
+          { key: 'relation', label: 'Relation to you', kind: 'text', placeholder: 'e.g. managed me at …' },
+          { key: 'date', label: 'Date given', kind: 'month' },
+          { key: 'sourceUrl', label: 'Source link', kind: 'url', span: 2, help: 'Optional: where the recommendation was published (https).' },
+          {
+            key: 'permission',
+            label: 'They agreed to have this published',
+            kind: 'switch',
+            span: 2,
+            hideable: false,
+            help: 'Required. Entries without it never leave the admin — not on the pages, the PDF or the API.',
+          },
+        ],
+        titleOf: (it) => it?.name || '',
+        subtitleOf: (it) => join(it?.role, it?.permission === true ? '' : 'no permission yet'),
+        blank: () => ({ quote: '', name: '', role: '', relation: '', date: '', sourceUrl: '', permission: false }),
+      },
+    ],
+  },
+  {
     sessionName: 'extraSkill',
     label: 'Languages',
     description: 'Spoken languages or any extra one-line points.',
@@ -326,7 +387,7 @@ export function blankSection(sessionName: string, lang: 'en' | 'zh'): Record<str
   if (!def) return null
   const out: Record<string, any> = { sessionName, headerName: def.headerDefault[lang], isVisible: true }
   for (const f of def.fields || []) {
-    out[f.key] = f.kind === 'bullets' || f.kind === 'tags' ? [] : f.kind === 'color' ? '#0059ff' : ''
+    out[f.key] = f.kind === 'bullets' || f.kind === 'tags' ? [] : f.kind === 'color' ? '#0059ff' : f.kind === 'switch' ? false : ''
   }
   for (const l of def.lists || []) out[l.key] = []
   return out
@@ -334,7 +395,7 @@ export function blankSection(sessionName: string, lang: 'en' | 'zh'): Record<str
 
 export function defaultSpan(f: FieldDef): 1 | 2 {
   if (f.span) return f.span
-  return f.kind === 'textarea' || f.kind === 'bullets' || f.kind === 'tags' ? 2 : 1
+  return f.kind === 'textarea' || f.kind === 'bullets' || f.kind === 'tags' || f.kind === 'image' ? 2 : 1
 }
 
 export function isFieldHideable(f: FieldDef): boolean {

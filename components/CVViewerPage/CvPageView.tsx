@@ -26,7 +26,9 @@ import {
 } from '../../lib/schema'
 import type { CvLang } from '../../lib/cvVisibility'
 import type { HomeData } from '../../lib/homeShape'
+import type { CvHeaderExtras } from '../../lib/cvLocale'
 import { useBottomBarOffset } from '../Common/useBottomBarOffset'
+import { CvHeaderExtrasContext } from './HeaderExtras'
 
 /**
  * The bilingual CV page: /cv (English) and /cv/zh (Chinese) render this with
@@ -69,6 +71,11 @@ export type CvPageProps = {
   personFacts: PersonFacts
   /** Print-only QR code (inline SVG) linking to this page; null when it could not be generated. */
   qrSvg: string | null
+  /**
+   * Header lines from the owner's availability (lib/cvLocale cvHeaderExtras):
+   * the right-to-work line, and 求职意向 on /cv/zh. Absent / null = none.
+   */
+  headerExtras?: CvHeaderExtras | null
 }
 
 const mono = 'var(--font-geist-mono), monospace'
@@ -134,6 +141,7 @@ export default function CvPageView({
   nameZh,
   personFacts,
   qrSvg,
+  headerExtras = null,
 }: CvPageProps) {
   const router = useRouter()
   const toast = useToast()
@@ -244,6 +252,7 @@ export default function CvPageView({
         ]}
       />
 
+      <CvHeaderExtrasContext.Provider value={headerExtras}>
       <HeaderFooter>
         <Box
           className="cv-print-flow"
@@ -498,6 +507,7 @@ export default function CvPageView({
           </Flex>
         </Box>
       </HeaderFooter>
+      </CvHeaderExtrasContext.Provider>
     </React.Fragment>
   )
 }

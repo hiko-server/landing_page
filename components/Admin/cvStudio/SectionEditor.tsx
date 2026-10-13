@@ -12,6 +12,7 @@ import {
   MenuButton,
   MenuItem,
   MenuList,
+  Switch,
   Text,
   Textarea,
   Tooltip,
@@ -40,6 +41,7 @@ import {
   useStudioTokens,
 } from './fields'
 import { cvPathAttr, pathStartsWith, useStudio } from './StudioContext'
+import PhotoField from './PhotoField'
 import { entryKey, type ListOp } from './docOps'
 
 const langName = (l: 'en' | 'zh') => (l === 'en' ? 'EN' : '中文')
@@ -79,6 +81,26 @@ function FieldRenderer({ def, node, nodePath }: { def: FieldDef; node: any; node
       break
     case 'color':
       control = <ColorField value={str} onChange={set} />
+      break
+    case 'switch':
+      control = (
+        <HStack spacing={3} minH="32px">
+          <Switch
+            id={`${fieldId}-switch`}
+            aria-labelledby={`${fieldId}-label`}
+            aria-describedby={def.help ? `${fieldId}-helptext` : undefined}
+            colorScheme="purple"
+            isChecked={value === true}
+            onChange={(e) => set(e.target.checked)}
+          />
+          <Text as="span" fontSize="12px" color={value === true ? undefined : 'page.fg-secondary'} aria-hidden>
+            {value === true ? 'On' : 'Off'}
+          </Text>
+        </HStack>
+      )
+      break
+    case 'image':
+      control = <PhotoField value={str} onChange={set} twin={api.twinValue?.(path)} otherLabel={api.lang === 'en' ? '中文' : 'EN'} />
       break
     case 'bullets': {
       const items: string[] = Array.isArray(value) ? value.map((x) => (typeof x === 'string' ? x : String(x ?? ''))) : []
@@ -139,7 +161,7 @@ function FieldRenderer({ def, node, nodePath }: { def: FieldDef; node: any; node
       help={def.help}
       invalid={invalid}
       gridColumn={gridColumn}
-      group={def.kind === 'bullets'}
+      group={def.kind === 'bullets' || def.kind === 'image' || def.kind === 'switch'}
       cvPath={cvPath}
     >
       {control}

@@ -21,6 +21,7 @@
 
 import { isPresent } from './cvFormat'
 import { SECTION_BY_NAME, type FieldDef, type ListDef } from './cvSections'
+import { isCvImageRef } from './url'
 
 export type CvLangKey = 'en' | 'zh'
 export type CvErrorPath = [CvLangKey, number, ...(string | number)[]]
@@ -49,10 +50,21 @@ class Collector {
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 const absent = (v: unknown) => v === undefined || v === null
 
+export { isCvImageRef }
+
 function checkField(f: FieldDef, value: unknown, path: Path, out: Collector) {
   if (absent(value)) return
   if (TEXT_KINDS.has(f.kind)) {
     if (typeof value !== 'string') out.add(path, `${f.label} must be text.`)
+    return
+  }
+  if (f.kind === 'switch') {
+    if (typeof value !== 'boolean') out.add(path, `${f.label} must be on or off.`)
+    return
+  }
+  if (f.kind === 'image') {
+    if (typeof value !== 'string') out.add(path, `${f.label} must be an image link.`)
+    else if (value.trim() && !isCvImageRef(value.trim())) out.add(path, `${f.label} must be an uploaded image (/uploads/…) or an https:// link.`)
     return
   }
   if (f.kind === 'month' || f.kind === 'endMonth') {
