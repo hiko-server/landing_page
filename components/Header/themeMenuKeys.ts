@@ -1,8 +1,9 @@
 import type { ThemePreference } from '../../lib/themePreference'
 
 /**
- * Pure keyboard / pointer model of the header theme control (ThemeControl +
- * ThemeMenu), unit tested in tests/tokens-theme-b2.test.ts.
+ * Pure keyboard model of the header theme menu (ThemeMenu, loaded on
+ * demand), unit tested in tests/tokens-theme-b2.test.ts. The menu button's
+ * own keys are in ./themeTriggerKeys (shared bundle, kept tiny).
  */
 
 export const THEME_OPTIONS: readonly { value: ThemePreference; label: string }[] = [
@@ -11,8 +12,7 @@ export const THEME_OPTIONS: readonly { value: ThemePreference; label: string }[]
   { value: 'dark', label: 'Dark' },
 ]
 
-/** Which item takes focus when the menu opens. */
-export type MenuFocus = 'checked' | 'first' | 'last'
+export type { MenuFocus } from './themeTriggerKeys'
 
 /**
  * The item a key moves focus to inside the menu (null: the key is not the
@@ -41,21 +41,4 @@ export function menuKeyTarget(key: string, current: number, count: number, label
       return null
     }
   }
-}
-
-/** The menu button's keys (WAI-ARIA menu button): which item to open on, or null to let the key through. */
-export function triggerKeyFocus(key: string): MenuFocus | null {
-  if (key === 'ArrowDown') return 'first'
-  if (key === 'ArrowUp') return 'last'
-  return null
-}
-
-/** A touch held this long on the theme toggle opens the menu instead of toggling. */
-export const LONG_PRESS_MS = 500
-/** Moving the finger further than this (px) cancels the long-press (it is a scroll). */
-export const LONG_PRESS_SLOP = 10
-
-/** True when a pointer moved far enough from its start to cancel a long-press. */
-export function exceedsSlop(start: { x: number; y: number }, now: { x: number; y: number }, slop = LONG_PRESS_SLOP): boolean {
-  return Math.hypot(now.x - start.x, now.y - start.y) > slop
 }

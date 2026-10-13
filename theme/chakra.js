@@ -1,16 +1,7 @@
 import { extendTheme } from '@chakra-ui/react'
-import { printColorVariables, semanticColors, semanticShadows } from './color'
+import { printColorVariables, semanticColors } from './color'
 import { serverColorMode } from '../lib/themePreference'
-import {
-  EASE_STANDARD_CSS,
-  PAGE_GUTTERS,
-  cssVariables,
-  fontSizes,
-  letterSpacings,
-  radii,
-  reducedMotionVariables,
-  textStyles,
-} from './tokens'
+import { fontSizes, letterSpacings, radii, textStyles } from './tokens'
 
 /**
  * v6 "Indigo Precision" theme.
@@ -32,37 +23,18 @@ import {
  *   tokens: fluid type scale, text styles, letter-spacings, radii, container
  *           widths and motion (one ease, three durations, zero under reduced
  *           motion) come from theme/tokens.ts — `textStyle="label"`,
- *           `fontSize="display"`, `var(--ease-standard)`, `var(--duration-fast)`
+ *           `fontSize="display"`; its CSS custom properties (`var(--ease-
+ *           standard)`, `var(--duration-fast)`, `--container-*`, elevation)
+ *           are mirrored in styles/globals.css (checked by tests)
  *
- * Older brand.* colors are kept for backward compatibility with components
- * that still reference them; new code should use semantic tokens ('page.bg',
- * 'page.fg', 'page.muted', 'page.border', 'page.surface', 'accent.500').
+ * Colours: the semantic tokens ('page.bg', 'page.fg', 'page.muted',
+ * 'page.border', 'page.surface', 'status.*', 'accent.text' …, theme/color.ts)
+ * plus the accent scale below. The legacy `brand.*` and `ink.*` scales are
+ * gone: nothing referenced them, and every unused token still cost bytes in
+ * the shared bundle and a CSS variable on every page.
  */
 
 const colors = {
-  // Legacy (kept so existing components don't break visually mid-refactor)
-  brand: {
-    900: '#1a365d',
-    800: '#153e75',
-    700: '#2a69ac',
-  },
-
-  // v6 ink scale — neutral grayscale tuned for OLED + paper-white extremes
-  ink: {
-    0: '#050505',
-    50: '#0a0a0a',
-    100: '#0e0e0e',
-    200: '#181818',
-    300: '#262626',
-    400: '#404040',
-    500: '#525252',
-    600: '#737373',
-    700: '#a1a1a1',
-    800: '#d4d4d4',
-    900: '#fafafa',
-    1000: '#fdfdfd',
-  },
-
   // v6 single brand accent — Tailwind indigo scale for `accent.500` -> #6366f1
   accent: {
     50: '#eef2ff',
@@ -93,6 +65,14 @@ const fonts = {
 // `outline` shadow (checkbox, switch, tabs, close buttons…) get the accent.
 const shadows = {
   outline: '0 0 0 2px var(--accent)',
+  // Three elevation levels: theme/color.ts semanticShadows, as CSS custom
+  // properties per data-theme in styles/globals.css (static CSS, so the
+  // shared bundle stays lean). `boxShadow="elevation.md"`.
+  elevation: {
+    sm: 'var(--elevation-sm)',
+    md: 'var(--elevation-md)',
+    lg: 'var(--elevation-lg)',
+  },
 }
 
 /** The site-wide keyboard focus ring (also the global *:focus-visible rule below). */
@@ -190,10 +170,6 @@ const semanticTokens = {
   colors: Object.fromEntries(
     Object.entries(semanticColors).map(([name, { light, dark }]) => [name, { default: light, _dark: dark }]),
   ),
-  // Three elevation levels (theme/color.ts semanticShadows): `boxShadow="elevation.md"`.
-  shadows: Object.fromEntries(
-    Object.entries(semanticShadows).map(([name, { light, dark }]) => [name, { default: light, _dark: dark }]),
-  ),
 }
 
 const theme = {
@@ -205,7 +181,6 @@ const theme = {
     radii,
     textStyles,
     shadows,
-    transition: { easing: { standard: EASE_STANDARD_CSS } },
     components,
     semanticTokens,
     config: {
@@ -222,16 +197,6 @@ const theme = {
     },
     styles: {
       global: {
-        // Design tokens as CSS custom properties (theme/tokens.ts): motion,
-        // container widths and the PageGrid gutter. Emitted with the server
-        // HTML, so plain CSS (styles/globals.css) can use them on first paint.
-        ':root': {
-          ...cssVariables(),
-          '@media screen and (min-width: 48em)': { '--page-gutter': `${PAGE_GUTTERS.md}px` },
-          '@media screen and (min-width: 62em)': { '--page-gutter': `${PAGE_GUTTERS.lg}px` },
-          // The reduced-motion zero: every token duration becomes 0ms.
-          '@media (prefers-reduced-motion: reduce)': reducedMotionVariables(),
-        },
         '*, *::before, *::after': { boxSizing: 'border-box' },
         'html, body, #__next': { height: '100%' },
         body: {

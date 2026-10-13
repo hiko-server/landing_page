@@ -9,7 +9,8 @@ import { themeColorFor } from '../../theme/color'
  * `media="(prefers-color-scheme: …)"` pair would paint the wrong colour for
  * anyone whose choice differs from their system. Instead there is ONE tag:
  *   - pages/_document.tsx renders it with the default mode;
- *   - THEME_COLOR_PREPAINT_SCRIPT runs right after the theme pre-paint script
+ *   - THEME_COLOR_PREPAINT_SCRIPT (lib/themePrepaint.ts, with the other
+ *     document-only script) runs right after the theme pre-paint script
  *     (which sets data-theme from the preference) and corrects it before the
  *     first paint, so a light-mode visitor never sees a dark bar;
  *   - after hydration syncThemeColorMeta keeps it in step with data-theme,
@@ -46,9 +47,3 @@ export function syncThemeColorMeta(doc: DocLike, Observer: ObserverCtor): () => 
   observer.observe(doc.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
   return () => observer.disconnect()
 }
-
-/** Inline, synchronous, before first paint (CSP allows inline scripts: lib/csp.js). */
-export const THEME_COLOR_PREPAINT_SCRIPT =
-  `(function(){try{var m=document.querySelector('${THEME_COLOR_SELECTOR}');` +
-  `if(m)m.setAttribute('content',document.documentElement.getAttribute('data-theme')==='light'?` +
-  `'${themeColorFor('light')}':'${themeColorFor('dark')}')}catch(e){}})();`

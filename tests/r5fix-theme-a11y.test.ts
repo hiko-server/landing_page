@@ -19,13 +19,8 @@ import { chakraColorVar, palette, printColorVariables, semanticColors, themeColo
 import { GEIST_MONO_METRICS, MONO_FALLBACKS, monoFallbackFontFaces, monoFallbackOverrides } from '../lib/monoFallback'
 import { installPrintDetails, openDetailsForPrint, printableLinkUrl, textOfNode } from '../lib/print'
 import { CHROME_LANG, chromeLangFor, isEnglishLang } from '../components/Chrome/chromeLang'
-import {
-  THEME_COLOR_PREPAINT_SCRIPT,
-  THEME_COLOR_SELECTOR,
-  applyThemeColor,
-  modeOfDataTheme,
-  syncThemeColorMeta,
-} from '../components/Chrome/themeColor'
+import { THEME_COLOR_SELECTOR, applyThemeColor, modeOfDataTheme, syncThemeColorMeta } from '../components/Chrome/themeColor'
+import { THEME_COLOR_PREPAINT_SCRIPT } from '../lib/themePrepaint'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const read = (rel: string) => readFileSync(path.join(ROOT, rel), 'utf8')

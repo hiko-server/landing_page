@@ -12,7 +12,8 @@ type StorageManager = NonNullable<ColorModeProviderProps['colorModeManager']>
  * (unlike Chakra's own script, which wrote the default on every first visit).
  * A preference is not an identifier: it never leaves the browser.
  *
- *   - THEME_PREPAINT_SCRIPT (pages/_document.tsx, inline, before first paint)
+ *   - THEME_PREPAINT_SCRIPT (lib/themePrepaint.ts — kept out of this module
+ *     so the client bundle does not carry it; pages/_document.tsx inlines it)
  *     resolves the mode and sets `data-theme`, `color-scheme`, Chakra's body
  *     class and `data-theme-preference` on <html> — so every semantic token
  *     (CSS variables keyed off data-theme) is right on the first frame, on
@@ -65,45 +66,6 @@ export function serverColorMode(fallback: ThemePreference = DEFAULT_THEME_PREFER
   return fallback === 'light' ? 'light' : 'dark'
 }
 
-type ReadableStorage = { getItem(key: string): string | null }
-
-/**
- * The stored preference: the `theme-preference` value, else a legacy
- * explicit `light` (Chakra's key; its `dark` was written for every visitor
- * and is no choice), else `fallback`. Storage that throws (blocked, private
- * mode) counts as empty.
- */
-export function readStoredPreference(storage: ReadableStorage | null | undefined, fallback: ThemePreference = DEFAULT_THEME_PREFERENCE): ThemePreference {
-  try {
-    const stored = parseThemePreference(storage?.getItem(THEME_PREFERENCE_KEY))
-    if (stored) return stored
-    if (storage?.getItem(LEGACY_COLOR_MODE_KEY) === 'light') return 'light'
-  } catch {
-    // Storage unavailable: the default applies.
-  }
-  return fallback
-}
-
-/**
- * Inline pre-paint script (runs synchronously in <body> before the first
- * paint). Mirrors readStoredPreference + resolveColorMode — kept in step by
- * tests/tokens-theme-b2.test.ts, which runs it against fake documents.
- */
-export function themePrepaintScript(fallback: ThemePreference = DEFAULT_THEME_PREFERENCE): string {
-  return (
-    '(function(){try{' +
-    'var d=document.documentElement,p=null,l=null,s;' +
-    `try{s=window.localStorage;p=s.getItem('${THEME_PREFERENCE_KEY}');l=s.getItem('${LEGACY_COLOR_MODE_KEY}')}catch(e){}` +
-    `if(p!=='system'&&p!=='light'&&p!=='dark')p=l==='light'?'light':'${fallback}';` +
-    `var m=p==='system'?(window.matchMedia&&window.matchMedia('${SYSTEM_DARK_QUERY}').matches?'dark':'light'):p;` +
-    `d.setAttribute('data-theme',m);d.style.colorScheme=m;d.setAttribute('${THEME_PREFERENCE_ATTRIBUTE}',p);` +
-    "var b=document.body;if(b){b.classList.add('chakra-ui-'+m);b.classList.remove(m==='dark'?'chakra-ui-light':'chakra-ui-dark')}" +
-    '}catch(e){}})();'
-  )
-}
-
-export const THEME_PREPAINT_SCRIPT = themePrepaintScript()
-
 // ── Client store ────────────────────────────────────────────────────────────
 
 const listeners = new Set<() => void>()
@@ -126,14 +88,14 @@ export function systemPrefersDark(): boolean {
 }
 
 /**
- * The current preference: the attribute the pre-paint script (or the last
- * commit) put on <html>, else storage, else the default. A string, so it is
- * a stable useSyncExternalStore snapshot.
+ * The current preference: the attribute the pre-paint script (which reads
+ * storage, lib/themePrepaint.ts) or the last commit put on <html>; the
+ * default when it is missing. A string, so it is a stable
+ * useSyncExternalStore snapshot.
  */
 export function getThemePreference(): ThemePreference {
   if (typeof document === 'undefined') return DEFAULT_THEME_PREFERENCE
-  const attr = parseThemePreference(document.documentElement.getAttribute(THEME_PREFERENCE_ATTRIBUTE))
-  return attr ?? readStoredPreference(storage())
+  return parseThemePreference(document.documentElement.getAttribute(THEME_PREFERENCE_ATTRIBUTE)) ?? DEFAULT_THEME_PREFERENCE
 }
 
 /** The mode the current preference shows right now. */

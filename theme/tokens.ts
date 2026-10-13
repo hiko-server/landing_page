@@ -53,9 +53,8 @@ export function fluid(
   minVw = FLUID_MIN_VIEWPORT,
   maxVw = FLUID_MAX_VIEWPORT
 ): string {
-  if (!(maxVw > minVw))
-    throw new Error('fluid(): the max viewport must be wider than the min viewport')
-  if (minPx === maxPx) return rem(minPx)
+  // A degenerate range (or equal sizes) is a fixed size.
+  if (minPx === maxPx || !(maxVw > minVw)) return rem(maxPx)
   const slope = (maxPx - minPx) / (maxVw - minVw)
   const intercept = minPx - slope * minVw
   const lo = Math.min(minPx, maxPx)

@@ -9,21 +9,20 @@ import {
   THEME_PREFERENCES,
   THEME_PREFERENCE_ATTRIBUTE,
   THEME_PREFERENCE_KEY,
-  THEME_PREPAINT_SCRIPT,
   commitThemePreference,
   currentResolvedMode,
   defaultThemePreference,
   getThemePreference,
   parseThemePreference,
-  readStoredPreference,
   resolveColorMode,
   serverColorMode,
   subscribeThemePreference,
-  themePrepaintScript,
   themePreferenceManager,
   type ThemePreference,
 } from '../lib/themePreference'
-import { THEME_OPTIONS, exceedsSlop, menuKeyTarget, triggerKeyFocus, LONG_PRESS_MS } from '../components/Header/themeMenuKeys'
+import { THEME_PREPAINT_SCRIPT, readStoredPreference, themePrepaintScript } from '../lib/themePrepaint'
+import { THEME_OPTIONS, menuKeyTarget } from '../components/Header/themeMenuKeys'
+import { triggerKeyFocus } from '../components/Header/themeTriggerKeys'
 import { semanticColors, semanticShadows, printColorVariables } from '../theme/color'
 
 /**
@@ -238,9 +237,6 @@ test('theme menu keys: wrap, Home / End, first-letter jumps; trigger keys open o
   assert.equal(triggerKeyFocus('ArrowDown'), 'first')
   assert.equal(triggerKeyFocus('ArrowUp'), 'last')
   assert.equal(triggerKeyFocus('Enter'), null)
-  assert.equal(LONG_PRESS_MS, 500)
-  assert.equal(exceedsSlop({ x: 0, y: 0 }, { x: 6, y: 6 }), false)
-  assert.equal(exceedsSlop({ x: 0, y: 0 }, { x: 8, y: 8 }), true)
 })
 
 // ── colour tokens ───────────────────────────────────────────────────────────
@@ -256,9 +252,9 @@ function contrast(a: string, b: string): number {
   return (x + 0.05) / (y + 0.05)
 }
 
-const STATUS_TEXT = ['status.success', 'status.warning', 'status.error', 'status.info', 'status.live', 'status.featured'] as const
+const STATUS_TEXT = ['status.warning', 'status.error', 'status.live', 'status.featured'] as const
 
-test('the status set is complete: text ≥ 4.5:1 on every page background in both modes, each with its border', () => {
+test('the status tokens: text ≥ 4.5:1 on every page background in both modes, chips with their border', () => {
   for (const t of STATUS_TEXT) {
     for (const mode of ['light', 'dark'] as const) {
       for (const b of ['page.bg', 'page.bg-elevated', 'page.bg-overlay'] as const) {
@@ -267,9 +263,8 @@ test('the status set is complete: text ≥ 4.5:1 on every page background in bot
       }
     }
   }
-  for (const t of ['status.success', 'status.warning', 'status.error', 'status.info', 'status.live'] as const) {
-    assert.ok(`${t}-border` in semanticColors, `${t}-border`)
-  }
+  // Chips draw a hairline in their status colour.
+  for (const t of ['status.live', 'status.open'] as const) assert.ok(`${t}-border` in semanticColors, `${t}-border`)
   // Print maps the new tokens to paper too.
   assert.equal(printColorVariables()['--chakra-colors-status-live'], semanticColors['status.live'].light)
 })
@@ -280,8 +275,17 @@ test('three elevation levels per mode; dark adds a light hairline so a raised su
     assert.match(pair.light, /rgba\(0,0,0,/, name)
     assert.match(pair.dark, /0 0 0 1px rgba\(255,255,255,0\.0\d\)/, name)
   }
+  // Values: theme/color.ts, mirrored per data-theme in globals.css (static CSS); Chakra points at the variables.
+  const css = read('styles/globals.css')
+  const rootBlock = /^:root \{([^}]*)\}/m.exec(css)?.[1] || ''
+  const darkBlock = /\[data-theme='dark'\],\s*\.chakra-ui-dark \{([^}]*)\}/.exec(css)?.[1] || ''
+  for (const [name, pair] of Object.entries(semanticShadows)) {
+    const v = `--${name.replace('.', '-')}`
+    assert.ok(rootBlock.includes(`${v}: ${pair.light};`), `${v} light`)
+    assert.ok(darkBlock.includes(`${v}: ${pair.dark};`), `${v} dark`)
+  }
   const chakra = read('theme/chakra.js')
-  assert.match(chakra, /shadows: Object\.fromEntries\(\s*Object\.entries\(semanticShadows\)/)
+  assert.match(chakra, /elevation: \{\s*sm: 'var\(--elevation-sm\)',\s*md: 'var\(--elevation-md\)',\s*lg: 'var\(--elevation-lg\)',/)
   assert.match(chakra, /warning: 'status\.warning'/)
   assert.match(chakra, /error: 'status\.error'/)
   assert.doesNotMatch(chakra, /'(orange|red)\.400'/)
@@ -297,6 +301,9 @@ test('three elevation levels per mode; dark adds a light hairline so a raised su
 
 test('the document paints the preference before first paint; the app hands Chakra the preference manager', () => {
   const doc = read('pages/_document.tsx')
+  assert.match(doc, /import \{ THEME_COLOR_PREPAINT_SCRIPT, THEME_PREPAINT_SCRIPT \} from '\.\.\/lib\/themePrepaint'/)
+  assert.doesNotMatch(read('components/Chrome/themeColor.ts'), /export const THEME_COLOR_PREPAINT_SCRIPT/, 'not in the client bundle')
+  assert.doesNotMatch(read('lib/themePreference.ts'), /export (function themePrepaintScript|const THEME_PREPAINT_SCRIPT)/, 'not in the client bundle')
   assert.doesNotMatch(doc, /ColorModeScript/)
   assert.match(doc, /<script dangerouslySetInnerHTML=\{\{ __html: THEME_PREPAINT_SCRIPT \}\} \/>\s*<script dangerouslySetInnerHTML=\{\{ __html: THEME_COLOR_PREPAINT_SCRIPT \}\} \/>/)
   assert.match(doc, /content=\{themeColorFor\(initialColorMode\)\}/)

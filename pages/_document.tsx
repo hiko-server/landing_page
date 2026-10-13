@@ -1,7 +1,7 @@
 import Document, { Head, Html, Main, NextScript } from 'next/document'
 import { resolveHtmlLang } from '../components/Chrome/chrome'
-import { THEME_COLOR_PREPAINT_SCRIPT } from '../components/Chrome/themeColor'
-import { THEME_PREPAINT_SCRIPT, serverColorMode } from '../lib/themePreference'
+import { serverColorMode } from '../lib/themePreference'
+import { THEME_COLOR_PREPAINT_SCRIPT, THEME_PREPAINT_SCRIPT } from '../lib/themePrepaint'
 import { themeColorFor } from '../theme/color'
 
 /**
@@ -10,7 +10,7 @@ import { themeColorFor } from '../theme/color'
  *
  * Colour mode: the server HTML is mode-agnostic — the body, the chrome and
  * every semantic token (`page.*`) are CSS variables keyed off `data-theme`.
- * THEME_PREPAINT_SCRIPT (lib/themePreference.ts) runs before first paint,
+ * THEME_PREPAINT_SCRIPT (lib/themePrepaint.ts) runs before first paint,
  * reads the visitor's System / Light / Dark preference (localStorage) —
  * resolving System from prefers-color-scheme — and sets `data-theme`,
  * `color-scheme` and `data-theme-preference`, so every visitor gets their
@@ -22,7 +22,8 @@ import { themeColorFor } from '../theme/color'
  *
  * `<meta name="theme-color">`: exactly one tag, rendered here with the
  * default mode and corrected to the visitor's mode by an inline script right
- * after the theme script, before first paint (components/Chrome/themeColor.ts).
+ * after the theme script, before first paint (lib/themePrepaint.ts,
+ * components/Chrome/themeColor.ts).
  */
 class MyDocument extends Document {
   render() {

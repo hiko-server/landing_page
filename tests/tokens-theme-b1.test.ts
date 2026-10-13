@@ -66,7 +66,7 @@ test('fluid() hits its bounds at 360 and 1280 px, interpolates linearly and clam
   assert.equal(evalClamp(v, 1920), 56, 'clamped above the range')
   assert.equal(fluid(14, 14), '0.875rem')
   assert.equal(rem(11), '0.6875rem')
-  assert.throws(() => fluid(10, 12, 800, 800))
+  assert.equal(fluid(10, 12, 800, 800), '0.75rem', 'a degenerate range is a fixed size')
   // fluidAt mirrors the CSS.
   for (const vp of [360, 500, 768, 1024, 1280, 1600]) {
     assert.ok(Math.abs(fluidAt(36, 56, vp) - evalClamp(v, vp)) < 0.05, `fluidAt @${vp}`)
@@ -165,7 +165,7 @@ test('motion: one standard ease, three durations, zero under reduced motion', ()
   assert.notEqual(motionTransition().ease, motionTransition().ease)
 })
 
-test('CSS custom properties come from the tokens, once (globals.css no longer defines them)', () => {
+test('the CSS custom properties in globals.css are exactly the tokens (static CSS, not shared JS)', () => {
   const vars = cssVariables()
   assert.equal(vars['--ease-standard'], EASE_STANDARD_CSS)
   assert.equal(vars['--ease-out-quart'], 'var(--ease-standard)')
@@ -178,18 +178,29 @@ test('CSS custom properties come from the tokens, once (globals.css no longer de
   assert.deepEqual(reducedMotionVariables(), { '--duration-fast': '0ms', '--duration-base': '0ms', '--duration-slow': '0ms' })
 
   const css = stripComments(read('styles/globals.css'))
-  for (const name of ['--ease-out-quart', '--ease-standard', '--duration-fast', '--duration-base', '--duration-slow', '--container-content', '--container-prose']) {
-    assert.doesNotMatch(css, new RegExp(`${name}\\s*:`), `${name} is defined in theme/tokens.ts only`)
+  const rootBlock = /^:root \{([^}]*)\}/m.exec(css)?.[1] || ''
+  const declared = (block: string) =>
+    Object.fromEntries([...block.matchAll(/(--[\w-]+):\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]))
+  const root = declared(rootBlock)
+  for (const [name, value] of Object.entries(vars)) assert.equal(root[name], value, `${name} in :root`)
+  // Each token is declared once at the top level of :root (plus its media overrides).
+  for (const name of Object.keys(vars)) {
+    const count = (css.match(new RegExp(`${name}:`, 'g')) || []).length
+    const expected = name === '--page-gutter' ? 3 : name.startsWith('--duration-') ? 2 : 1
+    assert.equal(count, expected, `${name} declarations`)
   }
-  // The standard curve is never spelled out in the global layer (the pulse loop's sine is not the UI ease).
+  const reduced = /@media \(prefers-reduced-motion: reduce\) \{\s*:root \{([^}]*)\}/.exec(css)?.[1] || ''
+  assert.deepEqual(declared(reduced), reducedMotionVariables())
+  assert.match(css, new RegExp(`@media screen and \\(min-width: 48em\\) \\{\\s*:root \\{\\s*--page-gutter: ${PAGE_GUTTERS.md}px;`))
+  assert.match(css, new RegExp(`@media screen and \\(min-width: 62em\\) \\{\\s*:root \\{\\s*--page-gutter: ${PAGE_GUTTERS.lg}px;`))
+  // The standard curve is spelled out once, as the token (the pulse loop's sine is not the UI ease).
   const curves = css.match(/cubic-bezier\([^)]*\)/g) || []
-  assert.deepEqual(curves, ['cubic-bezier(0.4, 0, 0.6, 1)'])
+  assert.deepEqual(curves.sort(), ['cubic-bezier(0.22, 1, 0.36, 1)', 'cubic-bezier(0.4, 0, 0.6, 1)'])
   assert.doesNotMatch(css, /var\(--ease-out-quart\)/)
 
   const chakra = read('theme/chakra.js')
   assert.match(chakra, /from '\.\/tokens'/)
-  assert.match(chakra, /':root': \{\s*\.\.\.cssVariables\(\)/)
-  assert.match(chakra, /'@media \(prefers-reduced-motion: reduce\)': reducedMotionVariables\(\)/)
+  assert.doesNotMatch(chakra, /cssVariables|':root'/, 'no CSS variables shipped through the JS theme')
   for (const key of ['fontSizes,', 'letterSpacings,', 'radii,', 'textStyles,']) assert.ok(chakra.includes(key), key)
   assert.doesNotMatch(stripComments(chakra), /cubic-bezier/)
 })

@@ -84,21 +84,13 @@ export const semanticColors = {
    * ≥ 4.5:1 on every page background in both modes.
    */
   'status.error': { light: '#c53030', dark: '#fc8181' },
-  /** Hairline border paired with status.error text. */
-  'status.error-border': { light: 'rgba(197,48,48,0.35)', dark: 'rgba(252,129,129,0.35)' },
   /**
-   * The general status set (text + its hairline border), for chips, notices
-   * and toasts: each text value is ≥ 4.5:1 on every page background,
-   * overlays included (tests/tokens-theme-b2.test.ts) — a shade deeper than
-   * the availability pair above, which only sits on page and card surfaces. Always paired with words — never colour
-   * alone.
+   * Toast / notice warnings (the v6 Alert's status bar). ≥ 4.5:1 on every
+   * page background, overlays included (tests/tokens-theme-b2.test.ts) — a
+   * shade deeper than status.limited, which only sits on page and card
+   * surfaces. Status colour is always paired with words, never alone.
    */
-  'status.success': { light: '#157a3b', dark: '#4ade80' },
-  'status.success-border': { light: 'rgba(21,122,59,0.35)', dark: 'rgba(74,222,128,0.35)' },
   'status.warning': { light: '#aa4c09', dark: '#fbbf24' },
-  'status.warning-border': { light: 'rgba(170,76,9,0.35)', dark: 'rgba(251,191,36,0.35)' },
-  'status.info': { light: '#4f46e5', dark: '#818cf8' },
-  'status.info-border': { light: 'rgba(79,70,229,0.35)', dark: 'rgba(129,140,248,0.35)' },
   /** A project that is live (work cards), and its chip border. */
   'status.live': { light: '#157a3b', dark: '#4ade80' },
   'status.live-border': { light: 'rgba(21,122,59,0.35)', dark: 'rgba(74,222,128,0.35)' },
@@ -107,8 +99,10 @@ export const semanticColors = {
 } as const satisfies Record<string, ModePair>
 
 /**
- * Elevation: three shadow levels by mode (Chakra semantic `shadows`, e.g.
- * `boxShadow="elevation.md"`). Light mode uses soft, layered greys; on the
+ * Elevation: three shadow levels by mode, the source of the `--elevation-*`
+ * custom properties in styles/globals.css (static CSS per data-theme, kept
+ * identical by tests/tokens-theme-b2.test.ts); Chakra's
+ * `boxShadow="elevation.md"` resolves to them. Light mode uses soft, layered greys; on the
  * near-black page a shadow alone is invisible, so dark mode pairs a deeper
  * shadow with a faint light hairline that outlines the raised surface.
  *
