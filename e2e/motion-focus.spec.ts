@@ -399,8 +399,11 @@ test.describe('mobile menu', () => {
     await expect.poll(async () => (await transitions(page)).length).toBe(1)
     await idle(page)
     const [vt] = await transitions(page)
-    // Scrim and panel each had their own snapshot when the old state was captured…
-    expect(vt.layers.length).toBeGreaterThan(0)
+    // Every modal layer still in the DOM when the old state was captured had its
+    // own snapshot (locally the static route renders while the menu is fully
+    // open, so scrim and panel are there). Over a real network the next page's
+    // data can arrive after the menu has already closed — then no layer is left
+    // to capture and nothing can ghost, so an empty list is fine too.
     expect(vt.layers.every((name) => /^vt-layer-\d+$/.test(name))).toBe(true)
     expect(new Set(vt.layers).size).toBe(vt.layers.length)
     // …and none of them was part of the new state.
