@@ -97,6 +97,13 @@ English → [README.md](./README.md)
   站长登录后多出「Admin」分组，含随当前页面变化的「编辑此页」。面板里的
   「Keyboard shortcuts: on/off」（后台 `?` 面板里也有）可按浏览器关闭单键快捷键
   （`/`、`G` 加字母）。
+- **主题**：跟随系统 / 浅色 / 深色。顶栏一键切换，旁边的菜单（以及 ⌘K）可选
+  三种偏好；默认深色（`NEXT_PUBLIC_DEFAULT_THEME`），在首帧绘制前生效，任何
+  页面都不会闪错颜色；选「跟随系统」时随操作系统切换。
+- **设计系统**：流式字号、文本样式、圆角、容器宽度，以及一条缓动曲线加三档
+  时长，统一为令牌（`theme/tokens.ts`）；带突破线的页面网格、状态与阴影颜色
+  令牌，公开页面统一使用按 4 px 网格取尺寸的 Lucide 图标；合作 Logo 在保存时
+  自动测量并按视觉面积均衡显示。
 - **克制的动效**：从切换按钮展开的圆形主题过渡、带方向的路由过渡与固定的
   顶栏；`prefers-reduced-motion` 下全部关闭，装饰性表面都提供
   `forced-colors` 回退。
@@ -268,6 +275,7 @@ docker compose up -d --build
 | 管理员引导 | `ADMIN_EMAIL`、`ADMIN_PASS` | ✅ 仅首次启动；落盘后可删 |
 | 会话 | `JWT_SECRET`（base64，≥ 32 字节） | ✅ 始终必填 |
 | 站点身份 | `NEXT_PUBLIC_PRODUCT_NAME`、`NEXT_PUBLIC_SITE_HOST`、`SITE_URL` | 推荐填 |
+| 默认主题 | `NEXT_PUBLIC_DEFAULT_THEME`（留空为 `dark`，可选 `light` 或 `system`；构建时生效） | 可选 |
 | 邮件 | `SMTP_HOST/PORT/USER/PASS`、`FROM_EMAIL`、`NOTIFY_EMAIL` | 可选 — 未设置时静默跳过 |
 | 联系验证码 | 无 — 内置 nonce + 数学题 + 蜜罐 | 不适用 |
 | GitHub | `GITHUB_TOKEN`（细粒度令牌，仅公开仓库只读，不授予任何权限） | 推荐（API 限额 60 → 5000/h） |

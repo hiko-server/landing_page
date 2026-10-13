@@ -8,6 +8,53 @@ portfolio CMS, no public package). Entries are grouped by release date.
 
 ## [Unreleased]
 
+### tokens-theme
+
+Design-system foundation (research items B1–B4).
+
+- **Design tokens (B1)** — `theme/tokens.ts` holds a fluid type scale
+  (clamp between 360 and 1280 px viewports; labels never below 11 px, the
+  page title 36–56 px), named text styles, letter-spacings, semantic radii,
+  container widths and motion: one standard ease, three durations
+  (150 / 250 / 450 ms) and zero under `prefers-reduced-motion`. The CSS custom
+  properties in `styles/globals.css` mirror them (checked by tests).
+  `PageGrid` lays a page out on named `content` / `wide` / `full` lines
+  (`/work` uses it). Migrated: section labels, page headers, the article meta
+  grid, the GitHub stats figures and labels, article headings and the work
+  cards; an ESLint error guards the migrated components against raw type
+  values, `cubic-bezier` literals and inline ease arrays (CONTRIBUTING.md).
+- **Theme preference (B2)** — System / Light / Dark. The header toggle stays
+  one tap with the circular reveal; the button beside it (or a right-click /
+  Android long-press on the toggle) opens a keyboard-accessible menu, and ⌘K
+  offers the same three actions. Dark stays the default
+  (`NEXT_PUBLIC_DEFAULT_THEME` changes it at build time). An inline script
+  applies the preference before the first paint — no flash, no hydration
+  mismatch, nothing stored until the visitor chooses; System follows the OS
+  live, and a choice made in another tab applies everywhere. A light choice
+  made before this release is kept.
+- **Colour tokens (B2)** — `status.live`, `status.featured` and
+  `status.warning` (AA on every page background, overlays included) and three
+  elevation shadows per mode (`boxShadow="elevation.sm | md | lg"`; dark adds
+  a faint hairline). Toasts, the palette and work cards use them; the unused
+  legacy `brand.*` / `ink.*` colour scales are gone.
+- **Icons (B3)** — one Lucide outline icon set on public pages (inlined SVG,
+  sized 12 / 16 / 20 / 24 px), replacing the glyphs Geist lacks (▾ ▸ ★ ✓) and
+  the Font Awesome / Octicons / Chakra icons; the contact panel uses the inline
+  brand marks. react-icons stays in the admin, and lint keeps it out of public
+  code. Licence on `/colophon` (`/licenses/lucide.txt`).
+- **Affiliation logos (B4)** — measured when the home page is saved (content
+  box, aspect ratio, ink density; site files, uploads and remote images through
+  `safeFetch`) and sized by area with a gentle density correction, cropped to
+  their content; the owner's logo scale still multiplies the result. Phones get
+  balanced rows of 3 or 2 (never a lone logo). A white logo backdrop no longer
+  shows as a box in dark mode. The Home editor previews the strip with each
+  logo's measured size, and its logo cards no longer crop the image.
+- **Bundles** — public pages load less JavaScript (home 250.5 → 243 KiB,
+  /about 244.5 → 234 KiB): the brand-icon module and the icon packs left the
+  shared and home bundles. Shared first-load JS is 203.5 KiB (was 203.2): the
+  preference store, the OS / tab sync and the menu button; the theme menu
+  itself loads on demand, and the pre-paint scripts stay in the document.
+
 ## [2.3.0] — 2026-10-13
 
 A research round across eight directions (UI, motion, reading, recruiter
