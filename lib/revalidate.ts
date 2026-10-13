@@ -88,10 +88,11 @@ export const HOME_PAGE_PATHS: readonly string[] = ['/', '/about', '/now']
 
 /**
  * ISR pages that render the public CV: / (identity, hero facts, projects,
- * experience, skills, certifications), /about (identity, the CV sections)
- * and /now (current roles and studies).
+ * experience, skills, certifications), /about (identity, the CV sections),
+ * /now (current roles and studies) and /work (the "All projects" archive of
+ * every public CV project).
  */
-export const CV_PAGE_PATHS: readonly string[] = ['/', '/about', '/now']
+export const CV_PAGE_PATHS: readonly string[] = ['/', '/about', '/now', '/work']
 
 /**
  * Pages outside a collection that a post or case-study save changes: the

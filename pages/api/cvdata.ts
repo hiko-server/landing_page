@@ -62,9 +62,10 @@ function isSectionArray(v: unknown): v is any[] {
 /**
  * Statically generated (ISR) pages that render CV data, regenerated after a
  * save, restore or import so an entry the owner just hid is not served from
- * the ISR cache (lib/revalidate.ts CV_PAGE_PATHS: /, /about, /now). Only ISR
- * pages belong here: `/cv`, `/cv/zh` and `/contact` are server-rendered on
- * every request (getServerSideProps) and are always fresh.
+ * the ISR cache (lib/revalidate.ts CV_PAGE_PATHS: /, /about, /now and /work,
+ * whose archive lists every public project). Only ISR pages belong here:
+ * `/cv`, `/cv/zh` and `/contact` are server-rendered on every request
+ * (getServerSideProps) and are always fresh.
  */
 export const CV_STATIC_PATHS: readonly string[] = [...CV_PAGE_PATHS]
 

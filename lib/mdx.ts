@@ -10,6 +10,9 @@ import { listItems, getItem, getPage } from './contentStore'
 import { detectContentLang, readingMinutes, type TocEntry } from './toc'
 import remarkStripMdxExpressions from './rehype/stripMdxExpressions'
 import rehypeSafeUrls from './rehype/safeUrls'
+import rehypeAutoEmbed, { type PosterResolver } from './rehype/autoEmbed'
+import rehypeAlerts from './rehype/alerts'
+import rehypeGalleries from './rehype/galleries'
 import rehypeLiftBlocks from './rehype/liftBlocks'
 import rehypeHeadings from './rehype/headings'
 import { footnoteOptions } from './rehype/footnotes'
@@ -18,8 +21,10 @@ import rehypeImages, { type SizeResolver, type SrcSetResolver } from './rehype/i
 import rehypeLangSpans from './rehype/langSpans'
 import { resolveImageSize } from './rehype/imageSize'
 import { variantSrcSet, variantState } from './uploadVariants'
-import { isElement, textOf, walk, type HastNode } from './rehype/hast'
+import { posterForCompile, posterState } from './videoPoster'
+import { classList, isElement, textOf, walk, type HastNode } from './rehype/hast'
 import { clampAtBoundary } from './schema'
+import { cleanGlanceFields, type WorkLink, type WorkOutcome } from './caseStudy'
 
 /**
  * MDX content loader (content store first, content/*.mdx as the seed — see
@@ -37,9 +42,10 @@ import { clampAtBoundary } from './schema'
  * 'unsafe-eval'.
  *
  *   remark-parse → remark-mdx → remark-gfm → strip expressions / map JSX →
- *   remark-rehype → safe URLs (links / media / embeds) → lift blocks out of
- *   paragraphs → heading ids + TOC → image sizes / srcset / figures →
- *   language-of-parts spans → rehype-pretty-code (its data-theme attributes
+ *   remark-rehype → safe URLs (links / media / embeds) → lone video links →
+ *   click-to-load players with stored posters → `> [!NOTE]` callouts → lift
+ *   blocks out of paragraphs → heading ids + TOC → image sizes / srcset /
+ *   figures → figure widths + galleries → language-of-parts spans → rehype-pretty-code (its data-theme attributes
  *   dropped) → drop positions / data
  *
  * Slugs are restricted to [a-z0-9-_]+ before any lookup.
@@ -63,7 +69,11 @@ export type PostFrontmatter = {
   coverAlt?: string
   /** BCP-47 language of the post (e.g. "zh-Hans"); detected when absent. */
   lang?: string
+  /** Slug of the case study this post is about (work/<slug>): linked both ways. */
+  project?: string
 }
+
+export type { WorkLink, WorkOutcome }
 
 export type WorkFrontmatter = {
   title: string
@@ -82,6 +92,17 @@ export type WorkFrontmatter = {
   draft?: boolean
   /** BCP-47 language of the case study; detected when absent. */
   lang?: string
+  /** "At a glance" (lib/caseStudy.ts): one-line outcome under the title. */
+  summary?: string
+  /** Up to four owner-entered metrics (value, unit, label, source). */
+  outcomes?: WorkOutcome[]
+  team?: string
+  /** Publication date of the case study (YYYY-MM-DD). */
+  published?: string
+  /** Extra links (demo, paper, slides), up to four. */
+  links?: WorkLink[]
+  /** Focal point of the cover, "x% y%". */
+  coverFocus?: string
 }
 
 export type PageFrontmatter = {
@@ -184,6 +205,8 @@ export type CompileOptions = {
   resolveSize?: SizeResolver
   /** Responsive `srcset` for an image (default: upload variants). */
   srcSetFor?: SrcSetResolver
+  /** Stored poster of a video facade (default: lib/videoPoster, imported once into /uploads). */
+  posterFor?: PosterResolver
 }
 
 /**
@@ -219,12 +242,15 @@ export async function compileMdx(body: string, opts: CompileOptions = {}): Promi
     .use(remarkStripMdxExpressions)
     .use(remarkRehype, footnoteOptions(lang))
     .use(rehypeSafeUrls)
+    .use(rehypeAutoEmbed, { posterFor: opts.posterFor || posterForCompile, lang })
+    .use(rehypeAlerts, { lang })
     .use(rehypeLiftBlocks)
     .use(rehypeHeadings, { onToc: (t: TocItem[]) => (toc = t) })
     .use(rehypeImages, {
       resolveSize: opts.resolveSize || resolveImageSize,
       srcSetFor: opts.srcSetFor || variantSrcSet,
     })
+    .use(rehypeGalleries)
     .use(rehypeLangSpans, { lang })
     .use(rehypePrettyCode, { theme: CODE_THEMES, keepBackground: false })
     .use(rehypeCodeThemeAttr)
@@ -247,14 +273,16 @@ function textOutsideLinks(node: HastNode): string {
 }
 
 /**
- * Plain text of the first real paragraph — not a caption, quote, list item
- * or a paragraph that is just a link — clamped to `max` chars at a boundary.
+ * Plain text of the first real paragraph — not a caption, quote, callout,
+ * list item or a paragraph that is just a link — clamped to `max` chars at
+ * a boundary.
  */
 export function excerptOf(tree: HastRoot, max = 155): string {
   let found = ''
   walk(tree as unknown as HastNode, (node, parent) => {
     if (found || !isElement(node, 'p')) return
     if (parent && isElement(parent, ['figure', 'blockquote', 'li', 'td', 'th'])) return
+    if (parent && classList(parent).includes('callout')) return
     const text = textOf(node).replace(/\s+/g, ' ').trim()
     const own = textOutsideLinks(node).replace(/\s+/g, ' ').trim()
     if (Array.from(text).length >= 20 && Array.from(own).length >= 10) found = text
@@ -267,11 +295,13 @@ const compileCache = new Map<string, Promise<{ tree: HastRoot; toc: TocItem[] }>
 
 /**
  * compileMdx memoised for the public pages, feeds and ISR revalidations.
- * The key is the body, the language and the variant state of the uploads
- * the body references (lib/uploadVariants variantState): the tree embeds
- * their srcsets, so variants that appear later (the media-optimize
- * backfill, a restored backup) give a fresh compile rather than the memoised
- * srcset-less one. Returned trees are shared: callers must not mutate them.
+ * The key is the body, the language, the variant state of the uploads
+ * the body references (lib/uploadVariants variantState) and which of its
+ * videos have a stored poster (lib/videoPoster posterState): the tree embeds
+ * srcsets and posters, so variants or posters that appear later (the
+ * media-optimize backfill, a poster import, a restored backup) give a fresh
+ * compile rather than the memoised one. Returned trees are shared: callers
+ * must not mutate them.
  */
 export function compileMdxCached(body: string, lang: string): Promise<{ tree: HastRoot; toc: TocItem[] }> {
   const key = crypto
@@ -281,6 +311,8 @@ export function compileMdxCached(body: string, lang: string): Promise<{ tree: Ha
     .update(body)
     .update('\0')
     .update(variantState(body))
+    .update('\0')
+    .update(posterState(body))
     .digest('hex')
   const hit = compileCache.get(key)
   if (hit) {
@@ -324,8 +356,17 @@ async function render<T extends { title: string }>(
 }
 
 // ── Posts (blog) ──────────────────────────────────────────────────────────
+/** A post's `project` only when it is a well-formed case-study slug. */
+function cleanProject(fm: PostFrontmatter): PostFrontmatter {
+  const project = typeof fm.project === 'string' ? fm.project.trim().toLowerCase().replace(/^\/?work\//, '').replace(/\/+$/, '') : ''
+  const out = { ...fm }
+  if (SLUG_RE.test(project)) out.project = project
+  else delete out.project
+  return out
+}
+
 function postEntry(item: { slug: string; frontmatter: Record<string, any>; body: string; updated_at: number }): MDXIndexEntry<PostFrontmatter> {
-  const fm = cleanFrontmatter(item.frontmatter as PostFrontmatter, item.slug)
+  const fm = cleanProject(cleanFrontmatter(item.frontmatter as PostFrontmatter, item.slug))
   return {
     slug: item.slug,
     permalink: `/blog/${item.slug}`,
@@ -355,7 +396,7 @@ export async function getPost(slug: string, opts: GetOptions = {}): Promise<MDXR
 
 // ── Work (case studies) ───────────────────────────────────────────────────
 function workEntry(item: { slug: string; frontmatter: Record<string, any>; body: string; updated_at: number }): MDXIndexEntry<WorkFrontmatter> {
-  const fm = cleanFrontmatter(item.frontmatter as WorkFrontmatter, item.slug)
+  const fm = cleanGlanceFields(cleanFrontmatter(item.frontmatter as WorkFrontmatter, item.slug))
   return {
     slug: item.slug,
     permalink: `/work/${item.slug}`,

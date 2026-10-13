@@ -1,7 +1,8 @@
-import { FormControl, FormHelperText, FormLabel, Input, SimpleGrid, Stack } from '@chakra-ui/react'
+import { useEffect, useMemo, useState } from 'react'
+import { FormControl, FormHelperText, FormLabel, Input, Select, SimpleGrid, Stack } from '@chakra-ui/react'
 import { AdminDirtyProvider } from '../../../components/Admin/AdminDirtyContext'
-import { MONO, inputProps } from '../../../components/Admin/shell/ui'
-import CoverImageField from '../../../components/Admin/shell/CoverImageField'
+import { MONO, inputProps, warnTextProps } from '../../../components/Admin/shell/ui'
+import CoverImageField, { type CoverSize } from '../../../components/Admin/shell/CoverImageField'
 import { useMdxItemEditor } from '../../../components/Admin/shell/useMdxItemEditor'
 import MdxItemEditorFrame from '../../../components/Admin/editor/MdxItemEditorFrame'
 import { DESCRIPTION_MAX, TITLE_MAX } from '../../../components/Admin/shell/publishChecks'
@@ -18,6 +19,32 @@ function BlogEditor() {
     toServer: blogToServer,
   })
   const { fm, setFm } = ed
+  const [coverSize, setCoverSize] = useState<CoverSize | null>(null)
+  const publishExtra = useMemo(() => ({ coverWidth: coverSize?.width ?? null }), [coverSize])
+
+  // Case studies the post can belong to (drafts included, so a pair can be prepared together).
+  const [studies, setStudies] = useState<Array<{ slug: string; title: string }> | null>(null)
+  useEffect(() => {
+    let alive = true
+    fetch('/api/admin/work', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { items?: Array<{ slug: string; frontmatter?: { title?: unknown } }> } | null) => {
+        if (!alive || !data) return
+        setStudies(
+          (data.items || []).map((i) => ({
+            slug: i.slug,
+            title: typeof i.frontmatter?.title === 'string' && i.frontmatter.title.trim() ? i.frontmatter.title : i.slug,
+          })),
+        )
+      })
+      .catch(() => {
+        if (alive) setStudies([])
+      })
+    return () => {
+      alive = false
+    }
+  }, [])
+  const unknownProject = !!fm.project && !!studies && !studies.some((s) => s.slug === fm.project)
 
   return (
     <MdxItemEditorFrame
@@ -27,6 +54,7 @@ function BlogEditor() {
       backHref="/admin/blog"
       backLabel="← All posts"
       newTitle="New post"
+      publishExtra={publishExtra}
       fields={
         <Stack spacing={4}>
           <FormControl isRequired>
@@ -102,7 +130,27 @@ function BlogEditor() {
             />
           </FormControl>
 
-          <CoverImageField inputId="item-cover" value={fm.cover} onChange={(cover) => setFm((f) => ({ ...f, cover }))} />
+          <FormControl>
+            <FormLabel fontSize="13px" htmlFor="item-project">
+              Case study
+            </FormLabel>
+            <Select {...inputProps} id="item-project" value={fm.project} onChange={(e) => setFm({ ...fm, project: e.target.value })}>
+              <option value="">None</option>
+              {(studies || []).map((s) => (
+                <option key={s.slug} value={s.slug}>
+                  {s.title}
+                </option>
+              ))}
+              {unknownProject ? <option value={fm.project}>{fm.project} (not found)</option> : null}
+            </Select>
+            <FormHelperText fontSize="xs" {...(unknownProject ? warnTextProps : { color: 'page.fg-secondary' })}>
+              {unknownProject
+                ? 'No case study has this slug any more — pick another or None.'
+                : 'Links the post and the case study both ways: the post names it, the case study lists the post.'}
+            </FormHelperText>
+          </FormControl>
+
+          <CoverImageField inputId="item-cover" value={fm.cover} onChange={(cover) => setFm((f) => ({ ...f, cover }))} onMeasure={setCoverSize} />
         </Stack>
       }
     />

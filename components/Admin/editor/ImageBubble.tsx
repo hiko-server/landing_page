@@ -1,14 +1,23 @@
 import { useEffect, useId, useState } from 'react'
-import { Box, Flex, Input, Text } from '@chakra-ui/react'
+import { Box, Button, ButtonGroup, Flex, Input, Text } from '@chakra-ui/react'
 import type { Editor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import { isFilenameAlt } from '../shell/publishChecks'
+import { figureWidthOfSrc, withWidthFragment, type FigureWidth } from '../../../lib/rehype/galleries'
 
 /**
  * Bubble shown on a selected image in the visual editor: edits its alt text
  * in place (updateAttributes), with a red dot and "Alt missing" while it is
- * empty, or a hint when it is just a file name.
+ * empty, or a hint when it is just a file name; and its width on the page —
+ * text column, wide or full (a `#wide` / `#full` fragment on the source,
+ * lib/rehype/galleries.ts; images alone in their paragraph only).
  */
+
+const WIDTHS: Array<{ value: FigureWidth | null; label: string }> = [
+  { value: null, label: 'Text' },
+  { value: 'wide', label: 'Wide' },
+  { value: 'full', label: 'Full' },
+]
 
 export const IMAGE_BUBBLE_KEY = 'imageBubble'
 
@@ -21,10 +30,14 @@ const POP_CSS = {
 export default function ImageBubble({ editor }: { editor: Editor }) {
   const inputId = useId()
   const current = editor.isActive('image') ? String(editor.getAttributes('image').alt || '') : ''
+  const src = editor.isActive('image') ? String(editor.getAttributes('image').src || '') : ''
+  const srcWidth = figureWidthOfSrc(src)
   const [alt, setAlt] = useState(current)
+  const [width, setWidth] = useState<FigureWidth | null>(srcWidth)
 
   // Follow the selected image (another image, or an undo).
   useEffect(() => setAlt(current), [current])
+  useEffect(() => setWidth(srcWidth), [srcWidth])
 
   const commit = (value: string) => {
     setAlt(value)
@@ -82,6 +95,29 @@ export default function ImageBubble({ editor }: { editor: Editor }) {
         <Text id={`${inputId}-hint`} fontSize="11px" color={fileName ? 'orange.400' : 'page.fg-secondary'} mt={1.5}>
           {fileName ? 'That looks like a file name — describe the picture instead.' : 'Read aloud by screen readers; shown if the image fails to load.'}
         </Text>
+        <Flex align="center" justify="space-between" gap={2} mt={2.5}>
+          <Text id={`${inputId}-width`} fontSize="12px" color="page.fg-secondary">
+            Width on the page
+          </Text>
+          <ButtonGroup size="xs" isAttached variant="outline" role="group" aria-labelledby={`${inputId}-width`}>
+            {WIDTHS.map((w) => (
+              <Button
+                key={w.label}
+                aria-pressed={width === w.value}
+                bg={width === w.value ? 'var(--accent-soft)' : 'transparent'}
+                borderColor="page.border-strong"
+                fontWeight={width === w.value ? 600 : 400}
+                onClick={() => {
+                  if (!src) return
+                  setWidth(w.value)
+                  editor.chain().updateAttributes('image', { src: withWidthFragment(src, w.value) }).run()
+                }}
+              >
+                {w.label}
+              </Button>
+            ))}
+          </ButtonGroup>
+        </Flex>
       </Box>
     </BubbleMenu>
   )

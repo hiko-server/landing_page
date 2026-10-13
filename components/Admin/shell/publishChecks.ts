@@ -10,11 +10,20 @@
  *   - images hosted elsewhere (https, not this site) → "Import & optimize"
  *     copies them into the uploads; http:// images are flagged as insecure
  *   - links to /blog/<slug> or /work/<slug> point at existing items
+ *   - the cover is wide enough (its real size, measured in the editor):
+ *     under 960 px the site shows it small on a panel, under 1600 px it may
+ *     look soft on large screens (D2)
+ *   - case studies: an "At a glance" summary, complete metrics with a
+ *     source (D1)
+ *   - no case-study template notes left and no empty sections
  *
  * Code blocks and inline code are ignored: their text is literal.
  */
 
-export type CheckField = 'title' | 'description' | 'slug' | 'cover' | 'body'
+import { COVER_RECOMMENDED_MIN, COVER_SHARP_MIN, outcomeText } from '../../../lib/caseStudy'
+import { emptySections, templateNoteLines } from '../editor/caseStudyTemplate'
+
+export type CheckField = 'title' | 'description' | 'slug' | 'cover' | 'body' | 'summary' | 'outcomes'
 
 export type PublishCheck = {
   id: string
@@ -40,6 +49,12 @@ export type PublishCheckInput = {
   knownSlugs: { blog: string[]; work: string[] }
   /** Host of the public site (defaults to NEXT_PUBLIC_SITE_HOST / lucian-dev.com). */
   siteHost?: string
+  /** Real width of the cover as loaded in the editor (unknown: no size check). */
+  coverWidth?: number | null
+  /** Case studies: the "At a glance" one-line outcome. */
+  summary?: string
+  /** Case studies: the metric rows as typed. */
+  outcomes?: ReadonlyArray<{ value?: string; unit?: string; label?: string; source?: string; sourceUrl?: string }>
 }
 
 export const TITLE_MAX = 70
@@ -278,6 +293,89 @@ export function runPublishChecks(input: PublishCheckInput): PublishCheck[] {
   })
   if (internal && !checks.some((c) => c.id.startsWith('link-'))) {
     checks.push({ id: 'links', level: 'ok', field: 'body', label: `${plural(internal, 'internal link')} resolve` })
+  }
+
+  // Cover size (measured in the editor)
+  const coverWidth = input.coverWidth
+  if (input.cover && typeof coverWidth === 'number' && coverWidth > 0) {
+    if (coverWidth < COVER_SHARP_MIN) {
+      checks.push({
+        id: 'cover-size',
+        level: 'warning',
+        field: 'cover',
+        label: `Cover is ${coverWidth} px wide`,
+        detail: `The site shows it at its own size on a tinted panel instead of stretching it. Upload one at least ${COVER_RECOMMENDED_MIN} px wide.`,
+      })
+    } else if (coverWidth < COVER_RECOMMENDED_MIN) {
+      checks.push({
+        id: 'cover-size',
+        level: 'warning',
+        field: 'cover',
+        label: `Cover is ${coverWidth} px wide`,
+        detail: `Fine, but ${COVER_RECOMMENDED_MIN} px or wider stays sharp on large and high-density screens.`,
+      })
+    } else checks.push({ id: 'cover-size', level: 'ok', field: 'cover', label: `Cover ${coverWidth} px wide` })
+  }
+
+  // Case studies: At a glance
+  if (input.collection === 'work') {
+    if (!(input.summary || '').trim()) {
+      checks.push({
+        id: 'summary',
+        level: 'warning',
+        field: 'summary',
+        label: 'No outcome summary',
+        detail: 'One sentence on what changed because of the project. It leads the case study, under the title.',
+      })
+    } else checks.push({ id: 'summary', level: 'ok', field: 'summary', label: 'Outcome summary set' })
+    let complete = 0
+    let unsourced = 0
+    ;(input.outcomes || []).forEach((o, i) => {
+      const value = (o.value || '').trim()
+      const label = (o.label || '').trim()
+      if (!value && !label) return
+      if (!value || !label) {
+        checks.push({ id: `outcome-${i}`, level: 'warning', field: 'outcomes', label: `Metric ${i + 1} needs a value and a label`, detail: 'Incomplete metrics are not shown on the page.' })
+        return
+      }
+      complete++
+      if (!(o.source || '').trim() && !(o.sourceUrl || '').trim()) {
+        unsourced++
+        checks.push({
+          id: `outcome-source-${i}`,
+          level: 'warning',
+          field: 'outcomes',
+          label: `Metric “${outcomeText({ value, unit: (o.unit || '').trim() || undefined })}” has no source`,
+          detail: 'Say where the number comes from (a test run, a benchmark, users): a number readers can trace is one they trust.',
+        })
+      }
+    })
+    if (complete && !unsourced && !checks.some((c) => c.id.startsWith('outcome-'))) {
+      checks.push({ id: 'outcomes', level: 'ok', field: 'outcomes', label: `${plural(complete, 'metric')} with a source` })
+    }
+  }
+
+  // The case-study outline, unfinished
+  const notes = templateNoteLines(input.body)
+  if (notes.length) {
+    checks.push({
+      id: 'template-notes',
+      level: 'warning',
+      field: 'body',
+      line: notes[0],
+      label: `${plural(notes.length, 'template note')} left in the body`,
+      detail: 'They never appear on the page; delete each one once its section is written.',
+    })
+  }
+  for (const empty of emptySections(input.body)) {
+    checks.push({
+      id: `empty-section-${empty.line}`,
+      level: 'warning',
+      field: 'body',
+      line: empty.line,
+      label: `Section “${empty.heading}” is empty`,
+      detail: 'Write it, or remove the heading.',
+    })
   }
 
   return checks

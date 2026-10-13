@@ -1,4 +1,5 @@
 import { modelledKeys } from './frontmatterMerge'
+import { cleanDate, cleanFocus, LINKS_MAX, OUTCOMES_MAX } from '../../../lib/caseStudy'
 
 /**
  * The frontmatter forms of the admin editors — posts and case studies
@@ -20,6 +21,8 @@ export type BlogFrontmatter = {
   tags: string[]
   draft: boolean
   cover: string
+  /** Slug of the case study the post is about (linked both ways on the site); '' for none. */
+  project: string
 }
 
 export const BLOG_EMPTY: BlogFrontmatter = {
@@ -29,6 +32,7 @@ export const BLOG_EMPTY: BlogFrontmatter = {
   tags: [],
   draft: true,
   cover: '',
+  project: '',
 }
 
 export const blogFromServer = (f: Record<string, any>): BlogFrontmatter => ({
@@ -38,6 +42,7 @@ export const blogFromServer = (f: Record<string, any>): BlogFrontmatter => ({
   tags: Array.isArray(f.tags) ? f.tags.map(String) : [],
   draft: Boolean(f.draft),
   cover: String(f.cover || ''),
+  project: typeof f.project === 'string' ? f.project : '',
 })
 
 export const blogToServer = (fm: BlogFrontmatter, tags: string[]) => ({
@@ -47,6 +52,7 @@ export const blogToServer = (fm: BlogFrontmatter, tags: string[]) => ({
   tags: tags.length ? tags : undefined,
   draft: fm.draft || undefined,
   cover: fm.cover || undefined,
+  project: fm.project.trim() || undefined,
 })
 
 // ── Case studies ─────────────────────────────────────────────────────────
@@ -54,6 +60,13 @@ export const blogToServer = (fm: BlogFrontmatter, tags: string[]) => ({
 export type WorkStatus = 'live' | 'case-study' | 'archived'
 
 export const WORK_STATUSES: WorkStatus[] = ['case-study', 'live', 'archived']
+
+/** One "At a glance" metric row of the form (all text, possibly half filled while editing). */
+export type OutcomeForm = { value: string; unit: string; label: string; source: string; sourceUrl: string }
+export type LinkForm = { label: string; url: string }
+
+export const OUTCOME_EMPTY: OutcomeForm = { value: '', unit: '', label: '', source: '', sourceUrl: '' }
+export const LINK_EMPTY: LinkForm = { label: '', url: '' }
 
 export type WorkFrontmatter = {
   title: string
@@ -67,8 +80,17 @@ export type WorkFrontmatter = {
   repo: string
   cover: string
   coverAlt: string
+  /** Cover focal point "x% y%" ('' = centre). */
+  coverFocus: string
   /** Hidden from /work until published; a missing flag means published. */
   draft: boolean
+  /** "At a glance" (lib/caseStudy.ts): one-line outcome. */
+  summary: string
+  team: string
+  /** Publication date of the case study, YYYY-MM-DD ('' = none). */
+  published: string
+  outcomes: OutcomeForm[]
+  links: LinkForm[]
 }
 
 export const WORK_EMPTY: WorkFrontmatter = {
@@ -83,7 +105,58 @@ export const WORK_EMPTY: WorkFrontmatter = {
   repo: '',
   cover: '',
   coverAlt: '',
+  coverFocus: '',
   draft: true,
+  summary: '',
+  team: '',
+  published: '',
+  outcomes: [],
+  links: [],
+}
+
+const textOf = (v: unknown) => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '')
+
+function outcomesFromServer(raw: unknown): OutcomeForm[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((o) => o && typeof o === 'object')
+    .slice(0, OUTCOMES_MAX)
+    .map((o: Record<string, unknown>) => ({
+      value: textOf(o.value),
+      unit: textOf(o.unit),
+      label: textOf(o.label),
+      source: textOf(o.source),
+      sourceUrl: textOf(o.sourceUrl),
+    }))
+}
+
+function linksFromServer(raw: unknown): LinkForm[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((l) => l && typeof l === 'object')
+    .slice(0, LINKS_MAX)
+    .map((l: Record<string, unknown>) => ({ label: textOf(l.label), url: textOf(l.url) }))
+}
+
+/**
+ * Rows the owner has started are kept as typed (trimmed, empty keys left
+ * out) — the public page shows only complete ones (lib/caseStudy
+ * cleanOutcomes) and the publish checklist points at the rest.
+ */
+function outcomesToServer(rows: OutcomeForm[]): Array<Record<string, string>> | undefined {
+  const out = rows
+    .map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k, v.trim()]).filter(([, v]) => v)))
+    .filter((r) => Object.keys(r).length > 0)
+    .slice(0, OUTCOMES_MAX)
+  return out.length ? out : undefined
+}
+
+function linksToServer(rows: LinkForm[]): Array<Record<string, string>> | undefined {
+  const out = rows
+    .map((r) => ({ label: r.label.trim(), url: r.url.trim() }))
+    .filter((r) => r.label || r.url)
+    .slice(0, LINKS_MAX)
+  return out.length ? out : undefined
 }
 
 export const workFromServer = (f: Record<string, any>): WorkFrontmatter => ({
@@ -98,7 +171,13 @@ export const workFromServer = (f: Record<string, any>): WorkFrontmatter => ({
   repo: String(f.repo || ''),
   cover: String(f.cover || ''),
   coverAlt: String(f.coverAlt || ''),
+  coverFocus: cleanFocus(f.coverFocus),
   draft: f.draft === true,
+  summary: textOf(f.summary),
+  team: textOf(f.team),
+  published: cleanDate(f.published),
+  outcomes: outcomesFromServer(f.outcomes),
+  links: linksFromServer(f.links),
 })
 
 export const workToServer = (fm: WorkFrontmatter, tech: string[]) => ({
@@ -113,7 +192,13 @@ export const workToServer = (fm: WorkFrontmatter, tech: string[]) => ({
   repo: fm.repo || undefined,
   cover: fm.cover || undefined,
   coverAlt: (fm.cover && fm.coverAlt.trim()) || undefined,
+  coverFocus: (fm.cover && cleanFocus(fm.coverFocus)) || undefined,
   draft: fm.draft || undefined,
+  summary: fm.summary.trim() || undefined,
+  team: fm.team.trim() || undefined,
+  published: cleanDate(fm.published) || undefined,
+  outcomes: outcomesToServer(fm.outcomes),
+  links: linksToServer(fm.links),
 })
 
 // ── Single pages (/now, /uses) ───────────────────────────────────────────

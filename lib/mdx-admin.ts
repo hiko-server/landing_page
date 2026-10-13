@@ -10,6 +10,7 @@ import { isAdminRequest } from './auth'
 import { requireRecentAuth } from './adminAuth/stepUp'
 import { rateLimit } from './rateLimit'
 import { COLLECTION_EXTRA_PATHS, collectionPaths, revalidatePaths } from './revalidate'
+import { ensurePosters } from './videoPoster'
 import {
   getPage,
   putPage as storePutPage,
@@ -453,6 +454,9 @@ export function createCollectionApi(c: Collection, opts: { noun: string; require
 
       const problem = await mdxProblem(text)
       if (problem) return res.status(422).json(problem)
+      // Posters of the body's video players, imported once into /uploads
+      // (bounded wait; the page compiles with whatever is stored by then).
+      await ensurePosters(text)
 
       // Checks and write run without an await in between, so no other
       // request can slip in after the version check (single Node process).

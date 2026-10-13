@@ -9,8 +9,9 @@ import { printableLinkUrl, textOfNode } from '../../lib/print'
 import { clearOfHeader } from '../../lib/anchorOffset'
 import { textStyleProps } from '../../theme/tokens'
 import CodeBlock, { CodeFigure } from './CodeBlock'
-import ArticleFigure, { FigCaption, InsideLinkContext, MdxImage } from './Figure'
-import YouTube from './YouTube'
+import ArticleFigure, { FigCaption, GalleryRow, InsideLinkContext, MdxImage } from './Figure'
+import VideoEmbed from './VideoEmbed'
+import Callout from './Callout'
 
 /**
  * Article renderer used by /blog/[slug], /work/[slug], /now, /uses and the
@@ -29,16 +30,23 @@ import YouTube from './YouTube'
  *   - Images are lazy, async-decoded, sized and responsive; an image alone
  *     in a paragraph (or `<Figure>`) is a <figure> with an optional caption,
  *     and inside an article each image opens the lightbox (./Figure).
- *   - `<YouTube>` is a click-to-load facade (./YouTube); allowed iframes
- *     (YouTube / Vimeo players) sit in a 16:9 frame.
+ *   - Videos (a lone YouTube / Vimeo link, `<YouTube>`) are click-to-load
+ *     facades with a poster stored on this site (./VideoEmbed); allowed
+ *     iframes (YouTube / Vimeo players) sit in a 16:9 frame.
  *   - Fenced code is pre-highlighted on the server (rehype-pretty-code) and
  *     gets a copy button, a filename tab for `title="…"`, highlighted lines
  *     and line numbers (CodeBlock).
- *   - GFM footnotes: the endnotes are set apart from the body, references and
- *     back links read as links, and both jump targets clear the sticky
- *     header (labels in the article's language: lib/rehype/footnotes.ts).
+ *   - GFM footnotes: the endnotes are set apart from the body in a smaller
+ *     size with mono numbers, references read as bracketed links, the note
+ *     or reference jumped to is highlighted, and both jump targets clear the
+ *     sticky header (labels in the article's language: lib/rehype/footnotes.ts).
+ *   - `> [!NOTE]` / TIP / IMPORTANT / WARNING / CAUTION quotes are callouts
+ *     (./Callout, lib/rehype/alerts.ts); `<details>` reads as a "deep dive"
+ *     disclosure; consecutive images form galleries and figures can be wide
+ *     or full-width (./Figure, lib/rehype/galleries.ts).
  *   - Paragraphs and lists use the prose colour token; the column is 68ch
- *     and shares the page's left edge with the title.
+ *     and shares the page's left edge with the title. The wrapper around it
+ *     is an inline-size container, so wide figures can size to the column.
  */
 
 const MONO = 'var(--font-geist-mono), monospace'
@@ -76,6 +84,61 @@ const Prose = ({ children, as = 'article', ...rest }: ChakraProps & { children: 
         outlineOffset: '2px',
         borderRadius: '2px',
       },
+      // References: [1] in mono (still underlined: links in text are never told apart by colour alone).
+      '& sup:has(> a[data-footnote-ref])': { lineHeight: 0 },
+      '& a[data-footnote-ref]': { fontFamily: MONO, fontSize: '0.78em', px: '0.1em' },
+      '& a[data-footnote-ref]::before': { content: '"["' },
+      '& a[data-footnote-ref]::after': { content: '"]"' },
+      '& section[data-footnotes] ol': { pl: 6, mb: 0 },
+      '& section[data-footnotes] li': { color: 'page.fg-secondary', pl: 1, borderRadius: 'md', transition: 'background-color 600ms var(--ease-out-quart)' },
+      '& section[data-footnotes] li::marker': { fontFamily: MONO, fontSize: '0.9em', color: 'page.fg-subtle' },
+      '& section[data-footnotes] li p': { color: 'inherit' },
+      '& a[data-footnote-backref]': { ml: 1 },
+      // The note (or the reference) a reader jumped to.
+      '& section[data-footnotes] li:target, & sup:has(> a[data-footnote-ref]:target)': { bg: 'var(--accent-soft)' },
+      '& section[data-footnotes] li:target': { outline: '1px solid var(--accent-ring)', outlineOffset: '4px' },
+      // "Deep dive" disclosures.
+      '& details': {
+        my: 6,
+        border: '1px solid',
+        borderColor: 'page.border',
+        borderRadius: 'lg',
+        bg: 'page.bg-elevated',
+        px: { base: 4, sm: 5 },
+        py: 3,
+      },
+      '& details > summary': {
+        cursor: 'pointer',
+        listStyle: 'none',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 3,
+        fontWeight: 500,
+        color: 'page.fg',
+        borderRadius: 'md',
+        minH: '28px',
+      },
+      '& details > summary::-webkit-details-marker': { display: 'none' },
+      '& details > summary::before': {
+        content: '""',
+        flexShrink: 0,
+        width: '0.45em',
+        height: '0.45em',
+        borderRight: '2px solid',
+        borderBottom: '2px solid',
+        borderColor: 'page.fg-secondary',
+        transform: 'translateY(-0.1em) rotate(-45deg)',
+        transition: 'transform 200ms var(--ease-out-quart)',
+      },
+      '& details[open] > summary::before': { transform: 'translateY(-0.2em) rotate(45deg)' },
+      '& details[open] > summary': { mb: 3 },
+      '& details > summary:focus-visible': { outline: '2px solid var(--accent)', outlineOffset: '4px' },
+      '& details > :last-child': { mb: 0 },
+      '@media (prefers-reduced-motion: reduce)': {
+        '& section[data-footnotes] li, & details > summary::before': { transition: 'none' },
+      },
+      // Text fragments (#:~:text=…) from a shared link.
+      '& ::target-text': { backgroundColor: 'var(--accent-soft)', color: 'inherit' },
     }}
     {...rest}
   >
@@ -190,6 +253,14 @@ function MdxCode(props: React.HTMLAttributes<HTMLElement>) {
   )
 }
 
+/** `div`: callouts and gallery rows (compiled shapes), anything else as is. */
+function MdxDiv(props: React.HTMLAttributes<HTMLDivElement> & Record<string, unknown>) {
+  const classes = String(props.className || '').split(/\s+/)
+  if (classes.includes('callout')) return <Callout {...props} />
+  if (classes.includes('gallery-row')) return <GalleryRow {...props} />
+  return <div {...props} />
+}
+
 /** Allowed player iframes (validated at compile time) in a responsive 16:9 frame. */
 function MdxIframe({ width, height, ...rest }: React.IframeHTMLAttributes<HTMLIFrameElement>) {
   const w = Number(width)
@@ -236,7 +307,9 @@ const mdxComponents = {
   figure: (props: any) => (props['data-rehype-pretty-code-figure'] !== undefined ? <CodeFigure {...props} /> : <ArticleFigure {...props} />),
   figcaption: FigCaption,
   iframe: MdxIframe,
-  'youtube-embed': YouTube,
+  div: MdxDiv,
+  'youtube-embed': VideoEmbed,
+  'vimeo-embed': VideoEmbed,
   table: (props: any) => (
     <Box my={6} overflowX="auto">
       <Box
@@ -280,5 +353,10 @@ export default function MDXContent({
   as?: 'article' | 'div'
 }) {
   const content = useMemo(() => renderTree(tree), [tree])
-  return <Prose as={as}>{content}</Prose>
+  // The inline-size container: `100cqw` inside is the article column (wide figures).
+  return (
+    <Box className="article-measure" sx={{ containerType: 'inline-size' }}>
+      <Prose as={as}>{content}</Prose>
+    </Box>
+  )
 }

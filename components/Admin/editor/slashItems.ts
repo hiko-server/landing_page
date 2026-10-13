@@ -1,10 +1,14 @@
 /**
  * Slash-command catalogue and the small pure helpers behind the editor's
- * menus (unit-tested): filtering, YouTube id extraction, link validation and
- * the raw-MDX snippets each command inserts.
+ * menus (unit-tested): filtering, video links, link validation and the
+ * raw-MDX snippets each command inserts.
  */
 import { rankItems } from '../../Article/fuzzyMatch'
 import { safeHref } from '../../../lib/cvFormat'
+import { parseVideoUrl, videoWatchUrl, youtubeId } from '../../../lib/videoUrl'
+import { caseStudyTemplate } from './caseStudyTemplate'
+
+export { youtubeId }
 
 export type SlashItemId =
   | 'h2'
@@ -17,6 +21,10 @@ export type SlashItemId =
   | 'image'
   | 'youtube'
   | 'link'
+  | 'note'
+  | 'tip'
+  | 'warning'
+  | 'outline'
 
 export type SlashItem = {
   id: SlashItemId
@@ -33,11 +41,15 @@ export const SLASH_ITEMS: SlashItem[] = [
   { id: 'bullet', label: 'Bullet list', hint: 'Unordered list', keywords: 'ul unordered list dash' },
   { id: 'ordered', label: 'Numbered list', hint: 'Ordered list', keywords: 'ol ordered list number' },
   { id: 'quote', label: 'Quote', hint: 'Block quote', keywords: 'blockquote citation' },
+  { id: 'note', label: 'Note', hint: 'Callout', keywords: 'callout alert info aside admonition' },
+  { id: 'tip', label: 'Tip', hint: 'Callout', keywords: 'callout alert hint advice admonition' },
+  { id: 'warning', label: 'Warning', hint: 'Callout', keywords: 'callout alert caution danger admonition' },
   { id: 'code', label: 'Code block', hint: 'With a language', keywords: 'pre fence snippet', step: 'code' },
   { id: 'divider', label: 'Divider', hint: 'Horizontal rule', keywords: 'hr rule separator line' },
   { id: 'image', label: 'Image', hint: 'Upload a picture', keywords: 'picture photo upload img' },
-  { id: 'youtube', label: 'YouTube video', hint: 'Embed a video', keywords: 'video embed youtube', step: 'youtube' },
+  { id: 'youtube', label: 'Video', hint: 'YouTube or Vimeo', keywords: 'video embed youtube vimeo movie player', step: 'youtube' },
   { id: 'link', label: 'Link to post / case study…', hint: 'Search your writing', keywords: 'internal link blog work', step: 'link' },
+  { id: 'outline', label: 'Case-study outline', hint: 'Problem → lessons', keywords: 'template scaffold sections case study skeleton' },
 ]
 
 /** Commands matching the text typed after "/" (all of them for an empty query). */
@@ -50,32 +62,26 @@ export function filterSlashItems(query: string, items: readonly SlashItem[] = SL
   ).map((r) => items.find((it) => it.id === r.item.id) as SlashItem)
 }
 
-const YT_ID_RE = /^[A-Za-z0-9_-]{11}$/
+/**
+ * The watch-page URL of a YouTube or Vimeo link (or a bare YouTube id); null
+ * when it is neither. Inserted alone in its paragraph, it compiles to the
+ * click-to-load player (lib/rehype/autoEmbed.ts).
+ */
+export function videoLinkUrl(input: string): string | null {
+  const raw = input.trim()
+  const ref = parseVideoUrl(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`)
+  if (ref) return videoWatchUrl(ref)
+  const id = youtubeId(raw)
+  return id ? videoWatchUrl({ provider: 'youtube', id }) : null
+}
 
 /**
- * The 11-character video id of a YouTube URL (watch?v=, youtu.be/, /embed/,
- * /shorts/, /live/, youtube-nocookie) or of a bare id; null otherwise.
+ * The raw-MDX paragraph for a video: `[title](url)`, or the bare URL without
+ * a title (a GFM autolink; MDX has no `<url>` autolinks).
  */
-export function youtubeId(input: string): string | null {
-  const raw = input.trim()
-  if (YT_ID_RE.test(raw)) return raw
-  let u: URL
-  try {
-    u = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`)
-  } catch {
-    return null
-  }
-  const host = u.hostname.toLowerCase().replace(/^(www\.|m\.|music\.)/, '')
-  let id: string | null = null
-  if (host === 'youtu.be') id = u.pathname.split('/')[1] || null
-  else if (host === 'youtube.com' || host === 'youtube-nocookie.com') {
-    if (u.pathname === '/watch') id = u.searchParams.get('v')
-    else {
-      const m = /^\/(?:embed|shorts|live|v)\/([^/?#]+)/.exec(u.pathname)
-      id = m ? m[1] : null
-    }
-  }
-  return id && YT_ID_RE.test(id) ? id : null
+export function videoLine(url: string, title: string): string {
+  const t = title.trim()
+  return t ? markdownLink(t, url) : url
 }
 
 /** Escape a JSX attribute value written inside double quotes. */
@@ -83,7 +89,7 @@ function jsxAttr(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/[{}<>]/g, (c) => `&#${c.charCodeAt(0)};`)
 }
 
-/** The MDX tag the raw editor inserts for a video. */
+/** A `<YouTube>` tag for a video (the editor now inserts plain links, which compile to the same player). */
 export function youtubeTag(id: string, title: string): string {
   const t = title.trim() || 'YouTube video'
   return `<YouTube id="${id}" title="${jsxAttr(t)}" />`
@@ -115,9 +121,22 @@ export function normalizeLinkHref(input: string): string | null {
   return safe || null
 }
 
+/** GitHub alert marker of a callout command. */
+export const CALLOUT_MARKERS = { note: '[!NOTE]', tip: '[!TIP]', warning: '[!WARNING]' } as const
+
 /** Raw-MDX text a block command inserts at the caret (`|` marks where the caret goes). */
 export function rawSnippet(id: Exclude<SlashItemId, 'image' | 'youtube' | 'link' | 'code'>): string {
   switch (id) {
+    case 'note':
+    case 'tip':
+    case 'warning':
+      return `> ${CALLOUT_MARKERS[id]}\n> |`
+    case 'outline': {
+      // The caret lands at the end of the first guidance note's line.
+      const t = caseStudyTemplate()
+      const firstNoteEnd = t.indexOf('*/}') + 3
+      return `${t.slice(0, firstNoteEnd)}\n\n|${t.slice(firstNoteEnd).replace(/^\n+/, '')}`
+    }
     case 'h2':
       return '## |'
     case 'h3':

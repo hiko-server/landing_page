@@ -28,7 +28,7 @@ import { element, hasDescendant, isElement, type HastElement, type HastNode } fr
  */
 
 /** Elements rendered as blocks (or that the parser treats as closing an open <p>). */
-const BLOCK_TAGS = ['figure', 'figcaption', 'iframe', 'youtube-embed', 'details', 'summary', 'div', 'section', 'blockquote', 'pre', 'table', 'ul', 'ol', 'hr']
+const BLOCK_TAGS = ['figure', 'figcaption', 'iframe', 'youtube-embed', 'vimeo-embed', 'details', 'summary', 'div', 'section', 'blockquote', 'pre', 'table', 'ul', 'ol', 'hr']
 
 const isBlock = (node: HastNode) => isElement(node, BLOCK_TAGS)
 const isBlank = (node: HastNode) => node.type === 'text' && !(node.value ?? '').trim()

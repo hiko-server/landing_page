@@ -212,7 +212,8 @@ test('the app shell, the theme reveal and the migrated primitives use the motion
   assert.match(reveal, /REVEAL_MS = DURATIONS\.slow/)
   assert.match(reveal, /REVEAL_EASING = EASE_STANDARD_CSS/)
   const work = read('pages/work/index.tsx')
-  assert.match(work, /cssTransition\('border-color', 'base'\)/)
+  // The card's border, lift and shadow share one token transition (reading-work's hover lift).
+  assert.match(work, /cssTransition\(\['border-color', 'transform', 'box-shadow'\], 'base'\)/)
   assert.doesNotMatch(work, /ease-out-quart|cubic-bezier/)
 })
 

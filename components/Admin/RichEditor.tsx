@@ -51,7 +51,8 @@ import SlashMenu, { type SlashResult } from './editor/SlashMenu'
 import LinkBubble, { type LinkBubbleHandle } from './editor/LinkBubble'
 import ImageBubble from './editor/ImageBubble'
 import { UPLOAD_ACCEPT, altFromFileName, uploadImage, type UploadedImage } from './editor/upload'
-import { markdownLink, rawCodeFence, rawSnippet, youtubeTag, youtubeWatchUrl } from './editor/slashItems'
+import { CALLOUT_MARKERS, markdownLink, rawCodeFence, rawSnippet, videoLine } from './editor/slashItems'
+import { CASE_STUDY_SECTIONS } from './editor/caseStudyTemplate'
 import { headingIndexAt, offsetOfLineColumn, slashTriggerAt, textareaCaretRect } from './editor/textareaCaret'
 import {
   planVisualSync,
@@ -699,7 +700,7 @@ export default function RichEditor({
           }
           insertRaw(from, to, rawSnippet(result.id), true)
         } else if (result.kind === 'code') insertRaw(from, to, rawCodeFence(result.language), true)
-        else if (result.kind === 'youtube') insertRaw(from, to, `${youtubeTag(result.id, result.title)}|`, true)
+        else if (result.kind === 'video') insertRaw(from, to, `${videoLine(result.url, result.title)}|`, true)
         else insertRaw(from, to, `${markdownLink(result.title, result.href)}|`, false)
         return
       }
@@ -730,16 +731,35 @@ export default function RichEditor({
             chain().run()
             onPickImage()
             break
+          case 'note':
+          case 'tip':
+          case 'warning':
+            // `> [!NOTE] …`: the compiler turns the quote into a callout (lib/rehype/alerts.ts).
+            chain().toggleBlockquote().insertContent(`${CALLOUT_MARKERS[result.id]} `).run()
+            break
+          case 'outline':
+            // Headings only: the visual editor cannot hold the outline's MDX notes.
+            chain()
+              .insertContent(
+                CASE_STUDY_SECTIONS.flatMap((s) => [
+                  { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: s.heading }] },
+                  { type: 'paragraph' },
+                ]),
+              )
+              .run()
+            break
         }
       } else if (result.kind === 'code') {
         const lang = result.language.trim().replace(/[^\w+#.-]/g, '')
         chain()
           .setCodeBlock(lang ? { language: lang } : undefined)
           .run()
-      } else if (result.kind === 'youtube') {
-        const text = result.title.trim() || 'Watch on YouTube'
+      } else if (result.kind === 'video') {
+        // A link alone in its paragraph compiles to the click-to-load player; the URL as
+        // text means "no title" (the player is then named after the site).
+        const text = result.title.trim() || result.url
         chain()
-          .insertContent({ type: 'paragraph', content: [{ type: 'text', text, marks: [{ type: 'link', attrs: { href: youtubeWatchUrl(result.id) } }] }] })
+          .insertContent({ type: 'paragraph', content: [{ type: 'text', text, marks: [{ type: 'link', attrs: { href: result.url } }] }] })
           .run()
       } else {
         chain()

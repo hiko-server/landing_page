@@ -7,18 +7,21 @@ import CustomHead from '../../components/General-UI/CustomHead'
 import PageHeader from '../../components/General-UI/PageHeader'
 import ArticleBody from '../../components/Article/ArticleBody'
 import ArticleNav from '../../components/Article/ArticleNav'
+import ArticleEnd, { type ShareData } from '../../components/Article/ArticleEnd'
+import AtAGlance from '../../components/Article/AtAGlance'
 import MetaGrid, { MetaChips, type MetaItem } from '../../components/Article/MetaGrid'
 import DraftBar from '../../components/Article/DraftBar'
 import EditPill from '../../components/Article/EditPill'
-import { neighbours, relatedByTags, toArticleLink, type ArticleLink } from '../../components/Article/collectionNav'
+import CoverFrame, { type CoverView } from '../../components/Work/CoverFrame'
+import { neighbours, projectLinks, relatedArticles, toArticleLink, type ArticleLink } from '../../components/Article/collectionNav'
 import { listPosts, listWorkInDisplayOrder, getWork, type HastRoot, type WorkFrontmatter } from '../../lib/mdx'
 import { labelLang, type TocEntry } from '../../lib/toc'
 import { safeHref } from '../../lib/cvFormat'
-import { variantSrcSet } from '../../lib/uploadVariants'
+import { formatPostDate } from '../../lib/postDate'
+import { tagHref } from '../../lib/tagFilter'
+import type { AuthorCardData } from '../../lib/authorCard'
 import { articleImageUrls, breadcrumb, absUrl, caseStudyNode, ogLangOf, PERSON_NAME, type ArticleCards, type OgImageOptions } from '../../lib/schema'
 import { signedOgImageUrl } from '../../lib/og/sign'
-
-type Cover = { src: string; alt: string; srcSet: string | null }
 
 type Props = {
   slug: string
@@ -34,12 +37,18 @@ type Props = {
   updatedAt: number | null
   /** Signed social-card URLs (1200×630 and square), computed in getStaticProps. */
   ogImages: ArticleCards
-  /** Frontmatter cover with its responsive variants (resolved on the server). */
-  cover: Cover | null
+  /** Frontmatter cover with its size, focal point and responsive variants (resolved on the server). */
+  cover: CoverView | null
   /** Neighbours in /work display order (featured first). */
   prev: ArticleLink | null
   next: ArticleLink | null
   related: ArticleLink[]
+  /** Posts whose `project` is this case study (D8). */
+  writeups: ArticleLink[]
+  /** End-of-article author card (public CV / home data). */
+  author: AuthorCardData | null
+  /** QR code of the page for WeChat (inline SVG). */
+  shareQr: string | null
   /** Rendered in Draft Mode (the admin preview cookie): drafts are visible. */
   draftMode: boolean
 }
@@ -49,12 +58,7 @@ const MONO = 'var(--font-geist-mono), monospace'
 /** English UI text inside a non-English article keeps its own language. */
 const uiLang = (lang: string) => (lang === 'en' || lang.startsWith('en-') ? undefined : 'en')
 
-/** Cover sources an <img> may load: same-site paths or https URLs. */
-function coverSrc(value: unknown): string {
-  if (typeof value !== 'string') return ''
-  const v = value.trim()
-  return /^\/(?!\/)/.test(v) || /^https:\/\//i.test(v) ? v : ''
-}
+const workTag = (t: string) => tagHref('/work', t)
 
 export default function WorkCase({
   slug,
@@ -70,6 +74,9 @@ export default function WorkCase({
   prev,
   next,
   related,
+  writeups,
+  author,
+  shareQr,
   draftMode,
 }: Props) {
   const path = `/work/${slug}`
@@ -77,29 +84,61 @@ export default function WorkCase({
   const tech = Array.isArray(frontmatter.tech) ? frontmatter.tech : []
   const link = safeHref(frontmatter.link)
   const repo = safeHref(frontmatter.repo)
+  const extraLinks = Array.isArray(frontmatter.links) ? frontmatter.links : []
   const image = ogImages.card
   const titleLang = labelLang(frontmatter.title) || 'en'
   const ui = uiLang(lang)
+  const share: ShareData = { url, title: frontmatter.title, qrSvg: shareQr }
 
   const meta: MetaItem[] = [
     { label: 'Role', value: frontmatter.role || null },
+    { label: 'Team', value: frontmatter.team || null },
     { label: 'Timeline', value: frontmatter.period ? <span className="tnum">{frontmatter.period}</span> : null },
-    { label: 'Stack', value: tech.length ? <MetaChips items={tech} label="Stack" /> : null, wide: true },
+    {
+      label: 'Published',
+      value: frontmatter.published ? (
+        <time dateTime={frontmatter.published} className="tnum">
+          {formatPostDate(frontmatter.published)}
+        </time>
+      ) : null,
+    },
+    { label: 'Stack', value: tech.length ? <MetaChips items={tech} label="Stack" hrefFor={workTag} /> : null, wide: true },
+    {
+      label: writeups.length === 1 ? 'Write-up' : 'Write-ups',
+      value: writeups.length ? (
+        <Flex as="ul" direction="column" gap={1} listStyleType="none" m={0} p={0}>
+          {writeups.map((w) => (
+            <Box as="li" key={w.slug}>
+              <Link as={NextLink} href={w.permalink} color="accent.text" className="link-underline" lang={w.lang === 'en' ? undefined : w.lang}>
+                {w.title}
+              </Link>
+            </Box>
+          ))}
+        </Flex>
+      ) : null,
+      wide: true,
+    },
     { label: 'Read', value: <span className="tnum">{readingMinutes} min</span> },
   ]
 
+  const external = (href: string, text: React.ReactNode, key?: string) => (
+    <Link key={key} href={href} isExternal color="accent.text" className="link-underline" fontSize="14px">
+      {text} <span className="nudge-ne" aria-hidden>↗</span>
+    </Link>
+  )
   const actions =
-    link || repo ? (
+    link || repo || extraLinks.length ? (
       <>
-        {link && (
-          <Link href={link} isExternal color="accent.text" className="link-underline" fontSize="14px">
-            Visit site <span className="nudge-ne" aria-hidden>↗</span>
-          </Link>
-        )}
-        {repo && (
-          <Link href={repo} isExternal color="accent.text" className="link-underline" fontSize="14px">
-            Source <span className="nudge-ne" aria-hidden>↗</span>
-          </Link>
+        {link && external(link, 'Visit site')}
+        {repo && external(repo, 'Source')}
+        {extraLinks.map((l) =>
+          l.url.startsWith('/') ? (
+            <Link key={l.url} as={NextLink} href={l.url} color="accent.text" className="link-underline" fontSize="14px">
+              {l.label}
+            </Link>
+          ) : (
+            external(l.url, l.label, l.url)
+          ),
         )}
       </>
     ) : undefined
@@ -116,15 +155,18 @@ export default function WorkCase({
         type="article"
         lang={lang}
         noindex={draftMode}
+        publishedTime={frontmatter.published || undefined}
         modifiedTime={updatedAt ? new Date(updatedAt).toISOString() : undefined}
         jsonLd={[
           caseStudyNode({
             path,
             title: frontmatter.title,
             description: frontmatter.description,
+            abstract: frontmatter.summary,
             lang,
             images: articleImageUrls(ogImages, cover?.src),
             keywords: tech,
+            datePublished: frontmatter.published,
             dateModified: updatedAt ? new Date(updatedAt).toISOString() : undefined,
             sameAs: [link, repo].filter(Boolean),
           }),
@@ -136,7 +178,15 @@ export default function WorkCase({
         ]}
       />
       <HeaderFooter>
-        <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[12, 16]} pb={draftMode ? 24 : undefined}>
+        <Box
+          maxW="var(--container-content)"
+          mx="auto"
+          px={[4, 6, 8]}
+          py={[12, 16]}
+          pb={draftMode ? 24 : undefined}
+          // The page gutter: full-width figures bleed through it on phones.
+          sx={{ '--page-gutter': { base: '1rem', sm: '1.5rem', md: '2rem' } }}
+        >
           <Flex align="center" justify="space-between" gap={4} minH="32px" mb={8} className="no-print">
             <Link as={NextLink} href="/work" fontFamily={MONO} fontSize="11px" color="page.fg-secondary" className="link-underline">
               ← All projects
@@ -154,34 +204,11 @@ export default function WorkCase({
               vtName={`vt-work-${slug}`}
             />
 
+            <AtAGlance summary={frontmatter.summary} outcomes={frontmatter.outcomes} labelLang={ui} />
+
             {cover && (
-              <Box
-                mb={10}
-                borderRadius="xl"
-                overflow="hidden"
-                border="1px solid"
-                borderColor="page.border"
-                bg="page.bg-elevated"
-                sx={{ aspectRatio: '16 / 10' }}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={cover.src}
-                  srcSet={cover.srcSet || undefined}
-                  sizes={cover.srcSet ? '(min-width: 1280px) 1200px, 100vw' : undefined}
-                  alt={cover.alt}
-                  width={1600}
-                  height={1000}
-                  decoding="async"
-                  {...{ fetchpriority: 'high' }}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                    viewTransitionName: `vt-work-cover-${slug}`,
-                  } as React.CSSProperties}
-                />
+              <Box mb={10}>
+                <CoverFrame cover={cover} title={frontmatter.title} sizes="(min-width: 1280px) 1200px, 100vw" eager vtName={`vt-work-cover-${slug}`} radius="xl" />
               </Box>
             )}
 
@@ -190,6 +217,8 @@ export default function WorkCase({
             </Box>
 
             <ArticleBody tree={tree} toc={toc} />
+
+            <ArticleEnd author={author} share={share} lang={lang} />
 
             <ArticleNav
               before={prev ? { label: 'Previous', item: prev } : null}
@@ -215,22 +244,27 @@ export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
   const w = await getWork(slug, { includeDrafts: draftMode })
   if (!w) return { notFound: true, revalidate: 60 }
 
+  const [{ resolveCover }, { loadAuthorCard }, { qrSvg }] = await Promise.all([
+    import('../../lib/coverImage'),
+    import('../../lib/authorCard'),
+    import('../../lib/qr'),
+  ])
+
   const work = listWorkInDisplayOrder().map((x) => toArticleLink('work', x))
   const posts = listPosts().map((p) => toArticleLink('blog', p))
+  const self = toArticleLink('work', w)
   const { before, after } = neighbours(work, slug)
-  const related = relatedByTags(toArticleLink('work', w), [...work, ...posts])
+  const related = relatedArticles(self, [...work, ...posts])
+  const writeups = projectLinks(self, posts)
 
-  const src = coverSrc(w.frontmatter.cover)
-  let cover: Cover | null = null
-  if (src) {
-    const variants = src.startsWith('/uploads/') ? await (async () => variantSrcSet(src))().catch(() => null) : null
-    cover = {
-      src,
-      alt: typeof w.frontmatter.coverAlt === 'string' ? w.frontmatter.coverAlt.trim() : '',
-      srcSet: typeof variants === 'string' && variants.trim() ? variants.trim() : null,
-    }
+  let shareQr: string | null = null
+  try {
+    shareQr = await qrSvg(absUrl(`/work/${w.slug}`))
+  } catch {
+    /* the share row keeps its other actions */
   }
 
+  const cover = resolveCover(w.frontmatter.cover, w.frontmatter.coverAlt, w.frontmatter.coverFocus)
   const card: OgImageOptions = {
     kind: 'work',
     title: w.frontmatter.title,
@@ -256,6 +290,9 @@ export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
       prev: before,
       next: after,
       related,
+      writeups,
+      author: loadAuthorCard(),
+      shareQr,
       draftMode,
     },
     revalidate: 60,

@@ -17,7 +17,7 @@ import {
   useToast,
 } from '@chakra-ui/react'
 import { readJsonObject } from './http'
-import { canPublish, runPublishChecks, type CheckField, type PublishCheck } from './publishChecks'
+import { canPublish, runPublishChecks, type CheckField, type PublishCheck, type PublishCheckInput } from './publishChecks'
 import { Eyebrow, MONO, outlineButtonProps, primaryButtonProps } from './ui'
 import { importRemoteImage } from '../editor/upload'
 
@@ -36,7 +36,7 @@ type Props = {
   isOpen: boolean
   onClose: () => void
   collection: 'blog' | 'work'
-  input: { title: string; description: string; body: string; slug: string; cover: string }
+  input: { title: string; description: string; body: string; slug: string; cover: string } & Pick<PublishCheckInput, 'coverWidth' | 'summary' | 'outcomes'>
   /** Save with draft = false; resolves true when it went live. */
   onPublish: () => Promise<boolean>
   publishing: boolean
@@ -60,6 +60,8 @@ const FIELD_LABEL: Record<CheckField, string> = {
   slug: 'Slug',
   cover: 'Cover image',
   body: 'Body',
+  summary: 'Outcome summary',
+  outcomes: 'Metrics',
 }
 
 async function fetchSlugs(endpoint: string): Promise<string[]> {

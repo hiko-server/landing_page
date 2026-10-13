@@ -23,6 +23,15 @@ import { Box, Text } from '@chakra-ui/react'
  *     <button>. <figure>/<figcaption> never sit in a <p>: lone images are
  *     turned into figures in place of their paragraph (lib/rehype/images.ts)
  *     and inline `<Figure>` JSX is lifted out (lib/rehype/liftBlocks.ts).
+ *   - Tall images (portrait screenshots) are capped at ~70% of the viewport
+ *     height, their width following from the aspect ratio.
+ *   - `data-width="wide" | "full"` (lib/rehype/galleries.ts) lets a figure
+ *     break out of the text column: wide up to 64rem, full the whole
+ *     article column — and edge to edge on phones. `100cqw` is the column:
+ *     MDXContent makes its wrapper an inline-size container.
+ *   - Galleries (`figure.article-gallery > div.gallery-row > figure`): each
+ *     figure of a row grows by its aspect ratio (`data-ratio`), so a row's
+ *     images share one height and the layout exists before any file loads.
  */
 
 /** Opens the article lightbox on the image with this src. */
@@ -30,6 +39,14 @@ export const ArticleImagesContext = createContext<{ open: (src: string) => void 
 
 /** True inside a link: an image there is navigation, never a zoom button. */
 export const InsideLinkContext = createContext(false)
+
+/** Inside a gallery row of two or more images: the image fills its cell (the row sets the size). */
+export const GalleryCellContext = createContext(false)
+
+/** The tallest a lone image is drawn: 70% of the viewport, at most 40rem. */
+const TALL_MAX_HEIGHT = 'min(70vh, 40rem)'
+/** Height / width above which an image counts as tall. */
+const TALL_RATIO = 1.25
 
 function useMounted(): boolean {
   const [mounted, setMounted] = useState(false)
@@ -53,6 +70,7 @@ const frameSx = {
 export function MdxImage({ alt, width, height, src, srcSet, sizes, title, className }: React.ImgHTMLAttributes<HTMLImageElement>) {
   const zoom = useContext(ArticleImagesContext)
   const inLink = useContext(InsideLinkContext)
+  const inCell = useContext(GalleryCellContext)
   const mounted = useMounted()
   const w = toNumber(width)
   const h = toNumber(height)
@@ -79,10 +97,19 @@ export function MdxImage({ alt, width, height, src, srcSet, sizes, title, classN
   )
 
   // Known size: the frame is as wide as the image (never upscaled) and its
-  // height follows from the width/height attributes. Unknown: a 16:10 box.
-  // Spans only (display: block): the image may share a <p> with text, and a
-  // <div> there would make the HTML parser close the paragraph — the server
-  // markup would no longer hydrate.
+  // height follows from the width/height attributes; a tall image is also
+  // capped in height (its width follows). In a gallery cell the row sets the
+  // size. Unknown: a 16:10 box. Spans only (display: block): the image may
+  // share a <p> with text, and a <div> there would make the HTML parser
+  // close the paragraph — the server markup would no longer hydrate.
+  const tall = known && (h as number) / (w as number) > TALL_RATIO
+  const sizing = inCell
+    ? known
+      ? {}
+      : { aspectRatio: '16 / 10' }
+    : known
+      ? { maxWidth: tall ? `min(${w}px, calc(${TALL_MAX_HEIGHT} * ${w} / ${h}))` : `${w}px`, mx: 'auto' }
+      : { aspectRatio: '16 / 10' }
   const framed = (
     <Box
       as="span"
@@ -90,7 +117,7 @@ export function MdxImage({ alt, width, height, src, srcSet, sizes, title, classN
         ...frameSx,
         overflow: 'hidden',
         width: '100%',
-        ...(known ? { maxWidth: `${w}px`, mx: 'auto' } : { aspectRatio: '16 / 10' }),
+        ...sizing,
       }}
     >
       {img}
@@ -129,19 +156,92 @@ export function MdxImage({ alt, width, height, src, srcSet, sizes, title, classN
   )
 }
 
-/** <figure>: article figures get spacing and a centred caption; code-block figures pass through. */
-export default function ArticleFigure({ className, children, ...rest }: React.HTMLAttributes<HTMLElement>) {
-  if (!String(className || '').split(/\s+/).includes('article-figure')) {
+type FigureProps = React.HTMLAttributes<HTMLElement> & { 'data-width'?: string; 'data-ratio'?: string | number }
+
+/** Breakout of a wide / full figure or gallery (see the header comment). */
+function widthSx(width: unknown) {
+  if (width === 'wide') return { width: { base: '100%', md: 'min(100cqw, 64rem)' }, maxWidth: 'none' }
+  if (width === 'full') {
+    return {
+      maxWidth: 'none',
+      width: { base: 'calc(100cqw + 2 * var(--page-gutter, 0px))', md: '100cqw' },
+      marginInlineStart: { base: 'calc(-1 * var(--page-gutter, 0px))', md: 0 },
+      // Edge to edge on phones: no rounded corners or side borders at the screen edge.
+      '@media (max-width: 47.99em)': {
+        '& .zoomable, & .zoomable > span, & > span > span, & .gallery-row span': { borderRadius: 0, borderInlineWidth: 0 },
+        '& figcaption': { px: 'var(--page-gutter, 0px)' },
+      },
+    }
+  }
+  return {}
+}
+
+/** A gallery cell's flex share: its aspect ratio (all cells of a row then share one height). */
+function cellRatio(value: unknown): number {
+  const n = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(n) && n > 0 && n < 20 ? n : 1.6
+}
+
+/**
+ * <figure>: article figures get spacing, a centred caption and their width;
+ * galleries lay out their rows; code-block figures pass through.
+ */
+export default function ArticleFigure({ className, children, ...rest }: FigureProps) {
+  const classes = String(className || '').split(/\s+/)
+  const { 'data-width': width, 'data-ratio': ratio, ...attrs } = rest
+  if (classes.includes('article-gallery')) {
+    return (
+      <Box as="figure" className={className} data-width={width} my={8} mx={0} sx={widthSx(width)} {...attrs}>
+        {children}
+      </Box>
+    )
+  }
+  if (!classes.includes('article-figure')) {
     return (
       <figure className={className} {...rest}>
         {children}
       </figure>
     )
   }
+  if (ratio !== undefined) {
+    // A cell of a gallery row (the row is a flex container: components/MDX/Gallery).
+    return (
+      <Box
+        as="figure"
+        className={className}
+        m={0}
+        minW={0}
+        style={{ flex: `${cellRatio(ratio)} 1 0%` }}
+        sx={{ '& .zoomable, & > span': { my: 0 }, '& figcaption': { mt: 2 } }}
+        {...attrs}
+      >
+        {children}
+      </Box>
+    )
+  }
   return (
-    <Box as="figure" className={className} my={8} sx={{ '& .zoomable, & > span': { my: 0 } }} {...rest}>
+    <Box as="figure" className={className} data-width={width} my={8} mx={0} sx={{ '& .zoomable, & > span': { my: 0 }, ...widthSx(width) }} {...attrs}>
       {children}
     </Box>
+  )
+}
+
+/** A row of a gallery: cells side by side, one shared height; a row of one is a plain figure slot. */
+export function GalleryRow({ children, ...rest }: React.HTMLAttributes<HTMLDivElement> & { 'data-count'?: string | number }) {
+  const count = Number(rest['data-count']) || 0
+  return (
+    <GalleryCellContext.Provider value={count > 1}>
+      <Box
+        className="gallery-row"
+        data-count={count || undefined}
+        display="flex"
+        alignItems="flex-start"
+        gap={{ base: 2, md: 3 }}
+        sx={{ '& + &': { mt: { base: 2, md: 3 } } }}
+      >
+        {children}
+      </Box>
+    </GalleryCellContext.Provider>
   )
 }
 

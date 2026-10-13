@@ -211,6 +211,31 @@ the full document.
 
 ---
 
+## Writing posts and case studies
+
+Bodies are Markdown (GFM) with a small, eval-free set of MDX components
+(`lib/mdx.ts`). Beyond the usual Markdown:
+
+| Write | Get |
+|---|---|
+| A YouTube or Vimeo link alone in its paragraph (`https://youtu.be/…`, `[Demo](https://vimeo.com/…)`) | A click-to-load player. Its poster is copied once into `/uploads` when you save; nothing loads from YouTube / Vimeo until the reader presses play |
+| `> [!NOTE]` (or `TIP`, `IMPORTANT`, `WARNING`, `CAUTION`) as the first line of a quote | A callout, labelled in the article's language |
+| `![alt](/uploads/x.webp#wide)` / `#full`, or `<Figure … size="wide" />` | A figure wider than the text column (full: edge to edge on phones). The image bubble in the visual editor sets it |
+| Two or more images in a row (blank lines between them, or one per line) | A gallery laid out by the images' shapes; identical captions are shown once |
+| `[^1]` footnotes, `<details><summary>…</summary>…</details>` | Styled endnotes and a "deep dive" disclosure |
+
+Case studies have an **At a glance** block in the editor (one-line outcome,
+up to four metrics with their source, team, publication date, extra links)
+and a cover focal point; the page shows only what is filled in. A new case
+study offers a documented template (*The problem → What I learned*); its
+guidance notes are MDX comments that never reach the page, and the publish
+checklist points at any left behind. A post can name its case study
+(*Case study* field) — both pages then link to each other. Tags and stacks
+link to `/blog?tag=…` and `/work?tag=…`; `/work` ends with every public CV
+project (*All projects*), linked to its case study when there is one.
+
+---
+
 ## Tech stack
 
 | Layer | Choice | Why |
