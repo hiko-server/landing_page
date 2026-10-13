@@ -247,8 +247,10 @@ case "$MODE" in
     cd "$DIR"
     echo "$TARGET" > .deployed-sha
     docker image prune -f --filter until=168h >/dev/null
-    # Keep the three most recent rollback images.
-    docker image ls "$IMAGE" --format '{{.Tag}}' | grep '^pre-' | sort -r | tail -n +4 | while read -r tag; do
+    # Keep the three most recent rollback images this script created
+    # (pre-<UTC timestamp>, which sort chronologically). Hand-made tags such
+    # as pre-v2-… are never touched.
+    docker image ls "$IMAGE" --format '{{.Tag}}' | grep -E '^pre-[0-9]{8}T[0-9]{6}Z$' | sort -r | tail -n +4 | while read -r tag; do
       docker rmi "$IMAGE:$tag" >/dev/null && say "removed old rollback image $IMAGE:$tag"
     done
     rm -f "$BUNDLE" "/tmp/landing_page-deploy-$TS.sh"

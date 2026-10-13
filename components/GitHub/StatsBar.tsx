@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, useLayoutEffect } from 'react'
 import { Box, Grid, Skeleton, Text } from '@chakra-ui/react'
 import { useInView, useReducedMotion } from 'framer-motion'
 
@@ -44,20 +44,35 @@ const NO_SCRIPT_CSS = '.stat-roll .digit>span{--d:var(--f)!important}'
 
 type DigitStyle = React.CSSProperties & { '--d': number; '--f': number; '--i': number }
 
+// useLayoutEffect on the client (runs before paint), a no-op on the server.
+const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect
+
 /**
  * A number that rolls into place: each digit is a `.digit` column whose
  * inner strip translates to the digit (globals.css: 900 ms, 60 ms stagger
- * per column). React renders once; the roll starts when the tile is 60 % in
- * view. Reduced motion shows the final digits at once.
+ * per column).
+ *
+ * The server renders the FINAL digits, so crawlers, link previews, slow
+ * hydrations and visitors who already see the tile never read "00". Only a
+ * tile that is still below the fold when the page hydrates is reset to 0
+ * (before paint, while off-screen) and rolls up as it scrolls into view.
+ * Reduced motion never animates.
  */
 function DigitRoll({ value }: { value: number }) {
   const ref = useRef<HTMLSpanElement>(null)
-  const inView = useInView(ref, { once: true, amount: 0.6 })
+  const inView = useInView(ref, { once: true, amount: 0.3 })
   const reduce = useReducedMotion()
-  const [rolled, setRolled] = useState(false)
+  const [rolled, setRolled] = useState(true)
+  const armed = useRef(false)
+  useIsoLayoutEffect(() => {
+    const el = ref.current
+    if (!el || reduce || armed.current) return
+    armed.current = true
+    if (el.getBoundingClientRect().top > window.innerHeight) setRolled(false)
+  }, [reduce])
   useEffect(() => {
-    if (reduce || inView) setRolled(true)
-  }, [reduce, inView])
+    if (inView || reduce) setRolled(true)
+  }, [inView, reduce])
 
   const text = Math.max(0, Math.floor(value)).toLocaleString('en-US')
   let digitIndex = 0
