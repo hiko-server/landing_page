@@ -6,6 +6,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import path from 'node:path'
 import { EXPORT_PATHS, cvPdfPath } from '../lib/cvExport/paths'
 import { EXPORT_PATHS as FILE_EXPORT_PATHS } from '../lib/cvExport/files'
@@ -127,4 +128,34 @@ test('(e) reading-work components draw their icons from the Lucide set, no inlin
   assert.match(work, /boxShadow: 'elevation\.md'/)
   assert.doesNotMatch(work, /fontSize=(\{[^}]*)?["']\d+px/)
   assert.doesNotMatch(work, /var\(--font-geist-mono\)/)
+})
+
+// ── (h) security-a + reading-work + every stream: the CSP and the social cards ─
+
+test('(h) the CSP allows what the merged code needs and nothing more', () => {
+  const { buildCsp, CSP_DIRECTIVES } = createRequire(import.meta.url)('../lib/csp.js') as {
+    buildCsp: (env?: string) => string
+    CSP_DIRECTIVES: Record<string, string[]>
+  }
+  const csp = buildCsp('production')
+  // security-a: violations are reported to the site's own error monitor.
+  assert.match(csp, /; report-uri \/api\/e$/)
+  // The browser connects to its own origin only (GitHub through /api/github/*, beacons to /api/e and /api/a).
+  assert.deepEqual(CSP_DIRECTIVES['connect-src'], ["'self'"])
+  // reading-work: posters are same-origin uploads; players load only after a click, from these hosts.
+  assert.ok(CSP_DIRECTIVES['img-src'].includes("'self'"))
+  assert.deepEqual(CSP_DIRECTIVES['frame-src'], ['https://www.youtube-nocookie.com', 'https://www.youtube.com', 'https://player.vimeo.com'])
+  assert.match(read('lib/videoPoster.ts'), /\/uploads\//)
+  // No third-party script, analytics or monitoring host.
+  assert.deepEqual(CSP_DIRECTIVES['script-src'], ["'self'", "'unsafe-inline'"])
+  assert.ok(!/sentry|cloudflareinsights|googletagmanager|hcaptcha/i.test(csp))
+})
+
+test('(h) social cards: fixed pages use presets, articles sign their free-text cards in the loader', () => {
+  const pages = [...sources('pages'), ...sources('components')].filter((f) => !f.startsWith('pages/api/') && !f.includes('/Admin/'))
+  for (const f of pages) assert.doesNotMatch(read(f), /\bogImageUrl\(/, `${f}: unsigned free-text card`)
+  for (const f of ['pages/blog/[slug].tsx', 'pages/work/[slug].tsx']) {
+    assert.match(read(f), /ogImages: \{ card: signedOgImageUrl\(card\), square: signedOgImageUrl\(\{ \.\.\.card, size: 'square' \}\) \}/, f)
+  }
+  assert.match(read('components/CVViewerPage/CvPageView.tsx'), /image=\{ogPresetUrl\('cv'/)
 })
