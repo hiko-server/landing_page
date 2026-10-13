@@ -8,6 +8,13 @@ const nextConfig = {
   // Don't publish full client source (incl. the admin UI) as .map files.
   productionBrowserSourceMaps: false,
   poweredByHeader: false,
+  // Security: Next 14's Image Optimization API (/_next/image) runs sharp/libheif
+  // on request — GHSA-2xp9-vwfh-vxw4 (RCE via AVIF) and GHSA-h64f-5h5j-jqjh
+  // (memory DoS) are fixed only in Next >= 15.5.24. With `unoptimized` set,
+  // next/image emits the original URL and Next 14 answers /_next/image with
+  // 404 (next-server.js handleNextImageRequest), so the vulnerable code path
+  // is unreachable. Images are already sized/compressed at upload time.
+  images: { unoptimized: true },
   experimental: {
     // Required on Next 14 so instrumentation.ts runs on server/edge startup and
     // loads the Sentry init for each runtime. (Stable/removed in Next 15.)

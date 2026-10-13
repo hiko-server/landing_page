@@ -89,3 +89,10 @@ test('sendVersionedJson keeps the given ETag and writes JSON', async () => {
   assert.equal(headers['content-type'], 'application/json; charset=utf-8')
   assert.deepEqual(JSON.parse(ended!), { error: 'conflict', etag: '"5"' })
 })
+
+test('the Next 14 image optimizer stays disabled (GHSA-2xp9-vwfh-vxw4)', async () => {
+  const { createRequire } = await import('node:module')
+  const req = createRequire(import.meta.url)
+  const cfg = req('../next.config.js')
+  assert.equal(cfg.images?.unoptimized, true)
+})
