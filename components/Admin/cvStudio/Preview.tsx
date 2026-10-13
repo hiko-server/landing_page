@@ -5,6 +5,7 @@ import { FaPrint } from 'react-icons/fa'
 import CVResult from '../../CVViewerPage/CVResult'
 import ScaledSheet from '../../CVViewerPage/ScaledSheet'
 import { publicSections, type CvLang } from '../../../lib/cvVisibility'
+import type { OwnerNames } from '../../../lib/publications/names'
 import { monoFont, useStudioTokens } from './fields'
 import WebsitePreview from './WebsitePreview'
 import type { Section } from './docOps'
@@ -24,7 +25,7 @@ const MODE_KEY = 'cv-studio:preview-mode'
  *   Website → the CV stack on /about (publicSections 'website')
  * Rendering is deferred so typing never waits on the preview.
  */
-export default function Preview({ sections, lang }: { sections: Section[]; lang: CvLang }) {
+export default function Preview({ sections, lang, ownerNames }: { sections: Section[]; lang: CvLang; ownerNames?: OwnerNames }) {
   const deferred = useDeferredValue(sections)
   const [mode, setMode] = useState<Mode>('cv')
   const cvData = useMemo(() => (mode === 'cv' ? publicSections(deferred, 'cv') : []), [deferred, mode])
@@ -129,7 +130,7 @@ export default function Preview({ sections, lang }: { sections: Section[]; lang:
       {mode === 'cv' ? (
         <Box flex={1} minH={0} overflow="auto" p={{ base: 3, md: 5 }} bg={canvas}>
           <ScaledSheet zoom={zoom} pageGuides onScale={setScale}>
-            <CVResult cvData={cvData as any} lang={lang} />
+            <CVResult cvData={cvData as any} lang={lang} ownerNames={ownerNames} />
           </ScaledSheet>
         </Box>
       ) : (

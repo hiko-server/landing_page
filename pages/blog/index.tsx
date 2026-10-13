@@ -180,6 +180,8 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
   return {
     props: {
       posts: listPosts(),
+      // Whether /publications exists, for the nav link (lib/publicationsData).
+      ...(await import('../../lib/publicationsData')).chromePublicationsProp(),
     },
     revalidate: 60,
   }

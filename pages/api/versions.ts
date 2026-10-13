@@ -37,7 +37,8 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { kvEtag, restoreErrorStatus, safeSnapshotName } from '../../lib/contentStore'
 import { isAdminRequest } from '../../lib/auth'
 import { sendVersionedJson } from '../../lib/http'
-import { revalidatePaths } from '../../lib/revalidate'
+import { PUBLICATIONS_STATIC_PATHS, revalidatePaths } from '../../lib/revalidate'
+import { trackPublicationsNav } from '../../lib/publicationsNav'
 import { withApi } from '../../lib/apiHandler'
 import { log } from '../../lib/log'
 import {
@@ -70,7 +71,7 @@ const TYPES: readonly VersionType[] = ['cv', 'home', 'blog', 'work', 'page']
  * that read them with getServerSideProps (/, /about, /contact, /cv, /cv/zh)
  * are rendered per request and need no revalidation.
  */
-const STATIC_PATHS: Record<JsonDocType, string[]> = { cv: ['/now'], home: ['/now'] }
+const STATIC_PATHS: Record<JsonDocType, string[]> = { cv: ['/now', ...PUBLICATIONS_STATIC_PATHS], home: ['/now'] }
 
 function parseType(value: unknown): VersionType | null {
   if (value === undefined || value === '') return null
@@ -219,10 +220,12 @@ export default withApi('versions', async (req, res) => {
       } catch (err) {
         log.warn('versions: snapshot before restore failed', { type, err })
       }
+      const nav = type === 'cv' ? trackPublicationsNav() : null
       const result = type === 'home' ? await restoreHomeSnapshot(filename) : await restoreSnapshot(filename)
       if (!result.ok) return res.status(restoreErrorStatus(result.error)).json({ error: result.error })
       const etag = kvEtag(result.updatedAt)
-      const paths = STATIC_PATHS[type]
+      // A restore that makes /publications appear or disappear also refreshes the nav link of the other ISR pages.
+      const paths = Array.from(new Set([...STATIC_PATHS[type], ...(nav ? nav.pathsIfChanged() : [])]))
       const failed = await revalidatePaths(res, paths)
       return sendVersionedJson(res, 200, {
         ok: true,

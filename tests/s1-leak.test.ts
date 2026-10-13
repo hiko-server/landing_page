@@ -1,7 +1,7 @@
 /**
  * End-to-end leak test for CV visibility.
  *
- * A fixture CV is generated from the section registry (all 9 sections, every
+ * A fixture CV is generated from the section registry (every section, every
  * field, nested list and bullet, in EN and ZH). For every text slot a unique
  * sentinel is planted and then hidden in turn by every mechanism that covers
  * it — field hide, bullet hide, entry hide, whole-list hide, and the section
@@ -134,10 +134,10 @@ function resolvePruned(full: any[], pruned: any[], path: CvPath): any {
 const slots: Slot[] = []
 buildDoc().en.forEach((section, i) => collectSlots(section, [i], [], [], slots))
 
-test('fixture covers all 9 sections, nested lists and bullets', () => {
-  assert.equal(CV_SECTIONS.length, 9)
+test('fixture covers every registry section (10, publications included), nested lists and bullets', () => {
+  assert.equal(CV_SECTIONS.length, 10)
   const sections = new Set(slots.map((s) => s.path[0]))
-  assert.equal(sections.size, 9)
+  assert.equal(sections.size, CV_SECTIONS.length)
   assert.ok(slots.some((s) => s.index !== undefined && s.entryPaths.length === 2), 'bullet inside a nested list (features[].furtherExplanation)')
   assert.ok(slots.some((s) => s.lists.length === 2), 'nested object list (certifications[].CertificationList)')
 })

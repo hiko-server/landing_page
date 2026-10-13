@@ -40,11 +40,13 @@ import {
   isFieldHidden,
   isSectionOnCv,
   isSectionOnWebsite,
+  publicSections,
   revealAll,
   type CvLang,
   type CvPath,
 } from '../../lib/cvVisibility'
 import { syncLanguage } from '../../lib/cvSync'
+import { ownerNamesFromSections } from '../../lib/publications/names'
 import { errorFocusPath, validateCvDoc, type CvValidationError } from '../../lib/cvValidate'
 import { useAdminDirty, useDirtyRegistration } from './AdminDirtyContext'
 import { SaveStatus } from './shell/ui'
@@ -65,6 +67,7 @@ import {
   setFieldHidden,
   setItemHidden,
   setSectionFlag,
+  setSharedValue,
   setValue,
   toggleEntryHidden,
   toggleFieldHidden,
@@ -102,8 +105,10 @@ import { monoFont, useStudioTokens } from './cvStudio/fields'
  * duplicate) also apply to the other language at the same position — but
  * only where EN and 中 line up (same list lengths on the whole path), and a
  * non-empty item in the other language is never deleted without asking.
- * Text edits are always per-language. Every linked change says where it
- * landed: "(EN + 中)" or "(EN only)".
+ * Text edits are always per-language, except registry fields marked
+ * `shared` (language-neutral values: a publication's status, DOI, date,
+ * links), which reach the aligned twin silently. Every linked change says
+ * where it landed: "(EN + 中)" or "(EN only)".
  * ──────────────────────────────────────────────────────────────────────── */
 
 const LINK_KEY = 'cv-studio:link'
@@ -379,8 +384,9 @@ export default function CVEditorStudio() {
       lang,
       linked,
       focus,
-      setValue: (path: CvPath, value: any) => {
-        apply((d) => setValue(d, lang, path, value), `${lang}:${path.join('.')}`)
+      setValue: (path: CvPath, value: any, opts?: { shared?: boolean }) => {
+        if (opts?.shared && linked) apply((d) => setSharedValue(d, lang, path, value, true).doc, `${lang}:${path.join('.')}`)
+        else apply((d) => setValue(d, lang, path, value), `${lang}:${path.join('.')}`)
       },
       toggleField: (nodePath: CvPath, field: string, label: string) => {
         const r = run((d) => toggleFieldHidden(d, lang, nodePath, field, linked))
@@ -546,6 +552,10 @@ export default function CVEditorStudio() {
     }
     return out
   }, [doc, lang, other])
+
+  // The owner's names from both languages' public Personal Info: author lists
+  // in the A4 preview emphasise them exactly like /cv and /cv/zh do.
+  const ownerNames = useMemo(() => ownerNamesFromSections(publicSections(doc.en, 'cv'), publicSections(doc.zh, 'cv')), [doc.en, doc.zh])
 
   // ── Save ───────────────────────────────────────────────────────────────
   /** Save; resolves true only when the server stored the document. */
@@ -832,7 +842,7 @@ export default function CVEditorStudio() {
     </Flex>
   )
 
-  const preview = <Preview sections={sections} lang={lang} />
+  const preview = <Preview sections={sections} lang={lang} ownerNames={ownerNames} />
 
   return (
     <StudioContext.Provider value={api}>

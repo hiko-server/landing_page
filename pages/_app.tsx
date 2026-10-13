@@ -157,7 +157,13 @@ const App = ({ Component, pageProps, router }: AppProps) => {
         <ChromeLangContext.Provider value={chromeLang}>
           <ClockProvider month={pageProps?.clockMonth}>
             <HtmlLangContext.Provider value={setReportedLang}>
-              {withChrome ? <SiteChrome socials={pageProps?.chromeSocials}>{page}</SiteChrome> : page}
+              {withChrome ? (
+                <SiteChrome socials={pageProps?.chromeSocials} publications={pageProps?.chromePublications}>
+                  {page}
+                </SiteChrome>
+              ) : (
+                page
+              )}
             </HtmlLangContext.Provider>
           </ClockProvider>
           <ScrollToTop />

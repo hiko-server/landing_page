@@ -84,6 +84,8 @@ export type CommandPaletteProps = {
   isOpen: boolean
   onClose: () => void
   isAdmin?: boolean
+  /** /publications has public papers: list it under Pages. */
+  publications?: boolean
   /** False when the palette closes because the visitor left the page (focus then moves to the new page). */
   returnFocusOnClose?: boolean
 }
@@ -250,7 +252,7 @@ async function fetchUnreadCount(signal: AbortSignal): Promise<number | null> {
   return full.ok ? unreadOf(await full.json().catch(() => null)) : null
 }
 
-export default function CommandPalette({ isOpen, onClose, isAdmin = false, returnFocusOnClose = true }: CommandPaletteProps) {
+export default function CommandPalette({ isOpen, onClose, isAdmin = false, publications = false, returnFocusOnClose = true }: CommandPaletteProps) {
   const router = useRouter()
   const toast = useChromeToast()
   // The palette's own text is English; results in another language carry their own lang.
@@ -419,6 +421,7 @@ export default function CommandPalette({ isOpen, onClose, isAdmin = false, retur
       page('Work', '/work', 'case studies projects portfolio'),
       page('Writing', '/blog', 'blog posts essays articles'),
       page('CV', '/cv', 'resume curriculum vitae'),
+      ...(publications ? [page('Publications', '/publications', 'papers research articles preprints citations bibtex apa doi 论文')] : []),
       page('Now', '/now', 'status current focus'),
       page('Uses', '/uses', 'tools gear setup'),
       page('Contact', '/contact', 'email message hire'),
@@ -544,7 +547,7 @@ export default function CommandPalette({ isOpen, onClose, isAdmin = false, retur
       else if (doc.kind === 'work') list.push(docItem(doc, 'Work'))
     }
     return list
-  }, [isAdmin, editTarget, unread, index, colorMode, toggleColorMode, shortcutsOn, isMac, toast, copyAndToast, backUpNow, logOut])
+  }, [isAdmin, publications, editTarget, unread, index, colorMode, toggleColorMode, shortcutsOn, isMac, toast, copyAndToast, backUpNow, logOut])
 
   const recentItems: Item[] = useMemo(() => {
     const out: Item[] = []

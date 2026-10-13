@@ -57,7 +57,7 @@ const SLUG_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._~-]{0,120}$/
  * (`/cv?lang=zh` / `?lang=cn` → `/cv/zh`), a trailing slash is ignored.
  *
  * Measured: /, /about, /cv, /cv/zh, /blog, /blog/<slug>, /work, /work/<slug>,
- * /now, /uses, /contact, /colophon.
+ * /now, /uses, /contact, /colophon, /publications.
  */
 export function normalizeTrackedPath(raw: unknown): string | null {
   if (typeof raw !== 'string' || !raw.startsWith('/') || raw.startsWith('//') || raw.length > 512) return null
@@ -77,7 +77,7 @@ export function normalizeTrackedPath(raw: unknown): string | null {
     const lang = new URLSearchParams(query).get('lang')
     return lang === 'zh' || lang === 'cn' ? '/cv/zh' : '/cv'
   }
-  if (['/', '/about', '/cv/zh', '/blog', '/work', '/now', '/uses', '/contact', '/colophon'].includes(pathname)) {
+  if (['/', '/about', '/cv/zh', '/blog', '/work', '/now', '/uses', '/contact', '/colophon', '/publications'].includes(pathname)) {
     return pathname
   }
   const m = /^\/(blog|work)\/([^/]+)$/.exec(pathname)

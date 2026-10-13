@@ -239,6 +239,8 @@ export const getServerSideProps: GetServerSideProps<Props> = async () => {
       // Omitted when the home document could not be read: the chrome then
       // loads the public view itself.
       ...(chromeSocials !== undefined ? { chromeSocials } : {}),
+      // Whether /publications exists, for the nav link (lib/publicationsData).
+      ...(await import('../lib/publicationsData')).chromePublicationsProp(),
     },
   }
 }

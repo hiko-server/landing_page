@@ -12,6 +12,7 @@ import {
   MenuButton,
   MenuItem,
   MenuList,
+  Select,
   Text,
   Textarea,
   Tooltip,
@@ -26,6 +27,8 @@ import { CSS } from '@dnd-kit/utilities'
 import { countHidden, hiddenIndices, isFieldHidden, type CvPath } from '../../../lib/cvVisibility'
 import { cvLabels } from '../../../lib/cvFormat'
 import { defaultSpan, isFieldHideable, type FieldDef, type ListDef, type SectionDef } from '../../../lib/cvSections'
+import { normalizeDoi } from '../../../lib/publications/doi'
+import { PUB_DATE_RE, publicationHref } from '../../../lib/publications/normalize'
 import {
   AutoTextarea,
   BulletList,
@@ -54,10 +57,12 @@ function FieldRenderer({ def, node, nodePath }: { def: FieldDef; node: any; node
   const value = node?.[def.key]
   const path = [...nodePath, def.key]
   const cvPath = cvPathAttr(api.lang, path)
-  const set = (v: any) => api.setValue(path, v)
+  const set = (v: any) => api.setValue(path, v, def.shared ? { shared: true } : undefined)
   const gridColumn = defaultSpan(def) === 2 ? '1 / -1' : undefined
   const str = typeof value === 'string' ? value : ''
-  const invalid = !!def.required && !str.trim() && def.kind !== 'bullets' && def.kind !== 'tags'
+  const missing = !!def.required && !str.trim() && def.kind !== 'bullets' && def.kind !== 'tags'
+  const malformed = !!str.trim() && !wellFormed(def, str.trim())
+  const invalid = missing || malformed
   const singular = def.label.replace(/s$/, '')
 
   let control: React.ReactNode
@@ -79,6 +84,30 @@ function FieldRenderer({ def, node, nodePath }: { def: FieldDef; node: any; node
       break
     case 'color':
       control = <ColorField value={str} onChange={set} />
+      break
+    case 'select':
+      control = (
+        <Select {...inputProps} bg={inputBg} value={str} placeholder="Choose…" onChange={(e) => set(e.target.value)}>
+          {(def.options || []).map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </Select>
+      )
+      break
+    case 'yearMonth':
+      control = (
+        <Input
+          {...inputProps}
+          bg={inputBg}
+          value={str}
+          maxLength={7}
+          autoComplete="off"
+          placeholder={def.placeholder || 'YYYY or YYYY-MM'}
+          onChange={(e) => set(e.target.value)}
+        />
+      )
       break
     case 'bullets': {
       const items: string[] = Array.isArray(value) ? value.map((x) => (typeof x === 'string' ? x : String(x ?? ''))) : []
@@ -136,7 +165,7 @@ function FieldRenderer({ def, node, nodePath }: { def: FieldDef; node: any; node
       hidden={hidden}
       hideable={isFieldHideable(def)}
       onToggleHidden={() => api.toggleField(nodePath, def.key, def.label)}
-      help={def.help}
+      help={malformed ? formatHint(def) : def.help}
       invalid={invalid}
       gridColumn={gridColumn}
       group={def.kind === 'bullets'}
@@ -145,6 +174,22 @@ function FieldRenderer({ def, node, nodePath }: { def: FieldDef; node: any; node
       {control}
     </FieldShell>
   )
+}
+
+/** False when a filled value has the wrong shape for its kind / format (shown live; the save refuses it too). */
+function wellFormed(def: FieldDef, value: string): boolean {
+  if (def.kind === 'yearMonth') return PUB_DATE_RE.test(value)
+  if (def.kind === 'select') return (def.options || []).some((o) => o.value === value)
+  if (def.format === 'doi') return !!normalizeDoi(value)
+  if (def.format === 'https-link') return !!publicationHref(value)
+  return true
+}
+
+function formatHint(def: FieldDef): string {
+  if (def.kind === 'yearMonth') return 'Use a year (2026) or a year and month (2026-03).'
+  if (def.format === 'doi') return 'Not a DOI yet: it should look like 10.1234/abcd (a doi.org link works too).'
+  if (def.format === 'https-link') return 'Use an https:// address or a path on this site such as /uploads/paper.pdf.'
+  return def.help || ''
 }
 
 function FieldGrid({ fields, node, nodePath }: { fields: FieldDef[]; node: any; nodePath: CvPath }) {

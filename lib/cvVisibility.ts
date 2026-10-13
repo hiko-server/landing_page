@@ -42,6 +42,16 @@ export const VISIBILITY_KEYS = ['isVisible', 'showOnWebsite', 'hiddenFields', 'h
 export const REDACTED_KEY = 'redacted' as const
 
 /**
+ * String lists whose ORDER carries meaning: a hidden item is replaced by
+ * HIDDEN_ITEM_MARK instead of being removed, so the visible items keep their
+ * real positions. Publication authors: hiding a co-author must never make
+ * the owner look like the first author ("Smith, J., …, Li, Y."). The mark is
+ * the only trace of the hidden value — never the value itself.
+ */
+export const POSITIONAL_ITEM_FIELDS: readonly string[] = ['authors']
+export const HIDDEN_ITEM_MARK = '…'
+
+/**
  * True when `field` was hidden by the owner and blanked during pruning.
  * Works on public (pruned) nodes; on full editor documents it falls back to
  * the hiddenFields metadata, so the Studio preview behaves the same way.
@@ -112,7 +122,11 @@ function pruneNode(node: any): any {
     }
     if (Array.isArray(value)) {
       const skip = new Set(hiddenIndices(node, key))
-      const kept = skip.size ? value.filter((_, i) => !skip.has(i)) : value
+      const kept = !skip.size
+        ? value
+        : POSITIONAL_ITEM_FIELDS.includes(key)
+          ? value.map((v, i) => (skip.has(i) ? HIDDEN_ITEM_MARK : v))
+          : value.filter((_, i) => !skip.has(i))
       out[key] = pruneNode(kept)
       continue
     }

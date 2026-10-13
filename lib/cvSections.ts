@@ -8,6 +8,16 @@
  * extraSkill.points) so the A4 sheet, /about and snapshots keep working.
  */
 
+import {
+  PAPERS_KEY,
+  PUBLICATIONS_SECTION,
+  PUBLICATION_STATUSES,
+  STATUS_LABELS,
+  VENUE_TYPES,
+  VENUE_TYPE_LABELS,
+  isPublicationStatus,
+} from './publications/types'
+
 export type FieldKind =
   | 'text'
   | 'textarea'
@@ -19,6 +29,8 @@ export type FieldKind =
   | 'color'
   | 'bullets' // string[] edited one line per bullet
   | 'tags' // string[] edited as chips
+  | 'select' // one of `options` (or empty)
+  | 'yearMonth' // YYYY or YYYY-MM, typed (a year alone is common for papers)
 
 export interface FieldDef {
   key: string
@@ -31,6 +43,18 @@ export interface FieldDef {
   hideable?: boolean
   required?: boolean
   help?: string
+  /** 'select': the allowed values (stored) and their labels (shown in the Studio). */
+  options?: ReadonlyArray<{ value: string; label: string }>
+  /**
+   * A language-neutral value (a status, a DOI, a date, a link): with linked
+   * languages an edit also sets the same field on the aligned entry of the
+   * other language (text fields stay per language).
+   */
+  shared?: boolean
+  /** Extra validation of a text value: 'doi' (10.xxxx/…), 'https-link' (https:// or a same-site path). */
+  format?: 'doi' | 'https-link'
+  /** The save is refused when this field is empty while the named sibling field has content. */
+  requiredWhen?: string
 }
 
 export interface ListDef {
@@ -311,6 +335,93 @@ export const CV_SECTIONS: SectionDef[] = [
         subtitleOf: (it) =>
           Array.isArray(it?.CertificationList) ? `${it.CertificationList.length} certificate(s)` : '',
         blank: () => ({ issuingOrganization: '', organizationURL: '', CertificationList: [] }),
+      },
+    ],
+  },
+  // ── Publications (论文) — lib/publications ────────────────────────────
+  {
+    sessionName: PUBLICATIONS_SECTION,
+    label: 'Publications',
+    description:
+      'Papers, preprints and theses, listed by status, then newest first. CV switch: the A4 CV and /cv. Website switch: the /publications page and its nav link. While the languages are linked, status, venue type, date, numbers, DOI and links are shared by EN and 中文.',
+    headerDefault: { en: 'Publications', zh: '论文' },
+    lists: [
+      {
+        key: PAPERS_KEY,
+        label: 'Papers',
+        itemNoun: 'paper',
+        fields: [
+          { key: 'title', label: 'Title', kind: 'text', required: true, span: 2 },
+          {
+            key: 'authors',
+            label: 'Authors',
+            kind: 'bullets',
+            span: 2,
+            placeholder: 'Yanpei Li',
+            help: 'One author per row, in the paper’s order; your own name is emphasised automatically. Write a family-name-first name with a comma (Li, Yanpei). Marks such as * or † are kept. A hidden author shows as “…” so the order stays true.',
+          },
+          {
+            key: 'venue',
+            label: 'Venue',
+            kind: 'text',
+            span: 2,
+            placeholder: 'Journal, conference, repository (arXiv) or school',
+            help: 'Not shown while the paper is under review: a manuscript under review is cited without the journal it was sent to.',
+          },
+          {
+            key: 'venueType',
+            label: 'Venue type',
+            kind: 'select',
+            shared: true,
+            options: VENUE_TYPES.map((v) => ({ value: v, label: VENUE_TYPE_LABELS[v].en })),
+          },
+          {
+            key: 'status',
+            label: 'Status',
+            kind: 'select',
+            shared: true,
+            required: true,
+            requiredWhen: 'title',
+            options: PUBLICATION_STATUSES.map((v) => ({ value: v, label: STATUS_LABELS[v].en })),
+            help: 'Anything not yet published is labelled with this status everywhere.',
+          },
+          { key: 'date', label: 'Date', kind: 'yearMonth', shared: true, placeholder: '2026 or 2026-03' },
+          { key: 'pages', label: 'Pages', kind: 'text', shared: true, placeholder: '45–67' },
+          { key: 'volume', label: 'Volume', kind: 'text', shared: true },
+          { key: 'issue', label: 'Issue', kind: 'text', shared: true },
+          { key: 'publisher', label: 'Publisher', kind: 'text', span: 2 },
+          { key: 'doi', label: 'DOI', kind: 'text', shared: true, format: 'doi', span: 2, placeholder: '10.1234/abcd.5678', help: 'A doi.org link works too.' },
+          { key: 'url', label: 'Paper page', kind: 'url', shared: true, format: 'https-link', placeholder: 'https://…' },
+          { key: 'pdfUrl', label: 'PDF', kind: 'url', shared: true, format: 'https-link', placeholder: 'https://… or /uploads/paper.pdf' },
+          { key: 'codeUrl', label: 'Code', kind: 'url', shared: true, format: 'https-link', placeholder: 'https://github.com/…' },
+          { key: 'slidesUrl', label: 'Slides', kind: 'url', shared: true, format: 'https-link', placeholder: 'https://…' },
+          { key: 'abstract', label: 'Abstract', kind: 'textarea', span: 2, help: 'Collapsible on the website; never printed.' },
+          { key: 'keywords', label: 'Keywords', kind: 'tags', span: 2, placeholder: 'Type a keyword, press Enter' },
+          { key: 'award', label: 'Award', kind: 'text', span: 2, placeholder: 'Best Paper Award' },
+        ],
+        titleOf: (it) => it?.title || '',
+        subtitleOf: (it) =>
+          join(it?.venue, isPublicationStatus(it?.status) ? STATUS_LABELS[it.status as keyof typeof STATUS_LABELS].en : '', typeof it?.date === 'string' ? it.date.slice(0, 4) : ''),
+        blank: () => ({
+          title: '',
+          authors: [],
+          venue: '',
+          venueType: '',
+          status: '',
+          date: '',
+          volume: '',
+          issue: '',
+          pages: '',
+          publisher: '',
+          doi: '',
+          url: '',
+          pdfUrl: '',
+          codeUrl: '',
+          slidesUrl: '',
+          abstract: '',
+          keywords: [],
+          award: '',
+        }),
       },
     ],
   },

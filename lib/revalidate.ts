@@ -83,7 +83,15 @@ export function pathsReferencingUploads(names: Iterable<string>, sources: readon
  * store. The server-rendered pages (/, /about, /cv, /cv/zh, /contact) are
  * fresh on every request and need no revalidation.
  */
-export const STATIC_CONTENT_PATHS = ['/blog', '/work', '/now', '/uses', '/colophon'] as const
+export const STATIC_CONTENT_PATHS = ['/blog', '/work', '/now', '/uses', '/colophon', '/publications'] as const
+
+/**
+ * ISR pages rendered from the CV's Publications section (lib/publicationsData),
+ * regenerated on every CV write (pages/api/cvdata CV_STATIC_PATHS, the
+ * versions restore) so a paper that was added, hidden or deleted is live at
+ * once — including /publications switching between its page and a 404.
+ */
+export const PUBLICATIONS_STATIC_PATHS = ['/publications'] as const
 
 // ── Edge notifications (Cloudflare purge, IndexNow) ──────────────────────
 
@@ -116,13 +124,15 @@ const COLLECTION_DERIVED_PATHS = ['/feed.xml', '/feed.json', '/work/feed.xml', '
 /**
  * Edge-cached responses derived from the given pages that must be purged with
  * them: a post or case-study change alters the feeds, the sitemap and the
- * search index; /now and /uses bodies are part of the search index.
+ * search index; /now and /uses bodies are part of the search index; the
+ * sitemap lists /publications only while it has public papers.
  */
 export function derivedPurgePaths(paths: readonly string[]): string[] {
   const out = new Set<string>()
   for (const p of paths) {
     if (/^\/(blog|work)(\/|$)/.test(p)) COLLECTION_DERIVED_PATHS.forEach((d) => out.add(d))
     else if (p === '/now' || p === '/uses') out.add('/api/search-index')
+    else if (p === '/publications') out.add('/sitemap.xml')
   }
   return Array.from(out)
 }

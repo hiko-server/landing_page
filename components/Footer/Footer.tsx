@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import NextLink from 'next/link'
 import { Box, Flex, Text, Link, Divider, chakra } from '@chakra-ui/react'
-import { PRIMARY_LINKS, SOCIAL_LINKS, type SocialLink } from '../Chrome/chrome'
+import { PRIMARY_LINKS, SOCIAL_LINKS, type NavLink, type SocialLink } from '../Chrome/chrome'
 import { useBrandHost } from '../Chrome/useBrandHost'
 import { referenceYear, useReferenceMonth } from '../../lib/clock'
 import { FEEDS } from '../../lib/feeds'
@@ -129,8 +129,11 @@ function Subscribe() {
   )
 }
 
-/** `socials`: the profile links to show (SiteChrome resolves them from home.socials). */
-const Footer = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] }) => {
+/**
+ * `socials`: the profile links to show (SiteChrome resolves them from
+ * home.socials); `navLinks`: the primary navigation (chrome navLinksFor).
+ */
+const Footer = ({ socials = SOCIAL_LINKS, navLinks = PRIMARY_LINKS }: { socials?: readonly SocialLink[]; navLinks?: readonly NavLink[] }) => {
   const brand = useBrandHost()
   const year = referenceYear(useReferenceMonth())
 
@@ -158,7 +161,7 @@ const Footer = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
             fontSize="13px"
             color="page.fg-secondary"
           >
-            {PRIMARY_LINKS.map((l) => (
+            {navLinks.map((l) => (
               <Link key={l.name} as={NextLink} href={l.url} {...TARGET} _hover={{ color: 'page.fg', textDecoration: 'none' }}>
                 <span className="link-underline">{l.name}</span>
               </Link>

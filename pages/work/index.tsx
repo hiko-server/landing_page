@@ -325,6 +325,8 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
         ...w,
         coverImage: coverImageOf(w.frontmatter.cover),
       })),
+      // Whether /publications exists, for the nav link (lib/publicationsData).
+      ...(await import('../../lib/publicationsData')).chromePublicationsProp(),
     },
     revalidate: 60,
   }

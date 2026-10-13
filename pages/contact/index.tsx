@@ -117,6 +117,8 @@ export const getServerSideProps: GetServerSideProps<Props> = async () => {
       availability,
       vcardQr,
       ...(chromeSocials !== undefined ? { chromeSocials } : {}),
+      // Whether /publications exists, for the nav link (lib/publicationsData).
+      ...(await import('../../lib/publicationsData')).chromePublicationsProp(),
     },
   }
 }

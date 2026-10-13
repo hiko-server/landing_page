@@ -15,7 +15,8 @@ import { sendMail } from '../../lib/mailer'
 import { rateLimit } from '../../lib/rateLimit'
 import { isAdminRequest, readAdminClaims } from '../../lib/auth'
 import { sendVersionedJson } from '../../lib/http'
-import { revalidatePaths } from '../../lib/revalidate'
+import { PUBLICATIONS_STATIC_PATHS, revalidatePaths } from '../../lib/revalidate'
+import { trackPublicationsNav } from '../../lib/publicationsNav'
 import { validateCvDoc, type CvValidationError } from '../../lib/cvValidate'
 import { withApi } from '../../lib/apiHandler'
 import type { Logger } from '../../lib/log'
@@ -65,13 +66,20 @@ function isSectionArray(v: unknown): v is any[] {
  * the ISR cache. Only ISR pages belong here: `/`, `/about`, `/cv`, `/cv/zh`
  * and `/contact` are server-rendered on every request (getServerSideProps)
  * and are always fresh. /now reads the public workExperience / education /
- * project sections.
+ * project sections; /publications renders the Publications section.
  */
-export const CV_STATIC_PATHS: readonly string[] = ['/now']
+export const CV_STATIC_PATHS: readonly string[] = ['/now', ...PUBLICATIONS_STATIC_PATHS]
 
-/** Regenerate CV-backed static pages; never fails the (already stored) write. */
-async function revalidateCvPages(res: NextApiResponse): Promise<{ revalidated: string[]; revalidateFailed?: string[] }> {
-  const paths = [...CV_STATIC_PATHS]
+/**
+ * Regenerate CV-backed static pages; never fails the (already stored) write.
+ * `nav` (trackPublicationsNav, taken before the write) adds the other ISR
+ * pages when /publications appeared or disappeared, so their nav link follows.
+ */
+async function revalidateCvPages(
+  res: NextApiResponse,
+  nav?: ReturnType<typeof trackPublicationsNav>,
+): Promise<{ revalidated: string[]; revalidateFailed?: string[] }> {
+  const paths = Array.from(new Set([...CV_STATIC_PATHS, ...(nav ? nav.pathsIfChanged() : [])]))
   const failed = await revalidatePaths(res, paths)
   return {
     revalidated: paths.filter((p) => !failed.includes(p)),
@@ -165,6 +173,7 @@ export default withApi('cvdata', async (req: NextApiRequest, res: NextApiRespons
       return sendVersionedJson(res, 200, { ok: true, unchanged: true, etag }, etag)
     }
 
+    const nav = trackPublicationsNav()
     snapshotQuietly(ctx.log, 'write')
     // The If-Match check is repeated atomically inside the write transaction.
     const writeResult = await writeCvData(next, {
@@ -181,7 +190,7 @@ export default withApi('cvdata', async (req: NextApiRequest, res: NextApiRespons
       subject: 'CV updated',
       text: `CV updated by ${actor} at ${new Date().toISOString()}\nSyncZh=${syncZh}`,
     }).catch((err) => ctx.log.warn('CV notification mail failed', { err }))
-    const revalidation = await revalidateCvPages(res)
+    const revalidation = await revalidateCvPages(res, nav)
     return sendVersionedJson(res, 200, {
       ok: true,
       etag,
@@ -203,10 +212,11 @@ export default withApi('cvdata', async (req: NextApiRequest, res: NextApiRespons
       if (!safeSnapshotName(filename)) return res.status(400).json({ error: 'Missing or invalid filename' })
       // Keep the current state recoverable: restoring is itself undoable.
       snapshotQuietly(ctx.log, 'restore')
+      const nav = trackPublicationsNav()
       const result = await restoreSnapshot(filename)
       if (!result.ok) return res.status(restoreErrorStatus(result.error)).json({ error: result.error })
       const etag = kvEtag(result.updatedAt)
-      const revalidation = await revalidateCvPages(res)
+      const revalidation = await revalidateCvPages(res, nav)
       return sendVersionedJson(res, 200, {
         ok: true,
         etag,
@@ -238,10 +248,11 @@ export default withApi('cvdata', async (req: NextApiRequest, res: NextApiRespons
       const newEn = enIn ?? current.en
       const newZh = zhIn ? syncLanguage(newEn, zhIn) : current.zh
       snapshotQuietly(ctx.log, 'import')
+      const nav = trackPublicationsNav()
       const importResult = await writeCvData({ en: newEn, zh: newZh })
       if (!importResult.ok) return res.status(500).json({ error: importResult.error })
       const etag = kvEtag(importResult.updatedAt)
-      const revalidation = await revalidateCvPages(res)
+      const revalidation = await revalidateCvPages(res, nav)
       return sendVersionedJson(res, 200, {
         ok: true,
         etag,

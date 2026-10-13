@@ -4,7 +4,7 @@ import Header from '../Header/Header'
 import Footer from '../Footer/Footer'
 import { ChromeContext } from './ChromeContext'
 import { useChromeLang } from './chromeLang'
-import { resolveSocialLinks } from './chrome'
+import { navLinksFor, resolveSocialLinks } from './chrome'
 
 /**
  * Page chrome: skip link + sticky <Header> + <main id="main"> + <Footer>.
@@ -25,6 +25,12 @@ import { resolveSocialLinks } from './chrome'
  * fetched). Only when the first page rendered did not ship it at all
  * (undefined) is the public /api/home view read once after mount. The last
  * known value is kept across navigations to pages that do not ship it.
+ *
+ * The Publications nav link (header, drawer, footer, ⌘K) follows
+ * `publications` (`pageProps.chromePublications`, lib/publicationsData): the
+ * page loaders ship it, so the link is in the server HTML (no request, no
+ * layout shift). A page that does not ship it keeps the last known value
+ * (none on a first load: no link).
  */
 
 /** undefined = this page did not ship the value; null = the home document has none. */
@@ -33,8 +39,18 @@ type SocialsInput = Record<string, unknown> | null | undefined
 /** CSS custom property on <html> with the sticky header's rendered height (the scroll margins of lib/anchorOffset.ts and globals.css). */
 export const HEADER_HEIGHT_VAR = '--header-h'
 
-export default function SiteChrome({ children, socials }: { children: React.ReactNode; socials?: SocialsInput }) {
+export default function SiteChrome({
+  children,
+  socials,
+  publications,
+}: {
+  children: React.ReactNode
+  socials?: SocialsInput
+  /** /publications has public papers (undefined: this page did not say). */
+  publications?: boolean
+}) {
   const [known, setKnown] = useState<SocialsInput>(socials)
+  const [knownPublications, setKnownPublications] = useState<boolean>(!!publications)
   const fetchOnMount = useRef(socials === undefined)
   const headerRef = useRef<HTMLDivElement | null>(null)
 
@@ -64,6 +80,12 @@ export default function SiteChrome({ children, socials }: { children: React.Reac
   useEffect(() => {
     if (socials !== undefined) setKnown(socials)
   }, [socials])
+
+  useEffect(() => {
+    if (publications !== undefined) setKnownPublications(publications)
+  }, [publications])
+  const hasPublications = publications !== undefined ? publications : knownPublications
+  const navLinks = useMemo(() => navLinksFor({ publications: hasPublications }), [hasPublications])
 
   useEffect(() => {
     if (!fetchOnMount.current) return
@@ -98,7 +120,7 @@ export default function SiteChrome({ children, socials }: { children: React.Reac
         {/* Its own view-transition snapshot: the header stays pinned while
             route transitions slide / fade the page beneath it (globals.css). */}
         <Box ref={headerRef} position="sticky" top={0} zIndex={40} className="no-print" lang={chromeLang} style={{ viewTransitionName: 'site-header' }}>
-          <Header socials={links} />
+          <Header socials={links} navLinks={navLinks} publications={hasPublications} />
         </Box>
         <Box
           as="main"
@@ -113,7 +135,7 @@ export default function SiteChrome({ children, socials }: { children: React.Reac
           {children}
         </Box>
         <Box position="relative" zIndex={1} className="no-print" lang={chromeLang}>
-          <Footer socials={links} />
+          <Footer socials={links} navLinks={navLinks} />
         </Box>
       </Box>
     </ChromeContext.Provider>

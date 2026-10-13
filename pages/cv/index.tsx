@@ -42,6 +42,15 @@ export const getServerSideProps: GetServerSideProps<CvPageProps> = async () => {
   } catch {
     /* the chrome loads the public home view itself */
   }
+  // Publications (lib/publicationsData): the owner's name forms for author
+  // lists, and whether /publications exists (the page and the chrome link to it).
+  let publications: Pick<CvPageProps, 'ownerNames' | 'chromePublications'> = {}
+  try {
+    const { chromePublicationsProp, readCvOwnerNames } = await import('../../lib/publicationsData')
+    publications = { ownerNames: readCvOwnerNames(), ...chromePublicationsProp() }
+  } catch {
+    /* author lists render without emphasis; no link to /publications */
+  }
   let qrSvg: string | null = null
   try {
     const { qrSvg: makeQr } = await import('../../lib/qr')
@@ -59,6 +68,7 @@ export const getServerSideProps: GetServerSideProps<CvPageProps> = async () => {
       personFacts,
       qrSvg,
       ...(chromeSocials !== undefined ? { chromeSocials } : {}),
+      ...publications,
     },
   }
 }

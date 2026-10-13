@@ -25,6 +25,7 @@ import {
   type PersonFacts,
 } from '../../lib/schema'
 import type { CvLang } from '../../lib/cvVisibility'
+import type { OwnerNames } from '../../lib/publications/names'
 import type { HomeData } from '../../lib/homeShape'
 import { useBottomBarOffset } from '../Common/useBottomBarOffset'
 
@@ -69,6 +70,10 @@ export type CvPageProps = {
   personFacts: PersonFacts
   /** Print-only QR code (inline SVG) linking to this page; null when it could not be generated. */
   qrSvg: string | null
+  /** The owner's name forms from both CV languages (bold in publication author lists). */
+  ownerNames?: OwnerNames
+  /** /publications has public papers: the page links to it (and the chrome lists it). */
+  chromePublications?: boolean
 }
 
 const mono = 'var(--font-geist-mono), monospace'
@@ -91,6 +96,7 @@ const COPY = {
     copyFailed: 'Could not copy — the link is',
     empty: 'The CV has not been published yet.',
     actions: 'CV actions',
+    publications: 'Publications',
     qrCaption: `Live CV · ${SITE_HOST}${PATHS.en}`,
     qrLabel: `QR code linking to ${SITE_HOST}${PATHS.en}`,
   },
@@ -109,6 +115,7 @@ const COPY = {
     copyFailed: '无法复制，链接为',
     empty: '中文简历暂未发布。',
     actions: '简历操作',
+    publications: '论文列表',
     qrCaption: `在线简历 · ${SITE_HOST}${PATHS.zh}`,
     qrLabel: `指向 ${SITE_HOST}${PATHS.zh} 的二维码`,
   },
@@ -134,6 +141,8 @@ export default function CvPageView({
   nameZh,
   personFacts,
   qrSvg,
+  ownerNames,
+  chromePublications = false,
 }: CvPageProps) {
   const router = useRouter()
   const toast = useToast()
@@ -203,6 +212,24 @@ export default function CvPageView({
     letterSpacing: '0.04em',
     _hover: { borderColor: 'var(--accent)', color: 'accent.text' },
   } as const
+
+  // /publications (English page) — only while it has public papers.
+  const publicationsLink = (display: React.ComponentProps<typeof Button>['display']) =>
+    chromePublications ? (
+      <Button
+        as={NextLink}
+        href="/publications"
+        hrefLang={language === 'zh' ? 'en' : undefined}
+        display={display}
+        {...outlineBtn}
+        _hover={{ ...outlineBtn._hover, textDecoration: 'none' }}
+      >
+        {T.publications}
+        <Box as="span" aria-hidden ml={1.5}>
+          →
+        </Box>
+      </Button>
+    ) : null
 
   const segmented = (active: boolean) =>
     ({
@@ -302,6 +329,7 @@ export default function CvPageView({
                       ))}
                     </ButtonGroup>
                   </HStack>
+                  {publicationsLink({ base: 'inline-flex', md: 'none' })}
 
                   {/* Desktop: language + actions */}
                   <HStack
@@ -348,6 +376,7 @@ export default function CvPageView({
                     </ButtonGroup>
                   </HStack>
                   <HStack spacing={2} display={{ base: 'none', md: 'flex' }}>
+                    {publicationsLink('inline-flex')}
                     <Button {...outlineBtn} leftIcon={<FaLink aria-hidden />} onClick={copyLink}>
                       {T.copy}
                     </Button>
@@ -371,7 +400,7 @@ export default function CvPageView({
                 display={{ base: view === 'reading' ? 'block' : 'none', md: 'none' }}
                 pb={6}
               >
-                <ReadingView sections={sections} lang={language} />
+                <ReadingView sections={sections} lang={language} ownerNames={ownerNames} />
               </Box>
               <Box
                 className="cv-print-flow"
@@ -382,6 +411,7 @@ export default function CvPageView({
                   <CVResult
                     cvData={sections}
                     lang={language}
+                    ownerNames={ownerNames}
                     qr={qrSvg ? { svg: qrSvg, caption: T.qrCaption, label: T.qrLabel } : null}
                   />
                 </ScaledSheet>

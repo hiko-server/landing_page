@@ -1,4 +1,5 @@
 import React from 'react'
+import dynamic from 'next/dynamic'
 import { Box, Flex } from '@chakra-ui/react'
 import type {
   PersonalInformation,
@@ -10,6 +11,7 @@ import type {
   CompetitionAwards,
   Certification,
   Patents,
+  Publications,
   CVData,
 } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'
@@ -22,7 +24,13 @@ import SkillSection from './Skill'
 import WorkExperience from './WorkExperience'
 import CompetitionAwardsSection from './CompetitionAwards'
 import PatentsSection from './Patents'
+import type { OwnerNames } from '../../lib/publications/names'
+import { isPublicationStatus } from '../../lib/publications/types'
+import { field, list } from './fields'
 import CvQr from './CvQr'
+
+// Publications render through their own chunk, fetched only when the CV has the section.
+const PublicationsSection = dynamic(() => import('./Publications'))
 
 /**
  * CVResult — the A4 sheet used by /cv, print / Save-as-PDF and the admin
@@ -56,9 +64,10 @@ export const SHEET_SECTIONS = [
   'extraSkill',
   'certification',
   'patents',
+  'publications',
 ] as const
 
-function renderSection(section: CVData[number], lang: CvLang): React.ReactNode {
+function renderSection(section: CVData[number], lang: CvLang, owner: OwnerNames | undefined, all: CVData): React.ReactNode {
   switch (section.sessionName) {
     case 'personalInformation':
       return <PersonalInformationSection data={section as PersonalInformation} lang={lang} />
@@ -78,6 +87,11 @@ function renderSection(section: CVData[number], lang: CvLang): React.ReactNode {
       return <CertificateSection data={section as Certification} lang={lang} />
     case 'patents':
       return <PatentsSection data={section as Patents} lang={lang} />
+    case 'publications':
+      // Only fetch the chunk when there is a paper to show (a title and a real status, as in lib/publications).
+      return list(section, 'papers').some((p) => field(p, 'title') && isPublicationStatus(field(p, 'status'))) ? (
+        <PublicationsSection data={section as Publications} lang={lang} owner={owner} sections={all} />
+      ) : null
     default:
       return null
   }
@@ -88,12 +102,15 @@ const CVResult = ({
   lang = 'en',
   style,
   qr,
+  ownerNames,
 }: {
   cvData: CVData | any[]
   lang?: CvLang
   style?: React.CSSProperties
   /** Print-only QR footer: inline SVG (lib/qr.ts), caption and accessible label. */
   qr?: { svg: string; caption: string; label: string } | null
+  /** The owner's name forms (both CV languages) for emphasis in author lists; default: this sheet's Personal Info. */
+  ownerNames?: OwnerNames
 }) => {
   const sections = (Array.isArray(cvData) ? cvData : []).filter(
     (s: any) => s && typeof s === 'object' && s.isVisible !== false,
@@ -128,7 +145,7 @@ const CVResult = ({
           }}
         >
           {sections.map((section, index) => (
-            <React.Fragment key={`${section.sessionName}-${index}`}>{renderSection(section, lang)}</React.Fragment>
+            <React.Fragment key={`${section.sessionName}-${index}`}>{renderSection(section, lang, ownerNames, sections)}</React.Fragment>
           ))}
           {qr && sections.length ? <CvQr svg={qr.svg} caption={qr.caption} label={qr.label} /> : null}
         </Box>

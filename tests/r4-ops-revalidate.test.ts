@@ -181,7 +181,8 @@ test('derived purge paths and helpers', () => {
   assert.deepEqual(chunk([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]])
   assert.deepEqual(chunk([], 30), [])
   // ISR pages only: the SSR pages are fresh on every request.
-  assert.deepEqual([...STATIC_CONTENT_PATHS], ['/blog', '/work', '/now', '/uses', '/colophon'])
+  assert.deepEqual([...STATIC_CONTENT_PATHS], ['/blog', '/work', '/now', '/uses', '/colophon', '/publications'])
+  assert.deepEqual(derivedPurgePaths(['/publications']), ['/sitemap.xml'])
 })
 
 function fakeRes() {

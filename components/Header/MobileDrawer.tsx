@@ -16,7 +16,7 @@ import {
 } from '@chakra-ui/react'
 import NextLink from 'next/link'
 import { useRouter } from 'next/router'
-import { MOBILE_MENU_ID, PRIMARY_LINKS, type SocialLink, type SocialName, isActiveRoute } from '../Chrome/chrome'
+import { MOBILE_MENU_ID, PRIMARY_LINKS, type NavLink, type SocialLink, type SocialName, isActiveRoute } from '../Chrome/chrome'
 import { useChromeLang } from '../Chrome/chromeLang'
 import { GitHubIcon, GitLabIcon, LinkedInIcon, WhatsAppIcon } from '../Icons/brand'
 import { toggleThemeWithTransition } from '../../lib/themeTransition'
@@ -51,13 +51,23 @@ export type MobileDrawerProps = {
   isOpen: boolean
   onClose: () => void
   socials: readonly SocialLink[]
+  /** The primary navigation (chrome navLinksFor); defaults to PRIMARY_LINKS. */
+  navLinks?: readonly NavLink[]
   isAdmin: boolean
   onLogout: () => void
   /** False when the menu closes because the visitor left the page (focus then moves to the new page). */
   returnFocusOnClose?: boolean
 }
 
-export default function MobileDrawer({ isOpen, onClose, socials, isAdmin, onLogout, returnFocusOnClose = true }: MobileDrawerProps) {
+export default function MobileDrawer({
+  isOpen,
+  onClose,
+  socials,
+  navLinks = PRIMARY_LINKS,
+  isAdmin,
+  onLogout,
+  returnFocusOnClose = true,
+}: MobileDrawerProps) {
   const router = useRouter()
   const { colorMode, toggleColorMode } = useColorMode()
   const firstLinkRef = useRef<HTMLAnchorElement>(null)
@@ -88,7 +98,7 @@ export default function MobileDrawer({ isOpen, onClose, socials, isAdmin, onLogo
             <Box as="nav" aria-labelledby="drawer-nav-label">
               <DrawerLabel id="drawer-nav-label">Navigate</DrawerLabel>
               <Flex direction="column" gap={1}>
-                {PRIMARY_LINKS.map((link, i) => {
+                {navLinks.map((link, i) => {
                   const active = isActiveRoute(router.pathname, link.url)
                   return (
                     <Link
