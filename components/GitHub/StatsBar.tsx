@@ -4,7 +4,7 @@ import { useInView, useReducedMotion } from 'framer-motion'
 
 import { useFetchJson } from '../Common/useFetchJson'
 import WidgetNotice from '../Common/WidgetNotice'
-import { statTiles, type GhStats } from '../Common/githubEvents'
+import { statColumns, statTiles, type GhStats } from '../Common/githubEvents'
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
@@ -22,6 +22,10 @@ const labelSx = {
   letterSpacing: { base: '0.06em', sm: '0.14em' },
   textTransform: 'uppercase' as const,
   color: 'page.fg-secondary',
+  // Break between words only (the CSS reset's break-word would split
+  // "CONTRIBUTIONS" mid-word); statColumns keeps every word within a tile.
+  overflowWrap: 'normal' as const,
+  wordBreak: 'normal' as const,
 }
 
 /**
@@ -112,11 +116,6 @@ const StatSkeleton = () => (
   </Box>
 )
 
-const columns = (n: number) => ({
-  base: `repeat(${Math.min(n, n === 4 ? 2 : 3)}, minmax(0, 1fr))`,
-  md: `repeat(${n}, minmax(0, 1fr))`,
-})
-
 /**
  * GitHub summary row: big numbers + mono labels between hairlines.
  * Server-rendered when `initialData` is passed; otherwise loading keeps the
@@ -143,7 +142,7 @@ export default function StatsBar({ initialData }: { initialData?: GhStats | null
       as="section"
       aria-label="GitHub stats"
       aria-busy={!tiles || undefined}
-      templateColumns={columns(count)}
+      templateColumns={statColumns(count)}
       columnGap={{ base: 3, sm: 8, md: 12 }}
       rowGap={6}
       w="100%"

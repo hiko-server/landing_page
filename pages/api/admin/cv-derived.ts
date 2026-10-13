@@ -2,11 +2,12 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { deriveCurrentlyCoding } from '../../../lib/currentlyCoding'
 import { readPublicCvSections } from '../../../lib/cvdata'
 import { isAdminRequest } from '../../../lib/auth'
+import { referenceMonth } from '../../../lib/clock'
 
 const isAuthed = isAdminRequest
 
 /** The CV sections the "currently coding" chip is derived from. */
-const DERIVED_SOURCE_SECTIONS = ['workExperience', 'project', 'education'] as const
+const DERIVED_SOURCE_SECTIONS = ['workExperience', 'education'] as const
 
 /**
  * GET /api/admin/cv-derived
@@ -17,9 +18,10 @@ const DERIVED_SOURCE_SECTIONS = ['workExperience', 'project', 'education'] as co
  * coding" chip, but the response is shaped as an envelope so we can add
  * more derived blocks without breaking the client.
  *
- * Derived from the *website* public view — exactly what visitors' pages
- * derive from — so hidden sections, entries and fields never shape the
- * preview (a hidden end date can't make a past job look current).
+ * Derived from the *website* public view for the site's reference month —
+ * exactly what the home page and /now derive — so hidden sections, entries
+ * and fields never shape the preview (a hidden end date can't make a past
+ * job look current), and an ended role is never offered.
  *
  * Auth-gated so the operator's CV layout / dates don't leak through an
  * unauthenticated endpoint to scrapers.
@@ -41,6 +43,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   return res.status(200).json({
-    currentlyCoding: deriveCurrentlyCoding(cvEn),
+    currentlyCoding: deriveCurrentlyCoding(cvEn, referenceMonth()),
   })
 }

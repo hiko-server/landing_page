@@ -195,3 +195,134 @@ test('uploaded images whose WebP variants exist ship a srcset on posts and case 
   }
   expect(missing, 'uploads with a stored w640 WebP but no srcset').toEqual([])
 })
+
+// ── Home identity: layout after lazy sections mount, Field Notes focus, Person entity, hero facts ──
+
+/**
+ * Scroll the whole page in steps, the way a visitor does, so every lazy
+ * section (WhenVisible, code-split widgets) mounts; stops once the bottom is
+ * reached and the page has stopped growing.
+ */
+async function scrollThrough(page: import('@playwright/test').Page) {
+  let stableAtBottom = 0
+  for (let i = 0; i < 120 && stableAtBottom < 2; i++) {
+    const atBottom = await page.evaluate(() => {
+      const before = document.documentElement.scrollHeight
+      window.scrollBy(0, Math.round(window.innerHeight * 0.75))
+      return window.scrollY + window.innerHeight >= before - 2
+    })
+    await page.waitForTimeout(150)
+    stableAtBottom = atBottom ? stableAtBottom + 1 : 0
+  }
+  await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => undefined)
+}
+
+for (const path of ['/', '/about']) {
+  test(`no horizontal page scroll on ${path} once every lazy section has mounted`, async ({ page }) => {
+    await page.goto(path, { waitUntil: 'load' })
+    await settle(page)
+    await scrollThrough(page)
+    if (path === '/' && (await page.locator('#section-photos').count())) {
+      // The Field Notes strip is what used to widen the page: make sure it is really there.
+      await expect(page.locator('#section-photos .field-notes-strip')).toBeAttached()
+    }
+    await settle(page)
+    const device = page.viewportSize()?.width ?? 0
+    const widths = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, inner: window.innerWidth }))
+    // On phones an overflow grows the layout viewport itself, so innerWidth alone cannot catch it.
+    expect(widths.inner, `${path}: layout viewport ${widths.inner} wider than the device (${device})`).toBeLessThanOrEqual(device)
+    expect(widths.scroll, `${path}: scrollWidth ${widths.scroll} > innerWidth ${widths.inner}`).toBeLessThanOrEqual(widths.inner)
+
+    // Labels wrap between words instead of being cut off (accordion titles)
+    // or split mid-word (GitHub stat labels).
+    const clipped = await page.evaluate(() =>
+      Array.from(document.querySelectorAll<HTMLElement>('[id^="accordion-button"] span, section[aria-label="GitHub stats"] p'))
+        .filter((el) => el.clientWidth > 0)
+        .filter(
+          (el) =>
+            el.scrollWidth > el.clientWidth + 1 ||
+            el.scrollHeight > el.clientHeight + 1 ||
+            (el.tagName === 'P' && !['normal', ''].includes(getComputedStyle(el).overflowWrap)),
+        )
+        .map((el) => (el.textContent || '').trim().slice(0, 40)),
+    )
+    expect.soft(clipped, `${path}: truncated or mid-word-broken labels`).toEqual([])
+  })
+}
+
+test('the Field Notes scroller shows a visible focus ring when reached by keyboard', async ({ page, isMobile }) => {
+  test.skip(!!isMobile, 'keyboard focus — desktop only')
+  await page.goto('/')
+  await settle(page)
+  const section = page.locator('#section-photos')
+  test.skip((await section.count()) === 0, 'no Field Notes photos in this content store')
+  await section.scrollIntoViewIfNeeded()
+  const strip = section.locator('.field-notes-strip')
+  await expect(strip).toBeAttached()
+  // Keyboard path: from the first photo, Shift+Tab lands on the scroller.
+  await strip.locator('button').first().focus()
+  await page.keyboard.press('Shift+Tab')
+  const ring = await strip.evaluate((el) => {
+    // The strip's edge mask would fade its own outline: the ring is on its parent.
+    const cs = getComputedStyle(el.parentElement as HTMLElement)
+    return { focused: document.activeElement === el, focusVisible: el.matches(':focus-visible'), style: cs.outlineStyle, width: parseFloat(cs.outlineWidth) }
+  })
+  expect(ring.focused, 'the scroller has focus').toBe(true)
+  expect(ring.focusVisible, 'the scroller matches :focus-visible').toBe(true)
+  expect(ring.style, 'focus ring style').not.toBe('none')
+  expect(ring.width, 'focus ring width').toBeGreaterThanOrEqual(2)
+})
+
+/** Top-level JSON-LD nodes of an HTML document. */
+function jsonLdNodes(html: string): Array<Record<string, any>> {
+  const out: Array<Record<string, any>> = []
+  for (const m of html.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g)) {
+    const data = JSON.parse(m[1])
+    out.push(...(Array.isArray(data) ? data : [data]))
+  }
+  return out
+}
+
+test('the Person entity is identical on /, /about, /cv and /cv/zh and uses the hero portrait', async ({ request }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium', 'HTTP-level check: once is enough')
+  const html: Record<string, string> = {}
+  const persons: Record<string, Record<string, any>> = {}
+  for (const path of ['/', '/about', '/cv', '/cv/zh']) {
+    const res = await request.get(path)
+    expect(res.status(), `${path} status`).toBe(200)
+    html[path] = await res.text()
+    const nodes = jsonLdNodes(html[path]).filter((n) => n['@type'] === 'Person')
+    expect(nodes.length, `${path}: exactly one top-level Person node`).toBe(1)
+    persons[path] = nodes[0]
+  }
+  for (const path of ['/about', '/cv', '/cv/zh']) {
+    expect(persons[path], `${path}: Person differs from the home page's (same @id)`).toEqual(persons['/'])
+  }
+  // The image is the portrait the home hero shows (or its 640 px variant), as an absolute URL.
+  const image = String(persons['/'].image || '')
+  expect(image, 'absolute Person image URL').toMatch(/^https:\/\//)
+  const shown = new URL(image).pathname.replace(/\.w\d+\.webp$/, '')
+  expect(html['/'], `Person image ${image} is not the portrait the hero shows`).toContain(`src="${shown}"`)
+})
+
+test('hero facts come from the CV: languages in the CV’s order, no derived “since” year', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium', 'content check: once is enough')
+  await page.goto('/')
+  const languages = page.locator('.hero-meta [data-meta="languages"]')
+  const location = page.locator('.hero-meta [data-meta="location"]')
+  const chip = page.locator('.hero-currently').first()
+  const shownLanguages = (await languages.count()) ? (await languages.innerText()).split('·').map((s) => s.trim()) : []
+  const shownLocation = (await location.count()) ? (await location.innerText()).trim() : ''
+  if (await chip.count()) expect(await chip.textContent(), 'the chip carries no derived "since YYYY"').not.toMatch(/\bsince (19|20)\d\d\b/)
+
+  await page.goto('/cv')
+  const cvLanguages = page.locator('#cv-extraSkill')
+  if (shownLanguages.length && (await cvLanguages.count())) {
+    const text = await cvLanguages.innerText()
+    const positions = shownLanguages.map((name) => text.indexOf(name))
+    expect(positions.every((p) => p >= 0), `hero languages ${shownLanguages.join(', ')} are on the CV`).toBe(true)
+    expect([...positions].sort((a, b) => a - b), 'hero languages follow the CV’s order').toEqual(positions)
+  }
+  const cvHeader = page.locator('#cv-personalInformation')
+  if (shownLocation && (await cvHeader.count())) await expect(cvHeader).toContainText(shownLocation)
+})

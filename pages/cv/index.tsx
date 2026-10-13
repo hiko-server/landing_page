@@ -4,7 +4,7 @@ import { SHEET_SECTIONS } from '../../components/CVViewerPage/CVResult'
 import { publicNameZh } from '../../components/CVViewerPage/PersonalInformation'
 import type { HomeData } from '../../lib/homeShape'
 import { referenceMonth } from '../../lib/clock'
-import { absUrl, personFactsFromCv } from '../../lib/schema'
+import { absUrl, type PersonFacts } from '../../lib/schema'
 
 /**
  * /cv — the English CV (the Chinese one is /cv/zh; the legacy /cv?lang=zh
@@ -17,7 +17,7 @@ export const getServerSideProps: GetServerSideProps<CvPageProps> = async () => {
   // Live CV from the content store (SQLite kv + R2) — the same source the
   // admin editor writes — reduced to what may appear on the CV, and to the
   // sections the sheet renders. The Chinese CV contributes only the public
-  // Chinese name (structured data).
+  // Chinese name (the page title).
   let sections: any[] = []
   let nameZh = ''
   try {
@@ -27,6 +27,13 @@ export const getServerSideProps: GetServerSideProps<CvPageProps> = async () => {
     nameZh = publicNameZh(cv.zh)
   } catch {
     /* render the empty state rather than failing the page */
+  }
+  // The site-wide Person entity: the same facts every page emits.
+  let personFacts: PersonFacts = {}
+  try {
+    personFacts = (await import('../../lib/personFacts')).loadPersonFacts()
+  } catch {
+    /* the node keeps its built-in defaults */
   }
   let chromeSocials: HomeData['socials'] | null | undefined
   try {
@@ -49,7 +56,7 @@ export const getServerSideProps: GetServerSideProps<CvPageProps> = async () => {
       lang: 'en',
       clockMonth: referenceMonth(),
       nameZh,
-      personFacts: personFactsFromCv(sections),
+      personFacts,
       qrSvg,
       ...(chromeSocials !== undefined ? { chromeSocials } : {}),
     },

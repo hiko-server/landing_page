@@ -191,7 +191,13 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
         role="region"
         aria-roledescription="carousel"
         aria-label="Field notes photos"
-        sx={{ '& > .field-notes-strip': { gridAutoColumns: { base: '83%', md: '48%', lg: '32%' } } }}
+        borderRadius="12px"
+        sx={{
+          '& > .field-notes-strip': { gridAutoColumns: { base: '83%', md: '48%', lg: '32%' } },
+          // The strip's edge mask would fade a ring drawn on the strip itself:
+          // keyboard focus on it is shown on this unmasked parent instead.
+          '&:has(> .field-notes-strip:focus-visible)': { outline: '2px solid var(--accent)', outlineOffset: '4px' },
+        }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         onFocus={() => setFocused(true)}
@@ -217,6 +223,10 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
           }}
           className="field-notes-strip"
           style={{
+            // The containing block of the captions' absolutely positioned
+            // .sr-only text: without it they resolve to an ancestor outside
+            // this scroller, escape its clip and widen the whole page.
+            position: 'relative',
             display: 'grid',
             gridAutoFlow: 'column',
             gap: 16,

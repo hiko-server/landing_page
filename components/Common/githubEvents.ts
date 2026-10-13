@@ -106,6 +106,22 @@ export function statTiles(s: GhStats): StatTile[] {
   return tiles
 }
 
+/**
+ * Grid columns of the stats row for `n` tiles: at most 3 per row on phones
+ * (2 for exactly 4), at most 4 on tablets — wider rows (e.g. 5 tiles at
+ * 768 px) leave tiles too narrow for a label word like "CONTRIBUTIONS" —
+ * and all in one row from the desktop breakpoint.
+ */
+export function statColumns(n: number): { base: string; md: string; lg: string } {
+  const count = Math.max(1, Math.floor(n) || 1)
+  const cols = (c: number) => `repeat(${c}, minmax(0, 1fr))`
+  return {
+    base: cols(Math.min(count, count === 4 ? 2 : 3)),
+    md: cols(count > 4 ? 3 : count),
+    lg: cols(count),
+  }
+}
+
 // ── Activity feed ────────────────────────────────────────────────────────────
 
 export type EventKind = 'push' | 'pr' | 'issue' | 'create' | 'repo' | 'other'

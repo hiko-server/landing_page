@@ -8,7 +8,7 @@ import Brands from '../BrandShowcase/BrandShowcase'
 import { isSectionVisible, type HomeData } from '../../lib/homeShape'
 import type { CvSectionLike } from '../../lib/cvVisibility'
 import type { CurrentlyCoding } from '../../lib/currentlyCoding'
-import type { HeroIdentity } from './heroIdentity'
+import type { HeroIdentity, HeroMeta } from './heroIdentity'
 import type { WorkIndexItem } from './projectMatch'
 import type { ScrollerImage } from '../imageScoller/imageScroller'
 import type { GithubSummary } from '../Common/githubEvents'
@@ -25,6 +25,7 @@ const LandingContent = ({
   cv,
   identity,
   autoCoding,
+  meta,
   work,
   avatar,
   photos,
@@ -35,6 +36,8 @@ const LandingContent = ({
   cv?: { en: CvSectionLike[]; zh: CvSectionLike[] } | null
   identity: HeroIdentity
   autoCoding: CurrentlyCoding
+  /** Hero location / languages from the public CV. */
+  meta?: HeroMeta
   work?: WorkIndexItem[]
   /** Portrait file facts (size, upload variants) from the server. */
   avatar?: AvatarMeta
@@ -46,7 +49,7 @@ const LandingContent = ({
   return (
     <Box w="100%" pb={{ base: 10, md: 16 }}>
       {isSectionVisible(home, 'introduction') && (
-        <PersonalInfo home={home || undefined} identity={identity} autoCoding={autoCoding} avatar={avatar} />
+        <PersonalInfo home={home || undefined} identity={identity} autoCoding={autoCoding} avatar={avatar} meta={meta} />
       )}
 
       {isSectionVisible(home, 'brands') && (

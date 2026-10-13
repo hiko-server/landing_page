@@ -147,6 +147,9 @@ export default function ProjectSpotlight({ cvEn, work }: { cvEn?: CvSectionLike[
         aria-label="Selected projects (scrolls horizontally)"
         tabIndex={0}
         onScroll={syncEdges}
+        // Containing block for anything absolutely positioned inside, so it
+        // stays within the scroll clip instead of widening the page.
+        position="relative"
         overflowX="auto"
         overflowY="hidden"
         // Room for card focus rings, which overflow clipping would otherwise cut.

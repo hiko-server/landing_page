@@ -213,7 +213,7 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
   const roles = currentRoles(cvEn, clockMonth)
   const signals: Signals = {
     roles,
-    coding: currentlyCodingSignal(cvEn, manualCoding, roles),
+    coding: currentlyCodingSignal(cvEn, manualCoding, clockMonth),
     post: latestPost(posts),
     work: latestWork(work),
     composed: now.toISOString().slice(0, 10),

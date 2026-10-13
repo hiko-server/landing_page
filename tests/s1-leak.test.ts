@@ -14,18 +14,21 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { CV_SECTIONS, type ListDef, type FieldKind } from '../lib/cvSections'
 import { getAt, isRedacted, publicCvDoc, setAt, type CvAudience, type CvDoc, type CvPath } from '../lib/cvVisibility'
-import { deriveCurrentlyCoding } from '../lib/currentlyCoding'
+import { STUDYING_LABEL, deriveCurrentlyCoding } from '../lib/currentlyCoding'
 
 const AUDIENCES: CvAudience[] = ['cv', 'website', 'any']
 const TEXT_SENTINEL = 'ZZ-LEAK-SENTINEL-ZZ'
-// Date-like slots get a parseable date so a leak through the derived
-// "since YYYY" note would be caught too. No filler uses this year.
+// Date-like slots get a parseable date so a leak of a date through the
+// derived chip would be caught too. No filler uses this year.
 const DATE_SENTINEL = '1907-07'
 const DATE_NEEDLE = '1907'
 
 function fill(kind: FieldKind): unknown {
   if (kind === 'bullets' || kind === 'tags') return ['first filler item', 'second filler item']
-  if (kind === 'month' || kind === 'endMonth') return '2020-01'
+  // Roles and studies are running ("Present"), so the derived chip actually
+  // names entries and the leak checks on it are not vacuous.
+  if (kind === 'endMonth') return 'Present'
+  if (kind === 'month') return '2020-01'
   if (kind === 'color') return '#123456'
   return 'filler text'
 }
@@ -184,9 +187,15 @@ test('the derived chip does pick up visible values (so the leak checks above are
   const doc = buildDoc()
   const work = doc.en.findIndex((s) => s.sessionName === 'workExperience')
   let en = setAt(doc.en, [work, 'experiences', 0, 'companyName'], TEXT_SENTINEL)
-  en = setAt(en, [work, 'experiences', 0, 'endDate'], '')
+  en = setAt(en, [work, 'experiences', 0, 'jobTitle'], `${TEXT_SENTINEL}-ROLE`)
   en = setAt(en, [work, 'experiences', 0, 'startDate'], DATE_SENTINEL)
   const chip = deriveCurrentlyCoding(publicCvDoc({ en, zh: [] }, 'website').en)
   assert.equal(chip.project, TEXT_SENTINEL)
-  assert.equal(chip.note, `since ${DATE_NEEDLE}`)
+  assert.equal(chip.note, `${TEXT_SENTINEL}-ROLE`)
+  // No work on the website: the running study is named instead.
+  const school = doc.en.findIndex((s) => s.sessionName === 'education')
+  let study = setAt(doc.en, [work, 'showOnWebsite'], false)
+  study = setAt(study, [school, 'educationExperience', 0, 'schoolName'], TEXT_SENTINEL)
+  const studyChip = deriveCurrentlyCoding(publicCvDoc({ en: study, zh: [] }, 'website').en)
+  assert.deepEqual([studyChip.label, studyChip.project], [STUDYING_LABEL, TEXT_SENTINEL])
 })

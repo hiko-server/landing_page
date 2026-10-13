@@ -1,14 +1,26 @@
 /**
- * Derive a "currently coding" chip from CV data so the admin doesn't have
- * to retype it every time the latest job changes.
+ * Derive the hero's "currently coding" chip from CV data so the owner doesn't
+ * have to retype it every time a role changes.
  *
- * The renderer (components/LandingPage/PersonalInfo.tsx) merges the admin's
- * manual home.json fields with this derived fallback per-line:
+ * The chip only ever names something that is current in the reference month
+ * (the page's 'YYYY-MM', lib/clock.ts), judged from the dates the visitor
+ * can see — the same rule as the /now page's "Currently" list
+ * (components/CVViewerPage/fields entryStatus):
  *
- *     final[line] = (admin[line].trim()) || derived[line] || ''
+ *   1. a running work role (the earliest-started one if several — usually
+ *      the main job rather than a side internship)
+ *        → "currently coding" · company · job title
+ *   2. otherwise a running study
+ *        → "currently studying" · school · degree
+ *   3. otherwise nothing: every line is blank and the chip is hidden.
  *
- * i.e. anything the admin typed wins; blank fields auto-fill from the CV;
- * if both are blank the line is omitted (chip hides when all three are empty).
+ * A role that has ended is never named, and no "since YYYY" line is derived:
+ * a year next to a company name reads as "there since", which the CV does
+ * not say.
+ *
+ * Every renderer — the home hero, /now (lib/nowSignals.ts) and the Home
+ * editor's preview (/api/admin/cv-derived) — combines the owner's Home editor
+ * lines with this chip through mergeCurrentlyCoding(), so they agree.
  *
  * Pure / sync / no side-effects so it runs identically on server and client.
  *
@@ -20,131 +32,88 @@
  * current one or leak through the derived chip.
  */
 
-import { isPresent } from './cvFormat'
-import { isEntryHidden, isRedacted, isSectionOnWebsite } from './cvVisibility'
+import { majorAddsInfo, type CvNow } from './cvFormat'
+import { isSectionOnWebsite } from './cvVisibility'
+import { entryStatus, field, joinParts, list } from '../components/CVViewerPage/fields'
 
 export type CurrentlyCoding = { label: string; project: string; note: string }
+
+/** Label of a chip that names a work role (and the default for an owner-named project). */
+export const CODING_LABEL = 'currently coding'
+/** Label of a chip that names a study. */
+export const STUDYING_LABEL = 'currently studying'
 
 type CvSection = { sessionName?: string } & Record<string, unknown>
 
 const EMPTY: CurrentlyCoding = { label: '', project: '', note: '' }
 
-function pickSection<T extends string>(cv: CvSection[] | undefined | null, name: T): any {
-  if (!Array.isArray(cv)) return undefined
+function websiteSection(cv: readonly CvSection[], name: string): CvSection | undefined {
   return cv.find((s) => s?.sessionName === name && isSectionOnWebsite(s))
 }
 
-/** Visible entries of a section's list (the list itself may be hidden). */
-function visibleEntries(section: any, listKey: string): any[] {
-  if (!section || isRedacted(section, listKey)) return []
-  const list = section[listKey]
-  return Array.isArray(list) ? list.filter((e) => e && typeof e === 'object' && !isEntryHidden(e)) : []
+/** "YYYY-MM" sort key of a start date; entries without a visible start sort last. */
+function startKey(entry: unknown): string {
+  const m = field(entry, 'startDate').match(/^(\d{4})(?:[-/.](\d{1,2}))?/)
+  return m ? `${m[1]}-${(m[2] || '01').padStart(2, '0')}` : '9999-99'
 }
 
-/** A field's value, or undefined when the owner hid it. */
-function field(entry: any, key: string): unknown {
-  return isRedacted(entry, key) ? undefined : entry?.[key]
-}
-
-/** Parse "YYYY-MM" or "YYYY-MM-DD" → YYYY (number) or null. */
-function yearOf(s: unknown): number | null {
-  if (typeof s !== 'string') return null
-  const m = s.match(/^\s*(\d{4})/)
-  if (!m) return null
-  const n = Number(m[1])
-  return Number.isFinite(n) ? n : null
-}
-
-/** "YYYY-MM" comparable string (zero-pad). Returns '' if input doesn't parse. */
-function ymKey(s: unknown): string {
-  if (typeof s !== 'string') return ''
-  const m = s.match(/^\s*(\d{4})[-/]?(\d{1,2})?/)
-  if (!m) return ''
-  const y = m[1]
-  const mo = (m[2] || '01').padStart(2, '0')
-  return `${y}-${mo}`
-}
-
-/** Today as "YYYY-MM". */
-function todayYm(now = new Date()): string {
-  const y = String(now.getUTCFullYear())
-  const mo = String(now.getUTCMonth() + 1).padStart(2, '0')
-  return `${y}-${mo}`
-}
-
-function isOngoing(entry: any): boolean {
-  // A hidden end date is unknown, not "present".
-  if (isRedacted(entry, 'endDate')) return false
-  const endDate = entry?.endDate
-  if (endDate == null) return true
-  return typeof endDate === 'string' && (endDate.trim() === '' || isPresent(endDate))
+/** Visible entries of a website section's list that are running now, earliest start first (CV order breaks ties). */
+function runningEntries(cv: readonly CvSection[], sectionName: string, listKey: string, now: CvNow): any[] {
+  return list(websiteSection(cv, sectionName), listKey)
+    .filter((e) => entryStatus(e, now) === 'current')
+    .map((e, i) => ({ e, i, key: startKey(e) }))
+    .sort((a, b) => a.key.localeCompare(b.key) || a.i - b.i)
+    .map(({ e }) => e)
 }
 
 /**
- * Pick the "current" workExperience:
- *
- *   1. Prefer entries whose endDate is empty / "present" / "now" / future.
- *      If multiple are still active, pick the one with the earliest startDate
- *      (i.e. the longest-running active role — typically the operator's main
- *      gig rather than a side internship).
- *   2. Fallback: the entry whose endDate is the most recent (last job held).
- *   3. Return null if no experiences exist at all.
+ * The CV-derived chip, or all-blank lines when nothing is current.
+ * `now` is the page's reference month ('YYYY-MM') or a Date.
  */
-function pickCurrentJob(experiences: any[] | undefined, today = todayYm()): any | null {
-  if (!Array.isArray(experiences) || experiences.length === 0) return null
-
-  const active = experiences.filter((e) => {
-    if (isOngoing(e)) return true
-    const end = ymKey(field(e, 'endDate'))
-    return end && end >= today
-  })
-
-  if (active.length > 0) {
-    return [...active].sort((a, b) => ymKey(field(a, 'startDate')).localeCompare(ymKey(field(b, 'startDate'))))[0]
-  }
-
-  return [...experiences].sort((a, b) => ymKey(field(b, 'endDate')).localeCompare(ymKey(field(a, 'endDate'))))[0]
-}
-
-export function deriveCurrentlyCoding(
-  cvEn: CvSection[] | undefined | null,
-): CurrentlyCoding {
+export function deriveCurrentlyCoding(cvEn: readonly CvSection[] | undefined | null, now: CvNow = new Date()): CurrentlyCoding {
   if (!Array.isArray(cvEn) || cvEn.length === 0) return EMPTY
 
-  const work = visibleEntries(pickSection(cvEn, 'workExperience'), 'experiences')
-  const projects = visibleEntries(pickSection(cvEn, 'project'), 'projectExperience')
-  const education = visibleEntries(pickSection(cvEn, 'education'), 'educationExperience')
-
-  // ── (b) project line ────────────────────────────────────────────────
-  // Most-relevant current job's company. Avoid bolting on the full job
-  // title (e.g. "WeGreen AI · CTO & Co-Founder") because the chip is
-  // sized for a single short line; the admin can paste a richer string
-  // manually if they want it.
-  const current = pickCurrentJob(work)
-  const company = current ? field(current, 'companyName') : undefined
-  const project = typeof company === 'string' ? company.trim() : ''
-
-  // ── (c) note line ───────────────────────────────────────────────────
-  // Earliest dated entry across work + projects + education → "since YYYY".
-  // Preserves the spirit of the original hard-coded "self-taught · since 2022"
-  // without inventing personal narrative that isn't in the CV.
-  const years: number[] = []
-  for (const e of [...work, ...projects, ...education]) {
-    const y = yearOf(field(e, 'startDate'))
-    if (y) years.push(y)
-  }
-  let note = ''
-  if (years.length > 0) {
-    const min = years.reduce((a, b) => (b < a ? b : a), years[0])
-    note = `since ${min}`
+  // The chip is sized for one short line per field: the organisation leads,
+  // the role sits in the small note line.
+  for (const job of runningEntries(cvEn, 'workExperience', 'experiences', now)) {
+    const company = field(job, 'companyName')
+    const title = field(job, 'jobTitle')
+    if (company || title) return { label: CODING_LABEL, project: company || title, note: company ? title : '' }
   }
 
-  // ── (a) label ──────────────────────────────────────────────────────
-  // Static. Kept as a derived "default" so the admin can override
-  // (e.g. "now working on" / "shipping").
-  return {
-    label: 'currently coding',
-    project,
-    note,
+  for (const study of runningEntries(cvEn, 'education', 'educationExperience', now)) {
+    const school = field(study, 'schoolName')
+    const degree = field(study, 'degree')
+    const title = joinParts([degree, majorAddsInfo(degree, field(study, 'major')) ? field(study, 'major') : ''], ', ')
+    if (school || title) return { label: STUDYING_LABEL, project: school || title, note: school ? title : '' }
   }
+
+  return EMPTY
+}
+
+const own = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
+
+/**
+ * The chip a visitor sees: the owner's Home editor lines merged with the
+ * CV-derived chip.
+ *
+ *   - The owner named a project: only their lines are used (a blank label
+ *     becomes "currently coding"). The derived label and note describe the
+ *     CV's item, so they are never attached to the owner's project.
+ *   - Otherwise the derived chip, with any line the owner typed replacing
+ *     the derived one.
+ *   - Nothing derived either: just the owner's label / note, if any (all
+ *     blank hides the chip).
+ */
+export function mergeCurrentlyCoding(
+  manual: Partial<CurrentlyCoding> | null | undefined,
+  derived: Partial<CurrentlyCoding> | null | undefined,
+): CurrentlyCoding {
+  const label = own(manual?.label)
+  const project = own(manual?.project)
+  const note = own(manual?.note)
+  if (project) return { label: label || CODING_LABEL, project, note }
+  const derivedProject = own(derived?.project)
+  if (derivedProject) return { label: label || own(derived?.label), project: derivedProject, note: note || own(derived?.note) }
+  return { label, project: '', note }
 }
