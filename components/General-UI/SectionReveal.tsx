@@ -5,16 +5,16 @@ import { useScrollReveal } from './useScrollReveal'
 type Props = BoxProps & {
   children: React.ReactNode
   /**
-   * Fade only the section's `[NN]` label (`.section-label-rule`) and leave
-   * the content alone — for sections whose rows run their own stagger, so a
-   * section never animates twice.
+   * Fade only the section's heading (`.section-heading`, SectionHeading) and
+   * leave the content alone — for sections whose rows run their own
+   * stagger, so a section never animates twice.
    */
   labelOnly?: boolean
 }
 
 /**
- * Fade-and-rise wrapper used as the outer slot for every "[NN]" section
- * on the home + about pages.
+ * Fade-and-rise wrapper used as the outer slot for every section on the
+ * home page.
  *
  * One path for every arrival (lib/reveal.ts): the wrapper renders visible —
  * in the server HTML, in the first frame after a client-side navigation and
@@ -48,9 +48,9 @@ const SECTION_SX = {
 } as const
 
 const LABEL_SX = {
-  '&[data-reveal="pending"] .section-label-rule': { opacity: 0, transform: 'translate3d(0, 12px, 0)' },
-  '&[data-reveal="shown"] .section-label-rule': { transition: REVEAL_TRANSITION },
-  '@media print': { '& .section-label-rule': { opacity: '1 !important', transform: 'none !important' } },
+  '&[data-reveal="pending"] .section-heading': { opacity: 0, transform: 'translate3d(0, 12px, 0)' },
+  '&[data-reveal="shown"] .section-heading': { transition: REVEAL_TRANSITION },
+  '@media print': { '& .section-heading': { opacity: '1 !important', transform: 'none !important' } },
 } as const
 
 export default function SectionReveal({ children, labelOnly, ...rest }: Props) {

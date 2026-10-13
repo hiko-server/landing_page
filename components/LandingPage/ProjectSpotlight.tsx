@@ -33,7 +33,7 @@ const STATUS_LABEL: Record<string, string> = {
 }
 
 /**
- * [05] Selected projects — horizontal, snap-scrolling cards built from the
+ * Selected projects — horizontal, snap-scrolling cards built from the
  * public CV's project section.
  *
  *   - A project that has a /work case study (the owner's `caseStudy` slug,

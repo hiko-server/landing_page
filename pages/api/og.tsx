@@ -109,7 +109,7 @@ async function renderCard(p: OgParams): Promise<Buffer> {
   const textColumn = (
     <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', flex: 1, minWidth: 0, gap: 32 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 20, fontFamily: MONO, fontSize: 24, color: '#a1a1a1', letterSpacing: 1 }}>
-        <div style={{ display: 'flex', color: '#a5b4fc' }}>[{kindLabel(p.kind, p.lang)}]</div>
+        <div style={{ display: 'flex', color: '#a5b4fc' }}>{kindLabel(p.kind, p.lang)}</div>
         <div style={{ display: 'flex' }}>Li Yanpei (Lucian)</div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>

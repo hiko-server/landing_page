@@ -11,8 +11,9 @@ import { textStyleProps } from '../../theme/tokens'
  *   Optional lede paragraph
  *   [optional actions]
  *
- * The eyebrow uses the SectionLabel look (mono, uppercase, trailing rule)
- * without a section number: numbering belongs to the home page's sections.
+ * The eyebrow is a short mono, uppercase kicker with a trailing rule — plain
+ * words, never an index number or brackets; the page's sections below use
+ * SectionHeading.
  * Typography is token-driven (theme/tokens.ts): the eyebrow is the `label`
  * text style, the title `display` (fluid clamp, no breakpoints), the lede
  * `lede`; `titleLang` marks a
@@ -36,7 +37,7 @@ export default function PageHeader({
 }) {
   return (
     <Box as="header" maxW="var(--container-content)" mb={[8, 12]}>
-      <Text className="section-label-rule" textStyle="label" color="page.fg-subtle" m={0}>
+      <Text className="eyebrow-rule" textStyle="label" color="page.fg-subtle" m={0}>
         {eyebrow}
       </Text>
       <Heading

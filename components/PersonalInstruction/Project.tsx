@@ -32,12 +32,10 @@ export function projectEntries(
 }
 
 const ProjectSection = ({
-  index,
   data,
   lang = 'en',
   work,
 }: {
-  index?: number
   data: Project
   lang?: CvLang
   /** /work case-study index; a matching project gets a "Case study →" link. */
@@ -48,7 +46,6 @@ const ProjectSection = ({
   if (!items.length) return null
   return (
     <CVSectionShell
-      index={index}
       label={data?.headerName || 'Projects'}
       count={items.length}
       countSuffix={cvLabels(lang).entries}

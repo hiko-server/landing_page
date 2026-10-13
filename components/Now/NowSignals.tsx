@@ -3,6 +3,7 @@ import NextLink from 'next/link'
 import { Box, Flex, LinkBox, LinkOverlay, Text } from '@chakra-ui/react'
 import type { NowLink, NowRole, NowSignals as Signals } from '../../lib/nowSignals'
 import { formatPostDate } from '../../lib/postDate'
+import SectionHeading from '../General-UI/SectionHeading'
 
 /**
  * Renders the live /now signals (lib/nowSignals.ts).
@@ -96,19 +97,14 @@ export default function NowSignals({ signals, variant }: { signals: Signals; var
     <Flex direction="column" gap={compact ? 6 : [10, 12]}>
       {groups.map((g) => (
         <Box as="section" key={g.key} aria-labelledby={`now-${variant}-${g.key}`}>
-          <Text
-            as={compact ? 'h3' : 'h2'}
-            id={`now-${variant}-${g.key}`}
-            className={compact ? undefined : 'section-label-rule'}
-            fontFamily={mono}
-            fontSize="11px"
-            letterSpacing="0.12em"
-            textTransform="uppercase"
-            color="page.fg-secondary"
-            mb={compact ? 2 : 5}
-          >
-            {g.title}
-          </Text>
+          {compact ? (
+            // The sidebar's small group labels (h3) next to the owner's own text.
+            <Text as="h3" id={`now-${variant}-${g.key}`} fontFamily={mono} fontSize="11px" letterSpacing="0.12em" textTransform="uppercase" color="page.fg-secondary" mb={2}>
+              {g.title}
+            </Text>
+          ) : (
+            <SectionHeading id={`now-${variant}-${g.key}`}>{g.title}</SectionHeading>
+          )}
           {g.body}
         </Box>
       ))}

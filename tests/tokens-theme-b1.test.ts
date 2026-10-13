@@ -220,7 +220,7 @@ test('the app shell, the theme reveal and the migrated primitives use the motion
 // ── migrated primitives + guard ─────────────────────────────────────────────
 
 const GUARDED = [
-  'components/General-UI/SectionLabel.tsx',
+  'components/General-UI/SectionHeading.tsx',
   'components/General-UI/PageHeader.tsx',
   'components/General-UI/PageGrid.tsx',
   'components/Article/MetaGrid.tsx',
@@ -230,7 +230,10 @@ const GUARDED = [
 test('the shared primitives use text styles instead of raw px sizes and em tracking', () => {
   const rawType = /(fontSize|letterSpacing|lineHeight)(=|:\s*)(\{?\s*)?['"]-?[\d.]+(px|em|rem)['"]/
   for (const f of GUARDED) assert.doesNotMatch(stripComments(read(f)), rawType, f)
-  assert.match(read('components/General-UI/SectionLabel.tsx'), /textStyle="label"/)
+  // Section headings: the `section` text style (sans, no index number, no brackets, no caps).
+  const heading = read('components/General-UI/SectionHeading.tsx')
+  assert.match(heading, /textStyle="section"/)
+  assert.doesNotMatch(stripComments(heading), /\[\{|textTransform|padStart|fontFamily/)
   const header = read('components/General-UI/PageHeader.tsx')
   assert.match(header, /textStyle="label"/)
   assert.match(header, /\.\.\.textStyleProps\('display'\)/)

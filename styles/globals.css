@@ -204,15 +204,15 @@ h3,
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
- * Section label rule — `[01] WORK ───────────`
- * Apply class `section-label-rule` to a flex container holding the label;
+ * Eyebrow rule — `WRITING ───────────` (PageHeader's kicker above the h1)
+ * Apply class `eyebrow-rule` to a flex container holding the eyebrow;
  * the ::after pseudo paints the thin trailing line.
  * ──────────────────────────────────────────────────────────────────────── */
-.section-label-rule {
+.eyebrow-rule {
   display: flex;
   align-items: center;
 }
-.section-label-rule::after {
+.eyebrow-rule::after {
   content: '';
   flex: 1;
   height: 1px;
@@ -742,7 +742,7 @@ button:hover .nudge-ne {
   }
   .rail-fill,
   .rail-dot,
-  .section-label-rule::after {
+  .eyebrow-rule::after {
     forced-color-adjust: none;
     background: CanvasText !important;
   }

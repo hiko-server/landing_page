@@ -11,11 +11,9 @@ import CVSectionShell from './_CVSectionShell'
  * shown as a plain line.
  */
 const ExtraSkillSection = ({
-  index,
   data,
   lang = 'en',
 }: {
-  index?: number
   data: ExtraSkill
   lang?: CvLang
 }) => {
@@ -26,7 +24,6 @@ const ExtraSkillSection = ({
   if (!points.length) return null
   return (
     <CVSectionShell
-      index={index}
       label={data?.headerName || 'Languages'}
       count={points.length}
       countSuffix={cvLabels(lang).items}

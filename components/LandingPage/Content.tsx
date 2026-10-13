@@ -17,7 +17,7 @@ import ExperienceTimeline from './ExperienceTimeline'
 import CertificationsPeek from './CertificationsPeek'
 import ContactBand from './ContactBand'
 import SectionReveal from '../General-UI/SectionReveal'
-import SectionLabel from '../General-UI/SectionLabel'
+import SectionHeading from '../General-UI/SectionHeading'
 import FloatingNav from '../General-UI/FloatingNav'
 // The read-side helpers only (lib/homeSections): never lib/home (server-only /
 // better-sqlite3), and not lib/homeShape's runtime (the admin's validation).
@@ -35,7 +35,7 @@ const ImageScroller = dynamic(() => import('../imageScoller/imageScroller'), { s
 
 export type HomeWriting = { items: WritingItem[]; hasPosts: boolean; hasWork: boolean }
 
-/** Whether the public CV section has any visible entry (an empty section gets no [NN] row). */
+/** Whether the public CV section has any visible entry (an empty section is left out). */
 function hasEntries(cvEn: CvSectionLike[] | undefined, sessionName: string, key: string): boolean {
   const section = Array.isArray(cvEn) ? cvEn.find((s) => s?.sessionName === sessionName) : undefined
   return list(section, key).length > 0
@@ -45,7 +45,7 @@ type SectionDef = {
   key: SortableSectionKey
   id: string
   label: string
-  /** Rows inside run their own stagger: reveal only the [NN] label. */
+  /** Rows inside run their own stagger: reveal only the section heading. */
   labelOnly?: boolean
   /** Rendered without the reveal wrapper (deferred / full-width rows). */
   plain?: boolean
@@ -63,14 +63,14 @@ const monoLabel = {
 }
 
 /**
- * Home sections [02]… in the owner's order (home.sectionOrder, completed by
+ * Home sections in the owner's order (home.sectionOrder, completed by
  * resolveSectionOrder): Open Source, Skills, Recent Activity, Selected
  * Projects, Writing & case studies, Experience, Certifications, Field Notes
  * and Get In Touch by default.
  *
  * - Each section is gated by `isSectionVisible(home, key)` (Home editor) and
- *   by having something to show (no empty [NN] rows), and numbered by its
- *   position among the visible ones, so the labels never skip a number.
+ *   by having something to show (no empty sections). Each opens with a plain
+ *   SectionHeading (h2, id `${id}-label`) — no index numbers.
  * - Open Source is one compact band: stats, the contribution calendar beside
  *   the language stack (lg), and the pinned repositories.
  * - Data the server already has (GitHub, CV, writing index) is rendered into
@@ -238,9 +238,7 @@ const Content = ({
             tabIndex={-1}
             sx={sectionSx}
           >
-            <SectionLabel n={i + 2} id={`${s.id}-label`} mb={6}>
-              {s.label}
-            </SectionLabel>
+            <SectionHeading id={`${s.id}-label`}>{s.label}</SectionHeading>
             {s.body}
           </Box>
         )

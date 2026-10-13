@@ -12,6 +12,7 @@ import { aboutNavEntries } from '../../components/About/aboutNav'
 import { heroIdentity, portraitAlt, taglinePhrases, type HeroIdentity } from '../../components/LandingPage/heroIdentity'
 import { ogPresetUrl } from '../../lib/og/presets'
 import AboutRecommendations from '../../components/About/Recommendations'
+import SectionHeading from '../../components/General-UI/SectionHeading'
 import { recommendationsSection } from '../../components/CVViewerPage/recommendationView'
 import type { WorkIndexItem } from '../../components/LandingPage/projectMatch'
 import { availabilityView, type AvailabilityView } from '../../components/Common/contactForm'
@@ -51,27 +52,20 @@ type Props = {
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
-/** "[01] Bio" — the page's h2s, in the site's mono section style. */
-function RowHeading({ n, id, children }: { n: number; id: string; children: React.ReactNode }) {
-  return (
-    <Text as="h2" id={id} m={0} sx={{ scrollMarginTop: clearOfHeader('8px') }} fontFamily={monoFont} fontSize="11px" letterSpacing="0.12em" textTransform="uppercase" color="page.fg-subtle" fontWeight={400} whiteSpace="nowrap">
-      <Text as="span" aria-hidden>
-        [{String(n).padStart(2, '0')}]
-      </Text>{' '}
-      {children}
-    </Text>
-  )
-}
+/** A jump target (the rail's section nav) clears the sticky header. */
+const ANCHOR_SX = { scrollMarginTop: clearOfHeader('8px') } as const
 
 /**
  * /about — the narrative page (home = summary, /cv = the record):
  *
  *   identity rail │ the tagline's lead and focus areas
- *   (sticky, lg)  │ [01] Bio      the owner's own words (admin → About bio);
- *                 │               omitted while empty, never drafted from the CV
- *                 │ [02] Recommendations  entries given with permission (CV Studio);
- *                 │               omitted while there is none
- *                 │ [03] CV       every CV section, open, with the EN / 中 toggle
+ *   (sticky, lg)  │ Bio      the owner's own words (admin → About bio);
+ *                 │          omitted while empty, never drafted from the CV
+ *                 │ Recommendations  entries given with permission (CV Studio);
+ *                 │          omitted while there is none
+ *                 │ CV       every CV section, open, with the EN / 中 toggle
+ *
+ * Each block opens with the site's plain SectionHeading (no index numbers).
  *
  * The GitHub widgets and the experience timeline live on the home page only.
  * Below lg the rail is the page header; the section nav shows from lg up.
@@ -90,8 +84,6 @@ const About = ({ hero, identity, portrait, availability, bio, cv, work, personFa
       }),
     [active, cv.en, cv.zh, bio, recommendations],
   )
-  const recommendationsNumber = bio ? 2 : 1
-  const cvNumber = 1 + (bio ? 1 : 0) + (recommendations ? 1 : 0)
 
   return (
     <React.Fragment>
@@ -156,12 +148,7 @@ const About = ({ hero, identity, portrait, availability, bio, cv, work, personFa
 
               {bio ? (
                 <Box as="section" id="about-bio" aria-labelledby="about-bio-heading" mb={{ base: 14, md: 16 }} sx={{ scrollMarginTop: clearOfHeader('8px') }}>
-                  <Flex align="center" gap={4} mb={{ base: 5, md: 6 }}>
-                    <RowHeading n={1} id="about-bio-heading">
-                      Bio
-                    </RowHeading>
-                    <Box flex="1" h="1px" bg="page.border" />
-                  </Flex>
+                  <SectionHeading id="about-bio-heading">Bio</SectionHeading>
                   <Box lang={bio.lang}>
                     <MDXContent tree={bio.tree} as="div" />
                   </Box>
@@ -173,12 +160,9 @@ const About = ({ hero, identity, portrait, availability, bio, cv, work, personFa
                   <AboutRecommendations
                     section={recommendations}
                     title={
-                      <Flex align="center" gap={4} mb={{ base: 5, md: 6 }}>
-                        <RowHeading n={recommendationsNumber} id="about-recommendations">
-                          Recommendations
-                        </RowHeading>
-                        <Box flex="1" h="1px" bg="page.border" />
-                      </Flex>
+                      <SectionHeading id="about-recommendations" sx={ANCHOR_SX}>
+                        Recommendations
+                      </SectionHeading>
                     }
                   />
                 </Box>
@@ -195,9 +179,9 @@ const About = ({ hero, identity, portrait, availability, bio, cv, work, personFa
                   language={lang}
                   onLanguageChange={setLang}
                   title={
-                    <RowHeading n={cvNumber} id="about-cv-heading">
+                    <SectionHeading id="about-cv-heading" mb={0} sx={ANCHOR_SX}>
                       CV
-                    </RowHeading>
+                    </SectionHeading>
                   }
                 />
               </Box>

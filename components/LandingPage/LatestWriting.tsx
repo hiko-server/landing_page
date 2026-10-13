@@ -20,7 +20,7 @@ const moreLinkSx = {
 } as const
 
 /**
- * [NN] Writing & case studies — the newest posts and case studies (server
+ * Writing & case studies — the newest posts and case studies (server
  * data from lib/mdx), as plain link rows on a hover-intent list:
  *
  *   [POST]  The AI was the easy part: building an edge waste-sorter…   May 30, 2026
@@ -69,7 +69,7 @@ export default function LatestWriting({
                 letterSpacing="0.08em"
                 color="page.fg-secondary"
               >
-                [{r.kind === 'post' ? 'POST' : 'WORK'}]
+                {r.kind === 'post' ? 'POST' : 'WORK'}
                 <span className="sr-only">{r.kind === 'post' ? ' post: ' : ' case study: '}</span>
               </Text>
               <Box flex="1" minW={0}>

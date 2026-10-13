@@ -7,11 +7,9 @@ import CVSectionShell, { CVRow } from './_CVSectionShell'
 const t = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
 const PatentsSection = ({
-  index,
   data,
   lang = 'en',
 }: {
-  index?: number
   data: Patents
   lang?: CvLang
 }) => {
@@ -24,7 +22,7 @@ const PatentsSection = ({
   if (!groups.length) return null
   const total = groups.reduce((n, g) => n + cleanList(g.patents).length, 0)
   return (
-    <CVSectionShell index={index} label={data?.headerName || 'Patents'} count={total || groups.length} countSuffix={L.items}>
+    <CVSectionShell label={data?.headerName || 'Patents'} count={total || groups.length} countSuffix={L.items}>
       <Flex direction="column">
         {groups.map((g, i) => (
           <CVRow
@@ -50,8 +48,9 @@ const PatentsSection = ({
                     borderColor={chipBorder}
                     borderRadius="4px"
                   >
-                    <Text as="span" fontFamily="mono" fontSize="10px" color="accent.text" pt="3px" flexShrink={0}>
-                      {String(j + 1).padStart(2, '0')}
+                    {/* The ordered list's marker: a plain number, not a zero-padded index label. */}
+                    <Text as="span" fontFamily="mono" fontSize="10px" color="accent.text" pt="3px" flexShrink={0} minW="1.5ch" className="tnum">
+                      {j + 1}.
                     </Text>
                     <Text as="span" fontSize="13px" color={text} lineHeight="1.5">
                       {p}

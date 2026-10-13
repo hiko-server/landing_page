@@ -18,15 +18,15 @@ import { recommendationsSection } from '../../CVViewerPage/recommendationView'
 /**
  * What a visitor sees in the CV stack on /about, for the language being
  * edited: the same website pruning (publicSections 'website') and the same
- * section components, in the same order, numbered the same way as
+ * section components, in the same order, as
  * components/LandingPage/LandingCVSections.
  */
 
 // Sections the /about stack renders (personal info is not part of it).
 const RENDERED = ['education', 'workExperience', 'project', 'patents', 'competitionAwards', 'skill', 'extraSkill', 'certification']
 
-function renderSection(section: any, index: number, lang: CvLang) {
-  const props = { index, data: section, lang }
+function renderSection(section: any, lang: CvLang) {
+  const props = { data: section, lang }
   switch (section.sessionName) {
     case 'education':
       return <EducationSection {...props} />
@@ -73,7 +73,7 @@ export default function WebsitePreview({ sections, lang }: { sections: Section[]
       {shown.length ? (
         <Flex direction="column">
           {shown.map((section, i) => (
-            <React.Fragment key={`${section.sessionName}-${i}`}>{renderSection(section, i + 1, lang)}</React.Fragment>
+            <React.Fragment key={`${section.sessionName}-${i}`}>{renderSection(section, lang)}</React.Fragment>
           ))}
         </Flex>
       ) : (

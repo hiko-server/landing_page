@@ -172,6 +172,17 @@ export const textStyles = {
     letterSpacing: 'heading',
     fontWeight: 600,
   },
+  /**
+   * A page section's heading (components/General-UI/SectionHeading): the
+   * h3 size at a lighter weight, so it heads a section without competing
+   * with the page h1 or the card titles inside it.
+   */
+  section: {
+    fontSize: 'title-md',
+    lineHeight: '1.3',
+    letterSpacing: 'heading-sm',
+    fontWeight: 500,
+  },
   'title-lg': {
     fontSize: 'title-lg',
     lineHeight: '1.22',

@@ -19,11 +19,9 @@ const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 const t = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
 const CertificateSection = ({
-  index,
   data,
   lang = 'en',
 }: {
-  index?: number
   data: Certification
   lang?: CvLang
 }) => {
@@ -36,7 +34,6 @@ const CertificateSection = ({
 
   return (
     <CVSectionShell
-      index={index}
       label={data?.headerName || 'Certifications'}
       count={totalCerts}
       countSuffix={L.entries}

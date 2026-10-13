@@ -4,6 +4,7 @@ import NextLink from 'next/link'
 import type { CvLang } from '../../lib/cvVisibility'
 import { EVIDENCE_KIND_LABELS, type SkillEvidence as SkillEvidenceRow } from '../../lib/skillEvidence'
 import { ANCHOR_SCROLL_MARGIN } from './primitives'
+import SectionHeading from '../General-UI/SectionHeading'
 
 /**
  * "Skill evidence" — below the CV on /cv and /cv/zh (never printed): every
@@ -70,20 +71,10 @@ export default function SkillEvidence({ evidence, lang }: { evidence: SkillEvide
 
   return (
     <Box as="section" className="no-print" aria-labelledby="cv-skill-evidence" mt={{ base: 10, md: 16 }} lang={lang === 'zh' ? 'zh-Hans' : 'en'}>
-      <Text
-        as="h2"
-        id="cv-skill-evidence"
-        className="section-label-rule"
-        fontFamily={mono}
-        fontSize="11px"
-        letterSpacing="0.12em"
-        textTransform="uppercase"
-        color="page.fg-subtle"
-        m={0}
-      >
+      <SectionHeading id="cv-skill-evidence" mb={0}>
         {T.title}
-      </Text>
-      <Text mt={4} maxW="62ch" fontSize="15px" lineHeight="1.6" color="page.fg-secondary">
+      </SectionHeading>
+      <Text mt={3} maxW="62ch" fontSize="15px" lineHeight="1.6" color="page.fg-secondary">
         {T.lede}
       </Text>
       <Box

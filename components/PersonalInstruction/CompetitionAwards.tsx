@@ -7,11 +7,9 @@ import CVSectionShell, { CVRow } from './_CVSectionShell'
 const t = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
 const CompetitionAwardsSection = ({
-  index,
   data,
   lang = 'en',
 }: {
-  index?: number
   data: CompetitionAwards
   lang?: CvLang
 }) => {
@@ -19,7 +17,6 @@ const CompetitionAwardsSection = ({
   if (!items.length) return null
   return (
     <CVSectionShell
-      index={index}
       label={data?.headerName || 'Competitions'}
       count={items.length}
       countSuffix={cvLabels(lang).entries}

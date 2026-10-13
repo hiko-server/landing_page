@@ -120,7 +120,7 @@ async function armFirstFrameProbe(page: Page, pathname: string, readySelector: s
           requestAnimationFrame(sample)
           return
         }
-        const nodes = Array.from(document.querySelectorAll('main section, main [data-reveal], main section li, main .section-label-rule'))
+        const nodes = Array.from(document.querySelectorAll('main section, main [data-reveal], main section li, main .section-heading'))
         w.__firstFrame = nodes
           .filter((n) => {
             const r = n.getBoundingClientRect()

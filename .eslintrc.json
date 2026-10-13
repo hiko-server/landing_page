@@ -61,7 +61,7 @@
         },
         {
             "files": [
-                "components/General-UI/SectionLabel.tsx",
+                "components/General-UI/SectionHeading.tsx",
                 "components/General-UI/PageHeader.tsx",
                 "components/General-UI/PageGrid.tsx",
                 "components/Article/MetaGrid.tsx",

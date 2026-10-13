@@ -7,11 +7,9 @@ import CVSectionShell, { CVRow } from './_CVSectionShell'
 const t = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
 const EducationSection = ({
-  index,
   data,
   lang = 'en',
 }: {
-  index?: number
   data: Education
   lang?: CvLang
 }) => {
@@ -21,7 +19,7 @@ const EducationSection = ({
   const gpaColor = 'page.fg-secondary'
   if (!items.length) return null
   return (
-    <CVSectionShell index={index} label={data?.headerName || 'Education'} count={items.length} countSuffix={L.entries}>
+    <CVSectionShell label={data?.headerName || 'Education'} count={items.length} countSuffix={L.entries}>
       <Flex direction="column">
         {items.map((edu, i) => {
           const major = majorAddsInfo(edu.degree, edu.major) ? t(edu.major) : ''

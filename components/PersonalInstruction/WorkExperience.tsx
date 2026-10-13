@@ -7,11 +7,9 @@ import CVSectionShell, { CVRow, CVBullets, CVTagList } from './_CVSectionShell'
 const t = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
 
 const WorkExperience = ({
-  index,
   data,
   lang = 'en',
 }: {
-  index?: number
   data: Experiences
   lang?: CvLang
 }) => {
@@ -20,7 +18,6 @@ const WorkExperience = ({
   if (!items.length) return null
   return (
     <CVSectionShell
-      index={index}
       label={data?.headerName || 'Work Experience'}
       count={items.length}
       countSuffix={L.entries}

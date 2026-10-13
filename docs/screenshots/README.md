@@ -7,7 +7,7 @@ compression.
 
 | Filename | What to capture |
 |---|---|
-| `hero-light.png` | Full home page in light mode, scrolled to the [01] Introduction section |
+| `hero-light.png` | Full home page in light mode, scrolled to the hero |
 | `hero-dark.png` | Same as above, in dark mode |
 | `admin-storage.png` | `/admin/dashboard?tab=storage` — the inventory + backup panel |
 | `admin-home.png` | `/admin/dashboard?tab=home` — Home editor with visibility checkboxes visible |

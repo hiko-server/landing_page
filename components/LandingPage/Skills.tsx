@@ -28,7 +28,7 @@ const chipSx = {
 } as const
 
 /**
- * [NN] Skills — the owner's own Skills section from the public CV (never the
+ * Skills — the owner's own Skills section from the public CV (never the
  * site's npm dependencies): "Core skills" (skill + proficiency) and each
  * technical group under its own title.
  *

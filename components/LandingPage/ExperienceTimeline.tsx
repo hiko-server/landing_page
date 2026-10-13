@@ -31,7 +31,7 @@ type Row = {
 const RAIL_LEFT = { base: '10px', md: '12px' }
 
 /**
- * [06] Experience — a career rail built from the public (website-pruned) CV.
+ * Experience — a career rail built from the public (website-pruned) CV.
  *
  * - Unboxed rows with hairline separators: mono dates (a sticky left column
  *   at lg), the role line, then the summary as plain text.

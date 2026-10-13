@@ -48,8 +48,15 @@ In a Chakra `Heading` (which brings its own responsive sizes) spread
 
 - **Type**: a fluid scale (clamp between a 360 px and a 1280 px viewport)
   with named text styles — `textStyle="label"` (mono caps), `"meta"`,
-  `"small"`, `"lede"`, `"title-sm"` … `"title-xl"`, `"display"`, `"stat"`;
-  or a size alone: `fontSize="caption"`. Tracking: `letterSpacing="caps"`.
+  `"small"`, `"lede"`, `"title-sm"` … `"title-xl"`, `"section"`,
+  `"display"`, `"stat"`; or a size alone: `fontSize="caption"`. Tracking:
+  `letterSpacing="caps"`.
+- **Section headings**: every page section opens with
+  `components/General-UI/SectionHeading.tsx` — the plain sans `section`
+  text style, its `id` on the heading, an optional quiet `aux` (a count)
+  at the far end. No index numbers ("[01]"), no brackets and no mono
+  uppercase eyebrows as section headings on public pages; `textStyle="label"`
+  is for small labels, chips and PageHeader's kicker above the h1.
 - **Radii**: `control` (buttons, inputs), `card`, `panel`, `pill`.
 - **Layout**: `components/General-UI/PageGrid.tsx` — the page column with
   named `content` / `wide` / `full` lines (`<Breakout span="wide">`).

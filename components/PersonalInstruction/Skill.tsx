@@ -16,11 +16,9 @@ import CVSectionShell from './_CVSectionShell'
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
 const SkillSection = ({
-  index,
   data,
   lang = 'en',
 }: {
-  index?: number
   data: Skill
   lang?: CvLang
 }) => {
@@ -42,7 +40,6 @@ const SkillSection = ({
 
   return (
     <CVSectionShell
-      index={index}
       label={data?.headerName || 'Skills'}
       count={totalCount}
       countSuffix={L.items}

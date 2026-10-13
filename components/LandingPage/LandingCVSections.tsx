@@ -17,9 +17,8 @@ import type { WorkIndexItem } from './projectMatch'
  *
  * Owns:
  *   - language picker (en / zh) at the top, restyled as a mono toggle
- *     instead of the default OS <select>
- *   - assigns each section a 1-indexed number that gets shown in the
- *     `[NN]` mono index inside CVSectionShell
+ *     instead of the default OS <select>, on the row of the page's heading
+ *     (`title`)
  */
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
@@ -92,14 +91,13 @@ const LandingCVSections = ({ en, zh, work, expanded, headingLevel, idPrefix, lan
 
   return (
     <Box w="100%" maxW="1100px" mx="auto">
-      {/* Language toggle — mono pill row, replaces the native select */}
-      <Flex align="center" gap={4} mb={[6, 8]}>
+      {/* The heading row: the page's title, then the language toggle (mono pills, replaces the native select) at the far end. */}
+      <Flex align="center" justify="space-between" gap={4} minH="32px" mb={{ base: 5, md: 6 }}>
         {title ?? (
           <Text fontFamily={monoFont} fontSize="11px" letterSpacing="0.08em" color="page.fg-secondary" textTransform="uppercase">
             {hasZh ? 'Language' : 'CV'}
           </Text>
         )}
-        <Box flex="1" h="1px" bg="page.border" />
         {hasZh && (
           <Flex gap={1} fontFamily={monoFont} fontSize="11px" role="group" aria-label="CV language">
             {langs.map(({ key, label }) => (
@@ -132,17 +130,15 @@ const LandingCVSections = ({ en, zh, work, expanded, headingLevel, idPrefix, lan
       </Flex>
 
       {/*
-        personalInformation is rendered by the hero, not here. Filter first so
-        the `[NN]` index chips count from 1 with no gaps, whatever order the
-        sections sit in. Data is already website-pruned server-side; the
-        showOnWebsite check is a second guard for unpruned callers.
+        personalInformation is rendered by the hero, not here. Data is already
+        website-pruned server-side; the showOnWebsite check is a second guard
+        for unpruned callers.
       */}
       <CVSectionsContext.Provider value={context}>
         <Flex direction="column" lang={active === 'zh' ? 'zh-Hans' : undefined}>
           {renderedCvSections(cvData).map((section: any, key: number) => {
-            const idx = key + 1
             const k = `${section.sessionName}-${key}`
-            const props = { index: idx, data: section, lang: active }
+            const props = { data: section, lang: active }
             let body: ReactNode = null
             switch (section.sessionName) {
               case 'education':

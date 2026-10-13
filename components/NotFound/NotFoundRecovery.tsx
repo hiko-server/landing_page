@@ -5,6 +5,7 @@ import { parseSearchIndex } from '../Article/fuzzyMatch'
 import { HIDE_ON_COARSE_POINTER, isApplePlatform, paletteShortcutLabel } from '../Chrome/platform'
 import { openCommandPalette } from '../Chrome/paletteEvents'
 import { STATIC_CANDIDATES, candidatesFrom, queryFromPath, suggestPages, type Suggestion } from '../../lib/notFoundSuggest'
+import SectionHeading from '../General-UI/SectionHeading'
 
 /**
  * The 404 page's way back: Home, a search field that opens the ⌘K palette
@@ -109,20 +110,9 @@ export default function NotFoundRecovery() {
 
       {suggestions && suggestions.length > 0 && (
         <Box as="section" aria-labelledby="not-found-suggestions" mt={{ base: 12, md: 16 }} maxW="720px">
-          <Text
-            as="h2"
-            id="not-found-suggestions"
-            className="section-label-rule"
-            fontFamily={MONO}
-            fontSize="11px"
-            fontWeight={500}
-            letterSpacing="0.12em"
-            textTransform="uppercase"
-            color="page.fg-subtle"
-            mb={3}
-          >
+          <SectionHeading id="not-found-suggestions" mb={3}>
             Did you mean
-          </Text>
+          </SectionHeading>
           <Box as="ul" className="hover-list" listStyleType="none" m={0} p={0} borderTop="1px solid" borderColor="page.border">
             {suggestions.map((s) => (
               <Box as="li" key={s.href} className="hover-item" borderBottom="1px solid" borderColor="page.border">

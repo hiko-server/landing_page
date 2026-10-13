@@ -208,19 +208,6 @@ function NavLinks({
               _hover={{ color: 'page.fg', textDecoration: 'none' }}
               _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
             >
-              <Text
-                as="span"
-                aria-hidden
-                fontFamily={MONO}
-                fontSize="11px"
-                letterSpacing="0.04em"
-                lineHeight="38px"
-                className="tnum"
-                color={active ? 'accent.text' : 'page.fg-subtle'}
-                minW="2ch"
-              >
-                {String(i + 1).padStart(2, '0')}
-              </Text>
               <span>{link.name}</span>
               {active && (
                 <Box

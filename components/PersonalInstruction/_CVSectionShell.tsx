@@ -16,16 +16,16 @@ export const CVSectionsContext = createContext<{ expanded?: boolean; headingLeve
 /**
  * Shared shell for every CV accordion section on /about.
  *
- * The five concrete section files (Education, Project, WorkExperience,
- * CompetitionAwards, Skill, Certificate) only own what's inside the
- * expanded panel — the chrome (numbered index, label, count chip,
+ * The concrete section files (Education, Project, WorkExperience,
+ * CompetitionAwards, Skill, Certificate, Patents, ExtraSkill) only own
+ * what's inside the expanded panel — the chrome (label, count chip,
  * animated chevron, hairline divider, accent strip on hover/expand)
  * lives here.
  *
  * Design (rauno + engineer + premium):
  *   - Single hairline 1px border, no rounded mega-radius and no boxShadow
- *   - Mono `[NN]` index in muted color, sans-serif uppercase label, both
- *     locked into a single baseline
+ *   - The section's title alone on the left (sans-serif uppercase label) —
+ *     no index number: sections are told apart by their titles
  *   - Right side: mono `N ENTRIES` count chip + animated chevron rotor
  *   - On hover: 2px indigo border-left strip slides in
  *   - On expand: indigo strip stays + label color shifts to accent +
@@ -43,8 +43,6 @@ export const CVSectionsContext = createContext<{ expanded?: boolean; headingLeve
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
 export type CVSectionShellProps = {
-  /** 1-indexed section number, e.g. 1 → "[01]" */
-  index?: number
   /** Section label, e.g. "Education" — will be uppercased + tracked */
   label: string
   /** Number shown in the right-side meta chip, e.g. 3 → "3 ENTRIES" */
@@ -58,7 +56,6 @@ export type CVSectionShellProps = {
 }
 
 export default function CVSectionShell({
-  index,
   label,
   count,
   countSuffix = 'ENTRIES',
@@ -71,11 +68,10 @@ export default function CVSectionShell({
   const surfaceHover = 'page.float-bg'
   const labelColor = 'page.fg'
   const labelExpanded = 'accent.text'
-  const indexColor = 'page.fg-subtle'
+  const chevronColor = 'page.fg-subtle'
   const metaColor = 'page.fg-subtle'
   const panelDivider = 'page.border'
 
-  const padded = (n: number) => String(n).padStart(2, '0')
   const { expanded, headingLevel, anchorId } = useContext(CVSectionsContext)
   // Local state, not Chakra's Accordion: its items learn their index from
   // descendant registration after mount, so a section that starts open was
@@ -106,20 +102,6 @@ export default function CVSectionShell({
       _focusVisible={{ outline: 'none', boxShadow: 'inset 0 0 0 2px var(--accent)' }}
     >
       <Flex w="full" align="center" gap={[3, 4]}>
-        {/* Mono index */}
-        {typeof index === 'number' && (
-          <Text
-            as="span"
-            fontFamily={monoFont}
-            fontSize={['10px', '11px']}
-            color={indexColor}
-            letterSpacing="0.08em"
-            flexShrink={0}
-          >
-            [{padded(index)}]
-          </Text>
-        )}
-
         {/* Label — wraps rather than truncating a long title on phones */}
         <Text
           as="span"
@@ -163,7 +145,7 @@ export default function CVSectionShell({
             transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
             transition: 'transform 320ms cubic-bezier(0.22,1,0.36,1)',
           }}
-          color={isExpanded ? labelExpanded : indexColor}
+          color={isExpanded ? labelExpanded : chevronColor}
           aria-hidden
         >
           <svg

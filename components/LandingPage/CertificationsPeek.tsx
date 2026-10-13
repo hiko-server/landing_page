@@ -15,7 +15,7 @@ const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 type Org = { key: string; name: string; certs: Array<{ key: string; name: string; href: string }> }
 
 /**
- * [07] Certifications — org-grouped chips on a flat surface.
+ * Certifications — org-grouped chips on a flat surface.
  *
  * Built from the public CV; a hidden certificate, URL or org name is simply
  * absent. Credential links go through safeHref, so only http(s) URLs become

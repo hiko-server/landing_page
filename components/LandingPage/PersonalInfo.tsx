@@ -8,7 +8,6 @@ import NextLink from 'next/link'
 
 import HeroHeadline from './HeroHeadline'
 import HeroAmbient from '../Background/HeroAmbient'
-import SectionLabel from '../General-UI/SectionLabel'
 import Hint, { HintGroup } from '../General-UI/Hint'
 import { GitHubIcon, GitLabIcon, LinkedInIcon, WhatsAppIcon } from '../Icons/brand'
 import { heroCopy, portraitAlt, type HeroIdentity, type HeroMeta } from './heroIdentity'
@@ -17,7 +16,7 @@ import { revealSx, settleSx } from './heroReveal'
 import { portraitFrameSx } from './portraitFrame'
 
 /**
- * [01] Introduction — the home hero.
+ * The home hero.
  *
  * One composition for every width, laid out with responsive props only (no
  * JS media queries, so the server HTML is final and nothing jumps after
@@ -27,8 +26,8 @@ import { portraitFrameSx } from './portraitFrame'
  *
  * ≥ md the portrait card sits in a right-hand column with the "currently
  * coding" note under it. Below md the portrait is a 64px avatar beside the
- * h1, the [01] label is hidden so the headline leads, the CTAs share one row
- * and the note closes the hero under a hairline.
+ * h1, the CTAs share one row and the note closes the hero under a hairline.
+ * The headline leads at every width: no section label above it.
  */
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
@@ -163,12 +162,6 @@ const PersonalInfo = ({
     <HeroAmbient>
       <Box pt={{ base: 12, md: 24, lg: 32 }} pb={{ base: 12, md: 20 }}>
         <Box mx="auto" maxW="var(--container-content)" px={{ base: 4, md: 6, lg: 8 }}>
-          <Box mb={{ base: 0, md: 10 }} sx={revealSx(0)}>
-            <SectionLabel n={1} as="p" mb={0} hideBelow="md">
-              Introduction
-            </SectionLabel>
-          </Box>
-
           <Flex
             direction={{ base: 'column', md: 'row' }}
             align={{ base: 'stretch', md: 'flex-start' }}
