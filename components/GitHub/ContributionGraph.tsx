@@ -101,10 +101,20 @@ function Calendar({ total, weeks }: { total: number; weeks: ContributionWeek[] }
   }, [updateEdges])
 
   // Fade the columns in only when the graph was below the fold at hydration.
+  // Decide before the first paint from the real position: only a graph that
+  // is still below the fold hides (off-screen, so no flash) and fades in when
+  // scrolled to. One that is already visible stays as server-rendered — no
+  // hide/re-show while IntersectionObserver reports its first entry.
+  const armed = useRef(false)
+  useIsoLayoutEffect(() => {
+    const el = svgRef.current
+    if (!el || reduce || armed.current) return
+    armed.current = true
+    if (el.getBoundingClientRect().top > window.innerHeight) setPhase('pending')
+  }, [reduce])
   useEffect(() => {
     if (reduce) setPhase('static')
     else if (inView) setPhase((p) => (p === 'pending' ? 'in' : p))
-    else setPhase((p) => (p === 'static' ? 'pending' : p))
   }, [reduce, inView])
 
   const placeTip = useCallback(
@@ -169,8 +179,10 @@ function Calendar({ total, weeks }: { total: number; weeks: ContributionWeek[] }
         {facts.best ? ` Busiest day: ${formatDay(facts.best.date, true)}, with ${contributionsText(facts.best.count).toLowerCase()}.` : ''}
         {' Use the arrow keys to move between days.'}
       </p>
-      {/* Fits the graph, so the legend lines up with its right edge on wide screens. */}
-      <Box w="fit-content" maxW="100%">
+      {/* Phones: natural 10 px cells, scrolled horizontally. From md up the grid
+          scales to the full container width (viewBox keeps the aspect ratio),
+          so the legend lines up with the section's right edge. */}
+      <Box w={{ base: 'fit-content', md: '100%' }} maxW="100%">
         <Box
           ref={scrollRef}
           onScroll={onScroll}
@@ -179,6 +191,8 @@ function Calendar({ total, weeks }: { total: number; weeks: ContributionWeek[] }
           pb={1}
           sx={{
             scrollbarWidth: 'thin',
+            // md+: fill the row; the viewBox scales cells, gaps and labels together.
+            '@media (min-width: 48em)': { '& .contrib-svg': { width: '100%', height: 'auto' } },
             WebkitMaskImage: `linear-gradient(to right, transparent, #000 ${fade(edges.left)}, #000 calc(100% - ${fade(edges.right)}), transparent)`,
             maskImage: `linear-gradient(to right, transparent, #000 ${fade(edges.left)}, #000 calc(100% - ${fade(edges.right)}), transparent)`,
           }}
@@ -191,6 +205,8 @@ function Calendar({ total, weeks }: { total: number; weeks: ContributionWeek[] }
             width={width}
             height={GRID_H}
             viewBox={`0 0 ${width} ${GRID_H}`}
+            preserveAspectRatio="xMinYMin meet"
+            className="contrib-svg"
             data-phase={phase}
             onKeyDown={onKeyDown}
             onPointerOver={(e) => {
