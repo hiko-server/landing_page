@@ -153,6 +153,70 @@ Design-system foundation (research items B1–B4).
   shared bundle, and the menu's gesture uses pointer events instead of
   framer-motion's drag.
 
+### home-about-isr
+
+Home and About: what a recruiter scans first, a lighter home page, a
+narrative /about, both served from the ISR cache.
+
+- **Owner-ordered home sections (A1).** Admin → Home → *Sections* lists the
+  numbered sections as a sortable list (drag, touch or Space + arrows) with a
+  visibility checkbox each, plus a one-click *Recruiter-first* preset
+  (projects, experience, writing and skills before the GitHub activity) and
+  *Default order*. Stored as `home.sectionOrder`; an older document without
+  it, or with a section it did not know, is completed on read and on write
+  so nothing disappears.
+- **Proof strip (A1).** Up to four owner-written highlights under the hero,
+  each a link to its source (CV entry, case study, external page). The
+  editor suggests tiles built verbatim from the public CV's awards, patents
+  and education with their `/cv#…` anchors; nothing shows until the owner
+  saves one. A headline that is a whole number rolls up like the GitHub
+  stats (off under reduced motion).
+- **Compact Open Source band (A2).** Stats, then the contribution calendar
+  beside one stacked bar of the top five languages plus *Other* (with a text
+  legend), then the three pinned repositories. The calendar is one SVG path
+  per contribution level with a screen-reader summary (total, active days,
+  busiest day and month, longest streak) instead of 367 focusable cells,
+  and a per-day tooltip for pointers. The page props carry only what is
+  drawn: 3.5 KB of GitHub data instead of 19.8 KB on the production data (a
+  compact one-count-per-day calendar, three repository cards, the language
+  stack), and the calendar's markup shrinks from ~71 KB of cells to ~8 KB.
+- **Contact on the home page (A2)** is the availability card (only when set)
+  and a *Write to me* link to /contact, replacing the 760 px form and its
+  human-check request on every home visit. The contact copy in the Home
+  editor now belongs to the /contact form, and hiding the home band no
+  longer resets it.
+- **/about (A4).** A sticky identity rail on large screens (portrait,
+  names, availability, *View CV* / *Download PDF*, profiles and a section
+  nav that marks the current section), the tagline and focus areas, the
+  owner's bio, and every CV section open with each toggle inside an h3. The
+  bio is a new owner-editable MDX page (Admin → *About bio*,
+  `/admin/about`): version history, drafts, compile checks, search index,
+  sitemap date, backups; while it is empty the section is omitted (never
+  the hidden CV introduction). The GitHub widgets and the experience
+  timeline moved to the home page only: home = summary, about = narrative,
+  CV = record.
+- **ISR for / and /about (G1).** Both pages are statically regenerated:
+  right after every save that changes them (home document, CV, the bio,
+  posts → /, case studies → / and /about, restores, storage pulls, Mongo
+  restores, image backfills) and at most an hour after the previous render,
+  because "Present" / "Expected" and GitHub data change without a save.
+  The build renders a 1-second placeholder (no content store, no GitHub
+  calls) that the boot warm-up replaces. `expireTime` is a day, so a CDN
+  serves a stale copy for at most 24 h. Two saves in quick succession no
+  longer leave the older render cached: a revalidation never joins a render
+  that started before it (Next batches concurrent ones), it waits and
+  renders again.
+- **Back/forward cache (FIX-22).** / and /about are restored instantly on
+  Back (no `no-store` documents any more); `/api/contact/nonce` answers
+  `private, no-cache, max-age=0` instead of `no-store`, and the contact form
+  replaces a challenge older than five minutes when the page comes back from
+  the cache. A Chromium e2e check (DevTools `backForwardCacheNotUsed`) guards
+  both pages.
+- Page JS: /about 244.3 → 235.7 KiB (the GitHub widgets and Chakra's
+  Accordion left it), / unchanged at 250.5 KiB with the new features (the
+  home page imports the read-side helpers of the home document only,
+  `lib/homeSections.ts`, not the admin's validation), shared JS unchanged.
+
 ## [2.3.0] — 2026-10-13
 
 A research round across eight directions (UI, motion, reading, recruiter

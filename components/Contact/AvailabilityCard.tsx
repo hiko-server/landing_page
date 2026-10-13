@@ -25,7 +25,14 @@ const DOT_TOKEN: Record<AvailabilityStatus, string> = {
 
 type AvailabilityInput = Parameters<typeof availabilityView>[0]
 
-export default function AvailabilityCard({ availability }: { availability?: AvailabilityInput }) {
+export default function AvailabilityCard({
+  availability,
+  mb = 6,
+}: {
+  availability?: AvailabilityInput
+  /** Space below the card (Chakra spacing). */
+  mb?: number | string
+}) {
   const view = availabilityView(availability)
   if (!view) return null
 
@@ -40,7 +47,7 @@ export default function AvailabilityCard({ availability }: { availability?: Avai
       bg="page.bg-elevated"
       px={{ base: 4, md: 5 }}
       py={4}
-      mb={6}
+      mb={mb}
     >
       <Flex align="center" justify="space-between" gap={3} flexWrap="wrap">
         <Flex

@@ -281,7 +281,6 @@ test('sections and row staggers use the reveal path, not framer whileInView', ()
     'components/LandingPage/CertificationsPeek.tsx',
     'components/LandingPage/ExperienceTimeline.tsx',
     'components/GitHub/TopRepos.tsx',
-    'components/GitHub/LanguageBars.tsx',
     'components/GitHub/ActivityFeed.tsx',
   ]) {
     const src = read(f)
@@ -299,8 +298,8 @@ test('COR-2 / UX-3: every row stagger is marked, and print shows its animated ro
     'components/LandingPage/CertificationsPeek.tsx': 1, // organisations (motion.section)
     'components/LandingPage/ExperienceTimeline.tsx': 1, // roles (motion.li)
     'components/GitHub/TopRepos.tsx': 1, // repo tiles
-    'components/GitHub/LanguageBars.tsx': 2, // rows and their scaleX bars
     'components/GitHub/ActivityFeed.tsx': 1, // event rows
+    // (A2 replaced the 10 staggered language bars with one static stacked bar: LanguageStack.)
   }
   for (const [f, items] of Object.entries(lists)) {
     const src = read(f)

@@ -23,7 +23,7 @@ export type AdminOverview = {
   inbox: { unread: number; total: number }
   posts: { published: number; drafts: number }
   work: { published: number; drafts: number }
-  pages: { nowEmpty: boolean; usesEmpty: boolean }
+  pages: { nowEmpty: boolean; usesEmpty: boolean; aboutEmpty: boolean }
   backup: { lastAt: number | null; lastOk: boolean | null; ageHours: number | null; scheduled: boolean; nextAt?: number }
   r2: { configured: boolean; pending: number }
   config: { smtp: boolean; githubToken: boolean; trustedProxy: boolean; cfApi: boolean; indexNow: boolean }
@@ -49,7 +49,7 @@ function counts(collection: 'blog' | 'work'): { published: number; drafts: numbe
   return { published, drafts }
 }
 
-const pageEmpty = (name: 'now' | 'uses') => !(getPage(name)?.body || '').trim()
+const pageEmpty = (name: 'now' | 'uses' | 'about') => !(getPage(name)?.body || '').trim()
 
 function lastEdits(): AdminOverview['lastEdits'] {
   const rows = getDb()
@@ -78,7 +78,7 @@ export function readOverview(): AdminOverview {
     inbox: { unread: inbox.unread, total: inbox.total },
     posts: counts('blog'),
     work: counts('work'),
-    pages: { nowEmpty: pageEmpty('now'), usesEmpty: pageEmpty('uses') },
+    pages: { nowEmpty: pageEmpty('now'), usesEmpty: pageEmpty('uses'), aboutEmpty: pageEmpty('about') },
     backup: {
       lastAt: backup.lastAt,
       lastOk: backup.lastOk,

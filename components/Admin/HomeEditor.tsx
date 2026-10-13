@@ -8,7 +8,6 @@ import {
   AlertDialogOverlay,
   Box,
   Button,
-  Checkbox,
   Flex,
   FormControl,
   FormLabel,
@@ -30,8 +29,9 @@ import {
 import { AddIcon } from '@chakra-ui/icons'
 // Pure shape import — must NOT come from lib/home.ts (server-only, drags
 // better-sqlite3 into the client bundle). lib/homeShape.ts has no Node deps.
-import { HOME_SECTION_META, type HomeFieldError, type SectionKey } from '../../lib/homeShape'
+import { type HomeFieldError, type SectionKey, type SortableSectionKey } from '../../lib/homeShape'
 import { currentlyCodingPlaceholder, mergeCurrentlyCoding } from '../../lib/currentlyCoding'
+import type { HighlightSuggestion } from '../../lib/highlights'
 import { useAdminDirty, useDirtyRegistration } from './AdminDirtyContext'
 import { readJsonObject } from './shell/http'
 import { useLocalDraft } from './shell/useLocalDraft'
@@ -47,7 +47,7 @@ import {
   useSaveShortcut,
   type SaveState,
 } from './shell/ui'
-import { formFromHome, normalizeUrl, serializeHome, validateHomeForm, type HomeForm } from './home/homeForm'
+import { formFromHome, normalizeUrl, parseSuggestions, serializeHome, validateHomeForm, type HomeForm } from './home/homeForm'
 import { uploadHomeImage } from './home/imageUpload'
 import type { Updater } from './home/ImageCards'
 import PhotosSection from './home/PhotosSection'
@@ -56,6 +56,8 @@ import QuickAccessSection from './home/QuickAccessSection'
 import AvailabilitySection from './home/AvailabilitySection'
 import OpenSourceSection from './home/OpenSourceSection'
 import SiteSection from './home/SiteSection'
+import SectionsSection from './home/SectionsSection'
+import HighlightsSection from './home/HighlightsSection'
 
 const DEFAULT_CONTACT_REASONS = ['Project Inquiry', 'Hiring', 'Collaboration', 'Consulting', 'Mentorship', 'Other']
 
@@ -100,6 +102,7 @@ export default function HomeEditor({ onUnsavedSource }: { onUnsavedSource?: (get
       quickAccess: sliceSetter(setForm, 'quickAccess'),
       photos: sliceSetter(setForm, 'photos'),
       sections: sliceSetter(setForm, 'sections'),
+      highlights: sliceSetter(setForm, 'highlights'),
       contact: sliceSetter(setForm, 'contact'),
       availability: sliceSetter(setForm, 'availability'),
       openSource: sliceSetter(setForm, 'openSource'),
@@ -112,6 +115,8 @@ export default function HomeEditor({ onUnsavedSource }: { onUnsavedSource?: (get
   // CV-derived defaults for the "currently coding" chip, shown as
   // placeholders. Best-effort: stays empty on any fetch error.
   const [ccAuto, setCcAuto] = useState({ label: '', project: '', note: '' })
+  // Proof-strip tiles built verbatim from the public CV (null while loading).
+  const [suggestedHighlights, setSuggestedHighlights] = useState<HighlightSuggestion[] | null>(null)
 
   // 'ready' only after a successful load of the ADMIN view: saving a form
   // that never loaded (or was filled from the public, pruned view) would
@@ -179,9 +184,11 @@ export default function HomeEditor({ onUnsavedSource }: { onUnsavedSource?: (get
               note: dj.currentlyCoding.note || '',
             })
           }
-        }
+          setSuggestedHighlights(parseSuggestions(dj.suggestedHighlights))
+        } else if (alive) setSuggestedHighlights([])
       } catch {
-        // placeholders just stay generic
+        // placeholders just stay generic; no suggestions to offer
+        if (alive) setSuggestedHighlights([])
       }
     }
     void load()
@@ -334,6 +341,7 @@ export default function HomeEditor({ onUnsavedSource }: { onUnsavedSource?: (get
   }
 
   const toggleSection = (key: SectionKey, visible: boolean) => set.sections((prev) => ({ ...prev, [key]: visible }))
+  const setSectionOrder = (order: SortableSectionKey[]) => setForm((prev) => ({ ...prev, sectionOrder: order }))
 
   const addReason = () => {
     const v = newReason.trim()
@@ -616,7 +624,14 @@ export default function HomeEditor({ onUnsavedSource }: { onUnsavedSource?: (get
         </FormControl>
       </SimpleGrid>
 
-      <SectionLabel index={2} title="Socials" hint="Profile URLs for GitHub, GitLab, LinkedIn and WhatsApp." />
+      <SectionLabel
+        index={2}
+        title="Highlights"
+        hint="The proof strip under the hero: up to four achievements, each linked to its source. Hidden until you save one."
+      />
+      <HighlightsSection value={form.highlights} onChange={set.highlights} suggestions={suggestedHighlights} />
+
+      <SectionLabel index={3} title="Socials" hint="Profile URLs for GitHub, GitLab, LinkedIn and WhatsApp." />
       <SimpleGrid columns={[1, 2]} gap={4}>
         {socialField('github', 'GitHub')}
         {socialField('gitlab', 'GitLab')}
@@ -624,63 +639,34 @@ export default function HomeEditor({ onUnsavedSource }: { onUnsavedSource?: (get
         {socialField('whatsapp', 'WhatsApp')}
       </SimpleGrid>
 
-      <SectionLabel index={3} title="Brands" hint="Affiliation logos, in display order. Drag the handle (or press Space on it and use the arrow keys) to reorder." />
+      <SectionLabel index={4} title="Brands" hint="Affiliation logos, in display order. Drag the handle (or press Space on it and use the arrow keys) to reorder." />
       <BrandsSection value={form.brands} onChange={set.brands} />
 
-      <SectionLabel index={4} title="Quick access" hint="Shortcut links, in display order." />
+      <SectionLabel index={5} title="Quick access" hint="Shortcut links, in display order." />
       <QuickAccessSection value={form.quickAccess} onChange={set.quickAccess} />
 
       <SectionLabel
-        index={5}
+        index={6}
         title="Photos"
         hint="Field-notes gallery. The description is the image’s alt text. Switch Visible off to hide a photo without deleting it."
       />
       <PhotosSection value={form.photos} onChange={set.photos} />
 
       <SectionLabel
-        index={6}
-        title="Visibility"
-        hint="Toggle which rows appear on the home page. Hiding a row also removes its anchor and scroll target; the numbering of the rest stays the same because labels are static."
+        index={7}
+        title="Sections"
+        hint="Which sections the home page shows, and the order of the numbered ones. A hidden section also loses its anchor; the [NN] labels count only what is shown."
       />
-      <SimpleGrid columns={[1, 2, 3]} gap={3}>
-        {HOME_SECTION_META.map(({ key, label, hint }) => {
-          const visible = sections[key] !== false
-          return (
-            <Flex
-              key={key}
-              as="label"
-              align="flex-start"
-              gap={3}
-              p={3}
-              borderWidth="1px"
-              borderRadius="md"
-              borderColor={visible ? 'accent.500' : 'page.border'}
-              bg={visible ? 'var(--accent-soft)' : 'page.bg-elevated'}
-              cursor="pointer"
-              transition="border-color 180ms var(--ease-out-quart), background-color 180ms var(--ease-out-quart)"
-            >
-              <Checkbox isChecked={visible} onChange={(e) => toggleSection(key, e.target.checked)} mt={0.5} />
-              <Box>
-                <Text fontSize="sm" fontWeight={600}>
-                  {label}
-                </Text>
-                <Text fontSize="xs" color="page.fg-secondary" mt={0.5}>
-                  {hint}
-                </Text>
-              </Box>
-            </Flex>
-          )
-        })}
-      </SimpleGrid>
+      <SectionsSection order={form.sectionOrder} sections={sections} onOrderChange={setSectionOrder} onToggle={toggleSection} />
 
       <SectionLabel
-        index={7}
-        title="Contact panel"
+        index={8}
+        title="Contact form"
         hint={
           <>
-            Heading and reasons dropdown of the home contact section. Leave a field blank to use the built-in default (heading =
-            brand name, blurb = &ldquo;I usually reply within 24 hours.&rdquo;, eyebrow = &ldquo;▸ Reach me&rdquo;). Reasons fall back
-            to the original six when the list is empty.
+            Heading and reasons dropdown of the contact form on /contact (the home page links to it). Leave a field blank to use the
+            built-in default (heading = brand name, blurb = &ldquo;I usually reply within 24 hours.&rdquo;, eyebrow = &ldquo;▸ Reach
+            me&rdquo;). Reasons fall back to the original six when the list is empty.
           </>
         }
       />
@@ -750,20 +736,20 @@ export default function HomeEditor({ onUnsavedSource }: { onUnsavedSource?: (get
       </Box>
 
       <SectionLabel
-        index={8}
+        index={9}
         title="Availability"
-        hint="Whether you are open to work, shown on the contact page and in the command palette. Clear it to show nothing."
+        hint="Whether you are open to work, shown on the home page’s contact band, /about, /contact and in the command palette. Clear it to show nothing."
       />
       <AvailabilitySection value={form.availability} onChange={set.availability} />
 
       <SectionLabel
-        index={9}
+        index={10}
         title="Open source"
-        hint="Repositories to feature first in the home page’s open-source section, in this order, with optional one-line blurbs."
+        hint="Repositories to pin in the home page’s open-source band (the first three show), in this order, with optional one-line blurbs."
       />
       <OpenSourceSection value={form.openSource} onChange={set.openSource} />
 
-      <SectionLabel index={10} title="Site" hint="Site-wide identity." />
+      <SectionLabel index={11} title="Site" hint="Site-wide identity." />
       <SiteSection value={form.site} onChange={set.site} />
 
       {/* Sticky save bar — always reachable, shows unsaved state. */}

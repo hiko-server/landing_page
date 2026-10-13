@@ -27,7 +27,7 @@ import { clampAtBoundary } from './schema'
  *
  *   blog/{slug}   posts (editable via /admin/blog)
  *   work/{slug}   project case studies (editable via /admin/work)
- *   pages now/uses single pages
+ *   pages now/uses/about single pages (about = the bio on /about)
  *
  * Bodies are compiled on the server into a plain, JSON-serialisable hast
  * tree that the client renders with hast-util-to-jsx-runtime
@@ -388,8 +388,9 @@ export async function getWork(slug: string, opts: GetOptions = {}): Promise<MDXR
   return render(entry, item.body)
 }
 
-// ── Static pages (now, uses, etc.) ────────────────────────────────────────
-export async function getStaticMdxPage(name: 'now' | 'uses'): Promise<MDXRendered<PageFrontmatter> | null> {
+// ── Static pages (now, uses, about) ───────────────────────────────────────
+/** A single owner-written page; null when it was never stored (callers check the body for emptiness). */
+export async function getStaticMdxPage(name: 'now' | 'uses' | 'about'): Promise<MDXRendered<PageFrontmatter> | null> {
   const page = getPage(name)
   if (!page) return null
   const fm = cleanFrontmatter(page.frontmatter as PageFrontmatter, name)

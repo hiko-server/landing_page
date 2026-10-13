@@ -154,7 +154,7 @@ test('overview reports real counts, env presence as booleans and the latest edit
   const o = r.body
   assert.deepEqual(o.posts, { published: 1, drafts: 1 })
   assert.deepEqual(o.work, { published: 1, drafts: 0 })
-  assert.deepEqual(o.pages, { nowEmpty: false, usesEmpty: true })
+  assert.deepEqual(o.pages, { nowEmpty: false, usesEmpty: true, aboutEmpty: true })
   assert.deepEqual(o.inbox, { unread: 0, total: 0 })
   assert.deepEqual(o.r2, { configured: false, pending: 0 })
   assert.deepEqual(o.config, { smtp: false, githubToken: true, trustedProxy: false, cfApi: false, indexNow: false })

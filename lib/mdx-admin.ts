@@ -9,7 +9,7 @@ import type { ApiHandler } from './apiHandler'
 import { isAdminRequest } from './auth'
 import { requireRecentAuth } from './adminAuth/stepUp'
 import { rateLimit } from './rateLimit'
-import { collectionPaths, revalidatePaths } from './revalidate'
+import { COLLECTION_EXTRA_PATHS, collectionPaths, revalidatePaths } from './revalidate'
 import {
   getPage,
   putPage as storePutPage,
@@ -24,8 +24,8 @@ import {
 } from './contentStore'
 
 /**
- * Admin-only operations for MDX collections and the single /now and /uses
- * pages.
+ * Admin-only operations for MDX collections and the single pages (/now,
+ * /uses and the /about bio).
  *
  * Backed by the dual-write content store (SQLite + Cloudflare R2). Legacy
  * filesystem (content/*.mdx) is auto-seeded into the DB on first read and
@@ -266,11 +266,16 @@ export async function restoreItemSnapshot(
   return await writeOne(c, slug, doc.frontmatter, doc.body)
 }
 
-// ── Single-file pages (now, uses) ─────────────────────────────────────────
+// ── Single-file pages (now, uses, about) ──────────────────────────────────
 
-export type PageName = 'now' | 'uses'
+/**
+ * The owner-written single pages: /now and /uses (an automatic version shows
+ * while the body is empty) and the bio on /about (no bio section while it
+ * is empty).
+ */
+export type PageName = 'now' | 'uses' | 'about'
 
-const PAGE_NAMES: ReadonlyArray<PageName> = ['now', 'uses']
+export const PAGE_NAMES: ReadonlyArray<PageName> = ['now', 'uses', 'about']
 
 export function isPageName(value: unknown): value is PageName {
   return typeof value === 'string' && (PAGE_NAMES as ReadonlyArray<string>).includes(value)
@@ -381,12 +386,14 @@ export async function mdxProblem(body: string): Promise<MdxProblem | null> {
 }
 
 /**
- * Public pages to regenerate after a write to `slug`: the index, the item and
- * its siblings (prev/next and related links). A failed refresh never fails
- * the write (the ISR window still applies).
+ * Public pages to regenerate after a write to `slug`: the index, the item,
+ * its siblings (prev/next and related links) and the pages outside the
+ * collection that list or link it (COLLECTION_EXTRA_PATHS: the home page's
+ * latest writing, case-study links on / and /about). A failed refresh never
+ * fails the write (the ISR window still applies).
  */
 export async function refreshCollection(res: NextApiResponse, c: Collection, slug: string) {
-  const paths = collectionPaths(c, slug, listAll(c).map((i) => i.slug))
+  const paths = [...collectionPaths(c, slug, listAll(c).map((i) => i.slug)), ...COLLECTION_EXTRA_PATHS[c]]
   const failed = await revalidatePaths(res, paths)
   return {
     revalidated: paths.filter((p) => !failed.includes(p)),

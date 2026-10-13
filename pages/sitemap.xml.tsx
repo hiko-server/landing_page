@@ -51,7 +51,7 @@ export const getServerSideProps: GetServerSideProps = async ({ res }) => {
 
   const entries: Entry[] = [
     { path: '/', lastmod: latestDate([home, cv]) },
-    { path: '/about', lastmod: latestDate([home, cv]) },
+    { path: '/about', lastmod: latestDate([home, cv, storedAt('pages', 'about')]) },
     { path: '/work', lastmod: latestDate(workEntries.map((e) => e.lastmod)) },
     { path: '/blog', lastmod: latestDate(postEntries.map((e) => e.lastmod)) },
     { path: '/cv', lastmod: latestDate([cv]), alternates: CV_ALTERNATES },

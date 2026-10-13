@@ -78,6 +78,23 @@ export function visibleErrors(errors: ContactErrors, touched: Partial<Record<Con
   return out
 }
 
+// ── Back/forward cache restore ───────────────────────────────────────────
+
+/** A challenge older than this is replaced when the page comes back from the back/forward cache. */
+export const RESTORE_REFRESH_AFTER_MS = 5 * 60 * 1000
+
+/**
+ * Whether a `pageshow` should replace the visible human-check challenge: only
+ * a restore from the back/forward cache (`persisted`), only while the form
+ * shows a challenge (fetched at `fetchedAt`, ms; 0 = none, 1 = in flight)
+ * and only when it is old enough that it may expire before the visitor
+ * sends — the server accepts a nonce for 30 minutes.
+ */
+export function shouldRefreshChallengeOnRestore(opts: { persisted: boolean; fetchedAt: number; now: number; sent: boolean }): boolean {
+  if (!opts.persisted || opts.sent || opts.fetchedAt <= 1) return false
+  return opts.now - opts.fetchedAt >= RESTORE_REFRESH_AFTER_MS
+}
+
 // ── Availability (home.availability) ─────────────────────────────────────
 
 export type AvailabilityStatus = 'open' | 'limited' | 'closed'

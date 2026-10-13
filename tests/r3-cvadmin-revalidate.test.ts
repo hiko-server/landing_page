@@ -24,7 +24,8 @@ let cvdata: Handler, home: Handler, versions: Handler
 let closeDb: () => void
 let CV_PATHS: readonly string[] = []
 let HOME_PATHS: readonly string[] = []
-const SSR_PATHS = ['/', '/about', '/contact', '/cv', '/cv/zh']
+// / and /about are ISR since G1 and belong in both lists (tests/g1-isr-revalidate.test.ts).
+const SSR_PATHS = ['/contact', '/cv', '/cv/zh']
 
 type MockRes = { statusCode: number; headers: Record<string, string>; body: any; revalidated: string[] }
 
@@ -105,6 +106,10 @@ after(() => {
 test('the path lists hold only ISR pages that render CV / home data', () => {
   assert.ok(CV_PATHS.includes('/now'), 'CV: /now renders public CV sections')
   assert.ok(HOME_PATHS.includes('/now'), 'home: /now renders hero.currentlyCoding')
+  for (const p of ['/', '/about']) {
+    assert.ok(CV_PATHS.includes(p), `CV: ${p} renders the CV`)
+    assert.ok(HOME_PATHS.includes(p), `home: ${p} renders the home document`)
+  }
   for (const p of SSR_PATHS) {
     assert.ok(!CV_PATHS.includes(p), `CV list must not contain the SSR page ${p}`)
     assert.ok(!HOME_PATHS.includes(p), `home list must not contain the SSR page ${p}`)

@@ -47,6 +47,10 @@ const nextConfig = {
   // time; make sure the standalone output carries them.
   outputFileTracingIncludes: { '/api/og': ['./assets/og/*.ttf'] },
   reactStrictMode: true,
+  // ISR pages answer `s-maxage=<revalidate>, stale-while-revalidate=<expireTime
+  // - revalidate>`: a CDN may serve a stale copy for at most a day after it
+  // went stale (the default is a year), while it refetches in the background.
+  expireTime: 86400,
   // Don't publish full client source (incl. the admin UI) as .map files.
   productionBrowserSourceMaps: false,
   poweredByHeader: false,

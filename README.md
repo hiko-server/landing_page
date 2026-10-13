@@ -49,10 +49,15 @@ backup, and a hardened admin GUI for non-engineers.
   guard. See [CV visibility model](#cv-visibility-model).
 - **Admin GUI for non-engineers** — visual editors for hero, brands,
   socials, photo strip, blog posts, case studies, the CV (Studio + raw
-  JSON), and Now/Uses pages.
-- **Per-section visibility** — toggle any `[NN]` row on the home page
-  (Open Source, Tech Stack, Activity, Projects, Experience, Certs,
-  Photos, Contact) without touching code.
+  JSON), the Now/Uses pages and the About bio.
+- **Per-section visibility and order** — toggle any `[NN]` row on the home
+  page (Open Source, Skills, Activity, Projects, Writing, Experience, Certs,
+  Photos, Contact) and drag them into any order, or apply the one-click
+  *Recruiter-first* preset, without touching code.
+- **Proof strip** — up to four owner-written highlights under the hero, each
+  linked to its source; the editor suggests tiles built verbatim from the
+  public CV (awards, patents, education) and nothing shows until one is
+  saved.
 - **Editable contact panel** — heading, eyebrow, blurb, and the dropdown
   reasons list all come from `data/home.json`; built-in defaults when
   blank.
@@ -95,8 +100,14 @@ backup, and a hardened admin GUI for non-engineers.
 - **Home** — responsive pre-baked hero image, word-staggered headline,
   cursor-lit cards, a scroll-driven career rail, skills taken from the CV,
   a *Writing & case studies* section and a full-width Field Notes strip with
-  a shared-element lightbox. GitHub data (owner-featured repos, meaningful
-  stats, an indigo contribution graph) is rendered into the HTML.
+  a shared-element lightbox. One compact Open Source band (meaningful stats,
+  an indigo contribution graph drawn as one path per level with a text
+  summary, a single top-five language bar and three pinned repos) is
+  rendered into the HTML with only the fields it draws; the contact section
+  is the availability card plus a "Write to me" link to `/contact`.
+- **About** — a sticky identity rail (portrait, names, availability, CV,
+  profiles, section nav) beside the owner's bio (Admin → About bio, omitted
+  while empty) and the full bilingual CV, open.
 - **Contact** — an availability card (only when the owner sets one), copy
   buttons, a vCard (`/api/vcard`) and a QR code to save it.
 - **Articles** — GitHub-flavoured Markdown, zero-layout-shift images with
@@ -146,8 +157,9 @@ backup, and a hardened admin GUI for non-engineers.
   into WebP variants with their dimensions recorded (existing uploads can
   be backfilled), and remote images can be imported in one click through
   the SSRF-safe fetcher.
-- **Home editor** — sortable photo / logo / link cards (mouse, touch and
-  keyboard), availability, featured repositories, logo scale, site name.
+- **Home editor** — sortable photo / logo / link cards and section order
+  (mouse, touch and keyboard), highlights with CV suggestions,
+  availability, featured repositories, logo scale, site name.
 - **Safer navigation** — *Save and leave / Discard / Stay* instead of a
   browser confirm, a relative "Saved · 12 s ago" status, and a `?`
   shortcuts overlay on every admin page.
@@ -501,12 +513,17 @@ drill and the recent warn / error log entries.
 
 ### Section visibility
 
-Each `[NN]` home section is gated through `isSectionVisible(home, key)`
-where `key ∈ {introduction, brands, open-source, tech-stack, activity,
-projects, experience, certifications, photos, contact}`. Defaults to
-*visible* if the key is missing — a clean install keeps the full page.
+Each home section is gated through `isSectionVisible(home, key)` where
+`key ∈ {introduction, highlights, brands, open-source, tech-stack, activity,
+projects, writing, experience, certifications, photos, contact}`. Defaults
+to *visible* if the key is missing — a clean install keeps the full page.
+The numbered sections follow `home.sectionOrder`, read through
+`resolveSectionOrder` (`lib/homeSections.ts`): unknown keys are dropped and
+a section missing from a stored order is inserted at its default place, so
+an older document never hides a section.
 
-Toggle from **Admin → Home → Visibility**.
+Toggle and reorder from **Admin → Home → Sections** (*Recruiter-first* puts
+projects, experience, writing and skills before the GitHub activity).
 
 ### Currently-coding chip
 
@@ -740,8 +757,8 @@ overlay and follow a contact message into the Inbox.
 
 | Route | Description |
 |---|---|
-| `/` | Home — composed `[NN]` sections, gated by visibility |
-| `/about` | Long-form intro + GitHub stats + bilingual CV stack |
+| `/` | Home — hero, proof strip and the `[NN]` sections in the owner's order (ISR, hourly + on save) |
+| `/about` | Identity rail, the owner's bio and the open bilingual CV (ISR, hourly + on save) |
 | `/cv` | Printable CV in English (browser print-to-PDF target, `?print=1`) |
 | `/cv/zh` | The same CV in Chinese (`/cv?lang=zh` redirects here) |
 | `/work` | Case-study index (MDX) |
@@ -772,7 +789,7 @@ are gated by the middleware.
 | `/admin/login` | Sign-in (covert: no nav link; reachable via ⌘K palette or URL) |
 | `/admin/forgot` + `/admin/reset` | Email-based reset flow |
 | `/admin` | Status hub: what needs attention, live counts, links to the editors |
-| `/admin/dashboard?tab=home` | HomeEditor — hero, contact, visibility, brands, photos |
+| `/admin/dashboard?tab=home` | HomeEditor — hero, highlights, section order and visibility, brands, photos, contact form copy |
 | `/admin/dashboard?tab=cv` | CV Studio (per-field visibility, hidden-items panel, A4 / website preview) + raw JSON |
 | `/admin/dashboard?tab=versions` | Version-history rollback |
 | `/admin/dashboard?tab=storage` | SQLite + R2 inventory, manual Backup / Pull |
@@ -780,7 +797,7 @@ are gated by the middleware.
 | `/admin/dashboard?tab=analytics` | First-party page views, referrers, devices and real-user Web Vitals |
 | `/admin/blog`, `/admin/blog/edit?slug=…` | Blog post manager: drafts, publish checklist, live preview, history |
 | `/admin/work`, `/admin/work/edit?slug=…` | Case-study manager |
-| `/admin/now`, `/admin/uses` | One-off page editors |
+| `/admin/now`, `/admin/uses`, `/admin/about` | One-off page editors (`about` = the bio on /about; empty = no bio section) |
 | `/admin/db-config` | MongoDB connection + manual backup/restore |
 | `/admin/security` | Passkeys, recovery codes, "Require a passkey", signed-in browsers, sign-in history |
 | `/admin/system` | Health (build, disk, databases, backups, restore drill, recent warnings) and `?view=errors` |

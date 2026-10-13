@@ -31,6 +31,7 @@ import EmailText from '../Common/EmailText'
 import {
   MESSAGE_MAX,
   isContactValid,
+  shouldRefreshChallengeOnRestore,
   submitHint,
   validateContact,
   visibleErrors,
@@ -254,6 +255,21 @@ export default function ContactPro({
     setValues((v) => ({ ...v, mathAnswer: '' }))
     return fetchNonce()
   }, [fetchNonce])
+
+  // Back from the back/forward cache: the page (and its challenge) is exactly
+  // as it was left, possibly long ago. A challenge that may expire before the
+  // visitor sends is replaced up front, instead of changing under them at submit.
+  const sentRef = useRef(false)
+  sentRef.current = !!sent
+  useEffect(() => {
+    const onShow = (e: PageTransitionEvent) => {
+      if (shouldRefreshChallengeOnRestore({ persisted: e.persisted, fetchedAt: nonceAtRef.current, now: Date.now(), sent: sentRef.current })) {
+        void refreshChallenge()
+      }
+    }
+    window.addEventListener('pageshow', onShow)
+    return () => window.removeEventListener('pageshow', onShow)
+  }, [refreshChallenge])
 
   // Draft autosave (name / email / reason / subject / message only).
   useEffect(() => {

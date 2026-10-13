@@ -135,8 +135,9 @@ export default function PublishSheet({ isOpen, onClose, collection, input, onPub
     [input, collection, known],
   )
 
-  // Mirrors lib/revalidate collectionPaths: the index, the item and up to 50
-  // sibling detail pages (their prev/next and related links).
+  // Mirrors lib/mdx-admin refreshCollection: the index, the item, up to 50
+  // sibling detail pages (their prev/next and related links) and
+  // COLLECTION_EXTRA_PATHS (/ for posts; / and /about for case studies).
   const detailPath = input.slug ? `/${collection}/${input.slug}` : null
   const others = useMemo(() => {
     const siblings = known ? known[collection].filter((s) => s !== input.slug) : []
@@ -313,7 +314,8 @@ export default function PublishSheet({ isOpen, onClose, collection, input, onPub
                     </Text>
                   </>
                 ) : null}
-                {others ? ` and ${others} other ${collection === 'blog' ? 'post' : 'case study'} page${others === 1 ? '' : 's'} (related links)` : ''}
+                {others ? `, ${others} other ${collection === 'blog' ? 'post' : 'case study'} page${others === 1 ? '' : 's'} (related links)` : ''}
+                {collection === 'blog' ? ' and the home page' : ' and the home and about pages'}
                 {' '}update right after publishing.
               </Text>
             </Box>

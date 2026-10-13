@@ -4,6 +4,8 @@ import sharp from 'sharp'
 import { withApi } from '../../../lib/apiHandler'
 import { isAdminRequest } from '../../../lib/auth'
 import { getPage, listItems } from '../../../lib/contentStore'
+import { readPublicHome } from '../../../lib/home'
+import { PAGE_NAMES } from '../../../lib/mdx-admin'
 import { pathsReferencingUploads, revalidatePaths, type ContentSource } from '../../../lib/revalidate'
 import { UPLOAD_NAME_RE, isValidUploadName } from '../../../lib/security/uploadName'
 import { isVariantName, variantName, variantWidthsFor } from '../../../lib/uploadVariants'
@@ -51,10 +53,17 @@ function publicUploadSources(): ContentSource[] {
   }
   // /work shows each case study's cover with its srcset.
   out.push({ path: '/work', text: workCovers.join('\n') })
-  for (const name of ['now', 'uses'] as const) {
+  for (const name of PAGE_NAMES) {
     const page = getPage(name)
     if (page) out.push({ path: `/${name}`, text: page.body })
   }
+  // The home page ships the portrait's and the field-note photos' srcsets;
+  // /about ships the portrait's.
+  const home = readPublicHome()
+  const avatar = typeof home?.hero?.avatarUrl === 'string' ? home.hero.avatarUrl : ''
+  const photos = (Array.isArray(home?.photos) ? home.photos : []).map((p) => (typeof p?.url === 'string' ? p.url : ''))
+  out.push({ path: '/', text: [avatar, ...photos].join('\n') })
+  out.push({ path: '/about', text: avatar })
   return out
 }
 

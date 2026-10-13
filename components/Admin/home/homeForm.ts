@@ -12,13 +12,17 @@
 
 import {
   AVAILABILITY_STATUSES,
+  DEFAULT_SECTION_ORDER,
   HOME_LIMITS,
+  isSameOrder,
   normalizeHomeWrite,
+  resolveSectionOrder,
   snapBrandScale,
   type AvailabilityStatus,
   type HomeData,
   type HomeFieldError,
   type SectionKey,
+  type SortableSectionKey,
 } from '../../../lib/homeShape'
 
 export type Keyed<T> = T & { _id: string }
@@ -27,6 +31,7 @@ export type BrandItem = Keyed<{ name: string; href: string; image: string; scale
 export type QuickItem = Keyed<{ label: string; url: string }>
 export type PhotoItem = Keyed<{ url: string; describe: string; redirectTo: string; visible: boolean }>
 export type FeaturedItem = Keyed<{ name: string; blurb: string }>
+export type HighlightItem = Keyed<{ value: string; label: string; href: string }>
 
 export type HeroForm = {
   welcome: string
@@ -63,6 +68,15 @@ export type HomeForm = {
   quickAccess: QuickItem[]
   photos: PhotoItem[]
   sections: Partial<Record<SectionKey, boolean>>
+  /** Every numbered section, in display order (always complete). */
+  sectionOrder: SortableSectionKey[]
+  /**
+   * Whether the stored document has an explicit order. Without one, the
+   * built-in order is not written back, so opening and saving the editor
+   * does not pin today's default for good.
+   */
+  sectionOrderSet: boolean
+  highlights: HighlightItem[]
   contact: ContactForm
   availability: AvailabilityForm
   openSource: OpenSourceForm
@@ -78,6 +92,8 @@ const KNOWN_KEYS = new Set([
   'quickAccess',
   'photos',
   'sections',
+  'sectionOrder',
+  'highlights',
   'contact',
   'availability',
   'openSource',
@@ -154,6 +170,11 @@ export function formFromHome(data: unknown, makeId: () => string = newId): HomeF
     sections: Object.fromEntries(
       Object.entries(obj(d.sections)).filter(([, v]) => typeof v === 'boolean'),
     ) as Partial<Record<SectionKey, boolean>>,
+    sectionOrder: resolveSectionOrder(d.sectionOrder),
+    sectionOrderSet: Array.isArray(d.sectionOrder),
+    highlights: arr(d.highlights)
+      .map(obj)
+      .map((h) => ({ _id: makeId(), value: str(h.value), label: str(h.label), href: str(h.href) })),
     contact: {
       heading: str(contact.heading),
       blurb: str(contact.blurb),
@@ -192,6 +213,7 @@ export function ensureIds(form: HomeForm, makeId: () => string = newId): HomeFor
     brands: fix(form.brands),
     quickAccess: fix(form.quickAccess),
     photos: fix(form.photos),
+    highlights: fix(Array.isArray(form.highlights) ? form.highlights : []),
     openSource: { ...form.openSource, featured: fix(form.openSource.featured) },
   }
 }
@@ -283,6 +305,13 @@ export function serializeHome(form: HomeForm, origin = 'http://localhost'): Home
     }
   }
   if (form.site.name.trim()) out.site = { name: form.site.name.trim() }
+  // A draft saved by an older editor build may lack the newer fields.
+  const order = resolveSectionOrder(form.sectionOrder)
+  if (form.sectionOrderSet || !isSameOrder(order, DEFAULT_SECTION_ORDER)) out.sectionOrder = order
+  const highlights = (Array.isArray(form.highlights) ? form.highlights : [])
+    .map((h) => ({ value: str(h.value).trim(), label: str(h.label).trim(), href: str(h.href).trim() }))
+    .filter((h) => h.value || h.label || h.href)
+  if (highlights.length) out.highlights = highlights
   return out
 }
 
@@ -328,3 +357,18 @@ export function updatedAgo(updatedAt: number | null, now: number): string {
 
 /** Remaining characters for a featured blurb (negative when over). */
 export const blurbRemaining = (blurb: string) => HOME_LIMITS.featuredBlurbMax - blurb.trim().length
+
+/** The `suggestedHighlights` of GET /api/admin/cv-derived, defensively parsed. */
+export function parseSuggestions(raw: unknown): Array<{ value: string; label: string; href: string; source: string }> {
+  return arr(raw)
+    .map(obj)
+    .filter((s) => typeof s.value === 'string' && s.value && typeof s.label === 'string' && s.label && typeof s.href === 'string' && s.href)
+    .map((s) => ({ value: str(s.value), label: str(s.label), href: str(s.href), source: str(s.source) }))
+}
+
+/** A highlight already in the form with the same text (suggestions are added once). */
+export function hasHighlight(items: readonly { value: string; label: string }[], h: { value: string; label: string }): boolean {
+  const key = (v: string, l: string) => `${v.trim().toLowerCase()}\u0000${l.trim().toLowerCase()}`
+  const want = key(h.value, h.label)
+  return items.some((i) => key(i.value, i.label) === want)
+}

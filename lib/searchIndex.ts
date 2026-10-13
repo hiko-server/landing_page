@@ -17,7 +17,7 @@ import {
   indexedList,
   list,
 } from '../components/CVViewerPage/fields'
-import { readableText } from './toc'
+import { detectContentLang, readableText } from './toc'
 import type { CvSectionLike } from './cvVisibility'
 
 /**
@@ -26,6 +26,7 @@ import type { CvSectionLike } from './cvVisibility'
  *   posts / case studies  frontmatter, h2/h3 headings and the first 4,000
  *                         characters of body text (code excluded)
  *   /now, /uses           page bodies
+ *   /about                the owner's bio, only once written
  *   CV                    one doc per entry of the PUBLIC A4 CV — the
  *                         audience /cv renders (readPublicCvData('cv'):
  *                         hidden sections, entries and fields are already
@@ -269,15 +270,41 @@ function pageDoc(name: 'now' | 'uses', fallbackTitle: string): SearchDoc {
   return doc
 }
 
+/**
+ * The owner's bio on /about, linking to its section; null while it is empty
+ * (the page then shows no bio, and an "About" result would only repeat the
+ * navigation entry).
+ */
+function aboutDoc(): SearchDoc | null {
+  const page = getPage('about')
+  if (!(page?.body || '').trim()) return null
+  const fm = (page?.frontmatter || {}) as Record<string, unknown>
+  const body = page?.body || ''
+  const doc: SearchDoc = {
+    kind: 'page',
+    title: str(fm.title) || 'About',
+    href: '/about#about-bio',
+    // The bio's own language (frontmatter `lang`, else detected), as the page marks it.
+    lang: detectContentLang({ lang: fm.lang, body }),
+  }
+  const description = str(fm.description)
+  if (description) doc.description = description
+  const { headings, text } = outlineOf(body)
+  if (headings.length) doc.headings = headings
+  if (text) doc.body = text
+  return doc
+}
+
 const bodyOf = (collection: 'blog' | 'work', slug: string): string => getItem(collection, slug)?.body || ''
 
-/** The whole public index (posts, case studies, /now, /uses, CV entries). */
+/** The whole public index (posts, case studies, /now, /uses, the /about bio, CV entries). */
 export function buildSearchIndex(): SearchIndex {
   const docs: SearchDoc[] = [
     ...listPosts().map((p) => articleDoc('post', p, bodyOf('blog', p.slug), p.frontmatter.tags)),
     ...listWorkInDisplayOrder().map((w) => articleDoc('work', w, bodyOf('work', w.slug), w.frontmatter.tech)),
     pageDoc('now', 'Now'),
     pageDoc('uses', 'Uses'),
+    ...[aboutDoc()].filter((d): d is SearchDoc => d !== null),
     ...cvSearchDocs(readPublicCvData('cv').en),
   ]
   const home = readPublicHome() as { availability?: { bookingUrl?: unknown } } | null

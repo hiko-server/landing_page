@@ -2,18 +2,22 @@ import { Box } from '@chakra-ui/react'
 
 import PersonalInfo, { type AvatarMeta } from './PersonalInfo'
 import Content, { type HomeWriting } from './Content'
+import ProofStrip from './ProofStrip'
 import Brands from '../BrandShowcase/BrandShowcase'
-// Pure shape — must NOT import from lib/home (server-only / better-sqlite3).
-import { isSectionVisible, type HomeData } from '../../lib/homeShape'
+// The read-side helpers only (lib/homeSections): never lib/home (server-only /
+// better-sqlite3), and not lib/homeShape's runtime (the admin's validation).
+import type { HomeData } from '../../lib/homeShape'
+import { isSectionVisible, visibleHighlights } from '../../lib/homeSections'
 import type { CvSectionLike } from '../../lib/cvVisibility'
 import type { CurrentlyCoding } from '../../lib/currentlyCoding'
 import type { HeroIdentity, HeroMeta } from './heroIdentity'
 import type { WorkIndexItem } from './projectMatch'
 import type { ScrollerImage } from '../imageScoller/imageScroller'
-import type { GithubSummary } from '../Common/githubEvents'
+import type { GithubPageData } from '../Common/githubEvents'
 
 /**
- * Home page body: hero → affiliations strip → [02]… sections.
+ * Home page body: hero → highlights (proof strip) → affiliations strip →
+ * the numbered sections in the owner's order.
  *
  * Every size and direction is a CSS/Chakra responsive value — nothing reads
  * the viewport in JS, so the server-rendered HTML is already the final
@@ -42,13 +46,20 @@ const LandingContent = ({
   avatar?: AvatarMeta
   /** Field-note photos with their intrinsic sizes / srcsets (server-enriched). */
   photos?: ScrollerImage[]
-  github?: GithubSummary | null
+  github?: GithubPageData | null
   writing?: HomeWriting | null
 }) => {
+  const highlights = isSectionVisible(home, 'highlights') ? visibleHighlights(home?.highlights) : []
   return (
     <Box w="100%" pb={{ base: 10, md: 16 }}>
       {isSectionVisible(home, 'introduction') && (
         <PersonalInfo home={home || undefined} identity={identity} autoCoding={autoCoding} avatar={avatar} meta={meta} />
+      )}
+
+      {highlights.length > 0 && (
+        <Box w="100%" mt={{ base: 0, md: -6 }} mb={{ base: 4, md: 6 }}>
+          <ProofStrip highlights={highlights} />
+        </Box>
       )}
 
       {isSectionVisible(home, 'brands') && (

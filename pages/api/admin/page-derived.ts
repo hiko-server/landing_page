@@ -23,7 +23,8 @@ export default withApi('admin/page-derived', async (req, res, ctx) => {
   if (!isAdminRequest(req, res)) return res.status(401).json({ error: 'Unauthorized' })
   res.setHeader('Cache-Control', 'no-store')
   const name = req.query.name
-  if (!isPageName(name)) return res.status(400).json({ error: 'name must be "now" or "uses"' })
+  // The /about bio has no automatic version: it is only ever the owner's text.
+  if (!isPageName(name) || name === 'about') return res.status(400).json({ error: 'name must be "now" or "uses"' })
 
   const attempt = async <T>(what: string, fn: () => T | Promise<T>, fallback: T): Promise<T> => {
     try {

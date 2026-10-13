@@ -10,7 +10,7 @@ import { useFetchJson, useRenderNow } from '../Common/useFetchJson'
 import WidgetNotice from '../Common/WidgetNotice'
 import { useScrollReveal } from '../General-UI/useScrollReveal'
 import { useSpotlight } from '../General-UI/useSpotlight'
-import { relativeTime, type GhRepo, type GhTopRepos } from '../Common/githubEvents'
+import { relativeTime, repoCard, type GhRepoCard, type GhRepoCards, type GhTopRepos } from '../Common/githubEvents'
 
 const LANG_COLORS: Record<string, string> = {
   TypeScript: '#3178c6',
@@ -49,21 +49,22 @@ const staggerVariants = (reduce: boolean | null): { list: Variants; item: Varian
 })
 
 /** Card body: the owner's blurb, else GitHub's description, else what we do know. */
-function repoSummary(r: GhRepo, now: number): string {
+function repoSummary(r: GhRepoCard, now: number): string {
   const text = (r.blurb || r.description || '').trim()
   if (text) return text
-  const when = relativeTime(r.pushed_at || r.updated_at, now)
+  const when = relativeTime(r.pushed_at, now)
   return [r.language, when ? `updated ${when}` : ''].filter(Boolean).join(' · ')
 }
 
 /**
- * Repositories: the owner's featured ones first, then the rest of their own
- * work — flat tiles in a 1 / 2 / 3-up grid with a cursor-lit border. Server-
- * rendered when `initialData` is passed; skeleton tiles otherwise keep the
- * loaded height. Outages and an empty account get an in-place notice.
+ * Repositories: the owner's pinned ones first, then the rest of their own
+ * work — flat tiles in a 1 / 2 / 3-up grid with a cursor-lit border, at most
+ * `limit`. Server-rendered when `initialData` is passed (card fields only);
+ * skeleton tiles otherwise keep the loaded height. Outages and an empty
+ * account get an in-place notice.
  */
-export default function TopRepos({ initialData }: { initialData?: GhTopRepos | null }) {
-  const { data, error, retry } = useFetchJson<GhTopRepos>('/api/github/top-repos', { initialData })
+export default function TopRepos({ initialData, limit = 6 }: { initialData?: GhRepoCards | null; limit?: number }) {
+  const { data, error, retry } = useFetchJson<GhRepoCards | GhTopRepos>('/api/github/top-repos', { initialData })
 
   if (error || data?.available === false) {
     return (
@@ -76,14 +77,17 @@ export default function TopRepos({ initialData }: { initialData?: GhTopRepos | n
   if (!data) {
     return (
       <Grid templateColumns={COLUMNS} gap={4} w="100%" aria-busy="true" aria-label="Loading repositories">
-        {Array.from({ length: 6 }).map((_, i) => (
+        {Array.from({ length: limit }).map((_, i) => (
           <Skeleton key={i} h={CARD_H} borderRadius="lg" startColor="page.bg-elevated" endColor="page.bg-overlay" />
         ))}
       </Grid>
     )
   }
 
-  const repos = (data.repos || []).filter((r) => safeHref(r.html_url))
+  const repos = (data.repos || [])
+    .filter((r) => safeHref(r.html_url))
+    .slice(0, limit)
+    .map(repoCard)
   if (!repos.length) {
     return <WidgetNotice kind="empty">No public repositories to show yet.</WidgetNotice>
   }
@@ -92,7 +96,7 @@ export default function TopRepos({ initialData }: { initialData?: GhTopRepos | n
 }
 
 /** The loaded grid (its own component so the spotlight attaches once the list exists). */
-function RepoGrid({ repos, asOf }: { repos: GhRepo[]; asOf?: number }) {
+function RepoGrid({ repos, asOf }: { repos: GhRepoCard[]; asOf?: number }) {
   const reduce = useReducedMotion()
   const listRef = useRef<HTMLElement | null>(null)
   const reveal = useScrollReveal<HTMLElement>()

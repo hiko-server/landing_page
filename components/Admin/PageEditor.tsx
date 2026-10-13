@@ -52,7 +52,7 @@ const RichEditor = dynamic(() => import('./RichEditor'), {
   loading: () => <Skeleton h="520px" borderRadius="lg" />,
 })
 
-type PageName = 'now' | 'uses'
+type PageName = 'now' | 'uses' | 'about'
 
 type Frontmatter = {
   title: string
@@ -79,7 +79,7 @@ const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringif
 const pageFrontmatter = (fm: Frontmatter, extra: FrontmatterRecord) => mergeFrontmatter(extra, pageToServer(fm), PAGE_MODELLED_KEYS)
 
 /** What an owner-written body does to each page (pages/now.tsx, pages/uses.tsx). */
-const AUTO_COPY: Record<PageName, { what: string; replaces: string }> = {
+const AUTO_COPY: Partial<Record<PageName, { what: string; replaces: string }>> = {
   now: {
     what: 'Visitors currently see an automatic /now built from',
     replaces: 'Saving any text replaces the automatic page; clear the body to go back to automatic.',
@@ -91,12 +91,26 @@ const AUTO_COPY: Record<PageName, { what: string; replaces: string }> = {
 }
 
 /**
- * Single-file MDX editor used by /admin/now and /admin/uses: version-checked
- * saves (If-Match → "Changed elsewhere"), local draft recovery, compile
- * errors that jump to the line, history with diff + restore, live preview,
- * and the automatic page — what visitors see while the body is empty — as
- * a guided starting point ("Start from this") or a way back ("Revert to
- * automatic").
+ * Pages without an automatic version: an empty body simply shows nothing
+ * (the /about bio is never drafted from the CV).
+ */
+const MANUAL_COPY: Partial<Record<PageName, { empty: string; filled: string; placeholder: string; live: string }>> = {
+  about: {
+    empty: 'While the body is empty, /about shows your profile and CV but no bio. Nothing is filled in for you.',
+    filled: 'Clear the body and save to take the bio off /about.',
+    placeholder: 'Your story in your own words: what you build, how you got here, what you are looking for. Markdown works.',
+    live: '/about#about-bio',
+  },
+}
+
+/**
+ * Single-file MDX editor used by /admin/now, /admin/uses and /admin/about:
+ * version-checked saves (If-Match → "Changed elsewhere"), local draft
+ * recovery, compile errors that jump to the line, history with diff +
+ * restore and live preview. /now and /uses offer their automatic page —
+ * what visitors see while the body is empty — as a guided starting point
+ * ("Start from this") or a way back ("Revert to automatic"); the /about bio
+ * has no automatic version, so an empty body means no bio on the page.
  */
 function PageEditorInner({ name }: { name: PageName }) {
   const router = useRouter()
@@ -170,8 +184,9 @@ function PageEditorInner({ name }: { name: PageName }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [name, reloadKey])
 
-  // The automatic page, while the stored body is empty.
-  const automatic = loadState === 'ready' && !serverBody.trim()
+  // The automatic page, while the stored body is empty (pages that have one).
+  const manual = MANUAL_COPY[name]
+  const automatic = loadState === 'ready' && !serverBody.trim() && !manual
   useEffect(() => {
     if (!automatic) return
     let alive = true
@@ -305,14 +320,18 @@ function PageEditorInner({ name }: { name: PageName }) {
           clearDraft()
           toast({
             ...saveToastCopy(data),
-            title: text.trim() ? 'Saved — snapshot taken' : `/${name} is automatic again — snapshot taken`,
+            title: text.trim()
+              ? 'Saved — snapshot taken'
+              : manual
+                ? `Removed from /${name} — snapshot taken`
+                : `/${name} is automatic again — snapshot taken`,
             position: 'bottom-right',
           })
           return true
         })(),
       )
     },
-    [loadState, fm, extra, body, etag, name, toast, flushDraft, clearDraft, track],
+    [loadState, fm, extra, body, etag, name, manual, toast, flushDraft, clearDraft, track],
   )
 
   // "Save and leave": true only once the edits are stored; a 409 / 422 / 401,
@@ -326,6 +345,8 @@ function PageEditorInner({ name }: { name: PageName }) {
 
   const historyCurrent = useMemo(() => ({ frontmatter: pageFrontmatter(fm, extra), body }), [fm, extra, body])
   const copy = AUTO_COPY[name]
+  const liveHref = manual?.live ?? `/${name}`
+  const hasStoredBody = loadState === 'ready' && !!serverBody.trim()
 
   return (
     <AdminPageShell
@@ -337,7 +358,7 @@ function PageEditorInner({ name }: { name: PageName }) {
       actions={
         <>
           <BackLink href="/admin">← Admin</BackLink>
-          <Button as="a" href={`/${name}`} target="_blank" rel="noopener" size="sm" variant="ghost" color="page.fg-secondary">
+          <Button as="a" href={liveHref} target="_blank" rel="noopener" size="sm" variant="ghost" color="page.fg-secondary">
             View live ↗
           </Button>
           {loadState === 'ready' ? (
@@ -394,7 +415,7 @@ function PageEditorInner({ name }: { name: PageName }) {
                   />
                 </FormControl>
 
-                {automatic && !body.trim() ? (
+                {automatic && copy && !body.trim() ? (
                   <Box border="1px solid" borderColor="page.border-strong" borderRadius="lg" bg="var(--accent-soft)" px={4} py={3} role="region" aria-label={`Automatic /${name}`}>
                     <Text fontSize="sm" fontWeight={500}>
                       {copy.what}:
@@ -417,7 +438,7 @@ function PageEditorInner({ name }: { name: PageName }) {
                       </Text>
                     )}
                     <Flex gap={2} mt={3} flexWrap="wrap">
-                      <Button as="a" href={`/${name}`} target="_blank" rel="noopener" size="sm" variant="ghost" color="page.fg-secondary">
+                      <Button as="a" href={liveHref} target="_blank" rel="noopener" size="sm" variant="ghost" color="page.fg-secondary">
                         View live ↗
                       </Button>
                       <Button size="sm" {...outlineButtonProps} isDisabled={!derived?.markdown} onClick={() => derived && setBody(derived.markdown)}>
@@ -445,15 +466,27 @@ function PageEditorInner({ name }: { name: PageName }) {
                     labelledBy={`${name}-body-label`}
                     onHeadingIndex={setHeadingIndex}
                     handleRef={richRef}
-                    placeholder="Write in Markdown. Drag, drop or paste images. Use the MDX tab for JSX components."
+                    placeholder={manual?.placeholder ?? 'Write in Markdown. Drag, drop or paste images. Use the MDX tab for JSX components.'}
                   />
                 }
               />
               <Flex mt={3} gap={3} align="center" justify="space-between" flexWrap="wrap">
-                <Text fontSize="xs" color="page.fg-secondary" maxW="70ch">
-                  {automatic ? copy.replaces : 'Clear the body and save to go back to the automatic page.'}
+                <Text fontSize="xs" color="page.fg-secondary" maxW="70ch" data-testid="page-body-note">
+                  {manual
+                    ? hasStoredBody
+                      ? manual.filled
+                      : manual.empty
+                    : automatic && copy
+                      ? copy.replaces
+                      : 'Clear the body and save to go back to the automatic page.'}
                 </Text>
-                {!automatic ? (
+                {manual ? (
+                  hasStoredBody ? (
+                    <Button size="sm" variant="ghost" color="page.fg-secondary" onClick={() => setRevertOpen(true)} isDisabled={saving}>
+                      Remove from /{name}
+                    </Button>
+                  ) : null
+                ) : !automatic ? (
                   <Button size="sm" variant="ghost" color="page.fg-secondary" onClick={() => setRevertOpen(true)} isDisabled={saving}>
                     Revert to automatic
                   </Button>
@@ -495,10 +528,12 @@ function PageEditorInner({ name }: { name: PageName }) {
       <AlertDialog isOpen={revertOpen} leastDestructiveRef={revertCancelRef} onClose={() => setRevertOpen(false)} isCentered>
         <AlertDialogOverlay>
           <AlertDialogContent bg="page.bg-elevated" border="1px solid" borderColor="page.border" mx={4}>
-            <AlertDialogHeader fontSize="md">Go back to the automatic /{name}?</AlertDialogHeader>
+            <AlertDialogHeader fontSize="md">{manual ? `Remove the text from /${name}?` : `Go back to the automatic /${name}?`}</AlertDialogHeader>
             <AlertDialogBody fontSize="sm">
-              This saves an empty body, so visitors see the page built from your data again. The current text is snapshotted
-              first — restore it any time from History.
+              {manual
+                ? 'This saves an empty body, so the section disappears from the page. '
+                : 'This saves an empty body, so visitors see the page built from your data again. '}
+              The current text is snapshotted first — restore it any time from History.
             </AlertDialogBody>
             <AlertDialogFooter gap={2}>
               <Button ref={revertCancelRef} size="sm" {...outlineButtonProps} onClick={() => setRevertOpen(false)}>
@@ -513,7 +548,7 @@ function PageEditorInner({ name }: { name: PageName }) {
                   setRevertOpen(false)
                 }}
               >
-                Revert to automatic
+                {manual ? 'Remove' : 'Revert to automatic'}
               </Button>
             </AlertDialogFooter>
           </AlertDialogContent>

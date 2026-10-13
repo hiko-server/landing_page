@@ -139,10 +139,10 @@ const firstFrame = (page: Page) =>
   page.waitForFunction(() => (window as unknown as { __firstFrame?: string[] }).__firstFrame).then((h) => h.jsonValue())
 
 test('after a client navigation, everything in the first viewport is visible in the first frame', async ({ page }) => {
-  // /about: the stats and contributions wrappers sit in the first viewport.
+  // /about: the identity rail, the tagline and the open CV sit in the first viewport.
   await page.goto('/')
   await settle(page)
-  await armFirstFrameProbe(page, '/about', 'main [aria-labelledby="about-activity"]')
+  await armFirstFrameProbe(page, '/about', 'main [aria-labelledby="about-cv-heading"]')
   await primaryNav(page, 'About').click()
   expect(await firstFrame(page), 'hidden in the first frame on /about').toEqual([])
 

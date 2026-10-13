@@ -10,7 +10,6 @@ import {
   buildCalendar,
   calendarFacts,
   calendarLayout,
-  calendarMove,
   featuredList,
   formatDay,
   groupEvents,
@@ -233,8 +232,9 @@ test('calendarFacts and formatDay feed the screen-reader summary', () => {
   assert.equal(formatDay('2026-10-03', true), 'Oct 3, 2026')
 })
 
-test('calendar keyboard model: arrows, partial weeks, Home/End and Ctrl+Home/End', () => {
+test('calendar layout: week columns × weekday rows, partial first and last weeks', () => {
   // Week 0 starts on Wednesday (partial), week 1 is full, week 2 ends on Monday (partial).
+  // (The graph is drawn as one path per level since A2; this index serves its pointer tooltip.)
   const day = (date: string) => ({ date, count: 0, level: 0 as const })
   const weeks = [
     { days: ['2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03'].map(day) },
@@ -245,21 +245,7 @@ test('calendar keyboard model: arrows, partial weeks, Home/End and Ctrl+Home/End
   assert.equal(cells.length, 13)
   assert.equal(byKey.get('0:3')?.day.date, '2026-09-30')
   assert.equal(byKey.get('2:1')?.day.date, '2026-10-12')
-  const move = (from: string, key: string, ctrl = false) => calendarMove(byKey.get(from)!, key, ctrl, byKey, weeks.length, cells)
-  assert.equal(move('1:0', 'ArrowRight'), '2:0')
-  assert.equal(move('1:3', 'ArrowRight'), null) // no Wednesday in the last week: stay
-  assert.equal(move('1:0', 'ArrowLeft'), null) // no Sunday in the first week: stay
-  assert.equal(move('1:3', 'ArrowLeft'), '0:3')
-  assert.equal(move('1:0', 'ArrowUp'), null)
-  assert.equal(move('1:6', 'ArrowDown'), null)
-  assert.equal(move('0:3', 'ArrowDown'), '0:4')
-  assert.equal(move('2:0', 'ArrowDown'), '2:1')
-  assert.equal(move('1:2', 'Home'), '1:2') // the row's first existing day
-  assert.equal(move('1:4', 'Home'), '0:4')
-  assert.equal(move('0:4', 'End'), '1:4')
-  assert.equal(move('1:1', 'Home', true), '0:3')
-  assert.equal(move('0:3', 'End', true), '2:1')
-  assert.equal(move('1:1', 'Enter'), null)
+  assert.equal(byKey.get('0:0'), undefined, 'no Sunday in the partial first week')
 })
 
 test('sharedFetch shares one request between concurrent callers and clears on settle', async () => {
