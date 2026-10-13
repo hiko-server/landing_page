@@ -1,6 +1,6 @@
 {
   "id": "/",
-  "name": "lucian-dev.com",
+  "name": "Li Yanpei (Lucian)",
   "short_name": "Lucian",
   "description": "Li Yanpei (Lucian) — software engineer in Hong Kong. Full-stack web, machine learning / computer vision, and embedded systems. Portfolio, projects, and CV.",
   "lang": "en",
@@ -10,9 +10,16 @@
   "display": "standalone",
   "background_color": "#050505",
   "theme_color": "#050505",
+  "launch_handler": { "client_mode": "navigate-existing" },
   "icons": [
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "CV", "short_name": "CV", "description": "Curriculum vitae (English)", "url": "/cv" },
+    { "name": "中文简历", "short_name": "中文简历", "description": "Curriculum vitae (Chinese)", "url": "/cv/zh" },
+    { "name": "Writing", "short_name": "Writing", "description": "Posts and articles", "url": "/blog" },
+    { "name": "Contact", "short_name": "Contact", "description": "Send a message", "url": "/contact" }
   ]
 }

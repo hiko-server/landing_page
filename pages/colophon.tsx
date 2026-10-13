@@ -1,12 +1,13 @@
-import React from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import fs from 'fs'
 import path from 'path'
 import type { GetStaticProps } from 'next'
 import NextLink from 'next/link'
-import { Box, Grid, Heading, Link, Text } from '@chakra-ui/react'
+import { Box, Grid, Heading, Link, Text, chakra } from '@chakra-ui/react'
 import HeaderFooter from '../layout/HeaderFooter'
 import CustomHead from '../components/General-UI/CustomHead'
 import PageHeader from '../components/General-UI/PageHeader'
+import { Collapse } from '../components/General-UI/Collapse'
 import MDXContent from '../components/MDX/MDXContent'
 import { compileMdx } from '../lib/mdx'
 import { groupMarkdown, parseChangelog } from '../lib/changelog'
@@ -15,12 +16,18 @@ import { log } from '../lib/log'
 import { absUrl, breadcrumb, personAuthor } from '../lib/schema'
 import { ogPresetUrl } from '../lib/og/presets'
 import { clearOfHeader } from '../lib/anchorOffset'
+import { REPO_URL, normalizeBuildSha } from '../lib/build'
+import { releaseAnchor, releaseChangeCount, releaseIdFromHash } from '../lib/releaseTimeline'
+import { ChevronDownIcon } from '../components/Icons/ui/chrome'
 
 /**
  * /colophon — how the site is made: stack (lib/stack.ts, installed versions),
  * type, hosting, how /now and /uses assemble themselves, exactly what the
  * first-party analytics stores, the build this page came from and every
- * release from CHANGELOG.md.
+ * release from CHANGELOG.md — as a timeline where each release shows its
+ * summary (the paragraph under its heading) and only the latest one opens
+ * its full notes; the others open on demand or when their anchor
+ * (#v2-2-0, the "On this page" links) is followed.
  *
  * Static (revalidate: false): CHANGELOG.md and package.json are read at build
  * time and the parsed, compiled result ships in the page JSON, so nothing
@@ -29,8 +36,8 @@ import { clearOfHeader } from '../lib/anchorOffset'
  */
 
 type MdxTree = Awaited<ReturnType<typeof compileMdx>>['tree']
-/** `items` (plain-text bullets) ship only for a group whose markdown did not compile. */
-type Group = { title: string; tree: MdxTree | null; items: string[] }
+/** `items` (plain-text bullets) ship only for a group whose markdown did not compile; `count` is the number of bullets. */
+type Group = { title: string; tree: MdxTree | null; items: string[]; count: number }
 type Release = { version: string; date: string; intro: string; groups: Group[] }
 
 type Props = {
@@ -42,9 +49,8 @@ type Props = {
   builtAt: string
 }
 
-const REPO_URL = 'https://github.com/hiko-server/landing_page'
 const mono = 'var(--font-geist-mono), monospace'
-const releaseId = (version: string) => `v${version.replace(/\./g, '-')}`
+const releaseId = releaseAnchor
 /** Sections and releases land clear of the sticky header, with 24px of air (lib/anchorOffset.ts). */
 const ANCHOR_MARGIN = clearOfHeader('24px')
 
@@ -155,6 +161,184 @@ const Code = ({ children }: { children: React.ReactNode }) => (
     {children}
   </Box>
 )
+
+/**
+ * Release history: a rail of releases, newest first. Each shows its version,
+ * date and summary; its full notes sit in a disclosure that only the latest
+ * release opens by default. Following a release's anchor opens it.
+ */
+function ReleaseTimeline({ releases }: { releases: Release[] }) {
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set(releases[0] ? [releases[0].version] : []))
+  const toggle = useCallback((version: string) => {
+    setOpen((prev) => {
+      const next = new Set(prev)
+      if (next.has(version)) next.delete(version)
+      else next.add(version)
+      return next
+    })
+  }, [])
+
+  // #v2-2-0 (the "On this page" links, a shared link): open that release.
+  useEffect(() => {
+    const versions = releases.map((r) => r.version)
+    const openFromHash = () => {
+      const version = releaseIdFromHash(window.location.hash, versions)
+      if (version) setOpen((prev) => (prev.has(version) ? prev : new Set(prev).add(version)))
+    }
+    openFromHash()
+    window.addEventListener('hashchange', openFromHash)
+    return () => window.removeEventListener('hashchange', openFromHash)
+  }, [releases])
+
+  return (
+    <Box
+      as="ol"
+      listStyleType="none"
+      m={0}
+      p={0}
+      position="relative"
+      sx={{
+        // The rail: a hairline through every release dot.
+        '&::before': {
+          content: '""',
+          position: 'absolute',
+          left: '5px',
+          top: '10px',
+          bottom: '10px',
+          width: '1px',
+          bg: 'page.border',
+        },
+      }}
+    >
+      {releases.map((r, i) => {
+        const id = releaseId(r.version)
+        const isOpen = open.has(r.version)
+        const latest = i === 0
+        const changes = releaseChangeCount(r.groups)
+        return (
+          <Box
+            as="li"
+            key={r.version}
+            id={id}
+            aria-labelledby={`${id}-title`}
+            position="relative"
+            pl={8}
+            pb={i === releases.length - 1 ? 0 : 10}
+            sx={{ scrollMarginTop: ANCHOR_MARGIN }}
+          >
+            <Box
+              aria-hidden
+              position="absolute"
+              left={0}
+              top="7px"
+              w="11px"
+              h="11px"
+              borderRadius="full"
+              border="1px solid"
+              borderColor={latest ? 'var(--accent)' : 'page.border-strong'}
+              bg={latest ? 'var(--accent)' : 'page.bg'}
+              boxShadow={latest ? '0 0 0 4px var(--accent-soft)' : 'none'}
+              sx={{ '@media (forced-colors: active)': { bg: latest ? 'CanvasText' : 'Canvas', borderColor: 'CanvasText' } }}
+            />
+            <Heading
+              as="h3"
+              id={`${id}-title`}
+              fontSize="20px"
+              fontWeight={500}
+              letterSpacing="-0.01em"
+              display="flex"
+              alignItems="baseline"
+              flexWrap="wrap"
+              columnGap={3}
+              rowGap={1}
+              mb={2}
+            >
+              <span className="tnum">{r.version}</span>
+              <Box as="time" dateTime={r.date} fontFamily={mono} fontSize="12px" fontWeight={400} color="page.fg-secondary" className="tnum">
+                {r.date}
+              </Box>
+              {latest ? (
+                <Box
+                  as="span"
+                  fontFamily={mono}
+                  fontSize="10px"
+                  fontWeight={500}
+                  letterSpacing="0.12em"
+                  textTransform="uppercase"
+                  color="accent.text"
+                  border="1px solid"
+                  borderColor="var(--accent-ring)"
+                  borderRadius="full"
+                  px={2}
+                  py="1px"
+                  alignSelf="center"
+                >
+                  Latest
+                </Box>
+              ) : null}
+            </Heading>
+            {r.intro ? <Para>{r.intro}</Para> : null}
+            {r.groups.length > 0 && (
+              <>
+                <chakra.button
+                  type="button"
+                  aria-expanded={isOpen}
+                  aria-controls={`${id}-notes`}
+                  onClick={() => toggle(r.version)}
+                  display="inline-flex"
+                  alignItems="center"
+                  gap={2}
+                  minH="44px"
+                  fontFamily={mono}
+                  fontSize="12px"
+                  letterSpacing="0.02em"
+                  color="accent.text"
+                  _hover={{ textDecoration: 'underline', textUnderlineOffset: '3px' }}
+                  _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px', borderRadius: '4px' }}
+                >
+                  {isOpen ? 'Hide full notes' : 'Full notes'}
+                  <Box as="span" color="page.fg-secondary" className="tnum">
+                    · {changes} {changes === 1 ? 'change' : 'changes'}
+                  </Box>
+                  <Box
+                    as="span"
+                    aria-hidden
+                    display="inline-flex"
+                    transition="transform var(--duration-base) var(--ease-standard)"
+                    transform={isOpen ? 'rotate(180deg)' : 'none'}
+                  >
+                    <ChevronDownIcon size="xs" />
+                  </Box>
+                </chakra.button>
+                <Collapse open={isOpen} id={`${id}-notes`}>
+                  <Box pt={2}>
+                    {r.groups.map((g) => (
+                      <Box key={g.title} mt={4}>
+                        <Heading
+                          as="h4"
+                          fontFamily={mono}
+                          fontSize="11px"
+                          fontWeight={500}
+                          letterSpacing="0.12em"
+                          textTransform="uppercase"
+                          color="page.fg-subtle"
+                          mb={2}
+                        >
+                          {g.title}
+                        </Heading>
+                        {g.tree ? <MDXContent tree={g.tree} as="div" /> : <Bullets items={g.items} />}
+                      </Box>
+                    ))}
+                  </Box>
+                </Collapse>
+              </>
+            )}
+          </Box>
+        )
+      })}
+    </Box>
+  )
+}
 
 export default function ColophonPage({ releases, stack, buildSha, builtAt }: Props) {
   const nav = SECTIONS.filter((s) => s.id !== 'changelog' || releases.length > 0)
@@ -448,67 +632,7 @@ export default function ColophonPage({ releases, stack, buildSha, builtAt }: Pro
 
               {releases.length ? (
                 <Section id="changelog" title="Changelog">
-                  {releases.map((r) => (
-                    <Box
-                      as="article"
-                      key={r.version}
-                      id={releaseId(r.version)}
-                      aria-labelledby={`${releaseId(r.version)}-title`}
-                      pt={6}
-                      mt={6}
-                      borderTop="1px solid"
-                      borderColor="page.border"
-                      sx={{ scrollMarginTop: ANCHOR_MARGIN }}
-                    >
-                      <Heading
-                        as="h3"
-                        id={`${releaseId(r.version)}-title`}
-                        fontSize="20px"
-                        fontWeight={500}
-                        letterSpacing="-0.01em"
-                        display="flex"
-                        alignItems="baseline"
-                        flexWrap="wrap"
-                        columnGap={3}
-                        mb={3}
-                      >
-                        <span className="tnum">{r.version}</span>
-                        <Box
-                          as="time"
-                          dateTime={r.date}
-                          fontFamily={mono}
-                          fontSize="12px"
-                          fontWeight={400}
-                          color="page.fg-secondary"
-                          className="tnum"
-                        >
-                          {r.date}
-                        </Box>
-                      </Heading>
-                      {r.intro ? <Para>{r.intro}</Para> : null}
-                      {r.groups.map((g) => (
-                        <Box key={g.title} mt={5}>
-                          <Heading
-                            as="h4"
-                            fontFamily={mono}
-                            fontSize="11px"
-                            fontWeight={500}
-                            letterSpacing="0.12em"
-                            textTransform="uppercase"
-                            color="page.fg-subtle"
-                            mb={2}
-                          >
-                            {g.title}
-                          </Heading>
-                          {g.tree ? (
-                            <MDXContent tree={g.tree} as="div" />
-                          ) : (
-                            <Bullets items={g.items} />
-                          )}
-                        </Box>
-                      ))}
-                    </Box>
-                  ))}
+                  <ReleaseTimeline releases={releases} />
                 </Section>
               ) : null}
             </Box>
@@ -518,8 +642,6 @@ export default function ColophonPage({ releases, stack, buildSha, builtAt }: Pro
     </>
   )
 }
-
-const SHA_RE = /^[0-9a-f]{7,40}$/i
 
 /** Markdown bullet → readable plain text (emphasis and code markers removed, line breaks unwrapped). */
 const plainText = (md: string) =>
@@ -545,17 +667,16 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
           err,
         })
       }
-      groups.push({ title: g.title, tree, items: tree ? [] : g.items.map(plainText) })
+      groups.push({ title: g.title, tree, items: tree ? [] : g.items.map(plainText), count: g.items.length })
     }
     releases.push({ version: r.version, date: r.date, intro: r.intro, groups })
   }
-  const sha = (process.env.NEXT_PUBLIC_BUILD_SHA || '').trim()
 
   return {
     props: {
       releases,
       stack: readStack().groups,
-      buildSha: SHA_RE.test(sha) ? sha.toLowerCase() : null,
+      buildSha: normalizeBuildSha(process.env.NEXT_PUBLIC_BUILD_SHA),
       builtAt: new Date().toISOString(),
     },
     revalidate: false,

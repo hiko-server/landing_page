@@ -100,6 +100,59 @@ Design-system foundation (research items B1–B4).
   preference store, the OS / tab sync and the menu button; the theme menu
   itself loads on demand, and the pre-paint scripts stay in the document.
 
+### chrome-identity
+
+- **Brand mark (A3)**: one typographic "LY" monogram replaces the emoji
+  favicon and the selfie app icon — an SVG favicon that follows the
+  browser's light / dark scheme, an ICO fallback, 192 / 512 px app icons, a
+  512 px maskable icon (letters inside the safe zone) and the 180 px Apple
+  icon, all rendered from one geometry (`lib/brandMark.ts`,
+  `node scripts/build-icons.mjs`). The footer shows the same mark.
+- **Hero (A3)**: the photo, scrim and grain now dissolve into the page over
+  the hero's last 160 px instead of ending at a visible band in light mode,
+  and the hero's dot grid lines up with the page's grid below it. In dark
+  mode the white-background portrait is matted (an inner ring, a soft
+  vignette, a slight exposure cut) instead of reading as a bright square.
+- **Manifest (G8)**: named "Li Yanpei (Lucian)", shortcuts to the CV, the
+  Chinese CV, Writing and Contact, `launch_handler`; the new icons. No
+  service worker.
+- **Footer (A5)**: three columns — the site, this site (colophon, privacy,
+  the feeds, the source) and elsewhere — then the copyright, a "Built with
+  Next.js · Set in Geist" credit and the deployed commit
+  (`NEXT_PUBLIC_BUILD_SHA`, linked to the repository; local builds show
+  none). Every list is a column, so "Contact" is no longer stranded on its
+  own row on phones; the last line clears the scroll-to-top button.
+- **Mobile menu (A5, C4)**: large numbered links with the current page
+  marked, quick actions (Search, CV as PDF, 中文简历), and a Light / Dark
+  segmented control whose icons and labels agree (it was a moon next to
+  "Light mode"). The menu is a physical sheet: it follows a horizontal
+  drag, closes when released past 35 % of its width or flicked faster than
+  500 px/s, otherwise settles back, and the scrim lightens as it leaves;
+  links rise in on open. Under reduced motion it opens and closes at once.
+  Focus trap, Escape, focus return and the route-transition layer lifting
+  are unchanged; a drag never follows the link it started on.
+- **Keyboard hints (A5)**: on touch-first devices (`pointer: coarse`) the
+  header and the ⌘K palette show no key chips or shortcut cheatsheet; the
+  palette key reads ⌘K on Apple platforms and Ctrl K elsewhere.
+- **/colophon (B5)**: the release history is a timeline — version, date and
+  summary for every release, full notes only for the latest; the others
+  open on demand or from their anchor.
+- **/now (B5)**: beside the owner's own text, the live signals leave out
+  whatever the text already links to or names, and the page shows one
+  "Updated" date (the newest of the owner's date and the shown signals')
+  instead of two conflicting ones.
+- **404 (B5)**: laid out like every other page, with Home, a search field
+  that opens the palette on the missing address's words, and up to four
+  "Did you mean" pages ranked in the browser from the search index (typos,
+  transpositions, a slug under another section, synonyms); still a real
+  404, and the address is never sent or logged.
+- **EmptyState (B5)**: one component for empty and unavailable states —
+  /blog, /work, /now and the GitHub widgets.
+- Shared JavaScript does not grow (203.2 → 203.0 kB gzip): the palette's
+  "Edit this page" helper and the admin's error fallback moved out of the
+  shared bundle, and the menu's gesture uses pointer events instead of
+  framer-motion's drag.
+
 ## [2.3.0] — 2026-10-13
 
 A research round across eight directions (UI, motion, reading, recruiter

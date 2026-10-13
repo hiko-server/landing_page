@@ -513,7 +513,7 @@ function pngSize(file: string): { width: number; height: number } {
 
 test('web manifest declares real, correctly sized icons and the v6 colours', () => {
   const manifest = JSON.parse(readFileSync(path.join(ROOT, 'public/manifest.json'), 'utf8'))
-  assert.equal(manifest.name, 'lucian-dev.com')
+  assert.equal(manifest.name, 'Li Yanpei (Lucian)')
   assert.equal(manifest.short_name, 'Lucian')
   assert.equal(manifest.theme_color, palette.ink)
   assert.equal(manifest.background_color, palette.ink)

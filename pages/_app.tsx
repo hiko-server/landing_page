@@ -161,9 +161,14 @@ const App = ({ Component, pageProps, router }: AppProps) => {
       <MotionConfig reducedMotion="user">
         <Head>
           <meta name="viewport" content="width=device-width, initial-scale=1" />
-          {/* The one icon set, site-wide (pages never add their own). */}
-          <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png" />
-          <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+          {/* The one icon set, site-wide (pages never add their own), all
+              rendered from the "LY" mark (lib/brandMark.ts, scripts/build-icons.mjs):
+              the SVG follows the browser's colour scheme; the ICO is the
+              fallback for browsers without SVG favicons (its sizes keep
+              Chromium on the SVG). */}
+          <link rel="icon" href="/favicon.ico" sizes="32x32" />
+          <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+          <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
           <style key="font-variables" dangerouslySetInnerHTML={{ __html: FONT_VARIABLES_CSS }} />
         </Head>
         <ThemeColorMeta />

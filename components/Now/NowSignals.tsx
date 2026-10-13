@@ -19,18 +19,21 @@ const ease = 'var(--ease-out-quart, cubic-bezier(0.22,1,0.36,1))'
 
 /**
  * "Updated Oct 13, 2026 · from CV and writing" — when the newest source of
- * the signals last changed (lib/nowSignals signalsUpdatedOn, a YYYY-MM-DD
- * computed on the server; formatted in UTC so server and client agree).
+ * the page last changed (a YYYY-MM-DD computed on the server; formatted in
+ * UTC so server and client agree). `source` names where the content comes
+ * from; null for a page the owner wrote (just "Updated …").
  */
-export function UpdatedLine({ updatedOn }: { updatedOn: string }) {
+export function UpdatedLine({ updatedOn, source = 'from CV and writing' }: { updatedOn: string; source?: string | null }) {
+  if (!updatedOn && !source) return null
   return (
     <Text fontFamily={mono} fontSize="12px" letterSpacing="0.02em" color="page.fg-secondary" className="tnum" m={0}>
       {updatedOn ? (
         <>
-          Updated <time dateTime={updatedOn}>{formatPostDate(updatedOn)}</time> · from CV and writing
+          Updated <time dateTime={updatedOn}>{formatPostDate(updatedOn)}</time>
+          {source ? ` · ${source}` : null}
         </>
       ) : (
-        'From CV and writing'
+        `${source!.charAt(0).toUpperCase()}${source!.slice(1)}`
       )}
     </Text>
   )

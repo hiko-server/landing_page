@@ -25,13 +25,15 @@ import {
 } from '../Article/fuzzyMatch'
 import { jumpToSection } from '../Article/useActiveHeading'
 import { copyText } from '../MDX/clipboard'
-import { NAV_SHORTCUTS, adminEditTarget, shortcutLabelFor } from '../Chrome/chrome'
+import { NAV_SHORTCUTS, shortcutLabelFor } from '../Chrome/chrome'
+import { adminEditTarget } from '../Chrome/adminEditTarget'
 import { useChromeLang } from '../Chrome/chromeLang'
 import { useChromeToast } from '../Chrome/useChromeToast'
 import { useShortcutsEnabled } from '../Chrome/useShortcutsEnabled'
 import { useThemePreference } from '../Chrome/useThemePreference'
 import { systemPrefersDark, type ThemePreference } from '../../lib/themePreference'
 import { motionTransition } from '../../theme/tokens'
+import { HIDE_ON_COARSE_POINTER, isApplePlatform } from '../Chrome/platform'
 import { setShortcutsEnabled } from '../../lib/keyboardShortcuts'
 
 /**
@@ -50,6 +52,9 @@ import { setShortcutsEnabled } from '../../lib/keyboardShortcuts'
  *     announced via aria-activedescendant, result counts via a live region.
  *   - Opens instantly (a fast scale-in, none under reduced motion); the list
  *     glides between heights as results change.
+ *   - `initialQuery` opens it already searching (the 404 page's search field).
+ *   - Keyboard hints (shortcut chips, ESC, the cheatsheet) are hidden on
+ *     touch-first devices (components/Chrome/platform).
  *
  * The search index is fetched once per visit (full page load), the first time
  * the palette opens. Recent items live in localStorage (per browser; failures
@@ -85,6 +90,8 @@ export type CommandPaletteProps = {
   isOpen: boolean
   onClose: () => void
   isAdmin?: boolean
+  /** Text the search field opens with ('' = the browse view). */
+  initialQuery?: string
   /** False when the palette closes because the visitor left the page (focus then moves to the new page). */
   returnFocusOnClose?: boolean
 }
@@ -204,7 +211,16 @@ function Highlighted({ text, indices }: { text: string; indices: number[] }) {
 
 function Key({ children }: { children: React.ReactNode }) {
   return (
-    <Kbd fontFamily={MONO} fontSize="10px" fontWeight={500} bg="transparent" border="1px solid" borderColor="page.border-strong" color="page.fg-secondary">
+    <Kbd
+      fontFamily={MONO}
+      fontSize="10px"
+      fontWeight={500}
+      bg="transparent"
+      border="1px solid"
+      borderColor="page.border-strong"
+      color="page.fg-secondary"
+      sx={HIDE_ON_COARSE_POINTER}
+    >
       {children}
     </Kbd>
   )
@@ -258,7 +274,7 @@ async function fetchUnreadCount(signal: AbortSignal): Promise<number | null> {
   return full.ok ? unreadOf(await full.json().catch(() => null)) : null
 }
 
-export default function CommandPalette({ isOpen, onClose, isAdmin = false, returnFocusOnClose = true }: CommandPaletteProps) {
+export default function CommandPalette({ isOpen, onClose, isAdmin = false, initialQuery = '', returnFocusOnClose = true }: CommandPaletteProps) {
   const router = useRouter()
   const toast = useChromeToast()
   // The palette's own text is English; results in another language carry their own lang.
@@ -282,15 +298,20 @@ export default function CommandPalette({ isOpen, onClose, isAdmin = false, retur
   const inputRef = useRef<HTMLInputElement | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const pending = useRef<(() => void) | null>(null)
+  // Read when the palette opens; a prefilled query is selected on focus so typing replaces it.
+  const initialQueryRef = useRef(initialQuery)
+  initialQueryRef.current = initialQuery
+  const selectOnFocus = useRef(false)
 
   useEffect(() => {
-    setIsMac(/Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent))
+    setIsMac(isApplePlatform(navigator as Navigator & { userAgentData?: { platform?: string } }))
   }, [])
 
   // Fresh state every time the palette opens.
   useEffect(() => {
     if (!isOpen) return
-    setQuery('')
+    setQuery(initialQueryRef.current)
+    selectOnFocus.current = initialQueryRef.current !== ''
     setActiveIdx(0)
     setRestoreFocus(true)
     setSections(collectSections())
@@ -831,6 +852,11 @@ export default function CommandPalette({ isOpen, onClose, isAdmin = false, retur
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onFocus={(e) => {
+              if (!selectOnFocus.current) return
+              selectOnFocus.current = false
+              e.currentTarget.select()
+            }}
             onKeyDown={onKey}
             role="combobox"
             aria-label="Search pages, sections, actions, posts, case studies and the CV"
@@ -876,7 +902,17 @@ export default function CommandPalette({ isOpen, onClose, isAdmin = false, retur
               </Flex>
             )}
             {!searching && (
-              <Box as="section" aria-label="Keyboard shortcuts" mt={2} mx={3} mb={2} pt={4} borderTop="1px solid" borderColor="page.border">
+              <Box
+                as="section"
+                aria-label="Keyboard shortcuts"
+                mt={2}
+                mx={3}
+                mb={2}
+                pt={4}
+                borderTop="1px solid"
+                borderColor="page.border"
+                sx={HIDE_ON_COARSE_POINTER}
+              >
                 <Text fontFamily={MONO} fontSize="10px" letterSpacing="0.16em" textTransform="uppercase" color="page.fg-secondary" mb={3}>
                   Shortcuts
                 </Text>
@@ -940,7 +976,7 @@ export default function CommandPalette({ isOpen, onClose, isAdmin = false, retur
           fontSize="10px"
           color="page.fg-secondary"
         >
-          <Flex gap={3} alignItems="center" display={{ base: 'none', sm: 'flex' }} aria-hidden>
+          <Flex gap={3} alignItems="center" display={{ base: 'none', sm: 'flex' }} aria-hidden sx={HIDE_ON_COARSE_POINTER}>
             <Flex gap={1} alignItems="center">
               <Key>↑</Key>
               <Key>↓</Key>

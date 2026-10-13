@@ -5,6 +5,7 @@ import NextLink from 'next/link'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 import PageHeader from '../../components/General-UI/PageHeader'
+import EmptyState from '../../components/General-UI/EmptyState'
 import { listPosts, type PostFrontmatter, type MDXIndexEntry } from '../../lib/mdx'
 import { formatPostDate, isoDate } from '../../lib/postDate'
 import { absUrl, personAuthor, PERSON_NAME, SITE_HOST } from '../../lib/schema'
@@ -97,14 +98,15 @@ export default function BlogIndex({ posts }: Props) {
           )}
 
           {visible.length === 0 ? (
-            <Box border="1px dashed" borderColor="page.border-strong" borderRadius="lg" p={[6, 10]} textAlign="center">
-              <Text fontFamily={MONO} fontSize="12px" color="page.fg-secondary" mb={2}>
-                [ no posts yet ]
-              </Text>
-              <Text color="page.fg-secondary" fontSize="14px">
-                Posts will appear here as they&rsquo;re published.
-              </Text>
-            </Box>
+            <EmptyState
+              title="No posts yet"
+              actions={[
+                { label: 'Case studies', href: '/work' },
+                { label: 'CV', href: '/cv' },
+              ]}
+            >
+              Posts will appear here as they&rsquo;re published.
+            </EmptyState>
           ) : (
             <Box as="ul" className="hover-list" listStyleType="none" m={0} p={0} borderTop="1px solid" borderColor="page.border">
               {visible.map((p) => (
