@@ -39,3 +39,22 @@ test('save outcomes', () => {
 test('sign-in link returns to the CV tab', () => {
   assert.equal(decodeURIComponent(LOGIN_HREF.split('next=')[1]), '/admin/dashboard?tab=cv')
 })
+
+test('a 422 INVALID_CV save carries the validation errors', () => {
+  const body = {
+    code: 'INVALID_CV',
+    error: 'The CV has an invalid value; nothing was saved.',
+    errors: [
+      { path: ['en', 2, 'experiences', 0, 'relatedSkills'], message: 'Skills must be a list of text items.' },
+      { path: ['xx', 0], message: 'dropped: unknown language' },
+      { message: 'dropped: no path' },
+    ],
+  }
+  assert.deepEqual(interpretSave(422, null, body), {
+    kind: 'invalid',
+    error: body.error,
+    errors: [body.errors[0]],
+  })
+  // A 422 from something else stays a plain error.
+  assert.deepEqual(interpretSave(422, null, { error: 'Nope' }), { kind: 'error', error: 'Nope' })
+})

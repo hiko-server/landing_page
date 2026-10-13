@@ -24,6 +24,7 @@ import {
 } from '@chakra-ui/react'
 import { useAdminDirty, useDirtyRegistration } from './AdminDirtyContext'
 import { LOGIN_HREF, readAdminCv, saveCv } from './cvStudio/cvApi'
+import { validateCvDoc, type CvValidationError } from '../../lib/cvValidate'
 import { monoFont, useStudioTokens } from './cvStudio/fields'
 
 /**
@@ -89,6 +90,7 @@ export default function CVEditor() {
   const cancelRef = useRef<HTMLButtonElement | null>(null)
   const fileRef = useRef<HTMLInputElement | null>(null)
   const tabLeaves = useRef(false)
+  const [invalid, setInvalid] = useState<CvValidationError[]>([])
   const { border, dim, inputBg: editorBg } = useStudioTokens()
 
   const load = useCallback(async () => {
@@ -122,26 +124,37 @@ export default function CVEditor() {
   const zhParsed = useMemo(() => parseSections(zhText), [zhText])
   const dirty = loadState === 'ready' && (enText !== baseline.en || zhText !== baseline.zh)
   const valid = enParsed.ok && zhParsed.ok
-  useDirtyRegistration('cv-raw', dirty)
 
-  /** Save; without `force` the write is conditional on the loaded version (If-Match). */
-  const save = async (force = false) => {
-    if (!enParsed.ok || !zhParsed.ok || saving) return
+  /**
+   * Save; without `force` the write is conditional on the loaded version
+   * (If-Match). Resolves true only when the server stored the document.
+   */
+  const save = async (force = false): Promise<boolean> => {
+    if (!enParsed.ok || !zhParsed.ok || saving) return false
+    const checked = validateCvDoc({ en: enParsed.value, zh: zhParsed.value })
+    if (!checked.ok) {
+      setInvalid(checked.errors)
+      return false
+    }
     setSaving(true)
     try {
       const r = await saveCv({ en: enParsed.value, zh: zhParsed.value }, force ? null : etagRef.current)
       if (r.kind === 'conflict') {
         conflict.onOpen()
-        return
+        return false
       }
       conflict.onClose()
       if (r.kind === 'unauthorized') {
         setSessionExpired(true)
-        return
+        return false
+      }
+      if (r.kind === 'invalid') {
+        setInvalid(r.errors)
+        return false
       }
       if (r.kind === 'error') {
         toast({ status: 'error', title: 'Save failed', description: r.error, isClosable: true })
-        return
+        return false
       }
       etagRef.current = r.etag
       const en = pretty(enParsed.value)
@@ -150,11 +163,14 @@ export default function CVEditor() {
       setZhText(zh)
       setBaseline({ en, zh })
       setSessionExpired(false)
+      setInvalid([])
       toast({ status: r.warning ? 'warning' : 'success', title: 'Saved', description: r.warning })
+      return true
     } finally {
       setSaving(false)
     }
   }
+  useDirtyRegistration('cv-raw', dirty, () => save(false))
 
   const format = () => {
     if (enParsed.ok) setEnText(pretty(enParsed.value))
@@ -254,7 +270,7 @@ export default function CVEditor() {
       <Flex align="center" gap={2} wrap="wrap">
         <Button
           size="sm"
-          onClick={() => save(false)}
+          onClick={() => void save(false)}
           isLoading={saving}
           isDisabled={!dirty || !valid}
           bg={dirty && valid ? 'var(--accent)' : undefined}
@@ -269,8 +285,13 @@ export default function CVEditor() {
         <Button
           size="sm"
           variant="outline"
-          onClick={() => {
-            if (!dirty || confirmDiscard('Discard your JSON edits and reload from the server?')) load()
+          onClick={async () => {
+            const ok = await confirmDiscard('Discard your JSON edits and reload from the server?', {
+              title: 'Reload the CV JSON?',
+              allowSave: false,
+              discardLabel: 'Discard and reload',
+            })
+            if (ok) load()
           }}
         >
           Reload
@@ -308,6 +329,28 @@ export default function CVEditor() {
             Sign in again
           </Button>
         </Flex>
+      ) : null}
+      {invalid.length ? (
+        <Box px={3} py={2} borderRadius="md" bg="rgba(239,68,68,0.08)" fontSize="13px" role="alert">
+          <Text fontWeight={600}>
+            Not saved: {invalid.length === 1 ? 'one value needs fixing' : `${invalid.length}${invalid.length >= 50 ? '+' : ''} values need fixing`}
+          </Text>
+          <Box as="ul" mt={1} pl={4}>
+            {invalid.slice(0, 5).map((e) => (
+              <Box as="li" key={`${e.path.join('.')}-${e.message}`} mt={0.5}>
+                <Text as="span" fontFamily={monoFont} fontSize="12px">
+                  {e.path[0]}[{e.path.slice(1).join('][')}]
+                </Text>{' '}
+                — {e.message}
+              </Box>
+            ))}
+          </Box>
+          {invalid.length > 5 ? (
+            <Text mt={1} fontSize="12px" color={dim}>
+              …and {invalid.length - 5} more.
+            </Text>
+          ) : null}
+        </Box>
       ) : null}
       <Text fontSize="12px" color={dim}>
         Visibility keys: <code>isVisible</code> (section on CV / entry shown), <code>showOnWebsite</code>,{' '}
@@ -351,7 +394,7 @@ export default function CVEditor() {
               >
                 Reload latest
               </Button>
-              <Button size="sm" colorScheme="red" onClick={() => save(true)} isLoading={saving}>
+              <Button size="sm" colorScheme="red" onClick={() => void save(true)} isLoading={saving}>
                 Overwrite
               </Button>
             </AlertDialogFooter>

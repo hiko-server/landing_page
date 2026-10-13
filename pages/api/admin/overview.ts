@@ -1,0 +1,100 @@
+import type { NextApiRequest, NextApiResponse } from 'next'
+import { withApi } from '../../../lib/apiHandler'
+import { isAdminRequest } from '../../../lib/auth'
+import { getBackupStatus } from '../../../lib/backupSchedule'
+import { getPage, listItems } from '../../../lib/contentStore'
+import { getDb } from '../../../lib/db'
+import { listInbox } from '../../../lib/inbox'
+import { isR2Configured } from '../../../lib/r2'
+
+/**
+ * GET /api/admin/overview — the admin status hub's numbers (admin only,
+ * never cached). Every value is read from the live store; configuration
+ * flags are booleans derived from env presence, never the values.
+ */
+
+export type EditKind = 'cv' | 'home' | 'post' | 'work' | 'page'
+
+export type AdminOverview = {
+  inbox: { unread: number; total: number }
+  posts: { published: number; drafts: number }
+  work: { published: number; drafts: number }
+  pages: { nowEmpty: boolean; usesEmpty: boolean }
+  backup: { lastAt: number | null; lastOk: boolean | null; ageHours: number | null; scheduled: boolean; nextAt?: number }
+  r2: { configured: boolean; pending: number }
+  config: { smtp: boolean; githubToken: boolean; trustedProxy: boolean; cfApi: boolean; indexNow: boolean }
+  lastEdits: { kind: EditKind; ref: string; updatedAt: number }[]
+}
+
+const LAST_EDITS = 5
+
+const present = (name: string) => !!(process.env[name] || '').trim()
+
+function counts(collection: 'blog' | 'work'): { published: number; drafts: number } {
+  let published = 0
+  let drafts = 0
+  for (const item of listItems(collection)) {
+    if (item.frontmatter?.draft) drafts++
+    else published++
+  }
+  return { published, drafts }
+}
+
+const pageEmpty = (name: 'now' | 'uses') => !(getPage(name)?.body || '').trim()
+
+function lastEdits(): AdminOverview['lastEdits'] {
+  const rows = getDb()
+    .prepare(
+      `SELECT kind, ref, updated_at AS updatedAt FROM (
+         SELECT CASE key WHEN 'cvdata' THEN 'cv' ELSE key END AS kind, key AS ref, updated_at FROM kv WHERE key IN ('cvdata', 'home')
+         UNION ALL
+         SELECT 'page' AS kind, name AS ref, updated_at FROM pages
+         UNION ALL
+         SELECT CASE collection WHEN 'blog' THEN 'post' ELSE 'work' END AS kind, slug AS ref, updated_at FROM collection_items WHERE collection IN ('blog', 'work')
+       ) ORDER BY updated_at DESC LIMIT ?`,
+    )
+    .all(LAST_EDITS) as { kind: EditKind; ref: string; updatedAt: number }[]
+  return rows.map((r) => ({ kind: r.kind, ref: r.ref, updatedAt: Number(r.updatedAt) || 0 }))
+}
+
+function r2Pending(): number {
+  const row = getDb().prepare('SELECT COUNT(*) AS n FROM r2_pending').get() as { n: number } | undefined
+  return Number(row?.n) || 0
+}
+
+export function readOverview(): AdminOverview {
+  const inbox = listInbox()
+  const backup = getBackupStatus()
+  return {
+    inbox: { unread: inbox.unread, total: inbox.total },
+    posts: counts('blog'),
+    work: counts('work'),
+    pages: { nowEmpty: pageEmpty('now'), usesEmpty: pageEmpty('uses') },
+    backup: {
+      lastAt: backup.lastAt,
+      lastOk: backup.lastOk,
+      ageHours: backup.ageHours,
+      scheduled: backup.scheduled,
+      ...(backup.nextAt ? { nextAt: backup.nextAt } : {}),
+    },
+    r2: { configured: isR2Configured(), pending: r2Pending() },
+    config: {
+      smtp: present('SMTP_HOST') && present('SMTP_USER') && present('SMTP_PASS'),
+      githubToken: present('GITHUB_TOKEN'),
+      trustedProxy: present('TRUSTED_PROXY_IPS'),
+      cfApi: present('CF_API_TOKEN') && present('CF_ZONE_ID'),
+      indexNow: present('INDEXNOW_KEY'),
+    },
+    lastEdits: lastEdits(),
+  }
+}
+
+export default withApi('admin/overview', (req: NextApiRequest, res: NextApiResponse) => {
+  if (!isAdminRequest(req, res)) return res.status(401).json({ error: 'Unauthorized' })
+  if (req.method !== 'GET') {
+    res.setHeader('Allow', 'GET')
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
+  res.setHeader('Cache-Control', 'no-store')
+  return res.status(200).json(readOverview())
+})

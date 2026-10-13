@@ -13,7 +13,8 @@ import { DRAFT_MAX_AGE_MS, UNKNOWN_BASE, readAdminCv, saveCv, type SaveOutcome }
  *    synchronously, so callers get the resulting document back — used to
  *    tie a toast's Undo button to exactly one history step.
  *  - Optimistic concurrency: saves send If-Match with the ETag the editor
- *    is based on; a 409 surfaces as 'conflict' and nothing is written.
+ *    is based on; a 409 surfaces as 'conflict' and nothing is written. A
+ *    value the server's registry check rejects surfaces as 'invalid'.
  *  - Local drafts remember the ETag they were based on and are only offered
  *    as a plain restore when that is still the server's version.
  */
@@ -229,7 +230,7 @@ export function useCvDocument() {
           writeStoredDraft(doc, baseEtagRef.current)
           return r
         }
-        if (r.kind === 'error') return r
+        if (r.kind === 'error' || r.kind === 'invalid') return r
         setBaseEtag(r.etag)
         setServerEtag(r.etag)
         setSavedJson(json)

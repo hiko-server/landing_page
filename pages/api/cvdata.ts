@@ -16,6 +16,9 @@ import { rateLimit } from '../../lib/rateLimit'
 import { isAdminRequest, readAdminClaims } from '../../lib/auth'
 import { sendVersionedJson } from '../../lib/http'
 import { revalidatePaths } from '../../lib/revalidate'
+import { validateCvDoc, type CvValidationError } from '../../lib/cvValidate'
+import { withApi } from '../../lib/apiHandler'
+import type { Logger } from '../../lib/log'
 
 const isAuthed = isAdminRequest
 
@@ -28,6 +31,10 @@ const isAuthed = isAdminRequest
  *   GET ?download=1[&file] admin: download the full document or a snapshot
  *   PUT                    admin: save {en?, zh?, syncZh?}; honours If-Match
  *   POST {action}          admin: snapshot / restore / import
+ *
+ * PUT and import validate the document against the section registry
+ * (lib/cvValidate.ts) first: 422 {code:'INVALID_CV', error, errors} and
+ * nothing is written.
  */
 
 /**
@@ -53,20 +60,31 @@ function isSectionArray(v: unknown): v is any[] {
 }
 
 /**
- * Statically generated pages that render CV data. /now reads the public
- * workExperience / education / project sections, so a save, restore or
- * import must regenerate it right away — otherwise an entry the owner just
- * hid keeps being served from the ISR cache.
+ * Statically generated (ISR) pages that render CV data, regenerated after a
+ * save, restore or import so an entry the owner just hid is not served from
+ * the ISR cache. Only ISR pages belong here: `/`, `/about`, `/cv`, `/cv/zh`
+ * and `/contact` are server-rendered on every request (getServerSideProps)
+ * and are always fresh. /now reads the public workExperience / education /
+ * project sections.
  */
-const CV_STATIC_PATHS = ['/now']
+export const CV_STATIC_PATHS: readonly string[] = ['/now']
 
 /** Regenerate CV-backed static pages; never fails the (already stored) write. */
 async function revalidateCvPages(res: NextApiResponse): Promise<{ revalidated: string[]; revalidateFailed?: string[] }> {
-  const failed = await revalidatePaths(res, CV_STATIC_PATHS)
+  const paths = [...CV_STATIC_PATHS]
+  const failed = await revalidatePaths(res, paths)
   return {
-    revalidated: CV_STATIC_PATHS.filter((p) => !failed.includes(p)),
+    revalidated: paths.filter((p) => !failed.includes(p)),
     ...(failed.length ? { revalidateFailed: failed } : {}),
   }
+}
+
+function sendInvalid(res: NextApiResponse, errors: CvValidationError[]) {
+  return res.status(422).json({
+    code: 'INVALID_CV',
+    error: `The CV has ${errors.length === 1 ? 'an invalid value' : `${errors.length} invalid values`}; nothing was saved.`,
+    errors,
+  })
 }
 
 function sendConflict(res: NextApiResponse, version: number) {
@@ -78,7 +96,7 @@ function sendConflict(res: NextApiResponse, version: number) {
   }, etag)
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default withApi('cvdata', async (req: NextApiRequest, res: NextApiResponse, ctx) => {
   if (req.method === 'GET') {
     // snapshots list (admin only)
     if (req.query.snapshots === '1') {
@@ -127,6 +145,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if ((en !== undefined && !isSectionArray(en)) || (zh !== undefined && !isSectionArray(zh))) {
       return res.status(400).json({ error: 'Each language must be an array of sections with a string "sessionName"' })
     }
+    // Only the languages that were sent are checked: a legacy value elsewhere
+    // in the stored document never blocks an unrelated save.
+    const checked = validateCvDoc({ en, zh })
+    if (!checked.ok) return sendInvalid(res, checked.errors)
 
     const ifMatch = req.headers['if-match']
     const current = readCvDataWithVersion()
@@ -143,11 +165,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return sendVersionedJson(res, 200, { ok: true, unchanged: true, etag }, etag)
     }
 
-    try {
-      saveSnapshot()
-    } catch (err) {
-      console.warn('cvdata: snapshot before write failed', err)
-    }
+    snapshotQuietly(ctx.log, 'write')
     // The If-Match check is repeated atomically inside the write transaction.
     const writeResult = await writeCvData(next, {
       precondition: (version) => ifMatchAllows(ifMatch, version),
@@ -162,7 +180,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       to: process.env.NOTIFY_EMAIL || process.env.ADMIN_EMAIL || 'hi@lucian-dev.com',
       subject: 'CV updated',
       text: `CV updated by ${actor} at ${new Date().toISOString()}\nSyncZh=${syncZh}`,
-    }).catch((err) => console.warn('cvdata: notification mail failed', err?.message || err))
+    }).catch((err) => ctx.log.warn('CV notification mail failed', { err }))
     const revalidation = await revalidateCvPages(res)
     return sendVersionedJson(res, 200, {
       ok: true,
@@ -184,11 +202,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (action === 'restore') {
       if (!safeSnapshotName(filename)) return res.status(400).json({ error: 'Missing or invalid filename' })
       // Keep the current state recoverable: restoring is itself undoable.
-      try {
-        saveSnapshot()
-      } catch (err) {
-        console.warn('cvdata: snapshot before restore failed', err)
-      }
+      snapshotQuietly(ctx.log, 'restore')
       const result = await restoreSnapshot(filename)
       if (!result.ok) return res.status(restoreErrorStatus(result.error)).json({ error: result.error })
       const etag = kvEtag(result.updatedAt)
@@ -218,14 +232,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if ((enIn && !isSectionArray(enIn)) || (zhIn && !isSectionArray(zhIn))) {
         return res.status(400).json({ error: 'Each language must be an array of sections with a string "sessionName"' })
       }
+      const checkedImport = validateCvDoc({ en: enIn, zh: zhIn })
+      if (!checkedImport.ok) return sendInvalid(res, checkedImport.errors)
       const current = readCvData()
       const newEn = enIn ?? current.en
       const newZh = zhIn ? syncLanguage(newEn, zhIn) : current.zh
-      try {
-        saveSnapshot()
-      } catch (err) {
-        console.warn('cvdata: snapshot before import failed', err)
-      }
+      snapshotQuietly(ctx.log, 'import')
       const importResult = await writeCvData({ en: newEn, zh: newZh })
       if (!importResult.ok) return res.status(500).json({ error: importResult.error })
       const etag = kvEtag(importResult.updatedAt)
@@ -242,6 +254,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   res.setHeader('Allow', 'GET,PUT,POST')
   return res.status(405).json({ error: 'Method not allowed' })
+})
+
+/** Keep the current state recoverable before a write; a failed snapshot never blocks the write. */
+function snapshotQuietly(log: Logger, before: string) {
+  try {
+    saveSnapshot()
+  } catch (err) {
+    log.warn('CV snapshot failed', { before, err })
+  }
 }
 
 export const config = {

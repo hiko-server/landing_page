@@ -21,10 +21,10 @@ import {
  * Node-only surface — never import it from anything under `components/`.
  */
 
-export { HOME_SECTION_META, isSectionVisible, publicHome } from './homeShape'
-export type { HomeData, SectionKey } from './homeShape'
+export { HOME_SECTION_META, isSectionVisible, normalizeHomeWrite, publicHome } from './homeShape'
+export type { HomeData, HomeFieldError, SectionKey } from './homeShape'
 import type { HomeData } from './homeShape'
-import { publicHome } from './homeShape'
+import { normalizeHomeWrite, publicHome } from './homeShape'
 
 const homeSnapshotDir = path.join(process.cwd(), 'data', 'home_snapshots')
 
@@ -48,9 +48,21 @@ export function readPublicHome(): HomeData | null {
   return publicHome(readHome())
 }
 
-/** Write the full document. Pass `precondition` for an atomic If-Match check. */
+/**
+ * Write the full document. Pass `precondition` for an atomic If-Match check.
+ *
+ * The owner-editable extras (availability, open-source picks, site name,
+ * logo scales) are validated and normalised first (normalizeHomeWrite); a
+ * document that fails is not stored. API routes validate up front to answer
+ * with field-level errors — this is the last line of defence for every
+ * other writer.
+ */
 export async function writeHome(data: HomeData, opts: KvPutOptions = {}): Promise<KvPutResult> {
-  return await putKv('home', data, opts)
+  const checked = normalizeHomeWrite(data)
+  if (!checked.ok) {
+    return { ok: false, error: `Invalid home document: ${checked.errors.map((e) => `${e.path}: ${e.message}`).join('; ')}` }
+  }
+  return await putKv('home', checked.home, opts)
 }
 
 /**
