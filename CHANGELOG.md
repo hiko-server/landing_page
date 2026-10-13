@@ -8,6 +8,95 @@ portfolio CMS, no public package). Entries are grouped by release date.
 
 ## [Unreleased]
 
+## [2.2.0] — 2026-10-13
+
+A research-driven round (benchmarks of leading developer portfolios and CMS
+admins, live visual/performance/accessibility/SEO audits) on a new platform:
+Next.js 15.5 and patched dependencies.
+
+### Security
+
+- Next.js 14.2 → 15.5.27 (Pages Router, React 18): closes the image
+  optimizer RCE/DoS, rewrite SSRF/smuggling and SSG/ISR cache-poisoning
+  advisories. On-request image optimization is disabled (`/_next/image` →
+  404); uploads are resized and converted at upload time instead.
+- Tiptap 3.31.3, prosemirror-view 1.42.6, nodemailer 10.0.12, sharp 0.35.5
+  and resolutions for vulnerable transitive packages; CI audit gate with a
+  reviewed allowlist (build-time tooling only).
+- MDX renders from a server-built tree without `eval`; the production CSP
+  no longer allows `'unsafe-eval'`. Embeds are an allow-list (YouTube,
+  Vimeo, figures).
+- Every server-side fetch of a content- or admin-supplied URL goes through
+  `lib/security/safeFetch` (public addresses only, DNS pinned, redirects
+  re-checked, size and time limits).
+- Uploaded and imported images lose their EXIF / XMP (GPS, camera serials)
+  — losslessly when no resize or rotation is needed — and images that decode
+  to more than 80 MP are refused with 413.
+- Compiled articles and the feeds only carry safe link and image URLs
+  (`javascript:` / `data:` are removed); embeds accept player URLs only.
+- Signing out also ends Draft Mode, and the Draft bar's Exit works without a
+  session.
+- Analytics records article paths only for published slugs and gives each
+  client and network a bounded share of the event budget.
+- The tracked CV seed holds only public content; an old snapshot is no
+  longer tracked.
+
+### Added
+
+- **Typography & motion**: real Geist Sans/Mono (two preloads, ~141 KB),
+  balanced headings and tabular figures; circular theme reveal from the
+  toggle; directional page transitions with a pinned header; blur-rise hero
+  headline; cursor-lit card borders and hover-intent lists; scroll-driven
+  experience rail; shared-element photo lightbox; number roll-ups. All
+  transform/opacity only and off under reduced motion.
+- **Home**: faster hero (pre-baked responsive WebP), Skills from the CV,
+  writing & case-study links, full-width Field Notes, GitHub data rendered
+  in the HTML, indigo contribution graph.
+- **Command palette 3.0**: loads on demand, searches posts, case studies
+  and CV entries, owner actions (inbox, backup, log out), vCard and booking.
+- **Articles**: GFM tables/strikethrough, zero-CLS responsive images,
+  refined reading layout, full-content `/feed.xml`, `/work/feed.xml`,
+  `/feed.json`, Draft Mode with an Edit pill.
+- **Pages**: `/cv/zh` as a real Chinese page (title, description, JSON-LD),
+  per-entry CV anchors, contact availability card, vCard and QR, `/colophon`
+  generated from the repository.
+- **Authoring**: local drafts and conflict-safe saves for every editor,
+  item history and undo-delete, compile-checked publishing with a checklist,
+  side-by-side live preview, slash menu, upload-time WebP variants and safe
+  remote image import.
+- **Admin**: status hub with "Needs attention", Save and leave dialog,
+  keyboard shortcuts overlay, sortable home cards, CV/home validation, and
+  first-party cookieless **Analytics** with real-user Web Vitals.
+- **Operations**: `scripts/deploy.sh` (bundle-based deploy with backups,
+  health/warm-up gating, smoke test and automatic rollback), scheduled
+  change-aware backups, structured JSON logs with request ids, Playwright +
+  axe browser tests and a performance budget in CI.
+
+### Changed
+
+- Shared JavaScript 225 → 204 kB (`_app` 137 → 114 kB): palette, drawer and
+  below-the-fold widgets load on demand; brand icons are inline SVG.
+- `docker-compose.override.yml` is no longer tracked; copy
+  `docker-compose.override.example.yml` on a new server.
+- Lint runs through the ESLint CLI over the whole repository.
+- Upload variants keep the original's extension (`photo.jpg.w640.webp`), so
+  originals with the same stem never share variants.
+
+### Fixed
+
+- Lists, quotes and the slash menu's list items in the editor (a duplicate
+  `prosemirror-model` broke wrapping and list splits).
+- A post with an image inside a sentence no longer fails hydration; inline
+  code wraps instead of being clipped on narrow screens.
+- RSS publish times match the JSON Feed and structured data.
+- Keyboard focus no longer dims the other rows of hover lists; the hero name
+  appears at once under reduced motion; the lightbox allows pinch-zoom.
+- The vCard no longer falls back to the built-in name when the owner hides
+  the name fields.
+- `scripts/deploy.sh`: a live analytics write during the backup no longer
+  aborts the deploy, `--force` on the same commit recreates the container,
+  and a dropped connection during the build restores the server.
+
 ## [2.1.0] — 2026-10-13
 
 Hardening and polish on top of 2.0.0, after two adversarial reviews (81
