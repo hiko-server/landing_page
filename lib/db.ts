@@ -25,7 +25,8 @@ import Database from 'better-sqlite3'
  * them, so the boot sync (scripts/sync-from-r2.mjs) reconciles them from the
  * local row unconditionally instead of trusting timestamps. `updated_at` is
  * when the failure was recorded. The same DDL lives in
- * scripts/content-helpers.mjs — keep the two in step.
+ * scripts/content-helpers.mjs — keep the two in step (a parity test compares
+ * the resulting sqlite_master of both).
  */
 
 const DB_DIR = path.join(process.cwd(), 'data')
@@ -86,7 +87,12 @@ export function getDb(): Database.Database {
   return db
 }
 
-function initSchema(db: Database.Database) {
+/**
+ * Create the content tables on `db` (idempotent) and switch it to WAL.
+ * Exported so tests can build a store on a temp file and compare it with the
+ * plain-Node scripts' schema (tests/r4-ops-schema-parity.test.ts).
+ */
+export function initSchema(db: Database.Database): void {
   withBusyRetry(() => {
     const mode = String(db.pragma('journal_mode', { simple: true })).toLowerCase()
     if (mode !== 'wal') db.pragma('journal_mode = WAL')

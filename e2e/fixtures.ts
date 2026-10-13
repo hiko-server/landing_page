@@ -1,0 +1,184 @@
+import { test as base, expect, type Page } from '@playwright/test'
+import AxeBuilder from '@axe-core/playwright'
+
+/**
+ * Shared E2E fixtures.
+ *
+ * Every test automatically fails on:
+ *   - console.error (React hydration errors #418/#425 land here),
+ *   - uncaught page errors,
+ *   - Content-Security-Policy violations (a `securitypolicyviolation`
+ *     listener installed with addInitScript collects them into window.__csp
+ *     and forwards each one to the test, across navigations).
+ * Failed loads of third-party resources and of the GitHub proxy routes are
+ * ignored: the GitHub API is rate-limited or unreachable in CI, and the site
+ * degrades to an honest empty state there.
+ */
+
+const IGNORED_FIRST_PARTY = [/^\/api\/github\//]
+
+/** True for console errors that are not the site's fault (see above). */
+export function isIgnorableConsoleError(text: string, url: string | undefined, origin: string): boolean {
+  if (!/^Failed to load resource|net::ERR_/.test(text) || !url) return false
+  try {
+    const u = new URL(url)
+    if (u.origin !== origin) return true
+    return IGNORED_FIRST_PARTY.some((re) => re.test(u.pathname))
+  } catch {
+    return false
+  }
+}
+
+type Fixtures = { pageGuard: void }
+
+export const test = base.extend<Fixtures>({
+  pageGuard: [
+    async ({ page, baseURL }, run) => {
+      const origin = new URL(baseURL || 'http://127.0.0.1:3000').origin
+      const problems: string[] = []
+      // Pages a test deliberately opens as 404s: the browser logs the failed
+      // document load (and Next's data request for the same path) as console
+      // errors, which are expected there.
+      const expected404 = new Set<string>()
+      const consoleErrors: { text: string; url?: string }[] = []
+      page.on('response', (res) => {
+        if (res.status() === 404 && res.request().isNavigationRequest()) expected404.add(new URL(res.url()).pathname)
+      })
+      await page.exposeFunction('__e2eReportCsp', (line: string) => {
+        problems.push(`CSP violation: ${line}`)
+      })
+      await page.addInitScript(() => {
+        const w = window as unknown as { __csp: string[]; __e2eReportCsp?: (line: string) => void }
+        w.__csp = []
+        document.addEventListener('securitypolicyviolation', (e) => {
+          const line = `${e.effectiveDirective} blocked ${e.blockedURI || '(inline)'} at ${e.sourceFile || location.href}:${e.lineNumber}`
+          w.__csp.push(line)
+          w.__e2eReportCsp?.(line)
+        })
+      })
+      page.on('console', (msg) => {
+        if (msg.type() !== 'error') return
+        if (isIgnorableConsoleError(msg.text(), msg.location().url, origin)) return
+        consoleErrors.push({ text: msg.text(), url: msg.location().url })
+      })
+      page.on('pageerror', (err) => problems.push(`pageerror: ${err.message}`))
+
+      await run()
+
+      for (const { text, url } of consoleErrors) {
+        if (url && /^Failed to load resource: .*\b404\b/.test(text)) {
+          const p = new URL(url).pathname
+          const dataFor = p.match(/^\/_next\/data\/[^/]+(\/.*)\.json$/)?.[1]
+          if (expected404.has(p) || (dataFor && expected404.has(dataFor))) continue
+        }
+        problems.push(`console.error: ${text}${url ? ` (${url})` : ''}`)
+      }
+
+      expect(problems, 'console errors, page errors or CSP violations').toEqual([])
+    },
+    { auto: true },
+  ],
+})
+
+export { expect }
+
+/**
+ * Wait until web fonts are in and no finite CSS/WAAPI animation is still
+ * running (infinite ones such as a status pulse are ignored), so contrast
+ * and layout checks see the settled page.
+ */
+export async function settle(page: Page, timeout = 6000): Promise<void> {
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  await page
+    .waitForFunction(
+      () =>
+        document.getAnimations().every((a) => {
+          const end = a.effect?.getComputedTiming().endTime
+          return a.playState !== 'running' || end === Infinity || end === undefined
+        }),
+      undefined,
+      { timeout },
+    )
+    .catch(() => undefined)
+}
+
+export type AxeViolation = { id: string; impact: string | null | undefined; help: string; targets: string[] }
+
+/** axe-core over WCAG 2.0/2.1/2.2 A + AA; returns serious and critical violations only. */
+export async function seriousA11yViolations(page: Page): Promise<AxeViolation[]> {
+  const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze()
+  return result.violations
+    .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+    .map((v) => ({ id: v.id, impact: v.impact, help: v.help, targets: v.nodes.slice(0, 5).map((n) => n.target.join(' ')) }))
+}
+
+export type TargetOffender = { label: string; width: number; height: number }
+
+/**
+ * WCAG 2.2 SC 2.5.8 (Target Size, Minimum) over every visible link and
+ * button: at least 24×24 CSS px, or — the spacing exception — a 24 px circle
+ * centred on the target does not intersect any other target's box or the
+ * circle of another undersized target. Inline links inside text and anything
+ * inside article prose are exempt (the SC's inline exception), as are
+ * visually-hidden elements (e.g. the skip link before it is focused).
+ */
+export async function undersizedTargets(page: Page): Promise<TargetOffender[]> {
+  return page.evaluate(() => {
+    const MIN = 24
+    const R = MIN / 2
+    const nodes = Array.from(document.querySelectorAll<HTMLElement>('a[href], button, [role="button"], input[type="checkbox"], input[type="radio"]'))
+    const targets = nodes.filter((el) => {
+      if (!el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) return false
+      if (el.closest('[aria-hidden="true"], [inert], .article-prose, .sr-only')) return false
+      const r = el.getBoundingClientRect()
+      if (r.width <= 1 || r.height <= 1) return false
+      // Inline exception: an inline link that sits in a run of text.
+      const parentText = (el.parentElement?.textContent || '').trim()
+      const ownText = (el.textContent || '').trim()
+      return !(getComputedStyle(el).display === 'inline' && parentText !== ownText)
+    })
+    const boxes = targets.map((el) => {
+      const r = el.getBoundingClientRect()
+      return { el, x: r.left + window.scrollX, y: r.top + window.scrollY, w: r.width, h: r.height }
+    })
+    // Nested targets (a button inside a link) count once: the outer one.
+    const top = boxes.filter((b) => !boxes.some((o) => o !== b && o.el.contains(b.el)))
+    const small = top.filter((b) => b.w < MIN || b.h < MIN)
+    const centre = (b: (typeof boxes)[number]) => ({ cx: b.x + b.w / 2, cy: b.y + b.h / 2 })
+    const circleHitsBox = (cx: number, cy: number, b: (typeof boxes)[number]) => {
+      const nx = Math.max(b.x, Math.min(cx, b.x + b.w))
+      const ny = Math.max(b.y, Math.min(cy, b.y + b.h))
+      return (cx - nx) ** 2 + (cy - ny) ** 2 < R * R
+    }
+    const offenders = small.filter((b) => {
+      const { cx, cy } = centre(b)
+      return top.some((o) => {
+        if (o === b) return false
+        if (circleHitsBox(cx, cy, o)) return true
+        if (o.w < MIN || o.h < MIN) {
+          const c = centre(o)
+          return (cx - c.cx) ** 2 + (cy - c.cy) ** 2 < (2 * R) ** 2
+        }
+        return false
+      })
+    })
+    return offenders.map((b) => ({
+      label: `${b.el.tagName.toLowerCase()} "${(b.el.getAttribute('aria-label') || b.el.textContent || '').trim().slice(0, 40)}"`,
+      width: Math.round(b.w),
+      height: Math.round(b.h),
+    }))
+  })
+}
+
+/** Admin credentials from the job env (the CI container is started with the same values). */
+export const ADMIN = { email: process.env.ADMIN_EMAIL || '', password: process.env.ADMIN_PASS || '' }
+
+/** Sign in through the real login form and land on the admin portal. */
+export async function loginAsAdmin(page: Page): Promise<void> {
+  await page.goto('/admin/login')
+  // Required fields carry a visual "*" in their label, hence the prefix match.
+  await page.getByLabel(/^email/i).fill(ADMIN.email)
+  await page.getByLabel(/^password/i).fill(ADMIN.password)
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click()
+  await page.waitForURL((url) => url.pathname.startsWith('/admin') && url.pathname !== '/admin/login')
+}

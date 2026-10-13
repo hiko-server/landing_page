@@ -19,6 +19,7 @@ export const SAFE_NAME = /^[a-z0-9][a-z0-9-_]*$/
 /** Upload filenames accepted from / pushed to R2 (flat, no paths). */
 // Must match lib/security/uploadName.ts UPLOAD_NAME_RE (this .mjs cannot import TS):
 // only names the /uploads/* server serves and backups include are synced.
+// tests/r4-ops-schema-parity.test.ts asserts both regexes are identical.
 export const SAFE_UPLOAD = /^(?!.*\.\.)[A-Za-z0-9_-][A-Za-z0-9._-]{0,254}$/
 
 export const COLLECTIONS = ['blog', 'work']
@@ -29,7 +30,8 @@ export const SKEW_MS = 5000
 /** Same bounds as lib/r2.ts: connect 5 s, idle socket 10 s, 3 attempts. */
 export const R2_TIMEOUTS = { connectionMs: 5000, requestMs: 10000, maxAttempts: 3 }
 
-// Must match initSchema() in lib/db.ts (this .mjs cannot import TS).
+// Must match initSchema() in lib/db.ts (this .mjs cannot import TS);
+// tests/r4-ops-schema-parity.test.ts compares the resulting sqlite_master.
 const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS pages (
     name TEXT PRIMARY KEY, frontmatter TEXT NOT NULL DEFAULT '{}',

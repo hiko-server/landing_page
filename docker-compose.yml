@@ -1,4 +1,3 @@
-
 services:
   landing-page:
     image: hiko-landing-page-frontend-ts-staging:latest
@@ -13,6 +12,9 @@ services:
         NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
         NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: ${NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE:-0}
         NEXT_PUBLIC_GA_ID: ${NEXT_PUBLIC_GA_ID:-}
+        # Short commit of the deployed tree, shown on /colophon. scripts/deploy.sh
+        # exports it; a plain `docker compose build` leaves it empty.
+        NEXT_PUBLIC_BUILD_SHA: ${NEXT_PUBLIC_BUILD_SHA:-}
     env_file:
       - .env
     # unless-stopped survives daemon restarts and clean exits (on-failure does
@@ -21,6 +23,12 @@ services:
     restart: unless-stopped
     mem_limit: 1g
     cpus: 2
+    # Rotated container logs: the default json-file driver grows without bound.
+    logging:
+      driver: local
+      options:
+        max-size: "10m"
+        max-file: "5"
     # Persistent runtime state. Without these, every rebuild/redeploy wiped
     # data/admin.json (password changes), version-history snapshots, local
     # backups, the contact fallback inbox and uploaded images. Named volumes
@@ -30,27 +38,15 @@ services:
       - landing-data:/app/data
       - landing-uploads:/app/public/uploads
     # Loopback only: the site is reached through a reverse proxy / Cloudflare
-    # Tunnel on the host, never directly. (The server's override replaces this
-    # mapping with its own loopback port; the named volumes above are likewise
-    # shadowed there by bind mounts on the same targets.)
+    # Tunnel on the host, never directly. (The server's override — see
+    # docker-compose.override.example.yml — replaces this mapping with its own
+    # loopback port; the named volumes above are likewise shadowed there by
+    # bind mounts on the same targets.)
     ports:
       - "127.0.0.1:8000:3000"
     networks:
       easilycv:
         ipv4_address: 172.18.0.9
-  # reverse-proxy:
-  #   image: nginx:latest
-  #   container_name: hiko-easilycv-frontend-nginx_staging
-  #   ports:
-  #     - "80:80"
-  #     - "443:443"
-  #   volumes:
-  #     - ./docker/nginx:/etc/nginx/conf.d
-  #   depends_on:
-  #     - cv
-  #   networks:
-  #     easilycv:
-  #       ipv4_address: 172.18.0.5 
 
 volumes:
   landing-data:

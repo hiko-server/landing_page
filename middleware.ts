@@ -1,14 +1,23 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
-import { buildCsp } from './lib/csp'
-import { getConfiguredSiteValues } from './lib/env'
+import { buildCsp } from './lib/csp.js'
+import { getConfiguredSiteValues, getPublicHost, hostnameOf } from './lib/env'
 import { checkCsrf, isCsrfProtectedPath, isFormLikeContentType, isUnsafeMethod, siteHostsFrom } from './lib/security/csrf'
 
 /**
  * Root middleware.
  *
- * Three responsibilities:
+ * Four responsibilities:
+ *
+ * 0.  **Edge redirects** (GET/HEAD only, 308 so the method and body survive):
+ *     - plain-HTTP requests for the configured public host (SITE_URL /
+ *       NEXT_PUBLIC_SITE_HOST, never a loopback name) go to the same URL on
+ *       https. The scheme the visitor used comes from Cloudflare's
+ *       `cf-visitor` header, else `x-forwarded-proto`. /api/health is never
+ *       redirected (probes talk plain HTTP to the container).
+ *     - the legacy `/cv?lang=zh|cn` goes to `/cv/zh`, keeping the other
+ *       query parameters (e.g. `print=1`).
  *
  * 1.  **Security headers** for every response (frame deny, HSTS, CSP, etc).
  *     These are applied unconditionally.
@@ -112,8 +121,55 @@ function csrfRejection(req: NextRequest, pathname: string): NextResponse | null 
   return null
 }
 
+/** The scheme the visitor used, as reported by the proxy in front of us (lower-case), or ''. */
+export function forwardedScheme(headers: Headers): string {
+  const visitor = headers.get('cf-visitor')
+  if (visitor) {
+    try {
+      const scheme = (JSON.parse(visitor) as { scheme?: unknown }).scheme
+      if (typeof scheme === 'string' && scheme) return scheme.toLowerCase()
+    } catch {
+      /* malformed: fall through to x-forwarded-proto */
+    }
+  }
+  return (headers.get('x-forwarded-proto') || '').split(',')[0].trim().toLowerCase()
+}
+
+/** Legacy language parameter values of /cv that mean the Chinese CV. */
+const LEGACY_ZH_LANG = new Set(['zh', 'cn'])
+
+/**
+ * 308 redirect for this request, or null. Pure function of the request (and
+ * the configured public host), so it is unit-tested with NextRequest fixtures.
+ */
+export function edgeRedirect(req: NextRequest, publicHost: string | null = getPublicHost()): NextResponse | null {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return null
+  const { pathname, search } = req.nextUrl
+
+  if (publicHost && pathname !== '/api/health' && forwardedScheme(req.headers) === 'http') {
+    const host = hostnameOf(req.headers.get('host') || '')
+    if (host === publicHost) {
+      return NextResponse.redirect(`https://${publicHost}${pathname}${search}`, 308)
+    }
+  }
+
+  if (pathname === '/cv') {
+    const lang = (req.nextUrl.searchParams.get('lang') || '').trim().toLowerCase()
+    if (LEGACY_ZH_LANG.has(lang)) {
+      const url = req.nextUrl.clone()
+      url.pathname = '/cv/zh'
+      url.searchParams.delete('lang')
+      return NextResponse.redirect(url, 308)
+    }
+  }
+  return null
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
+
+  const redirect = edgeRedirect(req)
+  if (redirect) return applySecurityHeaders(redirect, { adminContext: false })
   const isAdminPage = pathname === '/admin' || pathname.startsWith('/admin/')
   const isAdminApi = pathname.startsWith('/api/admin/')
 
@@ -152,5 +208,7 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  // /_next/image is not excluded: the optimizer is disabled (images.unoptimized)
+  // and answers 404, which gets the security headers like everything else.
+  matcher: ['/((?!_next/static|favicon.ico).*)'],
 }

@@ -90,9 +90,29 @@ test('sendVersionedJson keeps the given ETag and writes JSON', async () => {
   assert.deepEqual(JSON.parse(ended!), { error: 'conflict', etag: '"5"' })
 })
 
-test('the Next 14 image optimizer stays disabled (GHSA-2xp9-vwfh-vxw4)', async () => {
+test('the image optimizer stays disabled (GHSA-2xp9-vwfh-vxw4)', async () => {
   const { createRequire } = await import('node:module')
   const req = createRequire(import.meta.url)
   const cfg = req('../next.config.js')
   assert.equal(cfg.images?.unoptimized, true)
+})
+
+test('deployment files: loopback-only override example, untracked server override, pinned image', async () => {
+  const fs = await import('node:fs')
+  const read = (f: string) => fs.readFileSync(f, 'utf8')
+  // Comments may mention what not to do; only the YAML itself counts.
+  const example = read('docker-compose.override.example.yml').replace(/#.*$/gm, '')
+  assert.match(example, /ports: !override\s+- "127\.0\.0\.1:3002:3000"/)
+  assert.doesNotMatch(example, /0\.0\.0\.0/)
+  assert.match(example, /driver: local/)
+  assert.ok(read('.gitignore').split('\n').includes('docker-compose.override.yml'), 'the server override must stay untracked')
+  for (const line of read('docker-compose.yml').split('\n').filter((l) => /^\s+- "[^"]*:\d+:\d+"$/.test(l))) {
+    assert.match(line, /"127\.0\.0\.1:/, `compose publishes beyond loopback: ${line.trim()}`)
+  }
+  const dockerfile = read('Dockerfile')
+  const froms = dockerfile.split('\n').filter((l) => l.startsWith('FROM '))
+  assert.equal(froms.length, 2)
+  for (const from of froms) assert.match(from, /^FROM node:22-alpine@sha256:[0-9a-f]{64} AS /)
+  assert.match(dockerfile, /ARG NEXT_PUBLIC_BUILD_SHA/)
+  assert.doesNotMatch(dockerfile, /^RUN .*apk upgrade/m)
 })

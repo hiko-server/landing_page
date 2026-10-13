@@ -47,3 +47,57 @@ export function getTrustedProxySpec(): string {
 export function getConfiguredSiteValues(): string[] {
   return [process.env.SITE_URL || '', process.env.NEXT_PUBLIC_SITE_HOST || ''].filter(Boolean)
 }
+
+const LOOPBACK_NAMES = new Set(['localhost', '0.0.0.0', '::1', '[::1]', '::', '[::]'])
+
+/**
+ * Lower-case hostname of a configured site value — a full origin
+ * (`https://lucian-dev.com`) or a bare host (`lucian-dev.com`, `host:3002`) —
+ * or null when it does not parse.
+ */
+export function hostnameOf(value: string): string | null {
+  const raw = value.trim()
+  if (!raw) return null
+  try {
+    const url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`)
+    return url.hostname.toLowerCase().replace(/\.$/, '') || null
+  } catch {
+    return null
+  }
+}
+
+/** Loopback / unspecified addresses and *.localhost names: never a public host. */
+export function isLocalHostname(host: string): boolean {
+  const h = host.toLowerCase()
+  return LOOPBACK_NAMES.has(h) || h.endsWith('.localhost') || /^127\.\d+\.\d+\.\d+$/.test(h)
+}
+
+/**
+ * The public hostname the site is served on, from SITE_URL or
+ * NEXT_PUBLIC_SITE_HOST (first usable one). Loopback names never qualify, so a
+ * local or CI run (SITE_URL=http://127.0.0.1:3000) has no public host and
+ * nothing host-specific (HTTPS redirect, CDN purge, IndexNow) happens there.
+ */
+export function getPublicHost(): string | null {
+  for (const value of getConfiguredSiteValues()) {
+    const host = hostnameOf(value)
+    if (host && !isLocalHostname(host)) return host
+  }
+  return null
+}
+
+/** Cloudflare zone purge credentials (CF_ZONE_ID + CF_API_TOKEN), or null when either is unset. */
+export function getCloudflarePurgeConfig(): { zoneId: string; apiToken: string } | null {
+  const zoneId = (process.env.CF_ZONE_ID || '').trim()
+  const apiToken = (process.env.CF_API_TOKEN || '').trim()
+  return zoneId && apiToken ? { zoneId, apiToken } : null
+}
+
+/** IndexNow key format (8–128 of [A-Za-z0-9-], per the IndexNow protocol). */
+export const INDEXNOW_KEY_RE = /^[A-Za-z0-9-]{8,128}$/
+
+/** INDEXNOW_KEY when set and well-formed, else null (IndexNow stays off). */
+export function getIndexNowKey(): string | null {
+  const key = (process.env.INDEXNOW_KEY || '').trim()
+  return INDEXNOW_KEY_RE.test(key) ? key : null
+}
