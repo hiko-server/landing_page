@@ -8,6 +8,7 @@ import { Readable } from 'stream'
 import Database from 'better-sqlite3'
 import matter from 'gray-matter'
 import { CONTENT_DB_PATH, closeDb, getDb, reopenDb } from './db'
+import { currentVersion } from '../scripts/db/migrate.mjs'
 import {
   isR2Configured,
   getR2Bucket,
@@ -111,8 +112,13 @@ export type SnapshotManifest = {
   nodeVersion: string
   bucket: string | null
   reason?: SnapshotReason
-  files: Array<{ path: string; bytes: number }>
+  /** `sha256` (hex) is recorded from 2.4 on; older manifests carry the size only. */
+  files: Array<{ path: string; bytes: number; sha256?: string }>
   totals: { files: number; bytes: number }
+  /** Row counts of db/content.db at snapshot time (2.4+; the restore drill compares them). */
+  counts?: { pages: number; collection_items: number; kv: number }
+  /** Content schema version of db/content.db (2.4+). */
+  schemaVersion?: number
 }
 
 export type SnapshotResult = {
@@ -275,9 +281,18 @@ async function buildLocalSnapshot(reason: SnapshotReason): Promise<{
   const localPath = path.join(BACKUPS_DIR, filename)
   const tmpPath = `${localPath}.tmp`
   const dbDump = path.join(os.tmpdir(), `${filename}.content.db`)
+  // The inbox is appended to while the site runs: pack a private copy, so the
+  // hash in the manifest describes exactly the bytes in the archive.
+  const inboxCopy = path.join(os.tmpdir(), `${filename}.inbox.jsonl`)
 
   try {
     await dumpDbToFile(dbDump)
+    const dbFacts = snapshotDbFacts(dbDump)
+    try {
+      fs.copyFileSync(inboxFile(), inboxCopy)
+    } catch {
+      // No inbox yet: nothing to pack.
+    }
 
     const entries: Array<{ tarPath: string; source: string }> = []
     const manifestFiles: SnapshotManifest['files'] = []
@@ -285,7 +300,7 @@ async function buildLocalSnapshot(reason: SnapshotReason): Promise<{
       const stat = safeStat(source)
       if (!stat) return
       entries.push({ tarPath, source })
-      manifestFiles.push({ path: tarPath, bytes: stat.size })
+      manifestFiles.push({ path: tarPath, bytes: stat.size, sha256: sha256File(source) })
     }
 
     add('db/content.db', dbDump)
@@ -294,7 +309,7 @@ async function buildLocalSnapshot(reason: SnapshotReason): Promise<{
     }
     for (const f of listFilesRecursive(UPLOADS_DIR)) add(`uploads/${f.rel}`, f.abs)
     // Contact inbox (messages + read state) — restored by merging, never replacing.
-    add('data/inbox/contact-inbox.jsonl', inboxFile())
+    add('data/inbox/contact-inbox.jsonl', inboxCopy)
 
     const manifest: SnapshotManifest = {
       version: 1,
@@ -308,6 +323,7 @@ async function buildLocalSnapshot(reason: SnapshotReason): Promise<{
         files: manifestFiles.length,
         bytes: manifestFiles.reduce((n, f) => n + f.bytes, 0),
       },
+      ...dbFacts,
     }
 
     // Pipeline: pack → gzip → file. Push entries while the pipeline is running.
@@ -328,7 +344,33 @@ async function buildLocalSnapshot(reason: SnapshotReason): Promise<{
     return { localPath, manifest }
   } finally {
     fs.rmSync(dbDump, { force: true })
+    fs.rmSync(inboxCopy, { force: true })
     fs.rmSync(tmpPath, { force: true })
+  }
+}
+
+/** sha256 (hex) of a file's bytes. */
+export function sha256File(file: string): string {
+  return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')
+}
+
+/** Row counts and schema version of a dumped content DB (empty object when it has none or cannot be read). */
+function snapshotDbFacts(file: string): Pick<SnapshotManifest, 'counts' | 'schemaVersion'> {
+  const stat = safeStat(file)
+  if (!stat || stat.size === 0) return {}
+  let db: Database.Database | null = null
+  try {
+    db = new Database(file, { readonly: true, fileMustExist: true })
+    const n = (table: string) => Number((db!.prepare(`SELECT count(*) AS n FROM ${table}`).get() as { n: number }).n) || 0
+    return {
+      counts: { pages: n('pages'), collection_items: n('collection_items'), kv: n('kv') },
+      schemaVersion: currentVersion(db),
+    }
+  } catch (err) {
+    log.warn('could not read the dumped DB for the snapshot manifest', { err })
+    return {}
+  } finally {
+    db?.close()
   }
 }
 
@@ -431,7 +473,11 @@ function finish(result: SnapshotResult): SnapshotResult {
 
 // ── Restore side ──────────────────────────────────────────────────────────
 
-async function extractTarball(buf: Buffer, destDir: string): Promise<SnapshotManifest | null> {
+/**
+ * Extract a snapshot into `destDir` (path traversal refused), returning its
+ * manifest. Exported for the restore drill (lib/restoreDrill.ts).
+ */
+export async function extractTarball(buf: Buffer, destDir: string): Promise<SnapshotManifest | null> {
   ensureDir(destDir)
   let manifest: SnapshotManifest | null = null
   const extract = tar.extract()

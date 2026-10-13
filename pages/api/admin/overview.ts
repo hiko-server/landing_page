@@ -6,6 +6,10 @@ import { getPage, listItems } from '../../../lib/contentStore'
 import { getDb } from '../../../lib/db'
 import { listInbox } from '../../../lib/inbox'
 import { isR2Configured } from '../../../lib/r2'
+import { passkeyCount } from '../../../lib/adminAuth/passkeys'
+import { isPasskeyRequired } from '../../../lib/adminAuth/store'
+import { errorTotals } from '../../../lib/errors/store'
+import { latestRestoreDrill } from '../../../lib/restoreDrill'
 
 /**
  * GET /api/admin/overview — the admin status hub's numbers (admin only,
@@ -24,6 +28,11 @@ export type AdminOverview = {
   r2: { configured: boolean; pending: number }
   config: { smtp: boolean; githubToken: boolean; trustedProxy: boolean; cfApi: boolean; indexNow: boolean }
   lastEdits: { kind: EditKind; ref: string; updatedAt: number }[]
+  /** Sign-in hardening (null when auth.db cannot be read). */
+  security: { passkeys: number; passkeyRequired: boolean } | null
+  /** Error monitor totals (null when the store cannot be read). */
+  errors: { open: number; new24h: number } | null
+  restoreDrill: { status: 'passed' | 'failed' | 'skipped'; ranAt: number } | null
 }
 
 const LAST_EDITS = 5
@@ -86,6 +95,24 @@ export function readOverview(): AdminOverview {
       indexNow: present('INDEXNOW_KEY'),
     },
     lastEdits: lastEdits(),
+    security: safely(() => ({ passkeys: passkeyCount(), passkeyRequired: isPasskeyRequired() })),
+    errors: safely(() => {
+      const t = errorTotals()
+      return { open: t.open, new24h: t.new24h }
+    }),
+    restoreDrill: safely(() => {
+      const d = latestRestoreDrill()
+      return d ? { status: d.status, ranAt: d.ranAt } : null
+    }),
+  }
+}
+
+/** A part of the overview that must not fail the whole status hub. */
+function safely<T>(read: () => T): T | null {
+  try {
+    return read()
+  } catch {
+    return null
   }
 }
 
