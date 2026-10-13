@@ -14,6 +14,7 @@ import { getPage, listItems, putItem, putPage } from '../../lib/contentStore'
 import { maskMongoUri, redactMongoSecrets } from '../../lib/security/mongoUri'
 import { revalidatePaths, collectionPaths, CV_PAGE_PATHS, HOME_PAGE_PATHS, STATIC_CONTENT_PATHS } from '../../lib/revalidate'
 import { PAGE_NAMES } from '../../lib/mdx-admin'
+import { withApi } from '../../lib/apiHandler'
 
 /**
  * POST /api/mongo — optional MongoDB backup target (admin only).
@@ -102,7 +103,7 @@ function readConfig(env: ReturnType<typeof getMongoConfig>) {
   return { fromEnv: false, config: null }
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!isAdminRequest(req, res)) {
     return res.status(401).json({ ok: false, message: 'Unauthorized' })
   }
@@ -436,3 +437,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (client) await client.close().catch(() => {})
   }
 }
+
+// Request id, error handling and the activity log entry for backups, restores and target changes (lib/apiHandler).
+export default withApi('mongo', handler)

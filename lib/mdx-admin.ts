@@ -11,6 +11,7 @@ import { requireRecentAuth } from './adminAuth/stepUp'
 import { rateLimit } from './rateLimit'
 import { COLLECTION_EXTRA_PATHS, CV_DOCUMENT_PATHS, collectionPaths, revalidatePaths } from './revalidate'
 import { ensurePosters } from './videoPoster'
+import { noteSnapshot } from './audit/context'
 import {
   getPage,
   putPage as storePutPage,
@@ -160,6 +161,8 @@ function writeSnapshot(kind: SnapshotKind, slug: string, frontmatter: Record<str
   const yaml = matter.stringify(body || '\n', frontmatter)
   fs.writeFileSync(path.join(dir, filename), yaml, 'utf-8')
   pruneItemSnapshots(kind, slug)
+  // The activity log links this version to the write that replaces it (lib/audit).
+  noteSnapshot(kind, filename)
   return filename
 }
 

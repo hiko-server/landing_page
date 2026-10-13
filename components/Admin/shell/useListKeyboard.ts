@@ -1,0 +1,132 @@
+import { useCallback, useEffect, useRef, useState, type FocusEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { getShortcutsEnabled } from '../../../lib/keyboardShortcuts'
+import { isTextEntryTarget, listKeyAction, type ListKeyAction } from './listKeys'
+
+/**
+ * Roving-tabindex keyboard navigation for an admin list (keys: listKeys.ts).
+ * The list container gets `listProps`, each row's focusable element
+ * `itemProps(i)`: exactly one row is in the Tab order, j / k / arrows move
+ * focus between rows, Enter / o open, x selects and the list's own keys run
+ * its actions on the focused row.
+ *
+ * `global`: j / k also work while nothing in particular has focus (the page
+ * body), the way list views in mail and issue trackers behave — never while a
+ * dialog is open, inside a text field or with single-key shortcuts off.
+ */
+
+export type UseListKeyboardOptions = {
+  count: number
+  onOpen?: (index: number) => void
+  onSelect?: (index: number) => void
+  /** Keys handled by `onAction` ("e", "s", "#", "Delete", …). */
+  actions?: readonly string[]
+  onAction?: (key: string, index: number) => void
+  global?: boolean
+  /** Called when the roving focus moves (j / k / arrows / click / Tab). */
+  onActiveChange?: (index: number) => void
+}
+
+export function useListKeyboard(opts: UseListKeyboardOptions) {
+  const [active, setActive] = useState(-1)
+  const containerRef = useRef<HTMLElement | null>(null)
+  const optsRef = useRef(opts)
+  optsRef.current = opts
+  const activeRef = useRef(active)
+  activeRef.current = active
+
+  // Keep the roving index inside the list when it shrinks.
+  useEffect(() => {
+    if (active >= opts.count) setActive(opts.count - 1)
+  }, [active, opts.count])
+
+  const focusItem = useCallback((index: number) => {
+    setActive(index)
+    optsRef.current.onActiveChange?.(index)
+    requestAnimationFrame(() => {
+      const el = containerRef.current?.querySelector<HTMLElement>(`[data-list-item="${index}"]`)
+      el?.focus()
+      el?.scrollIntoView?.({ block: 'nearest' })
+    })
+  }, [])
+
+  const apply = useCallback(
+    (action: ListKeyAction) => {
+      const o = optsRef.current
+      if (action.type === 'move') focusItem(action.to)
+      else if (action.type === 'open') o.onOpen?.(action.index)
+      else if (action.type === 'select') o.onSelect?.(action.index)
+      else o.onAction?.(action.key, action.index)
+    },
+    [focusItem],
+  )
+
+  const onKeyDown = useCallback(
+    (e: ReactKeyboardEvent<HTMLElement>) => {
+      if (e.defaultPrevented) return
+      const o = optsRef.current
+      // Rows may hold their own buttons: let Enter on them do their own thing.
+      const target = e.target as HTMLElement
+      if (e.key === 'Enter' && target.closest('button, a[href]') && !target.hasAttribute('data-list-item')) return
+      const action = listKeyAction(e, {
+        count: o.count,
+        active: activeRef.current,
+        singleKeys: getShortcutsEnabled(),
+        inEditable: isTextEntryTarget(e.target),
+        actions: o.actions,
+        selectable: !!o.onSelect,
+      })
+      if (!action) return
+      e.preventDefault()
+      apply(action)
+    },
+    [apply],
+  )
+
+  useEffect(() => {
+    if (!opts.global) return
+    const onDocKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.repeat) return
+      if (e.key !== 'j' && e.key !== 'k') return
+      const container = containerRef.current
+      if (!container || container.contains(e.target as Node)) return
+      if (isTextEntryTarget(e.target) || !getShortcutsEnabled()) return
+      if (document.querySelector('[role="dialog"][aria-modal="true"], [role="alertdialog"]')) return
+      const el = e.target as HTMLElement | null
+      // Only from "nowhere": the body, <main> or the page shell — not from another widget.
+      if (el && el !== document.body && el.id !== 'main' && !el.matches?.('main')) return
+      const action = listKeyAction(e, {
+        count: optsRef.current.count,
+        active: activeRef.current,
+        singleKeys: true,
+        inEditable: false,
+      })
+      if (!action || action.type !== 'move') return
+      e.preventDefault()
+      focusItem(action.to)
+    }
+    document.addEventListener('keydown', onDocKey)
+    return () => document.removeEventListener('keydown', onDocKey)
+  }, [opts.global, focusItem])
+
+  const itemProps = useCallback(
+    (index: number) => ({
+      tabIndex: index === (active === -1 ? 0 : active) ? 0 : -1,
+      'data-list-item': index,
+      onFocus: (e: FocusEvent<HTMLElement>) => {
+        // Focus inside the row (its own buttons) does not move the roving index.
+        if (e.target !== e.currentTarget) return
+        if (activeRef.current !== index) {
+          setActive(index)
+          optsRef.current.onActiveChange?.(index)
+        }
+      },
+    }),
+    [active],
+  )
+
+  const setContainer = useCallback((node: HTMLElement | null) => {
+    containerRef.current = node
+  }, [])
+
+  return { active, setActive, focusItem, listProps: { onKeyDown, ref: setContainer }, itemProps }
+}

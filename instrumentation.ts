@@ -3,7 +3,7 @@
 //   - installs the first-party error capture (lib/errors/server): warn / error
 //     log entries feed the admin System panel's recent-log ring, and errors
 //     carrying an exception are recorded in the error monitor;
-//   - migrates the SQLite stores (content.db, analytics.db, auth.db) at boot
+//   - migrates the SQLite stores (content.db, analytics.db, auth.db, audit.db) at boot
 //     instead of on the first request (scripts/db; each migration is
 //     transactional and idempotent) — never during `next build`;
 //   - starts the scheduled, change-aware backups (lib/backupSchedule), the
@@ -41,14 +41,16 @@ export async function register() {
       installServerErrorCapture()
       const { log } = await import('./lib/log')
       try {
-        const [{ getDb }, { getAnalyticsDb }, { getAuthDb }] = await Promise.all([
+        const [{ getDb }, { getAnalyticsDb }, { getAuthDb }, { getAuditDb }] = await Promise.all([
           import('./lib/db'),
           import('./lib/analytics/db'),
           import('./lib/adminAuth/db'),
+          import('./lib/audit/db'),
         ])
         getDb()
         getAnalyticsDb()
         getAuthDb()
+        getAuditDb()
       } catch (err) {
         log.error('could not open or migrate a database at startup', { err })
       }

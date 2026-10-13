@@ -154,7 +154,7 @@ case "$MODE" in
 
     # 1. Online backup of the live SQLite files, consistent even mid-write.
     if running; then
-      for db in content.db analytics.db auth.db; do
+      for db in content.db analytics.db auth.db audit.db; do
         docker exec "$CONTAINER" test -f "/app/data/$db" || continue
         docker exec "$CONTAINER" node -e '
           const Database = require("better-sqlite3")

@@ -20,6 +20,9 @@
  *      return the new ETag. Works for deleted items too (undo delete).
  *
  * `type`, `slug` and `name` may also be sent in the POST body; the query string wins.
+ *
+ * Every listed version carries `replacedBy`: { summary, ts, device } of the
+ * admin write that took it (from the activity log, lib/audit), or null.
  */
 import {
   listSnapshots as listCvSnapshots,
@@ -42,6 +45,8 @@ import { warmCvExports } from '../../lib/cvExport/service'
 import { trackPublicationsNav } from '../../lib/publicationsNav'
 import { withApi } from '../../lib/apiHandler'
 import { log } from '../../lib/log'
+import { versionNotes, type VersionNote } from '../../lib/audit/store'
+import type { SnapshotKind as AuditSnapshotKind } from '../../lib/audit/context'
 import {
   PAGE_NAMES,
   isPageName,
@@ -95,14 +100,31 @@ function parseFilename(name: string): { date: string; label: string } {
   return { date: '', label: name }
 }
 
+/**
+ * For each snapshot, the change that replaced it (the activity log links
+ * the write to the version it took first — lib/audit); absent for older
+ * snapshots. Never fails the listing.
+ */
+function notesFor(kind: AuditSnapshotKind, files: string[]): Map<string, VersionNote> {
+  try {
+    return versionNotes(kind, files)
+  } catch (err) {
+    log.warn('versions: activity notes unavailable', { kind, err })
+    return new Map()
+  }
+}
+
 function mdxVersions(kind: SnapshotKind, slug: string) {
-  return listSnapshots(kind, slug).map((s, idx) => ({
+  const list = listSnapshots(kind, slug)
+  const notes = notesFor(kind, list.map((s) => s.filename))
+  return list.map((s, idx) => ({
     filename: s.filename,
     date: s.date,
     label: new Date(s.date).toUTCString(),
     index: idx,
     isLatest: idx === 0,
     type: kind,
+    replacedBy: notes.get(s.filename) ?? null,
   }))
 }
 
@@ -194,6 +216,7 @@ export default withApi('versions', async (req, res) => {
 
     // List all snapshots with metadata
     const files = type === 'home' ? listHomeSnapshots() : listCvSnapshots()
+    const notes = notesFor(type, files)
     const versions = files.map((f, idx) => {
       const { date, label } = parseFilename(f)
       return {
@@ -203,6 +226,7 @@ export default withApi('versions', async (req, res) => {
         index: idx,
         isLatest: idx === 0,
         type,
+        replacedBy: notes.get(f) ?? null,
       }
     })
     return res.status(200).json({ ok: true, versions })

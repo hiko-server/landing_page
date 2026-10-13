@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { getAnalyticsDb, analyticsDbPath } from './analytics/db'
 import { authDbPath, getAuthDb } from './adminAuth/db'
+import { auditDbPath, getAuditDb } from './audit/db'
 import { backupHealthWarnings, getBackupStatus, type BackupStatus } from './backupSchedule'
 import { listLocalBackups } from './backup'
 import { CONTENT_DB_PATH, getDb } from './db'
@@ -19,10 +20,11 @@ import {
 import { CONTENT_MIGRATIONS } from '../scripts/db/content/index.mjs'
 import { ANALYTICS_MIGRATIONS } from '../scripts/db/analytics/index.mjs'
 import { AUTH_MIGRATIONS } from '../scripts/db/auth/index.mjs'
+import { AUDIT_MIGRATIONS } from '../scripts/db/audit/index.mjs'
 
 /**
  * Everything the admin System panel shows (GET /api/admin/system), read
- * live from this process: the deployed build, runtime, disk, the three
+ * live from this process: the deployed build, runtime, disk, the four
  * SQLite stores (size, WAL, schema version), backups, restore drills, the
  * error monitor's totals and the recent warn / error log entries. Each part
  * fails on its own — an unreadable store reports its error instead of
@@ -30,7 +32,7 @@ import { AUTH_MIGRATIONS } from '../scripts/db/auth/index.mjs'
  */
 
 export type DatabaseInfo = {
-  name: 'content' | 'analytics' | 'auth'
+  name: 'content' | 'analytics' | 'auth' | 'audit'
   file: string
   bytes: number | null
   walBytes: number | null
@@ -140,6 +142,7 @@ export function systemSnapshot(now = Date.now()): SystemSnapshot {
     databaseInfo('content', CONTENT_DB_PATH, () => getDb(), CONTENT_MIGRATIONS),
     databaseInfo('analytics', analyticsDbPath(), () => getAnalyticsDb(), ANALYTICS_MIGRATIONS),
     databaseInfo('auth', authDbPath(), () => getAuthDb(), AUTH_MIGRATIONS),
+    databaseInfo('audit', auditDbPath(), () => getAuditDb(), AUDIT_MIGRATIONS),
   ]
   for (const d of databases) {
     if (d.error) warnings.push(`The ${d.name} database cannot be opened: ${d.error}`)

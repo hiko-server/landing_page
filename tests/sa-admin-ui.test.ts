@@ -198,6 +198,7 @@ test('the system snapshot reports every store, disk and warning without throwing
       ['content', 'current'],
       ['analytics', 'current'],
       ['auth', 'current'],
+      ['audit', 'current'],
     ]
   )
   assert.ok(snap.databases.every((d) => (d.bytes ?? 0) > 0))
