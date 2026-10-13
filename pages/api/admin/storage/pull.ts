@@ -3,6 +3,7 @@ import { isR2Configured } from '../../../../lib/r2'
 import { restoreLatestFromR2, restoreLocalSnapshot, StorageBusyError, type RestoreResult } from '../../../../lib/backup'
 import { revalidatePaths } from '../../../../lib/revalidate'
 import { isAdminRequest } from '../../../../lib/auth'
+import { requireRecentAuth } from '../../../../lib/adminAuth/stepUp'
 
 /**
  * POST /api/admin/storage/pull
@@ -26,6 +27,8 @@ import { isAdminRequest } from '../../../../lib/auth'
  * R2 must be configured for the default path; the handler returns 503
  * (not 500) when it isn't, so the UI can show a friendly "configure R2"
  * hint instead of a generic error. 409 when a backup/restore is running.
+ * 403 STEP_UP_REQUIRED unless the owner signed in or re-verified within the
+ * last 10 minutes (lib/adminAuth/stepUp.ts).
  */
 export default withApi('admin/storage/pull', async (req, res, ctx) => {
   if (!isAdminRequest(req, res)) return res.status(401).json({ ok: false, error: 'Unauthorized' })
@@ -33,6 +36,8 @@ export default withApi('admin/storage/pull', async (req, res, ctx) => {
     res.setHeader('Allow', 'POST')
     return res.status(405).json({ ok: false, error: 'Method not allowed' })
   }
+  // Replacing the live site needs a recent sign-in or step-up (403 STEP_UP_REQUIRED).
+  if (!requireRecentAuth(req, res)) return
 
   const source = req.body?.source === 'local' ? 'local' : 'r2'
 

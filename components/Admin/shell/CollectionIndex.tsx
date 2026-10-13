@@ -37,6 +37,8 @@ import {
   primaryButtonProps,
 } from './ui'
 import { loginHref, parseRevalidated, readJsonObject } from './http'
+import { useStepUp } from '../security/useStepUp'
+import { wasStepUpCancelled } from '../security/stepUpClient'
 import { Collapse } from '../../General-UI/Collapse'
 import { relativeTime } from './ItemHistoryDrawer'
 
@@ -85,6 +87,8 @@ export default function CollectionIndex({
 }) {
   const router = useRouter()
   const toast = useToast()
+  // Deleting asks for a recent sign-in or step-up (lib/adminAuth/stepUp.ts).
+  const { fetchWithStepUp, stepUpElement } = useStepUp()
   const [items, setItems] = useState<CollectionRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -216,7 +220,12 @@ export default function CollectionIndex({
     const slug = pendingDelete.slug
     setDeleting(true)
     try {
-      const res = await fetch(`${endpoint}?slug=${encodeURIComponent(slug)}`, { method: 'DELETE' })
+      const res = await fetchWithStepUp(
+        `${endpoint}?slug=${encodeURIComponent(slug)}`,
+        { method: 'DELETE' },
+        `Deleting “${slug}” takes it off the public site.`,
+      )
+      if (wasStepUpCancelled(res)) return
       const data = await readJsonObject(res)
       if (!res.ok)
         throw new Error(
@@ -536,6 +545,7 @@ export default function CollectionIndex({
           </AlertDialogContent>
         </AlertDialogOverlay>
       </AlertDialog>
+      {stepUpElement}
     </AdminPageShell>
   )
 }

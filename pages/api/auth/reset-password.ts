@@ -1,16 +1,22 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { deleteCookie } from 'cookies-next'
 import { consumeResetToken, ensureAdminFromEnv, readAdmin, updatePassword } from '../../../lib/admin'
-import { ADMIN_COOKIE, clearAdminHint } from '../../../lib/auth'
+import { ADMIN_COOKIE, clearAdminHint, requestOrigin } from '../../../lib/auth'
 import { withApi } from '../../../lib/apiHandler'
 import { rateLimit } from '../../../lib/rateLimit'
+import { revokeSessionsExcept } from '../../../lib/adminAuth/sessions'
+import { recordAuthEvent } from '../../../lib/adminAuth/store'
 
 /**
  * POST /api/auth/reset-password { token, password }
  *
  * A successful reset also bumps the session version (lib/admin
  * updatePassword), which signs out every device — including whoever may have
- * been holding a stolen session.
+ * been holding a stolen session — and revokes every session row in auth.db
+ * (lib/adminAuth/sessions). Passkeys and recovery codes stay: a reset proves
+ * control of the mailbox, which is how the password was set in the first
+ * place, and with "Require a passkey" on, the password alone still cannot
+ * sign in.
  */
 export default withApi('auth/reset-password', (req: NextApiRequest, res: NextApiResponse) => {
   if (req.method !== 'POST') {
@@ -37,6 +43,12 @@ export default withApi('auth/reset-password', (req: NextApiRequest, res: NextApi
   const ok = consumeResetToken(token)
   if (!ok) return res.status(400).json({ error: 'Invalid or expired token' })
   updatePassword(password)
+  try {
+    const revoked = revokeSessionsExcept(null, 'password reset')
+    recordAuthEvent({ type: 'password-reset', detail: `${revoked} session(s) signed out`, ...requestOrigin(req) })
+  } catch {
+    // The session version bump above already signed every device out.
+  }
   deleteCookie(ADMIN_COOKIE, { req, res, path: '/' })
   clearAdminHint(req, res)
   return res.status(200).json({ ok: true })

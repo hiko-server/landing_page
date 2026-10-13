@@ -7,6 +7,7 @@ import { log } from './log'
 import { sendVersionedJson } from './http'
 import type { ApiHandler } from './apiHandler'
 import { isAdminRequest } from './auth'
+import { requireRecentAuth } from './adminAuth/stepUp'
 import { rateLimit } from './rateLimit'
 import { collectionPaths, revalidatePaths } from './revalidate'
 import {
@@ -404,7 +405,8 @@ export async function refreshCollection(res: NextApiResponse, c: Collection, slu
  *          → 409 { code:'VERSION_CONFLICT', etag } when If-Match is stale
  *          → 422 { code:'MDX_INVALID', line, column, reason } when the body
  *            does not compile (nothing is written)
- *   DELETE ?slug=foo  → { ok, snapshot, revalidated } (snapshot first)
+ *   DELETE ?slug=foo  → { ok, snapshot, revalidated } (snapshot first; needs a
+ *                       recent sign-in or step-up, else 403 STEP_UP_REQUIRED)
  */
 export function createCollectionApi(c: Collection, opts: { noun: string; requireDate: boolean }): ApiHandler {
   return async (req, res) => {
@@ -459,6 +461,8 @@ export function createCollectionApi(c: Collection, opts: { noun: string; require
     }
 
     if (req.method === 'DELETE') {
+      // Deleting needs a recent sign-in or step-up (403 STEP_UP_REQUIRED).
+      if (!requireRecentAuth(req, res)) return
       const slug = req.query.slug
       if (typeof slug !== 'string' || !slug) return res.status(400).json({ error: 'Missing slug' })
       const result = await deleteOne(c, slug)

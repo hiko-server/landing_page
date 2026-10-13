@@ -154,7 +154,7 @@ case "$MODE" in
 
     # 1. Online backup of the live SQLite files, consistent even mid-write.
     if running; then
-      for db in content.db analytics.db; do
+      for db in content.db analytics.db auth.db; do
         docker exec "$CONTAINER" test -f "/app/data/$db" || continue
         docker exec "$CONTAINER" node -e '
           const Database = require("better-sqlite3")
@@ -173,7 +173,7 @@ case "$MODE" in
     # 2. Files: data/ (minus its own snapshot archives) and uploads. The live
     # container keeps writing data/analytics.db-wal; GNU tar then exits 1
     # ("file changed as we read it"). That is expected here (step 1 already
-    # holds consistent copies of both databases), so only exit codes above 1
+    # holds consistent copies of the databases), so only exit codes above 1
     # fail the deploy.
     tar --warning=no-file-changed -czf "$B/data-uploads.tgz" -C "$DIR" --exclude=data/backups data public/uploads || [ $? -eq 1 ]
     say "files: $B/data-uploads.tgz ($(du -h "$B/data-uploads.tgz" | cut -f1))"
