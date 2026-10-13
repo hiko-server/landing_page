@@ -17,6 +17,7 @@ export type CVData = (
   | Experiences
   | CompetitionAwards
   | Patents
+  | Publications
 )[]
 
 /** Visibility metadata any stored object may carry. */
@@ -162,4 +163,32 @@ export interface PatentGroup extends Visibility {
   status?: string
   date?: string
   patents: string[]
+}
+
+/** Publications (论文) — lib/publications describes the entry fields and how they render. */
+export interface Publications extends CVSection {
+  papers: PublicationItem[]
+}
+
+export interface PublicationItem extends Visibility {
+  title: string
+  /** In the paper's order; a hidden author keeps its place (lib/cvVisibility HIDDEN_ITEM_MARK). */
+  authors: string[]
+  venue: string
+  venueType: '' | 'journal' | 'conference' | 'workshop' | 'preprint' | 'thesis' | 'book-chapter' | 'other'
+  status: '' | 'published' | 'in-press' | 'accepted' | 'under-review' | 'preprint'
+  /** YYYY or YYYY-MM. */
+  date: string
+  volume: string
+  issue: string
+  pages: string
+  publisher: string
+  doi: string
+  url: string
+  pdfUrl: string
+  codeUrl: string
+  slidesUrl: string
+  abstract: string
+  keywords: string[]
+  award: string
 }

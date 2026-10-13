@@ -50,6 +50,15 @@ backup, and a hardened admin GUI for non-engineers.
   history for both languages, drag-and-drop, live fit-to-width A4
   preview with page-break guides, local draft recovery and an overwrite
   guard. See [CV visibility model](#cv-visibility-model).
+- **Publications (论文)** — a CV section for papers, preprints and theses
+  (authors in order, venue, status, DOI, links, abstract), rendered in
+  citation style on `/cv`, `/cv/zh`, the Reading view and the A4 sheet,
+  and on `/publications` with BibTeX / APA copy and ScholarlyArticle
+  JSON-LD. The owner's own name is emphasised from the public Personal
+  Info; anything not yet published carries its real status; a hidden
+  co-author shows as "…" so the author order stays true. Nothing is public
+  (no section, no nav link, `/publications` answers 404) until a public
+  paper exists. Logic in `lib/publications/`.
 - **Admin GUI for non-engineers** — visual editors for hero, brands,
   socials, photo strip, blog posts, case studies, the CV (Studio + raw
   JSON), the Now/Uses pages and the About bio.
@@ -815,6 +824,7 @@ overlay and follow a contact message into the Inbox.
 | `/cv.pdf`, `/cv/zh.pdf` | Server-rendered A4 PDF (tagged, embedded fonts), dated file name, ETag |
 | `/cv.txt`, `/cv/zh.txt` | Plain-text CV for paste-in application forms |
 | `/cv.json`, `/cv/zh.json` | JSON Resume 1.0.0 of the public CV |
+| `/publications` | Papers from the CV's Publications section: citations, links, abstracts, Copy BibTeX / APA, ScholarlyArticle JSON-LD (404 while no paper is public) |
 | `/work` | Case-study index (MDX) |
 | `/work/[slug]` | Case study page with cover image + body |
 | `/blog` | Blog index with tag filters + feed links |

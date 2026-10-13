@@ -79,9 +79,10 @@ export type AuthEventInput = {
   detail?: string | null
 }
 
-export type AuthEvent = Required<{
-  [K in keyof AuthEventInput]: Exclude<AuthEventInput[K], undefined>
-}> & { id: number; at: number }
+// Required<> drops `?` and `undefined` from every field (a hand-written mapped
+// type here crashed the lint run: the TS parser and the Next config's
+// typescript-eslint plugin disagree on the mapped-type AST).
+export type AuthEvent = Required<AuthEventInput> & { id: number; at: number }
 
 export function recordAuthEvent(e: AuthEventInput, now = Date.now()): void {
   const db = getAuthDb()

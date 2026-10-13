@@ -5,6 +5,8 @@ import { useReferenceMonth } from '../../lib/clock'
 import { cvLabels, displayUrl, formatCvDate, majorAddsInfo, safeHref } from '../../lib/cvFormat'
 import { profileLinks, projectLinks } from '../../lib/cvLinks'
 import EmailText from '../Common/EmailText'
+import dynamic from 'next/dynamic'
+import type { OwnerNames } from '../../lib/publications/names'
 import { composeName } from './cvName'
 import { SkillName, skillLinkLabel, useSkillLinkId } from './evidence'
 import { ANCHOR_SCROLL_MARGIN } from './primitives'
@@ -21,6 +23,7 @@ import {
   graduation,
   indexedCertificates,
   indexedList,
+  isRenderablePaper,
   joinParts,
   labelled,
   list,
@@ -48,9 +51,21 @@ import {
 
 const mono = 'var(--font-geist-mono), ui-monospace, monospace'
 
+// Publications render through their own chunk, fetched only when the CV has a paper.
+const ReadingPublications = dynamic(() => import('../Publications/ReadingPublications'))
+
 type Section = { sessionName?: string; headerName?: string; [k: string]: any }
 
-export default function ReadingView({ sections, lang }: { sections: Section[]; lang: CvLang }) {
+export default function ReadingView({
+  sections,
+  lang,
+  ownerNames,
+}: {
+  sections: Section[]
+  lang: CvLang
+  /** The owner's name forms, emphasised in publication author lists. */
+  ownerNames?: OwnerNames
+}) {
   const month = useReferenceMonth()
   const visible = entries(sections).filter((s) => s.isVisible !== false)
   return (
@@ -59,7 +74,7 @@ export default function ReadingView({ sections, lang }: { sections: Section[]; l
         if (section.sessionName === 'personalInformation') {
           return <IdentityCard key={`pi-${i}`} data={section} lang={lang} />
         }
-        const body = renderBody(section, lang, month)
+        const body = renderBody(section, lang, month, ownerNames)
         if (!body) return null
         const name = String(section.sessionName || i)
         return (
@@ -375,7 +390,7 @@ function IdentityCard({ data, lang }: { data: Section; lang: CvLang }) {
 // ── Section bodies ────────────────────────────────────────────────────────
 
 /** `month` is the page's reference month (lib/clock.ts) for "Expected" / "Present". */
-function renderBody(section: Section, lang: CvLang, month: string): React.ReactNode {
+function renderBody(section: Section, lang: CvLang, month: string, owner: OwnerNames | undefined): React.ReactNode {
   const L = cvLabels(lang)
   const dot = ' · '
   switch (section.sessionName) {
@@ -561,6 +576,12 @@ function renderBody(section: Section, lang: CvLang, month: string): React.ReactN
           ))}
         </Flex>
       )
+    }
+    case 'publications': {
+      // Same rule as lib/publications (a title and a real status), checked
+      // here so an empty section leaves no card behind.
+      const hasPaper = list(section, 'papers').some(isRenderablePaper)
+      return hasPaper ? <ReadingPublications section={section} lang={lang} owner={owner} /> : null
     }
     case 'extraSkill': {
       const points = bullets(section, 'points')

@@ -7,7 +7,7 @@ import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, us
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { countHidden, isSectionOnCv, isSectionOnWebsite } from '../../../lib/cvVisibility'
-import { CV_SECTIONS, SECTION_BY_NAME } from '../../../lib/cvSections'
+import { CV_SECTIONS, SECTION_BY_NAME, websiteWhere } from '../../../lib/cvSections'
 import { monoFont, useStudioTokens } from './fields'
 import { entryKey, type Section } from './docOps'
 
@@ -175,7 +175,7 @@ function SidebarRow({
         </Text>
       </Box>
       <ScopeToggle on={onCv} icon={<FiFileText />} label="CV / PDF" onToggle={onToggleCv} />
-      <ScopeToggle on={onWeb} icon={<FiGlobe />} label="website" onToggle={onToggleWeb} />
+      <ScopeToggle on={onWeb} icon={<FiGlobe />} label={`website (${websiteWhere(section.sessionName)})`} onToggle={onToggleWeb} />
     </Flex>
   )
 }
@@ -297,7 +297,7 @@ export default function Sidebar({
           <Box as="span" display="inline-flex" verticalAlign="-2px" mx={1}>
             <FiGlobe />
           </Box>
-          website (/about, home)
+          website ({websiteWhere(selected)})
         </Text>
       </Box>
     </Flex>

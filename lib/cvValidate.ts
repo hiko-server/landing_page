@@ -12,6 +12,11 @@
  *     objects and are checked recursively
  *   - visibility metadata: `isVisible` / `showOnWebsite` booleans,
  *     `hiddenFields` string[], `hiddenItems` { [field]: non-negative int[] }
+ *   - select fields hold one of their options (or nothing); yearMonth fields
+ *     hold `YYYY` or `YYYY-MM`; `format: 'doi'` text must be a DOI and
+ *     `format: 'https-link'` text an https:// address or a same-site path;
+ *     a `requiredWhen` field must be filled once its sibling is (publication
+ *     status once the paper has a title)
  *   - unknown sections and unknown keys pass through untouched, and missing
  *     or null values count as empty (renderers already handle both)
  *
@@ -22,6 +27,8 @@
 import { isPresent } from './cvFormat'
 import { SECTION_BY_NAME, type FieldDef, type ListDef } from './cvSections'
 import { isCvImageRef } from './url'
+import { normalizeDoi } from './publications/doi'
+import { PUB_DATE_RE, publicationHref } from './publications/normalize'
 
 export type CvLangKey = 'en' | 'zh'
 export type CvErrorPath = [CvLangKey, number, ...(string | number)[]]
@@ -49,6 +56,20 @@ class Collector {
 
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 const absent = (v: unknown) => v === undefined || v === null
+const hasText = (v: unknown) => typeof v === 'string' && v.trim() !== ''
+const listLabels = (labels: string[]) => (labels.length > 1 ? `${labels.slice(0, -1).join(', ')} or ${labels[labels.length - 1]}` : labels.join(''))
+
+const FORMAT_MESSAGES: Record<NonNullable<FieldDef['format']>, (label: string) => string> = {
+  doi: (label) => `${label} must look like 10.1234/abcd (a doi.org link works too).`,
+  'https-link': (label) => `${label} must be an https:// address or a path on this site such as /uploads/paper.pdf.`,
+}
+
+function checkFormat(f: FieldDef, value: string, path: Path, out: Collector) {
+  const v = value.trim()
+  if (!v || !f.format) return
+  const ok = f.format === 'doi' ? !!normalizeDoi(v) : !!publicationHref(v)
+  if (!ok) out.add(path, FORMAT_MESSAGES[f.format](f.label))
+}
 
 export { isCvImageRef }
 
@@ -56,6 +77,20 @@ function checkField(f: FieldDef, value: unknown, path: Path, out: Collector) {
   if (absent(value)) return
   if (TEXT_KINDS.has(f.kind)) {
     if (typeof value !== 'string') out.add(path, `${f.label} must be text.`)
+    else checkFormat(f, value, path, out)
+    return
+  }
+  if (f.kind === 'select') {
+    const allowed = (f.options || []).map((o) => o.value)
+    if (typeof value !== 'string' || (value.trim() !== '' && !allowed.includes(value.trim()))) {
+      out.add(path, `${f.label} must be one of: ${(f.options || []).map((o) => o.label).join(', ')}.`)
+    }
+    return
+  }
+  if (f.kind === 'yearMonth') {
+    if (typeof value !== 'string' || (value.trim() !== '' && !PUB_DATE_RE.test(value.trim()))) {
+      out.add(path, `${f.label} must be a year (2026) or a year and month (2026-03).`)
+    }
     return
   }
   if (f.kind === 'switch') {
@@ -115,6 +150,10 @@ function checkNode(node: Record<string, unknown>, fields: FieldDef[] | undefined
   for (const f of fields || []) {
     if (out.full) return
     checkField(f, node[f.key], [...path, f.key], out)
+    if (f.requiredWhen && hasText(node[f.requiredWhen]) && !hasText(node[f.key])) {
+      const options = f.options?.length ? `: choose ${listLabels(f.options.map((o) => o.label))}` : ''
+      out.add([...path, f.key], `${f.label} is required${options}.`)
+    }
   }
   for (const l of lists || []) {
     if (out.full) return

@@ -21,6 +21,19 @@ export const PRIMARY_LINKS: readonly NavLink[] = [
   { name: 'Contact', url: '/contact' },
 ]
 
+/** /publications: listed only while it has public papers (pageProps.chromePublications). */
+export const PUBLICATIONS_LINK: NavLink = { name: 'Publications', url: '/publications' }
+
+/**
+ * The primary navigation for what currently exists: Publications follows CV
+ * once /publications has a public paper (the page answers 404 until then).
+ */
+export function navLinksFor({ publications = false }: { publications?: boolean } = {}): readonly NavLink[] {
+  if (!publications) return PRIMARY_LINKS
+  const cv = PRIMARY_LINKS.findIndex((l) => l.url === '/cv')
+  return [...PRIMARY_LINKS.slice(0, cv + 1), PUBLICATIONS_LINK, ...PRIMARY_LINKS.slice(cv + 1)]
+}
+
 /**
  * "G then <key>" navigation (Header listens; the ⌘K palette lists them).
  * Contact has no shortcut on purpose ('c' is the CV).

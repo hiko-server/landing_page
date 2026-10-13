@@ -1,11 +1,11 @@
 import NextLink from 'next/link'
 import { Box, Flex, Link, Text } from '@chakra-ui/react'
-import { SOCIAL_LINKS, splitBrand, type SocialLink } from '../Chrome/chrome'
+import { PRIMARY_LINKS, SOCIAL_LINKS, splitBrand, type NavLink, type SocialLink } from '../Chrome/chrome'
 import { useBrandHost } from '../Chrome/useBrandHost'
 import { referenceYear, useReferenceMonth } from '../../lib/clock'
 import { BUILD_COMMIT } from '../../lib/build'
 import BrandMark from '../Icons/BrandMark'
-import { ABOUT_SITE_LINKS, SITE_LINKS, type FooterLink } from './footerLinks'
+import { ABOUT_SITE_LINKS, type FooterLink } from './footerLinks'
 
 /**
  * Footer — rendered once by components/Chrome/SiteChrome.
@@ -104,8 +104,11 @@ function Column({ title, links, area }: { title: string; links: readonly FooterL
   )
 }
 
-/** `socials`: the profile links to show (SiteChrome resolves them from home.socials). */
-const Footer = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] }) => {
+/**
+ * `socials`: the profile links to show (SiteChrome resolves them from
+ * home.socials); `navLinks`: the primary navigation (chrome navLinksFor).
+ */
+const Footer = ({ socials = SOCIAL_LINKS, navLinks = PRIMARY_LINKS }: { socials?: readonly SocialLink[]; navLinks?: readonly NavLink[] }) => {
   const brand = useBrandHost()
   const [brandHead, brandTail] = splitBrand(brand)
   const year = referenceYear(useReferenceMonth())
@@ -159,7 +162,7 @@ const Footer = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
                 </span>
               </Link>
             </Box>
-            <Column title="Site" links={SITE_LINKS.map((l) => ({ label: l.name, href: l.url }))} area="site" />
+            <Column title="Site" links={navLinks.map((l) => ({ label: l.name, href: l.url }))} area="site" />
             <Column title="This site" links={ABOUT_SITE_LINKS} area="meta" />
             {elsewhere.length > 0 && <Column title="Elsewhere" links={elsewhere} area="else" />}
           </Box>

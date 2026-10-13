@@ -43,6 +43,12 @@ English → [README.md](./README.md)
   公开 API 中**彻底移除**，而不只是视觉上隐藏。EN ↔ 中 联动编辑（可见性与结构保持一致）、
   两种语言共用一套撤销历史、拖拽排序、自适应宽度的 A4 实时预览（含分页参考线）、
   本地草稿恢复与覆盖保护。
+- **论文（Publications）**：CV 中新增论文板块（作者按顺序、发表载体、状态、DOI、
+  链接、摘要），在 `/cv`、`/cv/zh`、阅读视图和 A4 页面上以引用格式呈现，并在
+  `/publications` 提供 BibTeX / APA 复制与 ScholarlyArticle 结构化数据。本人姓名
+  依据公开的个人信息自动加粗；尚未发表的论文始终标明真实状态；被隐藏的合著者显示
+  为 “…”，作者顺序保持真实。在出现第一篇公开论文之前，网站上不显示任何相关内容
+  （无板块、无导航链接，`/publications` 返回 404）。逻辑位于 `lib/publications/`。
 - **面向非工程师的后台**：可视化编辑 Hero、品牌、社交、照片墙、博客、
   案例研究、CV（Studio + 原始 JSON）、Now/Uses，以及关于页自述。
 - **逐节可见性与排序**：首页所有 `[NN]` 板块（Open Source / Skills /
@@ -643,6 +649,7 @@ CI（`.github/workflows/ci.yml`）在每次推送和 Pull Request 时运行：
 | `/about` | 身份栏、站长自述与全部展开的双语 CV（ISR，每小时及保存时更新） |
 | `/cv` | 可打印的英文 CV（浏览器另存 PDF，`?print=1`） |
 | `/cv/zh` | 同一份 CV 的中文版（`/cv?lang=zh` 跳转至此） |
+| `/publications` | CV 论文板块的公开页面：引用、链接、摘要、复制 BibTeX / APA、ScholarlyArticle JSON-LD（无公开论文时返回 404） |
 | `/work` | 案例研究索引（MDX） |
 | `/work/[slug]` | 单篇案例（封面 + 正文） |
 | `/blog` | 博客索引 + 标签筛选 + 订阅源链接 |

@@ -31,6 +31,8 @@ export type ContactPageProps = {
   /** CONTACT_RETENTION_DAYS as the privacy notice states it (0 = no automatic expiry). */
   retentionDays: number
   chromeSocials?: HomeData['socials'] | null
+  /** Whether /publications exists (lib/publicationsData), for the chrome's nav link. */
+  chromePublications?: boolean
 }
 
 export const CONTACT_REVALIDATE_SECONDS = 300
@@ -75,6 +77,8 @@ export async function loadContactPage(): Promise<{ props: ContactPageProps; reva
       vcardQr,
       retentionDays: contactRetentionDays(),
       ...(chromeSocials !== undefined ? { chromeSocials } : {}),
+      // Whether /publications exists, for the nav link (lib/publicationsData).
+      ...(await import('./publicationsData')).chromePublicationsProp(),
     },
     revalidate: revalidateAfter(CONTACT_REVALIDATE_SECONDS),
   }

@@ -35,6 +35,7 @@ export const OG_PRESETS = {
     },
   },
   cv: { en: { kind: 'cv', title: 'CV / Résumé' }, zh: { kind: 'cv', title: '简历' } },
+  publications: { en: { kind: 'page', title: 'Publications', subtitle: 'Papers, preprints and theses' } },
 } as const satisfies Record<string, { en: Card; zh?: Card }>
 
 export type OgPresetId = keyof typeof OG_PRESETS

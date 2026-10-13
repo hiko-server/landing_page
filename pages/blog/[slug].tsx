@@ -244,6 +244,8 @@ export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
       author: loadAuthorCard(),
       shareQr,
       draftMode,
+      // Whether /publications exists, for the nav link (lib/publicationsData).
+      ...(await import('../../lib/publicationsData')).chromePublicationsProp(),
     },
     revalidate: 60,
   }

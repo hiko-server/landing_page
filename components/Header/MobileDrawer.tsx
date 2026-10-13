@@ -17,7 +17,7 @@ import {
 } from '@chakra-ui/react'
 import NextLink from 'next/link'
 import { useRouter } from 'next/router'
-import { MOBILE_MENU_ID, PRIMARY_LINKS, type SocialLink, type SocialName, isActiveRoute } from '../Chrome/chrome'
+import { MOBILE_MENU_ID, PRIMARY_LINKS, type NavLink, type SocialLink, type SocialName, isActiveRoute } from '../Chrome/chrome'
 import { useChromeLang } from '../Chrome/chromeLang'
 import { cvPdfPath } from '../../lib/cvExport/paths'
 import { GitHubIcon, GitLabIcon, LinkedInIcon, WhatsAppIcon } from '../Icons/brand'
@@ -149,8 +149,10 @@ function NavLinks({
   stagger,
   onNavigate,
   firstLinkRef,
+  links,
 }: {
   pathname: string
+  links: readonly NavLink[]
   stagger: boolean
   onNavigate: () => void
   firstLinkRef: React.RefObject<HTMLAnchorElement>
@@ -170,7 +172,7 @@ function NavLinks({
 
   return (
     <Box as="ul" listStyleType="none" m={0} p={0}>
-      {PRIMARY_LINKS.map((link, i) => {
+      {links.map((link, i) => {
         const active = isActiveRoute(pathname, link.url)
         return (
           <li
@@ -254,6 +256,8 @@ export type MobileDrawerProps = {
   isOpen: boolean
   onClose: () => void
   socials: readonly SocialLink[]
+  /** The primary navigation (chrome navLinksFor); defaults to PRIMARY_LINKS. */
+  navLinks?: readonly NavLink[]
   isAdmin: boolean
   onLogout: () => void
   /** Quick action: close the menu and open the ⌘K palette. */
@@ -268,6 +272,7 @@ export default function MobileDrawer({
   isOpen,
   onClose,
   socials,
+  navLinks = PRIMARY_LINKS,
   isAdmin,
   onLogout,
   onSearch,
@@ -455,7 +460,7 @@ export default function MobileDrawer({
             <Flex direction="column" gap={6}>
               <Box as="nav" aria-labelledby="drawer-nav-label">
                 <DrawerLabel id="drawer-nav-label">Navigate</DrawerLabel>
-                <NavLinks pathname={router.pathname} stagger={stagger.current} onNavigate={onClose} firstLinkRef={firstLinkRef} />
+                <NavLinks pathname={router.pathname} links={navLinks} stagger={stagger.current} onNavigate={onClose} firstLinkRef={firstLinkRef} />
               </Box>
 
               <Grid as="ul" listStyleType="none" m={0} p={0} templateColumns="repeat(3, minmax(0, 1fr))" gap={2} aria-label="Quick actions">

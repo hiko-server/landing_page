@@ -11,6 +11,7 @@
 
 import { hiddenIndices, isRedacted, type CvLang } from '../../lib/cvVisibility'
 import { cleanList, cvLabels, formatCvDate, formatCvRange, formatGraduation, isFuture, isPresent, type CvNow } from '../../lib/cvFormat'
+import { isPublicationStatus } from '../../lib/publications/types'
 
 const isObject = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v)
 
@@ -30,6 +31,7 @@ export const SHEET_SECTIONS = [
   'patents',
   'selfAssessment',
   'recommendations',
+  'publications',
 ] as const
 
 /** Trimmed string at node[key]; '' when hidden by the owner or not a string. */
@@ -156,11 +158,31 @@ export function indexedCertificates(section: unknown): Array<{ org: any; cert: a
 // Descriptions name only sections that actually have public content, in a
 // fixed order, so the meta description never promises a hidden section.
 
+/**
+ * A paper the CV renders: a title and a real status (the same test as the
+ * sheet and the Reading view, and lib/publications publicPublications).
+ */
+export function isRenderablePaper(paper: unknown): boolean {
+  return !!field(paper, 'title') && isPublicationStatus(field(paper, 'status'))
+}
+
+type SeoSection = {
+  name: string
+  /** Lists that hold the section's entries. */
+  keys: readonly string[]
+  en: string
+  zh: string
+  /** Which entries count (default: any visible entry). */
+  counts?: (entry: unknown) => boolean
+}
+
 /** Sections the descriptions mention, in mention order, with the list that holds their entries. */
-const SEO_SECTIONS: ReadonlyArray<{ name: string; keys: readonly string[]; en: string; zh: string }> = [
+const SEO_SECTIONS: ReadonlyArray<SeoSection> = [
   { name: 'education', keys: ['educationExperience'], en: 'education', zh: '教育' },
   { name: 'workExperience', keys: ['experiences'], en: 'experience', zh: '工作经历' },
   { name: 'project', keys: ['projectExperience'], en: 'projects', zh: '项目' },
+  // Only once a public paper exists — never promise publications the CV does not list.
+  { name: 'publications', keys: ['papers'], en: 'publications', zh: '论文', counts: isRenderablePaper },
   { name: 'patents', keys: ['patentExperience'], en: 'patents', zh: '专利' },
   { name: 'competitionAwards', keys: ['awards'], en: 'awards', zh: '奖项' },
   { name: 'certification', keys: ['certifications'], en: 'certifications', zh: '证书' },
@@ -169,10 +191,18 @@ const SEO_SECTIONS: ReadonlyArray<{ name: string; keys: readonly string[]; en: s
 /** sessionNames (from SEO_SECTIONS) that have at least one visible entry in these public sections. */
 export function publicSeoSections(sections: readonly unknown[] | null | undefined): string[] {
   const all = Array.isArray(sections) ? sections : []
-  return SEO_SECTIONS.filter(({ name, keys }) => {
+  return SEO_SECTIONS.filter(({ name, keys, counts }) => {
     const section = all.find((s) => isObject(s) && s.sessionName === name && s.isVisible !== false)
-    return !!section && keys.some((k) => list(section, k).length > 0)
+    return !!section && keys.some((k) => (counts ? list(section, k).some(counts) : list(section, k).length > 0))
   }).map((s) => s.name)
+}
+
+/** Longest meta description, in display columns (CJK and full-width count twice). */
+export const CV_DESCRIPTION_MAX_COLUMNS = 160
+
+/** Display columns of `text`: CJK and full-width characters count twice (as search snippets do). */
+export function displayColumns(text: string): number {
+  return [...text].reduce((n, ch) => n + (/[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6]/.test(ch) ? 2 : 1), 0)
 }
 
 function enumerate(items: string[], lang: CvLang): string {
@@ -187,8 +217,19 @@ function enumerate(items: string[], lang: CvLang): string {
  */
 export function cvDescription(lang: CvLang, opts: { present: readonly string[]; nameZh?: string }): string {
   const parts = SEO_SECTIONS.filter((s) => opts.present.includes(s.name)).map((s) => (lang === 'zh' ? s.zh : s.en))
+  // A CV with every section would run past what a search snippet shows: the
+  // last-named sections are left out until it fits (none is ever invented).
+  let text = describe(lang, parts, opts.nameZh)
+  while (parts.length > 1 && displayColumns(text) > CV_DESCRIPTION_MAX_COLUMNS) {
+    parts.pop()
+    text = describe(lang, parts, opts.nameZh)
+  }
+  return text
+}
+
+function describe(lang: CvLang, parts: string[], nameZh: string | undefined): string {
   if (lang === 'zh') {
-    const who = opts.nameZh ? `${opts.nameZh}（Lucian）` : 'Li Yanpei（Lucian）'
+    const who = nameZh ? `${nameZh}（Lucian）` : 'Li Yanpei（Lucian）'
     // The tail keeps even a CV without public sections at a useful length
     // (≥ 70 display columns) using only facts about the page itself.
     const tail = '另有英文版，可在线浏览，也可打印或保存为 A4 PDF。'

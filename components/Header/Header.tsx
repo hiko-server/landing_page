@@ -9,6 +9,7 @@ import {
   MOBILE_MENU_DIALOG_ID,
   PRIMARY_LINKS,
   SOCIAL_LINKS,
+  type NavLink,
   type SocialLink,
   formatAge,
   isActiveRoute,
@@ -134,8 +135,20 @@ function LiveStatusPill() {
   )
 }
 
-/** `socials`: the profile links to offer in the drawer (SiteChrome resolves them from home.socials). */
-const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] }) => {
+/**
+ * `socials`: the profile links to offer in the drawer (SiteChrome resolves
+ * them from home.socials); `navLinks`: the primary navigation (chrome
+ * navLinksFor); `publications`: /publications exists (the ⌘K palette lists it).
+ */
+const Header = ({
+  socials = SOCIAL_LINKS,
+  navLinks = PRIMARY_LINKS,
+  publications = false,
+}: {
+  socials?: readonly SocialLink[]
+  navLinks?: readonly NavLink[]
+  publications?: boolean
+}) => {
   const router = useRouter()
   const toast = useChromeToast()
   const [isAdmin, setIsAdmin] = useState(false)
@@ -382,7 +395,7 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
             fontSize="14px"
             color="page.fg-secondary"
           >
-            {PRIMARY_LINKS.map((l) => {
+            {navLinks.map((l) => {
               const active = isActiveRoute(router.pathname, l.url)
               return (
                 <Link
@@ -530,6 +543,7 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
           isOpen={isOpen}
           onClose={onClose}
           socials={socials}
+          navLinks={navLinks}
           isAdmin={isAdmin}
           onLogout={logout}
           onSearch={searchFromDrawer}
@@ -544,6 +558,7 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
           onClose={closeCmdk}
           isAdmin={isAdmin}
           initialQuery={paletteQuery}
+          publications={publications}
           returnFocusOnClose={dialogsReturnFocus}
         />
       )}

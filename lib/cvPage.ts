@@ -20,6 +20,7 @@
 import type { CvLang } from './cvVisibility'
 import type { CvHeaderExtras } from './cvLocale'
 import type { HomeData } from './homeShape'
+import type { OwnerNames } from './publications/names'
 import type { PersonFacts } from './schema'
 import type { SkillEvidence } from './skillEvidence'
 import { referenceMonth } from './clock'
@@ -62,6 +63,10 @@ export type CvPageData = {
    * the right-to-work line, and 求职意向 on /cv/zh. null = none.
    */
   headerExtras: CvHeaderExtras | null
+  /** The owner's name forms (CV-audience Personal Info, both languages) — emphasised in author lists. */
+  ownerNames?: OwnerNames
+  /** Whether /publications exists (lib/publicationsData): the CV header and the chrome link to it. */
+  chromePublications?: boolean
 }
 
 export async function loadCvPageProps(lang: CvLang): Promise<{ props: CvPageData; revalidate: number }> {
@@ -115,6 +120,15 @@ export async function loadCvPageProps(lang: CvLang): Promise<{ props: CvPageData
   } catch {
     /* the node keeps its built-in defaults */
   }
+  // Publications (lib/publicationsData): the owner's name forms for author
+  // lists, and whether /publications exists (the page and the chrome link to it).
+  let publications: Pick<CvPageData, 'ownerNames' | 'chromePublications'> = {}
+  try {
+    const { chromePublicationsProp, readCvOwnerNames } = await import('./publicationsData')
+    publications = { ownerNames: readCvOwnerNames(), ...chromePublicationsProp() }
+  } catch {
+    /* author lists render without emphasis; no link to /publications */
+  }
   let qrSvg: string | null = null
   try {
     const { qrSvg: makeQr } = await import('./qr')
@@ -141,6 +155,7 @@ export async function loadCvPageProps(lang: CvLang): Promise<{ props: CvPageData
       headerExtras: src.headerExtras,
       // Omitted when the home document could not be read: the chrome then loads the public view itself.
       ...(src.socials !== undefined ? { chromeSocials: src.socials as HomeData['socials'] | null } : {}),
+      ...publications,
     },
     revalidate: revalidateAfter(CV_REVALIDATE_SECONDS),
   }

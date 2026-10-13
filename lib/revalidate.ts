@@ -105,9 +105,10 @@ export const HOME_PAGE_PATHS: readonly string[] = ['/', '/about', '/now', '/cont
  * ISR pages that render the public CV: / (identity, hero facts, projects,
  * experience, skills, certifications), /about (identity, the CV sections),
  * /now (current roles and studies), /work (the "All projects" archive of
- * every public CV project) and the CV itself (/cv, /cv/zh).
+ * every public CV project), the CV itself (/cv, /cv/zh) and /publications
+ * (the Publications section — PUBLICATIONS_STATIC_PATHS).
  */
-export const CV_PAGE_PATHS: readonly string[] = ['/', '/about', '/now', '/work', '/cv', '/cv/zh']
+export const CV_PAGE_PATHS: readonly string[] = ['/', '/about', '/now', '/work', '/cv', '/cv/zh', '/publications']
 
 /**
  * Pages outside a collection that a post or case-study save changes: the
@@ -166,10 +167,29 @@ export function pathsReferencingUploads(names: Iterable<string>, sources: readon
 export const CV_DOCUMENT_PATHS = ['/cv', '/cv/zh'] as const
 
 /**
+ * ISR pages rendered from the CV's Publications section (lib/publicationsData),
+ * regenerated on every CV write (CV_PAGE_PATHS, the versions restore) so a
+ * paper that was added, hidden or deleted is live at once — including
+ * /publications switching between its page and a 404.
+ */
+export const PUBLICATIONS_STATIC_PATHS = ['/publications'] as const
+
+/**
  * Every statically generated (ISR) public page whose data lives in the content
  * store (a restore regenerates them all).
  */
-export const STATIC_CONTENT_PATHS = ['/', '/about', '/blog', '/work', '/now', '/uses', '/colophon', '/contact', ...CV_DOCUMENT_PATHS] as const
+export const STATIC_CONTENT_PATHS = [
+  '/',
+  '/about',
+  '/blog',
+  '/work',
+  '/now',
+  '/uses',
+  '/colophon',
+  '/contact',
+  ...CV_DOCUMENT_PATHS,
+  ...PUBLICATIONS_STATIC_PATHS,
+] as const
 
 // ── Edge notifications (Cloudflare purge, IndexNow) ──────────────────────
 
@@ -210,7 +230,7 @@ const CV_FILE_PATHS: Record<string, readonly string[]> = {
  * them: a post or case-study change alters the feeds, the sitemap and the
  * search index; the /now, /uses and /about (bio) bodies are part of the
  * search index; a CV page change alters its PDF, plain-text and JSON Resume
- * files.
+ * files; the sitemap lists /publications only while it has public papers.
  */
 export function derivedPurgePaths(paths: readonly string[]): string[] {
   const out = new Set<string>()
@@ -218,6 +238,7 @@ export function derivedPurgePaths(paths: readonly string[]): string[] {
     if (/^\/(blog|work)(\/|$)/.test(p)) COLLECTION_DERIVED_PATHS.forEach((d) => out.add(d))
     else if (p === '/now' || p === '/uses' || p === '/about') out.add('/api/search-index')
     else if (CV_FILE_PATHS[p]) CV_FILE_PATHS[p].forEach((d) => out.add(d))
+    else if (p === '/publications') out.add('/sitemap.xml')
   }
   return Array.from(out)
 }

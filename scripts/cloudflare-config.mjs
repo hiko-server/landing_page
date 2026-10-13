@@ -51,6 +51,7 @@ export const CACHEABLE_EXACT_PATHS = [
   '/now',
   '/uses',
   '/colophon',
+  '/publications',
   '/api/og',
   '/api/stack',
   '/api/search-index',

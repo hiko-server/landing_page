@@ -6,6 +6,7 @@ import CVResult from '../../CVViewerPage/CVResult'
 import ScaledSheet from '../../CVViewerPage/ScaledSheet'
 import { publicSections, type CvLang } from '../../../lib/cvVisibility'
 import { cvPdfPath } from '../../../lib/cvExport/paths'
+import type { OwnerNames } from '../../../lib/publications/names'
 import { monoFont, useStudioTokens } from './fields'
 import WebsitePreview from './WebsitePreview'
 import type { Section } from './docOps'
@@ -29,11 +30,14 @@ export default function Preview({
   sections,
   lang,
   onPages,
+  ownerNames,
 }: {
   sections: Section[]
   lang: CvLang
   /** Measured A4 page count of this language (readiness check). */
   onPages?: (lang: CvLang, pages: number) => void
+  /** The owner's name forms (bold in publication author lists, as on /cv). */
+  ownerNames?: OwnerNames
 }) {
   const deferred = useDeferredValue(sections)
   const [mode, setMode] = useState<Mode>('cv')
@@ -140,7 +144,7 @@ export default function Preview({
       {mode === 'cv' ? (
         <Box flex={1} minH={0} overflow="auto" p={{ base: 3, md: 5 }} bg={canvas}>
           <ScaledSheet zoom={zoom} pageGuides onScale={setScale} onPages={reportPages}>
-            <CVResult cvData={cvData as any} lang={lang} />
+            <CVResult cvData={cvData as any} lang={lang} ownerNames={ownerNames} />
           </ScaledSheet>
         </Box>
       ) : (

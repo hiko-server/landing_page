@@ -249,6 +249,21 @@ export function setValue(doc: Doc, lang: CvLang, path: CvPath, value: any): Doc 
   return { ...doc, [lang]: setAt(doc[lang], path, value) }
 }
 
+/**
+ * Set a language-neutral value (a registry field marked `shared`: a status,
+ * a DOI, a date, a link) in `lang` and — when linked and the entry lines up
+ * in the other language — on the twin too. The twin's parent must already
+ * exist; nothing is created there.
+ */
+export function setSharedValue(doc: Doc, lang: CvLang, path: CvPath, value: any, linked: boolean): LinkedResult {
+  const mine = setValue(doc, lang, path, value)
+  if (!linked) return { doc: mine, reached: false }
+  const twin = alignedTwin(doc, lang, path)
+  const o = otherLang(lang)
+  if (!twin || !isPlainObject(getAt(doc[o], twin.slice(0, -1)))) return { doc: mine, reached: false }
+  return { doc: { ...mine, [o]: setAt(doc[o], twin, value) }, reached: true }
+}
+
 // ── Visibility ────────────────────────────────────────────────────────────
 
 export function toggleFieldHidden(doc: Doc, lang: CvLang, nodePath: CvPath, field: string, linked: boolean): LinkedResult {

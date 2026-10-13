@@ -145,8 +145,15 @@ function websiteOutputs(doc: CvDoc): string {
   return JSON.stringify(personNode(personExtrasFromCv(publicCvDoc(doc, 'website').en, NOW)))
 }
 
+// Publications stay in the document (the exports must cope with them) but are
+// not sampled here: the downloadable CVs do not print papers yet, and their
+// own leak checks (props, JSON-LD, /api/cvdata, the switches) live in
+// tests/publications-leak.test.ts.
+const NOT_EXPORTED = new Set(['publications'])
 const slots: Slot[] = []
-buildDoc().en.forEach((section, i) => collect(section, [i], [], [], slots, (section as any).sessionName))
+buildDoc().en.forEach((section, i) => {
+  if (!NOT_EXPORTED.has((section as any).sessionName)) collect(section, [i], [], [], slots, (section as any).sessionName)
+})
 
 test('the fixture reaches the new fields (profiles, project links) and nested bullets', () => {
   const fields = new Set(slots.map((s) => s.field))

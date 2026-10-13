@@ -12,8 +12,11 @@ export type FocusTarget = { lang: CvLang; path: CvPath; nonce: number }
 export type StudioApi = {
   lang: CvLang
   linked: boolean
-  /** Text / value edit (never linked across languages). */
-  setValue: (path: CvPath, value: any) => void
+  /**
+   * Text / value edit. Per language, except a registry field marked `shared`
+   * (`{ shared: true }`), which also reaches the aligned twin when linked.
+   */
+  setValue: (path: CvPath, value: any, opts?: { shared?: boolean }) => void
   /** Visibility toggles; `label` names the thing in the confirmation toast. */
   toggleField: (nodePath: CvPath, field: string, label: string) => void
   toggleEntry: (entryPath: CvPath, label: string) => void

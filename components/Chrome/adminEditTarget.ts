@@ -16,6 +16,8 @@ export function adminEditTarget(pathname: string, slug: unknown): { label: strin
     case '/cv':
     case '/cv/zh':
       return { label: 'Edit the CV in CV Studio', href: '/admin/dashboard?tab=cv' }
+    case '/publications':
+      return { label: 'Edit publications in CV Studio', href: '/admin/dashboard?tab=cv' }
     case '/':
       return { label: 'Edit the home page', href: '/admin/dashboard?tab=home' }
     case '/now':

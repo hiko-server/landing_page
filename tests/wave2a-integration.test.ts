@@ -79,8 +79,8 @@ test('(d) the five profile pages are ISR with their streams\' windows, one build
 test('(d) every admin write regenerates exactly the pages that render what it changed', () => {
   // Home saves: availability feeds the CV header and the /contact card.
   assert.deepEqual(sorted(HOME_PAGE_PATHS), ['/', '/about', '/contact', '/cv', '/cv/zh', '/now'])
-  // CV saves: /work lists every public project; /now the current roles.
-  assert.deepEqual(sorted(CV_PAGE_PATHS), ['/', '/about', '/cv', '/cv/zh', '/now', '/work'])
+  // CV saves: /work lists every public project; /now the current roles; /publications the papers.
+  assert.deepEqual(sorted(CV_PAGE_PATHS), ['/', '/about', '/cv', '/cv/zh', '/now', '/publications', '/work'])
   assert.deepEqual([...CV_DOCUMENT_PATHS], ['/cv', '/cv/zh'])
   // The API routes use these lists (with the confirm pass) — no private copies.
   assert.match(read('pages/api/home.ts'), /export const HOME_STATIC_PATHS: readonly string\[\] = \[\.\.\.HOME_PAGE_PATHS\]/)
@@ -98,7 +98,7 @@ test('(d) every admin write regenerates exactly the pages that render what it ch
   assert.deepEqual([...COLLECTION_EXTRA_PATHS.work], ['/', '/about'])
   assert.match(read('lib/mdx-admin.ts'), /\.\.\.COLLECTION_EXTRA_PATHS\[c\], \.\.\.CV_DOCUMENT_PATHS\]/)
   // Restores and storage pulls regenerate every ISR page.
-  for (const p of new Set([...HOME_PAGE_PATHS, ...CV_PAGE_PATHS, '/blog', '/uses', '/colophon'])) {
+  for (const p of new Set([...HOME_PAGE_PATHS, ...CV_PAGE_PATHS, '/blog', '/uses', '/colophon', '/publications'])) {
     assert.ok((STATIC_CONTENT_PATHS as readonly string[]).includes(p), `restores regenerate ${p}`)
   }
   // A CV page change purges its files at the edge.

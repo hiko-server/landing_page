@@ -282,6 +282,8 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
       updated,
       ownDescription,
       stack: readStack().groups,
+      // Whether /publications exists, for the nav link (lib/publicationsData).
+      ...(await import('../lib/publicationsData')).chromePublicationsProp(),
     },
     revalidate: 60,
   }

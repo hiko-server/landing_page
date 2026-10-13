@@ -6,9 +6,11 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { publicSections } from '../lib/cvVisibility'
 import {
+  CV_DESCRIPTION_MAX_COLUMNS,
   cvDescription,
   cvEntryAnchor,
   cvSectionAnchor,
+  displayColumns,
   indexedCertificates,
   indexedList,
   publicSeoSections,
@@ -277,4 +279,41 @@ test('QR codes are inline SVG drawn in currentColor on a transparent background'
   assert.ok(!/fill="#|stroke="#/.test(svg), 'no hard-coded colours')
   assert.equal(await qrSvg('https://lucian-dev.com/cv'), svg, 'memoised and deterministic')
   assert.notEqual(await qrSvg('https://lucian-dev.com/cv/zh'), svg)
+})
+
+test('the CV description mentions publications only once a public paper exists', () => {
+  const papers = (list: unknown[], extra: Record<string, unknown> = {}) =>
+    publicSections([{ sessionName: 'publications', headerName: 'Publications', papers: list, ...extra }], 'cv')
+  // No section, an empty list, a draft without a status, a status without a title: nothing to promise.
+  assert.deepEqual(publicSeoSections([]), [])
+  assert.deepEqual(publicSeoSections(papers([])), [])
+  assert.deepEqual(publicSeoSections(papers([{ title: 'A draft', status: '' }])), [])
+  assert.deepEqual(publicSeoSections(papers([{ title: '', status: 'published' }])), [])
+  assert.deepEqual(publicSeoSections(papers([{ title: 'Hidden title', status: 'published', hiddenFields: ['title'] }])), [])
+  assert.deepEqual(publicSeoSections(papers([{ title: 'Hidden paper', status: 'published', isVisible: false }])), [])
+  assert.deepEqual(publicSeoSections(papers([{ title: 'Off the CV', status: 'published' }], { isVisible: false })), [])
+  // A real paper — under review counts too: it is listed with its status.
+  assert.deepEqual(publicSeoSections(papers([{ title: 'A paper', status: 'under-review' }])), ['publications'])
+  assert.equal(
+    cvDescription('en', { present: ['education', 'project', 'publications'] }),
+    'The CV / résumé of Li Yanpei (Lucian) in English and Chinese: education, projects and publications, printable as an A4 PDF.'
+  )
+  assert.equal(
+    cvDescription('zh', { present: ['education', 'project', 'publications'], nameZh: '李彦霈' }),
+    '李彦霈（Lucian）的中文简历：教育、项目与论文，另有英文版，可在线浏览，也可打印或保存为 A4 PDF。'
+  )
+})
+
+test('a CV with every section still gets a description within the snippet length', () => {
+  const all = ['education', 'workExperience', 'project', 'publications', 'patents', 'competitionAwards', 'certification']
+  for (const nameZh of [undefined, '李彦霈']) {
+    const zh = cvDescription('zh', { present: all, nameZh })
+    assert.ok(displayColumns(zh) <= CV_DESCRIPTION_MAX_COLUMNS, zh)
+    assert.match(zh, /论文/)
+  }
+  const en = cvDescription('en', { present: all })
+  assert.ok(displayColumns(en) <= CV_DESCRIPTION_MAX_COLUMNS, en)
+  // The first-named sections (publications among them) are kept; the tail gives way.
+  assert.match(en, /^The CV \/ résumé of Li Yanpei \(Lucian\) in English and Chinese: education, experience, projects, publications/)
+  assert.match(en, /, printable as an A4 PDF\.$/)
 })

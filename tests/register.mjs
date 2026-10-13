@@ -1,5 +1,7 @@
 // Lets `node --test` run the TypeScript sources directly (Node ≥ 22.18 strips
-// types natively): resolve extensionless relative imports to their .ts/.tsx file.
+// types natively): resolve extensionless relative imports to their .ts/.tsx file,
+// and Next's root subpath modules ("next/dynamic", which has no exports map) to
+// their .js file.
 import { register } from 'node:module'
 
 register(
@@ -14,6 +16,7 @@ register(
             if (existsSync(fileURLToPath(url))) return next(url.href, context)
           }
         }
+        if (/^next\\/[\\w-]+$/.test(specifier)) return next(specifier + '.js', context)
         return next(specifier, context)
       }
     `),
