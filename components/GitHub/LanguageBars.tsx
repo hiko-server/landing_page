@@ -1,11 +1,10 @@
 import React, { useMemo } from 'react'
 import { Box, Flex, Skeleton, Text } from '@chakra-ui/react'
-import { motion, useReducedMotion } from 'framer-motion'
+import { motion, useReducedMotion, type Variants } from 'framer-motion'
 
 import { useFetchJson } from '../Common/useFetchJson'
 import WidgetNotice from '../Common/WidgetNotice'
-
-type LangData = { total: number; breakdown: Record<string, number>; available?: boolean }
+import type { GhLanguages } from '../Common/githubEvents'
 
 /** GitHub's canonical language colours; anything unlisted uses the site accent. */
 const LANG_COLORS: Record<string, string> = {
@@ -35,16 +34,30 @@ const LANG_COLORS: Record<string, string> = {
 
 const colorFor = (lang: string) => LANG_COLORS[lang] || 'var(--accent)'
 const MotionBox = motion(Box)
+const MotionFlex = motion(Flex)
 const ROWS = 10
+const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1]
+/**
+ * One parent stagger. The hidden state is the same for everyone (server and
+ * client markup match); reduced motion only makes the reveal instant
+ * (MotionConfig reducedMotion="user" already drops the transforms).
+ */
+const staggerVariants = (reduce: boolean | null): { list: Variants; row: Variants; bar: Variants } => ({
+  list: { hidden: {}, show: { transition: { staggerChildren: reduce ? 0 : 0.03 } } },
+  row: { hidden: { opacity: 0, y: 6 }, show: { opacity: 1, y: 0, transition: reduce ? { duration: 0 } : { duration: 0.3, ease: EASE } } },
+  // scaleX (compositor-only) instead of animating width (layout).
+  bar: { hidden: { scaleX: 0 }, show: { scaleX: 1, transition: reduce ? { duration: 0 } : { duration: 0.6, ease: EASE } } },
+})
 
 /**
  * Language share across public, non-fork repositories (bytes, top 10).
- * The skeleton uses the loaded row geometry; outages and "no code yet" get
- * an in-place notice instead of an empty gap.
+ * Server-rendered when `initialData` is passed; otherwise the skeleton uses
+ * the loaded row geometry. Outages and "no code yet" get an in-place notice
+ * instead of an empty gap. One parent stagger reveals the rows.
  */
-export default function LanguageBars() {
+export default function LanguageBars({ initialData }: { initialData?: GhLanguages | null }) {
   const reduce = useReducedMotion()
-  const { data, error, retry } = useFetchJson<LangData>('/api/github/languages')
+  const { data, error, retry } = useFetchJson<GhLanguages>('/api/github/languages', { initialData })
 
   const items = useMemo(() => {
     if (!data?.total) return [] as Array<{ name: string; pct: number }>
@@ -82,17 +95,21 @@ export default function LanguageBars() {
     return <WidgetNotice kind="empty">No language data to show yet.</WidgetNotice>
   }
 
+  const variants = staggerVariants(reduce)
   return (
-    <Flex as="ul" listStyleType="none" direction="column" gap={3} aria-label="Languages by share of code">
-      {items.map(({ name, pct }, idx) => (
-        <MotionBox
-          as="li"
-          key={name}
-          initial={reduce ? false : { opacity: 0, x: -10 }}
-          whileInView={{ opacity: 1, x: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.35, delay: idx * 0.05, ease: [0.22, 1, 0.36, 1] }}
-        >
+    <MotionFlex
+      as="ul"
+      listStyleType="none"
+      direction="column"
+      gap={3}
+      aria-label="Languages by share of code"
+      variants={variants.list}
+      initial="hidden"
+      whileInView="show"
+      viewport={{ once: true, amount: 0.2 }}
+    >
+      {items.map(({ name, pct }) => (
+        <MotionBox as="li" key={name} variants={variants.row}>
           <Flex align="center" justify="space-between" mb={1} h="21px">
             <Flex align="center" gap={2}>
               <Box as="span" aria-hidden w="8px" h="8px" borderRadius="full" bg={colorFor(name)} flexShrink={0} />
@@ -100,17 +117,13 @@ export default function LanguageBars() {
                 {name}
               </Text>
             </Flex>
-            <Text as="span" fontFamily="var(--font-geist-mono), monospace" fontSize="12px" color="page.fg-secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+            <Text as="span" className="tnum" fontFamily="var(--font-geist-mono), monospace" fontSize="12px" color="page.fg-secondary">
               {pct.toFixed(1)}%
             </Text>
           </Flex>
           <Box aria-hidden w="100%" h="6px" bg="page.bg-overlay" borderRadius="full" overflow="hidden">
-            {/* scaleX (compositor-only) instead of animating width (layout). */}
             <MotionBox
-              initial={reduce ? false : { scaleX: 0 }}
-              whileInView={{ scaleX: 1 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.7, delay: idx * 0.05, ease: [0.22, 1, 0.36, 1] }}
+              variants={variants.bar}
               w={`${Math.max(pct, 0.5)}%`}
               h="100%"
               bg={colorFor(name)}
@@ -120,6 +133,6 @@ export default function LanguageBars() {
           </Box>
         </MotionBox>
       ))}
-    </Flex>
+    </MotionFlex>
   )
 }

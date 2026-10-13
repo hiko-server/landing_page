@@ -57,7 +57,7 @@ export default function WidgetNotice({
           borderColor="page.border-strong"
           color="page.fg"
           onClick={onRetry}
-          _hover={{ borderColor: 'var(--accent)', color: 'var(--accent)' }}
+          _hover={{ borderColor: 'var(--accent)', color: 'accent.text' }}
           _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
         >
           Try again
