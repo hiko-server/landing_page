@@ -32,6 +32,11 @@ const COLUMNS: Column[] = [
         typeof it.frontmatter.status === 'string' ? it.frontmatter.status : 'case-study'
       return (
         <HStack spacing={1.5}>
+          {it.frontmatter.draft ? (
+            <Badge colorScheme="yellow" variant="subtle" fontSize="10px">
+              draft
+            </Badge>
+          ) : null}
           <Badge colorScheme={STATUS_COLOR[status] || 'gray'} variant="subtle" fontSize="10px">
             {status}
           </Badge>

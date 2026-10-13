@@ -1,5 +1,7 @@
 /**
  * Unified version history API (admin only)
+ *
+ * CV and home page (JSON documents):
  * GET  ?type=cv   → list CV file snapshots
  * GET  ?type=home → list Home file snapshots
  * GET  ?type=cv&file=filename&preview=1 → read snapshot JSON (preview)
@@ -7,11 +9,20 @@
  * POST ?type=cv|home { action:'restore', filename } → restore a file snapshot
  * POST ?type=cv|home { action:'snapshot' } → take a manual snapshot
  *
- * `type` may also be sent in the POST body; the query string wins.
+ * Posts, case studies and pages (MDX, lib/mdx-admin.ts):
+ * GET  ?type=blog|work&slug=foo           → list that item's snapshots
+ * GET  ?type=page&name=now|uses           → list that page's snapshots
+ * GET  ?type=…&slug|name=…&file=…&preview=1 → { data: { frontmatter, body } }
+ * GET  ?type=blog|work&deleted=1          → { deleted: [{ slug, title, filename, date }] }
+ *                                           (snapshots whose item no longer exists)
+ * POST ?type=…  { action:'restore', slug|name, filename } → write the snapshot back
+ *      (the live state is snapshotted first), regenerate its public pages and
+ *      return the new ETag. Works for deleted items too (undo delete).
+ *
+ * `type`, `slug` and `name` may also be sent in the POST body; the query string wins.
  */
-import type { NextApiRequest, NextApiResponse } from 'next'
 import {
-  listSnapshots,
+  listSnapshots as listCvSnapshots,
   restoreSnapshot,
   saveSnapshot,
   readSnapshot,
@@ -22,25 +33,48 @@ import {
   saveHomeSnapshot,
   readHomeSnapshot,
 } from '../../lib/home'
+import type { NextApiRequest, NextApiResponse } from 'next'
 import { kvEtag, restoreErrorStatus, safeSnapshotName } from '../../lib/contentStore'
 import { isAdminRequest } from '../../lib/auth'
 import { sendVersionedJson } from '../../lib/http'
 import { revalidatePaths } from '../../lib/revalidate'
+import { withApi } from '../../lib/apiHandler'
+import { log } from '../../lib/log'
+import {
+  isPageName,
+  isSafeSlug,
+  listDeleted,
+  listSnapshots,
+  parseSnapshotName,
+  readOne,
+  readPage,
+  readSnapshot as readMdxSnapshot,
+  refreshCollection,
+  restoreItemSnapshot,
+  restorePageSnapshot,
+  versionEtag,
+  type SnapshotKind,
+} from '../../lib/mdx-admin'
 
 const isAuthed = isAdminRequest
 
-type VersionType = 'cv' | 'home'
+type JsonDocType = 'cv' | 'home'
+type VersionType = JsonDocType | SnapshotKind
+
+const TYPES: readonly VersionType[] = ['cv', 'home', 'blog', 'work', 'page']
 
 /**
- * Statically generated pages rendered from each document: /now reads the
- * public CV sections and home.hero.currentlyCoding, so restoring either one
- * must regenerate it instead of leaving the ISR copy live.
+ * Statically generated (ISR) pages rendered from each document: /now reads
+ * the public CV sections and home.hero.currentlyCoding, so restoring either
+ * one must regenerate it instead of leaving the ISR copy live. The pages
+ * that read them with getServerSideProps (/, /about, /contact, /cv, /cv/zh)
+ * are rendered per request and need no revalidation.
  */
-const STATIC_PATHS: Record<VersionType, string[]> = { cv: ['/now'], home: ['/now'] }
+const STATIC_PATHS: Record<JsonDocType, string[]> = { cv: ['/now'], home: ['/now'] }
 
 function parseType(value: unknown): VersionType | null {
   if (value === undefined || value === '') return null
-  return value === 'cv' || value === 'home' ? value : null
+  return (TYPES as readonly unknown[]).includes(value) ? (value as VersionType) : null
 }
 
 function parseFilename(name: string): { date: string; label: string } {
@@ -55,16 +89,85 @@ function parseFilename(name: string): { date: string; label: string } {
   return { date: '', label: name }
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+function mdxVersions(kind: SnapshotKind, slug: string) {
+  return listSnapshots(kind, slug).map((s, idx) => ({
+    filename: s.filename,
+    date: s.date,
+    label: new Date(s.date).toUTCString(),
+    index: idx,
+    isLatest: idx === 0,
+    type: kind,
+  }))
+}
+
+/** Snapshot history of posts, case studies and pages. */
+async function handleMdx(req: NextApiRequest, res: NextApiResponse, kind: SnapshotKind) {
+  const fromBody = req.method === 'POST' && req.body && typeof req.body === 'object' ? req.body : {}
+  const rawRef = kind === 'page' ? req.query.name ?? req.query.slug ?? fromBody.name ?? fromBody.slug : req.query.slug ?? fromBody.slug
+
+  if (req.method === 'GET' && kind !== 'page' && req.query.deleted === '1') {
+    return res.status(200).json({ ok: true, deleted: listDeleted(kind) })
+  }
+
+  const ref = typeof rawRef === 'string' ? rawRef : ''
+  if (kind === 'page' ? !isPageName(ref) : !isSafeSlug(ref)) {
+    return res.status(400).json({ error: kind === 'page' ? 'name must be "now" or "uses"' : 'Missing or invalid slug' })
+  }
+
+  if (req.method === 'GET') {
+    if (req.query.file !== undefined && req.query.preview === '1') {
+      const info = parseSnapshotName(req.query.file)
+      if (!info || info.slug !== ref) return res.status(400).json({ error: 'Invalid file name' })
+      const doc = readMdxSnapshot(kind, info.filename)
+      if (!doc) return res.status(404).json({ error: 'Not found' })
+      return res.status(200).json({ ok: true, data: doc })
+    }
+    return res.status(200).json({ ok: true, versions: mdxVersions(kind, ref) })
+  }
+
+  if (req.method === 'POST') {
+    const { action, filename } = fromBody as { action?: unknown; filename?: unknown }
+    if (action !== 'restore') return res.status(400).json({ error: 'Unknown action' })
+    const info = parseSnapshotName(filename)
+    if (!info || info.slug !== ref) return res.status(400).json({ error: 'Missing or invalid filename' })
+
+    if (kind === 'page') {
+      if (!isPageName(ref)) return res.status(400).json({ error: 'name must be "now" or "uses"' })
+      const result = await restorePageSnapshot(ref, info.filename)
+      if (!result.ok) return res.status('notFound' in result ? 404 : 500).json({ error: result.error })
+      const etag = versionEtag(readPage(ref).updatedAt)
+      const paths = [`/${ref}`]
+      const failed = await revalidatePaths(res, paths)
+      return sendVersionedJson(res, 200, {
+        ...result,
+        etag,
+        revalidated: paths.filter((p) => !failed.includes(p)),
+        ...(failed.length ? { revalidateFailed: failed } : {}),
+      }, etag)
+    }
+
+    const result = await restoreItemSnapshot(kind, ref, info.filename)
+    if (!result.ok) return res.status('notFound' in result ? 404 : 500).json({ error: result.error })
+    const etag = versionEtag(readOne(kind, ref)?.updatedAt ?? 0)
+    return sendVersionedJson(res, 200, { ...result, etag, ...(await refreshCollection(res, kind, ref)) }, etag)
+  }
+
+  res.setHeader('Allow', 'GET,POST')
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+export default withApi('versions', async (req, res) => {
   if (!isAuthed(req, res)) return res.status(401).json({ error: 'Unauthorized' })
   res.setHeader('Cache-Control', 'no-store')
 
   const rawType = req.query.type ?? (req.method === 'POST' ? req.body?.type : undefined)
   const parsedType = parseType(rawType)
   if (rawType !== undefined && rawType !== '' && !parsedType) {
-    return res.status(400).json({ error: 'type must be "cv" or "home"' })
+    return res.status(400).json({ error: 'type must be one of cv, home, blog, work, page' })
   }
-  const type: VersionType = parsedType ?? 'cv'
+  const anyType: VersionType = parsedType ?? 'cv'
+  if (anyType === 'blog' || anyType === 'work' || anyType === 'page') return handleMdx(req, res, anyType)
+  const type: JsonDocType = anyType
 
   if (req.method === 'GET') {
     const fileParam = req.query.file
@@ -84,7 +187,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     // List all snapshots with metadata
-    const files = type === 'home' ? listHomeSnapshots() : listSnapshots()
+    const files = type === 'home' ? listHomeSnapshots() : listCvSnapshots()
     const versions = files.map((f, idx) => {
       const { date, label } = parseFilename(f)
       return {
@@ -114,7 +217,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         if (type === 'home') saveHomeSnapshot()
         else saveSnapshot()
       } catch (err) {
-        console.warn('versions: snapshot before restore failed', err)
+        log.warn('versions: snapshot before restore failed', { type, err })
       }
       const result = type === 'home' ? await restoreHomeSnapshot(filename) : await restoreSnapshot(filename)
       if (!result.ok) return res.status(restoreErrorStatus(result.error)).json({ error: result.error })
@@ -135,4 +238,4 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   res.setHeader('Allow', 'GET,POST')
   return res.status(405).json({ error: 'Method not allowed' })
-}
+})
