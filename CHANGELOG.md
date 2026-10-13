@@ -8,6 +8,49 @@ portfolio CMS, no public package). Entries are grouped by release date.
 
 ## [Unreleased]
 
+### publications
+
+- **Publications (论文) in the CV**: a new CV Studio section for papers,
+  preprints and theses — title, authors (ordered; add, remove and reorder
+  by keyboard), venue and venue type, status (Published / In press /
+  Accepted / Under review / Preprint, 已发表 / 印刷中 / 已录用 / 审稿中 /
+  预印本), date (`YYYY` or `YYYY-MM`), volume, issue, pages, publisher,
+  DOI, paper / PDF / code / slides links, abstract, keywords and award.
+  Every field, paper and list item has the usual eye toggle and the CV /
+  website switches. With linked languages, status, venue type, date,
+  numbers, DOI and links are shared by EN and 中文 (text stays per
+  language). Saving checks the status (required once a paper has a
+  title), the DOI shape, the date shape and https-only links.
+- **On the CV**: `/cv`, `/cv/zh`, the Reading view and the A4 sheet list
+  the papers in citation style — the owner's name in bold (recognised from
+  the public Personal Info in both languages, never hard-coded), venue in
+  italics, a status label for anything not yet published, the DOI spelled
+  out for paper, PDF / code / slides links and an abstract disclosure that
+  is never printed. Published work first, then in press, accepted, under
+  review and preprints, newest first. A paper under review never names
+  its venue (APA 7). The renderers load on demand, so a CV without papers
+  ships no extra JavaScript.
+- **`/publications`**: every public paper with its anchor
+  (`#<citation key>`), formatted citation, links, collapsible abstract and
+  Copy BibTeX / Copy APA (plus copy-all), grouped by status, with year and
+  status filters from six papers on; English chrome, Chinese entries
+  marked `lang="zh-Hans"`. JSON-LD: a CollectionPage whose ItemList holds
+  a ScholarlyArticle per paper (the site Person as author, DOI as
+  identifier and `sameAs`, the journal / proceedings it is part of, a
+  status, and no publication date for unpublished work). ISR, regenerated
+  on every CV save, restore and import.
+- **Nothing public without a paper**: until a public paper exists there is
+  no CV section, no nav link (header, footer, drawer, ⌘K palette, the
+  `/cv` header), no sitemap entry, and `/publications` answers 404. The
+  page loaders ship the flag, so the link is in the server HTML (no
+  request, no layout shift). Hidden fields, papers and authors never reach
+  the HTML, `__NEXT_DATA__`, `/api/cvdata`, the JSON-LD or the sitemap.
+- `lib/publications/` (pure): DOI normalisation, name matching, ordering,
+  citation parts, BibTeX (entry type by venue type and status, escaped,
+  case-protected, stable `lastnameYEARword` keys), APA 7, JSON-LD and JSON
+  Resume `publications`, ready for the PDF CV, the exports and the home
+  page.
+
 ## [2.3.0] — 2026-10-13
 
 A research round across eight directions (UI, motion, reading, recruiter
