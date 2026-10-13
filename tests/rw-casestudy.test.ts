@@ -162,6 +162,13 @@ test('D1 the public loader keeps only valid "At a glance" fields; a post keeps a
   assert.deepEqual(cleaned, { title: 't' })
 })
 
+test('D1 the case-study feed dates an item by its publication date when one is set', async () => {
+  const { workFeedItems } = await import('../lib/feedHtml')
+  const [item] = await workFeedItems('https://lucian-dev.com')
+  assert.equal(item.published, '2026-05-30')
+  assert.ok(item.modified && item.modified.endsWith('Z'), 'modified stays the last write')
+})
+
 test('D1 admin form round trip: half-filled metric rows are kept for the owner, empty ones dropped, focus only with a cover', () => {
   const form = workFromServer({
     title: 'T',

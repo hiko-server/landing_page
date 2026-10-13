@@ -299,7 +299,8 @@ function workItem(work: MDXRendered<WorkFrontmatter>, site: string): FeedItem {
     summary: fm.description || work.excerpt || undefined,
     html: renderFeedHtml(work.tree, { site, pageUrl: url }),
     lang: work.lang,
-    published: updated,
+    // The owner's publication date (At a glance) when set, else the last write.
+    published: fm.published || updated,
     modified: updated,
     tags: strList(fm.tech),
     image: cover ? (cover.startsWith('/') ? `${site}${cover}` : cover) : undefined,
