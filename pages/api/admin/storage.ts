@@ -1,10 +1,9 @@
-import type { NextApiRequest, NextApiResponse } from 'next'
+import { withApi } from '../../../lib/apiHandler'
 import { isR2Configured, getR2Bucket, r2ListDetailed } from '../../../lib/r2'
 import { getDb } from '../../../lib/db'
 import { listLocalBackups, BACKUP_CONSTANTS } from '../../../lib/backup'
+import { getBackupStatus } from '../../../lib/backupSchedule'
 import { isAdminRequest } from '../../../lib/auth'
-
-const isAuthed = isAdminRequest
 
 /**
  * Inventory of the content store, surfaced in the admin UI so an operator
@@ -12,13 +11,18 @@ const isAuthed = isAdminRequest
  *   - whether R2 credentials are even loaded into the running process,
  *   - what's in the local SQLite (canonical),
  *   - what's in the R2 mirror (and whether they match),
- *   - which snapshot tarballs already exist locally + remotely.
+ *   - which snapshot tarballs already exist locally + remotely,
+ *   - the backup schedule (`schedule`: lib/backupSchedule getBackupStatus()).
  *
  * Never throws on R2 errors — the failure is the answer.
  */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (!isAuthed(req, res)) return res.status(401).json({ error: 'Unauthorized' })
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
+export default withApi('admin/storage', async (req, res, ctx) => {
+  if (!isAdminRequest(req, res)) return res.status(401).json({ error: 'Unauthorized' })
+  if (req.method !== 'GET') {
+    res.setHeader('Allow', 'GET')
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
+  res.setHeader('Cache-Control', 'no-store')
 
   // ── Local DB summary ────────────────────────────────────────────────
   const db = getDb()
@@ -77,10 +81,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .filter((o) => o.key.startsWith(BACKUP_CONSTANTS.R2_PREFIX) && o.key.endsWith('.tgz'))
         .sort((a, b) => (a.lastModified || '').localeCompare(b.lastModified || '') * -1)
       r2.hasLatest = r2.objects.some((o) => o.key === BACKUP_CONSTANTS.R2_LATEST_KEY)
-    } catch (err: any) {
-      r2.error = err?.message || String(err)
+    } catch (err) {
+      r2.error = err instanceof Error ? err.message : String(err)
+      ctx.log.warn('storage inventory: R2 listing failed', { err })
     }
   }
 
-  return res.status(200).json({ db: dbSummary, r2, backups, now: Date.now() })
-}
+  return res.status(200).json({ db: dbSummary, r2, backups, schedule: getBackupStatus(), now: Date.now() })
+})

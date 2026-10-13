@@ -41,7 +41,14 @@ import {
   FaArchive,
 } from 'react-icons/fa'
 import { readJsonObject } from './shell/http'
-import { parseRestoreReport, type RestoreReport } from './shell/storageReport'
+import {
+  lastRunDetail,
+  parseBackupSchedule,
+  parseRestoreReport,
+  scheduleLine,
+  type BackupSchedule,
+  type RestoreReport,
+} from './shell/storageReport'
 import {
   Eyebrow,
   MONO,
@@ -278,8 +285,36 @@ function RestoreReportCard({ pull, onDismiss }: { pull: PullSummary; onDismiss: 
   )
 }
 
+/** "Scheduled: every 24 h · last run 3 h ago · next in 21 h" plus what the last run did. */
+function ScheduleSummary({ schedule, now }: { schedule: BackupSchedule; now: number }) {
+  const detail = lastRunDetail(schedule)
+  const failed = schedule.lastOk === false
+  return (
+    <Box
+      mb={4}
+      px={3}
+      py={2.5}
+      border="1px solid"
+      borderColor={failed ? 'red.400' : 'page.border'}
+      borderRadius="md"
+      bg="page.bg-elevated"
+    >
+      <Text fontFamily={MONO} fontSize="xs" color="page.fg" className="tnum">
+        {scheduleLine(schedule, now)}
+      </Text>
+      {detail ? (
+        <Text fontSize="xs" color={failed ? 'red.600' : 'page.fg-secondary'} _dark={failed ? { color: 'red.300' } : undefined} mt={1}>
+          {failed ? <Box as="span" fontWeight={600}>Needs attention: </Box> : null}
+          {detail}
+        </Text>
+      ) : null}
+    </Box>
+  )
+}
+
 export default function StoragePanel() {
   const [data, setData] = useState<StoragePayload | null>(null)
+  const [schedule, setSchedule] = useState<BackupSchedule | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [backingUp, setBackingUp] = useState(false)
@@ -298,6 +333,7 @@ export default function StoragePanel() {
       if (res.status === 401) throw new Error('Session expired — sign in again.')
       if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`)
       setData(json as StoragePayload)
+      setSchedule(parseBackupSchedule(json))
     } catch (e) {
       setErr(errText(e))
     } finally {
@@ -528,6 +564,7 @@ export default function StoragePanel() {
                 </Badge>
               }
             />
+            {schedule ? <ScheduleSummary schedule={schedule} now={data.now} /> : null}
             <SimpleGrid columns={{ base: 2, md: 4 }} spacing={4} mb={4}>
               <Stat
                 label="Last local backup"
@@ -665,7 +702,7 @@ export default function StoragePanel() {
                 <Tbody>
                   {data.db.items.map((r) => (
                     <Tr key={`${r.collection}/${r.slug}`}>
-                      <Td fontFamily={MONO} fontSize="xs" color="accent.500">
+                      <Td fontFamily={MONO} fontSize="xs" color="accent.text">
                         {r.collection}
                       </Td>
                       <Td>
@@ -796,7 +833,7 @@ export default function StoragePanel() {
               {Object.entries(r2Groups).map(([prefix, objs]) => (
                 <Box key={prefix}>
                   <HStack mb={2} spacing={2}>
-                    <Eyebrow color="accent.500">{prefix}/</Eyebrow>
+                    <Eyebrow color="accent.text">{prefix}/</Eyebrow>
                     <Text fontSize="xs" color="page.fg-secondary">
                       {objs.length} object{objs.length === 1 ? '' : 's'}
                     </Text>

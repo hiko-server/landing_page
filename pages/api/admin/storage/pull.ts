@@ -1,10 +1,8 @@
-import type { NextApiRequest, NextApiResponse } from 'next'
+import { withApi } from '../../../../lib/apiHandler'
 import { isR2Configured } from '../../../../lib/r2'
 import { restoreLatestFromR2, restoreLocalSnapshot, StorageBusyError, type RestoreResult } from '../../../../lib/backup'
 import { revalidatePaths } from '../../../../lib/revalidate'
 import { isAdminRequest } from '../../../../lib/auth'
-
-const isAuthed = isAdminRequest
 
 /**
  * POST /api/admin/storage/pull
@@ -29,8 +27,8 @@ const isAuthed = isAdminRequest
  * (not 500) when it isn't, so the UI can show a friendly "configure R2"
  * hint instead of a generic error. 409 when a backup/restore is running.
  */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (!isAuthed(req, res)) return res.status(401).json({ ok: false, error: 'Unauthorized' })
+export default withApi('admin/storage/pull', async (req, res, ctx) => {
+  if (!isAdminRequest(req, res)) return res.status(401).json({ ok: false, error: 'Unauthorized' })
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST')
     return res.status(405).json({ ok: false, error: 'Method not allowed' })
@@ -72,6 +70,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     })
   } catch (err) {
     if (err instanceof StorageBusyError) return res.status(409).json({ ok: false, error: err.message })
+    ctx.log.error('restore failed', { source, err })
     return res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) })
   }
-}
+})
