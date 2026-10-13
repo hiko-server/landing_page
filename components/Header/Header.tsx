@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Box, Text, Button, useDisclosure, Flex, IconButton, Link, useColorMode, Kbd } from '@chakra-ui/react'
+import { Box, Text, Button, useDisclosure, Flex, IconButton, Link, Kbd } from '@chakra-ui/react'
 import NextLink from 'next/link'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/router'
@@ -22,24 +22,24 @@ import { useChromeToast } from '../Chrome/useChromeToast'
 import { useShortcutsEnabled } from '../Chrome/useShortcutsEnabled'
 import { useFetchJson } from '../Common/useFetchJson'
 import { MenuIcon, SearchIcon } from '../Icons/ui/chrome'
-import { toggleThemeWithTransition } from '../../lib/themeTransition'
 import { getShortcutsEnabled, isImeComposing } from '../../lib/keyboardShortcuts'
 import { pageKeyOf } from '../../lib/viewTransition'
-import ThemeIcon from './ThemeIcon'
+import ThemeControl from './ThemeControl'
 
 /**
  * v6 Header — rendered once by components/Chrome/SiteChrome (persistent across
  * client-side navigations).
  *
- * Layout (lg+):      [logo · live-status]  [primary nav]  [⌘K · theme · admin]
- * Layout (< lg):     [logo]                [⌘K · theme · hamburger → drawer]
+ * Layout (lg+):      [logo · live-status]  [primary nav]  [⌘K · theme ▾ · admin]
+ * Layout (< lg):     [logo]                [⌘K · theme ▾ · hamburger → drawer]
  *
  * Breakpoints are pure CSS (no JS media query) and every colour is a semantic
  * token (CSS variable), so the header is correct on the very first paint at
  * every width and in both colour modes.
  *
- * Weight: the ⌘K palette and the mobile drawer are separate chunks, fetched
- * when first needed (and warmed on hover / focus / idle); icons are inline.
+ * Weight: the ⌘K palette, the mobile drawer and the theme menu are separate
+ * chunks, fetched when first needed (and warmed on hover / focus / idle);
+ * icons are inline (components/Icons/ui/chrome).
  */
 
 const MONO = 'var(--font-geist-mono), ui-monospace, monospace'
@@ -142,7 +142,6 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
   // The lazy chunks are rendered from the first time they are asked for on.
   const [paletteRequested, setPaletteRequested] = useState(false)
   const [drawerRequested, setDrawerRequested] = useState(false)
-  const { colorMode, toggleColorMode } = useColorMode()
   const brand = useBrandHost()
   const [brandHead, brandTail] = splitBrand(brand)
   const shortcutsOn = useShortcutsEnabled()
@@ -296,9 +295,6 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
     }
   }, [router, toast])
 
-  const isDark = colorMode === 'dark'
-  const themeLabel = isDark ? 'Switch to light theme' : 'Switch to dark theme'
-
   return (
     <>
       <Box
@@ -437,17 +433,9 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
               </Kbd>
             </Button>
 
-            {/* Theme toggle: the new mode is revealed from this button. */}
-            <IconButton
-              size="sm"
-              variant="ghost"
-              color="page.fg-subtle"
-              _hover={{ color: 'page.fg', bg: 'page.hover' }}
-              aria-label={themeLabel}
-              title={themeLabel}
-              icon={<ThemeIcon />}
-              onClick={(e) => toggleThemeWithTransition(toggleColorMode, e.currentTarget)}
-            />
+            {/* Theme: one-tap toggle (the new mode is revealed from it) + the
+                System / Light / Dark menu. */}
+            <ThemeControl />
 
             {/*
               Admin entry — hidden when logged out (per spec: 不要直接显示).

@@ -312,6 +312,7 @@ All variables are documented in [`.env.example`](./.env.example). Headlines:
 | Admin bootstrap | `ADMIN_EMAIL`, `ADMIN_PASS` | ✅ on first boot, then deletable |
 | Sessions | `JWT_SECRET` (base64, ≥ 32 bytes) | ✅ always |
 | Site identity | `NEXT_PUBLIC_PRODUCT_NAME`, `NEXT_PUBLIC_SITE_HOST`, `SITE_URL` | recommended |
+| Default theme | `NEXT_PUBLIC_DEFAULT_THEME` (`dark` when empty, `light` or `system`; build time) | optional |
 | Mailer | `SMTP_HOST/PORT/USER/PASS`, `FROM_EMAIL`, `NOTIFY_EMAIL` | optional — silently skipped when unset |
 | Contact captcha | none — built-in nonce + math + honeypot | n/a |
 | GitHub | `GITHUB_TOKEN` (fine-grained, public repositories read-only, no permissions) | recommended (raises API limit 60→5000/h) |

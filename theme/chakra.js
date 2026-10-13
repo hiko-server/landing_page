@@ -1,5 +1,6 @@
 import { extendTheme } from '@chakra-ui/react'
-import { printColorVariables, semanticColors } from './color'
+import { printColorVariables, semanticColors, semanticShadows } from './color'
+import { serverColorMode } from '../lib/themePreference'
 import {
   EASE_STANDARD_CSS,
   PAGE_GUTTERS,
@@ -101,13 +102,13 @@ const FOCUS_RING = {
   boxShadow: 'none',
 }
 
-/** Left status bar of the `v6` Alert (toasts): the accent for good news, warm colours for problems. */
+/** Left status bar of the `v6` Alert (toasts): the accent for good news, the status tokens for problems. */
 const ALERT_BAR = {
   success: 'var(--accent)',
   info: 'var(--accent)',
   loading: 'var(--accent)',
-  warning: 'orange.400',
-  error: 'red.400',
+  warning: 'status.warning',
+  error: 'status.error',
 }
 
 const components = {
@@ -158,6 +159,7 @@ const components = {
             borderRadius: 'md',
             borderInlineStartWidth: '3px',
             borderInlineStartColor: bar,
+            boxShadow: 'elevation.md',
           },
           icon: { color: bar },
           spinner: { color: bar },
@@ -188,6 +190,10 @@ const semanticTokens = {
   colors: Object.fromEntries(
     Object.entries(semanticColors).map(([name, { light, dark }]) => [name, { default: light, _dark: dark }]),
   ),
+  // Three elevation levels (theme/color.ts semanticShadows): `boxShadow="elevation.md"`.
+  shadows: Object.fromEntries(
+    Object.entries(semanticShadows).map(([name, { light, dark }]) => [name, { default: light, _dark: dark }]),
+  ),
 }
 
 const theme = {
@@ -203,11 +209,15 @@ const theme = {
     components,
     semanticTokens,
     config: {
-      // Deliberate: v6 is dark-first. A first-time visitor always gets the
-      // brand's dark look (no system-preference switch); an explicit toggle is
-      // remembered (localStorage, applied before first paint by the
-      // ColorModeScript in pages/_document.tsx).
-      initialColorMode: 'dark',
+      // The visitor's System / Light / Dark preference decides the mode
+      // (lib/themePreference.ts: applied before first paint by
+      // pages/_document.tsx, stored by the colorModeManager in pages/_app).
+      // Without a preference the default is NEXT_PUBLIC_DEFAULT_THEME — the
+      // brand's dark look when unset. This is only the mode of the server
+      // render, which nothing visible depends on (everything is CSS
+      // variables keyed off data-theme). Chakra's own system listener stays
+      // off: it would override an explicit Light / Dark choice.
+      initialColorMode: serverColorMode(),
       useSystemColorMode: false,
     },
     styles: {

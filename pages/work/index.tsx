@@ -86,10 +86,10 @@ function Cover({
 }
 
 function WorkCard({ w, featured, first }: { w: WorkItem; featured: boolean; first: boolean }) {
-  // Semantic tokens: AA at 10px in both modes and right on the first paint
+  // Status tokens (theme/color.ts): AA at label size in both modes and right on the first paint
   // (useColorModeValue rendered the dark branch on the server).
-  const liveColor = 'status.open'
-  const featuredColor = 'accent.text'
+  const liveColor = 'status.live'
+  const featuredColor = 'status.featured'
   const fm = w.frontmatter
   const cover = w.coverImage
 
@@ -98,7 +98,7 @@ function WorkCard({ w, featured, first }: { w: WorkItem; featured: boolean; firs
       textStyle="label"
       color={fm.status === 'live' ? liveColor : 'page.fg-secondary'}
       border="1px solid"
-      borderColor={fm.status === 'live' ? 'status.open-border' : 'page.border'}
+      borderColor={fm.status === 'live' ? 'status.live-border' : 'page.border'}
       px={2}
       py={0.5}
       borderRadius="sm"

@@ -15,6 +15,8 @@ import { reportWebVital, useAnalytics } from '../lib/analytics/client'
 import { pageKeyOf } from '../lib/viewTransition'
 import SiteChrome from '../components/Chrome/SiteChrome'
 import ThemeColorMeta from '../components/Chrome/ThemeColorMeta'
+import { ThemePreferenceSync } from '../components/Chrome/useThemePreference'
+import { themePreferenceManager } from '../lib/themePreference'
 import { RouteTransitionGate, useRouteViewTransitions } from '../components/Chrome/RouteTransitions'
 import { useFocusMainOnPageChange } from '../components/Chrome/routeFocus'
 import { resolveHtmlLang, routeHasChrome } from '../components/Chrome/chrome'
@@ -147,7 +149,9 @@ const App = ({ Component, pageProps, router }: AppProps) => {
   )
 
   return (
-    <ChakraProvider theme={theme} toastOptions={TOAST_OPTIONS}>
+    // The colour mode follows the visitor's System / Light / Dark preference
+    // (lib/themePreference.ts; applied before first paint by pages/_document).
+    <ChakraProvider theme={theme} toastOptions={TOAST_OPTIONS} colorModeManager={themePreferenceManager}>
       {/* Every framer-motion animation honours prefers-reduced-motion. */}
       <MotionConfig reducedMotion="user">
         <Head>
@@ -158,6 +162,7 @@ const App = ({ Component, pageProps, router }: AppProps) => {
           <style key="font-variables" dangerouslySetInnerHTML={{ __html: FONT_VARIABLES_CSS }} />
         </Head>
         <ThemeColorMeta />
+        <ThemePreferenceSync />
         {/* Server-computed reference month (pageProps.clockMonth) so time-based
             text renders identically on the server and while hydrating. */}
         <ChromeLangContext.Provider value={chromeLang}>

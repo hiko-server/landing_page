@@ -112,9 +112,9 @@ test('CV sections and /work use semantic tokens, never useColorModeValue or raw 
   }
   const work = read('pages/work/index.tsx')
   assert.doesNotMatch(work, /#22c55e/i)
-  assert.match(work, /'status\.open'/)
-  assert.match(work, /'status\.open-border'/)
-  assert.ok('status.open-border' in semanticColors)
+  assert.match(work, /'status\.live'/)
+  assert.match(work, /'status\.live-border'/)
+  assert.ok('status.live-border' in semanticColors)
 })
 
 // ── FIX-11: print ───────────────────────────────────────────────────────────
@@ -316,7 +316,7 @@ test('one icon set, one theme-color, no X-UA-Compatible', () => {
   assert.match(app, /href="\/icons\/apple-touch-icon\.png"/)
   // The single tag starts at the dark default and is corrected before first paint.
   assert.match(doc, /<meta name="theme-color" content=\{themeColorFor\(initialColorMode\)\} \/>/)
-  assert.match(doc, /<ColorModeScript[^>]*\/>\s*<script dangerouslySetInnerHTML=\{\{ __html: THEME_COLOR_PREPAINT_SCRIPT \}\} \/>/)
+  assert.match(doc, /<script dangerouslySetInnerHTML=\{\{ __html: THEME_PREPAINT_SCRIPT \}\} \/>\s*<script dangerouslySetInnerHTML=\{\{ __html: THEME_COLOR_PREPAINT_SCRIPT \}\} \/>/)
   assert.doesNotMatch(read('components/Chrome/ThemeColorMeta.tsx'), /next\/head/, 'never re-applied by next/head on hydration')
 })
 
