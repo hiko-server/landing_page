@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import {
   Alert,
   AlertDescription,
@@ -23,15 +23,10 @@ import {
   Textarea,
   Tooltip,
   UnorderedList,
+  usePrefersReducedMotion,
   useToast,
 } from '@chakra-ui/react'
 import { useEditor, EditorContent, type Editor } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
-import Image from '@tiptap/extension-image'
-import Link from '@tiptap/extension-link'
-import Placeholder from '@tiptap/extension-placeholder'
-import Typography from '@tiptap/extension-typography'
-import { Markdown } from 'tiptap-markdown'
 import {
   FaBold,
   FaItalic,
@@ -48,8 +43,15 @@ import {
   FaRedo,
 } from 'react-icons/fa'
 import { detectMdxRisks, type MdxRisk } from './shell/mdxRisk'
-import { uploadImageFile } from './shell/http'
 import { MONO, outlineButtonProps, primaryButtonProps } from './shell/ui'
+import { baseExtensions } from './editor/extensions'
+import { createSlashCommand, type SlashBridge } from './editor/SlashCommand'
+import SlashMenu, { type SlashResult } from './editor/SlashMenu'
+import LinkBubble, { type LinkBubbleHandle } from './editor/LinkBubble'
+import ImageBubble from './editor/ImageBubble'
+import { UPLOAD_ACCEPT, altFromFileName, uploadImage, type UploadedImage } from './editor/upload'
+import { markdownLink, rawCodeFence, rawSnippet, youtubeTag, youtubeWatchUrl } from './editor/slashItems'
+import { headingIndexAt, offsetOfLineColumn, slashTriggerAt, textareaCaretRect } from './editor/textareaCaret'
 
 /**
  * RichEditor — dual-mode WYSIWYG / raw-MDX editor used by all admin content
@@ -57,9 +59,12 @@ import { MONO, outlineButtonProps, primaryButtonProps } from './shell/ui'
  *
  * Architecture:
  *   - Single source of truth is the markdown string the parent owns (`value`).
- *   - The Visual tab is TipTap with `tiptap-markdown` (md ⇆ ProseMirror).
+ *   - The Visual tab is TipTap with `tiptap-markdown` (md ⇆ ProseMirror):
+ *     "/" opens the block menu, selecting text shows the formatting / link
+ *     bubble, selecting an image shows its alt-text bubble, ⌘K edits links.
  *   - The MDX tab is a plain textarea — the escape hatch for JSX / MDX that
- *     TipTap can't model.
+ *     TipTap can't model. "/" opens the same block menu there (it inserts
+ *     Markdown / MDX text, e.g. a <YouTube /> tag).
  *
  * MDX safety: TipTap re-serialises the whole document on the first edit, so
  * JSX components, import/export lines, {expressions}, GFM tables and
@@ -68,9 +73,18 @@ import { MONO, outlineButtonProps, primaryButtonProps } from './shell/ui'
  * present the editor opens on the MDX tab with a warning that lists what the
  * visual editor would rewrite, and switching to Visual asks first.
  *
- * Image upload: toolbar button, drag-and-drop and clipboard paste all go to
- * /api/admin/upload-image; failures (network, 413, non-JSON) become a toast.
+ * Image upload: toolbar, "/image", drag-and-drop and clipboard paste all go
+ * to /api/admin/upload-image (resized, WebP variants); the image node keeps
+ * the returned width / height. Failures become a toast.
+ *
+ * Imperative handle (`handleRef`): `jumpToLine(line, column)` (opens the MDX
+ * tab with the caret on a compile error) and `focus()`.
  */
+
+export type RichEditorHandle = {
+  jumpToLine: (line: number, column?: number) => void
+  focus: () => void
+}
 
 type Props = {
   value: string
@@ -79,6 +93,13 @@ type Props = {
   placeholder?: string
   /** id of the visible label, wired to both editing surfaces. */
   labelledBy?: string
+  /** Index (0-based, -1 = none) of the heading at or above the caret — drives the live preview's scroll. */
+  onHeadingIndex?: (index: number) => void
+  /**
+   * Receives the imperative handle. A plain prop rather than `ref`, so it
+   * also works through next/dynamic.
+   */
+  handleRef?: React.Ref<RichEditorHandle>
 }
 
 const VISUAL = 0
@@ -87,6 +108,17 @@ const RAW = 1
 function getMarkdown(ed: Editor): string {
   const storage = ed.storage as unknown as { markdown?: { getMarkdown?: () => string } }
   return storage.markdown?.getMarkdown?.() ?? ed.getHTML()
+}
+
+/** Index of the heading at or above the visual editor's caret. */
+function visualHeadingIndex(ed: Editor): number {
+  let index = -1
+  const pos = ed.state.selection.from
+  ed.state.doc.nodesBetween(0, Math.max(0, Math.min(pos, ed.state.doc.content.size)), (node) => {
+    if (node.type.name === 'heading') index++
+    return node.isBlock && node.type.name !== 'heading'
+  })
+  return index
 }
 
 function ToolbarButton({
@@ -112,7 +144,7 @@ function ToolbarButton({
         variant="ghost"
         onClick={onClick}
         isDisabled={isDisabled}
-        color={isActive ? 'accent.500' : 'page.fg-secondary'}
+        color={isActive ? 'accent.text' : 'page.fg-secondary'}
         bg={isActive ? 'var(--accent-soft)' : undefined}
         _hover={{ bg: 'page.bg-overlay', color: 'page.fg' }}
         borderRadius="md"
@@ -125,20 +157,8 @@ function Divider() {
   return <Box w="1px" h="20px" bg="page.border" mx={1} aria-hidden />
 }
 
-function Toolbar({ editor, onPickImage }: { editor: Editor | null; onPickImage: () => void }) {
+function Toolbar({ editor, onPickImage, onLink }: { editor: Editor | null; onPickImage: () => void; onLink: () => void }) {
   if (!editor) return null
-
-  const setLink = () => {
-    const prev = editor.getAttributes('link').href as string | undefined
-    const url = window.prompt('Link URL (leave empty to remove)', prev || 'https://')
-    if (url === null) return
-    if (url === '') {
-      editor.chain().focus().extendMarkRange('link').unsetLink().run()
-      return
-    }
-    editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
-  }
-
   return (
     <HStack
       role="toolbar"
@@ -209,18 +229,9 @@ function Toolbar({ editor, onPickImage }: { editor: Editor | null; onPickImage: 
         onClick={() => editor.chain().focus().toggleCodeBlock().run()}
         isActive={editor.isActive('codeBlock')}
       />
-      <ToolbarButton
-        label="Horizontal rule"
-        icon={<FaMinus size={12} />}
-        onClick={() => editor.chain().focus().setHorizontalRule().run()}
-      />
+      <ToolbarButton label="Horizontal rule" icon={<FaMinus size={12} />} onClick={() => editor.chain().focus().setHorizontalRule().run()} />
       <Divider />
-      <ToolbarButton
-        label="Link"
-        icon={<FaLink size={12} />}
-        onClick={setLink}
-        isActive={editor.isActive('link')}
-      />
+      <ToolbarButton label="Link (⌘K)" icon={<FaLink size={12} />} onClick={onLink} isActive={editor.isActive('link')} />
       <ToolbarButton label="Insert image" icon={<FaImage size={12} />} onClick={onPickImage} />
       <Divider />
       <ToolbarButton
@@ -275,37 +286,56 @@ const tabStyle = {
   _focusVisible: { boxShadow: '0 0 0 2px var(--accent-ring)' },
 }
 
+type SlashOpen = { source: 'visual' | 'raw'; query: string; key: number }
+
 export default function RichEditor({
   value,
   onChange,
   minH = '520px',
   placeholder,
   labelledBy,
+  onHeadingIndex,
+  handleRef,
 }: Props) {
   const toast = useToast()
+  const reducedMotion = usePrefersReducedMotion()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const mdxRef = useRef<HTMLTextAreaElement>(null)
   const cancelRef = useRef<HTMLButtonElement>(null)
+  const linkHandle = useRef<LinkBubbleHandle | null>(null)
 
   const risks = useMemo(() => detectMdxRisks(value), [value])
   // Content with constructs the visual editor would destroy opens on MDX.
   const [tabIndex, setTabIndex] = useState(() => (detectMdxRisks(value).length ? RAW : VISUAL))
+  const tabRef = useRef(tabIndex)
+  tabRef.current = tabIndex
   const [confirmVisual, setConfirmVisual] = useState(false)
   // The last markdown string this component produced (either surface).
   // Anything else arriving through `value` came from outside (load, reload).
   const lastEmitted = useRef<string>(value)
   // What TipTap currently holds, to avoid re-applying identical content.
   const lastApplied = useRef<string>(value)
+  const valueRef = useRef(value)
+  valueRef.current = value
 
   const emit = useCallback(
     (md: string) => {
       lastEmitted.current = md
       onChange(md)
     },
-    [onChange]
+    [onChange],
   )
   const emitRef = useRef(emit)
   emitRef.current = emit
+
+  const headingCb = useRef(onHeadingIndex)
+  headingCb.current = onHeadingIndex
+  const lastHeading = useRef<number | null>(null)
+  const reportHeading = useCallback((i: number) => {
+    if (lastHeading.current === i) return
+    lastHeading.current = i
+    headingCb.current?.(i)
+  }, [])
 
   const notifyUploadError = useCallback(
     (err: unknown) =>
@@ -315,30 +345,44 @@ export default function RichEditor({
         description: err instanceof Error ? err.message : String(err),
         position: 'bottom-right',
       }),
-    [toast]
+    [toast],
   )
   const notifyRef = useRef(notifyUploadError)
   notifyRef.current = notifyUploadError
 
+  // ── Slash menu state (shared by both surfaces) ──────────────────────────
+  const [slash, setSlash] = useState<SlashOpen | null>(null)
+  const slashAnchor = useRef<() => DOMRect | null>(() => null)
+  /** Visual: the Suggestion range. Raw: [trigger start, caret]. */
+  const slashRange = useRef<{ from: number; to: number } | null>(null)
+  /** A command's form is open (the trigger text is already removed). */
+  const slashStepping = useRef(false)
+  /** Raw: where the chosen snippet goes once the trigger is removed. */
+  const rawInsertAt = useRef<number | null>(null)
+  const slashKeyRef = useRef<((e: KeyboardEvent) => boolean) | null>(null)
+  const bridge = useRef<SlashBridge | null>(null)
+  bridge.current = {
+    onOpen: (s) => {
+      slashRange.current = s.range
+      slashAnchor.current = () => s.clientRect?.() ?? null
+      slashStepping.current = false
+      setSlash({ source: 'visual', query: s.query, key: s.range.from })
+    },
+    onUpdate: (s) => {
+      slashRange.current = s.range
+      slashAnchor.current = () => s.clientRect?.() ?? null
+      setSlash({ source: 'visual', query: s.query, key: s.range.from * 1000 + s.query.length })
+    },
+    onClose: () => {
+      if (!slashStepping.current) setSlash(null)
+    },
+    onKeyDown: (e) => slashKeyRef.current?.(e) ?? false,
+  }
+  const slashExtension = useMemo(() => createSlashCommand(bridge), [])
+  const pendingImageInsert = useRef<number | null>(null)
+
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({ codeBlock: { HTMLAttributes: { class: 'tt-codeblock' } } }),
-      Image.configure({ inline: false, allowBase64: true, HTMLAttributes: { class: 'tt-image' } }),
-      Link.configure({
-        openOnClick: false,
-        autolink: true,
-        HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' },
-      }),
-      Placeholder.configure({ placeholder: placeholder || 'Write something…' }),
-      Typography,
-      Markdown.configure({
-        html: true,
-        linkify: true,
-        breaks: false,
-        transformPastedText: true,
-        transformCopiedText: true,
-      }),
-    ],
+    extensions: [...baseExtensions({ placeholder: placeholder || 'Write something… Type / for blocks.' }), slashExtension],
     content: value,
     // Pages-router SSR: render on the client only (avoids hydration mismatch),
     // and re-render on every transaction so toolbar active / undo states stay live.
@@ -349,6 +393,10 @@ export default function RichEditor({
       lastApplied.current = md
       emitRef.current(md)
     },
+    onSelectionUpdate: ({ editor: ed }) => reportHeading(visualHeadingIndex(ed)),
+    onBlur: () => {
+      if (!slashStepping.current) setSlash((s) => (s?.source === 'visual' ? null : s))
+    },
     editorProps: {
       attributes: {
         class: 'tt-prose',
@@ -356,17 +404,27 @@ export default function RichEditor({
         'aria-multiline': 'true',
         ...(labelledBy ? { 'aria-labelledby': labelledBy } : {}),
       },
+      handleKeyDown(_view, event) {
+        if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'k') {
+          event.preventDefault()
+          linkHandle.current?.openLink()
+          return true
+        }
+        return false
+      },
       handleDrop(view, event) {
         const files = event.dataTransfer?.files
         if (!files || files.length === 0) return false
         const imageFile = Array.from(files).find((f) => f.type.startsWith('image/'))
         if (!imageFile) return false
         event.preventDefault()
-        uploadImageFile(imageFile)
-          .then(({ url }) => {
+        uploadImage(imageFile)
+          .then((img) => {
             const node = view.state.schema.nodes.image.create({
-              src: url,
-              alt: imageFile.name.replace(/\.[^.]+$/, ''),
+              src: img.url,
+              alt: altFromFileName(imageFile.name),
+              width: img.width,
+              height: img.height,
             })
             view.dispatch(view.state.tr.replaceSelectionWith(node))
           })
@@ -381,9 +439,9 @@ export default function RichEditor({
           const file = item.getAsFile()
           if (!file) continue
           event.preventDefault()
-          uploadImageFile(file)
-            .then(({ url }) => {
-              const node = view.state.schema.nodes.image.create({ src: url, alt: '' })
+          uploadImage(file)
+            .then((img) => {
+              const node = view.state.schema.nodes.image.create({ src: img.url, alt: '', width: img.width, height: img.height })
               view.dispatch(view.state.tr.replaceSelectionWith(node))
             })
             .catch((e) => notifyRef.current(e))
@@ -415,6 +473,12 @@ export default function RichEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabIndex, editor])
 
+  // A tab switch closes any open slash menu.
+  useEffect(() => {
+    slashStepping.current = false
+    setSlash(null)
+  }, [tabIndex])
+
   const onTabChange = (i: number) => {
     if (i === VISUAL && risks.length) {
       setConfirmVisual(true)
@@ -424,44 +488,238 @@ export default function RichEditor({
   }
 
   const onPickImage = useCallback(() => fileInputRef.current?.click(), [])
+  const openLink = useCallback(() => {
+    if (!editor) return
+    editor.commands.focus()
+    linkHandle.current?.openLink()
+  }, [editor])
+
+  /** Insert raw text at [from, to) of the textarea value; `|` in `snippet` marks the caret. */
+  const insertRaw = useCallback(
+    (from: number, to: number, snippet: string, block: boolean) => {
+      const cur = valueRef.current
+      const before = cur.slice(0, from)
+      const after = cur.slice(to)
+      // Blocks start on their own paragraph: a blank line after any text before them.
+      let glue = ''
+      if (block && before.trim()) glue = before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n'
+      const caretInSnippet = snippet.includes('|') ? snippet.indexOf('|') : snippet.length
+      const text = snippet.replace('|', '')
+      const tail = block && after && !after.startsWith('\n') ? '\n\n' : ''
+      emit(`${before}${glue}${text}${tail}${after}`)
+      const pos = before.length + glue.length + caretInSnippet
+      requestAnimationFrame(() => {
+        const ta = mdxRef.current
+        if (!ta) return
+        ta.focus()
+        ta.setSelectionRange(pos, pos)
+      })
+    },
+    [emit],
+  )
+
+  const insertUploaded = useCallback(
+    (img: UploadedImage, fileName: string) => {
+      const alt = altFromFileName(fileName)
+      if (tabRef.current === RAW) {
+        const ta = mdxRef.current
+        const cur = valueRef.current
+        const at = pendingImageInsert.current ?? (ta ? ta.selectionStart : cur.length)
+        const end = pendingImageInsert.current ?? (ta ? ta.selectionEnd : cur.length)
+        insertRaw(at, end, `${markdownLink(alt, img.url).replace(/^\[/, '![')}|`, true)
+      } else if (editor) {
+        editor.chain().focus().setImage({ src: img.url, alt, width: img.width ?? undefined, height: img.height ?? undefined }).run()
+      }
+      pendingImageInsert.current = null
+    },
+    [editor, insertRaw],
+  )
 
   const onFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     e.target.value = '' // allow re-selecting the same file
-    if (!file) return
+    if (!file) {
+      pendingImageInsert.current = null
+      return
+    }
     try {
-      const { url, warning } = await uploadImageFile(file)
-      if (warning)
-        toast({
-          status: 'warning',
-          title: 'Image uploaded',
-          description: warning,
-          position: 'bottom-right',
-        })
-      const alt = file.name.replace(/\.[^.]+$/, '').replace(/[[\]]/g, '')
-      if (tabIndex === RAW) {
-        // Raw tab: insert Markdown at the caret instead of routing through
-        // the (hidden) visual editor, which would re-serialise the MDX.
-        const ta = mdxRef.current
-        const snippet = `![${alt}](${url})`
-        const start = ta ? ta.selectionStart : value.length
-        const end = ta ? ta.selectionEnd : value.length
-        const before = value.slice(0, start)
-        const glue = before && !before.endsWith('\n') ? '\n\n' : ''
-        emit(`${before}${glue}${snippet}\n${value.slice(end)}`)
-        requestAnimationFrame(() => {
-          if (!ta) return
-          const pos = before.length + glue.length + snippet.length + 1
-          ta.focus()
-          ta.setSelectionRange(pos, pos)
-        })
-      } else if (editor) {
-        editor.chain().focus().setImage({ src: url, alt }).run()
-      }
+      const img = await uploadImage(file)
+      if (img.warning) toast({ status: 'warning', title: 'Image uploaded', description: img.warning, position: 'bottom-right' })
+      insertUploaded(img, file.name)
     } catch (err) {
+      pendingImageInsert.current = null
       notifyUploadError(err)
     }
   }
+
+  // ── Slash menu actions ──────────────────────────────────────────────────
+  const closeSlash = useCallback(
+    ({ refocus }: { refocus: boolean }) => {
+      const source = slash?.source
+      slashStepping.current = false
+      slashRange.current = null
+      setSlash(null)
+      if (!refocus) return
+      if (source === 'raw') {
+        const at = rawInsertAt.current
+        requestAnimationFrame(() => {
+          const ta = mdxRef.current
+          if (!ta) return
+          ta.focus()
+          if (at !== null) ta.setSelectionRange(at, at)
+        })
+      } else editor?.commands.focus()
+    },
+    [slash, editor],
+  )
+
+  const beginSlash = useCallback(
+    (step: boolean) => {
+      if (!slash) return
+      slashStepping.current = step
+      if (!step) return
+      const r = slashRange.current
+      slashRange.current = null
+      if (!r) return
+      if (slash.source === 'visual') {
+        editor?.chain().focus().deleteRange(r).run()
+      } else {
+        const cur = valueRef.current
+        emit(cur.slice(0, r.from) + cur.slice(r.to))
+        rawInsertAt.current = r.from
+      }
+    },
+    [slash, editor, emit],
+  )
+
+  const runSlash = useCallback(
+    (result: SlashResult) => {
+      const source = slash?.source
+      const range = slashRange.current
+      slashRange.current = null
+      slashStepping.current = false
+      setSlash(null)
+
+      if (source === 'raw') {
+        const from = range ? range.from : rawInsertAt.current ?? mdxRef.current?.selectionStart ?? valueRef.current.length
+        const to = range ? range.to : from
+        rawInsertAt.current = null
+        if (result.kind === 'block') {
+          if (result.id === 'image') {
+            const cur = valueRef.current
+            emit(cur.slice(0, from) + cur.slice(to))
+            pendingImageInsert.current = from
+            onPickImage()
+            return
+          }
+          insertRaw(from, to, rawSnippet(result.id), true)
+        } else if (result.kind === 'code') insertRaw(from, to, rawCodeFence(result.language), true)
+        else if (result.kind === 'youtube') insertRaw(from, to, `${youtubeTag(result.id, result.title)}|`, true)
+        else insertRaw(from, to, `${markdownLink(result.title, result.href)}|`, false)
+        return
+      }
+
+      if (!editor) return
+      const chain = () => (range ? editor.chain().focus().deleteRange(range) : editor.chain().focus())
+      if (result.kind === 'block') {
+        switch (result.id) {
+          case 'h2':
+            chain().setNode('heading', { level: 2 }).run()
+            break
+          case 'h3':
+            chain().setNode('heading', { level: 3 }).run()
+            break
+          case 'bullet':
+            chain().toggleBulletList().run()
+            break
+          case 'ordered':
+            chain().toggleOrderedList().run()
+            break
+          case 'quote':
+            chain().toggleBlockquote().run()
+            break
+          case 'divider':
+            chain().setHorizontalRule().run()
+            break
+          case 'image':
+            chain().run()
+            onPickImage()
+            break
+        }
+      } else if (result.kind === 'code') {
+        const lang = result.language.trim().replace(/[^\w+#.-]/g, '')
+        chain()
+          .setCodeBlock(lang ? { language: lang } : undefined)
+          .run()
+      } else if (result.kind === 'youtube') {
+        const text = result.title.trim() || 'Watch on YouTube'
+        chain()
+          .insertContent({ type: 'paragraph', content: [{ type: 'text', text, marks: [{ type: 'link', attrs: { href: youtubeWatchUrl(result.id) } }] }] })
+          .run()
+      } else {
+        chain()
+          .insertContent([
+            { type: 'text', text: result.title, marks: [{ type: 'link', attrs: { href: result.href } }] },
+            { type: 'text', text: ' ' },
+          ])
+          .run()
+      }
+    },
+    [slash, editor, emit, insertRaw, onPickImage],
+  )
+
+  // Raw textarea: "/" trigger detection, keyboard forwarding, heading tracking.
+  const onRawChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const next = e.target.value
+    emit(next)
+    const caret = e.target.selectionStart
+    reportHeading(headingIndexAt(next, caret))
+    const trigger = e.target.selectionEnd === caret ? slashTriggerAt(next, caret) : null
+    if (trigger) {
+      const ta = e.target
+      slashRange.current = { from: trigger.from, to: caret }
+      slashAnchor.current = () => textareaCaretRect(ta, trigger.from)
+      slashStepping.current = false
+      setSlash({ source: 'raw', query: trigger.query, key: trigger.from })
+    } else if (slash?.source === 'raw' && !slashStepping.current) {
+      slashRange.current = null
+      setSlash(null)
+    }
+  }
+  const onRawKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (slash?.source === 'raw' && !slashStepping.current && slashKeyRef.current?.(e.nativeEvent)) e.preventDefault()
+  }
+  const onRawSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>) =>
+    reportHeading(headingIndexAt(e.currentTarget.value, e.currentTarget.selectionStart))
+
+  useImperativeHandle(
+    handleRef,
+    () => ({
+      jumpToLine: (line: number, column = 1) => {
+        setTabIndex(RAW)
+        // The MDX panel must be visible before it can take focus.
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => {
+            const ta = mdxRef.current
+            if (!ta) return
+            const offset = offsetOfLineColumn(valueRef.current, line, column)
+            ta.focus()
+            ta.setSelectionRange(offset, offset)
+            const lineHeight = Number.parseFloat(window.getComputedStyle(ta).lineHeight) || 22
+            ta.scrollTop = Math.max(0, (Math.max(1, line) - 1) * lineHeight - ta.clientHeight / 3)
+            ta.scrollIntoView({ block: 'center', behavior: reducedMotion ? 'auto' : 'smooth' })
+          }),
+        )
+      },
+      focus: () => {
+        if (tabRef.current === RAW) mdxRef.current?.focus()
+        else editor?.commands.focus()
+      },
+    }),
+    [editor, reducedMotion],
+  )
+
+  const slashController = slash?.source === 'raw' ? mdxRef.current : editor ? (editor.view.dom as HTMLElement) : null
 
   return (
     <Box>
@@ -504,12 +762,14 @@ export default function RichEditor({
         <TabPanels>
           <TabPanel p={0}>
             <Box border="1px solid" borderColor="page.border-strong" borderRadius="lg" bg="page.bg">
-              <Toolbar editor={editor} onPickImage={onPickImage} />
+              <Toolbar editor={editor} onPickImage={onPickImage} onLink={openLink} />
               <Box
                 px={4}
                 py={3}
                 minH={minH}
-                onClick={() => editor?.commands.focus()}
+                onClick={(e: React.MouseEvent) => {
+                  if (e.target === e.currentTarget) editor?.commands.focus()
+                }}
                 sx={{
                   '.tt-prose': { minHeight: minH, outline: 'none' },
                   '.tt-prose p.is-editor-empty:first-of-type::before': {
@@ -519,20 +779,8 @@ export default function RichEditor({
                     height: 0,
                     pointerEvents: 'none',
                   },
-                  '.tt-prose h1': {
-                    fontSize: '28px',
-                    fontWeight: 600,
-                    mt: 4,
-                    mb: 2,
-                    letterSpacing: '-0.02em',
-                  },
-                  '.tt-prose h2': {
-                    fontSize: '22px',
-                    fontWeight: 600,
-                    mt: 4,
-                    mb: 2,
-                    letterSpacing: '-0.015em',
-                  },
+                  '.tt-prose h1': { fontSize: '28px', fontWeight: 600, mt: 4, mb: 2, letterSpacing: '-0.02em' },
+                  '.tt-prose h2': { fontSize: '22px', fontWeight: 600, mt: 4, mb: 2, letterSpacing: '-0.015em' },
                   '.tt-prose h3': { fontSize: '18px', fontWeight: 600, mt: 3, mb: 2 },
                   '.tt-prose p': { my: 2, lineHeight: 1.7 },
                   '.tt-prose ul, .tt-prose ol': { pl: 6, my: 2 },
@@ -545,13 +793,7 @@ export default function RichEditor({
                     color: 'page.fg-secondary',
                     my: 3,
                   },
-                  '.tt-prose code': {
-                    fontFamily: MONO,
-                    fontSize: '0.9em',
-                    bg: 'page.bg-overlay',
-                    px: 1,
-                    borderRadius: 'sm',
-                  },
+                  '.tt-prose code': { fontFamily: MONO, fontSize: '0.9em', bg: 'page.bg-overlay', px: 1, borderRadius: 'sm' },
                   '.tt-prose pre.tt-codeblock': {
                     fontFamily: MONO,
                     fontSize: '13px',
@@ -564,16 +806,20 @@ export default function RichEditor({
                     my: 3,
                   },
                   '.tt-prose pre.tt-codeblock code': { bg: 'transparent', px: 0 },
-                  '.tt-prose img.tt-image': { maxWidth: '100%', borderRadius: 'md', my: 3 },
-                  '.tt-prose a': {
-                    color: 'accent.500',
-                    textDecoration: 'underline',
-                    textUnderlineOffset: '2px',
-                  },
+                  '.tt-prose img.tt-image': { maxWidth: '100%', height: 'auto', borderRadius: 'md', my: 3 },
+                  '.tt-prose img.tt-image.ProseMirror-selectednode': { outline: '2px solid', outlineColor: 'accent.500', outlineOffset: '2px' },
+                  '.tt-prose a': { color: 'accent.text', textDecoration: 'underline', textUnderlineOffset: '2px' },
                   '.tt-prose hr': { my: 4, borderColor: 'page.border' },
+                  '.tt-prose .suggestion': { color: 'accent.text' },
                 }}
               >
                 <EditorContent editor={editor} />
+                {editor ? (
+                  <>
+                    <LinkBubble editor={editor} handleRef={linkHandle} />
+                    <ImageBubble editor={editor} />
+                  </>
+                ) : null}
               </Box>
             </Box>
           </TabPanel>
@@ -581,14 +827,20 @@ export default function RichEditor({
             <Textarea
               ref={mdxRef}
               value={value}
-              onChange={(e) => emit(e.target.value)}
+              onChange={onRawChange}
+              onKeyDown={onRawKeyDown}
+              onSelect={onRawSelect}
+              onBlur={() => {
+                if (!slashStepping.current) setSlash((s) => (s?.source === 'raw' ? null : s))
+              }}
               minH={minH}
               spellCheck={false}
               fontFamily={MONO}
               fontSize="14px"
               lineHeight={1.6}
-              placeholder={placeholder}
+              placeholder={placeholder ? `${placeholder} Type / for blocks.` : 'Type / for blocks.'}
               aria-labelledby={labelledBy}
+              aria-autocomplete="list"
               borderColor="page.border-strong"
               focusBorderColor="accent.500"
               bg="page.bg"
@@ -598,36 +850,30 @@ export default function RichEditor({
                 Upload image → insert ![]()
               </Button>
               <Text fontSize="11px" color="page.fg-secondary" fontFamily={MONO}>
-                Raw MDX — JSX components, tables and footnotes are safe here.
+                Raw MDX — JSX components, tables and footnotes are safe here. Type / for blocks.
               </Text>
             </HStack>
           </TabPanel>
         </TabPanels>
       </Tabs>
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        hidden
-        onChange={onFileSelected}
-        aria-hidden
-        tabIndex={-1}
+      <SlashMenu
+        open={!!slash}
+        query={slash?.query ?? ''}
+        anchor={() => slashAnchor.current()}
+        anchorKey={slash?.key ?? 0}
+        controller={slashController}
+        keyRef={slashKeyRef}
+        onBegin={beginSlash}
+        onResult={runSlash}
+        onClose={closeSlash}
       />
 
-      <AlertDialog
-        isOpen={confirmVisual}
-        leastDestructiveRef={cancelRef}
-        onClose={() => setConfirmVisual(false)}
-        isCentered
-      >
+      <input ref={fileInputRef} type="file" accept={UPLOAD_ACCEPT} hidden onChange={onFileSelected} aria-hidden tabIndex={-1} />
+
+      <AlertDialog isOpen={confirmVisual} leastDestructiveRef={cancelRef} onClose={() => setConfirmVisual(false)} isCentered>
         <AlertDialogOverlay>
-          <AlertDialogContent
-            bg="page.bg-elevated"
-            border="1px solid"
-            borderColor="page.border"
-            mx={4}
-          >
+          <AlertDialogContent bg="page.bg-elevated" border="1px solid" borderColor="page.border" mx={4}>
             <AlertDialogHeader fontSize="md">Open the visual editor?</AlertDialogHeader>
             <AlertDialogBody fontSize="sm">
               The first edit there re-saves the whole body in plain Markdown, which rewrites:
@@ -637,12 +883,7 @@ export default function RichEditor({
               </Text>
             </AlertDialogBody>
             <AlertDialogFooter gap={2}>
-              <Button
-                ref={cancelRef}
-                size="sm"
-                {...outlineButtonProps}
-                onClick={() => setConfirmVisual(false)}
-              >
+              <Button ref={cancelRef} size="sm" {...outlineButtonProps} onClick={() => setConfirmVisual(false)}>
                 Stay in MDX
               </Button>
               <Button

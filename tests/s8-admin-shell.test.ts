@@ -266,3 +266,66 @@ test('saveToastCopy reports refreshed and late pages', () => {
   assert.equal(late.status, 'warning')
   assert.match(late.description || '', /\/blog\/a.*it updates within 60 s/)
 })
+
+import { isDraftStale, parseStoredDraft } from '../components/Admin/shell/useLocalDraft'
+
+test('isDraftStale: a draft is stale when it was based on another server version', () => {
+  assert.equal(isDraftStale(null, '"5"'), false)
+  assert.equal(isDraftStale({ etag: '"5"' }, '"5"'), false)
+  assert.equal(isDraftStale({ etag: '"5"' }, '"6"'), true)
+  assert.equal(isDraftStale({ etag: null }, null), false, 'new item, never saved')
+  assert.equal(isDraftStale({ etag: null }, '"6"'), true, 'started before the first save landed elsewhere')
+})
+
+test('parseStoredDraft ignores malformed storage', () => {
+  assert.deepEqual(parseStoredDraft('{"at":1,"etag":"\\"2\\"","value":{"body":"x"}}'), { at: 1, etag: '"2"', value: { body: 'x' } })
+  assert.deepEqual(parseStoredDraft('{"at":1,"value":"v"}'), { at: 1, etag: null, value: 'v' })
+  assert.equal(parseStoredDraft(null), null)
+  assert.equal(parseStoredDraft('not json'), null)
+  assert.equal(parseStoredDraft('{"value":1}'), null)
+  assert.equal(parseStoredDraft('[]'), null)
+})
+
+import { filterSlashItems, normalizeLinkHref, rawCodeFence, youtubeId, youtubeTag } from '../components/Admin/editor/slashItems'
+import { headingIndexAt, offsetOfLineColumn, slashTriggerAt } from '../components/Admin/editor/textareaCaret'
+
+test('slash menu: filtering, YouTube ids, link validation and raw snippets', () => {
+  assert.equal(filterSlashItems('').length, 10)
+  assert.equal(filterSlashItems('h2')[0].id, 'h2')
+  assert.equal(filterSlashItems('vid')[0].id, 'youtube')
+  assert.deepEqual(filterSlashItems('zzzz'), [])
+  for (const url of [
+    'https://www.youtube.com/watch?v=jkAqK3vqILI&t=10',
+    'https://youtu.be/jkAqK3vqILI',
+    'youtube.com/shorts/jkAqK3vqILI',
+    'https://www.youtube-nocookie.com/embed/jkAqK3vqILI',
+    'jkAqK3vqILI',
+  ]) {
+    assert.equal(youtubeId(url), 'jkAqK3vqILI', url)
+  }
+  assert.equal(youtubeId('https://vimeo.com/123'), null)
+  assert.equal(youtubeId('https://youtube.com/watch?v=short'), null)
+  assert.equal(youtubeTag('jkAqK3vqILI', 'Talk "intro" <live>'), '<YouTube id="jkAqK3vqILI" title="Talk &quot;intro&quot; &#60;live&#62;" />')
+  assert.equal(normalizeLinkHref('example.com/x'), 'https://example.com/x')
+  assert.equal(normalizeLinkHref('/blog/a'), '/blog/a')
+  assert.equal(normalizeLinkHref('#section'), '#section')
+  assert.equal(normalizeLinkHref('mailto:me@example.com'), 'mailto:me@example.com')
+  assert.equal(normalizeLinkHref('javascript:alert(1)'), null)
+  assert.equal(normalizeLinkHref('//evil.example'), null)
+  assert.equal(rawCodeFence('ts; rm'), '```tsrm\n|\n```')
+})
+
+test('raw editor helpers: "/" trigger, line/column offsets, heading under the caret', () => {
+  assert.deepEqual(slashTriggerAt('Hello\n/co', 9), { from: 6, query: 'co' })
+  assert.deepEqual(slashTriggerAt('word /', 6), { from: 5, query: '' })
+  assert.equal(slashTriggerAt('a/b', 3), null, 'no trigger inside a word or URL')
+  const text = 'one\ntwo\nthree'
+  assert.equal(offsetOfLineColumn(text, 2, 2), 5)
+  assert.equal(offsetOfLineColumn(text, 99, 1), 8, 'clamped to the last line')
+  assert.equal(offsetOfLineColumn(text, 1, 99), 3, 'clamped to the line end')
+  const doc = '# A\ntext\n```\n# not a heading\n```\n## B\nmore'
+  assert.equal(headingIndexAt(doc, 0), -1)
+  assert.equal(headingIndexAt(doc, doc.indexOf('text')), 0)
+  assert.equal(headingIndexAt(doc, doc.indexOf('not a')), 0)
+  assert.equal(headingIndexAt(doc, doc.length), 1)
+})

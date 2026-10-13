@@ -1,27 +1,38 @@
-import type { NextApiRequest, NextApiResponse } from 'next'
-import { isPageName, readPage, writePage } from '../../../lib/mdx-admin'
+import { withApi } from '../../../lib/apiHandler'
+import {
+  checkIfMatch,
+  isPageName,
+  mdxProblem,
+  readPage,
+  versionEtag,
+  writePage,
+} from '../../../lib/mdx-admin'
 import { rateLimit } from '../../../lib/rateLimit'
 import { isAdminRequest } from '../../../lib/auth'
+import { sendVersionedJson } from '../../../lib/http'
 import { revalidatePaths } from '../../../lib/revalidate'
 
-const isAuthed = isAdminRequest
-
 /**
- * Admin CRUD for single-file MDX pages (content/now.mdx, content/uses.mdx).
+ * Admin CRUD for the single MDX pages (/now, /uses).
  *
- *   GET /api/admin/page?name=now       → { name, frontmatter, body }
- *   PUT /api/admin/page                → { name, frontmatter, body } write
+ *   GET /api/admin/page?name=now  → { name, frontmatter, body, updatedAt }, ETag = its version
+ *   PUT /api/admin/page           → { name, frontmatter, body } write; optional If-Match
+ *                                   (409 VERSION_CONFLICT); the body must compile
+ *                                   (422 MDX_INVALID). An empty body switches the
+ *                                   public page back to its automatic version.
  *
  * Snapshots into data/page_snapshots/ on every write; the public page is
  * regenerated immediately and the response lists it under `revalidated`.
  */
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (!isAuthed(req, res)) return res.status(401).json({ error: 'Unauthorized' })
+export default withApi('admin/page', async (req, res) => {
+  if (!isAdminRequest(req, res)) return res.status(401).json({ error: 'Unauthorized' })
+  res.setHeader('Cache-Control', 'no-store')
 
   if (req.method === 'GET') {
     const name = req.query.name
     if (!isPageName(name)) return res.status(400).json({ error: 'Invalid page name' })
-    return res.status(200).json(readPage(name))
+    const page = readPage(name)
+    return sendVersionedJson(res, 200, page, versionEtag(page.updatedAt))
   }
 
   if (req.method === 'PUT') {
@@ -29,28 +40,45 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.setHeader('X-RateLimit-Remaining', String(rl.remaining))
     if (!rl.allowed) return res.status(429).json({ error: 'Too many writes, try later' })
     const { name, frontmatter, body } = (req.body || {}) as {
-      name?: string
-      frontmatter?: Record<string, any>
-      body?: string
+      name?: unknown
+      frontmatter?: unknown
+      body?: unknown
     }
     if (!isPageName(name)) return res.status(400).json({ error: 'Invalid page name' })
-    if (!frontmatter || typeof frontmatter !== 'object')
+    if (!frontmatter || typeof frontmatter !== 'object' || Array.isArray(frontmatter))
       return res.status(400).json({ error: 'Missing frontmatter' })
-    if (!frontmatter.title) return res.status(400).json({ error: 'frontmatter.title required' })
-    const result = await writePage(name, frontmatter, body || '')
+    const fm = frontmatter as Record<string, any>
+    if (!fm.title) return res.status(400).json({ error: 'frontmatter.title required' })
+    if (body !== undefined && typeof body !== 'string') return res.status(400).json({ error: 'body must be a string' })
+    const text = body || ''
+
+    if (text.trim()) {
+      const problem = await mdxProblem(text)
+      if (problem) return res.status(422).json(problem)
+    }
+
+    if (!checkIfMatch(req, res, readPage(name).updatedAt)) return
+    const result = await writePage(name, fm, text)
     if (!result.ok) return res.status(400).json({ error: result.error })
+    const etag = versionEtag(readPage(name).updatedAt)
     // /now and /uses are statically generated: regenerate the edited one now.
     const paths = [`/${name}`]
     const failed = await revalidatePaths(res, paths)
-    return res.status(200).json({
-      ...result,
-      revalidated: paths.filter((p) => !failed.includes(p)),
-      ...(failed.length ? { revalidateFailed: failed } : {}),
-    })
+    return sendVersionedJson(
+      res,
+      200,
+      {
+        ...result,
+        etag,
+        revalidated: paths.filter((p) => !failed.includes(p)),
+        ...(failed.length ? { revalidateFailed: failed } : {}),
+      },
+      etag,
+    )
   }
 
   res.setHeader('Allow', 'GET,PUT')
   return res.status(405).json({ error: 'Method not allowed' })
-}
+})
 
 export const config = { api: { bodyParser: { sizeLimit: '2mb' } } }
