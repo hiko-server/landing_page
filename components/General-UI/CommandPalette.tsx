@@ -58,6 +58,20 @@ import { setShortcutsEnabled } from '../../lib/keyboardShortcuts'
 type Group = 'Recent' | 'On this page' | 'Admin' | 'Pages' | 'Actions' | 'Writing' | 'Work' | 'Content'
 type Kind = 'nav' | 'action' | 'section'
 
+/**
+ * Save a same-site file under the name its Content-Disposition gives
+ * (/cv.pdf → "Li-Yanpei-CV-2026-10.pdf") instead of navigating to it.
+ */
+function downloadFile(href: string) {
+  const a = document.createElement('a')
+  a.href = href
+  a.download = ''
+  a.rel = 'noopener'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+}
+
 type Item = {
   id: string
   group: Exclude<Group, 'Recent'>
@@ -426,11 +440,20 @@ export default function CommandPalette({ isOpen, onClose, isAdmin = false, retur
       {
         id: 'action:cv-pdf',
         group: 'Actions',
-        kind: 'nav',
+        kind: 'action',
         label: 'Download CV (PDF)',
-        hint: 'print / save as PDF',
-        href: '/cv?print=1',
-        keywords: 'resume pdf print save download',
+        hint: 'A4 · English',
+        run: () => downloadFile('/cv.pdf'),
+        keywords: 'resume pdf print save download file a4',
+      },
+      {
+        id: 'action:cv-pdf-zh',
+        group: 'Actions',
+        kind: 'action',
+        label: 'Download CV in 中文 (PDF)',
+        hint: 'A4 · Chinese',
+        run: () => downloadFile('/cv/zh.pdf'),
+        keywords: 'resume pdf download chinese zh 简历 中文 下载',
       },
       {
         id: 'action:cv-zh',

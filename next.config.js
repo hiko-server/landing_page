@@ -44,6 +44,19 @@ const nextConfig = {
   // standalone output (server.js) under the parent's relative path.
   outputFileTracingRoot: path.join(__dirname),
   reactStrictMode: true,
+  // ISR pages send `s-maxage=<revalidate>, stale-while-revalidate=<expireTime
+  // − revalidate>`. A day bounds how long the edge may keep serving a stale
+  // copy when the origin cannot regenerate (default: a year); saves purge the
+  // edge immediately anyway (lib/revalidate notifyEdge).
+  expireTime: 86400,
+  // The PDF CV renderer (lib/cvExport/pdf.ts, /api/cv/export) stays a plain
+  // Node require at runtime: pdfkit reads its own data files relative to its
+  // install location, and the fonts it embeds are read from assets/ (traced
+  // into the standalone build below).
+  serverExternalPackages: ['pdfkit', 'fontkit', 'linebreak'],
+  outputFileTracingIncludes: {
+    '/api/cv/export': ['./assets/og/Geist-Regular.ttf', './assets/og/Geist-SemiBold.ttf', './assets/pdf/**/*'],
+  },
   // Don't publish full client source (incl. the admin UI) as .map files.
   productionBrowserSourceMaps: false,
   poweredByHeader: false,
@@ -83,11 +96,18 @@ const nextConfig = {
   // no rewrite loop.
   // /.well-known/security.txt (RFC 9116) is generated per request from the
   // public CV contact and a rolling expiry date (pages/api/security-txt.ts).
+  // The downloadable CVs keep stable URLs (/cv.pdf, /cv/zh.json, …) served by
+  // /api/cv/export (lib/cvExport/files.ts lists them).
   async rewrites() {
+    const cvFiles = ['pdf', 'txt', 'json'].flatMap((format) => [
+      { source: `/cv.${format}`, destination: `/api/cv/export?lang=en&format=${format}` },
+      { source: `/cv/zh.${format}`, destination: `/api/cv/export?lang=zh&format=${format}` },
+    ])
     return {
       beforeFiles: [
         { source: '/uploads/:path*', destination: '/api/uploads/:path*' },
         { source: '/.well-known/security.txt', destination: '/api/security-txt' },
+        ...cvFiles,
       ],
     }
   },
