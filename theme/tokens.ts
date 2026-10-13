@@ -12,11 +12,13 @@
  *   motion   ONE standard ease, THREE durations, and zero under
  *            prefers-reduced-motion
  *
- * Colours live in ./color.ts (contrast-tested pairs). Everything here is
- * emitted as CSS custom properties on :root by theme/chakra.js (`--ease-
- * standard`, `--duration-*`, `--container-*`, …) and registered as Chakra
- * tokens (`fontSize="label"`, `textStyle="display"`, `letterSpacing="caps"`,
- * `borderRadius="card"`).
+ * Colours live in ./color.ts (contrast-tested pairs). The type, spacing and
+ * radius tokens are registered with Chakra by theme/chakra.js
+ * (`fontSize="label"`, `textStyle="display"`, `letterSpacing="caps"`,
+ * `borderRadius="card"`); the CSS custom properties (`--ease-standard`,
+ * `--duration-*`, `--container-*`, `--page-gutter`) are cssVariables() below,
+ * mirrored as static CSS in styles/globals.css (tests keep them identical, and
+ * the shared JS bundle does not carry them).
  *
  * Guard: the shared primitives that have been migrated to these tokens are
  * listed in the `no-restricted-syntax` override of .eslintrc.json — raw px
@@ -307,7 +309,7 @@ export function motionTransition(
 
 // ── CSS custom properties ───────────────────────────────────────────────────
 
-/** Every token that is also a CSS custom property, for :root (theme/chakra.js). */
+/** Every token that is also a CSS custom property — the :root block of styles/globals.css must match. */
 export function cssVariables(): Record<string, string> {
   return {
     '--ease-standard': EASE_STANDARD_CSS,
