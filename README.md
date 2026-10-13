@@ -127,7 +127,8 @@ backup, and a hardened admin GUI for non-engineers.
   shortcuts: on/off* action (also in the admin `?` sheet) turns the
   single-key shortcuts (`/`, `G` then a letter) off, per browser.
 - **Theme** — System / Light / Dark: a one-tap toggle in the header plus a
-  menu beside it (and in ⌘K); dark by default (`NEXT_PUBLIC_DEFAULT_THEME`),
+  menu beside it, the same three choices in ⌘K and in the mobile menu (one
+  stored preference, so all of them agree); dark by default (`NEXT_PUBLIC_DEFAULT_THEME`),
   applied before the first paint so no page ever flashes the wrong mode,
   following the OS while on System.
 - **Design system** — fluid type scale, text styles, radii, container widths
@@ -809,7 +810,7 @@ overlay and follow a contact message into the Inbox.
 |---|---|
 | `/` | Home — hero, proof strip and the `[NN]` sections in the owner's order (ISR, hourly + on save) |
 | `/about` | Identity rail, the owner's bio and the open bilingual CV (ISR, hourly + on save) |
-| `/cv` | CV in English (ISR, every minute + on save): A4 sheet / Reading view, skill evidence, downloads; `?print=1` prints it |
+| `/cv` | CV in English (ISR, every minute + on save): A4 sheet / Reading view, skill evidence, downloads; `?print=1` opens the print dialog (every *Download PDF* link uses `/cv.pdf` / `/cv/zh.pdf`) |
 | `/cv/zh` | The same CV in Chinese (`/cv?lang=zh` redirects here) |
 | `/cv.pdf`, `/cv/zh.pdf` | Server-rendered A4 PDF (tagged, embedded fonts), dated file name, ETag |
 | `/cv.txt`, `/cv/zh.txt` | Plain-text CV for paste-in application forms |

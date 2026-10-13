@@ -381,6 +381,37 @@ Writing and case studies (D1–D5, D7, D8, E8).
   of on-demand regeneration after every home save, restore, storage pull or
   Mongo restore; the build-time copy regenerates on the first request.
 
+### wave-2a integration
+
+The seven streams above, merged and working together.
+
+- **One theme control everywhere**: the mobile menu's segmented control
+  offers System / Light / Dark from the same stored preference as the
+  header menu and ⌘K, and follows the operating system live on System.
+- **Real PDFs from every CV link**: the /about rail's *Download PDF* (in the
+  language the CV stack shows), the mobile menu's *CV as PDF* and the CV
+  Studio's PDF button open `/cv.pdf` / `/cv/zh.pdf` instead of the print
+  dialog.
+- **The PDF CV carries the new CV content**: the right-to-work line and the
+  Chinese job intent (求职意向) under the name, the self-assessment and the
+  recommendations given with permission; the optional photo appears only in
+  the language whose PDF it was switched on for (top right, tagged with
+  alternative text). The plain-text CV prints the same; the JSON Resume
+  gains `references`.
+- **Coherent ISR**: /, /about, /cv, /cv/zh and /contact are all statically
+  regenerated with their own windows (1 h, 1 min, 5 min); a home save
+  regenerates / /about /now /contact and both CV pages (availability feeds
+  the CV header) and re-renders the PDFs; a CV save regenerates / /about
+  /now /work and both CV pages.
+- **One icon set and type scale**: article callouts, the share row and the
+  video play button use the Lucide icons; the /work cards keep the token
+  type scale, status colours and elevation after their redesign.
+- **Tighter CSP**: `connect-src` is same-origin only (GitHub data comes
+  through `/api/github/*`); CSP reports go to `/api/e`.
+- **Fixes found while merging**: the home page prerenders again from a fresh
+  checkout (a missing contact block no longer breaks the build); the image
+  build checks the PDF font subset and libraries.
+
 ## [2.3.0] — 2026-10-13
 
 A research round across eight directions (UI, motion, reading, recruiter
