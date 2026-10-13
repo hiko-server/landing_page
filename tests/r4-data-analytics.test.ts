@@ -255,3 +255,97 @@ test('panel formatting helpers', () => {
   assert.equal(fmt.countryName('JP'), 'Japan')
   assert.equal(fmt.ratingLabel('needs-improvement'), 'Needs improvement')
 })
+
+// ── COR-1: a re-reported CLS / INP replaces its value, never counts twice ──
+
+test('COR-1: a CLS reported again under the same instance id replaces its row with the larger final value', () => {
+  const db = getAnalyticsDb()
+  db.exec('DELETE FROM vitals')
+  const t = Date.parse('2026-10-20T09:00:00Z')
+  const cls = (value: number, extra: Record<string, unknown> = {}) => ({ t: 'v', route: '/', name: 'CLS', value, nav: 'navigate', k: 'v5-1760950800000-1234567890123', ...extra })
+  ipCounter = 40
+  // First hide: CLS 0.02 (and an LCP of the same page load).
+  assert.equal(ingestMod.ingest(beacon([cls(0.02), { t: 'v', route: '/', name: 'LCP', value: 1800, k: 'v5-1760950800000-1234567890124' }]), t).accepted, 2)
+  ingestMod.flushNow(t + 1)
+  // The visitor comes back, more layout shifts, second hide: CLS 0.31 for the same instance.
+  assert.equal(ingestMod.ingest(beacon([cls(0.31)]), t + 60_000).accepted, 1)
+  ingestMod.flushNow(t + 60_001)
+  const rows = () =>
+    db.prepare("SELECT name, value, rating, vkey FROM vitals WHERE day = '2026-10-20' AND route = '/' ORDER BY name").all() as Array<{
+      name: string
+      value: number
+      rating: string
+      vkey: string | null
+    }>
+  assert.deepEqual(
+    rows().map((r) => [r.name, r.value, r.rating]),
+    [
+      ['CLS', 0.31, 'poor'],
+      ['LCP', 1800, 'good'],
+    ],
+    'one CLS row, holding the final value',
+  )
+  // The stored key is a hash: the browser's id (and its timestamp) never reach the database.
+  assert.ok(rows().every((r) => typeof r.vkey === 'string' && /^[0-9a-f]{32}$/.test(r.vkey) && !r.vkey.includes('1760950800000')))
+  // Two reports of one instance in the same flush window: still one row, the later value.
+  ingestMod.ingest(beacon([cls(0.4)]), t + 120_000)
+  ingestMod.ingest(beacon([cls(0.45)]), t + 120_500)
+  ingestMod.flushNow(t + 121_000)
+  assert.deepEqual(
+    rows()
+      .filter((r) => r.name === 'CLS')
+      .map((r) => r.value),
+    [0.45],
+  )
+  // Another page load (another id), an event without an id, a malformed id, and the same id
+  // under another route or metric are separate measurements.
+  ingestMod.ingest(beacon([cls(0.05, { k: 'v5-1760950900000-9999999999999' })]), t + 180_000)
+  ingestMod.ingest(beacon([cls(0.06, { k: undefined })]), t + 180_000)
+  ingestMod.ingest(beacon([cls(0.07, { k: 'bad id with spaces' })]), t + 180_000)
+  ingestMod.ingest(beacon([cls(0.08, { route: '/about' })]), t + 180_000)
+  ingestMod.ingest(beacon([cls(120, { name: 'INP' })]), t + 180_000)
+  ingestMod.flushNow(t + 181_000)
+  assert.deepEqual(
+    rows()
+      .filter((r) => r.name === 'CLS')
+      .map((r) => r.value)
+      .sort(),
+    [0.05, 0.06, 0.07, 0.45],
+  )
+  assert.equal((db.prepare("SELECT count(*) AS n FROM vitals WHERE route = '/about'").get() as { n: number }).n, 1)
+  assert.equal((db.prepare("SELECT count(*) AS n FROM vitals WHERE name = 'INP'").get() as { n: number }).n, 1)
+  // The report counts each measurement once.
+  const report = getAnalyticsReport('7d', t + 200_000)
+  const home = report.vitals['7d'].find((v) => v.route === '/' && v.name === 'CLS')
+  assert.equal(home?.samples, 4)
+  assert.equal(ingestMod.vitalKey('/', 'CLS', 'x'), ingestMod.vitalKey('/', 'CLS', 'x'))
+  assert.notEqual(ingestMod.vitalKey('/', 'CLS', 'x'), ingestMod.vitalKey('/', 'INP', 'x'))
+})
+
+test('COR-1: a store created before the vitals key gains the column and its unique index, keeping its rows', async () => {
+  const { default: Database } = await import('better-sqlite3')
+  ingestMod.flushNow()
+  closeAnalyticsDb()
+  const file = analyticsDbPath()
+  for (const f of fs.readdirSync(path.dirname(file))) if (f.startsWith('analytics.db')) fs.rmSync(path.join(path.dirname(file), f))
+  const old = new Database(file)
+  old.exec(`CREATE TABLE vitals (ts INTEGER NOT NULL, day TEXT NOT NULL, route TEXT NOT NULL, name TEXT NOT NULL,
+    value REAL NOT NULL, rating TEXT NOT NULL, device TEXT, nav TEXT)`)
+  old.prepare("INSERT INTO vitals VALUES (1, '2026-10-21', '/', 'LCP', 1500, 'good', 'desktop', 'navigate')").run()
+  old.close()
+
+  const db = getAnalyticsDb()
+  const columns = (db.prepare('PRAGMA table_info(vitals)').all() as Array<{ name: string }>).map((c) => c.name)
+  assert.ok(columns.includes('vkey'))
+  const index = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_vitals_key'").get() as { sql: string } | undefined
+  assert.match(index?.sql || '', /CREATE UNIQUE INDEX/)
+  assert.deepEqual(db.prepare('SELECT name, value, vkey FROM vitals').all(), [{ name: 'LCP', value: 1500, vkey: null }])
+  // Opening again is a no-op, and the upsert works on the migrated table.
+  closeAnalyticsDb()
+  const again = getAnalyticsDb()
+  const t = Date.parse('2026-10-21T09:00:00Z')
+  ipCounter = 41
+  for (const value of [0.1, 0.2]) ingestMod.ingest(beacon([{ t: 'v', route: '/', name: 'CLS', value, k: 'v5-1-2' }]), t)
+  ingestMod.flushNow(t + 1)
+  assert.deepEqual(again.prepare("SELECT value FROM vitals WHERE name = 'CLS'").all(), [{ value: 0.2 }])
+})

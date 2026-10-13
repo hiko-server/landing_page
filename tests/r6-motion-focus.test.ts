@@ -26,6 +26,7 @@ import {
   writeShortcutsPreference,
 } from '../lib/keyboardShortcuts'
 import { MAIN_ID, focusPageStart, focusVerdict, fragmentOf, isPageChange } from '../components/Chrome/routeFocus'
+import { HEADER_CLEARANCE, clearOfHeader } from '../lib/anchorOffset'
 
 const ROOT = process.cwd()
 const read = (rel: string) => readFileSync(path.join(ROOT, rel), 'utf8')
@@ -290,18 +291,67 @@ test('sections and row staggers use the reveal path, not framer whileInView', ()
   }
 })
 
+test('COR-2 / UX-3: every row stagger is marked, and print shows its animated rows whatever their reveal phase', () => {
+  // Each stagger container carries data-reveal-list; every element with an
+  // opacity / transform variant carries data-reveal-item.
+  const lists: Record<string, number> = {
+    'components/LandingPage/Skills.tsx': 1, // chips (motion.li)
+    'components/LandingPage/CertificationsPeek.tsx': 1, // organisations (motion.section)
+    'components/LandingPage/ExperienceTimeline.tsx': 1, // roles (motion.li)
+    'components/GitHub/TopRepos.tsx': 1, // repo tiles
+    'components/GitHub/LanguageBars.tsx': 2, // rows and their scaleX bars
+    'components/GitHub/ActivityFeed.tsx': 1, // event rows
+  }
+  for (const [f, items] of Object.entries(lists)) {
+    const src = read(f)
+    assert.equal(src.match(/data-reveal-list=""/g)?.length, 1, `${f}: one marked stagger container`)
+    assert.equal(src.match(/data-reveal-item=""/g)?.length, items, `${f}: animated rows marked`)
+    // The marker sits on the element that runs the reveal (ref + animate).
+    assert.match(src, /ref=\{(reveal\.ref|setListRef)\}\s+data-reveal-list=""|ref=\{reveal\.ref\} data-reveal-list=""/, f)
+  }
+  const css = read('styles/globals.css')
+  const print = css.slice(css.indexOf('@media print {'))
+  const rule = print.match(/\[data-reveal-list\] > \*,\s*\[data-reveal-list\] \[data-reveal-item\]\s*\{([^}]*)\}/)
+  assert.ok(rule, 'print override for the stagger rows')
+  // !important: framer-motion writes the hidden state as an inline style.
+  assert.match(rule[1], /opacity:\s*1 !important/)
+  assert.match(rule[1], /transform:\s*none !important/)
+  assert.ok(css.indexOf('[data-reveal-list] > *') > css.indexOf('@media print {'), 'only in print')
+})
+
 // ── FIX-13: focus clear of the sticky header, focus after page changes ────────
 
-test('scroll-padding clears the sticky header; per-element margins no longer add the header again', () => {
+test('UX-1 / UX-2 / COR-4: targets inside <main> carry the header offset as scroll margins; html has no scroll padding', () => {
   const css = read('styles/globals.css')
   assert.match(css, /--header-h:\s*57px/)
-  assert.match(css, /html\s*\{[^}]*scroll-padding-top:\s*calc\(var\(--header-h\)\s*\+\s*16px\)/)
-  assert.match(css, /scroll-padding-bottom:\s*var\(--bottom-bar-h,\s*0px\)/)
+  // No root scroll padding: it also applied to the sticky header's and the bottom bar's own controls.
+  assert.doesNotMatch(css, /scroll-padding-(top|bottom)\s*:/)
+  // One zero-specificity rule for every potential target inside <main> (and <main> itself, the skip link's target)…
+  const rule = css.match(/:where\(#main\),\s*:where\(#main\)\s*:where\(([^)]*)\):where\(\s*:not\(\[data-bottom-bar\], \[data-bottom-bar\] \*\)\s*\)\s*\{([^}]*)\}/)
+  assert.ok(rule, 'the :where(#main) scroll-margin rule')
+  for (const target of ['[id]', 'a', 'button', 'input', 'select', 'textarea', 'summary', '[tabindex]']) assert.ok(rule[1].split(/,\s*/).includes(target), target)
+  assert.match(rule[2], /scroll-margin-top:\s*calc\(var\(--header-h\)\s*\+\s*16px\)/)
+  assert.match(rule[2], /scroll-margin-bottom:\s*var\(--bottom-bar-h,\s*0px\)/)
+  // …the sticky bottom bars opt out, so focusing their controls never scrolls the page.
+  assert.match(read('components/CVViewerPage/CvPageView.tsx'), /as="nav"\s+data-bottom-bar=""/)
+  assert.match(read('components/Article/DraftBar.tsx'), /data-bottom-bar=""/)
+  // Per-element margins add their air on top of the header clearance (they replace the default).
+  assert.equal(HEADER_CLEARANCE, 'calc(var(--header-h) + 16px)')
+  assert.equal(clearOfHeader('24px'), 'calc(var(--header-h) + 16px + 24px)')
   assert.match(read('components/Chrome/SiteChrome.tsx'), /HEADER_HEIGHT_VAR = '--header-h'/)
-  assert.match(read('components/MDX/MDXContent.tsx'), /scrollMarginTop: '16px'/)
-  assert.match(read('components/LandingPage/Content.tsx'), /scrollMarginTop: '8px'/)
-  assert.match(read('components/CVViewerPage/primitives.tsx'), /ANCHOR_SCROLL_MARGIN = '24px'/)
-  assert.doesNotMatch(read('pages/colophon.tsx'), /scrollMarginTop: '96px'/)
+  const mdx = read('components/MDX/MDXContent.tsx')
+  assert.match(mdx, /const ANCHOR_MARGIN = clearOfHeader\('16px'\)/)
+  assert.match(mdx, /scrollMarginTop: ANCHOR_MARGIN,/, 'headings')
+  assert.match(mdx, /'& \[id\^="user-content-fn"\]': \{ scrollMarginTop: ANCHOR_MARGIN \}/, 'footnotes and back links: the header clearance once, plus air')
+  assert.match(read('components/LandingPage/Content.tsx'), /scrollMarginTop: clearOfHeader\('8px'\)/)
+  assert.match(read('components/CVViewerPage/primitives.tsx'), /ANCHOR_SCROLL_MARGIN = clearOfHeader\('24px'\)/)
+  const colophon = read('pages/colophon.tsx')
+  assert.match(colophon, /const ANCHOR_MARGIN = clearOfHeader\('24px'\)/)
+  assert.equal(colophon.match(/scrollMarginTop: ANCHOR_MARGIN/g)?.length, 2)
+  // No fixed pixel margin that would ignore the measured header height.
+  for (const f of ['components/MDX/MDXContent.tsx', 'components/LandingPage/Content.tsx', 'components/CVViewerPage/primitives.tsx', 'pages/colophon.tsx']) {
+    assert.doesNotMatch(read(f), /scrollMarginTop: '\d+px'/, f)
+  }
 })
 
 test('isPageChange / fragmentOf', () => {

@@ -19,8 +19,10 @@
  * not say.
  *
  * Every renderer — the home hero, /now (lib/nowSignals.ts) and the Home
- * editor's preview (/api/admin/cv-derived) — combines the owner's Home editor
- * lines with this chip through mergeCurrentlyCoding(), so they agree.
+ * editor's "Visitors see" preview (the chip from /api/admin/cv-derived) —
+ * combines the owner's Home editor lines with this chip through
+ * mergeCurrentlyCoding(), so they agree; the editor's per-field placeholders
+ * come from currentlyCodingPlaceholder(), which follows the same rules.
  *
  * Pure / sync / no side-effects so it runs identically on server and client.
  *
@@ -116,4 +118,29 @@ export function mergeCurrentlyCoding(
   const derivedProject = own(derived?.project)
   if (derivedProject) return { label: label || own(derived?.label), project: derivedProject, note: note || own(derived?.note) }
   return { label, project: '', note }
+}
+
+/** Note placeholder while the owner names their own project: the CV's note is never attached to it. */
+export const OWN_PROJECT_NOTE_PLACEHOLDER = 'optional (CV note not used with a custom project)'
+
+/**
+ * What a blank Home editor field would show visitors, as its placeholder
+ * ("auto: …"), under the mergeCurrentlyCoding() rules — or null when a blank
+ * field shows nothing (the input keeps its generic example).
+ *
+ *   - The owner typed a project: a blank label becomes "currently coding",
+ *     and a blank note stays blank (the CV-derived note describes the CV's
+ *     item, not the owner's project).
+ *   - Otherwise each blank line fills from the CV-derived chip — label and
+ *     note only when the CV names something current.
+ */
+export function currentlyCodingPlaceholder(
+  key: keyof CurrentlyCoding,
+  manual: Partial<CurrentlyCoding> | null | undefined,
+  derived: Partial<CurrentlyCoding> | null | undefined,
+): string | null {
+  if (own(manual?.project) && key !== 'project') return key === 'label' ? `auto: ${CODING_LABEL}` : OWN_PROJECT_NOTE_PLACEHOLDER
+  const value = own(derived?.[key])
+  if (!value || (key !== 'project' && !own(derived?.project))) return null
+  return `auto: ${value}`
 }

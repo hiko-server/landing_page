@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { publicSections } from '../lib/cvVisibility'
-import { currentRoles, currentlyCodingSignal, hasSignals, latestPost, latestWork, signalsUpdatedOn } from '../lib/nowSignals'
+import { currentRoles, currentlyCodingSignal, hasSignals, latestPost, latestWork, namesCurrentRole, signalsUpdatedOn } from '../lib/nowSignals'
 import { deriveCurrentlyCoding, mergeCurrentlyCoding } from '../lib/currentlyCoding'
 import { buildStack, shortVersion } from '../lib/stack'
 
@@ -52,16 +52,18 @@ test('currentRoles lists only running or upcoming entries, respecting visibility
 
 test('currently-coding on /now is the home chip: owner text wins, the CV only names what is current', () => {
   const roles = currentRoles(cv, NOW)
-  // Derived from the CV: Acme is running → named, like the first current role in the list.
-  const auto = currentlyCodingSignal(cv, null, NOW)
-  assert.deepEqual(auto, { label: 'currently coding', project: 'Acme', note: 'Engineer' })
-  assert.equal(roles.find((r) => r.status === 'current')?.org, auto?.project)
-  // The home page merges the same way (one shared function).
-  assert.deepEqual(auto, mergeCurrentlyCoding(null, deriveCurrentlyCoding(cv, NOW)))
-  // An owner project takes only the owner's lines (no derived note attached).
+  // Derived from the CV: Acme is running (the home chip names it, through the shared merge)…
+  const homeChip = mergeCurrentlyCoding(null, deriveCurrentlyCoding(cv, NOW))
+  assert.deepEqual(homeChip, { label: 'currently coding', project: 'Acme', note: 'Engineer' })
+  assert.equal(roles.find((r) => r.status === 'current')?.org, homeChip.project)
+  // …but on /now the "Currently" list already shows Acme, so the CV-derived chip is not repeated (COR-5).
+  assert.equal(currentlyCodingSignal(cv, null, NOW), null)
+  assert.equal(currentlyCodingSignal(cv, { label: 'busy with', project: '', note: '' }, NOW), null, 'owner lines without a project still name the CV entry')
+  // An owner project takes only the owner's lines (no derived note attached) and is always kept.
   const manual = currentlyCodingSignal(cv, { label: 'shipping', project: 'Carboy', note: '' }, NOW)
   assert.deepEqual(manual, { label: 'shipping', project: 'Carboy', note: '' })
-  // Only past jobs, but a current study → the study, as on the home page.
+  assert.deepEqual(currentlyCodingSignal(cv, { label: '', project: 'acme', note: '' }, NOW), { label: 'currently coding', project: 'acme', note: '' }, 'typed by the owner: kept even when it matches a role')
+  // Only past jobs, but a current study → the home chip names the study; /now lists it under "Currently" only.
   const studying = publicSections(
     [
       { sessionName: 'workExperience', experiences: [{ jobTitle: 'CTO', companyName: 'Past Co', startDate: '2024-01', endDate: '2026-03' }] },
@@ -69,7 +71,16 @@ test('currently-coding on /now is the home chip: owner text wins, the CV only na
     ],
     'website',
   )
-  assert.deepEqual(currentlyCodingSignal(studying, null, NOW), { label: 'currently studying', project: 'Uni', note: 'MSc in AI' })
+  assert.deepEqual(mergeCurrentlyCoding(null, deriveCurrentlyCoding(studying, NOW)), { label: 'currently studying', project: 'Uni', note: 'MSc in AI' })
+  assert.deepEqual(
+    currentRoles(studying, NOW).map((r) => [r.kind, r.status, r.org]),
+    [['study', 'current', 'Uni']],
+  )
+  assert.equal(currentlyCodingSignal(studying, null, NOW), null)
+  // An entry named only by its title (no organisation) is matched on the title.
+  const titleOnly = publicSections([{ sessionName: 'workExperience', experiences: [{ jobTitle: 'Freelance developer', startDate: '2025-01', endDate: 'Present' }] }], 'website')
+  assert.equal(deriveCurrentlyCoding(titleOnly, NOW).project, 'Freelance developer')
+  assert.equal(currentlyCodingSignal(titleOnly, null, NOW), null)
   // Only past jobs → nothing is claimed as current.
   const past = publicSections(
     [{ sessionName: 'workExperience', experiences: [{ jobTitle: 'CTO', companyName: 'Past Co', startDate: '2024-01', endDate: '2026-03' }] }],
@@ -80,6 +91,17 @@ test('currently-coding on /now is the home chip: owner text wins, the CV only na
   assert.equal(currentlyCodingSignal([], null, NOW), null)
   // The reference month decides: before the MSc starts there is nothing current.
   assert.equal(currentlyCodingSignal(studying, null, '2026-08'), null)
+})
+
+test('namesCurrentRole matches a current entry by organisation or title, case-insensitively; upcoming entries do not count', () => {
+  const roles = currentRoles(cv, NOW)
+  assert.equal(namesCurrentRole('Acme', roles), true)
+  assert.equal(namesCurrentRole(' acme ', roles), true)
+  assert.equal(namesCurrentRole('Engineer', roles), true)
+  assert.equal(namesCurrentRole('Uni', roles), true)
+  assert.equal(namesCurrentRole('Future Inc', roles), false, 'upcoming')
+  assert.equal(namesCurrentRole('Carboy', roles), false)
+  assert.equal(namesCurrentRole('', roles), false)
 })
 
 test('latest post / case study pick the first titled entry and carry their dates', () => {

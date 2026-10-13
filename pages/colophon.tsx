@@ -13,6 +13,7 @@ import { groupMarkdown, parseChangelog } from '../lib/changelog'
 import { readStack, type StackGroup } from '../lib/stack'
 import { log } from '../lib/log'
 import { absUrl, breadcrumb, ogImageUrl, personAuthor } from '../lib/schema'
+import { clearOfHeader } from '../lib/anchorOffset'
 
 /**
  * /colophon — how the site is made: stack (lib/stack.ts, installed versions),
@@ -43,6 +44,8 @@ type Props = {
 const REPO_URL = 'https://github.com/hiko-server/landing_page'
 const mono = 'var(--font-geist-mono), monospace'
 const releaseId = (version: string) => `v${version.replace(/\./g, '-')}`
+/** Sections and releases land clear of the sticky header, with 24px of air (lib/anchorOffset.ts). */
+const ANCHOR_MARGIN = clearOfHeader('24px')
 
 const SECTIONS = [
   { id: 'stack', label: 'Stack' },
@@ -68,7 +71,7 @@ function Section({
       as="section"
       aria-labelledby={`${id}-title`}
       mb={[12, 16]}
-      sx={{ scrollMarginTop: '24px' }}
+      sx={{ scrollMarginTop: ANCHOR_MARGIN }}
       id={id}
     >
       <Heading
@@ -440,7 +443,7 @@ export default function ColophonPage({ releases, stack, buildSha, builtAt }: Pro
                       mt={6}
                       borderTop="1px solid"
                       borderColor="page.border"
-                      sx={{ scrollMarginTop: '24px' }}
+                      sx={{ scrollMarginTop: ANCHOR_MARGIN }}
                     >
                       <Heading
                         as="h3"

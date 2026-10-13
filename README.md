@@ -473,7 +473,10 @@ third-party script and no cookie.
   also starts a new salt).
 - What a page view keeps: path, referrer host (only when it is another
   site), country (Cloudflare's `cf-ipcountry`), coarse device and browser
-  class, page language. Web Vitals keep route, metric, value and rating.
+  class, page language. Web Vitals keep route, metric, value and rating,
+  plus a hash of the browser's random per-page-load measurement id, so a
+  CLS / INP reported again replaces its earlier value instead of counting
+  twice (it identifies a measurement, not a visitor).
 - **Storage and retention**: a separate `data/analytics.db` (never part of
   `content.db`, R2 sync or restores). Raw page views are kept 35 days, raw
   Web Vitals 30 days, daily roll-ups 400 days.

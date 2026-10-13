@@ -108,6 +108,7 @@ export default function ExperienceTimeline({
 
       <motion.ol
         ref={reveal.ref}
+        data-reveal-list=""
         className="hover-list"
         initial={false}
         animate={revealVariant(reveal.phase)}
@@ -115,7 +116,7 @@ export default function ExperienceTimeline({
         style={{ listStyle: 'none', margin: 0, padding: 0 }}
       >
         {rows.map((r, idx) => (
-          <motion.li key={r.key} variants={row} style={{ position: 'relative' }}>
+          <motion.li key={r.key} variants={row} data-reveal-item="" style={{ position: 'relative' }}>
             <TimelineRow row={r} first={idx === 0} defaultExpanded={defaultExpanded} />
           </motion.li>
         ))}

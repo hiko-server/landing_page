@@ -30,7 +30,7 @@ import { resolveSocialLinks } from './chrome'
 /** undefined = this page did not ship the value; null = the home document has none. */
 type SocialsInput = Record<string, unknown> | null | undefined
 
-/** CSS custom property on <html> with the sticky header's rendered height (globals.css scroll-padding-top). */
+/** CSS custom property on <html> with the sticky header's rendered height (the scroll margins of lib/anchorOffset.ts and globals.css). */
 export const HEADER_HEIGHT_VAR = '--header-h'
 
 export default function SiteChrome({ children, socials }: { children: React.ReactNode; socials?: SocialsInput }) {
@@ -38,8 +38,9 @@ export default function SiteChrome({ children, socials }: { children: React.Reac
   const fetchOnMount = useRef(socials === undefined)
   const headerRef = useRef<HTMLDivElement | null>(null)
 
-  // Keyboard focus and anchor jumps clear the sticky header through
-  // html { scroll-padding-top } (globals.css). Its fallback is the header's
+  // Keyboard focus and anchor jumps inside <main> clear the sticky header
+  // through scroll margins on the targets (globals.css, lib/anchorOffset.ts)
+  // that read this variable. Its fallback is the header's
   // usual height, right for the server HTML; this keeps the value exact
   // whenever the header renders at another height (zoom, a wrapped line,
   // hidden for print).

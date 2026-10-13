@@ -48,17 +48,35 @@ export function clearAdminHint(req: NextApiRequest, res: NextApiResponse): void 
   setCookie(ADMIN_HINT_COOKIE, '', hintCookieOptions(req, res, 0))
 }
 
+/**
+ * A request cookie's value, or undefined when it is absent or cannot be
+ * decoded. cookies-next percent-decodes values with decodeURIComponent, which
+ * throws on a malformed escape (`cv_admin_token=%E0%A4%A`); a cookie the
+ * visitor's browser — or anyone — can set must never turn a public route
+ * into a 500, so an undecodable cookie reads as absent.
+ */
+export function readCookie(req: NextApiRequest, res: NextApiResponse, name: string): string | undefined {
+  try {
+    // cookies-next turns "true" / "false" / "null" into values; give the text back.
+    const value: unknown = getCookie(name, { req, res })
+    return value === undefined ? undefined : String(value)
+  } catch {
+    return undefined
+  }
+}
+
 /** True when the request carries the hint cookie (so clearing it is worth a header). */
 export function hasAdminHint(req: NextApiRequest, res: NextApiResponse): boolean {
-  return getCookie(ADMIN_HINT_COOKIE, { req, res }) !== undefined
+  return readCookie(req, res, ADMIN_HINT_COOKIE) !== undefined
 }
 
 export type AdminClaims = { role?: string; email?: string; sub?: string; sv?: number }
 
+/** The verified, current admin session of the request, or null (absent, undecodable, invalid, expired or revoked token). Never throws. */
 export function readAdminClaims(req: NextApiRequest, res: NextApiResponse): AdminClaims | null {
-  const token = getCookie(ADMIN_COOKIE, { req, res })
-  if (typeof token !== 'string' || !token) return null
   try {
+    const token = readCookie(req, res, ADMIN_COOKIE)
+    if (!token) return null
     const claims = jwt.verify(token, getJwtSecret(), { algorithms: ['HS256'] }) as AdminClaims
     if (claims?.role !== 'admin') return null
     return isSessionCurrent(claims as Record<string, unknown>, getSessionVersion()) ? claims : null

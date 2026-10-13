@@ -58,7 +58,7 @@ export default function Skills({ cvEn }: { cvEn?: CvSectionLike[] }) {
 
   return (
     <HintGroup>
-      <motion.div ref={reveal.ref} initial={false} animate={revealVariant(reveal.phase)} variants={stagger}>
+      <motion.div ref={reveal.ref} data-reveal-list="" initial={false} animate={revealVariant(reveal.phase)} variants={stagger}>
         <Box as="dl" w="100%" maxW="1100px" mx="auto">
           {groups.map((g, gi) => (
             <Flex
@@ -86,7 +86,7 @@ export default function Skills({ cvEn }: { cvEn?: CvSectionLike[] }) {
               <Box as="dd" m={0} minW={0}>
                 <motion.ul variants={stagger} style={{ listStyle: 'none', display: 'flex', flexWrap: 'wrap', gap: 8, margin: 0, padding: 0 }}>
                   {g.items.map((s) => (
-                    <motion.li key={s.name} variants={item}>
+                    <motion.li key={s.name} variants={item} data-reveal-item="">
                       <SkillChip skill={s} />
                     </motion.li>
                   ))}

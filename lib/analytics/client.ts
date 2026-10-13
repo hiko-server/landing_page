@@ -9,14 +9,18 @@ import { isVitalName, normalizeNavType, normalizeTrackedPath, type NavType, type
  *                                 client-side navigation to a new path
  *   useReportWebVitals(reportWebVital)
  *                                 in pages/_app (next/web-vitals): Core Web
- *                                 Vitals of the landing page, sent when the
- *                                 tab is hidden
+ *                                 Vitals of the landing page, sent whenever
+ *                                 the tab is hidden (latest value per metric
+ *                                 instance) and on pagehide
  *
  * Nothing is sent from /admin, from automated browsers (navigator.webdriver),
  * or when the browser asks not to be tracked (Do Not Track / Global Privacy
  * Control) — the server enforces the same rules. No cookies, no storage, no
- * identifiers: the beacon carries the path, the external referrer of the
- * landing page and the page language.
+ * visitor identifiers: a page view carries the path, the external referrer
+ * of the landing page and the page language; a vital carries the route, the
+ * metric and the web-vitals instance id (`k`, random per page load and
+ * metric — it names a measurement, not a visitor) so that a value reported
+ * again replaces the earlier one on the server instead of counting twice.
  */
 
 const ENDPOINT = '/api/a'
@@ -91,34 +95,55 @@ export function useAnalytics(router: Pick<NextRouter, 'events'>) {
 /** The fields of a web-vitals `Metric` this module reads. */
 export type WebVitalMetric = { id: string; name: string; value: number; navigationType?: string }
 
-/** One `t: 'v'` event of the beacon (validated again by lib/analytics/ingest). */
-export type VitalBeaconEvent = { t: 'v'; route: string; name: VitalName; value: number; nav: NavType | null }
+/**
+ * One `t: 'v'` event of the beacon (validated again by lib/analytics/ingest).
+ * `k` is the web-vitals instance id: ingest keeps one row per instance and
+ * replaces its value when the instance is reported again.
+ */
+export type VitalBeaconEvent = { t: 'v'; route: string; name: VitalName; value: number; nav: NavType | null; k: string }
 
 /**
  * Turns web-vitals reports into beacon events for one measured `route`
- * (null: nothing is collected). Each metric instance counts once: web-vitals
- * reports a CLS / INP instance again under the same `id` whenever the page is
- * hidden with a changed value, so only the first report of an id is kept and
- * the server never stores one measurement twice. (A back/forward-cache
- * restore starts new instances with new ids: new measurements.) FID, unknown
- * names and non-finite values are ignored.
+ * (null: nothing is collected), keeping the LATEST value of each metric
+ * instance. web-vitals reports CLS and INP again under the same `id` each
+ * time the page is hidden with a changed value — the final value is the
+ * last one — while LCP / FCP / TTFB are final once reported. `drain()`
+ * returns every instance whose latest value has not been sent yet (a new
+ * instance, or a changed value of one already sent), so a hide → show →
+ * hide sequence sends the larger final CLS too; the server keys rows by the
+ * instance id (`k`), so a re-sent instance replaces its earlier value and
+ * is never counted twice. (A back/forward-cache restore starts new
+ * instances with new ids: new measurements.) FID, unknown names and
+ * non-finite values are ignored.
  */
 export function createVitalsCollector(route: string | null) {
-  const seen = new Set<string>()
-  const queue: VitalBeaconEvent[] = []
+  const latest = new Map<string, { event: VitalBeaconEvent; sent: boolean }>()
   return {
-    /** Queue `metric`; false when it is ignored. `fallbackNav` is read only when the metric carries no navigation type. */
+    /** Record `metric`; false when it is ignored or repeats the stored value. `fallbackNav` is read only for a new instance without a navigation type. */
     add(metric: WebVitalMetric, fallbackNav: () => NavType | null = () => null): boolean {
-      if (!route || !metric || typeof metric.id !== 'string' || !metric.id || seen.has(metric.id)) return false
+      if (!route || !metric || typeof metric.id !== 'string' || !metric.id) return false
       if (!isVitalName(metric.name) || typeof metric.value !== 'number' || !Number.isFinite(metric.value)) return false
-      seen.add(metric.id)
-      queue.push({ t: 'v', route, name: metric.name, value: metric.value, nav: normalizeNavType(metric.navigationType) ?? fallbackNav() })
+      const known = latest.get(metric.id)
+      if (known) {
+        if (known.event.name !== metric.name || known.event.value === metric.value) return false
+        known.event = { ...known.event, value: metric.value }
+        known.sent = false
+        return true
+      }
+      const nav = normalizeNavType(metric.navigationType) ?? fallbackNav()
+      latest.set(metric.id, { event: { t: 'v', route, name: metric.name, value: metric.value, nav, k: metric.id }, sent: false })
       return true
     },
-    /** Empty the queue into beacon-sized batches (at most MAX_PER_BEACON events each). */
+    /** The unsent latest values, in beacon-sized batches (at most MAX_PER_BEACON events each); they count as sent. */
     drain(): VitalBeaconEvent[][] {
+      const pending: VitalBeaconEvent[] = []
+      for (const entry of latest.values()) {
+        if (entry.sent) continue
+        entry.sent = true
+        pending.push(entry.event)
+      }
       const batches: VitalBeaconEvent[][] = []
-      while (queue.length) batches.push(queue.splice(0, MAX_PER_BEACON))
+      while (pending.length) batches.push(pending.splice(0, MAX_PER_BEACON))
       return batches
     },
   }
@@ -148,8 +173,12 @@ function onVisibilityChange() {
 }
 
 /**
- * The `useReportWebVitals` callback (pages/_app): queue the landing page's
- * LCP / INP / CLS / FCP / TTFB and flush them when the tab is hidden.
+ * The `useReportWebVitals` callback (pages/_app): record the landing page's
+ * LCP / INP / CLS / FCP / TTFB and send what changed whenever the tab is
+ * hidden — the last moment a page is reliably alive on mobile, where
+ * pagehide may never come — and on pagehide (Safari, unload, entering the
+ * back/forward cache). A CLS or INP that grows after the tab came back is
+ * sent again under the same instance id and replaces the earlier value.
  */
 export function reportWebVital(metric: WebVitalMetric) {
   if (!trackingAllowed(landingPath)) return

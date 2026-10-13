@@ -18,6 +18,8 @@ export default function DraftBar({ path }: { path: string }) {
       ref={ref}
       role="region"
       aria-label="Draft preview"
+      // Its controls are not scrolled clear of the bar they sit in (globals.css).
+      data-bottom-bar=""
       position="fixed"
       left={0}
       right={0}
