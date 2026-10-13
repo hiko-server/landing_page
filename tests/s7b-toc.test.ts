@@ -71,3 +71,14 @@ test('labelLang only tags non-English labels', () => {
   assert.equal(labelLang('Hello'), undefined)
   assert.equal(labelLang('爱车人社区'), 'zh-Hans')
 })
+
+test('detectContentLang: short or Latin titles defer to the body; bilingual bodies follow the majority script', () => {
+  const zhMajority = '我一直在认真打磨一款自己的产品，一个写给爱车人的社区，把路线圈子动态车库活动油价放进同一个产品。\n\nA car community.'
+  assert.equal(detectContentLang({ title: 'Carboy', body: zhMajority }), 'zh-Hans')
+  // A long CJK title still decides on its own.
+  assert.equal(detectContentLang({ title: '一个写给爱车人的社区平台', body: 'English only body text here.' }), 'zh-Hans')
+  // A short CJK title over an English body: the body decides.
+  assert.equal(detectContentLang({ title: '车友', body: 'An English article about cars and the people who love them.' }), 'en')
+  // No body: the title alone (list labels).
+  assert.equal(detectContentLang({ title: '车友' }), 'zh-Hans')
+})

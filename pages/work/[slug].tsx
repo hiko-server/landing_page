@@ -1,171 +1,200 @@
 import React from 'react'
 import type { GetStaticPaths, GetStaticProps } from 'next'
-import { Box, Heading, Text, Flex, Link } from '@chakra-ui/react'
+import { Box, Flex, Link } from '@chakra-ui/react'
 import NextLink from 'next/link'
-import type { MDXRemoteSerializeResult } from 'next-mdx-remote'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
-import SectionLabel from '../../components/General-UI/SectionLabel'
+import PageHeader from '../../components/General-UI/PageHeader'
 import ArticleBody from '../../components/Article/ArticleBody'
 import ArticleNav from '../../components/Article/ArticleNav'
+import MetaGrid, { MetaChips, type MetaItem } from '../../components/Article/MetaGrid'
+import DraftBar from '../../components/Article/DraftBar'
+import EditPill from '../../components/Article/EditPill'
 import { neighbours, relatedByTags, toArticleLink, type ArticleLink } from '../../components/Article/collectionNav'
-import { listPosts, listWorkInDisplayOrder, getWork, type WorkFrontmatter } from '../../lib/mdx'
-import type { TocEntry } from '../../lib/toc'
+import { listPosts, listWorkInDisplayOrder, getWork, type HastRoot, type WorkFrontmatter } from '../../lib/mdx'
+import { labelLang, type TocEntry } from '../../lib/toc'
 import { safeHref } from '../../lib/cvFormat'
-import { absUrl, breadcrumb, ogImageUrl, personRef, PERSON_NAME } from '../../lib/schema'
+import { variantSrcSet } from '../../lib/uploadVariants'
+import { articleImages, breadcrumb, absUrl, caseStudyNode, ogImageUrl, ogLangOf, PERSON_NAME, type OgImageOptions } from '../../lib/schema'
+
+type Cover = { src: string; alt: string; srcSet: string | null }
 
 type Props = {
   slug: string
   frontmatter: WorkFrontmatter
-  source: MDXRemoteSerializeResult
+  tree: HastRoot
   readingMinutes: number
   toc: TocEntry[]
   /** Contract E: BCP-47 language for <html lang>. */
   lang: string
+  /** First paragraph: meta description when the frontmatter one is too short. */
+  excerpt: string
+  /** Content-store write time (og:image cache-buster, schema dateModified). */
+  updatedAt: number | null
+  /** Frontmatter cover with its responsive variants (resolved on the server). */
+  cover: Cover | null
   /** Neighbours in /work display order (featured first). */
   prev: ArticleLink | null
   next: ArticleLink | null
   related: ArticleLink[]
+  /** Rendered in Draft Mode (the admin preview cookie): drafts are visible. */
+  draftMode: boolean
 }
 
 const MONO = 'var(--font-geist-mono), monospace'
 
-function Sep() {
-  return (
-    <Text as="span" aria-hidden opacity={0.5}>
-      ·
-    </Text>
-  )
+/** English UI text inside a non-English article keeps its own language. */
+const uiLang = (lang: string) => (lang === 'en' || lang.startsWith('en-') ? undefined : 'en')
+
+/** Cover sources an <img> may load: same-site paths or https URLs. */
+function coverSrc(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  const v = value.trim()
+  return /^\/(?!\/)/.test(v) || /^https:\/\//i.test(v) ? v : ''
 }
 
-export default function WorkCase({ slug, frontmatter, source, readingMinutes, toc, lang, prev, next, related }: Props) {
-  const url = absUrl(`/work/${slug}`)
-  const image = ogImageUrl({ kind: 'work', title: frontmatter.title, subtitle: frontmatter.description })
+export default function WorkCase({
+  slug,
+  frontmatter,
+  tree,
+  readingMinutes,
+  toc,
+  lang,
+  excerpt,
+  updatedAt,
+  cover,
+  prev,
+  next,
+  related,
+  draftMode,
+}: Props) {
+  const path = `/work/${slug}`
+  const url = absUrl(path)
   const tech = Array.isArray(frontmatter.tech) ? frontmatter.tech : []
   const link = safeHref(frontmatter.link)
   const repo = safeHref(frontmatter.repo)
+  const card: OgImageOptions = {
+    kind: 'work',
+    title: frontmatter.title,
+    lang: ogLangOf(lang),
+    mins: readingMinutes,
+    tags: tech,
+    cover: cover?.src,
+    v: updatedAt,
+  }
+  const image = ogImageUrl(card)
+  const titleLang = labelLang(frontmatter.title) || 'en'
+  const ui = uiLang(lang)
+
+  const meta: MetaItem[] = [
+    { label: 'Role', value: frontmatter.role || null },
+    { label: 'Timeline', value: frontmatter.period ? <span className="tnum">{frontmatter.period}</span> : null },
+    { label: 'Stack', value: tech.length ? <MetaChips items={tech} label="Stack" /> : null, wide: true },
+    { label: 'Read', value: <span className="tnum">{readingMinutes} min</span> },
+  ]
+
+  const actions =
+    link || repo ? (
+      <>
+        {link && (
+          <Link href={link} isExternal color="accent.text" className="link-underline" fontSize="14px">
+            Visit site <span className="nudge-ne" aria-hidden>↗</span>
+          </Link>
+        )}
+        {repo && (
+          <Link href={repo} isExternal color="accent.text" className="link-underline" fontSize="14px">
+            Source <span className="nudge-ne" aria-hidden>↗</span>
+          </Link>
+        )}
+      </>
+    ) : undefined
 
   return (
     <>
       <CustomHead
-        title={frontmatter.title}
+        title={frontmatter.seoTitle || frontmatter.title}
         description={frontmatter.description || `${frontmatter.title} — a project case study by ${PERSON_NAME}.`}
+        fallbackDescription={excerpt}
         url={url}
         image={image}
+        imageAlt={`${frontmatter.title} — ${PERSON_NAME}`}
         type="article"
         lang={lang}
+        noindex={draftMode}
+        modifiedTime={updatedAt ? new Date(updatedAt).toISOString() : undefined}
         jsonLd={[
-          {
-            '@context': 'https://schema.org',
-            '@type': 'CreativeWork',
-            name: frontmatter.title,
-            url,
-            mainEntityOfPage: url,
-            image,
-            inLanguage: lang,
-            description: frontmatter.description || undefined,
-            author: personRef,
-            ...(tech.length ? { keywords: tech.join(', ') } : {}),
-            ...(link || repo ? { sameAs: [link, repo].filter(Boolean) } : {}),
-          },
+          caseStudyNode({
+            path,
+            title: frontmatter.title,
+            description: frontmatter.description,
+            lang,
+            images: articleImages(card, cover?.src),
+            keywords: tech,
+            dateModified: updatedAt ? new Date(updatedAt).toISOString() : undefined,
+            sameAs: [link, repo].filter(Boolean),
+          }),
           breadcrumb([
             { name: 'Home', path: '/' },
             { name: 'Work', path: '/work' },
-            { name: frontmatter.title, path: `/work/${slug}` },
+            { name: frontmatter.title, path },
           ]),
         ]}
       />
       <HeaderFooter>
-        <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[12, 16]}>
-          <Link
-            as={NextLink}
-            href="/work"
-            fontFamily={MONO}
-            fontSize="11px"
-            color="page.fg-secondary"
-            className="link-underline no-print"
-            display="inline-block"
-            mb={8}
-          >
-            ← All projects
-          </Link>
+        <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[12, 16]} pb={draftMode ? 24 : undefined}>
+          <Flex align="center" justify="space-between" gap={4} minH="32px" mb={8} className="no-print">
+            <Link as={NextLink} href="/work" fontFamily={MONO} fontSize="11px" color="page.fg-secondary" className="link-underline">
+              ← All projects
+            </Link>
+            <EditPill kind="work" slug={slug} />
+          </Flex>
 
           <Box as="article" lang={lang}>
-            <Box as="header">
-              <SectionLabel n="02" as="p">
-                Case Study
-              </SectionLabel>
+            <PageHeader
+              eyebrow={<span lang={ui}>Case study</span>}
+              title={frontmatter.title}
+              titleLang={titleLang !== lang ? titleLang : undefined}
+              lede={frontmatter.description}
+              actions={actions}
+              vtName={`vt-work-${slug}`}
+            />
 
-              <Heading
-                as="h1"
-                mt={6}
-                mb={4}
-                fontSize={['32px', '44px', '52px']}
-                lineHeight="1.08"
-                letterSpacing="-0.025em"
-                fontWeight={500}
-                maxW="900px"
-                style={{ viewTransitionName: `vt-work-${slug}` }}
-              >
-                {frontmatter.title}
-              </Heading>
-
-              {frontmatter.description && (
-                <Text color="page.fg-secondary" fontSize={['16px', '17px']} maxW="720px" mb={6}>
-                  {frontmatter.description}
-                </Text>
-              )}
-
-              <Flex
-                wrap="wrap"
-                gap={4}
-                fontFamily={MONO}
-                fontSize="11px"
-                color="page.fg-secondary"
-                mb={12}
-                pb={6}
-                borderBottom="1px solid"
+            {cover && (
+              <Box
+                mb={10}
+                borderRadius="xl"
+                overflow="hidden"
+                border="1px solid"
                 borderColor="page.border"
+                bg="page.bg-elevated"
+                sx={{ aspectRatio: '16 / 10' }}
               >
-                {frontmatter.role && (
-                  <>
-                    <Text as="span">{frontmatter.role}</Text>
-                    <Sep />
-                  </>
-                )}
-                {frontmatter.period && (
-                  <>
-                    <Text as="span">{frontmatter.period}</Text>
-                    <Sep />
-                  </>
-                )}
-                {tech.length > 0 && (
-                  <>
-                    <Text as="span">{tech.join(' · ')}</Text>
-                    <Sep />
-                  </>
-                )}
-                <Text as="span">{readingMinutes} min read</Text>
-                {link && (
-                  <>
-                    <Sep />
-                    <Link href={link} isExternal color="accent.text" className="link-underline">
-                      Visit site ↗
-                    </Link>
-                  </>
-                )}
-                {repo && (
-                  <>
-                    <Sep />
-                    <Link href={repo} isExternal color="accent.text" className="link-underline">
-                      Source ↗
-                    </Link>
-                  </>
-                )}
-              </Flex>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={cover.src}
+                  srcSet={cover.srcSet || undefined}
+                  sizes={cover.srcSet ? '(min-width: 1280px) 1200px, 100vw' : undefined}
+                  alt={cover.alt}
+                  width={1600}
+                  height={1000}
+                  decoding="async"
+                  {...{ fetchpriority: 'high' }}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    viewTransitionName: `vt-work-cover-${slug}`,
+                  } as React.CSSProperties}
+                />
+              </Box>
+            )}
+
+            <Box mb={12} pb={6} borderBottom="1px solid" borderColor="page.border" lang={ui}>
+              <MetaGrid items={meta} />
             </Box>
 
-            <ArticleBody source={source} toc={toc} />
+            <ArticleBody tree={tree} toc={toc} />
 
             <ArticleNav
               before={prev ? { label: 'Previous', item: prev } : null}
@@ -174,6 +203,7 @@ export default function WorkCase({ slug, frontmatter, source, readingMinutes, to
             />
           </Box>
         </Box>
+        {draftMode && <DraftBar path={path} />}
       </HeaderFooter>
     </>
   )
@@ -186,7 +216,8 @@ export const getStaticPaths: GetStaticPaths = async () => ({
 
 export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
   const slug = String(ctx.params?.slug || '')
-  const w = await getWork(slug)
+  const draftMode = ctx.draftMode === true
+  const w = await getWork(slug, { includeDrafts: draftMode })
   if (!w) return { notFound: true, revalidate: 60 }
 
   const work = listWorkInDisplayOrder().map((x) => toArticleLink('work', x))
@@ -194,17 +225,32 @@ export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
   const { before, after } = neighbours(work, slug)
   const related = relatedByTags(toArticleLink('work', w), [...work, ...posts])
 
+  const src = coverSrc(w.frontmatter.cover)
+  let cover: Cover | null = null
+  if (src) {
+    const variants = src.startsWith('/uploads/') ? await (async () => variantSrcSet(src))().catch(() => null) : null
+    cover = {
+      src,
+      alt: typeof w.frontmatter.coverAlt === 'string' ? w.frontmatter.coverAlt.trim() : '',
+      srcSet: typeof variants === 'string' && variants.trim() ? variants.trim() : null,
+    }
+  }
+
   return {
     props: {
       slug: w.slug,
       frontmatter: w.frontmatter,
-      source: w.source,
+      tree: w.tree,
       readingMinutes: w.readingMinutes,
       toc: w.toc,
       lang: w.lang,
+      excerpt: w.excerpt,
+      updatedAt: w.updatedAt,
+      cover,
       prev: before,
       next: after,
       related,
+      draftMode,
     },
     revalidate: 60,
   }

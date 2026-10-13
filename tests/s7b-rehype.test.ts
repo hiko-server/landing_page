@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import rehypeHeadings from '../lib/rehype/headings'
 import rehypeImages, { captionFor } from '../lib/rehype/images'
 import { imageSizeFromBytes } from '../lib/rehype/imageSize'
+import { createRequire } from 'node:module'
 import type { HastNode } from '../lib/rehype/hast'
 import type { TocEntry } from '../lib/toc'
 
@@ -57,14 +58,17 @@ test('an existing element id is never reused for a heading', () => {
   assert.equal(tree.children![1].properties!.id, 'intro-1')
 })
 
-test('images: lazy/async, sized when known, lone images become captioned figures', () => {
+test('images: lazy/async, sized when known, lone images become captioned figures', async () => {
   const tree = el('root', {}, [
     el('p', {}, [text('\n'), el('img', { src: '/a.png', alt: 'A chart of latency' }), text(' ')]),
     el('p', {}, [el('img', { src: '/b.png', alt: 'image.png' })]),
     el('p', {}, [el('img', { src: 'https://cdn/x.jpg', alt: 'x', title: 'Real caption' })]),
     el('p', {}, [el('img', { src: '/c.png', alt: 'inline' }), text(' (Ref: somewhere)')]),
   ])
-  rehypeImages({ resolveSize: (src) => (src.startsWith('/') ? { width: 800, height: 600 } : null) })(tree)
+  await rehypeImages({
+    resolveSize: async (src) => (src.startsWith('/') ? { width: 800, height: 600 } : null),
+    srcSetFor: (src) => (src === '/a.png' ? '/a.w640.webp 640w, /a.png 800w' : undefined),
+  })(tree)
   const [f1, f2, f3, p4] = tree.children!
 
   assert.equal(f1.tagName, 'figure')
@@ -74,6 +78,8 @@ test('images: lazy/async, sized when known, lone images become captioned figures
   assert.equal(img1.properties!.decoding, 'async')
   assert.equal(img1.properties!.width, 800)
   assert.equal(img1.properties!.height, 600)
+  assert.equal(img1.properties!.srcSet, '/a.w640.webp 640w, /a.png 800w')
+  assert.equal(img1.properties!.sizes, '(min-width: 768px) 720px, 100vw')
   assert.equal(f1.children![1].tagName, 'figcaption')
   assert.equal(f1.children![1].children![0].value, 'A chart of latency')
 
@@ -85,6 +91,8 @@ test('images: lazy/async, sized when known, lone images become captioned figures
   assert.equal(f3.children![1].children![0].value, 'Real caption')
   assert.equal(f3.children![0].properties!.title, undefined)
   assert.equal(f3.children![0].properties!.width, undefined)
+
+  assert.equal(f2.children![0].properties!.srcSet, undefined)
 
   // Image sharing a paragraph with text stays inline (no figure inside <p>).
   assert.equal(p4.tagName, 'p')
@@ -131,4 +139,27 @@ test('imageSizeFromBytes reads PNG, GIF, JPEG (with EXIF rotation) and WebP head
   assert.deepEqual(imageSizeFromBytes(webp), { width: 640, height: 800 })
 
   assert.equal(imageSizeFromBytes(new Uint8Array(40)), null)
+})
+
+test('a failing size or srcset lookup never breaks compilation', async () => {
+  const tree = el('root', {}, [el('p', {}, [el('img', { src: '/x.png', alt: 'x' })])])
+  await rehypeImages({
+    resolveSize: () => Promise.reject(new Error('disk gone')),
+    srcSetFor: () => {
+      throw new Error('boom')
+    },
+  })(tree)
+  const img = tree.children![0].children![0]
+  assert.equal(img.properties!.width, undefined)
+  assert.equal(img.properties!.loading, 'lazy')
+})
+
+test('the production CSP has no unsafe-eval; development keeps it for React Refresh', () => {
+  const { buildCsp } = createRequire(import.meta.url)('../lib/csp.js') as { buildCsp: (env?: string) => string }
+  const prod = buildCsp('production')
+  assert.ok(!prod.includes("'unsafe-eval'"), prod)
+  assert.match(prod, /script-src 'self' 'unsafe-inline'/)
+  assert.match(prod, /frame-src https:\/\/www\.youtube-nocookie\.com/)
+  assert.ok(!buildCsp('test').includes("'unsafe-eval'"))
+  assert.match(buildCsp('development'), /script-src [^;]*'unsafe-eval'/)
 })

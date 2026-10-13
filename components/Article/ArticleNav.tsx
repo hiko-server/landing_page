@@ -3,6 +3,7 @@ import NextLink from 'next/link'
 import { Box, Flex, SimpleGrid, Text } from '@chakra-ui/react'
 import type { ArticleLink } from './collectionNav'
 import { formatPostDate } from '../../lib/postDate'
+import { setPendingDirection } from '../../lib/viewTransition'
 
 const MONO = 'var(--font-geist-mono), monospace'
 
@@ -29,8 +30,17 @@ function metaOf(item: ArticleLink): string {
 
 function PagerCard({ side, align }: { side: PagerSide; align: 'left' | 'right' }) {
   const { item } = side
+  const direction = align === 'left' ? 'prev' : 'next'
   return (
-    <Box as={NextLink} href={item.permalink} sx={linkSx} textAlign={align} rel={align === 'left' ? 'prev' : 'next'}>
+    <Box
+      as={NextLink}
+      href={item.permalink}
+      sx={linkSx}
+      textAlign={align}
+      rel={direction}
+      // The view transition slides in the direction of travel.
+      onClick={() => setPendingDirection(direction)}
+    >
       <Text fontFamily={MONO} fontSize="11px" letterSpacing="0.08em" textTransform="uppercase" color="page.fg-secondary" mb={2}>
         {align === 'left' ? '← ' : ''}
         {side.label}
@@ -45,7 +55,9 @@ function PagerCard({ side, align }: { side: PagerSide; align: 'left' | 'right' }
 
 /**
  * End-of-article navigation: previous / next within the collection and
- * related pieces (any collection) that share tags.
+ * related pieces (any collection) that share tags. Related rows use
+ * `data-group` (not role="group", which would rename the link for screen
+ * readers) for the hover colour.
  */
 export default function ArticleNav({
   before,
@@ -91,7 +103,7 @@ export default function ArticleNav({
                   display="block"
                   py={4}
                   textDecoration="none"
-                  role="group"
+                  data-group=""
                   _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
                 >
                   <Flex direction={{ base: 'column', sm: 'row' }} gap={{ base: 1, sm: 6 }} align={{ base: 'flex-start', sm: 'baseline' }}>

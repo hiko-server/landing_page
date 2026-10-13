@@ -1,14 +1,21 @@
-import { MDXRemote, type MDXRemoteSerializeResult } from 'next-mdx-remote'
 import { Box, Heading, Text, Link as ChakraLink, Code, Divider, type ChakraProps } from '@chakra-ui/react'
 import NextLink from 'next/link'
-import React, { type ReactNode } from 'react'
+import React, { useMemo, type ReactNode } from 'react'
+import { Fragment, jsx, jsxs } from 'react/jsx-runtime'
+import { toJsxRuntime, type Components, type Jsx } from 'hast-util-to-jsx-runtime'
+import type { Root as HastRoot } from 'hast'
 import { safeHref } from '../../lib/cvFormat'
 import CodeBlock from './CodeBlock'
+import ArticleFigure, { FigCaption, InsideLinkContext, MdxImage } from './Figure'
+import YouTube from './YouTube'
 
 /**
- * MDX → React renderer used by /blog/[slug], /work/[slug], /now, /uses.
- * Each HTML tag emitted from the MDX is mapped to a Chakra-styled wrapper
- * so prose inherits v6 typography tokens.
+ * Article renderer used by /blog/[slug], /work/[slug], /now, /uses and the
+ * admin live preview. The body arrives as a plain hast tree compiled on the
+ * server (lib/mdx.ts compileMdx) and becomes React elements through
+ * hast-util-to-jsx-runtime — nothing is evaluated, so the page works under a
+ * CSP without 'unsafe-eval'. Each HTML tag is mapped to a Chakra-styled
+ * wrapper so prose inherits the typography tokens.
  *
  *   - Headings carry ids + a self-link (lib/rehype/headings.ts); the "#"
  *     marker appears on hover / focus and they clear the sticky header when
@@ -16,11 +23,15 @@ import CodeBlock from './CodeBlock'
  *   - Same-site links route through next/link, in-page "#…" links stay plain
  *     anchors, external links open in a new tab; script-capable URLs
  *     (javascript:, data:, …) are rendered as text.
- *   - Images are lazy, async-decoded and sized when known; an image alone in
- *     a paragraph is a <figure> with an optional caption
- *     (lib/rehype/images.ts).
+ *   - Images are lazy, async-decoded, sized and responsive; an image alone
+ *     in a paragraph (or `<Figure>`) is a <figure> with an optional caption,
+ *     and inside an article each image opens the lightbox (./Figure).
+ *   - `<YouTube>` is a click-to-load facade (./YouTube); allowed iframes
+ *     (YouTube / Vimeo players) sit in a 16:9 frame.
  *   - Fenced code is pre-highlighted on the server (rehype-pretty-code) and
  *     gets a copy button (CodeBlock).
+ *   - Paragraphs and lists use the prose colour token; the column is 68ch
+ *     and shares the page's left edge with the title.
  */
 
 const MONO = 'var(--font-geist-mono), monospace'
@@ -29,11 +40,15 @@ const Prose = ({ children, as = 'article', ...rest }: ChakraProps & { children: 
   <Box
     as={as}
     className="article-prose"
-    maxW="var(--container-prose)"
-    mx="auto"
+    maxW="68ch"
     fontSize={['16px', '17px']}
     lineHeight="1.7"
     overflowWrap="break-word"
+    sx={{
+      '& p, & li': { color: 'page.fg-prose' },
+      '& blockquote p, & blockquote li': { color: 'page.fg-secondary' },
+      '& h1, & h2, & h3, & h4, & h5, & h6': { color: 'page.fg' },
+    }}
     {...rest}
   >
     {children}
@@ -89,55 +104,29 @@ function MdxLink({ href, className, children, ...rest }: React.AnchorHTMLAttribu
   }
   const safe = safeHref(raw)
   if (!safe) return <>{children}</>
+  const inner = <InsideLinkContext.Provider value>{children}</InsideLinkContext.Provider>
   if (isExternal(safe)) {
     return (
       <ChakraLink href={safe} isExternal color="accent.text" className="link-underline" {...rest}>
-        {children}
+        {inner}
       </ChakraLink>
     )
   }
   return (
     <ChakraLink as={NextLink} href={safe} color="accent.text" className="link-underline" {...rest}>
-      {children}
+      {inner}
     </ChakraLink>
   )
 }
 
-function MdxImage({ alt, width, height, ...rest }: React.ImgHTMLAttributes<HTMLImageElement>) {
+/** Allowed player iframes (validated at compile time) in a responsive 16:9 frame. */
+function MdxIframe({ width, height, ...rest }: React.IframeHTMLAttributes<HTMLIFrameElement>) {
+  const w = Number(width)
+  const h = Number(height)
+  const ratio = w > 0 && h > 0 ? `${w} / ${h}` : '16 / 9'
   return (
-    <Box
-      as="img"
-      alt={typeof alt === 'string' ? alt : ''}
-      width={width}
-      height={height}
-      loading="lazy"
-      decoding="async"
-      display="block"
-      maxW="100%"
-      h="auto"
-      mx="auto"
-      my={6}
-      borderRadius="lg"
-      border="1px solid"
-      borderColor="page.border"
-      bg="page.bg-elevated"
-      {...rest}
-    />
-  )
-}
-
-function MdxFigure({ className, children, ...rest }: React.HTMLAttributes<HTMLElement>) {
-  // rehype-pretty-code also emits <figure> around code blocks: leave those alone.
-  if (!String(className || '').split(/\s+/).includes('article-figure')) {
-    return (
-      <figure className={className} {...rest}>
-        {children}
-      </figure>
-    )
-  }
-  return (
-    <Box as="figure" my={8} sx={{ '& img': { my: 0 } }} {...rest}>
-      {children}
+    <Box my={8} w="100%" sx={{ aspectRatio: ratio }} borderRadius="lg" overflow="hidden" border="1px solid" borderColor="page.border">
+      <Box as="iframe" w="100%" h="100%" border={0} display="block" {...rest} />
     </Box>
   )
 }
@@ -180,19 +169,10 @@ const mdxComponents = {
   ),
   pre: (props: any) => <CodeBlock {...props} />,
   img: MdxImage,
-  figure: MdxFigure,
-  figcaption: (props: any) => (
-    <Text
-      as="figcaption"
-      mt={3}
-      textAlign="center"
-      fontFamily={MONO}
-      fontSize="12px"
-      lineHeight="1.5"
-      color="page.fg-secondary"
-      {...props}
-    />
-  ),
+  figure: ArticleFigure,
+  figcaption: FigCaption,
+  iframe: MdxIframe,
+  'youtube-embed': YouTube,
   table: (props: any) => (
     <Box my={6} overflowX="auto">
       <Box
@@ -214,17 +194,27 @@ const mdxComponents = {
   ),
 }
 
+/** hast → React elements with the components above (pure: same output on server and client). */
+export function renderTree(tree: HastRoot): React.ReactNode {
+  return toJsxRuntime(tree, {
+    Fragment,
+    jsx: jsx as Jsx,
+    jsxs: jsxs as Jsx,
+    components: mdxComponents as unknown as Partial<Components>,
+    passKeys: true,
+    stylePropertyNameCase: 'dom',
+    elementAttributeNameCase: 'react',
+  })
+}
+
 export default function MDXContent({
-  source,
+  tree,
   as = 'article',
 }: {
-  source: MDXRemoteSerializeResult
+  tree: HastRoot
   /** Element for the prose wrapper; use 'div' when the page already wraps it in an <article>. */
   as?: 'article' | 'div'
 }) {
-  return (
-    <Prose as={as}>
-      <MDXRemote {...source} components={mdxComponents as any} />
-    </Prose>
-  )
+  const content = useMemo(() => renderTree(tree), [tree])
+  return <Prose as={as}>{content}</Prose>
 }

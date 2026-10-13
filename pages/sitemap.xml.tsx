@@ -1,5 +1,6 @@
 import type { GetServerSideProps } from 'next'
-import { listPosts, listWork, xmlEscape } from '../lib/mdx'
+import { listPosts, listWork } from '../lib/mdx'
+import { xmlEscape } from '../lib/feeds'
 import { getDb } from '../lib/db'
 import { latestDate } from '../lib/postDate'
 import { SITE_URL, CV_ALTERNATES, type Alternate } from '../lib/schema'
@@ -8,7 +9,8 @@ import { SITE_URL, CV_ALTERNATES, type Alternate } from '../lib/schema'
  * sitemap.xml with real <lastmod> values: items use the newest of their
  * frontmatter `updated` / `date` and the content-store write time; static
  * pages use the write time of the data they render (home, CV, now, uses).
- * The bilingual CV is listed in both languages with hreflang alternates.
+ * The bilingual CV is listed in both languages (/cv and /cv/zh) with
+ * reciprocal hreflang alternates. Drafts never appear (listPosts/listWork).
  */
 
 const Sitemap = () => null
@@ -53,10 +55,11 @@ export const getServerSideProps: GetServerSideProps = async ({ res }) => {
     { path: '/work', lastmod: latestDate(workEntries.map((e) => e.lastmod)) },
     { path: '/blog', lastmod: latestDate(postEntries.map((e) => e.lastmod)) },
     { path: '/cv', lastmod: latestDate([cv]), alternates: CV_ALTERNATES },
-    { path: '/cv?lang=zh', lastmod: latestDate([cv]), alternates: CV_ALTERNATES },
+    { path: '/cv/zh', lastmod: latestDate([cv]), alternates: CV_ALTERNATES },
     { path: '/now', lastmod: latestDate([storedAt('pages', 'now')]) },
     { path: '/uses', lastmod: latestDate([storedAt('pages', 'uses')]) },
     { path: '/contact', lastmod: latestDate([home]) },
+    { path: '/colophon', lastmod: '' },
     ...postEntries,
     ...workEntries,
   ]

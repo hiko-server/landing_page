@@ -1,9 +1,12 @@
 import React, { useId, useState } from 'react'
 import { Box, Text } from '@chakra-ui/react'
 import type { TocEntry } from '../../lib/toc'
+import Collapse from '../General-UI/Collapse'
 import { jumpToSection } from './useActiveHeading'
 
 const MONO = 'var(--font-geist-mono), monospace'
+/** Duration of the shared Collapse height transition. */
+const COLLAPSE_MS = 240
 
 type Props = {
   toc: readonly TocEntry[]
@@ -25,10 +28,12 @@ function TocList({ toc, activeId, onNavigate }: Props & { onNavigate?: () => voi
                 if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return
                 e.preventDefault()
                 if (onNavigate) {
-                  // Collapse first, then scroll: the panel sits above the
-                  // target, so closing it afterwards would shift the page.
+                  // Collapse first, then scroll once the panel has finished
+                  // closing: it sits above the target, so scrolling while it
+                  // shrinks would land short by its height.
                   onNavigate()
-                  window.requestAnimationFrame(() => jumpToSection(entry.id))
+                  const instant = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+                  window.setTimeout(() => jumpToSection(entry.id), instant ? 0 : COLLAPSE_MS + 20)
                 } else {
                   jumpToSection(entry.id)
                 }
@@ -79,7 +84,12 @@ export function TocRail({ toc, activeId }: Props) {
   )
 }
 
-/** Collapsible table of contents shown above the article below xl. */
+/**
+ * Collapsible table of contents shown above the article below xl. The list
+ * is always in the DOM (so `aria-controls` always resolves) inside the
+ * shared Collapse, which animates the height and makes it `inert` while
+ * closed.
+ */
 export function TocDisclosure({ toc, activeId }: Props) {
   const [open, setOpen] = useState(false)
   const panelId = useId()
@@ -130,9 +140,11 @@ export function TocDisclosure({ toc, activeId }: Props) {
           +
         </Box>
       </Box>
-      <Box id={panelId} hidden={!open} px={4} pb={4}>
-        <TocList toc={toc} activeId={activeId} onNavigate={() => setOpen(false)} />
-      </Box>
+      <Collapse open={open} id={panelId}>
+        <Box px={4} pb={4}>
+          <TocList toc={toc} activeId={activeId} onNavigate={() => setOpen(false)} />
+        </Box>
+      </Collapse>
     </Box>
   )
 }

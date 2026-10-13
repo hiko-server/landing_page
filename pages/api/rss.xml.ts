@@ -1,13 +1,19 @@
-import type { NextApiRequest, NextApiResponse } from 'next'
-import { buildRssFeed } from '../../lib/mdx'
+import { withApi } from '../../lib/apiHandler'
+import { buildBlogRss } from '../../lib/feedHtml'
 import { SITE_URL } from '../../lib/schema'
+import { FEED_CACHE_CONTROL } from '../../lib/feeds'
 
 /**
- * RSS 2.0 feed for the blog at /api/rss.xml (same document as /feed.xml);
- * cached for 5 minutes. Escaping lives in lib/mdx.ts:buildRssFeed.
+ * RSS 2.0 feed for the blog at /api/rss.xml (same document as /feed.xml).
+ * Escaping and full-content rendering live in lib/feedHtml.ts.
  */
-export default function handler(_req: NextApiRequest, res: NextApiResponse) {
+export default withApi('rss.xml', async (req, res) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.setHeader('Allow', 'GET, HEAD')
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
+  const xml = await buildBlogRss(SITE_URL, `${SITE_URL}/api/rss.xml`)
   res.setHeader('Content-Type', 'application/xml; charset=utf-8')
-  res.setHeader('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
-  res.status(200).send(buildRssFeed(SITE_URL, `${SITE_URL}/api/rss.xml`))
-}
+  res.setHeader('Cache-Control', FEED_CACHE_CONTROL)
+  res.status(200).send(xml)
+})

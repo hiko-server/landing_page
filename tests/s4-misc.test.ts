@@ -79,7 +79,8 @@ test('og params are clamped by code point and sanitised', () => {
   assert.equal(Array.from(p.title).length, OG_LIMITS.title)
   assert.equal(Array.from(p.subtitle).length, OG_LIMITS.subtitle)
   assert.equal(p.kind, 'blogscript')
-  assert.deepEqual(parseOgParams(new URLSearchParams()), { title: 'LUCIAN-DEV.COM', kind: 'page', subtitle: '' })
+  const empty = parseOgParams(new URLSearchParams())
+  assert.deepEqual([empty.title, empty.kind, empty.subtitle], ['LUCIAN-DEV.COM', 'page', ''])
 })
 
 test('fixed-window limiter counts, resets and stays bounded', () => {

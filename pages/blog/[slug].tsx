@@ -1,170 +1,156 @@
 import React from 'react'
 import type { GetStaticPaths, GetStaticProps } from 'next'
-import { Box, Heading, Text, Flex, Tag, Link } from '@chakra-ui/react'
+import { Box, Flex, Link } from '@chakra-ui/react'
 import NextLink from 'next/link'
-import type { MDXRemoteSerializeResult } from 'next-mdx-remote'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
-import SectionLabel from '../../components/General-UI/SectionLabel'
+import PageHeader from '../../components/General-UI/PageHeader'
 import ArticleBody from '../../components/Article/ArticleBody'
 import ArticleNav from '../../components/Article/ArticleNav'
+import MetaGrid, { MetaChips, type MetaItem } from '../../components/Article/MetaGrid'
+import DraftBar from '../../components/Article/DraftBar'
+import EditPill from '../../components/Article/EditPill'
 import { neighbours, relatedByTags, toArticleLink, type ArticleLink } from '../../components/Article/collectionNav'
-import { listPosts, listWorkInDisplayOrder, getPost, type PostFrontmatter } from '../../lib/mdx'
-import type { TocEntry } from '../../lib/toc'
-import { absUrl, breadcrumb, ogImageUrl, personRef, PERSON_NAME } from '../../lib/schema'
+import { listPosts, listWorkInDisplayOrder, getPost, type HastRoot, type PostFrontmatter } from '../../lib/mdx'
+import { labelLang, type TocEntry } from '../../lib/toc'
+import { articleImages, blogPostingNode, breadcrumb, absUrl, ogImageUrl, ogLangOf, PERSON_NAME, type OgImageOptions } from '../../lib/schema'
 import { formatPostDate, isoDate } from '../../lib/postDate'
 
 type Props = {
   slug: string
   frontmatter: PostFrontmatter
-  source: MDXRemoteSerializeResult
+  tree: HastRoot
   readingMinutes: number
   toc: TocEntry[]
   /** Contract E: BCP-47 language for <html lang>. */
   lang: string
+  /** First paragraph: meta description when the frontmatter one is too short. */
+  excerpt: string
+  /** Content-store write time (og:image cache-buster). */
+  updatedAt: number | null
   /** Newer / older post in the collection (index order is newest first). */
   newer: ArticleLink | null
   older: ArticleLink | null
   related: ArticleLink[]
+  /** Rendered in Draft Mode (the admin preview cookie): drafts are visible. */
+  draftMode: boolean
 }
 
 const MONO = 'var(--font-geist-mono), monospace'
 
-export default function BlogPost({ slug, frontmatter, source, readingMinutes, toc, lang, newer, older, related }: Props) {
-  const url = absUrl(`/blog/${slug}`)
-  const image = ogImageUrl({ kind: 'blog', title: frontmatter.title, subtitle: frontmatter.description })
+/** English UI text inside a non-English article keeps its own language. */
+const uiLang = (lang: string) => (lang === 'en' || lang.startsWith('en-') ? undefined : 'en')
+
+export default function BlogPost({
+  slug,
+  frontmatter,
+  tree,
+  readingMinutes,
+  toc,
+  lang,
+  excerpt,
+  updatedAt,
+  newer,
+  older,
+  related,
+  draftMode,
+}: Props) {
+  const path = `/blog/${slug}`
+  const url = absUrl(path)
   const published = isoDate(frontmatter.date)
   const modified = isoDate(frontmatter.updated || frontmatter.date)
   const tags = Array.isArray(frontmatter.tags) ? frontmatter.tags : []
+  const card: OgImageOptions = {
+    kind: 'blog',
+    title: frontmatter.title,
+    lang: ogLangOf(lang),
+    date: published || undefined,
+    mins: readingMinutes,
+    tags,
+    cover: frontmatter.cover,
+    v: updatedAt,
+  }
+  const image = ogImageUrl(card)
+  const titleLang = labelLang(frontmatter.title) || 'en'
+  const ui = uiLang(lang)
+
+  const meta: MetaItem[] = [
+    {
+      label: 'Date',
+      value: published ? (
+        <time dateTime={published} className="tnum">
+          {formatPostDate(frontmatter.date)}
+        </time>
+      ) : null,
+    },
+    {
+      label: 'Updated',
+      value:
+        modified && modified !== published ? (
+          <time dateTime={modified} className="tnum">
+            {formatPostDate(frontmatter.updated)}
+          </time>
+        ) : null,
+    },
+    { label: 'Read', value: <span className="tnum">{readingMinutes} min</span> },
+    { label: 'Tags', value: tags.length ? <MetaChips items={tags} label="Tags" /> : null, wide: true },
+  ]
 
   return (
     <>
       <CustomHead
-        title={frontmatter.title}
+        title={frontmatter.seoTitle || frontmatter.title}
         description={frontmatter.description || `${frontmatter.title} — an essay by ${PERSON_NAME}.`}
+        fallbackDescription={excerpt}
         url={url}
         image={image}
+        imageAlt={`${frontmatter.title} — ${PERSON_NAME}`}
         type="article"
         lang={lang}
+        noindex={draftMode}
         publishedTime={published || undefined}
         modifiedTime={modified || undefined}
         jsonLd={[
-          {
-            '@context': 'https://schema.org',
-            '@type': 'BlogPosting',
-            headline: frontmatter.title,
-            description: frontmatter.description || undefined,
-            image,
-            inLanguage: lang,
-            datePublished: published || undefined,
-            dateModified: modified || undefined,
-            ...(tags.length ? { keywords: tags.join(', ') } : {}),
-            author: personRef,
-            publisher: personRef,
-            mainEntityOfPage: url,
-            url,
-          },
+          blogPostingNode({
+            path,
+            title: frontmatter.title,
+            description: frontmatter.description,
+            lang,
+            images: articleImages(card, frontmatter.cover),
+            keywords: tags,
+            datePublished: published,
+            dateModified: modified,
+          }),
           breadcrumb([
             { name: 'Home', path: '/' },
             { name: 'Writing', path: '/blog' },
-            { name: frontmatter.title, path: `/blog/${slug}` },
+            { name: frontmatter.title, path },
           ]),
         ]}
       />
       <HeaderFooter>
-        <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[12, 16]}>
-          <Link
-            as={NextLink}
-            href="/blog"
-            fontFamily={MONO}
-            fontSize="11px"
-            color="page.fg-secondary"
-            className="link-underline no-print"
-            display="inline-block"
-            mb={8}
-          >
-            ← All posts
-          </Link>
+        <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[12, 16]} pb={draftMode ? 24 : undefined}>
+          <Flex align="center" justify="space-between" gap={4} minH="32px" mb={8} className="no-print">
+            <Link as={NextLink} href="/blog" fontFamily={MONO} fontSize="11px" color="page.fg-secondary" className="link-underline">
+              ← All posts
+            </Link>
+            <EditPill kind="blog" slug={slug} />
+          </Flex>
 
           <Box as="article" lang={lang}>
-            <Box as="header">
-              <SectionLabel n="01" as="p">
-                Article
-              </SectionLabel>
+            <PageHeader
+              eyebrow={<span lang={ui}>Writing</span>}
+              title={frontmatter.title}
+              titleLang={titleLang !== lang ? titleLang : undefined}
+              lede={frontmatter.description}
+              vtName={`vt-blog-${slug}`}
+            />
 
-              <Heading
-                as="h1"
-                mt={6}
-                mb={4}
-                fontSize={['32px', '44px', '52px']}
-                lineHeight="1.08"
-                letterSpacing="-0.025em"
-                fontWeight={500}
-                maxW="900px"
-                style={{ viewTransitionName: `vt-blog-${slug}` }}
-              >
-                {frontmatter.title}
-              </Heading>
-
-              {frontmatter.description && (
-                <Text color="page.fg-secondary" fontSize={['16px', '17px']} maxW="720px" mb={6}>
-                  {frontmatter.description}
-                </Text>
-              )}
-
-              <Flex
-                wrap="wrap"
-                gap={4}
-                align="center"
-                fontFamily={MONO}
-                fontSize="11px"
-                color="page.fg-secondary"
-                mb={12}
-                pb={6}
-                borderBottom="1px solid"
-                borderColor="page.border"
-              >
-                {published && (
-                  <>
-                    <Text as="time" dateTime={published}>
-                      {formatPostDate(frontmatter.date)}
-                    </Text>
-                    <Text as="span" aria-hidden opacity={0.5}>
-                      ·
-                    </Text>
-                  </>
-                )}
-                <Text as="span">{readingMinutes} min read</Text>
-                {modified && modified !== published && (
-                  <>
-                    <Text as="span" aria-hidden opacity={0.5}>
-                      ·
-                    </Text>
-                    <Text as="span">
-                      Updated <time dateTime={modified}>{formatPostDate(frontmatter.updated)}</time>
-                    </Text>
-                  </>
-                )}
-                {tags.length > 0 && (
-                  <>
-                    <Text as="span" aria-hidden opacity={0.5}>
-                      ·
-                    </Text>
-                    <Flex as="ul" aria-label="Tags" listStyleType="none" gap={2} wrap="wrap" m={0} p={0}>
-                      {tags.map((t) => (
-                        <Box as="li" key={t}>
-                          <Tag size="sm" variant="outline" fontSize="10px" fontFamily={MONO} color="page.fg-secondary" boxShadow="inset 0 0 0px 1px var(--chakra-colors-page-border-strong)">
-                            {t}
-                          </Tag>
-                        </Box>
-                      ))}
-                    </Flex>
-                  </>
-                )}
-              </Flex>
+            <Box mb={12} pb={6} borderBottom="1px solid" borderColor="page.border" lang={ui}>
+              <MetaGrid items={meta} />
             </Box>
 
-            <ArticleBody source={source} toc={toc} />
+            <ArticleBody tree={tree} toc={toc} />
 
             <ArticleNav
               before={newer ? { label: 'Newer', item: newer } : null}
@@ -173,6 +159,7 @@ export default function BlogPost({ slug, frontmatter, source, readingMinutes, to
             />
           </Box>
         </Box>
+        {draftMode && <DraftBar path={path} />}
       </HeaderFooter>
     </>
   )
@@ -185,7 +172,8 @@ export const getStaticPaths: GetStaticPaths = async () => ({
 
 export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
   const slug = String(ctx.params?.slug || '')
-  const post = await getPost(slug)
+  const draftMode = ctx.draftMode === true
+  const post = await getPost(slug, { includeDrafts: draftMode })
   if (!post) return { notFound: true, revalidate: 60 }
 
   const posts = listPosts().map((p) => toArticleLink('blog', p))
@@ -197,13 +185,16 @@ export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
     props: {
       slug: post.slug,
       frontmatter: post.frontmatter,
-      source: post.source,
+      tree: post.tree,
       readingMinutes: post.readingMinutes,
       toc: post.toc,
       lang: post.lang,
+      excerpt: post.excerpt,
+      updatedAt: post.updatedAt,
       newer: before,
       older: after,
       related,
+      draftMode,
     },
     revalidate: 60,
   }

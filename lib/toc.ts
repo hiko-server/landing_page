@@ -144,11 +144,22 @@ function cjkTag(text: string): string {
   return 'zh-Hans'
 }
 
+/** Titles shorter than this say too little about the language of the piece. */
+export const SHORT_TITLE_CHARS = 12
+
 /**
- * Language of an article: an explicit frontmatter `lang` wins; otherwise a
- * title or body that is predominantly CJK yields 'zh-Hans' (or 'ja' / 'ko'
- * when kana / Hangul dominate); everything else is 'en'. Bilingual pieces
- * with roughly equal halves stay 'en'.
+ * Language of an article.
+ *
+ *   1. An explicit frontmatter `lang` wins.
+ *   2. A title of 12+ characters that is predominantly CJK decides
+ *      ('zh-Hans', or 'ja' / 'ko' when kana / Hangul dominate).
+ *   3. Otherwise (short or mostly Latin title) the body decides by its CJK
+ *      share of reading effort: ≥ 0.6 is a CJK piece; 0.25–0.6 is a
+ *      bilingual piece whose page language is the majority script (CJK only
+ *      above half — lib/rehype/langSpans marks the other script's runs);
+ *      below 0.25 is English with the odd CJK word.
+ *   4. With no body text, a short title still decides on its own (list
+ *      labels such as "爱车人社区").
  */
 export function detectContentLang({
   lang,
@@ -161,11 +172,15 @@ export function detectContentLang({
 }): string {
   const explicit = normalizeLang(lang)
   if (explicit) return explicit
-  const t = typeof title === 'string' ? title : ''
+  const t = typeof title === 'string' ? title.trim() : ''
   const b = typeof body === 'string' ? body : ''
-  if (t && cjkShare(t) >= CJK_THRESHOLD) return cjkTag(t)
-  if (b && cjkShare(b) >= CJK_THRESHOLD) return cjkTag(b)
-  return 'en'
+  const titleShare = t ? cjkShare(t) : 0
+  if (Array.from(t).length >= SHORT_TITLE_CHARS && titleShare >= CJK_THRESHOLD) return cjkTag(t)
+  const readable = readableText(b)
+  const hasBody = count(LATIN_WORD_RE, readable) + count(HAN_RE, readable) + count(KANA_RE, readable) + count(HANGUL_RE, readable) > 0
+  if (!hasBody) return t && titleShare >= CJK_THRESHOLD ? cjkTag(t) : 'en'
+  const share = cjkShare(b)
+  return share > 0.5 ? cjkTag(b) : 'en'
 }
 
 /** `lang` attribute for a short label (title in a list): only set when it differs from English. */

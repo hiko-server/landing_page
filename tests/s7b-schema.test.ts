@@ -3,6 +3,14 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import {
   absUrl,
+  articleImages,
+  blogPostingNode,
+  caseStudyNode,
+  clampDescription,
+  composeTitle,
+  isoWithTz,
+  personAuthor,
+  profilePageNode,
   breadcrumb,
   ogImageUrl,
   ogLocale,
@@ -12,7 +20,9 @@ import {
   websiteNode,
   withXDefault,
   CV_ALTERNATES,
+  PERSON_ID,
   SITE_URL,
+  WEBSITE_ID,
 } from '../lib/schema'
 
 test('serializeJsonLd cannot break out of the script element and stays valid JSON', () => {
@@ -101,6 +111,7 @@ test('withXDefault adds x-default, absolutises and de-duplicates; CV alternates 
     CV_ALTERNATES.map((a) => a.hrefLang),
     ['en', 'zh-Hans', 'x-default'],
   )
+  assert.equal(CV_ALTERNATES[1].href, `${SITE_URL}/cv/zh`)
   assert.equal(withXDefault(CV_ALTERNATES).length, 3)
 })
 
@@ -121,4 +132,81 @@ test('robots.txt allows social cards but keeps the API and admin out', () => {
   // First-match crawlers need the Allow before the broader Disallow.
   assert.ok(allowOg < disallowApi)
   assert.ok(lines.includes('Disallow: /admin'))
+})
+
+test('article JSON-LD: resolvable author, image array, dates with the +08:00 offset', () => {
+  const card = { kind: 'blog' as const, title: 'Post', date: '2026-05-30', mins: 4 }
+  const post: any = blogPostingNode({
+    path: '/blog/post',
+    title: 'Post',
+    description: 'About it',
+    lang: 'en',
+    images: articleImages(card, '/uploads/cover.jpg'),
+    keywords: ['Edge AI'],
+    datePublished: '2026-05-30',
+    dateModified: '2026-06-01',
+  })
+  assert.equal(post['@type'], 'BlogPosting')
+  assert.equal(post.author.name, 'Li Yanpei (Lucian)')
+  assert.equal(post.author['@id'], PERSON_ID)
+  assert.equal(post.author.url, `${SITE_URL}/about`)
+  assert.deepEqual(post.publisher, personAuthor)
+  assert.ok(Array.isArray(post.image) && post.image.length === 3)
+  assert.equal(post.image[0], `${SITE_URL}/uploads/cover.jpg`)
+  assert.equal(new URL(post.image[2]).searchParams.get('size'), 'square')
+  assert.equal(new URL(post.image[1]).searchParams.has('size'), false)
+  assert.equal(post.datePublished, '2026-05-30T00:00:00+08:00')
+  assert.equal(post.dateModified, '2026-06-01T00:00:00+08:00')
+  assert.equal(post.keywords, 'Edge AI')
+
+  const work: any = caseStudyNode({ path: '/work/x', title: 'X', lang: 'zh-Hans', images: articleImages({ kind: 'work', title: 'X' }), sameAs: ['https://x.example'] })
+  assert.equal(work.author.name, 'Li Yanpei (Lucian)')
+  assert.equal(work.image.length, 2)
+  assert.deepEqual(work.sameAs, ['https://x.example'])
+  assert.equal('description' in work, false)
+})
+
+test('isoWithTz appends the site offset to bare dates only', () => {
+  assert.equal(isoWithTz('2026-05-30'), '2026-05-30T00:00:00+08:00')
+  assert.equal(isoWithTz('2026-05-30T10:00:00Z'), '2026-05-30T10:00:00Z')
+  assert.equal(isoWithTz(''), '')
+  assert.equal(isoWithTz(undefined), '')
+})
+
+test('person, website and profile-page nodes', () => {
+  const p: any = personNode({ alternateName: ['李彦霈', 'Lucian', ' '] })
+  assert.deepEqual(p.alternateName, ['Lucian', '李彦霈'])
+  assert.deepEqual((personNode() as any).alternateName, ['Lucian'])
+  const site: any = websiteNode({ name: undefined })
+  assert.equal(site.url, `${SITE_URL}/`)
+  assert.equal(site.name, 'Li Yanpei (Lucian)')
+  assert.deepEqual(site.alternateName, ['lucian-dev.com'])
+  assert.equal((websiteNode({ name: 'Lucian builds' }) as any).name, 'Lucian builds')
+  const profile: any = profilePageNode({ path: '/about', dateModified: '2026-05-01' })
+  assert.equal(profile['@type'], 'ProfilePage')
+  assert.deepEqual(profile.mainEntity, { '@id': PERSON_ID })
+  assert.deepEqual(profile.isPartOf, { '@id': WEBSITE_ID })
+  assert.equal(profile.url, `${SITE_URL}/about`)
+  assert.equal(profile.dateModified, '2026-05-01T00:00:00+08:00')
+})
+
+test('composeTitle names the owner; zh pages use the Chinese name', () => {
+  assert.equal(composeTitle({ home: true }), 'Li Yanpei (Lucian) — Software Engineer')
+  assert.equal(composeTitle({ home: true, jobTitle: 'ML Engineer' }), 'Li Yanpei (Lucian) — ML Engineer')
+  assert.equal(composeTitle({ title: '  Writing  ' }), 'Writing · Li Yanpei')
+  assert.equal(composeTitle({ title: '简历', lang: 'zh-Hans', nameZh: '李彦霈' }), '简历 · 李彦霈')
+  assert.equal(composeTitle({ title: '简历', lang: 'zh-Hans' }), '简历 · Li Yanpei')
+  assert.equal(composeTitle({ title: '', fallback: 'lucian-dev.com' }), 'lucian-dev.com')
+})
+
+test('clampDescription: ≤155 chars at a boundary, short ones fall back', () => {
+  const long = `${'First sentence is here. '.repeat(4)}${'word '.repeat(40)}`
+  const out = clampDescription(long)
+  assert.ok(Array.from(out).length <= 155)
+  assert.ok(out.endsWith('.'), out)
+  const words = clampDescription('word '.repeat(60))
+  assert.ok(words.endsWith('…') && !words.endsWith(' …'))
+  assert.ok(Array.from(words).length <= 155)
+  assert.equal(clampDescription('Too short.', 'A much longer first paragraph that explains what the article is about in detail.'), 'A much longer first paragraph that explains what the article is about in detail.')
+  assert.equal(clampDescription('  spaced \n  out  '), 'spaced out')
 })
