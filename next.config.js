@@ -1,24 +1,25 @@
 /* eslint-disable @typescript-eslint/no-var-requires -- CommonJS config file */
+const path = require('path')
 const { buildCsp } = require('./lib/csp')
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  // Pin the tracing root to this project: a stray lockfile in a parent
+  // directory would otherwise make Next 15 trace from there and nest the
+  // standalone output (server.js) under the parent's relative path.
+  outputFileTracingRoot: path.join(__dirname),
   reactStrictMode: true,
   // Don't publish full client source (incl. the admin UI) as .map files.
   productionBrowserSourceMaps: false,
   poweredByHeader: false,
-  // Security: Next 14's Image Optimization API (/_next/image) runs sharp/libheif
-  // on request — GHSA-2xp9-vwfh-vxw4 (RCE via AVIF) and GHSA-h64f-5h5j-jqjh
-  // (memory DoS) are fixed only in Next >= 15.5.24. With `unoptimized` set,
-  // next/image emits the original URL and Next 14 answers /_next/image with
-  // 404 (next-server.js handleNextImageRequest), so the vulnerable code path
-  // is unreachable. Images are already sized/compressed at upload time.
+  // No on-request image optimization: /_next/image runs sharp/libheif on
+  // arbitrary requests (the AVIF RCE GHSA-2xp9-vwfh-vxw4 and memory-DoS
+  // advisories). Images are resized and converted at upload time instead, so
+  // next/image emits original URLs and /_next/image answers 404.
   images: { unoptimized: true },
+  // instrumentation.ts is stable in Next 15 (no flag needed).
   experimental: {
-    // Required on Next 14 so instrumentation.ts runs on server/edge startup and
-    // loads the Sentry init for each runtime. (Stable/removed in Next 15.)
-    instrumentationHook: true,
     // Back / Forward return to the previous scroll position instead of the
     // top. Next saves each history entry's position and restores it in the
     // commit that renders the page; pages/_app.tsx re-applies it after the
