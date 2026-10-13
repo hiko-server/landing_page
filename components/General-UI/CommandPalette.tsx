@@ -11,7 +11,6 @@ import {
   Spinner,
   useColorMode,
   usePrefersReducedMotion,
-  useToast,
 } from '@chakra-ui/react'
 import { useRouter } from 'next/router'
 import {
@@ -28,6 +27,8 @@ import {
 import { jumpToSection } from '../Article/useActiveHeading'
 import { copyText } from '../MDX/clipboard'
 import { NAV_SHORTCUTS, adminEditTarget, shortcutLabelFor } from '../Chrome/chrome'
+import { useChromeLang } from '../Chrome/chromeLang'
+import { useChromeToast } from '../Chrome/useChromeToast'
 import { toggleThemeWithTransition } from '../../lib/themeTransition'
 
 /**
@@ -243,7 +244,9 @@ async function fetchUnreadCount(signal: AbortSignal): Promise<number | null> {
 
 export default function CommandPalette({ isOpen, onClose, isAdmin = false }: CommandPaletteProps) {
   const router = useRouter()
-  const toast = useToast()
+  const toast = useChromeToast()
+  // The palette's own text is English; results in another language carry their own lang.
+  const chromeLang = useChromeLang()
   const reduceMotion = usePrefersReducedMotion()
   const { colorMode, toggleColorMode } = useColorMode()
   const baseId = useId()
@@ -760,6 +763,7 @@ export default function CommandPalette({ isOpen, onClose, isAdmin = false }: Com
       <ModalOverlay backdropFilter="blur(12px)" bg="rgba(0,0,0,0.45)" />
       <ModalContent
         aria-label="Command palette"
+        lang={chromeLang}
         motionProps={
           reduceMotion
             ? undefined

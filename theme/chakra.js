@@ -1,5 +1,5 @@
 import { extendTheme } from '@chakra-ui/react'
-import { semanticColors } from './color'
+import { printColorVariables, semanticColors } from './color'
 
 /**
  * v6 "Indigo Precision" theme.
@@ -117,6 +117,19 @@ const components = {
       _focusVisible: { ...FOCUS_RING },
     },
   },
+  // Validation text and the required asterisk: Chakra's red.500 is under AA
+  // at 12px on paper; status.error is AA in both modes (theme/color.ts).
+  FormError: {
+    baseStyle: {
+      text: { color: 'status.error' },
+      icon: { color: 'status.error' },
+    },
+  },
+  Form: {
+    baseStyle: {
+      requiredIndicator: { color: 'status.error' },
+    },
+  },
   Alert: {
     variants: {
       // Elevated surface + hairline border + a 3px status bar on the left;
@@ -221,6 +234,12 @@ const theme = {
         '::selection': {
           background: semanticColors['accent.solid'].light,
           color: semanticColors['accent.fg'].light,
+        },
+        // Paper is white: printed pages use the light value of every
+        // semantic colour, also when the screen is in dark mode. The selector
+        // outranks the dark-mode variables (`:root[data-theme=dark]`).
+        '@media print': {
+          'html:root[data-theme]': printColorVariables(),
         },
       },
     },

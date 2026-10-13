@@ -20,6 +20,9 @@ import { resolveHtmlLang, routeHasChrome } from '../components/Chrome/chrome'
 import ScrollToTop from '../components/ScrollToTop/ScrollToTop'
 import ScrollProgressBar from '../components/General-UI/ScrollProgressBar'
 import { HtmlLangContext } from '../components/Common/htmlLang'
+import { ChromeLangContext, chromeLangFor } from '../components/Chrome/chromeLang'
+import { monoFallbackFontFaces } from '../lib/monoFallback'
+import { installPrintDetails } from '../lib/print'
 import { RestoreScrollOnMount, useDeferredScrollRestore } from '../components/Common/scrollRestore'
 import { ClockProvider } from '../lib/clock'
 
@@ -29,7 +32,11 @@ import { ClockProvider } from '../lib/clock'
 // own variable file that the browser fetches only when italic text renders
 // (globals.css maps em / i / cite / [data-italic] to it). The fallback lists
 // end with the platforms' Chinese UI fonts so 中文 never lands on a serif,
-// and the sans fallback is metric-adjusted (Arial) to keep CLS at zero.
+// and the sans fallback is metric-adjusted (Arial) to keep CLS at zero. The
+// mono face must not fall back to Arial (proportional): it lists installed
+// monospace faces metric-matched to Geist Mono first (lib/monoFallback.ts,
+// whose @font-face rules are rendered below), so mono labels keep their
+// width when Geist Mono swaps in.
 const sans = localFont({
   src: [{ path: '../public/fonts/Geist-Variable.woff2', style: 'normal', weight: '100 900' }],
   variable: '--font-geist-sans',
@@ -51,13 +58,22 @@ const mono = localFont({
   variable: '--font-geist-mono',
   display: 'swap',
   preload: true,
-  fallback: ['ui-monospace', 'SF Mono', 'Consolas', 'monospace'],
+  fallback: [
+    'Geist Mono Fallback Menlo',
+    'Geist Mono Fallback Consolas',
+    'Geist Mono Fallback Courier',
+    'ui-monospace',
+    'SF Mono',
+    'Consolas',
+    'monospace',
+  ],
+  adjustFontFallback: false,
 })
 
 // The font variables are defined on :root (not on a wrapper element) so that
 // everything Chakra portals to <body> — drawers, the ⌘K palette, menus,
 // tooltips, toasts — resolves the same Geist stacks.
-const FONT_VARIABLES_CSS = `:root{--font-geist-sans:${sans.style.fontFamily};--font-geist-sans-italic:${sansItalic.style.fontFamily};--font-geist-mono:${mono.style.fontFamily}}`
+const FONT_VARIABLES_CSS = `${monoFallbackFontFaces()}:root{--font-geist-sans:${sans.style.fontFamily};--font-geist-sans-italic:${sansItalic.style.fontFamily};--font-geist-mono:${mono.style.fontFamily}}`
 
 // Every toast: the elevated v6 Alert (theme/chakra.js), bottom centre, short.
 const TOAST_OPTIONS = { defaultOptions: { variant: 'v6', position: 'bottom', duration: 2000, isClosable: true } } as const
@@ -91,6 +107,11 @@ const App = ({ Component, pageProps, router }: AppProps) => {
   useEffect(() => {
     document.documentElement.lang = lang
   }, [lang, router.asPath])
+  // The English chrome is marked lang="en" whenever the page is not English.
+  const chromeLang = chromeLangFor(lang)
+
+  // Printing: closed <details> are opened for the print, then closed again.
+  useEffect(() => installPrintDetails(window), [])
 
   // Browsers with the View Transitions API animate route changes natively
   // (see components/Chrome/RouteTransitions.tsx), so the framer-motion wrapper
@@ -121,20 +142,23 @@ const App = ({ Component, pageProps, router }: AppProps) => {
       <MotionConfig reducedMotion="user">
         <Head>
           <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <link rel="icon" href="/images/favicon-32x32.png" />
+          {/* The one icon set, site-wide (pages never add their own). */}
+          <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png" />
           <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
           <style key="font-variables" dangerouslySetInnerHTML={{ __html: FONT_VARIABLES_CSS }} />
         </Head>
         <ThemeColorMeta />
         {/* Server-computed reference month (pageProps.clockMonth) so time-based
             text renders identically on the server and while hydrating. */}
-        <ClockProvider month={pageProps?.clockMonth}>
-          <HtmlLangContext.Provider value={setReportedLang}>
-            {withChrome ? <SiteChrome socials={pageProps?.chromeSocials}>{page}</SiteChrome> : page}
-          </HtmlLangContext.Provider>
-        </ClockProvider>
-        <ScrollToTop />
-        <ScrollProgressBar />
+        <ChromeLangContext.Provider value={chromeLang}>
+          <ClockProvider month={pageProps?.clockMonth}>
+            <HtmlLangContext.Provider value={setReportedLang}>
+              {withChrome ? <SiteChrome socials={pageProps?.chromeSocials}>{page}</SiteChrome> : page}
+            </HtmlLangContext.Provider>
+          </ClockProvider>
+          <ScrollToTop />
+          <ScrollProgressBar />
+        </ChromeLangContext.Provider>
       </MotionConfig>
     </ChakraProvider>
   )

@@ -1,5 +1,5 @@
 import React from 'react'
-import { Box, Flex, useColorModeValue } from '@chakra-ui/react'
+import { Box, Flex } from '@chakra-ui/react'
 import { Education } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'
 import { cvLabels, formatCvRange, majorAddsInfo } from '../../lib/cvFormat'
@@ -18,8 +18,8 @@ const EducationSection = ({
 }) => {
   const L = cvLabels(lang)
   const items = (data?.educationExperience || []).filter((e) => t(e.schoolName) || t(e.degree))
-  // GPA line color — theme-aware (gray.500 on white fails WCAG AA).
-  const gpaColor = useColorModeValue('gray.600', 'gray.500')
+  // GPA line: a semantic token (AA in both modes, correct on the first paint).
+  const gpaColor = 'page.fg-secondary'
   if (!items.length) return null
   return (
     <CVSectionShell index={index} label={data?.headerName || 'Education'} count={items.length} countSuffix={L.entries}>

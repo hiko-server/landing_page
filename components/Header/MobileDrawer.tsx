@@ -17,6 +17,7 @@ import {
 import NextLink from 'next/link'
 import { useRouter } from 'next/router'
 import { MOBILE_MENU_ID, PRIMARY_LINKS, type SocialLink, type SocialName, isActiveRoute } from '../Chrome/chrome'
+import { useChromeLang } from '../Chrome/chromeLang'
 import { GitHubIcon, GitLabIcon, LinkedInIcon, WhatsAppIcon } from '../Icons/brand'
 import { toggleThemeWithTransition } from '../../lib/themeTransition'
 import ThemeIcon from './ThemeIcon'
@@ -59,11 +60,13 @@ export default function MobileDrawer({ isOpen, onClose, socials, isAdmin, onLogo
   const { colorMode, toggleColorMode } = useColorMode()
   const firstLinkRef = useRef<HTMLAnchorElement>(null)
   const isDark = colorMode === 'dark'
+  // Portaled to <body>, outside the header's lang="en" subtree.
+  const chromeLang = useChromeLang()
 
   return (
     <Drawer id={MOBILE_MENU_ID} isOpen={isOpen} placement="right" onClose={onClose} size="xs" initialFocusRef={firstLinkRef}>
       <DrawerOverlay bg="rgba(0,0,0,0.6)" backdropFilter="blur(4px)" />
-      <DrawerContent bg="page.bg" color="page.fg" borderLeft="1px solid" borderColor="page.border">
+      <DrawerContent lang={chromeLang} bg="page.bg" color="page.fg" borderLeft="1px solid" borderColor="page.border">
         <DrawerCloseButton top="10px" color="page.fg-subtle" _hover={{ color: 'page.fg', bg: 'page.hover' }} />
         <DrawerHeader
           borderBottomWidth="1px"

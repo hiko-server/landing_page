@@ -5,6 +5,7 @@ import { Fragment, jsx, jsxs } from 'react/jsx-runtime'
 import { toJsxRuntime, type Components, type Jsx } from 'hast-util-to-jsx-runtime'
 import type { Root as HastRoot } from 'hast'
 import { safeHref } from '../../lib/cvFormat'
+import { printableLinkUrl, textOfNode } from '../../lib/print'
 import CodeBlock, { CodeFigure } from './CodeBlock'
 import ArticleFigure, { FigCaption, InsideLinkContext, MdxImage } from './Figure'
 import YouTube from './YouTube'
@@ -128,7 +129,15 @@ function MdxLink({ href, className, children, ...rest }: React.AnchorHTMLAttribu
   const inner = <InsideLinkContext.Provider value>{children}</InsideLinkContext.Provider>
   if (isExternal(safe)) {
     return (
-      <ChakraLink href={safe} isExternal color="accent.text" className="link-underline" {...rest}>
+      <ChakraLink
+        href={safe}
+        isExternal
+        color="accent.text"
+        className="link-underline"
+        // Printed after the link text on paper (styles/globals.css, @media print).
+        data-print-url={printableLinkUrl(safe, textOfNode(children))}
+        {...rest}
+      >
         {inner}
       </ChakraLink>
     )

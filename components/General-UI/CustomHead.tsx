@@ -1,6 +1,5 @@
 import Head from 'next/head'
 import { useEffect, useState } from 'react'
-import { VPColor } from '../../theme/color'
 import {
   SITE_HOST,
   absUrl,
@@ -57,7 +56,6 @@ type Props = {
   image?: string
   imageAlt?: string
   type?: string
-  themeColor?: string
   twitterCard?: 'summary' | 'summary_large_image'
   canonical?: string
   /**
@@ -89,7 +87,6 @@ const CustomHead = ({
   image,
   imageAlt,
   type = 'website',
-  themeColor,
   twitterCard = 'summary_large_image',
   canonical,
   alternates,
@@ -143,13 +140,11 @@ const CustomHead = ({
   return (
     <Head>
       <meta charSet="utf-8" />
-      <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
       {/* Allow pinch-zoom for accessibility (no maximum-scale / user-scalable=no). */}
       <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-      <meta
-        name="theme-color"
-        content={themeColor ? themeColor : VPColor ? VPColor.index.blue : '#559ec7'}
-      />
+      {/* theme-color is mode-aware and site-wide (pages/_document.tsx +
+          components/Chrome/ThemeColorMeta.tsx); the favicon and the Apple
+          touch icon are site-wide too (pages/_app.tsx). */}
 
       <title>{pageTitle}</title>
       <meta name="description" content={pageDesc} />
@@ -207,8 +202,6 @@ const CustomHead = ({
 
       {/* PWA basics */}
       <link rel="manifest" href="/manifest.json" />
-      <link rel="icon" href="/images/favicon-32x32.png" />
-      <link rel="apple-touch-icon" href="/apple-icon.png" />
     </Head>
   )
 }

@@ -683,7 +683,7 @@ export default function ContactPro({
                   </Flex>
                   <FormErrorMessage fontSize="12px">{shown.mathAnswer}</FormErrorMessage>
                   {nonceErr && (
-                    <Text role="alert" mt={2} fontFamily={monoFont} fontSize="12px" color="red.500" _dark={{ color: 'red.300' }}>
+                    <Text role="alert" mt={2} fontFamily={monoFont} fontSize="12px" color="status.error">
                       {nonceErr}
                     </Text>
                   )}
