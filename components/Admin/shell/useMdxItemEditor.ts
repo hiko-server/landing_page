@@ -6,6 +6,7 @@ import type { RichEditorHandle } from '../RichEditor'
 import type { MdxProblem } from '../editor/EditorNotices'
 import { loginHref, parseRevalidated, readJsonObject, saveToastCopy } from './http'
 import { slugFromTitle } from './publishChecks'
+import { useLeaveSaver } from './useLeaveSaver'
 import { useLocalDraft } from './useLocalDraft'
 import { useSaveShortcut, type SaveState } from './ui'
 
@@ -176,6 +177,7 @@ export function useMdxItemEditor<F extends Record<string, unknown> & { draft: bo
     if (loadState === 'ready' && baseline === null) setBaseline(snapshot)
   }, [loadState, baseline, snapshot])
   const dirty = loadState === 'ready' && baseline !== null && snapshot !== baseline
+  const { track, leave } = useLeaveSaver(snapshot)
 
   const draftValue = useMemo<DraftValue<F>>(() => ({ slug, fm, listText, body }), [slug, fm, listText, body])
   const {
@@ -228,85 +230,92 @@ export function useMdxItemEditor<F extends Record<string, unknown> & { draft: bo
       if (!isNew && etag && !options.force) headers['If-Match'] = etag
       savingRef.current = true
       setSaving(true)
-      let res: Response | null = null
-      try {
-        res = await fetch(endpoint, {
-          method: 'PUT',
-          headers,
-          // New items must never silently overwrite an existing slug.
-          body: JSON.stringify({ slug, frontmatter: toServer(nextFm, list), body, create: isNew }),
-        })
-      } catch {
-        res = null
-      }
-      savingRef.current = false
-      setSaving(false)
-      if (!res) {
-        toast({ status: 'error', title: 'Network error — not saved', description: 'Your edits are kept on this device.', position: 'bottom-right' })
-        return false
-      }
-      const data = await readJsonObject(res)
-      if (!res.ok) {
-        if (res.status === 409 && data.code === 'VERSION_CONFLICT') {
-          flushDraft()
-          conflictOptions.current = options
-          setConflict(true)
-          return false
-        }
-        if (res.status === 422 && data.code === 'MDX_INVALID') {
-          const problem: MdxProblem = {
-            line: typeof data.line === 'number' ? data.line : null,
-            column: typeof data.column === 'number' ? data.column : null,
-            reason: typeof data.reason === 'string' ? data.reason : 'The body does not compile',
+      return track(
+        savedSnapshot,
+        (async (): Promise<boolean> => {
+          let res: Response | null = null
+          try {
+            res = await fetch(endpoint, {
+              method: 'PUT',
+              headers,
+              // New items must never silently overwrite an existing slug.
+              body: JSON.stringify({ slug, frontmatter: toServer(nextFm, list), body, create: isNew }),
+            })
+          } catch {
+            res = null
           }
-          setMdxError(problem)
-          if (problem.line !== null) richRef.current?.jumpToLine(problem.line, problem.column ?? 1)
-          return false
-        }
-        if (res.status === 401) setSessionExpired(true)
-        toast({
-          status: 'error',
-          title: 'Save failed',
-          description:
-            res.status === 401
-              ? 'Your session has expired. Sign in again in a new tab, then save — your edits are kept.'
-              : res.status === 409
-                ? `A ${noun} with the slug “${slug}” already exists. Pick another slug.`
-                : res.status === 429
-                  ? 'Too many saves in a short time — wait a minute and try again.'
-                  : data.error || `HTTP ${res.status}`,
-          position: 'bottom-right',
-          duration: 7000,
-          isClosable: true,
-        })
-        return false
-      }
-      const paths = parseRevalidated(data)
-      setSessionExpired(false)
-      setMdxError(null)
-      setConflict(false)
-      setRevalidated(paths)
-      setFm({ ...nextFm, [listField]: list })
-      setBaseline(savedSnapshot)
-      setEtag(typeof data.etag === 'string' ? data.etag : res.headers.get('ETag'))
-      setSavedAt(Date.now())
-      clearDraft()
-      const verb =
-        options.draft === false ? 'Published' : options.draft === true ? 'Unpublished — now a draft' : nextFm.draft ? 'Draft saved' : 'Updated'
-      toast({ ...saveToastCopy(data), title: `${verb} — snapshot taken`, position: 'bottom-right' })
-      if (isNew) {
-        justCreated.current = slug
-        router.replace(`/admin/${collection}/edit?slug=${encodeURIComponent(slug)}`, undefined, {
-          shallow: true,
-          scroll: false,
-        })
-      }
-      return true
+          savingRef.current = false
+          setSaving(false)
+          if (!res) {
+            toast({ status: 'error', title: 'Network error — not saved', description: 'Your edits are kept on this device.', position: 'bottom-right' })
+            return false
+          }
+          const data = await readJsonObject(res)
+          if (!res.ok) {
+            if (res.status === 409 && data.code === 'VERSION_CONFLICT') {
+              flushDraft()
+              conflictOptions.current = options
+              setConflict(true)
+              return false
+            }
+            if (res.status === 422 && data.code === 'MDX_INVALID') {
+              const problem: MdxProblem = {
+                line: typeof data.line === 'number' ? data.line : null,
+                column: typeof data.column === 'number' ? data.column : null,
+                reason: typeof data.reason === 'string' ? data.reason : 'The body does not compile',
+              }
+              setMdxError(problem)
+              if (problem.line !== null) richRef.current?.jumpToLine(problem.line, problem.column ?? 1)
+              return false
+            }
+            if (res.status === 401) setSessionExpired(true)
+            toast({
+              status: 'error',
+              title: 'Save failed',
+              description:
+                res.status === 401
+                  ? 'Your session has expired. Sign in again in a new tab, then save — your edits are kept.'
+                  : res.status === 409
+                    ? `A ${noun} with the slug “${slug}” already exists. Pick another slug.`
+                    : res.status === 429
+                      ? 'Too many saves in a short time — wait a minute and try again.'
+                      : data.error || `HTTP ${res.status}`,
+              position: 'bottom-right',
+              duration: 7000,
+              isClosable: true,
+            })
+            return false
+          }
+          const paths = parseRevalidated(data)
+          setSessionExpired(false)
+          setMdxError(null)
+          setConflict(false)
+          setRevalidated(paths)
+          setFm({ ...nextFm, [listField]: list })
+          setBaseline(savedSnapshot)
+          setEtag(typeof data.etag === 'string' ? data.etag : res.headers.get('ETag'))
+          setSavedAt(Date.now())
+          clearDraft()
+          const verb =
+            options.draft === false ? 'Published' : options.draft === true ? 'Unpublished — now a draft' : nextFm.draft ? 'Draft saved' : 'Updated'
+          toast({ ...saveToastCopy(data), title: `${verb} — snapshot taken`, position: 'bottom-right' })
+          if (isNew) {
+            justCreated.current = slug
+            router.replace(`/admin/${collection}/edit?slug=${encodeURIComponent(slug)}`, undefined, {
+              shallow: true,
+              scroll: false,
+            })
+          }
+          return true
+        })(),
+      )
     },
-    [loadState, slug, fm, listText, body, snapshotOf, isNew, etag, endpoint, toServer, noun, listField, toast, collection, router, flushDraft, clearDraft],
+    [loadState, slug, fm, listText, body, snapshotOf, isNew, etag, endpoint, toServer, noun, listField, toast, collection, router, flushDraft, clearDraft, track],
   )
 
-  useDirtyRegistration(collection, dirty, () => save())
+  // "Save and leave": true only once the edits are stored; a 409 / 422 / 401,
+  // a network error or a failed check keeps the page open with its explanation.
+  useDirtyRegistration(collection, dirty, () => leave(() => save()))
 
   const canSave = loadState === 'ready' && dirty && !saving
   useSaveShortcut(canSave, () => void save())

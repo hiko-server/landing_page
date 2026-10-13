@@ -26,7 +26,8 @@ import {
   usePrefersReducedMotion,
   useToast,
 } from '@chakra-ui/react'
-import { useEditor, EditorContent, type Editor } from '@tiptap/react'
+import { useEditor, useEditorState, EditorContent, type Editor } from '@tiptap/react'
+import type { EditorProps } from '@tiptap/pm/view'
 import {
   FaBold,
   FaItalic,
@@ -52,6 +53,13 @@ import ImageBubble from './editor/ImageBubble'
 import { UPLOAD_ACCEPT, altFromFileName, uploadImage, type UploadedImage } from './editor/upload'
 import { markdownLink, rawCodeFence, rawSnippet, youtubeTag, youtubeWatchUrl } from './editor/slashItems'
 import { headingIndexAt, offsetOfLineColumn, slashTriggerAt, textareaCaretRect } from './editor/textareaCaret'
+import {
+  planVisualSync,
+  sameToolbarState,
+  sameViewSnapshot,
+  viewSnapshot,
+  type ToolbarState,
+} from './editor/editorSync'
 
 /**
  * RichEditor — dual-mode WYSIWYG / raw-MDX editor used by all admin content
@@ -79,6 +87,15 @@ import { headingIndexAt, offsetOfLineColumn, slashTriggerAt, textareaCaretRect }
  *
  * Imperative handle (`handleRef`): `jumpToLine(line, column)` (opens the MDX
  * tab with the caret on a compile error) and `focus()`.
+ *
+ * Rendering contract (editor/editorSync.ts): this component does NOT
+ * re-render on TipTap transactions. The toolbar and the bubble menus
+ * subscribe to editor state through selectors that only change when what
+ * they show changes, so a metadata-only transaction (TipTap's BubbleMenu
+ * dispatches one whenever its props change) can never start a render →
+ * transaction → render cycle. The useEditor options are kept referentially
+ * stable for the same reason, and content set from outside never emits an
+ * update.
  */
 
 export type RichEditorHandle = {
@@ -157,8 +174,34 @@ function Divider() {
   return <Box w="1px" h="20px" bg="page.border" mx={1} aria-hidden />
 }
 
-function Toolbar({ editor, onPickImage, onLink }: { editor: Editor | null; onPickImage: () => void; onLink: () => void }) {
-  if (!editor) return null
+function toolbarStateOf(ed: Editor): ToolbarState {
+  return {
+    heading2: ed.isActive('heading', { level: 2 }),
+    bold: ed.isActive('bold'),
+    italic: ed.isActive('italic'),
+    strike: ed.isActive('strike'),
+    code: ed.isActive('code'),
+    bulletList: ed.isActive('bulletList'),
+    orderedList: ed.isActive('orderedList'),
+    blockquote: ed.isActive('blockquote'),
+    codeBlock: ed.isActive('codeBlock'),
+    link: ed.isActive('link'),
+    canUndo: ed.can().undo(),
+    canRedo: ed.can().redo(),
+  }
+}
+
+/** Formatting toolbar; re-renders only when an active / enabled state changes. */
+const Toolbar = React.memo(function Toolbar({
+  editor,
+  onPickImage,
+  onLink,
+}: {
+  editor: Editor
+  onPickImage: () => void
+  onLink: () => void
+}) {
+  const state = useEditorState({ editor, selector: ({ editor: ed }) => toolbarStateOf(ed), equalityFn: sameToolbarState })
   return (
     <HStack
       role="toolbar"
@@ -178,77 +221,88 @@ function Toolbar({ editor, onPickImage, onLink }: { editor: Editor | null; onPic
         label="Heading 2"
         icon={<FaHeading size={12} />}
         onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        isActive={editor.isActive('heading', { level: 2 })}
+        isActive={state.heading2}
       />
-      <ToolbarButton
-        label="Bold (⌘B)"
-        icon={<FaBold size={12} />}
-        onClick={() => editor.chain().focus().toggleBold().run()}
-        isActive={editor.isActive('bold')}
-      />
+      <ToolbarButton label="Bold (⌘B)" icon={<FaBold size={12} />} onClick={() => editor.chain().focus().toggleBold().run()} isActive={state.bold} />
       <ToolbarButton
         label="Italic (⌘I)"
         icon={<FaItalic size={12} />}
         onClick={() => editor.chain().focus().toggleItalic().run()}
-        isActive={editor.isActive('italic')}
+        isActive={state.italic}
       />
       <ToolbarButton
         label="Strikethrough"
         icon={<FaStrikethrough size={12} />}
         onClick={() => editor.chain().focus().toggleStrike().run()}
-        isActive={editor.isActive('strike')}
+        isActive={state.strike}
       />
-      <ToolbarButton
-        label="Inline code"
-        icon={<FaCode size={12} />}
-        onClick={() => editor.chain().focus().toggleCode().run()}
-        isActive={editor.isActive('code')}
-      />
+      <ToolbarButton label="Inline code" icon={<FaCode size={12} />} onClick={() => editor.chain().focus().toggleCode().run()} isActive={state.code} />
       <Divider />
       <ToolbarButton
         label="Bullet list"
         icon={<FaListUl size={12} />}
         onClick={() => editor.chain().focus().toggleBulletList().run()}
-        isActive={editor.isActive('bulletList')}
+        isActive={state.bulletList}
       />
       <ToolbarButton
         label="Numbered list"
         icon={<FaListOl size={12} />}
         onClick={() => editor.chain().focus().toggleOrderedList().run()}
-        isActive={editor.isActive('orderedList')}
+        isActive={state.orderedList}
       />
       <ToolbarButton
         label="Quote"
         icon={<FaQuoteRight size={12} />}
         onClick={() => editor.chain().focus().toggleBlockquote().run()}
-        isActive={editor.isActive('blockquote')}
+        isActive={state.blockquote}
       />
       <ToolbarButton
         label="Code block"
         icon={<FaCode size={12} />}
         onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-        isActive={editor.isActive('codeBlock')}
+        isActive={state.codeBlock}
       />
       <ToolbarButton label="Horizontal rule" icon={<FaMinus size={12} />} onClick={() => editor.chain().focus().setHorizontalRule().run()} />
       <Divider />
-      <ToolbarButton label="Link (⌘K)" icon={<FaLink size={12} />} onClick={onLink} isActive={editor.isActive('link')} />
+      <ToolbarButton label="Link (⌘K)" icon={<FaLink size={12} />} onClick={onLink} isActive={state.link} />
       <ToolbarButton label="Insert image" icon={<FaImage size={12} />} onClick={onPickImage} />
       <Divider />
-      <ToolbarButton
-        label="Undo (⌘Z)"
-        icon={<FaUndo size={12} />}
-        onClick={() => editor.chain().focus().undo().run()}
-        isDisabled={!editor.can().undo()}
-      />
+      <ToolbarButton label="Undo (⌘Z)" icon={<FaUndo size={12} />} onClick={() => editor.chain().focus().undo().run()} isDisabled={!state.canUndo} />
       <ToolbarButton
         label="Redo (⌘⇧Z)"
         icon={<FaRedo size={12} />}
         onClick={() => editor.chain().focus().redo().run()}
-        isDisabled={!editor.can().redo()}
+        isDisabled={!state.canRedo}
       />
     </HStack>
   )
-}
+})
+
+/**
+ * Selection bubbles. They render from the editor state (active marks, the
+ * selected image), so they follow the document, selection and stored marks —
+ * but not metadata-only transactions, which their own <BubbleMenu> dispatches
+ * whenever they render (see editor/editorSync.ts).
+ */
+const EditorBubbles = React.memo(function EditorBubbles({
+  editor,
+  linkHandle,
+}: {
+  editor: Editor
+  linkHandle: React.MutableRefObject<LinkBubbleHandle | null>
+}) {
+  useEditorState({
+    editor,
+    selector: ({ editor: ed }) => viewSnapshot(ed.state, Boolean(ed.isEditable)),
+    equalityFn: sameViewSnapshot,
+  })
+  return (
+    <>
+      <LinkBubble editor={editor} handleRef={linkHandle} />
+      <ImageBubble editor={editor} />
+    </>
+  )
+})
 
 function RiskList({ risks }: { risks: MdxRisk[] }) {
   return (
@@ -313,8 +367,16 @@ export default function RichEditor({
   // The last markdown string this component produced (either surface).
   // Anything else arriving through `value` came from outside (load, reload).
   const lastEmitted = useRef<string>(value)
+  // TipTap is created with the value of the first render; later values are
+  // synced by the effect below (a changing `content` option would make
+  // useEditor reconfigure the editor on every keystroke).
+  const [initialContent] = useState(value)
   // What TipTap currently holds, to avoid re-applying identical content.
-  const lastApplied = useRef<string>(value)
+  const lastApplied = useRef<string>(initialContent)
+  // An outside value arrived that TipTap has not been given yet.
+  const externalPending = useRef(false)
+  // The editor instance lastApplied refers to.
+  const syncedEditor = useRef<Editor | null>(null)
   const valueRef = useRef(value)
   valueRef.current = value
 
@@ -381,23 +443,14 @@ export default function RichEditor({
   const slashExtension = useMemo(() => createSlashCommand(bridge), [])
   const pendingImageInsert = useRef<number | null>(null)
 
-  const editor = useEditor({
-    extensions: [...baseExtensions({ placeholder: placeholder || 'Write something… Type / for blocks.' }), slashExtension],
-    content: value,
-    // Pages-router SSR: render on the client only (avoids hydration mismatch),
-    // and re-render on every transaction so toolbar active / undo states stay live.
-    immediatelyRender: false,
-    shouldRerenderOnTransaction: true,
-    onUpdate: ({ editor: ed }) => {
-      const md = getMarkdown(ed)
-      lastApplied.current = md
-      emitRef.current(md)
-    },
-    onSelectionUpdate: ({ editor: ed }) => reportHeading(visualHeadingIndex(ed)),
-    onBlur: () => {
-      if (!slashStepping.current) setSlash((s) => (s?.source === 'visual' ? null : s))
-    },
-    editorProps: {
+  // useEditor compares these options on every render and reconfigures the
+  // editor when one changed, so they must keep their identity.
+  const extensions = useMemo(
+    () => [...baseExtensions({ placeholder: placeholder || 'Write something… Type / for blocks.' }), slashExtension],
+    [placeholder, slashExtension],
+  )
+  const editorProps = useMemo<EditorProps>(
+    () => ({
       attributes: {
         class: 'tt-prose',
         role: 'textbox',
@@ -405,8 +458,11 @@ export default function RichEditor({
         ...(labelledBy ? { 'aria-labelledby': labelledBy } : {}),
       },
       handleKeyDown(_view, event) {
+        // Inside the editor ⌘K edits the link; stopPropagation keeps it from also
+        // reaching the site-wide command palette shortcut (a document keydown listener).
         if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'k') {
           event.preventDefault()
+          event.stopPropagation()
           linkHandle.current?.openLink()
           return true
         }
@@ -449,29 +505,58 @@ export default function RichEditor({
         }
         return false
       },
+    }),
+    [labelledBy],
+  )
+
+  const editor = useEditor({
+    extensions,
+    content: initialContent,
+    editorProps,
+    // Pages-router SSR: render on the client only (avoids hydration mismatch).
+    immediatelyRender: false,
+    // The toolbar and bubbles subscribe to the state they show; re-rendering
+    // this whole tree on every transaction is what fed the update loop.
+    shouldRerenderOnTransaction: false,
+    // Callbacks are read from the latest options on every event.
+    onUpdate: ({ editor: ed }) => {
+      const md = getMarkdown(ed)
+      lastApplied.current = md
+      emitRef.current(md)
+    },
+    onSelectionUpdate: ({ editor: ed }) => reportHeading(visualHeadingIndex(ed)),
+    onBlur: () => {
+      if (!slashStepping.current) setSlash((s) => (s?.source === 'visual' ? null : s))
     },
   })
 
-  // External value changes (load / reload): re-check for MDX constructs and
-  // sync TipTap without emitting an update.
+  // Values from outside (load, reload, draft restore) — anything but this
+  // component's own echo: re-check for MDX constructs.
   useEffect(() => {
     if (value === lastEmitted.current) return
     lastEmitted.current = value
+    externalPending.current = true
     if (detectMdxRisks(value).length) setTabIndex(RAW)
-    if (editor && value !== lastApplied.current) {
-      lastApplied.current = value
-      editor.commands.setContent(value || '', { emitUpdate: false })
-    }
-  }, [value, editor])
+  }, [value])
 
-  // Entering the visual tab: load the latest raw text typed in the MDX tab.
+  // Bring TipTap's document up to date: outside values at once, raw MDX
+  // typing when the Visual tab opens. Content set here never emits an update,
+  // and identical content (as Markdown) is not set again.
   useEffect(() => {
-    if (!editor || tabIndex !== VISUAL || value === lastApplied.current) return
-    lastApplied.current = value
-    editor.commands.setContent(value || '', { emitUpdate: false })
-    // Only on tab change: typing in the visual editor updates lastApplied itself.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tabIndex, editor])
+    if (!editor || editor.isDestroyed) return
+    if (syncedEditor.current !== editor) {
+      // A new instance starts from the content it was created with.
+      syncedEditor.current = editor
+      lastApplied.current = initialContent
+    }
+    if (tabIndex !== VISUAL && !externalPending.current) return
+    externalPending.current = false
+    const md = valueRef.current
+    const plan = planVisualSync(md, lastApplied.current, () => getMarkdown(editor))
+    if (plan === 'none') return
+    lastApplied.current = md
+    if (plan === 'apply') editor.commands.setContent(md || '', { emitUpdate: false })
+  }, [value, editor, tabIndex, initialContent])
 
   // A tab switch closes any open slash menu.
   useEffect(() => {
@@ -719,6 +804,7 @@ export default function RichEditor({
     [editor, reducedMotion],
   )
 
+  const slashAnchorRect = useCallback(() => slashAnchor.current(), [])
   const slashController = slash?.source === 'raw' ? mdxRef.current : editor ? (editor.view.dom as HTMLElement) : null
 
   return (
@@ -762,7 +848,7 @@ export default function RichEditor({
         <TabPanels>
           <TabPanel p={0}>
             <Box border="1px solid" borderColor="page.border-strong" borderRadius="lg" bg="page.bg">
-              <Toolbar editor={editor} onPickImage={onPickImage} onLink={openLink} />
+              {editor ? <Toolbar editor={editor} onPickImage={onPickImage} onLink={openLink} /> : null}
               <Box
                 px={4}
                 py={3}
@@ -814,12 +900,7 @@ export default function RichEditor({
                 }}
               >
                 <EditorContent editor={editor} />
-                {editor ? (
-                  <>
-                    <LinkBubble editor={editor} handleRef={linkHandle} />
-                    <ImageBubble editor={editor} />
-                  </>
-                ) : null}
+                {editor ? <EditorBubbles editor={editor} linkHandle={linkHandle} /> : null}
               </Box>
             </Box>
           </TabPanel>
@@ -860,7 +941,7 @@ export default function RichEditor({
       <SlashMenu
         open={!!slash}
         query={slash?.query ?? ''}
-        anchor={() => slashAnchor.current()}
+        anchor={slashAnchorRect}
         anchorKey={slash?.key ?? 0}
         controller={slashController}
         keyRef={slashKeyRef}

@@ -38,6 +38,7 @@ import {
 } from './shell/ui'
 import { loginHref, parseRevalidated, readJsonObject, saveToastCopy } from './shell/http'
 import { useLocalDraft } from './shell/useLocalDraft'
+import { useLeaveSaver } from './shell/useLeaveSaver'
 import LivePreview from './shell/LivePreview'
 import ItemHistoryDrawer from './shell/ItemHistoryDrawer'
 import { ConflictDialog, DraftBanner, MdxErrorBanner, type MdxProblem } from './editor/EditorNotices'
@@ -187,6 +188,7 @@ function PageEditorInner({ name }: { name: PageName }) {
     if (loadState === 'ready' && baseline === null) setBaseline(snapshot)
   }, [loadState, baseline, snapshot])
   const dirty = loadState === 'ready' && baseline !== null && snapshot !== baseline
+  const { track, leave } = useLeaveSaver(snapshot)
 
   const draftValue = useMemo<DraftValue>(() => ({ fm, body }), [fm, body])
   const {
@@ -226,81 +228,88 @@ function PageEditorInner({ name }: { name: PageName }) {
       if (etag && !opts.force) headers['If-Match'] = etag
       savingRef.current = true
       setSaving(true)
-      let res: Response | null = null
-      try {
-        res = await fetch('/api/admin/page', {
-          method: 'PUT',
-          headers,
-          body: JSON.stringify({
-            name,
-            frontmatter: { title: fm.title, description: fm.description || undefined, updated: fm.updated },
-            body: text,
-          }),
-        })
-      } catch {
-        res = null
-      }
-      savingRef.current = false
-      setSaving(false)
-      if (!res) {
-        toast({ status: 'error', title: 'Network error — not saved', description: 'Your edits are kept on this device.', position: 'bottom-right' })
-        return false
-      }
-      const data = await readJsonObject(res)
-      if (!res.ok) {
-        if (res.status === 409 && data.code === 'VERSION_CONFLICT') {
-          flushDraft()
-          conflictBody.current = opts.bodyOverride
-          setConflict(true)
-          return false
-        }
-        if (res.status === 422 && data.code === 'MDX_INVALID') {
-          const problem: MdxProblem = {
-            line: typeof data.line === 'number' ? data.line : null,
-            column: typeof data.column === 'number' ? data.column : null,
-            reason: typeof data.reason === 'string' ? data.reason : 'The body does not compile',
+      return track(
+        savedSnapshot,
+        (async (): Promise<boolean> => {
+          let res: Response | null = null
+          try {
+            res = await fetch('/api/admin/page', {
+              method: 'PUT',
+              headers,
+              body: JSON.stringify({
+                name,
+                frontmatter: { title: fm.title, description: fm.description || undefined, updated: fm.updated },
+                body: text,
+              }),
+            })
+          } catch {
+            res = null
           }
-          setMdxError(problem)
-          if (problem.line !== null) richRef.current?.jumpToLine(problem.line, problem.column ?? 1)
-          return false
-        }
-        if (res.status === 401) setSessionExpired(true)
-        toast({
-          status: 'error',
-          title: 'Save failed',
-          description:
-            res.status === 401
-              ? 'Your session has expired. Sign in again in a new tab, then save — your edits are kept.'
-              : res.status === 429
-                ? 'Too many saves in a short time — wait a minute and try again.'
-                : data.error || `HTTP ${res.status}`,
-          position: 'bottom-right',
-          duration: 7000,
-          isClosable: true,
-        })
-        return false
-      }
-      setSessionExpired(false)
-      setMdxError(null)
-      setConflict(false)
-      setRevalidated(parseRevalidated(data))
-      if (opts.bodyOverride !== undefined) setBody(opts.bodyOverride)
-      setServerBody(text)
-      setBaseline(savedSnapshot)
-      setEtag(typeof data.etag === 'string' ? data.etag : res.headers.get('ETag'))
-      setSavedAt(Date.now())
-      clearDraft()
-      toast({
-        ...saveToastCopy(data),
-        title: text.trim() ? 'Saved — snapshot taken' : `/${name} is automatic again — snapshot taken`,
-        position: 'bottom-right',
-      })
-      return true
+          savingRef.current = false
+          setSaving(false)
+          if (!res) {
+            toast({ status: 'error', title: 'Network error — not saved', description: 'Your edits are kept on this device.', position: 'bottom-right' })
+            return false
+          }
+          const data = await readJsonObject(res)
+          if (!res.ok) {
+            if (res.status === 409 && data.code === 'VERSION_CONFLICT') {
+              flushDraft()
+              conflictBody.current = opts.bodyOverride
+              setConflict(true)
+              return false
+            }
+            if (res.status === 422 && data.code === 'MDX_INVALID') {
+              const problem: MdxProblem = {
+                line: typeof data.line === 'number' ? data.line : null,
+                column: typeof data.column === 'number' ? data.column : null,
+                reason: typeof data.reason === 'string' ? data.reason : 'The body does not compile',
+              }
+              setMdxError(problem)
+              if (problem.line !== null) richRef.current?.jumpToLine(problem.line, problem.column ?? 1)
+              return false
+            }
+            if (res.status === 401) setSessionExpired(true)
+            toast({
+              status: 'error',
+              title: 'Save failed',
+              description:
+                res.status === 401
+                  ? 'Your session has expired. Sign in again in a new tab, then save — your edits are kept.'
+                  : res.status === 429
+                    ? 'Too many saves in a short time — wait a minute and try again.'
+                    : data.error || `HTTP ${res.status}`,
+              position: 'bottom-right',
+              duration: 7000,
+              isClosable: true,
+            })
+            return false
+          }
+          setSessionExpired(false)
+          setMdxError(null)
+          setConflict(false)
+          setRevalidated(parseRevalidated(data))
+          if (opts.bodyOverride !== undefined) setBody(opts.bodyOverride)
+          setServerBody(text)
+          setBaseline(savedSnapshot)
+          setEtag(typeof data.etag === 'string' ? data.etag : res.headers.get('ETag'))
+          setSavedAt(Date.now())
+          clearDraft()
+          toast({
+            ...saveToastCopy(data),
+            title: text.trim() ? 'Saved — snapshot taken' : `/${name} is automatic again — snapshot taken`,
+            position: 'bottom-right',
+          })
+          return true
+        })(),
+      )
     },
-    [loadState, fm, body, etag, name, toast, flushDraft, clearDraft],
+    [loadState, fm, body, etag, name, toast, flushDraft, clearDraft, track],
   )
 
-  useDirtyRegistration(`page:${name}`, dirty, () => save())
+  // "Save and leave": true only once the edits are stored; a 409 / 422 / 401,
+  // a network error or a failed check keeps the page open with its explanation.
+  useDirtyRegistration(`page:${name}`, dirty, () => leave(() => save()))
 
   const canSave = loadState === 'ready' && dirty && !saving
   useSaveShortcut(canSave, () => void save())
