@@ -22,6 +22,7 @@ import SkillSection from './Skill'
 import WorkExperience from './WorkExperience'
 import CompetitionAwardsSection from './CompetitionAwards'
 import PatentsSection from './Patents'
+import CvQr from './CvQr'
 
 /**
  * CVResult — the A4 sheet used by /cv, print / Save-as-PDF and the admin
@@ -34,7 +35,11 @@ import PatentsSection from './Patents'
  * Print: the sheet flows in normal document order (so multi-page CVs
  * paginate) and its padding is cloned onto every printed page via
  * box-decoration-break, giving page 2+ a real top margin. Global print rules
- * live in styles/globals.css.
+ * live in styles/globals.css. With `qr`, a print-only footer carries a QR
+ * code to the live CV.
+ *
+ * Sections and entries carry stable anchor ids (`cv-<sessionName>`,
+ * `cv-<sessionName>-<index>`, see ./fields) that search results link to.
  */
 
 export const A4_WIDTH_PX = 794 // 210mm @ 96dpi
@@ -82,10 +87,13 @@ const CVResult = ({
   cvData,
   lang = 'en',
   style,
+  qr,
 }: {
   cvData: CVData | any[]
   lang?: CvLang
   style?: React.CSSProperties
+  /** Print-only QR footer: inline SVG (lib/qr.ts), caption and accessible label. */
+  qr?: { svg: string; caption: string; label: string } | null
 }) => {
   const sections = (Array.isArray(cvData) ? cvData : []).filter(
     (s: any) => s && typeof s === 'object' && s.isVisible !== false,
@@ -122,6 +130,7 @@ const CVResult = ({
           {sections.map((section, index) => (
             <React.Fragment key={`${section.sessionName}-${index}`}>{renderSection(section, lang)}</React.Fragment>
           ))}
+          {qr && sections.length ? <CvQr svg={qr.svg} caption={qr.caption} label={qr.label} /> : null}
         </Box>
       </Box>
     </Flex>

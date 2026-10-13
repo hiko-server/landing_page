@@ -1,9 +1,9 @@
-import type { NextApiRequest, NextApiResponse } from 'next'
 import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
 import { getJwtSecret } from '../../../lib/env'
 import { rateLimit } from '../../../lib/rateLimit'
 import { challengeHash, newChallenge } from '../../../lib/security/contactChallenge'
+import { withApi } from '../../../lib/apiHandler'
 
 /**
  * Signed nonce for the contact form's lightweight human-check.
@@ -20,7 +20,7 @@ import { challengeHash, newChallenge } from '../../../lib/security/contactChalle
  * server state is pages/api/contact.ts's bounded used-nonce list. No external
  * service. Rate-limited so a bot can't churn nonces.
  */
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
+export default withApi('contact/nonce', (req, res, { log }) => {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET')
     return res.status(405).json({ error: 'Method not allowed' })
@@ -46,7 +46,8 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
     )
     res.setHeader('Cache-Control', 'no-store')
     return res.status(200).json({ token, challenge })
-  } catch {
+  } catch (err) {
+    log.error('contact nonce: mint failed', { err })
     return res.status(500).json({ error: 'Nonce mint failed' })
   }
-}
+})

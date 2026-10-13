@@ -9,22 +9,31 @@ import { bullets, entries, field } from './fields'
  * entries with a left content column and a right-aligned italic meta column,
  * and hanging-indent bullets.
  *
+ * Outline: the page h1 is the /cv PageHeader, section titles are h2 and
+ * entry titles h3 (the name at the top of the sheet is not a heading).
+ * Sections and entries carry the stable anchor ids from ./fields
+ * (cvSectionAnchor / cvEntryAnchor) with a scroll margin that clears the
+ * sticky site header.
+ *
  * Inputs are normally pruned (lib/cvVisibility.ts); sections read their
  * values through ./fields, which also honours `redacted` / hiddenFields, so
  * a hidden value is "empty" here and every block quietly renders nothing —
  * MetaLine only draws its "|" when both sides are present.
  */
 
-export function SheetSection({ title, children }: { title?: string; children: React.ReactNode }) {
+/** Space kept above an anchored section / entry when the page scrolls to it. */
+export const ANCHOR_SCROLL_MARGIN = '96px'
+
+export function SheetSection({ title, id, children }: { title?: string; id?: string; children: React.ReactNode }) {
   return (
-    <Box as="section" className="cv-sheet-section">
+    <Box as="section" className="cv-sheet-section" id={id} sx={id ? { scrollMarginTop: ANCHOR_SCROLL_MARGIN } : undefined}>
       {title ? (
         <Box
           px="10px"
           borderBottom="3px solid var(--cv-separator-color, blue)"
           sx={{ breakAfter: 'avoid', pageBreakAfter: 'avoid' }}
         >
-          <Text as="h3" fontWeight={800} fontSize="12px" letterSpacing="0.02em" lineHeight="1.5">
+          <Text as="h2" fontWeight={800} fontSize="12px" letterSpacing="0.02em" lineHeight="1.5">
             {title.toUpperCase()}
           </Text>
         </Box>
@@ -47,16 +56,22 @@ export function EntryStack({ children, gap = '14px' }: { children: React.ReactNo
 
 /** One entry: left column (title / subtitle), right column (meta), body below. */
 export function SheetEntry({
+  id,
   left,
   right,
   children,
 }: {
+  id?: string
   left: React.ReactNode
   right?: React.ReactNode
   children?: React.ReactNode
 }) {
   return (
-    <Box className="cv-entry" sx={{ breakInside: 'avoid', pageBreakInside: 'avoid' }}>
+    <Box
+      className="cv-entry"
+      id={id}
+      sx={{ breakInside: 'avoid', pageBreakInside: 'avoid', ...(id ? { scrollMarginTop: ANCHOR_SCROLL_MARGIN } : null) }}
+    >
       <Flex justify="space-between" align="flex-start" gap="16px">
         <Box flex="1" minW={0}>
           {left}
@@ -100,7 +115,7 @@ export function MetaLine({ date, place }: { date?: string; place?: React.ReactNo
 
 export function EntryTitle({ children }: { children: React.ReactNode }) {
   return (
-    <Text as="h4" fontWeight={800} fontSize="14px" lineHeight="1.35">
+    <Text as="h3" fontWeight={800} fontSize="14px" lineHeight="1.35">
       {children}
     </Text>
   )

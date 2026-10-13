@@ -17,6 +17,7 @@ import type { CvSectionLike } from './cvVisibility'
 import { formatCvDate, majorAddsInfo, type CvNow } from './cvFormat'
 import { deriveCurrentlyCoding, type CurrentlyCoding } from './currentlyCoding'
 import { formatPostDate, isoDate } from './postDate'
+import { SITE_TIME_ZONE } from './clock'
 import { entryRange, entryStatus, field, graduation, joinParts, list } from '../components/CVViewerPage/fields'
 
 export type NowRole = {
@@ -159,4 +160,18 @@ export function latestWork(work: readonly WorkLike[] | null | undefined): NowLin
 /** True when there is at least one signal worth showing. */
 export function hasSignals(s: Pick<NowSignals, 'roles' | 'coding' | 'post' | 'work'>): boolean {
   return s.roles.length > 0 || !!s.coding || !!s.post || !!s.work
+}
+
+/**
+ * Day (YYYY-MM-DD, in the site's time zone) of the most recent change among
+ * the sources a /now page was composed from — content-store `updated_at`
+ * stamps in epoch ms; missing or invalid stamps are ignored. '' when none.
+ * The page formats it once on the server, so every render shows the same text.
+ */
+export function signalsUpdatedOn(stamps: ReadonlyArray<number | null | undefined>, timeZone: string = SITE_TIME_ZONE): string {
+  const latest = stamps.reduce<number>((max, t) => (typeof t === 'number' && Number.isFinite(t) && t > max ? t : max), 0)
+  if (!latest) return ''
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(latest))
+  const get = (type: string) => parts.find((p) => p.type === type)?.value
+  return `${get('year')}-${get('month')}-${get('day')}`
 }

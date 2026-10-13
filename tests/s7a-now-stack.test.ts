@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { publicSections } from '../lib/cvVisibility'
-import { currentRoles, currentlyCodingSignal, hasSignals, latestPost, latestWork } from '../lib/nowSignals'
+import { currentRoles, currentlyCodingSignal, hasSignals, latestPost, latestWork, signalsUpdatedOn } from '../lib/nowSignals'
 import { buildStack, shortVersion } from '../lib/stack'
 
 const NOW = new Date('2026-10-12T00:00:00Z')
@@ -106,4 +106,30 @@ test('stack is curated from package.json with major.minor versions', () => {
   // JSON-serialisable for getStaticProps: no undefined values anywhere.
   assert.equal(JSON.stringify(stack).includes('undefined'), false)
   assert.ok(stack.groups.every((g) => g.items.every((i) => Object.values(i).every((v) => v !== undefined))))
+})
+
+test('/now "Updated" day is the newest source stamp, in the site time zone', () => {
+  // 2026-10-12 17:30 UTC is already 13 Oct in Hong Kong.
+  const late = Date.UTC(2026, 9, 12, 17, 30)
+  const earlier = Date.UTC(2026, 8, 1, 3, 0)
+  assert.equal(signalsUpdatedOn([earlier, late, null, undefined]), '2026-10-13')
+  assert.equal(signalsUpdatedOn([earlier, late], 'UTC'), '2026-10-12')
+  assert.equal(signalsUpdatedOn([null, undefined, Number.NaN]), '')
+  assert.equal(signalsUpdatedOn([]), '')
+})
+
+test('the content pipeline is listed truthfully (server-side MDX, not next-mdx-remote)', () => {
+  const stack = buildStack(
+    { dependencies: { 'next-mdx-remote': '^6.0.0', 'remark-mdx': '3.1.1', 'remark-gfm': '4.0.1', sharp: '0.35.5', shiki: '^4.1.0' } },
+    '22.23.3',
+  )
+  const content = stack.groups.find((g) => g.label === 'Content')
+  assert.deepEqual(content?.items, [
+    { name: 'MDX', version: '3.1' },
+    { name: 'GFM', version: '4.0' },
+    { name: 'Shiki', version: '4.1' },
+    { name: 'sharp', version: '0.35' },
+  ])
+  // A package that is not a dependency is never listed.
+  assert.ok(!buildStack({ dependencies: { next: '15.5.27' } }, '22.0.0').packages.includes('MDX'))
 })

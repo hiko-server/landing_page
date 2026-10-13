@@ -1,93 +1,146 @@
 import React from 'react'
 import type { GetStaticProps } from 'next'
-import { Box, Flex, Heading, Text } from '@chakra-ui/react'
+import NextLink from 'next/link'
+import { Box, Flex, Heading, Link, Text } from '@chakra-ui/react'
 import HeaderFooter from '../layout/HeaderFooter'
 import CustomHead from '../components/General-UI/CustomHead'
-import SectionLabel from '../components/General-UI/SectionLabel'
+import PageHeader from '../components/General-UI/PageHeader'
 import MDXContent from '../components/MDX/MDXContent'
-import { getStaticMdxPage } from '../lib/mdx'
+import { getStaticMdxPage, type MDXRendered, type PageFrontmatter } from '../lib/mdx'
 import { getPage } from '../lib/contentStore'
 import { readStack, type StackGroup } from '../lib/stack'
-import type { MDXRemoteSerializeResult } from 'next-mdx-remote'
+import { absUrl, ogImageUrl, personAuthor } from '../lib/schema'
 
 /**
  * /uses — tools & setup.
  *
  * The owner's own write-up (admin → pages → uses) comes first when it has
- * content. Below it — or on its own when the body is empty — the curated
- * stack this site is built with (lib/stack.ts, the same data as /api/stack),
- * honestly labelled as derived from the site's package.json. ISR (60 s).
+ * content, followed by "Colophon: how this site is built" — the curated stack
+ * from this site's package.json (lib/stack.ts, the same data as /api/stack).
+ * While the write-up is empty the page is honestly titled "How this site is
+ * built" and shows only that stack. ISR (60 s).
  */
 
 type Props = {
-  source: MDXRemoteSerializeResult | null
+  tree: MDXRendered<PageFrontmatter>['tree'] | null
   updated: string | null
   stack: StackGroup[]
-  host: string
 }
 
 const mono = 'var(--font-geist-mono), monospace'
+const BUILT_DESCRIPTION = 'The stack, hosting and tooling behind lucian-dev.com.'
 
-export default function UsesPage({ source, updated, stack, host }: Props) {
+export default function UsesPage({ tree, updated, stack }: Props) {
+  const written = !!tree
+  const title = written ? 'Tools & setup.' : 'How this site is built'
+  const description = written
+    ? 'The tools, hardware, and software Li Yanpei (Lucian) relies on for engineering work, and how this site is built.'
+    : BUILT_DESCRIPTION
+
+  const colophonLink = (
+    <Text fontSize={['15px', '16px']} color="page.fg-secondary" mt={[8, 10]}>
+      Hosting, fonts, privacy and the changelog are on the{' '}
+      <Link
+        as={NextLink}
+        href="/colophon"
+        color="accent.text"
+        textDecoration="underline"
+        textUnderlineOffset="3px"
+      >
+        colophon
+      </Link>
+      .
+    </Text>
+  )
+
   return (
     <>
       <CustomHead
-        title="Uses"
-        description="The tools, hardware, and software Li Yanpei (Lucian) relies on daily for engineering work."
-        url={`https://${host}/uses`}
-        image={`https://${host}/api/og?title=Uses&kind=page&subtitle=Tools%20%26%20setup`}
+        title={written ? 'Uses' : 'How this site is built'}
+        description={description}
+        url={absUrl('/uses')}
+        image={ogImageUrl({
+          kind: 'page',
+          title: written ? 'Uses' : 'How this site is built',
+          subtitle: written ? 'Tools & setup' : BUILT_DESCRIPTION,
+        })}
         jsonLd={{
           '@context': 'https://schema.org',
           '@type': 'WebPage',
-          name: 'Uses',
-          url: `https://${host}/uses`,
-          dateModified: (source && updated) || undefined,
-          author: { '@type': 'Person', name: 'Li Yanpei' },
+          name: written ? 'Uses' : 'How this site is built',
+          url: absUrl('/uses'),
+          dateModified: (written && updated) || undefined,
+          author: personAuthor,
         }}
       />
       <HeaderFooter>
         <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[12, 16]}>
-          <SectionLabel n="01" as="p">
-            Uses
-          </SectionLabel>
-
-          <Heading
-            as="h1"
-            mt={6}
-            mb={3}
-            fontSize={['32px', '44px', '52px']}
-            lineHeight="1.08"
-            letterSpacing="-0.025em"
-            fontWeight={500}
-          >
-            Tools &amp; setup.
-          </Heading>
-
-          {source ? (
-            <>
-              {updated && (
-                <Text fontFamily={mono} fontSize="11px" color="page.fg-secondary" mb={12}>
+          <PageHeader
+            eyebrow="Uses"
+            title={title}
+            lede={written ? undefined : BUILT_DESCRIPTION}
+            actions={
+              written && updated ? (
+                <Text
+                  fontFamily={mono}
+                  fontSize="12px"
+                  color="page.fg-secondary"
+                  className="tnum"
+                  m={0}
+                >
                   Last updated · <time dateTime={updated}>{updated}</time>
                 </Text>
-              )}
-              <MDXContent source={source} />
-            </>
-          ) : null}
+              ) : null
+            }
+          />
+
+          {tree ? <MDXContent tree={tree} /> : null}
 
           {stack.length ? (
-            <Box as="section" aria-labelledby="uses-stack" mt={source ? [16, 20] : [8, 10]}>
-              <SectionLabel n="02" id="uses-stack" mb={5}>
-                What this site is built with
-              </SectionLabel>
-              <Text fontSize={['15px', '16px']} lineHeight="1.65" color="page.fg-secondary" maxW="62ch" mb={[8, 10]}>
-                Read from this site&rsquo;s own package.json and deployment when the page is generated, so the versions
-                below are the ones serving this page.
+            <Box
+              as={written ? 'section' : 'div'}
+              aria-labelledby={written ? 'uses-stack' : undefined}
+              mt={written ? [16, 20] : 0}
+            >
+              {written ? (
+                <Heading
+                  as="h2"
+                  id="uses-stack"
+                  fontSize={['24px', '28px']}
+                  fontWeight={500}
+                  letterSpacing="-0.02em"
+                  lineHeight="1.2"
+                  mb={3}
+                >
+                  Colophon: how this site is built
+                </Heading>
+              ) : null}
+              <Text
+                fontSize={['15px', '16px']}
+                lineHeight="1.65"
+                color="page.fg-secondary"
+                maxW="62ch"
+                mb={[8, 10]}
+              >
+                Read from this site&rsquo;s own package.json and deployment when the page is
+                generated, so the versions below are the ones serving this page.
               </Text>
               <StackList groups={stack} />
+              {colophonLink}
             </Box>
-          ) : !source ? (
-            <Text fontSize={['15px', '16px']} color="page.fg-secondary" mt={8}>
-              Nothing has been written here yet.
+          ) : !written ? (
+            <Text fontSize={['15px', '16px']} color="page.fg-secondary">
+              The stack could not be read for this build. The{' '}
+              <Link
+                as={NextLink}
+                href="/colophon"
+                color="accent.text"
+                textDecoration="underline"
+                textUnderlineOffset="3px"
+              >
+                colophon
+              </Link>{' '}
+              describes how the site is built and hosted.
             </Text>
           ) : null}
         </Box>
@@ -111,7 +164,13 @@ function StackList({ groups }: { groups: StackGroup[] }) {
           borderColor="page.border"
         >
           <Box as="dt">
-            <Text fontFamily={mono} fontSize="11px" letterSpacing="0.14em" textTransform="uppercase" color="page.fg">
+            <Text
+              fontFamily={mono}
+              fontSize="11px"
+              letterSpacing="0.14em"
+              textTransform="uppercase"
+              color="page.fg"
+            >
               {g.label}
             </Text>
             {g.hint ? (
@@ -159,24 +218,24 @@ function StackList({ groups }: { groups: StackGroup[] }) {
 }
 
 export const getStaticProps: GetStaticProps<Props> = async () => {
-  let source: MDXRemoteSerializeResult | null = null
+  let tree: Props['tree'] = null
   let updated: string | null = null
   try {
     if ((getPage('uses')?.body || '').trim()) {
       const page = await getStaticMdxPage('uses')
-      source = page?.source ?? null
+      tree = page?.tree ?? null
       const raw = page?.frontmatter.updated as unknown
-      updated = raw instanceof Date ? raw.toISOString().slice(0, 10) : raw ? String(raw).slice(0, 10) : null
+      updated =
+        raw instanceof Date ? raw.toISOString().slice(0, 10) : raw ? String(raw).slice(0, 10) : null
     }
   } catch {
-    source = null
+    tree = null
   }
   return {
     props: {
-      source,
+      tree,
       updated,
       stack: readStack().groups,
-      host: process.env.NEXT_PUBLIC_SITE_HOST || 'lucian-dev.com',
     },
     revalidate: 60,
   }

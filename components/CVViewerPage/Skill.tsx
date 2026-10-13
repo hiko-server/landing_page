@@ -1,7 +1,7 @@
 import React from 'react'
 import { Box, Flex, Text } from '@chakra-ui/react'
 import type { Skill } from '../../types/cvProps'
-import { bullets, field, list } from './fields'
+import { bullets, cvSectionAnchor, field, list } from './fields'
 import { PlainBullets, SheetSection } from './primitives'
 
 const SkillSection = ({ data }: { data: Skill }) => {
@@ -9,7 +9,7 @@ const SkillSection = ({ data }: { data: Skill }) => {
   const techs = list(data, 'technical').filter((g) => field(g, 'name') || bullets(g, 'description').length)
   if (!languages.length && !techs.length) return null
   return (
-    <SheetSection title={data.headerName}>
+    <SheetSection title={data.headerName} id={cvSectionAnchor('skill')}>
       <Flex direction="column" gap="14px">
         {languages.length ? (
           <Box display="grid" gridTemplateColumns="max-content 1fr" columnGap="12px" rowGap="4px" fontSize="12px" lineHeight="1.5">

@@ -1,7 +1,8 @@
 /**
- * Contact form validation — pure, shared by ContactPro and its unit tests.
+ * Contact page logic — pure, shared by ContactPro, AvailabilityCard and their
+ * unit tests.
  *
- * Mirrors what POST /api/contact enforces (name, a well-formed email, a
+ * Form validation mirrors what POST /api/contact enforces (name, a well-formed email, a
  * subject — the chosen reason stands in when the subject is blank — and a
  * message) plus the client-side human check, so a form the UI lets through
  * is one the server accepts.
@@ -75,4 +76,59 @@ export function visibleErrors(errors: ContactErrors, touched: Partial<Record<Con
   const out: ContactErrors = {}
   for (const f of FIELD_ORDER) if (errors[f] && (all || touched[f])) out[f] = errors[f]
   return out
+}
+
+// ── Availability (home.availability) ─────────────────────────────────────
+
+export type AvailabilityStatus = 'open' | 'limited' | 'closed'
+
+/** What AvailabilityCard renders; null renders nothing. */
+export type AvailabilityView = {
+  status: AvailabilityStatus
+  label: string
+  roles: string[]
+  /** 'YYYY-MM' the availability starts, or '' when not set. */
+  from: string
+  /** An https booking link, or '' (other schemes are never linked). */
+  bookingUrl: string
+}
+
+const DEFAULT_AVAILABILITY_LABEL: Record<AvailabilityStatus, string> = {
+  open: 'Available for new work',
+  limited: 'Limited availability',
+  closed: 'Not taking on new work',
+}
+
+const isStatus = (v: unknown): v is AvailabilityStatus => v === 'open' || v === 'limited' || v === 'closed'
+const text = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+
+function httpsUrl(v: unknown): string {
+  const raw = text(v)
+  if (!raw) return ''
+  try {
+    const u = new URL(raw)
+    return u.protocol === 'https:' ? u.toString() : ''
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * The owner's availability as shown on /contact. Only an explicit status
+ * (open / limited / closed) produces a card; the label defaults to a plain
+ * description of that status. `label_zh` is for Chinese pages and not used here.
+ */
+export function availabilityView(
+  a: { status?: unknown; label?: unknown; roles?: unknown; from?: unknown; bookingUrl?: unknown } | null | undefined,
+): AvailabilityView | null {
+  if (!a || !isStatus(a.status)) return null
+  const roles = Array.isArray(a.roles) ? Array.from(new Set(a.roles.map(text).filter(Boolean))) : []
+  const from = /^(\d{4}-(0[1-9]|1[0-2]))(-\d{2})?$/.exec(text(a.from))
+  return {
+    status: a.status,
+    label: text(a.label) || DEFAULT_AVAILABILITY_LABEL[a.status],
+    roles,
+    from: from ? from[1] : '',
+    bookingUrl: httpsUrl(a.bookingUrl),
+  }
 }

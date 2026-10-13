@@ -1,13 +1,13 @@
 import React, { useMemo, useState } from 'react'
 import type { GetStaticProps } from 'next'
-import { Box, Flex, Heading, Text, Link, HStack, Button } from '@chakra-ui/react'
+import { Box, Flex, Text, Link, HStack, Button } from '@chakra-ui/react'
 import NextLink from 'next/link'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
-import SectionLabel from '../../components/General-UI/SectionLabel'
+import PageHeader from '../../components/General-UI/PageHeader'
 import { listPosts, type PostFrontmatter, type MDXIndexEntry } from '../../lib/mdx'
 import { formatPostDate, isoDate } from '../../lib/postDate'
-import { absUrl, ogImageUrl, personRef, PERSON_NAME, SITE_HOST } from '../../lib/schema'
+import { absUrl, ogImageUrl, personAuthor, PERSON_NAME, SITE_HOST } from '../../lib/schema'
 
 type Props = {
   posts: MDXIndexEntry<PostFrontmatter>[]
@@ -59,7 +59,7 @@ export default function BlogIndex({ posts }: Props) {
           '@type': 'Blog',
           name: `${SITE_HOST.toUpperCase()} — Writing`,
           url: absUrl('/blog'),
-          author: personRef,
+          author: personAuthor,
           blogPost: posts.slice(0, 10).map((p) => ({
             '@type': 'BlogPosting',
             headline: p.frontmatter.title,
@@ -70,26 +70,17 @@ export default function BlogIndex({ posts }: Props) {
         }}
       />
       <HeaderFooter>
-        <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[16, 24]}>
-          <SectionLabel n={1} as="p">
-            Writing
-          </SectionLabel>
-
-          <Heading
-            as="h1"
-            mt={6}
-            mb={4}
-            fontSize={['32px', '44px', '56px']}
-            lineHeight="1.05"
-            letterSpacing="-0.025em"
-            fontWeight={500}
-          >
-            Notes, essays, and write-ups.
-          </Heading>
-          <Text color="page.fg-secondary" maxW="640px" mb={12} fontSize="15px">
-            Long-form pieces on engineering, ML, and the craft of shipping software.
-            New posts land here when they&rsquo;re ready — no drafts, no fluff.
-          </Text>
+        <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[12, 16]}>
+          <PageHeader
+            eyebrow="Writing"
+            title="Notes, essays, and write-ups."
+            lede={
+              <>
+                Long-form pieces on engineering, ML, and the craft of shipping software. New posts land here when
+                they&rsquo;re ready — no drafts, no fluff.
+              </>
+            }
+          />
 
           {tags.length > 0 && (
             <HStack as="div" role="group" aria-label="Filter posts by tag" mb={8} spacing={2} flexWrap="wrap" rowGap={2}>
@@ -114,13 +105,13 @@ export default function BlogIndex({ posts }: Props) {
               </Text>
             </Box>
           ) : (
-            <Box as="ul" listStyleType="none" m={0} p={0} borderTop="1px solid" borderColor="page.border">
+            <Box as="ul" className="hover-list" listStyleType="none" m={0} p={0} borderTop="1px solid" borderColor="page.border">
               {visible.map((p) => (
-                <Box as="li" key={p.slug} borderBottom="1px solid" borderColor="page.border">
+                <Box as="li" key={p.slug} className="hover-item" borderBottom="1px solid" borderColor="page.border">
                   <Link
                     as={NextLink}
                     href={p.permalink}
-                    role="group"
+                    data-group=""
                     _hover={{ textDecoration: 'none' }}
                     _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
                     display="block"
@@ -129,6 +120,7 @@ export default function BlogIndex({ posts }: Props) {
                     <Flex direction={['column', 'row']} align={['flex-start', 'baseline']} gap={[1, 6]}>
                       <Text
                         as="time"
+                        className="tnum"
                         dateTime={isoDate(p.frontmatter.date) || undefined}
                         flexShrink={0}
                         fontFamily={MONO}
@@ -166,8 +158,11 @@ export default function BlogIndex({ posts }: Props) {
                           </Text>
                         )}
                       </Box>
-                      <Text as="span" flexShrink={0} fontFamily={MONO} fontSize="11px" color="page.fg-secondary">
+                      <Text as="span" flexShrink={0} fontFamily={MONO} fontSize="11px" color="page.fg-secondary" className="tnum">
                         {p.readingMinutes} min read
+                        <Box as="span" aria-hidden className="nudge" ml={2} color="page.fg-subtle">
+                          →
+                        </Box>
                       </Text>
                     </Flex>
                   </Link>
