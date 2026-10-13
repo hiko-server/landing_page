@@ -171,9 +171,12 @@ export function cvDescription(lang: CvLang, opts: { present: readonly string[]; 
   const parts = SEO_SECTIONS.filter((s) => opts.present.includes(s.name)).map((s) => (lang === 'zh' ? s.zh : s.en))
   if (lang === 'zh') {
     const who = opts.nameZh ? `${opts.nameZh}（Lucian）` : 'Li Yanpei（Lucian）'
+    // The tail keeps even a CV without public sections at a useful length
+    // (≥ 70 display columns) using only facts about the page itself.
+    const tail = '另有英文版，可在线浏览，也可打印或保存为 A4 PDF。'
     return parts.length
-      ? `${who}的中文简历：${enumerate(parts, 'zh')}，可打印为 A4 PDF。`
-      : `${who}的中文简历，可打印为 A4 PDF。`
+      ? `${who}的中文简历：${enumerate(parts, 'zh')}，${tail}`
+      : `${who}的中文简历，${tail}`
   }
   return parts.length
     ? `The CV / résumé of Li Yanpei (Lucian) in English and Chinese: ${enumerate(parts, 'en')}, printable as an A4 PDF.`

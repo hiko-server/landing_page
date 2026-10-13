@@ -105,23 +105,23 @@ test('zh SEO copy names only the public sections, with the public Chinese name',
   assert.deepEqual(present, ['education', 'workExperience', 'certification'])
   assert.equal(
     cvDescription('zh', { present, nameZh: '李彦霈' }),
-    '李彦霈（Lucian）的中文简历：教育、工作经历与证书，可打印为 A4 PDF。'
+    '李彦霈（Lucian）的中文简历：教育、工作经历与证书，另有英文版，可在线浏览，也可打印或保存为 A4 PDF。'
   )
   assert.equal(
     cvDescription('zh', {
       present: ['education', 'workExperience', 'project', 'patents', 'competitionAwards'],
       nameZh: '李彦霈',
     }),
-    '李彦霈（Lucian）的中文简历：教育、工作经历、项目、专利与奖项，可打印为 A4 PDF。'
+    '李彦霈（Lucian）的中文简历：教育、工作经历、项目、专利与奖项，另有英文版，可在线浏览，也可打印或保存为 A4 PDF。'
   )
   // Hidden Chinese name → the romanised name, never an invented one.
   assert.equal(
     cvDescription('zh', { present: ['project'] }),
-    'Li Yanpei（Lucian）的中文简历：项目，可打印为 A4 PDF。'
+    'Li Yanpei（Lucian）的中文简历：项目，另有英文版，可在线浏览，也可打印或保存为 A4 PDF。'
   )
   assert.equal(
     cvDescription('zh', { present: [] }),
-    'Li Yanpei（Lucian）的中文简历，可打印为 A4 PDF。'
+    'Li Yanpei（Lucian）的中文简历，另有英文版，可在线浏览，也可打印或保存为 A4 PDF。'
   )
   assert.equal(
     cvDescription('en', { present }),
@@ -132,6 +132,21 @@ test('zh SEO copy names only the public sections, with the public Chinese name',
       present: ['education', 'workExperience', 'project', 'patents', 'competitionAwards'],
     }).length <= 155
   )
+})
+
+test('every CV description stays within 70–160 display columns, even with no public sections', () => {
+  // Same measure as the E2E check: CJK and full-width characters count twice.
+  const columns = (text: string) =>
+    [...text].reduce((n, ch) => n + (/[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6]/.test(ch) ? 2 : 1), 0)
+  const all = ['education', 'workExperience', 'project', 'patents', 'competitionAwards', 'certification']
+  for (const present of [[], ['project'], all]) {
+    for (const nameZh of [undefined, '李彦霈']) {
+      const zh = columns(cvDescription('zh', { present, nameZh }))
+      assert.ok(zh >= 70 && zh <= 160, `zh ${present.length} sections, name ${nameZh ?? '-'}: ${zh}`)
+    }
+    const en = columns(cvDescription('en', { present }))
+    assert.ok(en >= 70 && en <= 160, `en ${present.length} sections: ${en}`)
+  }
 })
 
 test('the public Chinese name follows the CV, and disappears when hidden', () => {
