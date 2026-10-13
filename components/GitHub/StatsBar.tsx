@@ -6,21 +6,16 @@ import { useFetchJson } from '../Common/useFetchJson'
 import WidgetNotice from '../Common/WidgetNotice'
 import { statColumns, statTiles, type GhStats } from '../Common/githubEvents'
 
-const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
-
+/** Big figures: the fluid `stat` size (28→44px), tight tabular digits (theme/tokens.ts). */
 const numberSx = {
-  fontSize: { base: '28px', sm: '36px', md: '44px' },
-  lineHeight: '1',
-  fontWeight: 500,
-  letterSpacing: '-0.03em',
+  textStyle: 'stat',
 }
 
+/** Tile labels: the `label` text style, with tighter tracking in the narrow phone tiles. */
 const labelSx = {
   mt: 2,
-  fontFamily: monoFont,
-  fontSize: { base: '10px', sm: '11px' },
-  letterSpacing: { base: '0.06em', sm: '0.14em' },
-  textTransform: 'uppercase' as const,
+  textStyle: 'label',
+  letterSpacing: { base: 'caps-tight', sm: 'caps' },
   color: 'page.fg-secondary',
   // Break between words only (the CSS reset's break-word would split
   // "CONTRIBUTIONS" mid-word); statColumns keeps every word within a tile.
@@ -81,7 +76,7 @@ function DigitRoll({ value }: { value: number }) {
   const text = Math.max(0, Math.floor(value)).toLocaleString('en-US')
   let digitIndex = 0
   return (
-    <Text as="span" ref={ref} className="stat-roll tnum" display="inline-flex" sx={{ ...numberSx, fontVariantNumeric: 'tabular-nums' }} color="page.fg">
+    <Text as="span" ref={ref} className="stat-roll tnum" display="inline-flex" sx={numberSx} color="page.fg">
       <span aria-hidden style={{ display: 'inline-flex' }}>
         {Array.from(text).map((ch, i) => {
           if (ch < '0' || ch > '9') return <span key={i}>{ch}</span>
@@ -111,8 +106,8 @@ const SKELETON_TILES = 3
 /** Loading tile: the loaded geometry, no label text (the set of tiles is not known yet). */
 const StatSkeleton = () => (
   <Box minW={0}>
-    <Skeleton h={numberSx.fontSize} w="60%" borderRadius="sm" startColor="page.bg-elevated" endColor="page.bg-overlay" />
-    <Skeleton mt={2} h={{ base: '12px', sm: '14px' }} w="70%" borderRadius="sm" startColor="page.bg-elevated" endColor="page.bg-overlay" />
+    <Skeleton h="var(--chakra-fontSizes-stat)" w="60%" borderRadius="sm" startColor="page.bg-elevated" endColor="page.bg-overlay" />
+    <Skeleton mt={2} h="calc(var(--chakra-fontSizes-label) * 1.4)" w="70%" borderRadius="sm" startColor="page.bg-elevated" endColor="page.bg-overlay" />
   </Box>
 )
 

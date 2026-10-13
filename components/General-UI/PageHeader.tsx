@@ -1,5 +1,6 @@
-import React from 'react'
+import type React from 'react'
 import { Box, Flex, Heading, Text } from '@chakra-ui/react'
+import { textStyleProps } from '../../theme/tokens'
 
 /**
  * The one header every standalone page opens with (/blog, /work, /now,
@@ -12,7 +13,9 @@ import { Box, Flex, Heading, Text } from '@chakra-ui/react'
  *
  * The eyebrow uses the SectionLabel look (mono, uppercase, trailing rule)
  * without a section number: numbering belongs to the home page's sections.
- * The title scales fluidly (clamp, no breakpoints); `titleLang` marks a
+ * Typography is token-driven (theme/tokens.ts): the eyebrow is the `label`
+ * text style, the title `display` (fluid clamp, no breakpoints), the lede
+ * `lede`; `titleLang` marks a
  * title in another language than the page, `vtName` gives the h1 a view
  * transition name for a shared-element morph.
  */
@@ -33,24 +36,15 @@ export default function PageHeader({
 }) {
   return (
     <Box as="header" maxW="var(--container-content)" mb={[8, 12]}>
-      <Text
-        className="section-label-rule"
-        fontFamily="var(--font-geist-mono), monospace"
-        fontSize="11px"
-        letterSpacing="0.12em"
-        textTransform="uppercase"
-        color="page.fg-subtle"
-        m={0}
-      >
+      <Text className="section-label-rule" textStyle="label" color="page.fg-subtle" m={0}>
         {eyebrow}
       </Text>
       <Heading
         as="h1"
         mt={6}
-        fontSize="clamp(2.25rem, 4vw + 1rem, 3.5rem)"
-        lineHeight="1.05"
-        letterSpacing="-0.025em"
-        fontWeight={500}
+        // Fluid 36→56px, tight tracking (theme/tokens.ts `display`), as
+        // explicit props so Heading's own responsive size never wins.
+        {...textStyleProps('display')}
         color="page.fg"
         lang={titleLang}
         style={vtName ? ({ viewTransitionName: vtName } as React.CSSProperties) : undefined}
@@ -58,15 +52,7 @@ export default function PageHeader({
         {title}
       </Heading>
       {lede ? (
-        <Text
-          className="lede"
-          mt={4}
-          maxW="62ch"
-          fontSize="17px"
-          lineHeight="1.6"
-          color="page.fg-secondary"
-          sx={{ textWrap: 'pretty' }}
-        >
+        <Text className="lede" mt={4} maxW="62ch" textStyle="lede" color="page.fg-secondary" sx={{ textWrap: 'pretty' }}>
           {lede}
         </Text>
       ) : null}

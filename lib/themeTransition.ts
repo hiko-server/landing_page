@@ -1,6 +1,7 @@
 import { flushSync } from 'react-dom'
 import { isRouteTransitionHolding } from '../components/Chrome/RouteTransitions'
 import { prefersReducedMotion, revealGeometry, supportsViewTransitions } from './viewTransition'
+import { DURATIONS, EASE_STANDARD_CSS } from '../theme/tokens'
 
 /**
  * Theme toggle with a circular reveal: the new colour mode grows out of the
@@ -14,8 +15,9 @@ import { prefersReducedMotion, revealGeometry, supportsViewTransitions } from '.
  * and on any error. Clicks while a reveal is running are ignored.
  */
 
-const REVEAL_MS = 420
-const REVEAL_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
+// The slow token duration on the standard ease (theme/tokens.ts).
+const REVEAL_MS = DURATIONS.slow
+const REVEAL_EASING = EASE_STANDARD_CSS
 
 let inFlight = false
 

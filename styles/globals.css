@@ -23,15 +23,10 @@
   --accent-soft: rgba(99, 102, 241, 0.10);
   --accent-ring: rgba(99, 102, 241, 0.35);
 
-  /* Single global easing curve */
-  --ease-out-quart: cubic-bezier(0.22, 1, 0.36, 1);
-  --duration-fast: 150ms;
-  --duration-base: 250ms;
-  --duration-slow: 450ms;
-
-  /* Container widths */
-  --container-content: 1100px;
-  --container-prose: 720px;
+  /* Motion (--ease-standard, --duration-fast / -base / -slow, 0ms under
+     reduced motion), container widths (--container-content / -wide /
+     -prose), --measure and --page-gutter are design tokens: theme/tokens.ts,
+     emitted on :root by theme/chakra.js. */
 
   /* Live status green */
   --live-green: #22c55e;
@@ -110,6 +105,38 @@ h3,
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
+ * PageGrid (components/General-UI/PageGrid.tsx) — the page column with named
+ * breakout lines (theme/tokens.ts pageGridColumns, kept in step by
+ * tests/tokens-theme.test.ts):
+ *
+ *   full-start | gutter | wide-start | ≤90px | content … | ≤90px | wide-end | gutter | full-end
+ *
+ * Children sit in `content` (the container minus its gutters, so it lines up
+ * with the header); `data-span="wide"` widens one to the breakout line,
+ * `data-span="full"` takes the full width. Pure CSS: laid out before any
+ * script runs, no layout shift.
+ * ──────────────────────────────────────────────────────────────────────── */
+.page-grid {
+  display: grid;
+  grid-template-columns:
+    [full-start] minmax(var(--page-gutter), 1fr)
+    [wide-start] minmax(0, calc((var(--container-wide) - var(--container-content)) / 2))
+    [content-start] min(calc(100% - 2 * var(--page-gutter)), calc(var(--container-content) - 2 * var(--page-gutter)))
+    [content-end] minmax(0, calc((var(--container-wide) - var(--container-content)) / 2))
+    [wide-end] minmax(var(--page-gutter), 1fr) [full-end];
+}
+.page-grid > * {
+  grid-column: content;
+  min-width: 0;
+}
+.page-grid > [data-span='wide'] {
+  grid-column: wide;
+}
+.page-grid > [data-span='full'] {
+  grid-column: full;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
  * Pulse dot — used by the header's "● Last commit · 2h ago" status pill.
  * Apply to a positioned span that wraps the green dot.
  * ──────────────────────────────────────────────────────────────────────── */
@@ -161,7 +188,7 @@ h3,
   background-size: 0% 1px;
   background-repeat: no-repeat;
   background-position: 0 100%;
-  transition: background-size var(--duration-base) var(--ease-out-quart);
+  transition: background-size var(--duration-base) var(--ease-standard);
 }
 .link-underline:hover,
 .link-underline:focus-visible,
@@ -239,12 +266,12 @@ a:focus-visible > .link-underline {
    cross-fade at full opacity throughout (no dip on unchanged pixels). */
 ::view-transition-old(root),
 ::view-transition-new(root) {
-  animation-duration: 220ms;
-  animation-timing-function: var(--ease-out-quart);
+  animation-duration: var(--duration-base);
+  animation-timing-function: var(--ease-standard);
 }
 ::view-transition-group(*) {
-  animation-duration: 320ms;
-  animation-timing-function: var(--ease-out-quart);
+  animation-duration: var(--duration-base);
+  animation-timing-function: var(--ease-standard);
 }
 
 /* Directional route transitions. RouteTransitions passes a type: 'next' /
@@ -275,16 +302,16 @@ a:focus-visible > .link-underline {
   }
 }
 html:active-view-transition-type(next, forward)::view-transition-old(root) {
-  animation: 220ms var(--ease-out-quart) both vt-out-left;
+  animation: var(--duration-base) var(--ease-standard) both vt-out-left;
 }
 html:active-view-transition-type(next, forward)::view-transition-new(root) {
-  animation: 220ms var(--ease-out-quart) both vt-in-right;
+  animation: var(--duration-base) var(--ease-standard) both vt-in-right;
 }
 html:active-view-transition-type(prev, back)::view-transition-old(root) {
-  animation: 220ms var(--ease-out-quart) both vt-out-right;
+  animation: var(--duration-base) var(--ease-standard) both vt-out-right;
 }
 html:active-view-transition-type(prev, back)::view-transition-new(root) {
-  animation: 220ms var(--ease-out-quart) both vt-in-left;
+  animation: var(--duration-base) var(--ease-standard) both vt-in-left;
 }
 
 /* The sticky, blurred header (view-transition-name: site-header, set in
@@ -328,8 +355,8 @@ html:active-view-transition-type(prev, back)::view-transition-new(root) {
   transform-box: view-box;
   transform-origin: 12px 12px;
   transition:
-    transform 300ms var(--ease-out-quart),
-    opacity 300ms var(--ease-out-quart);
+    transform var(--duration-base) var(--ease-standard),
+    opacity var(--duration-base) var(--ease-standard);
 }
 :root[data-theme='dark'] .theme-icon__core {
   transform: scale(1.8);
@@ -367,7 +394,7 @@ html:active-view-transition-type(prev, back)::view-transition-new(root) {
       linear-gradient(#000 0 0) content-box exclude,
       linear-gradient(#000 0 0);
     opacity: 0;
-    transition: opacity 200ms var(--ease-out-quart);
+    transition: opacity var(--duration-fast) var(--ease-standard);
     pointer-events: none;
   }
   .spotlight:hover::before {
@@ -383,7 +410,7 @@ html:active-view-transition-type(prev, back)::view-transition-new(root) {
  */
 @media (hover: hover) and (pointer: fine) and (prefers-contrast: no-preference) and (forced-colors: none) {
   .hover-list .hover-item {
-    transition: opacity 200ms var(--ease-out-quart);
+    transition: opacity var(--duration-fast) var(--ease-standard);
   }
   .hover-list:has(.hover-item:hover) .hover-item:not(:hover):not(:focus-within) {
     opacity: 0.55;
@@ -394,7 +421,7 @@ html:active-view-transition-type(prev, back)::view-transition-new(root) {
 .nudge,
 .nudge-ne {
   display: inline-block;
-  transition: transform 200ms var(--ease-out-quart);
+  transition: transform var(--duration-fast) var(--ease-standard);
 }
 a:hover .nudge,
 a:focus-visible .nudge,
@@ -444,8 +471,8 @@ button:hover .nudge-ne {
   opacity: 0;
   transform: translateY(2px) scale(0.96);
   transition:
-    opacity 120ms var(--ease-out-quart),
-    transform 120ms var(--ease-out-quart);
+    opacity var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard);
   transition-delay: 0ms;
 }
 .hint--top {
@@ -480,13 +507,13 @@ button:hover .nudge-ne {
   display: flex;
   flex-direction: column;
   transform: translateY(calc(var(--d, 0) * -10%));
-  transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1) calc(var(--i, 0) * 60ms);
+  transition: transform 900ms var(--ease-standard) calc(var(--i, 0) * 60ms);
 }
 
 /* Hero headline: words rise out of a blur, staggered by --i. */
 .hero-word {
   display: inline-block;
-  animation: hero-word 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: hero-word 700ms var(--ease-standard) both;
   animation-delay: calc(var(--i, 0) * 55ms + 140ms);
 }
 /* Reduced motion: the whole name is there at once (no staggered pop-in). */
@@ -561,7 +588,7 @@ button:hover .nudge-ne {
 .collapse {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 240ms var(--ease-out-quart);
+  transition: grid-template-rows var(--duration-base) var(--ease-standard);
 }
 .collapse[data-open='true'] {
   grid-template-rows: 1fr;

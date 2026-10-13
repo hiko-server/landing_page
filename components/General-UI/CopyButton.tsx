@@ -21,7 +21,9 @@ import { copyText } from '../MDX/clipboard'
 type State = 'idle' | 'copied' | 'failed'
 
 const RESET_MS = 1600
-const ease = 'var(--ease-out-quart, cubic-bezier(0.22, 1, 0.36, 1))'
+// The standard ease and the fast duration (theme/tokens.ts; 0ms under reduced motion).
+const ease = 'var(--ease-standard)'
+const fast = 'var(--duration-fast)'
 
 const layer = (shown: boolean) =>
   ({
@@ -30,7 +32,7 @@ const layer = (shown: boolean) =>
     opacity: shown ? 1 : 0,
     transform: shown ? 'scale(1)' : 'scale(0.8)',
     filter: shown ? 'blur(0)' : 'blur(2px)',
-    transition: `opacity 150ms ${ease}, transform 150ms ${ease}, filter 150ms ${ease}`,
+    transition: `opacity ${fast} ${ease}, transform ${fast} ${ease}, filter ${fast} ${ease}`,
   }) as const
 
 function CopyGlyph() {
@@ -142,7 +144,7 @@ export default function CopyButton({
         _dark={state === 'failed' ? { color: 'red.300' } : undefined}
         bg="transparent"
         cursor="pointer"
-        transition={`color 150ms ${ease}, background-color 150ms ${ease}`}
+        transition={`color ${fast} ${ease}, background-color ${fast} ${ease}`}
         _hover={{ color: state === 'idle' ? 'page.fg' : undefined, bg: 'page.hover' }}
         _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
       >

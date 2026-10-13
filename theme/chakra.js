@@ -1,5 +1,15 @@
 import { extendTheme } from '@chakra-ui/react'
 import { printColorVariables, semanticColors } from './color'
+import {
+  EASE_STANDARD_CSS,
+  PAGE_GUTTERS,
+  cssVariables,
+  fontSizes,
+  letterSpacings,
+  radii,
+  reducedMotionVariables,
+  textStyles,
+} from './tokens'
 
 /**
  * v6 "Indigo Precision" theme.
@@ -17,8 +27,11 @@ import { printColorVariables, semanticColors } from './color'
  *           platform's Chinese UI fonts listed after the variables below.
  *   focus:  one global 2px var(--accent) focus-visible ring; buttons press to
  *           0.97 scale; toasts use the elevated `v6` Alert variant
- *   grid:   8px base, 1100px max content width
- *   easing: cubic-bezier(0.22, 1, 0.36, 1) (use --ease-out-quart from globals.css)
+ *   grid:   8px base, 1100px max content width (PageGrid: content / wide / full lines)
+ *   tokens: fluid type scale, text styles, letter-spacings, radii, container
+ *           widths and motion (one ease, three durations, zero under reduced
+ *           motion) come from theme/tokens.ts — `textStyle="label"`,
+ *           `fontSize="display"`, `var(--ease-standard)`, `var(--duration-fast)`
  *
  * Older brand.* colors are kept for backward compatibility with components
  * that still reference them; new code should use semantic tokens ('page.bg',
@@ -101,8 +114,8 @@ const components = {
   Button: {
     baseStyle: {
       transitionProperty: 'common',
-      transitionDuration: '160ms',
-      transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
+      transitionDuration: 'var(--duration-fast)',
+      transitionTimingFunction: 'var(--ease-standard)',
       // Press feedback (zeroed by the global reduced-motion rule). Drag
       // handles opt out with _active={{ transform: 'none' }}.
       _active: { transform: 'scale(0.97)' },
@@ -150,14 +163,14 @@ const components = {
           spinner: { color: bar },
           title: {
             fontFamily: 'mono',
-            fontSize: '12px',
+            fontSize: 'caption',
             fontWeight: 600,
-            letterSpacing: '0.08em',
+            letterSpacing: 'caps-tight',
             textTransform: 'uppercase',
             lineHeight: '6',
           },
           description: {
-            fontSize: '14px',
+            fontSize: 'small',
             color: 'page.fg',
           },
         }
@@ -181,7 +194,12 @@ const theme = {
   ...extendTheme({
     colors,
     fonts,
+    fontSizes,
+    letterSpacings,
+    radii,
+    textStyles,
     shadows,
+    transition: { easing: { standard: EASE_STANDARD_CSS } },
     components,
     semanticTokens,
     config: {
@@ -194,6 +212,16 @@ const theme = {
     },
     styles: {
       global: {
+        // Design tokens as CSS custom properties (theme/tokens.ts): motion,
+        // container widths and the PageGrid gutter. Emitted with the server
+        // HTML, so plain CSS (styles/globals.css) can use them on first paint.
+        ':root': {
+          ...cssVariables(),
+          '@media screen and (min-width: 48em)': { '--page-gutter': `${PAGE_GUTTERS.md}px` },
+          '@media screen and (min-width: 62em)': { '--page-gutter': `${PAGE_GUTTERS.lg}px` },
+          // The reduced-motion zero: every token duration becomes 0ms.
+          '@media (prefers-reduced-motion: reduce)': reducedMotionVariables(),
+        },
         '*, *::before, *::after': { boxSizing: 'border-box' },
         'html, body, #__next': { height: '100%' },
         body: {

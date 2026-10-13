@@ -7,6 +7,7 @@ import type { Root as HastRoot } from 'hast'
 import { safeHref } from '../../lib/cvFormat'
 import { printableLinkUrl, textOfNode } from '../../lib/print'
 import { clearOfHeader } from '../../lib/anchorOffset'
+import { textStyleProps } from '../../theme/tokens'
 import CodeBlock, { CodeFigure } from './CodeBlock'
 import ArticleFigure, { FigCaption, InsideLinkContext, MdxImage } from './Figure'
 import YouTube from './YouTube'
@@ -82,10 +83,10 @@ const Prose = ({ children, as = 'article', ...rest }: ChakraProps & { children: 
   </Box>
 )
 
+// Size, line height, tracking and weight come from the title text styles
+// (theme/tokens.ts: h1 `title-xl`, h2 `title-lg`, h3 `title-md`, h4 `title-sm`).
 const headingProps = {
-  fontFamily: 'var(--font-geist-sans), Inter, sans-serif',
-  letterSpacing: '-0.02em',
-  fontWeight: 600,
+  fontFamily: 'heading',
   // Clear of the sticky header, with a little air above a jumped-to heading.
   scrollMarginTop: ANCHOR_MARGIN,
   position: 'relative' as const,
@@ -98,7 +99,7 @@ const headingProps = {
       fontFamily: MONO,
       fontWeight: 400,
       opacity: 0,
-      transition: 'opacity 150ms var(--ease-out-quart)',
+      transition: 'opacity var(--duration-fast) var(--ease-standard)',
     },
     '& .heading-anchor:hover::after, & .heading-anchor:focus-visible::after': { opacity: 1 },
     '& .heading-anchor-icon': {
@@ -106,7 +107,7 @@ const headingProps = {
       fontFamily: MONO,
       fontWeight: 400,
       opacity: 0,
-      transition: 'opacity 150ms var(--ease-out-quart)',
+      transition: 'opacity var(--duration-fast) var(--ease-standard)',
     },
     '&:hover .heading-anchor-icon, & .heading-anchor-icon:focus-visible': { opacity: 1 },
     '& .heading-anchor:focus-visible': { outline: '2px solid var(--accent)', outlineOffset: '2px', borderRadius: '2px' },
@@ -202,10 +203,10 @@ function MdxIframe({ width, height, ...rest }: React.IframeHTMLAttributes<HTMLIF
 }
 
 const mdxComponents = {
-  h1: (props: any) => <Heading as="h1" mt={10} mb={4} fontSize={['28px', '32px']} {...headingProps} {...props} />,
-  h2: (props: any) => <Heading as="h2" mt={12} mb={3} fontSize={['22px', '24px']} {...headingProps} {...props} />,
-  h3: (props: any) => <Heading as="h3" mt={8} mb={2} fontSize="19px" {...headingProps} {...props} />,
-  h4: (props: any) => <Heading as="h4" mt={6} mb={2} fontSize="17px" {...headingProps} {...props} />,
+  h1: (props: any) => <Heading as="h1" mt={10} mb={4} {...textStyleProps('title-xl')} {...headingProps} {...props} />,
+  h2: (props: any) => <Heading as="h2" mt={12} mb={3} {...textStyleProps('title-lg')} {...headingProps} {...props} />,
+  h3: (props: any) => <Heading as="h3" mt={8} mb={2} {...textStyleProps('title-md')} {...headingProps} {...props} />,
+  h4: (props: any) => <Heading as="h4" mt={6} mb={2} {...textStyleProps('title-sm')} {...headingProps} {...props} />,
   p: (props: any) => <Text mb={4} {...props} />,
   a: MdxLink,
   ul: (props: any) => <Box as="ul" pl={5} mb={4} sx={{ '& li': { mb: 2 } }} {...props} />,

@@ -5,10 +5,12 @@ import NextLink from 'next/link'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 import PageHeader from '../../components/General-UI/PageHeader'
+import PageGrid from '../../components/General-UI/PageGrid'
 import { useSpotlight } from '../../components/General-UI/useSpotlight'
 import { listWorkInDisplayOrder, type WorkFrontmatter, type MDXIndexEntry } from '../../lib/mdx'
 import { variantSrcSet } from '../../lib/uploadVariants'
 import { absUrl, ogImageUrl, PERSON_NAME } from '../../lib/schema'
+import { cssTransition, textStyleProps } from '../../theme/tokens'
 
 /**
  * /work — case studies, featured first. Cards with a frontmatter cover show
@@ -27,7 +29,6 @@ type Props = {
   items: WorkItem[]
 }
 
-const monoFont = 'var(--font-geist-mono), monospace'
 const titleLang = (w: WorkItem) => (w.lang === 'en' ? undefined : w.lang)
 
 const FEATURED_SIZES = '(min-width: 768px) 320px, calc(100vw - 2rem)'
@@ -93,10 +94,7 @@ function WorkCard({ w, featured, first }: { w: WorkItem; featured: boolean; firs
 
   const status = fm.status ? (
     <Text
-      fontFamily={monoFont}
-      fontSize="10px"
-      letterSpacing="0.08em"
-      textTransform="uppercase"
+      textStyle="label"
       color={fm.status === 'live' ? liveColor : 'page.fg-secondary'}
       border="1px solid"
       borderColor={fm.status === 'live' ? 'status.open-border' : 'page.border'}
@@ -113,18 +111,11 @@ function WorkCard({ w, featured, first }: { w: WorkItem; featured: boolean; firs
     <Box flex="1" minW={0}>
       <Flex justify="space-between" align="flex-start" gap={3} mb={featured ? 3 : 4}>
         {featured ? (
-          <Text
-            fontFamily={monoFont}
-            fontSize="10px"
-            letterSpacing="0.12em"
-            textTransform="uppercase"
-            color={featuredColor}
-            className="tnum"
-          >
+          <Text textStyle="label" color={featuredColor} className="tnum">
             ★ Featured · {fm.period || '—'}
           </Text>
         ) : (
-          <Text fontFamily={monoFont} fontSize="11px" color="page.fg-secondary" className="tnum">
+          <Text fontFamily="mono" fontSize="label" color="page.fg-secondary" className="tnum">
             {fm.period || '—'}
           </Text>
         )}
@@ -132,10 +123,9 @@ function WorkCard({ w, featured, first }: { w: WorkItem; featured: boolean; firs
       </Flex>
       <Heading
         as="h2"
-        size={featured ? 'lg' : 'md'}
-        mb={featured ? 3 : 2}
+        {...textStyleProps(featured ? 'title-lg' : 'title-md')}
         fontWeight={500}
-        letterSpacing={featured ? '-0.02em' : '-0.015em'}
+        mb={featured ? 3 : 2}
         lang={titleLang(w)}
         style={{ viewTransitionName: `vt-work-${w.slug}` }}
       >
@@ -146,7 +136,7 @@ function WorkCard({ w, featured, first }: { w: WorkItem; featured: boolean; firs
       {fm.description && (
         <Text
           color="page.fg-secondary"
-          fontSize={featured ? '15px' : '14px'}
+          fontSize="small"
           mb={4}
           noOfLines={featured ? 4 : 3}
         >
@@ -154,13 +144,7 @@ function WorkCard({ w, featured, first }: { w: WorkItem; featured: boolean; firs
         </Text>
       )}
       {fm.tech && fm.tech.length > 0 && (
-        <Flex
-          gap={2}
-          wrap="wrap"
-          fontFamily={monoFont}
-          fontSize={featured ? '11px' : '10px'}
-          color="page.fg-secondary"
-        >
+        <Flex gap={2} wrap="wrap" fontFamily="mono" fontSize="label" color="page.fg-secondary">
           {fm.tech.slice(0, featured ? 8 : 5).map((t) => (
             <Text as="span" key={t}>
               {t}
@@ -180,16 +164,16 @@ function WorkCard({ w, featured, first }: { w: WorkItem; featured: boolean; firs
       bg="page.surface"
       border="1px solid"
       borderColor="page.border"
-      borderRadius="lg"
+      borderRadius="card"
       p={featured ? [6, 8] : 6}
-      transition="border-color 250ms var(--ease-out-quart)"
+      transition={cssTransition('border-color', 'base')}
       _hover={{ borderColor: 'page.border-strong' }}
       _focusWithin={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
       sx={{
         '& a': { color: 'inherit', textDecoration: 'none' },
         '& a:focus-visible': { outline: 'none' },
         '@media (hover: hover) and (prefers-reduced-motion: no-preference)': {
-          '& .work-cover img': { transition: 'transform 300ms var(--ease-out-quart)' },
+          '& .work-cover img': { transition: cssTransition('transform', 'base') },
           '&:hover .work-cover img': { transform: 'scale(1.02)' },
         },
       }}
@@ -266,7 +250,7 @@ export default function WorkIndex({ items }: Props) {
         }}
       />
       <HeaderFooter>
-        <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[12, 16]}>
+        <PageGrid py={[12, 16]}>
           <PageHeader
             eyebrow="Case studies"
             title="Projects that shipped, with the story."
@@ -281,10 +265,10 @@ export default function WorkIndex({ items }: Props) {
               p={[6, 10]}
               textAlign="center"
             >
-              <Text fontFamily={monoFont} fontSize="12px" color="page.fg-secondary" mb={2}>
+              <Text fontFamily="mono" fontSize="caption" color="page.fg-secondary" mb={2}>
                 [ no case studies yet ]
               </Text>
-              <Text color="page.fg-secondary" fontSize="14px">
+              <Text color="page.fg-secondary" fontSize="small">
                 Case studies will appear here as they&rsquo;re published.
               </Text>
             </Box>
@@ -304,7 +288,7 @@ export default function WorkIndex({ items }: Props) {
               </SimpleGrid>
             </Box>
           )}
-        </Box>
+        </PageGrid>
       </HeaderFooter>
     </>
   )
