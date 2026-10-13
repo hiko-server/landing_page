@@ -95,7 +95,9 @@ export function outlineOf(body: string): { headings: string[]; text: string } {
     for (const c of node.children || []) walk(c)
   }
   walk(tree)
-  return { headings, text: clampChars(squash(mdText(tree)), BODY_MAX_CHARS) }
+  // Callout markers (`> [!NOTE]`, lib/rehype/alerts.ts) are syntax, not words.
+  const text = mdText(tree).replace(/\[!(?:note|tip|important|warning|caution)\]/gi, ' ')
+  return { headings, text: clampChars(squash(text), BODY_MAX_CHARS) }
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? squash(v) : '')

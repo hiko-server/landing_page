@@ -83,17 +83,16 @@ const Prose = ({ children, as = 'article', ...rest }: ChakraProps & { children: 
         outlineOffset: '2px',
         borderRadius: '2px',
       },
-      // References: [1] in mono, the brackets say "note" without relying on colour.
+      // References: [1] in mono (still underlined: links in text are never told apart by colour alone).
       '& sup:has(> a[data-footnote-ref])': { lineHeight: 0 },
-      '& a[data-footnote-ref]': { fontFamily: MONO, fontSize: '0.78em', textDecoration: 'none', px: '0.1em' },
+      '& a[data-footnote-ref]': { fontFamily: MONO, fontSize: '0.78em', px: '0.1em' },
       '& a[data-footnote-ref]::before': { content: '"["' },
       '& a[data-footnote-ref]::after': { content: '"]"' },
-      '& a[data-footnote-ref]:hover': { textDecoration: 'underline' },
       '& section[data-footnotes] ol': { pl: 6, mb: 0 },
       '& section[data-footnotes] li': { color: 'page.fg-secondary', pl: 1, borderRadius: 'md', transition: 'background-color 600ms var(--ease-out-quart)' },
       '& section[data-footnotes] li::marker': { fontFamily: MONO, fontSize: '0.9em', color: 'page.fg-subtle' },
       '& section[data-footnotes] li p': { color: 'inherit' },
-      '& a[data-footnote-backref]': { textDecoration: 'none', ml: 1 },
+      '& a[data-footnote-backref]': { ml: 1 },
       // The note (or the reference) a reader jumped to.
       '& section[data-footnotes] li:target, & sup:has(> a[data-footnote-ref]:target)': { bg: 'var(--accent-soft)' },
       '& section[data-footnotes] li:target': { outline: '1px solid var(--accent-ring)', outlineOffset: '4px' },

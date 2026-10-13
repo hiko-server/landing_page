@@ -238,3 +238,8 @@ test('D4 the visual editor keeps callouts and image widths: its Markdown compile
   assert.equal(textOf(callout).trim(), 'Keep the servo on its own supply.')
   assert.equal(all(tree, (n) => isElement(n, 'figure'))[0]?.properties.dataWidth, 'wide')
 })
+
+test('D4 callout markers stay out of the search text', async () => {
+  const { outlineOf } = await import('../lib/searchIndex')
+  assert.equal(outlineOf('> [!NOTE]\n> Keep the servo powered.\n\nPlain [!tip] words.').text, 'Keep the servo powered. Plain words.')
+})
