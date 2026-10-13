@@ -95,7 +95,8 @@ These changes deserve extra scrutiny — call them out in the PR body:
   not push to upstream.
 - **No `.env` commits**, ever. If you accidentally stage one,
   `git restore --staged .env`. If you accidentally *pushed* one,
-  open a private security advisory (see `SECURITY.md`).
+  rotate every secret in it and e-mail the maintainer privately (the
+  address is in the site's `/.well-known/security.txt`; see `SECURITY.md`).
 
 ## Reporting bugs / requesting features
 

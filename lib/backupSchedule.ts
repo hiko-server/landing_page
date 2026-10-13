@@ -425,7 +425,8 @@ export function backupHealthWarnings(status: BackupStatus, r2Pending: number): s
       )
     }
   }
-  // The error text itself stays in the admin Storage panel (this list is public via /api/health).
+  // The error text itself stays in the admin Storage panel (this list also
+  // goes to monitors holding HEALTH_TOKEN through /api/health).
   if (status.lastOk === false) warnings.push('The last backup attempt failed; details are in the admin Storage panel.')
   if (r2Pending > 0) {
     warnings.push(`${r2Pending} R2 object${r2Pending === 1 ? ' is' : 's are'} out of date (r2_pending); the next boot sync repairs them.`)

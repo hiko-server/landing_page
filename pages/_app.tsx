@@ -10,7 +10,8 @@ import { AnimatePresence, MotionConfig, motion } from 'framer-motion'
 import '../styles/globals.css'
 
 import theme from '../theme/chakra'
-import { useAnalytics } from '../lib/analytics/client'
+import { useReportWebVitals } from 'next/web-vitals'
+import { reportWebVital, useAnalytics } from '../lib/analytics/client'
 import { pageKeyOf } from '../lib/viewTransition'
 import SiteChrome from '../components/Chrome/SiteChrome'
 import ThemeColorMeta from '../components/Chrome/ThemeColorMeta'
@@ -21,9 +22,6 @@ import ScrollProgressBar from '../components/General-UI/ScrollProgressBar'
 import { HtmlLangContext } from '../components/Common/htmlLang'
 import { RestoreScrollOnMount, useDeferredScrollRestore } from '../components/Common/scrollRestore'
 import { ClockProvider } from '../lib/clock'
-
-// Real Core Web Vitals from visitors' browsers → first-party analytics.
-export { reportWebVitals } from '../lib/analytics/client'
 
 // v6 typography — Geist (SIL OFL, public/fonts/OFL-Geist.txt), self-hosted
 // variable fonts so the build never depends on a font CDN. Exactly two files
@@ -77,8 +75,11 @@ const App = ({ Component, pageProps, router }: AppProps) => {
   // on the new page (see components/Common/scrollRestore.ts).
   useDeferredScrollRestore(!viewTransitions, pageKey)
 
-  // Cookieless first-party page views (lib/analytics/client.ts).
+  // Cookieless first-party page views and real Core Web Vitals from
+  // visitors' browsers (lib/analytics/client.ts). reportWebVital is defined
+  // at module level, so the web-vitals observers are attached exactly once.
   useAnalytics(router)
+  useReportWebVitals(reportWebVital)
 
   // <html lang> follows the page's `lang` prop (contract E): _document sets it
   // on the server, this keeps it right across client-side navigations. It is

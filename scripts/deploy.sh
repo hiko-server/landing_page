@@ -21,7 +21,8 @@
 #                 `[warm-isr] regenerated` log line, /api/health status "ok",
 #                 port published on 127.0.0.1 only
 #   5. smoke      key URLs through https://lucian-dev.com
-#   6. finalize   .deployed-sha, prune old images
+#   6. finalize   .deployed-sha, prune old images, keep only the 10 newest
+#                 backup directories (each one holds a copy of .env)
 #
 # Any failure after the image switch rolls back automatically:
 # `docker tag <image>:pre-<ts> <image>:latest && docker compose up -d
@@ -76,6 +77,7 @@ MODE="$1"; TS="$2"; DIR="$3"; SERVER_HEAD="$4"; TARGET="${5:-}"
 IMAGE=hiko-landing-page-frontend-ts-staging
 CONTAINER=hiko-landing-page-frontend-ts-staging
 BACKUP_ROOT=/root/landing_page-backups
+KEEP_BACKUPS=10
 B="$BACKUP_ROOT/$TS"
 LOCK=/tmp/landing_page-deploy.lock
 BUNDLE="/tmp/landing_page-deploy-$TS.bundle"
@@ -102,6 +104,15 @@ restore_checkout() {
   restore_preserved
 }
 unlock() { rm -rf "$LOCK"; }
+# This script's backup directories (<UTC timestamp>, real directories, not
+# symlinks), newest first. Nothing else under $BACKUP_ROOT is ever listed.
+backup_dirs() {
+  local d name
+  for d in "$BACKUP_ROOT"/*; do
+    name=${d##*/}
+    if [ -d "$d" ] && [ ! -L "$d" ] && [[ $name =~ ^[0-9]{8}T[0-9]{6}Z$ ]]; then printf '%s\n' "$name"; fi
+  done | sort -r
+}
 # EXIT traps: undo only when the mode fails.
 unlock_on_failure() { local rc=$?; [ $rc -eq 0 ] || unlock; }
 restore_on_failure() { local rc=$?; [ $rc -eq 0 ] || { restore_checkout; unlock; }; }
@@ -272,6 +283,17 @@ case "$MODE" in
     docker image ls "$IMAGE" --format '{{.Tag}}' | grep -E '^pre-[0-9]{8}T[0-9]{6}Z$' | sort -r | tail -n +4 | while read -r tag; do
       docker rmi "$IMAGE:$tag" >/dev/null && say "removed old rollback image $IMAGE:$tag"
     done
+    # Keep the $KEEP_BACKUPS newest backups. Every one holds a copy of the
+    # production .env (JWT secret, R2 and SMTP credentials), so they must not
+    # pile up; files and differently named entries there are never touched.
+    pruned=0
+    while IFS= read -r old; do
+      [ -n "$old" ] || continue
+      rm -rf -- "${BACKUP_ROOT:?}/$old"
+      pruned=$((pruned + 1))
+      say "pruned old backup $BACKUP_ROOT/$old/"
+    done < <(backup_dirs | tail -n +$((KEEP_BACKUPS + 1)))
+    say "backups: $(backup_dirs | wc -l | tr -d ' ') kept in $BACKUP_ROOT (newest $KEEP_BACKUPS), $pruned pruned"
     rm -f "$BUNDLE" "/tmp/landing_page-deploy-$TS.sh"
     unlock
     ;;

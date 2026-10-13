@@ -147,12 +147,22 @@ async function purgeBatch(fetchFn: FetchFn, zoneId: string, apiToken: string, fi
   }
 }
 
+/**
+ * Where search engines verify the key: `/<key>.txt` at the site root (served
+ * by the middleware rewrite to /api/indexnow-key). A key file only
+ * authorises URLs in its own directory and below, so anything deeper than
+ * the root would leave /blog/* and /work/* unverified.
+ */
+export function indexNowKeyLocation(host: string, key: string): string {
+  return `https://${host}/${key}.txt`
+}
+
 async function submitIndexNow(fetchFn: FetchFn, host: string, key: string, urlList: string[]): Promise<boolean> {
   try {
     const res = await fetchFn(INDEXNOW_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
-      body: JSON.stringify({ host, key, keyLocation: `https://${host}/api/indexnow-key`, urlList }),
+      body: JSON.stringify({ host, key, keyLocation: indexNowKeyLocation(host, key), urlList }),
       signal: AbortSignal.timeout(EDGE_TIMEOUT_MS),
     })
     if (!res.ok) {

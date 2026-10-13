@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
 import { buildCsp } from './lib/csp.js'
-import { getConfiguredSiteValues, getPublicHost, hostnameOf } from './lib/env'
+import { getConfiguredSiteValues, getIndexNowKey, getPublicHost, hostnameOf } from './lib/env'
 import { checkCsrf, isCsrfProtectedPath, isFormLikeContentType, isUnsafeMethod, siteHostsFrom } from './lib/security/csrf'
 
 /**
@@ -18,6 +18,8 @@ import { checkCsrf, isCsrfProtectedPath, isFormLikeContentType, isUnsafeMethod, 
  *       redirected (probes talk plain HTTP to the container).
  *     - the legacy `/cv?lang=zh|cn` goes to `/cv/zh`, keeping the other
  *       query parameters (e.g. `print=1`).
+ *     The IndexNow key file `/<INDEXNOW_KEY>.txt` is rewritten (not
+ *     redirected) to /api/indexnow-key; only the configured key matches.
  *
  * 1.  **Security headers** for every response (frame deny, HSTS, CSP, etc).
  *     These are applied unconditionally.
@@ -177,11 +179,30 @@ export function edgeRedirect(req: NextRequest, publicHost: string | null = getPu
   return null
 }
 
+/**
+ * True for the IndexNow key file: exactly `/<key>.txt` for the configured,
+ * well-formed INDEXNOW_KEY (read at runtime). The file must sit at the site
+ * root because a key file only authorises URLs in its own directory and
+ * below; any other `.txt` path, and every path while IndexNow is off, is
+ * left alone.
+ */
+export function isIndexNowKeyPath(pathname: string, key: string | null = getIndexNowKey()): boolean {
+  return key !== null && pathname === `/${key}.txt`
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
   const redirect = edgeRedirect(req)
   if (redirect) return applySecurityHeaders(redirect, { adminContext: false })
+
+  if (isIndexNowKeyPath(pathname)) {
+    const target = req.nextUrl.clone()
+    target.pathname = '/api/indexnow-key'
+    target.search = ''
+    return applySecurityHeaders(NextResponse.rewrite(target), { adminContext: false })
+  }
+
   const isAdminPage = pathname === '/admin' || pathname.startsWith('/admin/')
   const isAdminApi = pathname.startsWith('/api/admin/')
 

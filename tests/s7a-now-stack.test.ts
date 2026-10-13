@@ -4,6 +4,8 @@ import { publicSections } from '../lib/cvVisibility'
 import { currentRoles, currentlyCodingSignal, hasSignals, latestPost, latestWork, signalsUpdatedOn } from '../lib/nowSignals'
 import { buildStack, shortVersion } from '../lib/stack'
 
+// More stack coverage (installed versions, Sentry gating): tests/r6-ops-stack.test.ts
+
 const NOW = new Date('2026-10-12T00:00:00Z')
 
 const cv = publicSections(
@@ -88,6 +90,7 @@ test('stack is curated from package.json with major.minor versions', () => {
       devDependencies: { typescript: '~5.4.5' },
     },
     '22.23.3',
+    { installed: { next: '14.2.35', typescript: '5.4.5' } },
   )
   assert.deepEqual(stack.groups[0], {
     label: 'Framework',
@@ -122,6 +125,7 @@ test('the content pipeline is listed truthfully (server-side MDX, not next-mdx-r
   const stack = buildStack(
     { dependencies: { 'next-mdx-remote': '^6.0.0', 'remark-mdx': '3.1.1', 'remark-gfm': '4.0.1', sharp: '0.35.5', shiki: '^4.1.0' } },
     '22.23.3',
+    { installed: { shiki: '4.1.2' } },
   )
   const content = stack.groups.find((g) => g.label === 'Content')
   assert.deepEqual(content?.items, [

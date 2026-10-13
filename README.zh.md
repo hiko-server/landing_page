@@ -119,7 +119,8 @@ English → [README.md](./README.md)
 - **Analytics 标签页**：第一方、无 Cookie 的访问统计与真实用户 Core Web Vitals
   （见[隐私](#隐私第一方访问统计)）。
 - **定时备份**：每隔 `BACKUP_INTERVAL_HOURS`（默认 24）在内容有变化时生成全站
-  快照，备份时长显示在 `/api/health` 与 Storage 面板中。
+  快照，备份时长显示在 Storage 面板与 `/api/health` 的详情中（仅管理员或持有
+  `HEALTH_TOKEN` 的请求可见）。
 - **可运维性**：带请求 ID 的结构化 JSON 日志（`LOG_LEVEL`），按页面区域划分的
   错误边界。
 
@@ -274,6 +275,7 @@ docker compose up -d --build
 | 日志 | `LOG_LEVEL`（`debug` / `info` / `warn` / `error`） | 可选 |
 | Cloudflare 缓存清除 | `CF_ZONE_ID`、`CF_API_TOKEN` | 可选 — 两者都设置才会发送 |
 | IndexNow | `INDEXNOW_KEY`（8–128 位 `[A-Za-z0-9-]`） | 可选 — 未设置即关闭 |
+| 健康详情 | `HEALTH_TOKEN`（供监控使用的 Bearer 令牌） | 可选 — 未设置时只有已登录的管理员能看到 `/api/health` 详情 |
 
 > 仓库里**永远不会**提交真实 `.env`。`.env.example` 仅含占位值 — 拷贝
 > 一份再按自己的部署填即可。
@@ -500,7 +502,9 @@ scripts/deploy.sh                         # --force 重新构建当前已部署�
 7. **回滚**：切换后任何一步失败都会执行 `docker tag …:pre-<时间戳> …:latest &&
    docker compose up -d --no-build`，恢复检出目录，并打印失败容器最后 100 行
    日志和备份路径。成功时写入 `.deployed-sha` 并清理旧镜像（保留最近三个回滚
-   镜像）。
+   镜像），同时清理备份：只保留最新的十个 `<UTC 时间戳>/` 备份目录（每个都含
+   一份 `.env`），逐一列出被删除的目录，`/root/landing_page-backups/` 中的其他
+   内容一概不动。
 
 部署后对生产环境运行公开部分的端到端测试：
 
@@ -542,7 +546,8 @@ Analytics:Edit（没有它时，脚本会打印在控制台中手动关闭 Web A
 运行时，设置 `CF_ZONE_ID` + `CF_API_TOKEN`（只需 Cache Purge 权限的令牌）后，
 每次按需重新生成页面都会以每批 30 个清除刷新过的 URL——文章或案例变化时还会
 清除订阅源、站点地图与搜索索引；设置 `INDEXNOW_KEY` 后，页面 URL 会推送给
-IndexNow（密钥在 `/api/indexnow-key` 提供验证）。两者都是发出即不等待、3 秒
+IndexNow（密钥文件位于站点根目录 `/<INDEXNOW_KEY>.txt`：密钥文件只对其所在
+目录及以下的 URL 有效；中间件只把这一个路径改写到 `/api/indexnow-key`）。两者都是发出即不等待、3 秒
 超时、记录日志，且绝不会导致保存失败；未设置环境变量时什么都不发送。
 
 ---
@@ -587,7 +592,8 @@ CI（`.github/workflows/ci.yml`）在每次推送和 Pull Request 时运行：
 | `/sitemap.xml` | 站点地图（含 EN / 中 CV 互链） |
 | `/api/search-index` | 供命令面板使用的公开搜索文档 |
 | `/api/vcard` | 公开联系方式的 vCard |
-| `/api/health` | 健康状态：存储、内容、备份时长、待同步的 R2 写入 |
+| `/api/health` | 健康状态：所有人只看到 `{"status":"ok"\|"empty"\|"degraded"}`；存储、内容、备份时长、待同步的 R2 写入仅对管理员或携带 `Authorization: Bearer <HEALTH_TOKEN>` 的请求返回 |
+| `/.well-known/security.txt` | RFC 9116 安全联系方式（公开简历中的邮箱，有效期滚动 180 天；邮箱隐藏时返回 404） |
 
 API 在 `/api/*`；`/api/admin/*` 全部需要鉴权（Middleware 把关）。
 
@@ -631,9 +637,11 @@ README 自动引用。**请勿提交**包含真实凭据、付费仪表盘或个
 
 ## 安全披露
 
-发现安全问题请**不要**直接开 issue。建议走
-[GitHub 私密安全公告流程](https://github.com/hiko-server/landing_page/security/advisories/new)
-提交，或直接邮件给维护者。优先采用协调披露策略。
+发现安全问题请**不要**直接开 issue。请发邮件到
+[`/.well-known/security.txt`](https://lucian-dev.com/.well-known/security.txt)
+（RFC 9116）中 `Contact:` 给出的地址；范围与响应时间见
+[SECURITY.md](./SECURITY.md)。优先采用协调披露策略。每个部署都会根据公开
+简历中的邮箱自动生成自己的 security.txt（简历隐藏邮箱时返回 404）。
 
 已知限制（设计取舍，已记录）：
 - 内存级限流器在服务重启时清零。生产建议在反向代理或 Cloudflare

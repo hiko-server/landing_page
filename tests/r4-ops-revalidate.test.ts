@@ -1,11 +1,14 @@
 import { test, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import path from 'node:path'
 import {
   INDEXNOW_ENDPOINT,
   PURGE_BATCH_SIZE,
   STATIC_CONTENT_PATHS,
   chunk,
   derivedPurgePaths,
+  indexNowKeyLocation,
   notifyEdge,
   revalidatePaths,
 } from '../lib/revalidate'
@@ -83,9 +86,27 @@ test('IndexNow gets host, key, keyLocation and the page URLs only', async () => 
   assert.deepEqual(calls[0].body, {
     host: 'lucian-dev.com',
     key: 'abcdef0123456789',
-    keyLocation: 'https://lucian-dev.com/api/indexnow-key',
+    // At the site root: a key file only authorises URLs in its own directory
+    // and below, so /api/… would have covered nothing but /api/*.
+    keyLocation: 'https://lucian-dev.com/abcdef0123456789.txt',
     urlList: ['https://lucian-dev.com/work', 'https://lucian-dev.com/work/a'],
   })
+  assert.equal(indexNowKeyLocation('lucian-dev.com', 'k3y-0123'), 'https://lucian-dev.com/k3y-0123.txt')
+  for (const url of calls[0].body.urlList as string[]) {
+    const dir = new URL(calls[0].body.keyLocation).pathname.replace(/[^/]*$/, '')
+    assert.ok(new URL(url).pathname.startsWith(dir), `${url} is under the key file's directory`)
+  }
+})
+
+test('robots.txt keeps the root key file and security.txt fetchable', () => {
+  const robots = fs.readFileSync(path.join(process.cwd(), 'public/robots.txt'), 'utf8')
+  const disallowed = robots
+    .split('\n')
+    .filter((l) => /^Disallow:/i.test(l))
+    .map((l) => l.replace(/^Disallow:\s*/i, '').trim())
+  for (const p of ['/abcdef0123456789.txt', '/.well-known/security.txt']) {
+    assert.ok(!disallowed.some((d) => d && p.startsWith(d)), `${p} must not be disallowed`)
+  }
 })
 
 test('a malformed IndexNow key or a loopback-only site disables the edge calls', async () => {
