@@ -1,4 +1,4 @@
-import type { GetServerSideProps } from 'next'
+import type { GetStaticProps } from 'next'
 import Head from 'next/head'
 
 import LandingContent from '../components/LandingPage/LandingContent'
@@ -6,7 +6,8 @@ import HeaderFooter from '../layout/HeaderFooter'
 import CustomHead from '../components/General-UI/CustomHead'
 import { HERO_AVIF_SRCSET, HERO_SIZES } from '../components/Background/HeroAmbient'
 import { absUrl, websiteNode, personNode, profilePageNode, ogImageUrl, type PersonFacts } from '../lib/schema'
-import { isSectionVisible, type HomeData, type SectionKey } from '../lib/homeShape'
+import type { HomeData, SectionKey } from '../lib/homeShape'
+import { isSectionVisible } from '../lib/homeSections'
 import type { CvSectionLike } from '../lib/cvVisibility'
 import { safeHref } from '../lib/cvFormat'
 import { deriveCurrentlyCoding, type CurrentlyCoding } from '../lib/currentlyCoding'
@@ -15,8 +16,9 @@ import { latestWriting, type WorkIndexItem } from '../components/LandingPage/pro
 import type { AvatarMeta } from '../components/LandingPage/PersonalInfo'
 import type { HomeWriting } from '../components/LandingPage/Content'
 import type { ScrollerImage } from '../components/imageScoller/imageScroller'
-import type { GithubSummary } from '../components/Common/githubEvents'
+import { githubPageData, type GithubPageData, type GithubSummary } from '../components/Common/githubEvents'
 import { referenceMonth } from '../lib/clock'
+import { PROFILE_REVALIDATE_SECONDS, isBuildPhase, revalidateAfter } from '../lib/isr'
 
 type Props = {
   /** Public home document (field-note photos travel separately, in `photos`). */
@@ -34,8 +36,8 @@ type Props = {
   avatar: AvatarMeta
   /** Field-note photos with intrinsic sizes / srcsets. */
   photos: ScrollerImage[]
-  /** GitHub data rendered into the HTML (null when unavailable in time). */
-  github: GithubSummary | null
+  /** GitHub data rendered into the HTML, trimmed to the rendered fields (null when unavailable in time). */
+  github: GithubPageData | null
   /** Newest posts + case studies (null when the section is off). */
   writing: HomeWriting | null
   /** schema.org Person facts — the site-wide loader (lib/personFacts), identical on every page. */
@@ -117,11 +119,19 @@ function timeout<T>(ms: number, value: T): Promise<T> {
 }
 
 /**
- * Always rendered on request (never ISR): the Docker image is built without
- * the content store, so a prerendered copy would be stale after a deploy.
- * Every read is best effort — a failing store yields an honest, emptier page.
+ * Incremental static regeneration: regenerated right after every save that
+ * changes what the page shows (lib/revalidate.ts HOME_PAGE_PATHS and the
+ * collection / restore paths) and at most an hour after the previous render
+ * (lib/isr.ts: the reference month for "Present" / "Expected", relative
+ * GitHub times and numbers change without a save). Visitors get a cached
+ * page and Next prefetches its data for client navigations; bfcache works.
+ *
+ * The build renders without the content store (Docker) and without calling
+ * GitHub; that copy lives for a second and is replaced at boot
+ * (scripts/warm-isr.mjs). Every read is best effort — a failing store
+ * yields an honest, emptier page.
  */
-export const getServerSideProps: GetServerSideProps<Props> = async () => {
+export const getStaticProps: GetStaticProps<Props> = async () => {
   const clockMonth = referenceMonth()
   let home: HomeData | null = null
   let chromeSocials: HomeData['socials'] | null | undefined
@@ -134,7 +144,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async () => {
   }
 
   const show = (key: SectionKey) => isSectionVisible(home, key)
-  const githubWanted = show('open-source') || show('tech-stack') || show('activity')
+  const githubWanted = (show('open-source') || show('activity')) && !isBuildPhase()
   const githubPromise: Promise<GithubSummary | null> = githubWanted
     ? import('../lib/githubData')
         .then(({ loadGithubSummary }) => Promise.race([loadGithubSummary(), timeout<GithubSummary | null>(GITHUB_BUDGET_MS, null)]))
@@ -220,9 +230,10 @@ export const getServerSideProps: GetServerSideProps<Props> = async () => {
     photos = (Array.isArray(home?.photos) ? home.photos : []).map((p) => defined({ url: p.url, describe: p.describe, redirectTo: p.redirectTo }))
   }
 
-  const github = await githubPromise
+  const github = githubPageData(await githubPromise)
 
   return {
+    revalidate: revalidateAfter(PROFILE_REVALIDATE_SECONDS),
     props: {
       home: home ? { ...home, photos: [] } : null,
       cv: { en, zh: [] },

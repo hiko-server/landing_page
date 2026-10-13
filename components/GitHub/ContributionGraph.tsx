@@ -1,54 +1,64 @@
-import React, { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Box, Flex, Skeleton, Text } from '@chakra-ui/react'
-import { keyframes } from '@emotion/react'
 import { useInView, useReducedMotion } from 'framer-motion'
 
 import { useFetchJson } from '../Common/useFetchJson'
-import WidgetNotice from '../Common/WidgetNotice'
 import {
-  calendarFacts,
-  calendarLayout,
-  calendarMove,
-  formatDay,
-  monthLabels,
+  CALENDAR_CELL as CELL,
+  CALENDAR_GAP as GAP,
+  CALENDAR_LABEL_H as LABEL_H,
   CALENDAR_ROWS as ROWS,
+  CALENDAR_STEP as STEP,
+  calendarFacts,
+  calendarHighlights,
+  calendarLayout,
+  calendarPaths,
+  compactCalendar,
+  expandCalendar,
+  formatDay,
+  formatMonth,
+  monthLabels,
+  type CalendarInput,
+  type CompactCalendar,
   type ContributionLevel,
-  type ContributionWeek,
-  type GhContributions,
 } from '../Common/githubEvents'
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
-const CELL = 10
-const GAP = 3
-const STEP = CELL + GAP
-const LABEL_H = 16
 const GRID_H = LABEL_H + ROWS * STEP - GAP
 const LEVELS: ContributionLevel[] = [0, 1, 2, 3, 4]
-const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-
-const fadeIn = keyframes`from { opacity: 0; } to { opacity: 1; }`
 
 const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
 
 /**
- * Five steps: the page hairline for no contributions, then brand indigo at
- * increasing opacity — readable on both themes. In forced-colors mode the
- * levels switch to system colours that differ by fill AND outline, never by
- * opacity alone.
+ * Five steps: the page hairline tint for no contributions, then brand indigo
+ * at increasing strength — readable on both themes. Each level is one path
+ * whose stroke repeats the fill with round joins (rounded cell corners, see
+ * calendarPaths). The colours are opaque and the strength is the element's
+ * `opacity`, so where stroke and fill overlap nothing darkens into a ring.
+ * In forced-colors mode the levels switch to system colours that differ by
+ * fill AND outline, never by opacity alone.
  */
+const INDIGO = 'rgb(99, 102, 241)'
 const levelSx = {
-  '& rect[data-level="0"]': { fill: 'var(--chakra-colors-page-border)' },
-  '& rect[data-level="1"]': { fill: 'rgba(99, 102, 241, 0.25)' },
-  '& rect[data-level="2"]': { fill: 'rgba(99, 102, 241, 0.45)' },
-  '& rect[data-level="3"]': { fill: 'rgba(99, 102, 241, 0.7)' },
-  '& rect[data-level="4"]': { fill: 'rgb(99, 102, 241)' },
+  '& [data-level]': { strokeLinejoin: 'round', strokeWidth: 3, fill: INDIGO, stroke: INDIGO },
+  '& [data-level="0"]': {
+    fill: 'var(--chakra-colors-page-fg)',
+    stroke: 'var(--chakra-colors-page-fg)',
+    opacity: 0.08,
+    _dark: { opacity: 0.1 },
+  },
+  '& [data-level="1"]': { opacity: 0.25 },
+  '& [data-level="2"]': { opacity: 0.45 },
+  '& [data-level="3"]': { opacity: 0.7 },
+  '& [data-level="4"]': { opacity: 1 },
   '@media (forced-colors: active)': {
     '& svg': { forcedColorAdjust: 'none' },
-    '& rect[data-level="0"]': { fill: 'Canvas', stroke: 'GrayText', strokeWidth: 0.5 },
-    '& rect[data-level="1"]': { fill: 'Canvas', stroke: 'Highlight', strokeWidth: 1.5 },
-    '& rect[data-level="2"]': { fill: 'GrayText', stroke: 'none' },
-    '& rect[data-level="3"]': { fill: 'Highlight', stroke: 'none' },
-    '& rect[data-level="4"]': { fill: 'CanvasText', stroke: 'none' },
+    '& [data-level]': { opacity: 1 },
+    '& [data-level="0"]': { fill: 'Canvas', stroke: 'GrayText', strokeWidth: 1, opacity: 1 },
+    '& [data-level="1"]': { fill: 'Canvas', stroke: 'Highlight', strokeWidth: 2 },
+    '& [data-level="2"]': { fill: 'GrayText', stroke: 'GrayText' },
+    '& [data-level="3"]': { fill: 'Highlight', stroke: 'Highlight' },
+    '& [data-level="4"]': { fill: 'CanvasText', stroke: 'CanvasText' },
   },
 }
 
@@ -56,7 +66,7 @@ const contributionsText = (count: number) => `${count === 0 ? 'No' : count.toLoc
 
 type Tip = { key: string; text: string; x: number; y: number }
 
-function Calendar({ total, weeks }: { total: number; weeks: ContributionWeek[] }) {
+function Calendar({ data }: { data: CompactCalendar }) {
   const reduce = useReducedMotion()
   const summaryId = useId()
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -65,20 +75,19 @@ function Calendar({ total, weeks }: { total: number; weeks: ContributionWeek[] }
   const tipRef = useRef<HTMLSpanElement>(null)
   const inView = useInView(svgRef, { once: true, amount: 0.3 })
 
+  const weeks = useMemo(() => expandCalendar(data), [data])
   const { cells, byKey } = useMemo(() => calendarLayout(weeks), [weeks])
+  const paths = useMemo(() => calendarPaths(weeks), [weeks])
   const labels = useMemo(() => monthLabels(weeks), [weeks])
   const facts = useMemo(() => calendarFacts(weeks), [weeks])
+  const more = useMemo(() => calendarHighlights(weeks), [weeks])
   const width = weeks.length * STEP - GAP
-  const lastKey = cells[cells.length - 1]?.key ?? ''
 
-  const [active, setActive] = useState(lastKey)
   const [tip, setTip] = useState<Tip | null>(null)
-  const [focused, setFocused] = useState<string | null>(null)
   const [edges, setEdges] = useState({ left: false, right: false })
-  // 'static': shown as rendered; 'pending': hidden until scrolled into view; 'in': columns fade in.
+  // 'static': shown as rendered; 'pending': hidden until scrolled into view; 'in': fades in.
   const [phase, setPhase] = useState<'static' | 'pending' | 'in'>('static')
-
-  const activeKey = byKey.has(active) ? active : lastKey
+  const scrollable = edges.left || edges.right
 
   const updateEdges = useCallback(() => {
     const el = scrollRef.current
@@ -100,11 +109,9 @@ function Calendar({ total, weeks }: { total: number; weeks: ContributionWeek[] }
     return () => window.removeEventListener('resize', updateEdges)
   }, [updateEdges])
 
-  // Fade the columns in only when the graph was below the fold at hydration.
-  // Decide before the first paint from the real position: only a graph that
-  // is still below the fold hides (off-screen, so no flash) and fades in when
-  // scrolled to. One that is already visible stays as server-rendered — no
-  // hide/re-show while IntersectionObserver reports its first entry.
+  // Fade in only when the graph was below the fold at hydration: decided
+  // before the first paint from the real position, so a graph already on
+  // screen stays exactly as server-rendered.
   const armed = useRef(false)
   useIsoLayoutEffect(() => {
     const el = svgRef.current
@@ -117,23 +124,41 @@ function Calendar({ total, weeks }: { total: number; weeks: ContributionWeek[] }
     else if (inView) setPhase((p) => (p === 'pending' ? 'in' : p))
   }, [reduce, inView])
 
-  const placeTip = useCallback(
-    (key: string) => {
-      const wrap = wrapRef.current
-      const cell = byKey.get(key)
-      const el = svgRef.current?.querySelector<SVGRectElement>(`rect[data-cell="${key}"]`)
-      if (!wrap || !cell || !el) return
-      const w = wrap.getBoundingClientRect()
-      const r = el.getBoundingClientRect()
-      setTip({
-        key,
-        text: `${contributionsText(cell.day.count)} · ${formatDay(cell.day.date)}`,
-        x: r.left - w.left + r.width / 2,
-        y: r.top - w.top,
-      })
-    },
-    [byKey],
-  )
+  // Esc dismisses the hover tooltip (WCAG 1.4.13).
+  useEffect(() => {
+    if (!tip) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setTip(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [tip])
+
+  /** The day under the pointer, from its position in SVG units (no per-day elements to hit-test). */
+  const showTipAt = (clientX: number, clientY: number) => {
+    const svg = svgRef.current
+    const wrap = wrapRef.current
+    const ctm = svg?.getScreenCTM()
+    if (!svg || !wrap || !ctm) return
+    const p = new DOMPoint(clientX, clientY).matrixTransform(ctm.inverse())
+    const col = Math.floor(p.x / STEP)
+    const row = Math.floor((p.y - LABEL_H) / STEP)
+    const inCell = p.x - col * STEP <= CELL && p.y - LABEL_H - row * STEP <= CELL && p.y >= LABEL_H
+    const cell = inCell ? byKey.get(`${col}:${row}`) : undefined
+    if (!cell) {
+      setTip(null)
+      return
+    }
+    if (tip?.key === cell.key) return
+    const topLeft = new DOMPoint(col * STEP + CELL / 2, LABEL_H + row * STEP).matrixTransform(ctm)
+    const w = wrap.getBoundingClientRect()
+    setTip({
+      key: cell.key,
+      text: `${contributionsText(cell.day.count)} · ${formatDay(cell.day.date)}`,
+      x: topLeft.x - w.left,
+      y: topLeft.y - w.top,
+    })
+  }
 
   // Keep the tooltip inside the wrapper (no page overflow at the edges).
   useIsoLayoutEffect(() => {
@@ -145,53 +170,46 @@ function Calendar({ total, weeks }: { total: number; weeks: ContributionWeek[] }
     el.style.left = `${x}px`
   }, [tip])
 
-  const cellKeyOf = (target: EventTarget | null) =>
-    target instanceof Element ? target.closest('rect[data-cell]')?.getAttribute('data-cell') ?? null : null
-
-  const onKeyDown = (e: React.KeyboardEvent<SVGSVGElement>) => {
-    const from = byKey.get(activeKey)
-    if (!from) return
-    const next = calendarMove(from, e.key, e.ctrlKey || e.metaKey, byKey, weeks.length, cells)
-    if (next === null) return
-    e.preventDefault()
-    setActive(next)
-    svgRef.current?.querySelector<SVGRectElement>(`rect[data-cell="${next}"]`)?.focus()
-  }
-
-  const onScroll = () => {
-    updateEdges()
-    if (focused) placeTip(focused)
-    else setTip(null)
-  }
-
   const fade = (on: boolean) => (on ? '24px' : '0px')
   const first = weeks[0]?.days[0]?.date
   const lastDay = cells[cells.length - 1]?.day.date
+  const summary = [
+    first && lastDay ? `${contributionsText(data.total)} between ${formatDay(first, true)} and ${formatDay(lastDay, true)}.` : '',
+    `Active on ${facts.activeDays} of ${facts.days} days.`,
+    facts.best ? `Busiest day: ${formatDay(facts.best.date, true)}, with ${contributionsText(facts.best.count).toLowerCase()}.` : '',
+    more.bestMonth ? `Busiest month: ${formatMonth(more.bestMonth.month)}, with ${contributionsText(more.bestMonth.count).toLowerCase()}.` : '',
+    more.longestStreak > 1 ? `Longest streak: ${more.longestStreak} days in a row.` : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   return (
     <Box ref={wrapRef} position="relative" sx={levelSx}>
       <Text className="tnum" fontSize="sm" color="page.fg" mb={3}>
-        {total.toLocaleString('en-US')} contributions in the last year
+        {data.total.toLocaleString('en-US')} contributions in the last year
       </Text>
       <p id={summaryId} className="sr-only">
-        {first && lastDay ? `${contributionsText(total)} between ${formatDay(first, true)} and ${formatDay(lastDay, true)}. ` : ''}
-        {`Active on ${facts.activeDays} of ${facts.days} days.`}
-        {facts.best ? ` Busiest day: ${formatDay(facts.best.date, true)}, with ${contributionsText(facts.best.count).toLowerCase()}.` : ''}
-        {' Use the arrow keys to move between days.'}
+        {summary}
       </p>
-      {/* Phones: natural 10 px cells, scrolled horizontally. From md up the grid
-          scales to the full container width (viewBox keeps the aspect ratio),
-          so the legend lines up with the section's right edge. */}
+      {/* Phones: natural 10 px cells, scrolled horizontally (the scroller is
+          focusable then, so the keyboard can scroll it). From md up the
+          drawing scales to the column (the viewBox keeps the aspect ratio). */}
       <Box w={{ base: 'fit-content', md: '100%' }} maxW="100%">
         <Box
           ref={scrollRef}
-          onScroll={onScroll}
+          onScroll={() => {
+            updateEdges()
+            setTip(null)
+          }}
           overflowX="auto"
           overflowY="hidden"
           pb={1}
+          tabIndex={scrollable ? 0 : undefined}
+          role={scrollable ? 'group' : undefined}
+          aria-label={scrollable ? 'Contribution calendar, scrolls sideways' : undefined}
           sx={{
             scrollbarWidth: 'thin',
-            // md+: fill the row; the viewBox scales cells, gaps and labels together.
+            '&:focus-visible': { outline: '2px solid var(--accent)', outlineOffset: '2px', borderRadius: '4px' },
             '@media (min-width: 48em)': { '& .contrib-svg': { width: '100%', height: 'auto' } },
             WebkitMaskImage: `linear-gradient(to right, transparent, #000 ${fade(edges.left)}, #000 calc(100% - ${fade(edges.right)}), transparent)`,
             maskImage: `linear-gradient(to right, transparent, #000 ${fade(edges.left)}, #000 calc(100% - ${fade(edges.right)}), transparent)`,
@@ -199,7 +217,7 @@ function Calendar({ total, weeks }: { total: number; weeks: ContributionWeek[] }
         >
           <svg
             ref={svgRef}
-            role="grid"
+            role="img"
             aria-label="Contribution calendar"
             aria-describedby={summaryId}
             width={width}
@@ -208,21 +226,12 @@ function Calendar({ total, weeks }: { total: number; weeks: ContributionWeek[] }
             preserveAspectRatio="xMinYMin meet"
             className="contrib-svg"
             data-phase={phase}
-            onKeyDown={onKeyDown}
-            onPointerOver={(e) => {
-              const key = cellKeyOf(e.target)
-              if (key) placeTip(key)
-            }}
-            onPointerLeave={() => (focused ? placeTip(focused) : setTip(null))}
+            onPointerMove={(e) => showTipAt(e.clientX, e.clientY)}
+            onPointerDown={(e) => showTipAt(e.clientX, e.clientY)}
+            onPointerLeave={() => setTip(null)}
             style={{ display: 'block', overflow: 'visible' }}
           >
-            <Box
-              as="g"
-              aria-hidden
-              fontFamily={monoFont}
-              fontSize="10px"
-              sx={{ fill: 'var(--chakra-colors-page-fg-secondary)' }}
-            >
+            <Box as="g" aria-hidden fontFamily={monoFont} fontSize="10px" sx={{ fill: 'var(--chakra-colors-page-fg-secondary)' }}>
               {labels.map((l) => (
                 <text key={`${l.col}-${l.label}`} x={l.col * STEP} y={10}>
                   {l.label}
@@ -231,50 +240,14 @@ function Calendar({ total, weeks }: { total: number; weeks: ContributionWeek[] }
             </Box>
             <Box
               as="g"
+              aria-hidden
               sx={{
-                '& rect': { outline: 'none' },
-                '& rect:focus-visible': { stroke: 'var(--chakra-colors-page-fg)', strokeWidth: 1.5 },
-                '[data-phase="pending"] & rect': { opacity: 0 },
-                '[data-phase="in"] & rect': {
-                  animation: `${fadeIn} 300ms var(--ease-out-quart) both`,
-                  animationDelay: 'calc(var(--c) * 4ms)',
-                },
-                '@media (prefers-reduced-motion: reduce)': {
-                  '[data-phase] & rect': { animation: 'none', opacity: 1 },
-                },
+                '[data-phase="pending"] &': { opacity: 0 },
+                '[data-phase="in"] &': { opacity: 1, transition: 'opacity 500ms var(--ease-out-quart)' },
+                '@media (prefers-reduced-motion: reduce)': { '[data-phase] &': { opacity: 1, transition: 'none' } },
               }}
             >
-              {Array.from({ length: ROWS }, (_, row) => (
-                <g role="row" key={row}>
-                  {cells
-                    .filter((c) => c.row === row)
-                    .map((c) => (
-                      <rect
-                        key={c.key}
-                        role="gridcell"
-                        data-cell={c.key}
-                        data-level={c.day.level}
-                        tabIndex={c.key === activeKey ? 0 : -1}
-                        aria-label={`${contributionsText(c.day.count)} on ${WEEKDAYS[c.row]}, ${formatDay(c.day.date, true)}`}
-                        x={c.col * STEP}
-                        y={LABEL_H + c.row * STEP}
-                        width={CELL}
-                        height={CELL}
-                        rx={2}
-                        style={{ ['--c' as string]: c.col }}
-                        onFocus={() => {
-                          setActive(c.key)
-                          setFocused(c.key)
-                          placeTip(c.key)
-                        }}
-                        onBlur={() => {
-                          setFocused(null)
-                          setTip(null)
-                        }}
-                      />
-                    ))}
-                </g>
-              ))}
+              {LEVELS.map((level) => (paths[level] ? <path key={level} data-level={level} d={paths[level]} /> : null))}
             </Box>
           </svg>
         </Box>
@@ -282,7 +255,7 @@ function Calendar({ total, weeks }: { total: number; weeks: ContributionWeek[] }
           <span>Less</span>
           <svg width={LEVELS.length * STEP - GAP} height={CELL} style={{ display: 'block' }}>
             {LEVELS.map((level) => (
-              <rect key={level} data-level={level} x={level * STEP} y={0} width={CELL} height={CELL} rx={2} />
+              <rect key={level} data-level={level} x={level * STEP + 1.5} y={1.5} width={CELL - 3} height={CELL - 3} />
             ))}
           </svg>
           <span>More</span>
@@ -305,33 +278,23 @@ function Calendar({ total, weeks }: { total: number; weeks: ContributionWeek[] }
 const SKELETON_H = `${GRID_H + 52}px`
 
 /**
- * GitHub contribution calendar for the last year as an inline SVG in brand
- * indigo (no third-party image). Keyboard: one tab stop, arrow keys move by
- * day / week, Home / End to the row's ends (Ctrl/⌘ for the whole year).
- * Server-rendered when `initialData` is passed.
+ * GitHub contribution calendar for the last year as one inline SVG in brand
+ * indigo (no third-party image): a path per contribution level, the month
+ * labels, and a text summary for screen readers (total, active days,
+ * busiest day and month, longest streak) instead of one element per day.
+ * Pointer users get a per-day tooltip from the pointer position.
  *
- * When the calendar is unavailable it renders nothing (`whenUnavailable:
- * 'hide'`, the home page) or an in-place notice with a retry ('notice', /about).
+ * Server-rendered from the compact calendar in the page props; without it
+ * (not ready in the server's budget) it fetches /api/github/contributions.
+ * Renders nothing when the calendar is unavailable.
  */
-export default function ContributionGraph({
-  initialData,
-  whenUnavailable = 'hide',
-}: {
-  initialData?: GhContributions | null
-  whenUnavailable?: 'hide' | 'notice'
-}) {
-  const { data, error, retry } = useFetchJson<GhContributions>('/api/github/contributions', { initialData })
+export default function ContributionGraph({ initialData }: { initialData?: CompactCalendar | { available: false } | null }) {
+  const { data, error } = useFetchJson<CalendarInput>('/api/github/contributions', { initialData })
+  const calendar = useMemo(() => compactCalendar(data), [data])
 
-  if (error || (data && (!data.available || !data.weeks?.length))) {
-    if (whenUnavailable === 'hide') return null
-    return (
-      <WidgetNotice kind="error" onRetry={retry} minH={SKELETON_H}>
-        The contribution calendar couldn’t be loaded from GitHub.
-      </WidgetNotice>
-    )
-  }
+  if (error || (data && !calendar)) return null
 
-  if (!data) {
+  if (!calendar) {
     return (
       <Box aria-busy="true" aria-label="Loading contribution calendar" h={SKELETON_H}>
         <Skeleton h="14px" w="260px" maxW="70%" mb={3} borderRadius="sm" startColor="page.bg-elevated" endColor="page.bg-overlay" />
@@ -340,5 +303,5 @@ export default function ContributionGraph({
     )
   }
 
-  return <Calendar total={data.total ?? 0} weeks={data.weeks as ContributionWeek[]} />
+  return <Calendar data={calendar} />
 }

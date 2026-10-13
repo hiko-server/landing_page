@@ -13,6 +13,15 @@
  * the same on server and client.
  */
 
+import {
+  HIGHLIGHT_LIMITS,
+  isHighlightHref,
+  isHttpsUrl,
+  resolveSectionOrder,
+  visibleHighlights,
+  type SortableSectionKey,
+} from './homeSections'
+
 export type HomeData = {
   hero: {
     welcome: string
@@ -65,6 +74,22 @@ export type HomeData = {
    * renderer and editor.
    */
   sections?: Partial<Record<SectionKey, boolean>>
+  /**
+   * Order of the numbered home sections ([02]…), set in the Home editor
+   * (drag to sort, or the "Recruiter-first" preset). Absent = the built-in
+   * order (DEFAULT_SECTION_ORDER). Always read through `resolveSectionOrder`:
+   * unknown keys are dropped and sections missing from a stored order (e.g.
+   * one added in a later release) are inserted at their default place, so an
+   * older document never hides a section.
+   */
+  sectionOrder?: SortableSectionKey[]
+  /**
+   * The proof strip under the hero: up to four owner-written highlights, each
+   * linking to where it comes from (a CV entry, a case study, an external
+   * page). Nothing renders until the owner saves at least one; the editor
+   * only *suggests* tiles built verbatim from the public CV.
+   */
+  highlights?: HomeHighlight[]
   /**
    * Editable contact-form copy + reasons dropdown options. Was hard-coded
    * in `components/Contact/ContactPro.tsx`; lifted here so an operator
@@ -127,6 +152,16 @@ export type HomeSite = {
   name?: string
 }
 
+/** One tile of the proof strip under the hero. */
+export type HomeHighlight = {
+  /** The figure or headline, e.g. "18th worldwide". */
+  value: string
+  /** What it is, e.g. "IEEEXtreme 19.0 global programming competition". */
+  label: string
+  /** Where it comes from: a site path (/cv#…, /work/…) or an https:// URL. */
+  href: string
+}
+
 /** Limits enforced on write (lib/home) and mirrored by the admin editor. */
 export const HOME_LIMITS = {
   brandScaleMin: 0.5,
@@ -139,6 +174,7 @@ export const HOME_LIMITS = {
   rolesMax: 12,
   roleMax: 60,
   siteNameMax: 80,
+  ...HIGHLIGHT_LIMITS,
 } as const
 
 /**
@@ -149,40 +185,51 @@ export const HOME_LIMITS = {
  */
 export type SectionKey =
   | 'introduction' // PersonalInfo (hero)
+  | 'highlights'   // ProofStrip (owner-saved highlights) under the hero
   | 'brands'       // brand strip under hero
-  | 'open-source'  // StatsBar + contribution graph + TopRepos
-  | 'tech-stack'   // Skills (from the CV) + LanguageBars
+  | 'open-source'  // StatsBar + contribution graph + language stack + pinned repos
+  | 'tech-stack'   // Skills (from the CV)
   | 'activity'     // ActivityFeed
   | 'projects'     // ProjectSpotlight
   | 'experience'   // ExperienceTimeline
   | 'certifications' // CertificationsPeek
   | 'photos'       // Field Notes photo strip
-  | 'contact'      // ContactPro
+  | 'contact'      // availability + "Write to me" (the form lives on /contact)
   | 'writing'      // latest posts + case studies
 
 /** Display metadata for each section — drives the admin checkboxes. */
 export const HOME_SECTION_META: Array<{ key: SectionKey; label: string; hint: string }> = [
   { key: 'introduction', label: 'Introduction', hint: 'hero + avatar + CTAs' },
+  { key: 'highlights', label: 'Highlights', hint: 'proof strip under the hero, once you save highlights' },
   { key: 'brands', label: 'Brand strip', hint: 'logo row under hero' },
-  { key: 'open-source', label: 'Open source', hint: 'GitHub stats, contribution graph, top repos' },
-  { key: 'tech-stack', label: 'Skills', hint: 'skills from your CV + language bars' },
+  { key: 'open-source', label: 'Open source', hint: 'GitHub stats, contribution graph, languages, pinned repos' },
+  { key: 'tech-stack', label: 'Skills', hint: 'skills from your CV' },
   { key: 'activity', label: 'Recent activity', hint: 'GitHub event feed' },
   { key: 'projects', label: 'Selected projects', hint: 'horizontal spotlight' },
   { key: 'experience', label: 'Experience', hint: 'CV timeline' },
   { key: 'certifications', label: 'Certifications', hint: 'certifications from your CV' },
   { key: 'photos', label: 'Field notes', hint: 'full-width photo strip' },
-  { key: 'contact', label: 'Contact', hint: 'form + reach-me panel' },
+  { key: 'contact', label: 'Contact', hint: 'availability + “Write to me” (the form is on /contact)' },
   { key: 'writing', label: 'Writing & case studies', hint: 'latest posts and case studies' },
 ]
 
-/** Tiny render-time helper. Omitted/undefined → visible. Explicit false → hidden. */
-export function isSectionVisible(
-  data: HomeData | null | undefined,
-  key: SectionKey,
-): boolean {
-  const v = data?.sections?.[key]
-  return v !== false
-}
+// The read side (section visibility and order, complete highlights) lives in
+// lib/homeSections so the public home page can import it without the
+// write-time validation below; re-exported here for everything else.
+export {
+  DEFAULT_SECTION_ORDER,
+  FIXED_SECTION_KEYS,
+  HIGHLIGHT_LIMITS,
+  RECRUITER_SECTION_ORDER,
+  isHighlightHref,
+  isHttpsUrl,
+  isSameOrder,
+  isSectionVisible,
+  isSortableSectionKey,
+  resolveSectionOrder,
+  visibleHighlights,
+} from './homeSections'
+export type { SortableSectionKey } from './homeSections'
 
 /**
  * The home document as visitors may see it. Pure (runs on server and client).
@@ -190,7 +237,8 @@ export function isSectionVisible(
  * Content that the owner switched off never leaves the server:
  *   - photos with `visible: false` are dropped
  *   - a section switched off in `sections` has the data that feeds only that
- *     section emptied (brand strip, field-note photos, contact copy)
+ *     section emptied (brand strip, field-note photos, highlights);
+ *     incomplete highlights are dropped
  * The `sections` map itself is kept so renderers know what to skip.
  * `availability`, `openSource` and `site` are public by design and pass
  * through unchanged.
@@ -209,7 +257,10 @@ export function publicHome(home: HomeData | null | undefined): HomeData | null {
           delete rest.visible
           return rest
         }),
-    contact: off('contact') ? {} : home.contact,
+    // The contact copy belongs to the form on /contact; switching off the
+    // home page's contact band must not reset that page to its defaults.
+    contact: home.contact,
+    ...(home.highlights !== undefined ? { highlights: off('highlights') ? [] : visibleHighlights(home.highlights) } : {}),
   }
 }
 
@@ -217,17 +268,6 @@ export function publicHome(home: HomeData | null | undefined): HomeData | null {
 // ── Write-time validation of the owner-editable extras ─────────────────────
 
 export type HomeFieldError = { path: string; message: string }
-
-/** An absolute https:// URL with a host and no embedded credentials. */
-export function isHttpsUrl(value: unknown): value is string {
-  if (typeof value !== 'string' || !value.trim() || /\s/.test(value.trim())) return false
-  try {
-    const u = new URL(value.trim())
-    return u.protocol === 'https:' && !!u.hostname && !u.username && !u.password
-  } catch {
-    return false
-  }
-}
 
 /** `YYYY-MM` with a real month. */
 export function isYearMonth(value: unknown): value is string {
@@ -381,6 +421,64 @@ function normalizeSite(input: unknown, errors: HomeFieldError[]): HomeSite | und
   return name ? { name } : {}
 }
 
+function normalizeSectionOrder(input: unknown, errors: HomeFieldError[]): SortableSectionKey[] | undefined {
+  if (input === undefined || input === null) return undefined
+  if (!Array.isArray(input) || input.some((k) => typeof k !== 'string')) {
+    errors.push({ path: 'sectionOrder', message: 'The section order must be a list of section names.' })
+    return undefined
+  }
+  return resolveSectionOrder(input)
+}
+
+function normalizeHighlights(input: unknown, errors: HomeFieldError[]): HomeHighlight[] | undefined {
+  if (input === undefined || input === null) return undefined
+  if (!Array.isArray(input)) {
+    errors.push({ path: 'highlights', message: 'Highlights must be a list.' })
+    return undefined
+  }
+  if (input.length > HOME_LIMITS.highlightsMax) {
+    errors.push({ path: 'highlights', message: `Show at most ${HOME_LIMITS.highlightsMax} highlights.` })
+  }
+  const out: HomeHighlight[] = []
+  input.slice(0, HOME_LIMITS.highlightsMax).forEach((raw: unknown, i: number) => {
+    const n = i + 1
+    const h = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : null
+    if (!h) {
+      errors.push({ path: `highlights.${i}`, message: `Highlight ${n} is not valid.` })
+      return
+    }
+    const value = trimmed(h.value)
+    const label = trimmed(h.label)
+    const href = trimmed(h.href)
+    // A tile left completely blank is simply dropped.
+    if (!value && !label && !href) return
+    let ok = true
+    if (!value) {
+      errors.push({ path: `highlights.${i}.value`, message: `Highlight ${n}: enter the headline.` })
+      ok = false
+    } else if (value.length > HOME_LIMITS.highlightValueMax) {
+      errors.push({ path: `highlights.${i}.value`, message: `Highlight ${n}: keep the headline under ${HOME_LIMITS.highlightValueMax} characters.` })
+      ok = false
+    }
+    if (!label) {
+      errors.push({ path: `highlights.${i}.label`, message: `Highlight ${n}: say what it is.` })
+      ok = false
+    } else if (label.length > HOME_LIMITS.highlightLabelMax) {
+      errors.push({ path: `highlights.${i}.label`, message: `Highlight ${n}: keep the description under ${HOME_LIMITS.highlightLabelMax} characters.` })
+      ok = false
+    }
+    if (!isHighlightHref(href)) {
+      errors.push({
+        path: `highlights.${i}.href`,
+        message: `Highlight ${n}: link it to its source, a site path such as /cv#… or a full https:// URL.`,
+      })
+      ok = false
+    }
+    if (ok) out.push({ value, label, href })
+  })
+  return out
+}
+
 function normalizeBrands(input: HomeBrand[], errors: HomeFieldError[]): HomeBrand[] {
   const { brandScaleMin: min, brandScaleMax: max } = HOME_LIMITS
   return input.map((b, i) => {
@@ -402,8 +500,10 @@ function normalizeBrands(input: HomeBrand[], errors: HomeFieldError[]): HomeBran
 
 /**
  * Validate and normalise the owner-editable extras of a home document before
- * it is stored: availability, open-source picks, the site name and brand
- * logo scales. Text is trimmed, empty optional values are dropped, and
+ * it is stored: availability, open-source picks, the site name, brand logo
+ * scales, the section order (completed with any missing section) and the
+ * highlights (each needs a headline, a description and a source link). Text
+ * is trimmed, empty optional values are dropped, and
  * anything that would render wrongly (a non-https booking link, a bad month,
  * an out-of-range scale) is reported instead of being stored. Every other
  * key passes through untouched.
@@ -427,6 +527,14 @@ export function normalizeHomeWrite(
   const site = normalizeSite(input.site, errors)
   if (site) home.site = site
   else delete home.site
+
+  const sectionOrder = normalizeSectionOrder(input.sectionOrder, errors)
+  if (sectionOrder) home.sectionOrder = sectionOrder
+  else delete home.sectionOrder
+
+  const highlights = normalizeHighlights(input.highlights, errors)
+  if (highlights && highlights.length) home.highlights = highlights
+  else delete home.highlights
 
   if (input.sections && typeof input.sections === 'object') {
     for (const [k, v] of Object.entries(input.sections)) {

@@ -504,13 +504,13 @@ export function calendarFacts(weeks: readonly ContributionWeek[]): {
   return { days: all.length, activeDays: all.filter((d) => d.count > 0).length, best }
 }
 
-// ── Calendar grid (keyboard model of components/GitHub/ContributionGraph) ────
+// ── Calendar drawing (components/GitHub/ContributionGraph) ───────────────────
 
 export const CALENDAR_ROWS = 7
 
 export type CalendarCell = { key: string; col: number; row: number; day: ContributionDay }
 
-/** Week columns × weekday rows, plus a "col:row" → cell index for keyboard moves. */
+/** Week columns × weekday rows, plus a "col:row" → cell index for pointer lookups. */
 export function calendarLayout(weeks: readonly ContributionWeek[]): { cells: CalendarCell[]; byKey: Map<string, CalendarCell> } {
   const cells: CalendarCell[] = []
   const byKey = new Map<string, CalendarCell>()
@@ -525,50 +525,193 @@ export function calendarLayout(weeks: readonly ContributionWeek[]): { cells: Cal
   return { cells, byKey }
 }
 
+/** Cell geometry of the drawn calendar (SVG user units). */
+export const CALENDAR_CELL = 10
+export const CALENDAR_GAP = 3
+export const CALENDAR_STEP = CALENDAR_CELL + CALENDAR_GAP
+/** Height of the month-label row above the cells. */
+export const CALENDAR_LABEL_H = 16
+
 /**
- * The cell a navigation key moves to, or null to leave focus where it is:
- * arrows move by week / weekday (skipping days missing from a partial
- * week), Home / End go to the row's first / last day, and with Ctrl/⌘ to
- * the first / last day of the whole calendar.
+ * One SVG path per contribution level (0–4) instead of one <rect> per day:
+ * each cell is a small square sub-path. Drawn with a stroke of the fill
+ * colour and round joins (see ContributionGraph), a 7-unit square plus a
+ * 1.5-unit stroke paints a 10-unit cell with rounded corners, so the
+ * markup stays ~20 characters per day.
  */
-export function calendarMove(
-  from: CalendarCell,
-  key: string,
-  ctrl: boolean,
-  byKey: ReadonlyMap<string, CalendarCell>,
-  cols: number,
-  cells: readonly CalendarCell[],
-): string | null {
-  const at = (c: number, r: number) => byKey.get(`${c}:${r}`)
-  const scan = (dc: number, dr: number) => {
-    let c = from.col + dc
-    let r = from.row + dr
-    while (c >= 0 && c < cols && r >= 0 && r < CALENDAR_ROWS) {
-      const hit = at(c, r)
-      if (hit) return hit.key
-      c += dc
-      r += dr
+export function calendarPaths(weeks: readonly ContributionWeek[]): string[] {
+  const out = ['', '', '', '', '']
+  const inset = 1.5
+  const side = CALENDAR_CELL - inset * 2
+  weeks.forEach((w, col) => {
+    for (const day of w.days) {
+      const x = col * CALENDAR_STEP + inset
+      const y = CALENDAR_LABEL_H + weekdayOf(day.date) * CALENDAR_STEP + inset
+      const level = day.level >= 0 && day.level <= 4 ? day.level : 0
+      out[level] += `M${x} ${y}h${side}v${side}h-${side}z`
     }
-    return null
+  })
+  return out
+}
+
+/**
+ * The calendar as a page ships it in its props: the first day, the total and
+ * one count per consecutive day. About 1 KB, against ~18 KB for the day
+ * objects; levels are recomputed from the counts (expandCalendar).
+ */
+export type CompactCalendar = { available: true; total: number; start: string; counts: number[] }
+
+/** What the graph accepts: the compact calendar, the API payload (weeks), or "unavailable". */
+export type CalendarInput = CompactCalendar | GhContributions
+
+/** Weeks → CompactCalendar (missing days between the first and last count as 0); null when there is nothing to draw. */
+export function compactCalendar(data: CalendarInput | null | undefined): CompactCalendar | null {
+  if (!data || data.available === false) return null
+  if ('counts' in data) return Array.isArray(data.counts) && data.counts.length && DATE_RE.test(data.start) ? data : null
+  const days = (data.weeks || []).flatMap((w) => (Array.isArray(w?.days) ? w.days : []))
+  const valid = days.filter((d) => typeof d?.date === 'string' && DATE_RE.test(d.date)).sort((a, b) => (a.date < b.date ? -1 : 1))
+  if (!valid.length) return null
+  const first = dayStamp(valid[0].date)
+  const last = dayStamp(valid[valid.length - 1].date)
+  const counts = new Array<number>(Math.round((last - first) / DAY_MS) + 1).fill(0)
+  for (const d of valid) {
+    const n = Number(d.count)
+    counts[Math.round((dayStamp(d.date) - first) / DAY_MS)] = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0
   }
-  switch (key) {
-    case 'ArrowLeft':
-      return scan(-1, 0)
-    case 'ArrowRight':
-      return scan(1, 0)
-    case 'ArrowUp':
-      return scan(0, -1)
-    case 'ArrowDown':
-      return scan(0, 1)
-    case 'Home':
-      if (ctrl) return cells[0]?.key ?? null
-      for (let c = 0; c < cols; c++) if (at(c, from.row)) return `${c}:${from.row}`
-      return null
-    case 'End':
-      if (ctrl) return cells[cells.length - 1]?.key ?? null
-      for (let c = cols - 1; c >= 0; c--) if (at(c, from.row)) return `${c}:${from.row}`
-      return null
-    default:
-      return null
+  const total = typeof data.total === 'number' && Number.isFinite(data.total) ? data.total : counts.reduce((a, b) => a + b, 0)
+  return { available: true, total, start: valid[0].date, counts }
+}
+
+const isoDay = (stamp: number) => new Date(stamp).toISOString().slice(0, 10)
+
+/** CompactCalendar → Sunday-first weeks with quartile levels (the same weeks buildCalendar makes). */
+export function expandCalendar(c: CompactCalendar): ContributionWeek[] {
+  const start = dayStamp(c.start)
+  if (!Number.isFinite(start)) return []
+  const days = c.counts.map((count, i) => ({ date: isoDay(start + i * DAY_MS), count }))
+  return buildCalendar(days, c.total, Number.MAX_SAFE_INTEGER).weeks
+}
+
+/** Further facts for the screen-reader summary: the busiest month and the longest run of active days. */
+export function calendarHighlights(weeks: readonly ContributionWeek[]): {
+  bestMonth: { month: string; count: number } | null
+  longestStreak: number
+} {
+  const byMonth = new Map<string, number>()
+  let longestStreak = 0
+  let run = 0
+  for (const d of weeks.flatMap((w) => w.days)) {
+    const month = d.date.slice(0, 7)
+    byMonth.set(month, (byMonth.get(month) || 0) + d.count)
+    run = d.count > 0 ? run + 1 : 0
+    longestStreak = Math.max(longestStreak, run)
+  }
+  let bestMonth: { month: string; count: number } | null = null
+  for (const [month, count] of Array.from(byMonth)) {
+    if (count > 0 && (!bestMonth || count > bestMonth.count)) bestMonth = { month, count }
+  }
+  return { bestMonth, longestStreak }
+}
+
+/** 'October 2026' for '2026-10'. */
+export function formatMonth(month: string): string {
+  const [y, m] = month.split('-').map(Number)
+  const names = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+  return y && m >= 1 && m <= 12 ? `${names[m - 1]} ${y}` : month
+}
+
+// ── Language share (components/GitHub/LanguageStack) ─────────────────────────
+
+export type LanguageSlice = { name: string; pct: number; other?: true }
+
+/**
+ * The top `top` languages by bytes plus one "Other" slice for the rest, as
+ * percentages that add up to 100 (rounded to one decimal, the remainder on
+ * the largest slice). Empty when there is no code.
+ */
+export function languageStack(data: Pick<GhLanguages, 'total' | 'breakdown'> | null | undefined, top = 5): LanguageSlice[] {
+  const entries = Object.entries(data?.breakdown || {})
+    .map(([name, bytes]) => [name, Number(bytes)] as const)
+    .filter(([, bytes]) => Number.isFinite(bytes) && bytes > 0)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+  const total = entries.reduce((n, [, b]) => n + b, 0)
+  if (!total) return []
+  const head = entries.slice(0, top)
+  const rest = entries.slice(top).reduce((n, [, b]) => n + b, 0)
+  const round = (bytes: number) => Math.round((bytes / total) * 1000) / 10
+  const slices: LanguageSlice[] = head.map(([name, bytes]) => ({ name, pct: round(bytes) }))
+  if (rest > 0) slices.push({ name: 'Other', pct: round(rest), other: true })
+  const drift = Math.round((100 - slices.reduce((n, s) => n + s.pct, 0)) * 10) / 10
+  if (drift && slices.length) slices[0] = { ...slices[0], pct: Math.round((slices[0].pct + drift) * 10) / 10 }
+  return slices
+}
+
+/** The language slice of the page props: only what LanguageStack draws. */
+export type GhLanguageStack = { available: boolean; slices: LanguageSlice[]; count: number }
+
+export function languageStackProp(data: GhLanguages | GhLanguageStack | null | undefined, top = 5): GhLanguageStack | null {
+  if (!data) return null
+  if ('slices' in data) return data
+  if (data.available === false) return { available: false, slices: [], count: 0 }
+  return { available: true, slices: languageStack(data, top), count: Object.keys(data.breakdown || {}).length }
+}
+
+// ── Page props (what the home page ships in __NEXT_DATA__) ───────────────────
+
+/** The fields a repository card renders. */
+export type GhRepoCard = Pick<GhRepo, 'id' | 'name' | 'html_url' | 'description' | 'stargazers_count' | 'forks_count' | 'language' | 'pushed_at'> & {
+  blurb?: string
+  featured?: boolean
+}
+
+export type GhRepoCards = { repos: GhRepoCard[]; available: boolean; asOf?: number }
+
+/**
+ * The GitHub data the home page's widgets render, trimmed to the rendered
+ * fields: the pinned repositories only (with card fields), the language
+ * stack instead of every language's byte count, and the calendar as one
+ * count per day. A part is null when it was not ready within the server
+ * budget (that widget then fetches the full API payload itself).
+ */
+export type GithubPageData = {
+  stats: GhStats | null
+  repos: GhRepoCards | null
+  languages: GhLanguageStack | null
+  events: GhEventsPayload | null
+  calendar: CompactCalendar | { available: false } | null
+}
+
+/** Pinned repositories on the home page. */
+export const HOME_REPO_LIMIT = 3
+
+export function repoCard(r: GhRepo | GhRepoCard): GhRepoCard {
+  const card: GhRepoCard = {
+    id: r.id,
+    name: r.name,
+    html_url: r.html_url,
+    description: r.description ?? null,
+    stargazers_count: r.stargazers_count,
+    forks_count: r.forks_count,
+    language: r.language ?? null,
+    pushed_at: r.pushed_at || ('updated_at' in r ? r.updated_at : '') || '',
+  }
+  if (r.blurb) card.blurb = r.blurb
+  if (r.featured) card.featured = true
+  return card
+}
+
+/** GithubSummary → the trimmed page props (JSON-serialisable: no undefined anywhere). */
+export function githubPageData(s: GithubSummary | null | undefined, opts: { repos?: number } = {}): GithubPageData | null {
+  if (!s) return null
+  const limit = opts.repos ?? HOME_REPO_LIMIT
+  const calendar = s.contributions ? (s.contributions.available === false ? { available: false as const } : compactCalendar(s.contributions) ?? { available: false as const }) : null
+  return {
+    stats: s.stats,
+    repos: s.topRepos
+      ? { repos: s.topRepos.repos.slice(0, limit).map(repoCard), available: s.topRepos.available, ...(typeof s.topRepos.asOf === 'number' ? { asOf: s.topRepos.asOf } : {}) }
+      : null,
+    languages: languageStackProp(s.languages),
+    events: s.events,
+    calendar,
   }
 }
