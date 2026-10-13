@@ -18,7 +18,9 @@ const TEXT_PARAMS = ['title', 'subtitle', 'kind', 'date', 'mins', 'tags', 'cover
 
 /** The default card in the requested size (the only parameter honoured without a signature). */
 export function defaultCardParams(search: URLSearchParams): OgParams {
-  return parseOgParams(new URLSearchParams(search.get('size') === 'square' ? { size: 'square' } : {}))
+  return parseOgParams(
+    new URLSearchParams(search.get('size') === 'square' ? { size: 'square' } : {})
+  )
 }
 
 export function resolveCard(search: URLSearchParams, key: Buffer | null): ResolvedCard {
@@ -33,7 +35,9 @@ export function resolveCard(search: URLSearchParams, key: Buffer | null): Resolv
     return { source: 'preset', params: parseOgParams(p) }
   }
   if (search.has('sig')) {
-    return verifyOgSignature(search, key) ? { source: 'signed', params: parseOgParams(search) } : { source: 'refused', params: defaultCardParams(search) }
+    return verifyOgSignature(search, key)
+      ? { source: 'signed', params: parseOgParams(search) }
+      : { source: 'refused', params: defaultCardParams(search) }
   }
   // Unsigned free text is never rendered.
   const hasText = TEXT_PARAMS.some((k) => search.has(k))

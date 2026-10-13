@@ -13,7 +13,13 @@ import { absUrl, type OgImageOptions } from '../schema'
 type Card = Pick<OgImageOptions, 'kind' | 'title' | 'subtitle'>
 
 export const OG_PRESETS = {
-  home: { en: { kind: 'home', title: 'Li Yanpei (Lucian)', subtitle: 'Software engineer: full-stack, ML / computer vision, embedded' } },
+  home: {
+    en: {
+      kind: 'home',
+      title: 'Li Yanpei (Lucian)',
+      subtitle: 'Software engineer: full-stack, ML / computer vision, embedded',
+    },
+  },
   about: { en: { kind: 'page', title: 'About', subtitle: 'Background, skills & projects' } },
   colophon: { en: { kind: 'page', title: 'Colophon', subtitle: 'How this site is made' } },
   now: { en: { kind: 'page', title: 'Now', subtitle: 'What I’m focused on' } },
@@ -21,7 +27,13 @@ export const OG_PRESETS = {
   writing: { en: { kind: 'blog', title: 'Writing', subtitle: 'Essays, notes, and write-ups' } },
   work: { en: { kind: 'work', title: 'Selected Work', subtitle: 'Project case studies' } },
   uses: { en: { kind: 'page', title: 'Uses', subtitle: 'Tools & setup' } },
-  'uses-built': { en: { kind: 'page', title: 'How this site is built', subtitle: 'The stack, hosting and tooling behind lucian-dev.com.' } },
+  'uses-built': {
+    en: {
+      kind: 'page',
+      title: 'How this site is built',
+      subtitle: 'The stack, hosting and tooling behind lucian-dev.com.',
+    },
+  },
   cv: { en: { kind: 'cv', title: 'CV / Résumé' }, zh: { kind: 'cv', title: '简历' } },
 } as const satisfies Record<string, { en: Card; zh?: Card }>
 
@@ -39,7 +51,10 @@ export function presetCard(id: OgPresetId, lang: 'en' | 'zh' = 'en'): Card & { l
 }
 
 /** Absolute URL of a fixed card. */
-export function ogPresetUrl(id: OgPresetId, opts: { lang?: 'en' | 'zh'; size?: 'square' } = {}): string {
+export function ogPresetUrl(
+  id: OgPresetId,
+  opts: { lang?: 'en' | 'zh'; size?: 'square' } = {}
+): string {
   const params = new URLSearchParams({ card: id })
   if (opts.lang === 'zh' && (OG_PRESETS[id] as { zh?: Card }).zh) params.set('lang', 'zh')
   if (opts.size === 'square') params.set('size', 'square')

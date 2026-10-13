@@ -7,8 +7,20 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
-import { canonicalOgString, ogSigningKey, signOgParams, signedOgImageUrl, verifyOgSignature } from '../lib/og/sign'
-import { OG_PRESETS, defaultOgImageUrl, isOgPresetId, ogPresetUrl, presetCard } from '../lib/og/presets'
+import {
+  canonicalOgString,
+  ogSigningKey,
+  signOgParams,
+  signedOgImageUrl,
+  verifyOgSignature,
+} from '../lib/og/sign'
+import {
+  OG_PRESETS,
+  defaultOgImageUrl,
+  isOgPresetId,
+  ogPresetUrl,
+  presetCard,
+} from '../lib/og/presets'
 import { defaultCardParams, resolveCard } from '../lib/og/resolve'
 import { parseOgParams } from '../lib/security/ogParams'
 import { SITE_URL, ogImageUrl } from '../lib/schema'
@@ -29,7 +41,18 @@ test('the signing key is derived (HKDF) from JWT_SECRET, never the secret itself
 })
 
 test('a signed content card verifies; any change to what it shows breaks the signature', () => {
-  const url = signedOgImageUrl({ kind: 'blog', title: 'Real title', date: '2026-05-30', mins: 6, tags: ['Edge AI', 'YOLO'], lang: 'zh', v: 1780000000000 }, KEY)
+  const url = signedOgImageUrl(
+    {
+      kind: 'blog',
+      title: 'Real title',
+      date: '2026-05-30',
+      mins: 6,
+      tags: ['Edge AI', 'YOLO'],
+      lang: 'zh',
+      v: 1780000000000,
+    },
+    KEY
+  )
   const s = searchOf(url)
   assert.match(s.get('sig') || '', /^[A-Za-z0-9_-]{22}$/)
   assert.equal(verifyOgSignature(s, KEY), true)
@@ -49,7 +72,11 @@ test('a signed content card verifies; any change to what it shows breaks the sig
     t.set(k, v)
     assert.equal(verifyOgSignature(t, KEY), false, `changing ${k}`)
   }
-  assert.equal(verifyOgSignature(s, ogSigningKey('another-secret-for-og-signatures-012345')), false, 'other key')
+  assert.equal(
+    verifyOgSignature(s, ogSigningKey('another-secret-for-og-signatures-012345')),
+    false,
+    'other key'
+  )
   assert.equal(verifyOgSignature(s, null), false, 'no key')
 })
 
@@ -85,7 +112,10 @@ test('resolveCard: fixed cards by id, signed cards, and the default card for eve
   assert.equal(preset.params.title, 'About')
   assert.equal(preset.params.subtitle, 'Background, skills & projects')
   const zh = resolveCard(searchOf(ogPresetUrl('cv', { lang: 'zh', size: 'square' })), null)
-  assert.deepEqual([zh.source, zh.params.title, zh.params.lang, zh.params.size], ['preset', '简历', 'zh', 'square'])
+  assert.deepEqual(
+    [zh.source, zh.params.title, zh.params.lang, zh.params.size],
+    ['preset', '简历', 'zh', 'square']
+  )
   // A preset ignores free text that rides along.
   const smuggled = new URLSearchParams({ card: 'home', title: 'Owned' })
   assert.equal(resolveCard(smuggled, null).params.title, OG_PRESETS.home.en.title)
@@ -93,14 +123,24 @@ test('resolveCard: fixed cards by id, signed cards, and the default card for eve
   const signed = resolveCard(searchOf(signedOgImageUrl({ kind: 'blog', title: 'Post' }, KEY)), KEY)
   assert.deepEqual([signed.source, signed.params.title], ['signed', 'Post'])
 
-  for (const q of ['card=nope', 'kind=blog&title=Unsigned', 'title=x&sig=AAAAAAAAAAAAAAAAAAAAAA', 'subtitle=only', 'cover=%2Fuploads%2Fa.png']) {
+  for (const q of [
+    'card=nope',
+    'kind=blog&title=Unsigned',
+    'title=x&sig=AAAAAAAAAAAAAAAAAAAAAA',
+    'subtitle=only',
+    'cover=%2Fuploads%2Fa.png',
+  ]) {
     const r = resolveCard(new URLSearchParams(q), KEY)
     assert.equal(r.source, 'refused', q)
     assert.deepEqual(r.params, defaultCardParams(new URLSearchParams()), q)
   }
   assert.equal(resolveCard(new URLSearchParams(''), KEY).source, 'default')
   assert.equal(resolveCard(new URLSearchParams('size=square'), KEY).params.size, 'square')
-  assert.equal(resolveCard(new URLSearchParams('lang=zh'), KEY).params.lang, 'en', 'the default card is always English')
+  assert.equal(
+    resolveCard(new URLSearchParams('lang=zh'), KEY).params.lang,
+    'en',
+    'the default card is always English'
+  )
 })
 
 test('presets: ids, languages, URLs', () => {
@@ -108,7 +148,11 @@ test('presets: ids, languages, URLs', () => {
   assert.equal(isOgPresetId('toString'), false)
   assert.equal(isOgPresetId('__proto__'), false)
   assert.equal(ogPresetUrl('now'), `${SITE_URL}/api/og?card=now`)
-  assert.equal(ogPresetUrl('home', { lang: 'zh' }), `${SITE_URL}/api/og?card=home`, 'no Chinese text: no lang')
+  assert.equal(
+    ogPresetUrl('home', { lang: 'zh' }),
+    `${SITE_URL}/api/og?card=home`,
+    'no Chinese text: no lang'
+  )
   assert.equal(ogPresetUrl('cv', { lang: 'zh' }), `${SITE_URL}/api/og?card=cv&lang=zh`)
   assert.equal(presetCard('home', 'zh').lang, 'en')
   assert.equal(defaultOgImageUrl(), `${SITE_URL}/api/og`)
@@ -130,13 +174,28 @@ test('the route runs on the Node runtime, never the deprecated Edge runtime', ()
   assert.match(src, /withApi\('og'/)
   assert.match(src, /resolveCard\(search, ogSigningKey\(\)\)/)
   const config = fs.readFileSync(path.join(ROOT, 'next.config.js'), 'utf8')
-  assert.match(config, /outputFileTracingIncludes: \{ '\/api\/og': \['\.\/assets\/og\/\*\.ttf'\] \}/)
-  for (const f of ['Geist-Regular.ttf', 'Geist-SemiBold.ttf', 'GeistMono-Regular.ttf']) assert.ok(fs.existsSync(path.join(ROOT, 'assets/og', f)), f)
+  assert.match(
+    config,
+    /outputFileTracingIncludes: \{ '\/api\/og': \['\.\/assets\/og\/\*\.ttf'\] \}/
+  )
+  for (const f of ['Geist-Regular.ttf', 'Geist-SemiBold.ttf', 'GeistMono-Regular.ttf'])
+    assert.ok(fs.existsSync(path.join(ROOT, 'assets/og', f)), f)
 })
 
 test('pages never build free-text card URLs on the client: fixed cards by id, article cards signed in the loader', () => {
   const read = (f: string) => fs.readFileSync(path.join(ROOT, f), 'utf8')
-  for (const f of ['pages/index.tsx', 'pages/about/index.tsx', 'pages/colophon.tsx', 'pages/now.tsx', 'pages/uses.tsx', 'pages/contact/index.tsx', 'pages/blog/index.tsx', 'pages/work/index.tsx', 'components/CVViewerPage/CvPageView.tsx', 'components/General-UI/CustomHead.tsx']) {
+  for (const f of [
+    'pages/index.tsx',
+    'pages/about/index.tsx',
+    'pages/colophon.tsx',
+    'pages/now.tsx',
+    'pages/uses.tsx',
+    'pages/contact/index.tsx',
+    'pages/blog/index.tsx',
+    'pages/work/index.tsx',
+    'components/CVViewerPage/CvPageView.tsx',
+    'components/General-UI/CustomHead.tsx',
+  ]) {
     assert.doesNotMatch(read(f), /ogImageUrl\(/, f)
   }
   for (const f of ['pages/blog/[slug].tsx', 'pages/work/[slug].tsx']) {
@@ -144,6 +203,10 @@ test('pages never build free-text card URLs on the client: fixed cards by id, ar
     const loader = src.slice(src.indexOf('export const getStaticProps'))
     assert.match(loader, /signedOgImageUrl\(card\)/, `${f} signs in getStaticProps`)
     assert.match(loader, /signedOgImageUrl\(\{ \.\.\.card, size: 'square' \}\)/, f)
-    assert.doesNotMatch(src.slice(0, src.indexOf('export const getStaticProps')), /signedOgImageUrl\(/, `${f}: never in the component`)
+    assert.doesNotMatch(
+      src.slice(0, src.indexOf('export const getStaticProps')),
+      /signedOgImageUrl\(/,
+      `${f}: never in the component`
+    )
   }
 })

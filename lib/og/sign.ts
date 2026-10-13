@@ -31,22 +31,44 @@ let cached: { secret: string; key: Buffer } | null = null
 export function ogSigningKey(secret: string | undefined = process.env.JWT_SECRET): Buffer | null {
   if (!secret || secret === 'change-me') return null
   if (cached?.secret === secret) return cached.key
-  const key = Buffer.from(crypto.hkdfSync('sha256', secret, 'lucian-dev/og', 'og-card-signature-v1', 32))
+  const key = Buffer.from(
+    crypto.hkdfSync('sha256', secret, 'lucian-dev/og', 'og-card-signature-v1', 32)
+  )
   cached = { secret, key }
   return key
 }
 
 /** The parameters a card shows, in a fixed order (version-tagged). */
 export function canonicalOgString(p: OgParams): string {
-  return JSON.stringify(['v1', p.kind, p.title, p.subtitle, p.date, p.mins, p.tags, p.cover, p.lang, p.size, p.v])
+  return JSON.stringify([
+    'v1',
+    p.kind,
+    p.title,
+    p.subtitle,
+    p.date,
+    p.mins,
+    p.tags,
+    p.cover,
+    p.lang,
+    p.size,
+    p.v,
+  ])
 }
 
 export function signOgParams(p: OgParams, key: Buffer): string {
-  return crypto.createHmac('sha256', key).update(canonicalOgString(p)).digest().subarray(0, SIG_BYTES).toString('base64url')
+  return crypto
+    .createHmac('sha256', key)
+    .update(canonicalOgString(p))
+    .digest()
+    .subarray(0, SIG_BYTES)
+    .toString('base64url')
 }
 
 /** Does `params` carry a valid signature for what it would render? (constant-time) */
-export function verifyOgSignature(params: URLSearchParams, key: Buffer | null = ogSigningKey()): boolean {
+export function verifyOgSignature(
+  params: URLSearchParams,
+  key: Buffer | null = ogSigningKey()
+): boolean {
   if (!key) return false
   const given = params.get('sig') || ''
   if (!SIG_RE.test(given)) return false
