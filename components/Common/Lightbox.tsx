@@ -171,7 +171,9 @@ export default function Lightbox({
                   position: 'relative',
                   overflow: 'hidden',
                   borderRadius: 8,
-                  touchAction: 'none',
+                  // Single-finger pans go to the drag-to-close gesture; a
+                  // two-finger pinch still zooms the image natively.
+                  touchAction: 'pinch-zoom',
                   cursor: 'grab',
                   maxWidth: '100%',
                   ...(ratio

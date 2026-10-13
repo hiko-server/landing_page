@@ -1,6 +1,6 @@
 import { Box, Heading, Text, Link as ChakraLink, Code, Divider, type ChakraProps } from '@chakra-ui/react'
 import NextLink from 'next/link'
-import React, { useMemo, type ReactNode } from 'react'
+import React, { createContext, useContext, useMemo, type ReactNode } from 'react'
 import { Fragment, jsx, jsxs } from 'react/jsx-runtime'
 import { toJsxRuntime, type Components, type Jsx } from 'hast-util-to-jsx-runtime'
 import type { Root as HastRoot } from 'hast'
@@ -119,6 +119,41 @@ function MdxLink({ href, className, children, ...rest }: React.AnchorHTMLAttribu
   )
 }
 
+/** True inside a fenced code block (<pre>): its <code> keeps the block layout. */
+const InsidePreContext = createContext(false)
+
+/**
+ * Inline code wraps like text: Chakra's <Code> is inline-block, so a long
+ * unbroken token (a file path) could not shrink below its own width and
+ * overflowed narrow screens. Inline with `overflow-wrap: anywhere` it breaks
+ * where needed, and `box-decoration-break: clone` gives every line fragment
+ * its own padding and rounded background. Code inside <pre> is unchanged.
+ */
+const inlineCodeSx = {
+  display: 'inline',
+  overflowWrap: 'anywhere',
+  wordBreak: 'break-word',
+  boxDecorationBreak: 'clone',
+  WebkitBoxDecorationBreak: 'clone',
+} as const
+
+function MdxCode(props: React.HTMLAttributes<HTMLElement>) {
+  const inPre = useContext(InsidePreContext)
+  return (
+    <Code
+      bg="page.bg-overlay"
+      color="inherit"
+      px={1.5}
+      py={0.5}
+      fontSize="0.9em"
+      borderRadius="md"
+      fontFamily={MONO}
+      {...(inPre ? null : { sx: inlineCodeSx })}
+      {...props}
+    />
+  )
+}
+
 /** Allowed player iframes (validated at compile time) in a responsive 16:9 frame. */
 function MdxIframe({ width, height, ...rest }: React.IframeHTMLAttributes<HTMLIFrameElement>) {
   const w = Number(width)
@@ -155,19 +190,12 @@ const mdxComponents = {
     />
   ),
   hr: () => <Divider my={8} borderColor="page.border" />,
-  code: (props: any) => (
-    <Code
-      bg="page.bg-overlay"
-      color="inherit"
-      px={1.5}
-      py={0.5}
-      fontSize="0.9em"
-      borderRadius="md"
-      fontFamily={MONO}
-      {...props}
-    />
+  code: MdxCode,
+  pre: (props: any) => (
+    <InsidePreContext.Provider value>
+      <CodeBlock {...props} />
+    </InsidePreContext.Provider>
   ),
-  pre: (props: any) => <CodeBlock {...props} />,
   img: MdxImage,
   figure: ArticleFigure,
   figcaption: FigCaption,

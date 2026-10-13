@@ -3,10 +3,11 @@ import { readPublicCvSections } from '../../lib/cvdata'
 import { readPublicHome } from '../../lib/home'
 import { referenceMonth } from '../../lib/clock'
 import { absUrl } from '../../lib/schema'
-import { buildVcard, currentRoleFrom } from '../../lib/vcard'
+import { buildVcard, currentRoleFrom, vcardFileName } from '../../lib/vcard'
 
 /**
- * GET /api/vcard → "Li-Yanpei.vcf" (vCard 4.0, lib/vcard.ts).
+ * GET /api/vcard → "Li-Yanpei.vcf" (vCard 4.0, lib/vcard.ts; the file name
+ * follows the visible name and is neutral when the owner hides it).
  *
  * Built from the public, CV-scoped personal information (hidden e-mail /
  * phone / address never appear), the current role from work experience and
@@ -28,7 +29,7 @@ export default withApi('vcard', async (req, res) => {
   })
 
   res.setHeader('Content-Type', 'text/vcard; charset=utf-8')
-  res.setHeader('Content-Disposition', 'attachment; filename="Li-Yanpei.vcf"')
+  res.setHeader('Content-Disposition', `attachment; filename="${vcardFileName(personal)}"`)
   res.setHeader('Cache-Control', 'public, s-maxage=3600')
   return res.status(200).send(card)
 })

@@ -1,4 +1,5 @@
 import { element, isElement, walk, type HastElement, type HastNode } from './hast'
+import { safeSrcSet } from './safeUrls'
 
 /**
  * rehype plugin: well-behaved article images (zero layout shift).
@@ -8,12 +9,16 @@ import { element, isElement, walk, type HastElement, type HastNode } from './has
  *     uploads, remote headers — lib/rehype/imageSize.ts), so the browser
  *     reserves the box before the file arrives;
  *   - `srcSet` + `sizes` for uploads that have responsive variants
- *     (`srcSetFor`, backed by lib/uploadVariants);
+ *     (`srcSetFor`, backed by lib/uploadVariants), entries filtered by the
+ *     media URL rule of ./safeUrls;
  *   - an image that is alone in its paragraph becomes
  *     `<figure class="article-figure"><img><figcaption>` — the caption is the
  *     markdown title (`![alt](src "title")`), else a meaningful alt text
  *     (file-name alts such as "image.png" are never shown as captions).
- *     `<Figure>` from MDX arrives in that shape already.
+ *     `<Figure>` from MDX arrives in that shape already. An image that
+ *     shares its paragraph with text stays inline (MdxImage renders it with
+ *     phrasing content only); block elements are lifted out of paragraphs
+ *     by ./liftBlocks before this runs.
  *
  * Size lookups run concurrently and may be async (remote headers).
  */
@@ -62,8 +67,10 @@ async function enhance(img: HastElement, options: ImagesOptions): Promise<void> 
     p.width = size.width
     p.height = size.height
   }
-  if (typeof srcSet === 'string' && srcSet.trim()) {
-    p.srcSet = srcSet.trim()
+  // Same URL rules as every other source in the tree (./safeUrls).
+  const safe = safeSrcSet(srcSet)
+  if (safe) {
+    p.srcSet = safe
     p.sizes = ARTICLE_IMAGE_SIZES
   }
 }

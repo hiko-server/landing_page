@@ -5,22 +5,27 @@
       "headerName": "Personal Information",
       "firstName": "Yanpei",
       "lastName": "Li",
-      "nickName": "Hiko",
+      "nickName": "Lucian",
       "email": "owner@example.test",
       "phoneNumber": "+852 0000 0000",
-      "personalWebsite": "hiko.dev",
-      "address": "Kowloon, Hong Kong",
-      "introduction": "A Computer Engineering student with experience in full-stack web development, AI-powered waste classification, backend development, data structure design, embedded software debugging, and technical product development.",
-      "hiddenFields": [
-        "introduction"
-      ],
-      "separatorColor": "#0059ff",
-      "isVisible": true
+      "personalWebsite": "lucian-dev.com",
+      "address": "Example Road, Hong Kong",
+      "introduction": "",
+      "separatorColor": "#000000"
     },
     {
       "sessionName": "education",
       "headerName": "EDUCATION",
       "educationExperience": [
+        {
+          "schoolName": "The Chinese University of Hong Kong",
+          "schoolLocation": "Hong Kong",
+          "degree": "MSc in Artificial Intelligence for Science",
+          "major": "Artificial Intelligence for Science",
+          "startDate": "2026-09-07",
+          "endDate": "2028-12-07",
+          "gpa": ""
+        },
         {
           "schoolName": "Hong Kong Metropolitan University",
           "schoolLocation": "Hong Kong",
@@ -28,19 +33,9 @@
           "major": "Computer Engineering",
           "startDate": "2024-09-01",
           "endDate": "2026-06-30",
-          "gpa": "—"
-        },
-        {
-          "schoolName": "UOW College HongKong",
-          "schoolLocation": "Hong Kong",
-          "degree": "Associate of Engineering",
-          "major": "Engineering",
-          "startDate": "2022-09-01",
-          "endDate": "2024-06-30",
-          "gpa": "—"
+          "gpa": ""
         }
-      ],
-      "isVisible": true
+      ]
     },
     {
       "sessionName": "patents",
@@ -63,8 +58,7 @@
             "Elastic Contact Quick-Release Battery Structure for Earphones (Utility Model)"
           ]
         }
-      ],
-      "isVisible": true
+      ]
     },
     {
       "sessionName": "project",
@@ -188,8 +182,7 @@
             }
           ]
         }
-      ],
-      "isVisible": true
+      ]
     },
     {
       "sessionName": "workExperience",
@@ -347,8 +340,7 @@
             "Software Engineering"
           ]
         }
-      ],
-      "isVisible": true
+      ]
     },
     {
       "sessionName": "competitionAwards",
@@ -377,8 +369,7 @@
             "Recognized for applying AI to accelerate smart recycling and waste sorting."
           ]
         }
-      ],
-      "isVisible": true
+      ]
     },
     {
       "sessionName": "skill",
@@ -462,8 +453,7 @@
             "HTTP Headers Management"
           ]
         }
-      ],
-      "isVisible": true
+      ]
     },
     {
       "sessionName": "extraSkill",
@@ -472,8 +462,7 @@
         "Mandarin: Native",
         "English: Professional Working Proficiency (IELTS 6.0)",
         "Cantonese: Basic (Conversational)"
-      ],
-      "isVisible": true
+      ]
     },
     {
       "sessionName": "certification",
@@ -557,22 +546,27 @@
       "headerName": "个人信息",
       "firstName": "彦霈",
       "lastName": "李",
-      "nickName": "Hiko",
+      "nickName": "Lucian",
       "email": "owner@example.test",
       "phoneNumber": "+852 0000 0000",
-      "personalWebsite": "hiko.dev",
-      "address": "九龙, 香港",
-      "introduction": "一名计算机工程学生，具备全栈网页开发、AI 智能废物分类、后端开发、数据结构设计、嵌入式软件调试及技术产品开发经验。",
-      "hiddenFields": [
-        "introduction"
-      ],
-      "separatorColor": "#0059ff",
-      "isVisible": true
+      "personalWebsite": "lucian-dev.com",
+      "address": "Example Road, Hong Kong",
+      "introduction": "",
+      "separatorColor": "#000000"
     },
     {
       "sessionName": "education",
       "headerName": "教育经历",
       "educationExperience": [
+        {
+          "schoolName": "香港中文大学",
+          "schoolLocation": "中国香港",
+          "degree": "人工智能（科学应用） 理学硕士",
+          "major": "人工智能（科学应用）",
+          "startDate": "2026-08-07",
+          "endDate": "2028-12-07",
+          "gpa": ""
+        },
         {
           "schoolName": "香港都会大学",
           "schoolLocation": "中国香港",
@@ -580,19 +574,9 @@
           "major": "计算机工程",
           "startDate": "2024-09-01",
           "endDate": "2026-06-30",
-          "gpa": "—"
-        },
-        {
-          "schoolName": "香港伍伦贡学院",
-          "schoolLocation": "中国香港",
-          "degree": "工程学副学士",
-          "major": "工程学",
-          "startDate": "2022-09-01",
-          "endDate": "2024-06-30",
-          "gpa": "—"
+          "gpa": ""
         }
-      ],
-      "isVisible": true
+      ]
     },
     {
       "sessionName": "patents",
@@ -615,8 +599,7 @@
             "用于耳机的弹性接触快拆电池结构（实用新型）"
           ]
         }
-      ],
-      "isVisible": true
+      ]
     },
     {
       "sessionName": "project",
@@ -740,8 +723,7 @@
             }
           ]
         }
-      ],
-      "isVisible": true
+      ]
     },
     {
       "sessionName": "workExperience",
@@ -899,8 +881,7 @@
             "软件工程"
           ]
         }
-      ],
-      "isVisible": true
+      ]
     },
     {
       "sessionName": "competitionAwards",
@@ -929,8 +910,7 @@
             "因应用 AI 加速智能回收和废物分类而受到认可。"
           ]
         }
-      ],
-      "isVisible": true
+      ]
     },
     {
       "sessionName": "skill",
@@ -1014,8 +994,7 @@
             "HTTP Headers 管理"
           ]
         }
-      ],
-      "isVisible": true
+      ]
     },
     {
       "sessionName": "extraSkill",
@@ -1024,8 +1003,7 @@
         "普通话：母语",
         "英语：职业工作水平（IELTS 6.0）",
         "粤语：基础会话"
-      ],
-      "isVisible": true
+      ]
     },
     {
       "sessionName": "certification",

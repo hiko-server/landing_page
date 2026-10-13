@@ -99,14 +99,48 @@ export function currentRoleFrom(
   return null
 }
 
-/** Display name from the public name fields: "Li Yanpei (Lucian)". */
-export function vcardDisplayName(personal: unknown): string {
+const NAME_FIELDS = ['firstName', 'lastName', 'nickName'] as const
+
+/** True when the owner hid at least one name field in CV Studio. */
+export function nameIsRedacted(personal: unknown): boolean {
+  return NAME_FIELDS.some((f) => isRedacted(personal, f))
+}
+
+/** Bare host of a site URL ("lucian-dev.com"); FN must never be empty. */
+function siteHostOf(siteUrl: string): string {
+  try {
+    return new URL(siteUrl).host || siteUrl
+  } catch {
+    return siteUrl
+  }
+}
+
+/**
+ * Display name from the public name fields: "Li Yanpei (Lucian)".
+ *
+ * With no visible name, the built-in PERSON_NAME is used only when the CV
+ * simply has none. If the owner HID the name fields, the card falls back to
+ * the neutral site host instead of re-publishing the hidden name.
+ */
+export function vcardDisplayName(personal: unknown, siteUrl: string = SITE_URL): string {
   const first = field(personal, 'firstName')
   const last = field(personal, 'lastName')
   const nick = field(personal, 'nickName')
   const base = [last, first].filter(Boolean).join(' ')
-  if (!base) return nick || PERSON_NAME
+  if (!base) return nick || (nameIsRedacted(personal) ? siteHostOf(siteUrl) : PERSON_NAME)
   return nick ? `${base} (${nick})` : base
+}
+
+/**
+ * Download name for the card: "Li-Yanpei.vcf" from the visible ASCII name
+ * parts, else the neutral "contact.vcf" (hidden or non-Latin names).
+ */
+export function vcardFileName(personal: unknown): string {
+  if (!personal) return 'Li-Yanpei.vcf'
+  const parts = [field(personal, 'lastName'), field(personal, 'firstName')]
+    .map((p) => p.normalize('NFKD').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-+|-+$/g, ''))
+    .filter(Boolean)
+  return parts.length ? `${parts.join('-')}.vcf` : 'contact.vcf'
 }
 
 /** The vCard text (CRLF line endings, folded). */
@@ -129,7 +163,7 @@ export function buildVcard(
     'BEGIN:VCARD',
     'VERSION:4.0',
     'KIND:individual',
-    `FN:${escapeVcardText(vcardDisplayName(personal))}`,
+    `FN:${escapeVcardText(vcardDisplayName(personal, extras.siteUrl || SITE_URL))}`,
   ]
   if (first || last) lines.push(`N:${escapeVcardText(last)};${escapeVcardText(first)};;;`)
   if (nick) lines.push(`NICKNAME:${escapeVcardText(nick)}`)

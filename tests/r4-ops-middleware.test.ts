@@ -17,7 +17,7 @@ register(
   import.meta.url,
 )
 const { NextRequest } = await import('next/server.js')
-const { edgeRedirect, forwardedScheme, middleware } = await import('../middleware')
+const { edgeRedirect, forwardedScheme, isPublicAdminApi, middleware } = await import('../middleware')
 
 const HOST = 'lucian-dev.com'
 
@@ -120,4 +120,26 @@ test('getPublicHost never returns a loopback name', () => {
   assert.equal(hostnameOf(''), null)
   for (const h of ['localhost', 'app.localhost', '127.0.0.1', '127.1.2.3', '[::1]', '0.0.0.0']) assert.equal(isLocalHostname(h), true, h)
   assert.equal(isLocalHostname('lucian-dev.com'), false)
+})
+
+test('leaving Draft Mode works without a session; entering it does not', async () => {
+  const q = (s: string) => new URLSearchParams(s)
+  assert.equal(isPublicAdminApi('/api/admin/draft', 'GET', q('disable=1&path=/blog/x')), true)
+  assert.equal(isPublicAdminApi('/api/admin/draft', 'GET', q('path=/blog/x')), false)
+  assert.equal(isPublicAdminApi('/api/admin/draft', 'POST', q('disable=1')), false)
+  assert.equal(isPublicAdminApi('/api/admin/draft', 'GET', q('disable=true')), false)
+  assert.equal(isPublicAdminApi('/api/admin/logout', 'POST', q('')), true)
+  assert.equal(isPublicAdminApi('/api/admin/inbox', 'GET', q('disable=1')), false)
+
+  const prev = process.env.JWT_SECRET
+  process.env.JWT_SECRET = 'test-secret-for-draft-exit'
+  try {
+    const exit = await middleware(req('https://lucian-dev.com/api/admin/draft?disable=1&path=/blog/x'))
+    assert.notEqual(exit.status, 401)
+    const enter = await middleware(req('https://lucian-dev.com/api/admin/draft?path=/blog/x'))
+    assert.equal(enter.status, 401)
+  } finally {
+    if (prev === undefined) delete process.env.JWT_SECRET
+    else process.env.JWT_SECRET = prev
+  }
 })

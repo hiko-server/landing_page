@@ -2,11 +2,25 @@ import crypto from 'crypto'
 import type { NextApiRequest } from 'next'
 import { ADMIN_COOKIE } from '../auth'
 import { ADMIN_HINT_COOKIE } from '../adminHint'
-import { ipFromReq, rateLimit } from '../rateLimit'
+import { ipFromReq } from '../rateLimit'
 import { log } from '../log'
+import { ipBucket } from '../security/ip'
+import { sharedLimiter } from '../security/rateLimitCore'
 import { getAnalyticsDb } from './db'
 import {
+  CLIENT_DAILY_SHARE,
+  CLIENT_EVENTS_PER_MIN,
+  NETWORK_DAILY_SHARE,
+  NETWORK_EVENTS_PER_MIN,
+  createDailyShares,
+  networkOf,
+  takeUnits,
+  type DailyShares,
+} from './limits'
+import { isRecordablePath } from './published'
+import {
   dayMinus,
+  isPlausibleHost,
   isVitalName,
   isVitalValueInRange,
   normalizeNavType,
@@ -23,15 +37,23 @@ import {
  * Privacy model (documented on /colophon and in the README):
  *   - Nothing is recorded when the browser sends `DNT: 1` or `Sec-GPC: 1`,
  *     for bots, for signed-in admins (cv_admin_token / cv_admin_hint cookie),
- *     for cross-site posts, or for paths outside the public allowlist.
+ *     for cross-site posts, for paths outside the public allowlist, or for
+ *     /blog/<slug> and /work/<slug> pages that are not published
+ *     (lib/analytics/published).
  *   - The IP address and user agent are never stored. A visitor is
  *     sha256(daily salt + site host + IP + user agent) truncated to 16 hex
  *     characters; the salt is random, rotates at UTC midnight and exists only
  *     in this process's memory, so a hash cannot be recomputed later or linked
  *     across days (a restart also starts a new salt).
  *   - Stored per view: time, UTC day, path, referrer HOST (only when it is
- *     another site), country (Cloudflare's cf-ipcountry), coarse device and
- *     browser family, page language.
+ *     another site and a plausible hostname), country (Cloudflare's
+ *     cf-ipcountry), coarse device and browser family, page language.
+ *
+ * Abuse budgets (lib/analytics/limits; in memory only, no new stored data):
+ * events — not beacons — are counted per client (IPv4 address / IPv6 /64)
+ * and per network (IPv6 /48 / IPv4 /24) per minute, and each client and
+ * network gets a fixed share of the day's raw rows, so no single source can
+ * use up the global daily budget and blank out real visits.
  *
  * Writes are buffered and flushed in one transaction every 2 s; at most
  * 200 000 raw rows are accepted per UTC day. The first flush of a new UTC day
@@ -111,7 +133,15 @@ function hasCookie(req: Pick<NextApiRequest, 'headers' | 'cookies'>, name: strin
     .some((part) => part.trim().startsWith(`${name}=`))
 }
 
-/** Why this request must not be recorded, or null when it may be. */
+/**
+ * Why this request must not be recorded, or null when it may be.
+ *
+ * Sec-Fetch-Site, when sent, must be same-origin (or none); Origin, when
+ * sent, must be this host. A request with neither header (older browsers,
+ * some sendBeacon implementations) is accepted on purpose: rejecting it
+ * would drop real readers, and a script that omits both is still held to
+ * the per-client and per-network budgets in ingest().
+ */
 export function dropReason(req: Pick<NextApiRequest, 'headers' | 'cookies'>): string | null {
   if (headerOf(req, 'dnt') === '1') return 'dnt'
   if (headerOf(req, 'sec-gpc') === '1') return 'gpc'
@@ -163,7 +193,7 @@ export function referrerHost(referrer: string | null, siteHost: string): string 
     if (!['http:', 'https:', 'android-app:'].includes(url.protocol)) return null
     const host = stripWww(url.hostname)
     if (!host || host === stripWww(siteHost)) return null
-    return host.slice(0, 253)
+    return isPlausibleHost(host) ? host : null
   } catch {
     return null
   }
@@ -205,6 +235,8 @@ type IngestState = {
   cap: { day: string; count: number } | null
   capWarned: string | null
   rollupDay: string | null
+  /** Per-client / per-network raw-row counters for today (optional: absent on a state object from before a hot reload). */
+  shares?: DailyShares
 }
 
 type IngestGlobal = typeof globalThis & { __analyticsIngest?: IngestState }
@@ -248,16 +280,35 @@ function scheduleFlush() {
 }
 
 /**
+ * The beacon's own fixed-window counters: kept apart from the 'api' limiter
+ * so a distributed beacon flood cannot evict the login / contact windows.
+ */
+const limiter = () => sharedLimiter('analytics', 20_000)
+const MINUTE_MS = 60_000
+
+/**
  * Record one beacon. Returns what happened (for tests and debug logs); the
- * route answers 204 regardless.
+ * route answers 204 regardless. Drop reasons: dnt, gpc, bot, admin,
+ * cross-site, rate-limit, invalid, unpublished, cap (global daily budget),
+ * share (this client's or network's daily share).
  */
 export function ingest(req: NextApiRequest, now: number = Date.now()): { accepted: number; dropped: string | null } {
   const reason = dropReason(req)
   if (reason) return { accepted: 0, dropped: reason }
-  if (!rateLimit(req, 120, 60_000, 'analytics').allowed) return { accepted: 0, dropped: 'rate-limit' }
 
-  const events = parseEvents(req.body)
-  if (!events.length) return { accepted: 0, dropped: 'invalid' }
+  // Rate limits count events, not beacons (an unparseable beacon costs one).
+  const parsed = parseEvents(req.body)
+  const ip = ipFromReq(req)
+  const client = `c|${ipBucket(ip)}`
+  const net = networkOf(ip)
+  const network = net ? `n|${net}` : null
+  let granted = takeUnits(limiter(), client, CLIENT_EVENTS_PER_MIN, Math.max(1, parsed.length), MINUTE_MS, now)
+  if (granted && network) granted = takeUnits(limiter(), network, NETWORK_EVENTS_PER_MIN, granted, MINUTE_MS, now)
+  if (!granted) return { accepted: 0, dropped: 'rate-limit' }
+  if (!parsed.length) return { accepted: 0, dropped: 'invalid' }
+
+  const events = parsed.slice(0, granted).filter((e) => isRecordablePath(e.t === 'pv' ? e.path : e.route, now))
+  if (!events.length) return { accepted: 0, dropped: 'unpublished' }
 
   const day = utcDay(now)
   const s = state()
@@ -269,15 +320,21 @@ export function ingest(req: NextApiRequest, now: number = Date.now()): { accepte
     }
     return { accepted: 0, dropped: 'cap' }
   }
+  const shares = (s.shares ??= createDailyShares(saltFor))
+  const share = Math.min(
+    shares.remaining(client, day, CLIENT_DAILY_SHARE),
+    network ? shares.remaining(network, day, NETWORK_DAILY_SHARE) : Infinity,
+  )
+  if (share <= 0) return { accepted: 0, dropped: 'share' }
 
   const ua = headerOf(req, 'user-agent')
   const host = siteHostOf(req)
   const device = deviceOf(ua)
   let visitor: string | null = null
-  const accepted = events.slice(0, available)
+  const accepted = events.slice(0, Math.min(available, share))
   for (const e of accepted) {
     if (e.t === 'pv') {
-      visitor ??= visitorHash(saltFor(day), host, ipFromReq(req), ua)
+      visitor ??= visitorHash(saltFor(day), host, ip, ua)
       s.hits.push({
         ts: now,
         day,
@@ -303,6 +360,8 @@ export function ingest(req: NextApiRequest, now: number = Date.now()): { accepte
     }
   }
   if (s.cap) s.cap.count += accepted.length
+  shares.add(client, day, accepted.length)
+  if (network) shares.add(network, day, accepted.length)
   scheduleFlush()
   return { accepted: accepted.length, dropped: null }
 }

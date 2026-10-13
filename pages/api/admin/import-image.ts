@@ -1,7 +1,7 @@
 import { withApi } from '../../../lib/apiHandler'
 import { isAdminRequest } from '../../../lib/auth'
 import { rateLimit } from '../../../lib/rateLimit'
-import { storeUpload } from '../../../lib/imageVariants'
+import { ImageRejectedError, storeUpload } from '../../../lib/imageVariants'
 import { fetchRemoteImage, RemoteImageError } from '../../../lib/remoteImage'
 
 /**
@@ -9,9 +9,11 @@ import { fetchRemoteImage, RemoteImageError } from '../../../lib/remoteImage'
  *
  * Downloads a remote image (lib/remoteImage: https, public hosts only,
  * re-validated redirects, 10 s / 25 MB, real JPEG/PNG/WebP/GIF bytes), runs
- * it through the upload pipeline (rotation, downscale, WebP variants) and
- * stores it as a regular upload, so posts stop hot-linking third-party
- * images. Admin-only, 20 imports per 10 minutes.
+ * it through the upload pipeline (pixel limit, rotation, downscale, metadata
+ * stripped, WebP variants) and stores it as a regular upload, so posts stop
+ * hot-linking third-party images. Admin-only, 20 imports per 10 minutes.
+ * An image over 80 megapixels (all frames) is refused with 413
+ * { code: 'TOO_MANY_PIXELS' }, an unreadable one with 415.
  */
 export default withApi('admin/import-image', async (req, res, ctx) => {
   if (req.method !== 'POST') {
@@ -36,7 +38,16 @@ export default withApi('admin/import-image', async (req, res, ctx) => {
     throw err
   }
 
-  const stored = await storeUpload(remote.buf, remote.mime, remote.name)
+  let stored
+  try {
+    stored = await storeUpload(remote.buf, remote.mime, remote.name)
+  } catch (err) {
+    if (err instanceof ImageRejectedError) {
+      ctx.log.info('remote image import refused', { code: err.code })
+      return res.status(err.status).json({ error: err.message, code: err.code })
+    }
+    throw err
+  }
   ctx.log.info('remote image imported', { name: stored.name, bytes: remote.buf.length })
   return res.status(200).json({
     url: stored.url,

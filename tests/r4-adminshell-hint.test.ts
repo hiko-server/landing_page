@@ -38,7 +38,7 @@ after(() => {
   fs.rmSync(tmp, { recursive: true, force: true })
 })
 
-type Out = { statusCode: number; headers: Record<string, string | string[]>; body: any }
+type Out = { statusCode: number; headers: Record<string, string | string[]>; body: any; draftMode?: boolean }
 
 async function call(handler: Handler, opts: { method: string; body?: unknown; cookie?: string; ip?: string }): Promise<Out> {
   const req = {
@@ -68,6 +68,10 @@ async function call(handler: Handler, opts: { method: string; body?: unknown; co
     getHeader: (name: string) => out.headers[name.toLowerCase()],
     json(b: unknown) {
       out.body = b
+      return res
+    },
+    setDraftMode({ enable }: { enable: boolean }) {
+      out.draftMode = enable
       return res
     },
   }
@@ -127,6 +131,14 @@ test('logout clears the hint cookie', async () => {
   const out = await call(logout, { method: 'POST', cookie: `${sessionCookie}; cv_admin_hint=1` })
   assert.equal(out.statusCode, 200)
   assert.match(hintOf(out) || '', /^cv_admin_hint=;.*Max-Age=0/)
+})
+
+test('logout also ends Draft Mode, with or without a valid session', async () => {
+  const signedIn = await call(logout, { method: 'POST', cookie: `${sessionCookie}; __prerender_bypass=x` })
+  assert.equal(signedIn.draftMode, false)
+  const stale = await call(logout, { method: 'POST', cookie: '__prerender_bypass=x' })
+  assert.equal(stale.statusCode, 200)
+  assert.equal(stale.draftMode, false)
 })
 
 test('a successful password reset clears the hint cookie', async () => {

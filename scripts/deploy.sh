@@ -159,8 +159,12 @@ case "$MODE" in
       say "container not running: skipping the online SQLite backup (the tar below is consistent)"
     fi
 
-    # 2. Files: data/ (minus its own snapshot archives) and uploads.
-    tar -czf "$B/data-uploads.tgz" -C "$DIR" --exclude=data/backups data public/uploads
+    # 2. Files: data/ (minus its own snapshot archives) and uploads. The live
+    # container keeps writing data/analytics.db-wal; GNU tar then exits 1
+    # ("file changed as we read it"). That is expected here (step 1 already
+    # holds consistent copies of both databases), so only exit codes above 1
+    # fail the deploy.
+    tar --warning=no-file-changed -czf "$B/data-uploads.tgz" -C "$DIR" --exclude=data/backups data public/uploads || [ $? -eq 1 ]
     say "files: $B/data-uploads.tgz ($(du -h "$B/data-uploads.tgz" | cut -f1))"
     [ -f "$DIR/.env" ] && cp -p "$DIR/.env" "$B/.env"
     for f in "${PRESERVE[@]}"; do
@@ -201,13 +205,25 @@ case "$MODE" in
     export NEXT_PUBLIC_BUILD_SHA DOCKER_BUILDKIT=1
     NEXT_PUBLIC_BUILD_SHA=$(G rev-parse --short HEAD)
     docker compose build
+    # If the deploying ssh session died mid-build, the local side has already
+    # aborted (checkout restored, lock released) while this build ran on. Do
+    # not leave an image that was never activated as :latest: the next deploy
+    # would keep it as its rollback image. Leave a newer deploy's lock alone.
+    if [ "$(cat "$LOCK/ts" 2>/dev/null || true)" != "$TS" ]; then
+      trap - EXIT
+      if docker image inspect "$IMAGE:pre-$TS" >/dev/null 2>&1; then docker tag "$IMAGE:pre-$TS" "$IMAGE:latest"; fi
+      fail "this deploy was aborted while it was building; the new image was discarded"
+    fi
     say "built $IMAGE:latest ($NEXT_PUBLIC_BUILD_SHA)"
     ;;
 
   activate)
     cd "$DIR"
     since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    docker compose up -d --no-build
+    # --force-recreate: with an unchanged image (--force on the same commit)
+    # compose would keep the old container, which never logs the warm-up line
+    # again, so wait_ready would time out and trigger a pointless rollback.
+    docker compose up -d --no-build --force-recreate
     wait_ready "$since" 300 || exit 1
     bindings=$(docker port "$CONTAINER" 3000/tcp || true)
     [ -n "$bindings" ] || { say "no published port"; exit 1; }
@@ -230,7 +246,7 @@ case "$MODE" in
     if docker image inspect "$IMAGE:pre-$TS" >/dev/null 2>&1; then
       docker tag "$IMAGE:pre-$TS" "$IMAGE:latest"
       since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-      docker compose up -d --no-build
+      docker compose up -d --no-build --force-recreate
       if wait_ready "$since" 240; then say "rolled back to $IMAGE:pre-$TS — serving again"; else say "rolled back, but the previous image is not healthy either: check now"; fi
     else
       say "no $IMAGE:pre-$TS image to roll back to"
@@ -238,8 +254,11 @@ case "$MODE" in
     unlock
     ;;
 
-  abort) # failure before the image switch: checkout back, nothing else ran
+  abort) # failure before the image switch: the old container still serves
     restore_checkout
+    # The build may have finished before the connection dropped: put the image
+    # the running container uses back on :latest.
+    if docker image inspect "$IMAGE:pre-$TS" >/dev/null 2>&1; then docker tag "$IMAGE:pre-$TS" "$IMAGE:latest"; fi
     unlock
     ;;
 
@@ -333,8 +352,12 @@ PHASE=prepared
 log "building the image on the server (the current container keeps serving)"
 if ! run build; then
   PHASE=failed
+  # A remote build failure already restored the checkout; a dropped ssh
+  # connection did not. abort is idempotent, so always run it.
+  warn "build failed or the connection dropped — restoring the checkout"
+  run abort || warn "could not run abort on $DEPLOY_HOST — check $DEPLOY_DIR (git status) and /tmp/landing_page-deploy.lock by hand"
   print_backups
-  die "build failed — checkout restored, the old container never stopped"
+  die "build did not complete — the old container never stopped"
 fi
 PHASE=built
 

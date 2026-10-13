@@ -85,6 +85,22 @@ export function normalizeTrackedPath(raw: unknown): string | null {
   return null
 }
 
+const HOST_LABEL = '[a-z0-9](?:[a-z0-9_-]{0,61}[a-z0-9])?'
+const PLAUSIBLE_HOST = new RegExp(`^(?:${HOST_LABEL}\\.)+(?:[a-z]{2,63}|xn--[a-z0-9-]{1,59})$`)
+
+/**
+ * A lowercased host that looks like a real public name: dot-separated LDH
+ * labels (1–63 chars) ending in an alphabetic or punycode TLD, ≤ 253 chars.
+ * IP literals, single-label names (localhost) and anything with odd
+ * characters are not referrers worth naming.
+ */
+export function isPlausibleHost(host: unknown): host is string {
+  return typeof host === 'string' && host.length <= 253 && PLAUSIBLE_HOST.test(host)
+}
+
+/** Report row that sums every referrer not listed by name. */
+export const OTHER_KEY = '(other)'
+
 /** UTC day "YYYY-MM-DD". */
 export function utcDay(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10)
@@ -137,6 +153,7 @@ export type AnalyticsReport = {
   kpis: { views: Kpi; visitors: Kpi }
   series: SeriesPoint[]
   topPages: CountRow[]
+  /** Top referrer hosts; a last OTHER_KEY row sums the hosts not named (see lib/analytics/query). */
   referrers: CountRow[]
   countries: CountRow[]
   devices: CountRow[]
