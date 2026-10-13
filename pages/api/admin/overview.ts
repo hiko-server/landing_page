@@ -6,6 +6,7 @@ import { getPage, listItems } from '../../../lib/contentStore'
 import { getDb } from '../../../lib/db'
 import { listInbox } from '../../../lib/inbox'
 import { isR2Configured } from '../../../lib/r2'
+import { readinessCounts } from '../../../lib/cvReadinessServer'
 
 /**
  * GET /api/admin/overview — the admin status hub's numbers (admin only,
@@ -24,6 +25,8 @@ export type AdminOverview = {
   r2: { configured: boolean; pending: number }
   config: { smtp: boolean; githubToken: boolean; trustedProxy: boolean; cfApi: boolean; indexNow: boolean }
   lastEdits: { kind: EditKind; ref: string; updatedAt: number }[]
+  /** CV readiness checks (lib/cvReadiness, without the page-length check); null when they could not run. */
+  cvReadiness?: { open: number; high: number; dismissed: number } | null
 }
 
 const LAST_EDITS = 5
@@ -86,6 +89,7 @@ export function readOverview(): AdminOverview {
       indexNow: present('INDEXNOW_KEY'),
     },
     lastEdits: lastEdits(),
+    cvReadiness: readinessCounts(),
   }
 }
 

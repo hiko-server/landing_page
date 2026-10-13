@@ -109,7 +109,13 @@ function cardDetail(key: CardKey, o: AdminOverview, now: number): string | null 
       return o.inbox.total ? `${o.inbox.unread} unread of ${o.inbox.total}` : 'No messages yet'
     case 'cv': {
       const at = lastEditOf(o, 'cv')
-      return at ? `Edited ${relTime(at, now)}` : null
+      const r = o.cvReadiness
+      const checks = r
+        ? r.open
+          ? `${plural(r.open, 'readiness check')} to review${r.high ? ` (${r.high} to fix first)` : ''}`
+          : 'Readiness checks pass'
+        : ''
+      return [at ? `Edited ${relTime(at, now)}` : '', checks].filter(Boolean).join(' · ') || null
     }
     case 'home': {
       const at = lastEditOf(o, 'home')
@@ -208,6 +214,17 @@ export default function AdminIndex() {
         action: (
           <Button as={NextLink} href="/admin/dashboard?tab=inbox" size="xs" {...outlineButtonProps}>
             Open Inbox
+          </Button>
+        ),
+      })
+    }
+    if (o.cvReadiness && o.cvReadiness.high > 0) {
+      attention.push({
+        id: 'cv-readiness',
+        text: `The CV has ${plural(o.cvReadiness.high, 'readiness issue')} to fix first (contradictions or out-of-date claims).`,
+        action: (
+          <Button as={NextLink} href="/admin/dashboard?tab=cv&panel=readiness" size="xs" {...outlineButtonProps}>
+            Review
           </Button>
         ),
       })
