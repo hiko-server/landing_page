@@ -1,0 +1,8 @@
+/**
+ * auth.db migrations, oldest first (rules: scripts/db/migrate.mjs).
+ * Append new files here; never edit or reorder a released one.
+ */
+import passkeysSessions from './001-passkeys-sessions.mjs'
+
+/** @type {readonly import('../migrate.mjs').Migration[]} */
+export const AUTH_MIGRATIONS = Object.freeze([passkeysSessions])

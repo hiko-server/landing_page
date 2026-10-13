@@ -97,6 +97,8 @@ fs.mkdirSync(path.join(root, 'scripts'))
 for (const f of ['sync-from-r2.mjs', 'content-helpers.mjs']) {
   fs.copyFileSync(path.join(repoRoot, 'scripts', f), path.join(root, 'scripts', f))
 }
+// content-helpers.mjs applies the shared, versioned migrations in scripts/db.
+fs.cpSync(path.join(repoRoot, 'scripts', 'db'), path.join(root, 'scripts', 'db'), { recursive: true })
 fs.symlinkSync(path.join(repoRoot, 'node_modules'), path.join(root, 'node_modules'), 'dir')
 const dbPath = path.join(root, 'data', 'content.db')
 
@@ -490,6 +492,7 @@ test('a restore whose R2 mirror fails is not undone by the next boot sync', asyn
   for (const f of ['sync-from-r2.mjs', 'content-helpers.mjs']) {
     fs.copyFileSync(path.join(repoRoot, 'scripts', f), path.join(libRoot, 'scripts', f))
   }
+  fs.cpSync(path.join(repoRoot, 'scripts', 'db'), path.join(libRoot, 'scripts', 'db'), { recursive: true })
   if (!fs.existsSync(path.join(libRoot, 'node_modules'))) {
     fs.symlinkSync(path.join(repoRoot, 'node_modules'), path.join(libRoot, 'node_modules'), 'dir')
   }

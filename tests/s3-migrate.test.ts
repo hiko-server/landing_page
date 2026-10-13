@@ -14,6 +14,8 @@ fs.mkdirSync(path.join(root, 'scripts'))
 for (const f of ['migrate-files-to-db.mjs', 'content-helpers.mjs']) {
   fs.copyFileSync(path.join(repoRoot, 'scripts', f), path.join(root, 'scripts', f))
 }
+// content-helpers.mjs applies the shared, versioned migrations in scripts/db.
+fs.cpSync(path.join(repoRoot, 'scripts', 'db'), path.join(root, 'scripts', 'db'), { recursive: true })
 fs.symlinkSync(path.join(repoRoot, 'node_modules'), path.join(root, 'node_modules'), 'dir')
 fs.mkdirSync(path.join(root, 'content', 'blog'), { recursive: true })
 fs.mkdirSync(path.join(root, 'data'), { recursive: true })
