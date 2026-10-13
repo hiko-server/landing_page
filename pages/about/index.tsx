@@ -1,65 +1,90 @@
-import React from 'react'
-import type { GetServerSideProps } from 'next'
-import { Flex, Box, Heading } from '@chakra-ui/react'
+import React, { useMemo, useState } from 'react'
+import type { GetStaticProps } from 'next'
+import { Box, Flex, Grid, Text } from '@chakra-ui/react'
+import type { Root as HastRoot } from 'hast'
 
-import LandingCVSections, { CV_WEBSITE_SECTIONS } from '../../components/LandingPage/LandingCVSections'
+import LandingCVSections, { CV_WEBSITE_SECTIONS, hasChineseCv, renderedCvSections } from '../../components/LandingPage/LandingCVSections'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
-import { absUrl, personNode, profilePageNode, breadcrumb, ogImageUrl, PERSON_NAME, type PersonFacts } from '../../lib/schema'
-import ActivityFeed from '../../components/GitHub/ActivityFeed'
-import StatsBar from '../../components/GitHub/StatsBar'
-import ContributionGraph from '../../components/GitHub/ContributionGraph'
-import ErrorBoundary, { WidgetFallback } from '../../components/Common/ErrorBoundary'
-import SectionReveal from '../../components/General-UI/SectionReveal'
-import AboutHero from '../../components/About/AboutHero'
-import ExperienceTimeline from '../../components/LandingPage/ExperienceTimeline'
-import CertificationsPeek from '../../components/LandingPage/CertificationsPeek'
-import { heroIdentity, type HeroIdentity } from '../../components/LandingPage/heroIdentity'
+import MDXContent from '../../components/MDX/MDXContent'
+import IdentityRail, { type RailPortrait } from '../../components/About/IdentityRail'
+import { aboutNavEntries } from '../../components/About/aboutNav'
+import { heroIdentity, portraitAlt, taglinePhrases, type HeroIdentity } from '../../components/LandingPage/heroIdentity'
 import type { WorkIndexItem } from '../../components/LandingPage/projectMatch'
-import type { GithubSummary } from '../../components/Common/githubEvents'
+import { availabilityView, type AvailabilityView } from '../../components/Common/contactForm'
+import { resolveSocialLinks } from '../../components/Chrome/chrome'
+import { absUrl, personNode, profilePageNode, breadcrumb, ogImageUrl, PERSON_NAME, type PersonFacts } from '../../lib/schema'
 import type { CvSectionLike } from '../../lib/cvVisibility'
 import type { HomeData } from '../../lib/homeShape'
+import { safeHref } from '../../lib/cvFormat'
+import { clearOfHeader } from '../../lib/anchorOffset'
 import { referenceMonth } from '../../lib/clock'
+import { PROFILE_REVALIDATE_SECONDS, revalidateAfter } from '../../lib/isr'
 
 type Props = {
-  /** Only the brand + tagline the hero prints — not the whole home document. */
+  /** Only the brand + tagline the page prints — not the whole home document. */
   hero: { brand: string; tagline: string }
   /** Display names from the website-pruned Personal Info (never the section itself). */
   identity: HeroIdentity
+  /** The home portrait with its crop, size and upload srcset; null when none is set. */
+  portrait: RailPortrait | null
+  /** The owner's availability (Home editor); null when not set. */
+  availability: AvailabilityView | null
+  /** The owner's bio (admin → About bio), compiled on the server; null while it is empty. */
+  bio: { tree: HastRoot; lang: string } | null
   /** Website-pruned CV, limited to the sections this page renders. */
   cv: { en: CvSectionLike[]; zh: CvSectionLike[] }
-  githubUser: string | null
-  /** GitHub data rendered into the HTML; null (or a null part) = the widget loads it in the browser. */
-  github: GithubSummary | null
   /** /work case-study index (slug + title) for "Case study →" links on roles and CV projects. */
   work: WorkIndexItem[]
   /** schema.org Person facts — the site-wide loader (lib/personFacts), identical on every page. */
   personFacts: PersonFacts
   /** Server reference month ('YYYY-MM', lib/clock.ts) for "Present" / "Expected". */
   clockMonth: string
-  /** Public home.socials for the persistent header / footer (null = none set). */
+  /** Public home.socials for the persistent header / footer and the rail (null = none set). */
   chromeSocials?: HomeData['socials'] | null
 }
 
-/** Server-side ceiling for the GitHub summary; the page never waits longer on GitHub. */
-const GITHUB_BUDGET_MS = 1500
+const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
-/** True when the section is present and carries at least one visible entry. */
-function hasSection(list: CvSectionLike[], name: string, key: string): boolean {
-  const section = list.find((s) => s.sessionName === name)
-  return Array.isArray(section?.[key]) && section[key].length > 0
+/** "[01] Bio" — the page's h2s, in the site's mono section style. */
+function RowHeading({ n, id, children }: { n: number; id: string; children: React.ReactNode }) {
+  return (
+    <Text as="h2" id={id} m={0} fontFamily={monoFont} fontSize="11px" letterSpacing="0.12em" textTransform="uppercase" color="page.fg-subtle" fontWeight={400} whiteSpace="nowrap">
+      <Text as="span" aria-hidden>
+        [{String(n).padStart(2, '0')}]
+      </Text>{' '}
+      {children}
+    </Text>
+  )
 }
 
-const githubFallback = (p: { reset?: () => void }) => <WidgetFallback reset={p.reset} title="This GitHub section couldn’t load." />
+/**
+ * /about — the narrative page (home = summary, /cv = the record):
+ *
+ *   identity rail │ the tagline's lead and focus areas
+ *   (sticky, lg)  │ [01] Bio      the owner's own words (admin → About bio);
+ *                 │               omitted while empty, never drafted from the CV
+ *                 │ [02] CV       every CV section, open, with the EN / 中 toggle
+ *
+ * The GitHub widgets and the experience timeline live on the home page only.
+ * Below lg the rail is the page header; the section nav shows from lg up.
+ */
+const About = ({ hero, identity, portrait, availability, bio, cv, work, personFacts, chromeSocials }: Props) => {
+  const [lang, setLang] = useState<'en' | 'zh'>('en')
+  const [lead, ...focus] = taglinePhrases(hero.tagline)
+  const socials = useMemo(() => resolveSocialLinks(chromeSocials), [chromeSocials])
+  const active = lang === 'zh' && hasChineseCv(cv.zh) ? 'zh' : 'en'
+  const nav = useMemo(
+    () => aboutNavEntries(renderedCvSections(active === 'zh' ? cv.zh : cv.en), { hasBio: !!bio, lang: active }),
+    [active, cv.en, cv.zh, bio],
+  )
+  const cvNumber = bio ? 2 : 1
 
-const sectionHeading = { size: 'md', fontWeight: 500, letterSpacing: '-0.01em' } as const
-
-const About = ({ hero, identity, cv, githubUser, github, work, personFacts }: Props) => {
   return (
     <React.Fragment>
       <CustomHead
         title="About"
-        description="About Li Yanpei (Lucian), a software engineer in Hong Kong: background, education, skills, GitHub activity and project case studies."
+        description="About Li Yanpei (Lucian), a software engineer in Hong Kong: background, education, experience, projects, skills, patents and awards."
         url={absUrl('/about')}
         image={ogImageUrl({ kind: 'page', title: 'About', subtitle: 'Background, skills & projects' })}
         jsonLd={[
@@ -72,64 +97,83 @@ const About = ({ hero, identity, cv, githubUser, github, work, personFacts }: Pr
         ]}
       />
       <HeaderFooter>
-        <Flex direction="column" alignItems="center" justifyContent="center" px={{ base: 4, md: 10 }} py={{ base: 8, md: 10 }} gap={{ base: 8, md: 10 }}>
-          {/* Not inside SectionReveal: the h1 must paint from the server HTML. */}
-          <Box w="100%">
-            <AboutHero brand={hero.brand} tagline={hero.tagline} identity={identity} />
-          </Box>
-          <SectionReveal>
-            <Box w="100%" maxW="1100px" mx="auto">
-              <ErrorBoundary name="about-github" fallback={githubFallback}>
-                <StatsBar initialData={github?.stats} />
-              </ErrorBoundary>
+        <Box w="100%" maxW="var(--container-content)" mx="auto" px={{ base: 4, md: 6, lg: 8 }} py={{ base: 10, md: 14, lg: 16 }}>
+          <Grid templateColumns={{ base: 'minmax(0, 1fr)', lg: 'minmax(0, 20rem) minmax(0, 1fr)' }} columnGap={{ lg: 16 }} rowGap={{ base: 10, md: 12 }} alignItems="start">
+            <IdentityRail brand={hero.brand} identity={identity} portrait={portrait} availability={availability} socials={socials} nav={nav} />
+
+            <Box minW={0}>
+              {lead || focus.length ? (
+                <Box mb={{ base: 12, md: 14 }}>
+                  {lead ? (
+                    <Text className="lede" fontSize={{ base: 'lg', md: 'xl' }} lineHeight="1.5" color="page.fg" maxW="40ch" letterSpacing="-0.01em">
+                      {lead}
+                    </Text>
+                  ) : null}
+                  {focus.length ? (
+                    <Flex
+                      as="ul"
+                      aria-label="Focus areas"
+                      listStyleType="none"
+                      wrap="wrap"
+                      gap={2}
+                      mt={lead ? 5 : 0}
+                    >
+                      {focus.map((p, i) => (
+                        <Box
+                          as="li"
+                          key={`${i}-${p}`}
+                          fontFamily={monoFont}
+                          fontSize="12px"
+                          lineHeight="1.4"
+                          px={2.5}
+                          py={1}
+                          border="1px solid"
+                          borderColor="page.border-strong"
+                          borderRadius="full"
+                          color="page.fg-secondary"
+                        >
+                          {p}
+                        </Box>
+                      ))}
+                    </Flex>
+                  ) : null}
+                </Box>
+              ) : null}
+
+              {bio ? (
+                <Box as="section" id="about-bio" aria-labelledby="about-bio-heading" mb={{ base: 14, md: 16 }} sx={{ scrollMarginTop: clearOfHeader('8px') }}>
+                  <Flex align="center" gap={4} mb={{ base: 5, md: 6 }}>
+                    <RowHeading n={1} id="about-bio-heading">
+                      Bio
+                    </RowHeading>
+                    <Box flex="1" h="1px" bg="page.border" />
+                  </Flex>
+                  <Box lang={bio.lang}>
+                    <MDXContent tree={bio.tree} as="div" />
+                  </Box>
+                </Box>
+              ) : null}
+
+              <Box as="section" aria-labelledby="about-cv-heading">
+                <LandingCVSections
+                  en={cv.en}
+                  zh={cv.zh}
+                  work={work}
+                  expanded
+                  headingLevel="h3"
+                  idPrefix="about-"
+                  language={lang}
+                  onLanguageChange={setLang}
+                  title={
+                    <RowHeading n={cvNumber} id="about-cv-heading">
+                      CV
+                    </RowHeading>
+                  }
+                />
+              </Box>
             </Box>
-          </SectionReveal>
-          {githubUser ? (
-            <SectionReveal>
-              <Box as="section" aria-labelledby="about-contributions" w="100%" maxW="1100px" mx="auto">
-                <Heading as="h2" id="about-contributions" mb={4} {...sectionHeading}>
-                  Contributions
-                </Heading>
-                <ErrorBoundary name="about-github" fallback={githubFallback}>
-                  <ContributionGraph initialData={github?.contributions} whenUnavailable="notice" />
-                </ErrorBoundary>
-              </Box>
-            </SectionReveal>
-          ) : null}
-          {hasSection(cv.en, 'workExperience', 'experiences') && (
-            <SectionReveal>
-              <Box as="section" aria-labelledby="about-experience" w="100%" maxW="1100px" mx="auto">
-                <Heading as="h2" id="about-experience" mb={6} {...sectionHeading}>
-                  Experience
-                </Heading>
-                <ExperienceTimeline cvEn={cv.en} work={work} defaultExpanded />
-              </Box>
-            </SectionReveal>
-          )}
-          {hasSection(cv.en, 'certification', 'certifications') && (
-            <SectionReveal>
-              <Box as="section" aria-labelledby="about-certifications" w="100%" maxW="1100px" mx="auto">
-                <Heading as="h2" id="about-certifications" mb={4} {...sectionHeading}>
-                  Certifications
-                </Heading>
-                <CertificationsPeek cvEn={cv.en} />
-              </Box>
-            </SectionReveal>
-          )}
-          <SectionReveal>
-            <Box as="section" aria-labelledby="about-activity" w="100%" maxW="1100px" mx="auto">
-              <Heading as="h2" id="about-activity" mb={4} {...sectionHeading}>
-                Recent Activity
-              </Heading>
-              <ErrorBoundary name="about-github" fallback={githubFallback}>
-                <ActivityFeed initialData={github?.events} />
-              </ErrorBoundary>
-            </Box>
-          </SectionReveal>
-          <SectionReveal>
-            <LandingCVSections en={cv.en} zh={cv.zh} work={work} />
-          </SectionReveal>
-        </Flex>
+          </Grid>
+        </Box>
       </HeaderFooter>
     </React.Fragment>
   )
@@ -137,36 +181,38 @@ const About = ({ hero, identity, cv, githubUser, github, work, personFacts }: Pr
 
 export default About
 
-/** `promise`, or `fallback` once `ms` have passed (the timer never outlives the race). */
-async function within<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  try {
-    return await Promise.race([promise, new Promise<T>((resolve) => (timer = setTimeout(() => resolve(fallback), ms)))])
-  } finally {
-    if (timer) clearTimeout(timer)
-  }
+/** Drop undefined values (Next refuses them in props). */
+function defined<T extends Record<string, unknown>>(o: T): T {
+  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T
+}
+
+const clamp = (v: unknown, min: number, max: number, fallback: number) => {
+  const n = Number(v)
+  return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback
 }
 
 /**
- * Server-rendered on every request (always fresh after a deploy: the Docker
- * build has no content store). The GitHub summary comes from lib/githubData's
- * in-memory cache and is raced against a 1.5 s budget, so a slow GitHub never
- * holds the page; whatever is missing loads in the browser.
+ * Incremental static regeneration: regenerated right after a save of the
+ * home document, the CV, the bio or a case study (lib/revalidate.ts), and at
+ * most an hour after the previous render (lib/isr.ts — "Present" /
+ * "Expected" follow the reference month). The build renders without the
+ * content store; boot warm-up replaces that copy. Every read is best effort.
  */
-export const getServerSideProps: GetServerSideProps<Props> = async () => {
+export const getStaticProps: GetStaticProps<Props> = async () => {
   let cv: Props['cv'] = { en: [], zh: [] }
   let identity: HeroIdentity = heroIdentity(undefined, undefined)
   let hero: Props['hero'] = { brand: '', tagline: '' }
-  let githubUser: string | null = null
+  let portrait: Props['portrait'] = null
+  let availability: Props['availability'] = null
+  let bio: Props['bio'] = null
   let chromeSocials: HomeData['socials'] | null | undefined
   let work: WorkIndexItem[] = []
   let personFacts: PersonFacts = {}
 
   try {
     // Live CV from the content store, website audience, exactly the sections
-    // rendered here (the accordion's set — it covers the timeline and
-    // certification peek too). personalInformation is read only to derive
-    // the display names; the section itself is never shipped.
+    // rendered here. personalInformation is read only to derive the display
+    // names; the section itself is never shipped.
     const { readCvData, readPublicCvSections } = await import('../../lib/cvdata')
     cv = readPublicCvSections('website', CV_WEBSITE_SECTIONS, ['en', 'zh'])
     const pi = readPublicCvSections('website', ['personalInformation'], ['en', 'zh'])
@@ -186,22 +232,56 @@ export const getServerSideProps: GetServerSideProps<Props> = async () => {
 
   try {
     const { readPublicHome } = await import('../../lib/home')
-    const { extractGithubUser } = await import('../../lib/github')
     const home = readPublicHome()
     hero = { brand: home?.hero?.brand || '', tagline: home?.hero?.tagline || '' }
-    githubUser = extractGithubUser(home?.socials?.github)
     chromeSocials = home?.socials ?? null
+    availability = availabilityView(home?.availability)
+    const avatarUrl = safeHref(home?.hero?.avatarUrl)
+    if (avatarUrl) {
+      const t = home?.hero?.avatarTransform
+      let facts: { width?: number; height?: number; srcSet?: string } = {}
+      if (avatarUrl.startsWith('/')) {
+        try {
+          const [{ localImageSize }, { variantSrcSet }] = await Promise.all([import('../../lib/rehype/imageSize'), import('../../lib/uploadVariants')])
+          const size = localImageSize(avatarUrl)
+          facts = defined({ width: size?.width, height: size?.height, srcSet: variantSrcSet(avatarUrl) })
+        } catch {
+          /* the portrait renders without its size / variants */
+        }
+      }
+      portrait = defined({
+        src: avatarUrl,
+        ...facts,
+        x: clamp(t?.x, 0, 100, 50),
+        y: clamp(t?.y, 0, 100, 50),
+        scale: clamp(t?.scale, 0.5, 3, 1),
+        alt: portraitAlt(identity),
+      })
+    }
   } catch {
     /* best effort — render with what we have */
   }
 
+  try {
+    // The owner's bio: rendered only when it has real content. Never a
+    // fallback to the CV's introduction.
+    const { getPage } = await import('../../lib/contentStore')
+    if ((getPage('about')?.body || '').trim()) {
+      const { getStaticMdxPage } = await import('../../lib/mdx')
+      const page = await getStaticMdxPage('about')
+      if (page) bio = { tree: page.tree, lang: page.lang }
+    }
+  } catch {
+    bio = null
+  }
+
   // Only read the /work index when something on the page can link to it:
-  // the experience timeline (roles) or the CV accordion's projects (either language).
-  const linksCaseStudies =
-    hasSection(cv.en, 'workExperience', 'experiences') ||
-    hasSection(cv.en, 'project', 'projectExperience') ||
-    hasSection(cv.zh, 'project', 'projectExperience')
-  if (linksCaseStudies) {
+  // a role or a CV project (either language).
+  const has = (list: CvSectionLike[], name: string, key: string) => {
+    const s = list.find((x) => x.sessionName === name)
+    return Array.isArray(s?.[key]) && s[key].length > 0
+  }
+  if (has(cv.en, 'workExperience', 'experiences') || has(cv.en, 'project', 'projectExperience') || has(cv.zh, 'project', 'projectExperience')) {
     try {
       const { listWork } = await import('../../lib/mdx')
       work = listWork().map(({ slug, frontmatter: fm }) => ({ slug, title: String(fm?.title || slug) }))
@@ -210,19 +290,15 @@ export const getServerSideProps: GetServerSideProps<Props> = async () => {
     }
   }
 
-  let github: GithubSummary | null = null
-  if (githubUser) {
-    const { loadGithubSummary } = await import('../../lib/githubData')
-    github = await within(loadGithubSummary(githubUser), GITHUB_BUDGET_MS, null)
-  }
-
   return {
+    revalidate: revalidateAfter(PROFILE_REVALIDATE_SECONDS),
     props: {
       hero,
       identity,
+      portrait,
+      availability,
+      bio,
       cv,
-      githubUser,
-      github,
       work,
       personFacts,
       clockMonth: referenceMonth(),

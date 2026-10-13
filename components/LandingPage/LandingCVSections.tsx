@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { Fragment, useMemo, useState, type ReactNode } from 'react'
 import { Box, Flex, Text } from '@chakra-ui/react'
 import EducationSection from '../PersonalInstruction/Education'
 import ProjectSection from '../PersonalInstruction/Project'
@@ -8,6 +8,7 @@ import WorkExperience from '../PersonalInstruction/WorkExperience'
 import CompetitionAwardsSection from '../PersonalInstruction/CompetitionAwards'
 import PatentsSection from '../PersonalInstruction/Patents'
 import ExtraSkillSection from '../PersonalInstruction/ExtraSkill'
+import { CVSectionsContext } from '../PersonalInstruction/_CVSectionShell'
 import { isSectionOnWebsite } from '../../lib/cvVisibility'
 import type { WorkIndexItem } from './projectMatch'
 
@@ -43,19 +44,46 @@ export const CV_WEBSITE_SECTIONS = [
 
 const RENDERED: readonly string[] = CV_WEBSITE_SECTIONS
 
+/** The sections a language renders, in order (what the accordion and a section nav list). */
+export function renderedCvSections(list: readonly any[] | undefined): any[] {
+  return (Array.isArray(list) ? list : []).filter((s: any) => RENDERED.includes(s?.sessionName) && isSectionOnWebsite(s))
+}
+
+/** True when the Chinese CV has at least one section this stack renders (the EN / 中 toggle shows). */
+export function hasChineseCv(zh: readonly any[] | undefined): boolean {
+  return renderedCvSections(zh).length > 0
+}
+
 type LandingCVSectionsProps = {
   en?: any[]
   zh?: any[]
   /** /work case-study index; CV projects that match one link to it ("Case study →"). */
   work?: readonly WorkIndexItem[]
+  /** Every section starts open. */
+  expanded?: boolean
+  /** Wrap each section's toggle in a heading of this level (page outline). */
+  headingLevel?: 'h2' | 'h3'
+  /** Give each section an anchor id `${idPrefix}${sessionName}` (e.g. "about-education"). */
+  idPrefix?: string
+  /** Controlled language (with onLanguageChange); uncontrolled when omitted. */
+  language?: Lang
+  onLanguageChange?: (lang: Lang) => void
+  /** Replaces the mono "Language / CV" caption on the left of the toggle row. */
+  title?: ReactNode
 }
 
-const LandingCVSections = ({ en, zh, work }: LandingCVSectionsProps) => {
-  const [language, setLanguage] = useState<Lang>('en')
+const LandingCVSections = ({ en, zh, work, expanded, headingLevel, idPrefix, language: controlled, onLanguageChange, title }: LandingCVSectionsProps) => {
+  const [own, setOwn] = useState<Lang>('en')
+  const language = controlled ?? own
+  const setLanguage = (lang: Lang) => {
+    if (controlled === undefined) setOwn(lang)
+    onLanguageChange?.(lang)
+  }
   // Fall back to EN when there is no Chinese CV at all, and hide the toggle.
-  const hasZh = Array.isArray(zh) && zh.some((s: any) => RENDERED.includes(s?.sessionName))
+  const hasZh = hasChineseCv(zh)
   const active: Lang = hasZh ? language : 'en'
   const cvData: any[] = active === 'zh' ? zh || [] : en || []
+  const context = useMemo(() => ({ expanded, headingLevel }), [expanded, headingLevel])
 
   const langs: Array<{ key: Lang; label: string }> = [
     { key: 'en', label: 'EN' },
@@ -66,9 +94,11 @@ const LandingCVSections = ({ en, zh, work }: LandingCVSectionsProps) => {
     <Box w="100%" maxW="1100px" mx="auto">
       {/* Language toggle — mono pill row, replaces the native select */}
       <Flex align="center" gap={4} mb={[6, 8]}>
-        <Text fontFamily={monoFont} fontSize="11px" letterSpacing="0.08em" color="page.fg-secondary" textTransform="uppercase">
-          {hasZh ? 'Language' : 'CV'}
-        </Text>
+        {title ?? (
+          <Text fontFamily={monoFont} fontSize="11px" letterSpacing="0.08em" color="page.fg-secondary" textTransform="uppercase">
+            {hasZh ? 'Language' : 'CV'}
+          </Text>
+        )}
         <Box flex="1" h="1px" bg="page.border" />
         {hasZh && (
           <Flex gap={1} fontFamily={monoFont} fontSize="11px" role="group" aria-label="CV language">
@@ -107,35 +137,54 @@ const LandingCVSections = ({ en, zh, work }: LandingCVSectionsProps) => {
         sections sit in. Data is already website-pruned server-side; the
         showOnWebsite check is a second guard for unpruned callers.
       */}
-      <Flex direction="column" lang={active === 'zh' ? 'zh-Hans' : undefined}>
-        {cvData
-          .filter((s: any) => RENDERED.includes(s?.sessionName) && isSectionOnWebsite(s))
-          .map((section: any, key: number) => {
+      <CVSectionsContext.Provider value={context}>
+        <Flex direction="column" lang={active === 'zh' ? 'zh-Hans' : undefined}>
+          {renderedCvSections(cvData).map((section: any, key: number) => {
             const idx = key + 1
             const k = `${section.sessionName}-${key}`
             const props = { index: idx, data: section, lang: active }
+            let body: ReactNode = null
             switch (section.sessionName) {
               case 'education':
-                return <EducationSection key={k} {...props} />
+                body = <EducationSection {...props} />
+                break
               case 'skill':
-                return <SkillSection key={k} {...props} />
+                body = <SkillSection {...props} />
+                break
               case 'certification':
-                return <CertificateSection key={k} {...props} />
+                body = <CertificateSection {...props} />
+                break
               case 'workExperience':
-                return <WorkExperience key={k} {...props} />
+                body = <WorkExperience {...props} />
+                break
               case 'competitionAwards':
-                return <CompetitionAwardsSection key={k} {...props} />
+                body = <CompetitionAwardsSection {...props} />
+                break
               case 'project':
-                return <ProjectSection key={k} {...props} work={work} />
+                body = <ProjectSection {...props} work={work} />
+                break
               case 'patents':
-                return <PatentsSection key={k} {...props} />
+                body = <PatentsSection {...props} />
+                break
               case 'extraSkill':
-                return <ExtraSkillSection key={k} {...props} />
+                body = <ExtraSkillSection {...props} />
+                break
               default:
-                return null
+                body = null
             }
+            if (!body) return null
+            // The anchor goes on the section's own root (CVSectionShell), so a
+            // section that renders nothing leaves no empty target behind.
+            return idPrefix ? (
+              <CVSectionsContext.Provider key={k} value={{ ...context, anchorId: `${idPrefix}${section.sessionName}` }}>
+                {body}
+              </CVSectionsContext.Provider>
+            ) : (
+              <Fragment key={k}>{body}</Fragment>
+            )
           })}
-      </Flex>
+        </Flex>
+      </CVSectionsContext.Provider>
     </Box>
   )
 }

@@ -180,8 +180,10 @@ test('derived purge paths and helpers', () => {
   assert.deepEqual(derivedPurgePaths(['/blogroll']), [])
   assert.deepEqual(chunk([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]])
   assert.deepEqual(chunk([], 30), [])
-  // ISR pages only: the SSR pages are fresh on every request.
-  assert.deepEqual([...STATIC_CONTENT_PATHS], ['/blog', '/work', '/now', '/uses', '/colophon'])
+  // The /about bio is part of the search index (G1 / A4).
+  assert.deepEqual(derivedPurgePaths(['/about']), ['/api/search-index'])
+  // ISR pages only (/ and /about since G1): the SSR pages are fresh on every request.
+  assert.deepEqual([...STATIC_CONTENT_PATHS], ['/', '/about', '/blog', '/work', '/now', '/uses', '/colophon'])
 })
 
 function fakeRes() {

@@ -4,7 +4,8 @@
  *
  * The Docker build deliberately runs without data/content.db (runtime state
  * never belongs in an image), so the statically generated pages baked into
- * the image — /blog, /work, /now, /uses — are rendered from an EMPTY store.
+ * the image — /, /about, /blog, /work, /now, /uses — are rendered from an
+ * EMPTY store.
  * Left alone, the first visitor after every deploy would be served that empty
  * copy while Next regenerates in the background.
  *

@@ -11,13 +11,14 @@ import { readCvData, writeCvData, saveSnapshot } from '../../lib/cvdata'
 import { readHome, writeHome, saveHomeSnapshot } from '../../lib/home'
 import { getPage, listItems, putItem, putPage } from '../../lib/contentStore'
 import { maskMongoUri, redactMongoSecrets } from '../../lib/security/mongoUri'
-import { revalidatePaths, collectionPaths, STATIC_CONTENT_PATHS } from '../../lib/revalidate'
+import { revalidatePaths, collectionPaths, CV_PAGE_PATHS, HOME_PAGE_PATHS, STATIC_CONTENT_PATHS } from '../../lib/revalidate'
+import { PAGE_NAMES } from '../../lib/mdx-admin'
 
 /**
  * POST /api/mongo — optional MongoDB backup target (admin only).
  *
  * Backs up the LIVE content (SQLite store: CV, home, blog/work posts,
- * now/uses pages), uploaded + brand images (GridFS) and version-history
+ * now/uses/about pages), uploaded + brand images (GridFS) and version-history
  * snapshots; restores them back through the same store API the editors use,
  * so a restore is immediately visible and mirrored to R2.
  *
@@ -33,7 +34,7 @@ const SNAPSHOT_DIRS = ['cv_snapshots', 'home_snapshots', 'blog_snapshots', 'work
   path.join(process.cwd(), 'data', d),
 )
 const IMAGE_EXT = /\.(png|jpe?g|webp|gif|avif|svg|ico)$/i
-const PAGES = ['now', 'uses'] as const
+const PAGES = PAGE_NAMES
 const COLLECTIONS = ['blog', 'work'] as const
 
 let dnsConfigured = false
@@ -350,13 +351,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const restoredPaths: string[] = []
+    // A restored CV or home document changes the ISR pages that render it.
+    if (counts.cv) restoredPaths.push(...CV_PAGE_PATHS)
+    if (counts.home) restoredPaths.push(...HOME_PAGE_PATHS)
     if (wants('content')) {
       const docs = await db.collection('mdx_content').find({}).toArray()
       let n = 0
       for (const doc of docs) {
         const rel = String(doc.relPath || '').replace(/\\/g, '/')
         const parsed = matter(String(doc.body ?? ''))
-        const page = rel.match(/^(now|uses)\.mdx?$/)
+        const page = rel.match(/^(now|uses|about)\.mdx?$/)
         const item = rel.match(/^(blog|work)\/([a-z0-9][a-z0-9-]*)\.mdx?$/i)
         if (page) {
           note(await putPage(page[1], parsed.data, parsed.content))

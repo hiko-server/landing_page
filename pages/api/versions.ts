@@ -11,7 +11,7 @@
  *
  * Posts, case studies and pages (MDX, lib/mdx-admin.ts):
  * GET  ?type=blog|work&slug=foo           → list that item's snapshots
- * GET  ?type=page&name=now|uses           → list that page's snapshots
+ * GET  ?type=page&name=now|uses|about     → list that page's snapshots
  * GET  ?type=…&slug|name=…&file=…&preview=1 → { data: { frontmatter, body } }
  * GET  ?type=blog|work&deleted=1          → { deleted: [{ slug, title, filename, date }] }
  *                                           (snapshots whose item no longer exists)
@@ -37,10 +37,11 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { kvEtag, restoreErrorStatus, safeSnapshotName } from '../../lib/contentStore'
 import { isAdminRequest } from '../../lib/auth'
 import { sendVersionedJson } from '../../lib/http'
-import { revalidatePaths } from '../../lib/revalidate'
+import { CV_PAGE_PATHS, HOME_PAGE_PATHS, revalidatePaths } from '../../lib/revalidate'
 import { withApi } from '../../lib/apiHandler'
 import { log } from '../../lib/log'
 import {
+  PAGE_NAMES,
   isPageName,
   isSafeSlug,
   listDeleted,
@@ -64,13 +65,15 @@ type VersionType = JsonDocType | SnapshotKind
 const TYPES: readonly VersionType[] = ['cv', 'home', 'blog', 'work', 'page']
 
 /**
- * Statically generated (ISR) pages rendered from each document: /now reads
- * the public CV sections and home.hero.currentlyCoding, so restoring either
- * one must regenerate it instead of leaving the ISR copy live. The pages
- * that read them with getServerSideProps (/, /about, /contact, /cv, /cv/zh)
- * are rendered per request and need no revalidation.
+ * Statically generated (ISR) pages rendered from each document (/, /about
+ * and /now, lib/revalidate.ts), so restoring either one regenerates them
+ * instead of leaving the ISR copy live. The pages that read them with
+ * getServerSideProps (/contact, /cv, /cv/zh) are rendered per request and
+ * need no revalidation.
  */
-const STATIC_PATHS: Record<JsonDocType, string[]> = { cv: ['/now'], home: ['/now'] }
+const STATIC_PATHS: Record<JsonDocType, string[]> = { cv: [...CV_PAGE_PATHS], home: [...HOME_PAGE_PATHS] }
+
+const PAGE_NAME_ERROR = `name must be one of ${PAGE_NAMES.map((n) => `"${n}"`).join(', ')}`
 
 function parseType(value: unknown): VersionType | null {
   if (value === undefined || value === '') return null
@@ -111,7 +114,7 @@ async function handleMdx(req: NextApiRequest, res: NextApiResponse, kind: Snapsh
 
   const ref = typeof rawRef === 'string' ? rawRef : ''
   if (kind === 'page' ? !isPageName(ref) : !isSafeSlug(ref)) {
-    return res.status(400).json({ error: kind === 'page' ? 'name must be "now" or "uses"' : 'Missing or invalid slug' })
+    return res.status(400).json({ error: kind === 'page' ? PAGE_NAME_ERROR : 'Missing or invalid slug' })
   }
 
   if (req.method === 'GET') {
@@ -132,7 +135,7 @@ async function handleMdx(req: NextApiRequest, res: NextApiResponse, kind: Snapsh
     if (!info || info.slug !== ref) return res.status(400).json({ error: 'Missing or invalid filename' })
 
     if (kind === 'page') {
-      if (!isPageName(ref)) return res.status(400).json({ error: 'name must be "now" or "uses"' })
+      if (!isPageName(ref)) return res.status(400).json({ error: PAGE_NAME_ERROR })
       const result = await restorePageSnapshot(ref, info.filename)
       if (!result.ok) return res.status('notFound' in result ? 404 : 500).json({ error: result.error })
       const etag = versionEtag(readPage(ref).updatedAt)

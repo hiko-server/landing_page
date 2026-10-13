@@ -27,6 +27,7 @@ import {
   FaHdd,
   FaInbox,
   FaChartLine,
+  FaUser,
 } from 'react-icons/fa'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
@@ -34,7 +35,7 @@ import { Eyebrow, MONO, outlineButtonProps } from '../../components/Admin/shell/
 import ShortcutsOverlay from '../../components/Admin/shell/ShortcutsOverlay'
 import type { AdminOverview } from '../api/admin/overview'
 
-type CardKey = 'inbox' | 'cv' | 'home' | 'blog' | 'work' | 'now' | 'uses' | 'analytics' | 'versions' | 'storage' | 'mongo'
+type CardKey = 'inbox' | 'cv' | 'home' | 'about' | 'blog' | 'work' | 'now' | 'uses' | 'analytics' | 'versions' | 'storage' | 'mongo'
 type Card = { key: CardKey; title: string; desc: string; href: string; icon: IconType }
 
 const GROUPS: Array<{ label: string; cards: Card[] }> = [
@@ -61,7 +62,8 @@ const GROUPS: Array<{ label: string; cards: Card[] }> = [
     label: 'Profile',
     cards: [
       { key: 'cv', title: 'CV Studio', desc: 'EN / 中文 CV with per-field visibility, live A4 preview and PDF.', href: '/admin/dashboard?tab=cv', icon: FaFileAlt },
-      { key: 'home', title: 'Home page', desc: 'Hero, logos, photos, availability, open source and contact copy.', href: '/admin/dashboard?tab=home', icon: FaHome },
+      { key: 'home', title: 'Home page', desc: 'Hero, highlights, section order, logos, photos, availability and open source.', href: '/admin/dashboard?tab=home', icon: FaHome },
+      { key: 'about', title: 'About bio', desc: 'Your story in your own words, at the top of /about.', href: '/admin/about', icon: FaUser },
     ],
   },
   {
@@ -123,6 +125,11 @@ function cardDetail(key: CardKey, o: AdminOverview, now: number): string | null 
       return o.pages.nowEmpty ? 'Auto-generated from your CV and writing' : 'Written by you'
     case 'uses':
       return o.pages.usesEmpty ? 'Auto-generated from the site’s stack' : 'Written by you'
+    case 'about': {
+      if (o.pages.aboutEmpty) return 'Not written yet · /about shows no bio'
+      const at = lastEditOf(o, 'page', 'about')
+      return at ? `Written by you · edited ${relTime(at, now)}` : 'Written by you'
+    }
     case 'storage': {
       if (!o.backup.lastAt) return o.backup.scheduled ? 'No backup yet · scheduled' : 'No backup yet'
       const next = o.backup.scheduled && o.backup.nextAt ? ` · next ${relTime(o.backup.nextAt, now)}` : ''
@@ -259,6 +266,17 @@ export default function AdminIndex() {
         action: (
           <Button as={NextLink} href="/admin/uses" size="xs" {...outlineButtonProps}>
             Write /uses
+          </Button>
+        ),
+      })
+    }
+    if (o.pages.aboutEmpty) {
+      attention.push({
+        id: 'about',
+        text: '/about has no bio yet · visitors see only your CV there.',
+        action: (
+          <Button as={NextLink} href="/admin/about" size="xs" {...outlineButtonProps}>
+            Write your bio
           </Button>
         ),
       })
@@ -403,7 +421,7 @@ export default function AdminIndex() {
                       <Text color="page.fg-secondary" fontSize="sm" lineHeight="1.55">
                         {c.desc}
                       </Text>
-                      {state === 'loading' && ['inbox', 'blog', 'work', 'now', 'uses', 'storage', 'cv', 'home'].includes(c.key) ? (
+                      {state === 'loading' && ['inbox', 'blog', 'work', 'now', 'uses', 'about', 'storage', 'cv', 'home'].includes(c.key) ? (
                         <Skeleton h="12px" w="55%" mt={3} />
                       ) : detail ? (
                         <Text mt={3} fontFamily={MONO} fontSize="11px" color="page.fg-secondary" className="tnum">

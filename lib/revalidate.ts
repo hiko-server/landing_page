@@ -6,8 +6,8 @@ import { uploadNamesIn } from './uploadVariants'
 /**
  * On-demand ISR revalidation.
  *
- * /blog, /work, /now, /uses, the posts, case studies and /colophon are
- * statically generated with a revalidate window. Without this, an admin save
+ * /, /about, /blog, /work, /now, /uses, the posts, case studies and
+ * /colophon are statically generated with a revalidate window. Without this, an admin save
  * only shows up on the public page after that window elapses *and* someone
  * visits twice. Calling `res.revalidate()` right after a successful write
  * regenerates the affected pages immediately, so "Save" means "live".
@@ -26,7 +26,7 @@ export async function revalidatePaths(res: NextApiResponse, paths: string[]): Pr
   await Promise.all(
     unique.map(async (p) => {
       try {
-        await res.revalidate(p)
+        await revalidateSerially(p, () => res.revalidate(p))
       } catch (err) {
         failed.push(p)
         log.warn('revalidate failed', { path: p, err })
@@ -38,10 +38,70 @@ export async function revalidatePaths(res: NextApiResponse, paths: string[]): Pr
   return failed
 }
 
+const runningRevalidations = new Map<string, Promise<void>>()
+const followUpRevalidations = new Map<string, Promise<void>>()
+
+/**
+ * Run `regenerate` (res.revalidate(path)) without ever joining a render of
+ * `path` that is already under way. Next batches concurrent on-demand
+ * revalidations of one path into a single render, so a save that lands while
+ * an earlier save's render is running would receive that render — made
+ * from the content as it was before the second save — and the page would
+ * stay stale until its time window (an hour for / and /about) runs out.
+ *
+ * A request that finds a render running waits for it, then renders again;
+ * every request that arrives meanwhile shares that one follow-up render,
+ * which starts after all their writes. One Node process serves the site, so
+ * process memory is the right scope.
+ */
+export function revalidateSerially(path: string, regenerate: () => Promise<void>): Promise<void> {
+  const running = runningRevalidations.get(path)
+  if (!running) {
+    const run: Promise<void> = regenerate().finally(() => {
+      if (runningRevalidations.get(path) === run) runningRevalidations.delete(path)
+    })
+    runningRevalidations.set(path, run)
+    return run
+  }
+  const queued = followUpRevalidations.get(path)
+  if (queued) return queued
+  const followUp = running
+    .catch(() => undefined)
+    .then(() => {
+      followUpRevalidations.delete(path)
+      return revalidateSerially(path, regenerate)
+    })
+  followUpRevalidations.set(path, followUp)
+  return followUp
+}
+
 export type Collection = 'blog' | 'work'
 
 /** Upper bound on detail pages refreshed for one save (ISR covers the rest). */
 export const MAX_SIBLING_PATHS = 50
+
+/**
+ * ISR pages that render the home document: / (everything), /about (hero,
+ * portrait, socials, availability) and /now (hero.currentlyCoding).
+ */
+export const HOME_PAGE_PATHS: readonly string[] = ['/', '/about', '/now']
+
+/**
+ * ISR pages that render the public CV: / (identity, hero facts, projects,
+ * experience, skills, certifications), /about (identity, the CV sections)
+ * and /now (current roles and studies).
+ */
+export const CV_PAGE_PATHS: readonly string[] = ['/', '/about', '/now']
+
+/**
+ * Pages outside a collection that a post or case-study save changes: the
+ * home page lists the latest writing and links projects and roles to case
+ * studies; /about links roles and CV projects to case studies.
+ */
+export const COLLECTION_EXTRA_PATHS: Record<Collection, readonly string[]> = {
+  blog: ['/'],
+  work: ['/', '/about'],
+}
 
 /**
  * Public paths that render a collection item: the index, the item's detail
@@ -80,10 +140,10 @@ export function pathsReferencingUploads(names: Iterable<string>, sources: readon
 
 /**
  * Every statically generated (ISR) public page whose data lives in the content
- * store. The server-rendered pages (/, /about, /cv, /cv/zh, /contact) are
- * fresh on every request and need no revalidation.
+ * store (a restore regenerates them all). The server-rendered pages (/cv,
+ * /cv/zh, /contact) are fresh on every request and need no revalidation.
  */
-export const STATIC_CONTENT_PATHS = ['/blog', '/work', '/now', '/uses', '/colophon'] as const
+export const STATIC_CONTENT_PATHS = ['/', '/about', '/blog', '/work', '/now', '/uses', '/colophon'] as const
 
 // ── Edge notifications (Cloudflare purge, IndexNow) ──────────────────────
 
@@ -116,13 +176,14 @@ const COLLECTION_DERIVED_PATHS = ['/feed.xml', '/feed.json', '/work/feed.xml', '
 /**
  * Edge-cached responses derived from the given pages that must be purged with
  * them: a post or case-study change alters the feeds, the sitemap and the
- * search index; /now and /uses bodies are part of the search index.
+ * search index; the /now, /uses and /about (bio) bodies are part of the
+ * search index.
  */
 export function derivedPurgePaths(paths: readonly string[]): string[] {
   const out = new Set<string>()
   for (const p of paths) {
     if (/^\/(blog|work)(\/|$)/.test(p)) COLLECTION_DERIVED_PATHS.forEach((d) => out.add(d))
-    else if (p === '/now' || p === '/uses') out.add('/api/search-index')
+    else if (p === '/now' || p === '/uses' || p === '/about') out.add('/api/search-index')
   }
   return Array.from(out)
 }

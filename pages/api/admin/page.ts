@@ -13,13 +13,14 @@ import { sendVersionedJson } from '../../../lib/http'
 import { revalidatePaths } from '../../../lib/revalidate'
 
 /**
- * Admin CRUD for the single MDX pages (/now, /uses).
+ * Admin CRUD for the single MDX pages (/now, /uses and the /about bio).
  *
  *   GET /api/admin/page?name=now  → { name, frontmatter, body, updatedAt }, ETag = its version
  *   PUT /api/admin/page           → { name, frontmatter, body } write; optional If-Match
  *                                   (409 VERSION_CONFLICT); the body must compile
- *                                   (422 MDX_INVALID). An empty body switches the
- *                                   public page back to its automatic version.
+ *                                   (422 MDX_INVALID). An empty body switches /now
+ *                                   and /uses back to their automatic version and
+ *                                   takes the bio off /about.
  *
  * Snapshots into data/page_snapshots/ on every write; the public page is
  * regenerated immediately and the response lists it under `revalidated`.
@@ -61,7 +62,7 @@ export default withApi('admin/page', async (req, res) => {
     const result = await writePage(name, fm, text)
     if (!result.ok) return res.status(400).json({ error: result.error })
     const etag = versionEtag(readPage(name).updatedAt)
-    // /now and /uses are statically generated: regenerate the edited one now.
+    // /now, /uses and /about are statically generated: regenerate the edited one now.
     const paths = [`/${name}`]
     const failed = await revalidatePaths(res, paths)
     return sendVersionedJson(

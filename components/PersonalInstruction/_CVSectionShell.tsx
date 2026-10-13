@@ -1,13 +1,17 @@
-import React from 'react'
-import {
-  Accordion,
-  AccordionButton,
-  AccordionItem,
-  AccordionPanel,
-  Box,
-  Flex,
-  Text,
-} from '@chakra-ui/react'
+import React, { createContext, useContext, useId, useState } from 'react'
+import { Box, Flex, Heading, Text } from '@chakra-ui/react'
+import Collapse from '../General-UI/Collapse'
+import { clearOfHeader } from '../../lib/anchorOffset'
+
+/**
+ * Set by the page that stacks the sections (LandingCVSections):
+ *   - `expanded`: every section starts open (/about shows the record in full)
+ *   - `headingLevel`: each section's toggle sits inside a heading of this
+ *     level (the WAI-ARIA accordion pattern), so the sections appear in the
+ *     page outline and screen-reader heading navigation
+ *   - `anchorId`: id of this section (a jump target for a section nav)
+ */
+export const CVSectionsContext = createContext<{ expanded?: boolean; headingLevel?: 'h2' | 'h3'; anchorId?: string }>({})
 
 /**
  * Shared shell for every CV accordion section on /about.
@@ -72,15 +76,124 @@ export default function CVSectionShell({
   const panelDivider = 'page.border'
 
   const padded = (n: number) => String(n).padStart(2, '0')
+  const { expanded, headingLevel, anchorId } = useContext(CVSectionsContext)
+  // Local state, not Chakra's Accordion: its items learn their index from
+  // descendant registration after mount, so a section that starts open was
+  // rendered closed on the server and expanded after hydration (a layout
+  // shift). Here the server HTML already has the final state.
+  const [isExpanded, setExpanded] = useState(defaultOpen || !!expanded)
+  const uid = useId()
+  const buttonId = `accordion-button-${uid}`
+  const panelId = `accordion-panel-${uid}`
+
+  const button = (
+    <Box
+      as="button"
+      type="button"
+      id={buttonId}
+      aria-expanded={isExpanded}
+      aria-controls={panelId}
+      onClick={() => setExpanded((v) => !v)}
+      className="chakra-accordion__button"
+      display="flex"
+      alignItems="center"
+      w="100%"
+      textAlign="start"
+      px={[5, 7]}
+      py={[5, 6]}
+      // Keyboard focus gets an inset accent ring (the item clips overflow).
+      _focus={{ boxShadow: 'none' }}
+      _focusVisible={{ outline: 'none', boxShadow: 'inset 0 0 0 2px var(--accent)' }}
+    >
+      <Flex w="full" align="center" gap={[3, 4]}>
+        {/* Mono index */}
+        {typeof index === 'number' && (
+          <Text
+            as="span"
+            fontFamily={monoFont}
+            fontSize={['10px', '11px']}
+            color={indexColor}
+            letterSpacing="0.08em"
+            flexShrink={0}
+          >
+            [{padded(index)}]
+          </Text>
+        )}
+
+        {/* Label — wraps rather than truncating a long title on phones */}
+        <Text
+          as="span"
+          flex="1"
+          minW={0}
+          lineHeight="1.35"
+          textAlign="left"
+          fontWeight={600}
+          fontSize={['14px', '15px']}
+          letterSpacing="0.06em"
+          textTransform="uppercase"
+          color={isExpanded ? labelExpanded : labelColor}
+          sx={{ transition: 'color 240ms cubic-bezier(0.22,1,0.36,1)' }}
+        >
+          {label}
+        </Text>
+
+        {/* Count chip */}
+        {typeof count === 'number' && count > 0 && (
+          <Text
+            as="span"
+            fontFamily={monoFont}
+            fontSize={['10px', '11px']}
+            color={metaColor}
+            letterSpacing="0.08em"
+            flexShrink={0}
+            display={['none', 'inline']}
+          >
+            {count} {countSuffix}
+          </Text>
+        )}
+
+        {/* Custom chevron — single inline svg, rotates on expand */}
+        <Box
+          as="span"
+          flexShrink={0}
+          display="inline-flex"
+          alignItems="center"
+          justifyContent="center"
+          sx={{
+            transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+            transition: 'transform 320ms cubic-bezier(0.22,1,0.36,1)',
+          }}
+          color={isExpanded ? labelExpanded : indexColor}
+          aria-hidden
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 14 14"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="5 3 9 7 5 11" />
+          </svg>
+        </Box>
+      </Flex>
+    </Box>
+  )
 
   return (
-    <Accordion
-      allowToggle
-      defaultIndex={defaultOpen ? [0] : undefined}
+    <Box
+      className="chakra-accordion"
       width="100%"
       maxW="1100px"
+      id={anchorId}
+      // A jump target clears the sticky header.
+      sx={anchorId ? { scrollMarginTop: clearOfHeader('8px') } : undefined}
     >
-      <AccordionItem
+      <Box
+        className="chakra-accordion__item"
         border="1px solid"
         borderColor={border}
         bg={surface}
@@ -90,8 +203,7 @@ export default function CVSectionShell({
           transition: 'border-color 240ms cubic-bezier(0.22,1,0.36,1), background-color 240ms cubic-bezier(0.22,1,0.36,1)',
           position: 'relative',
           // Indigo accent strip on the left edge — hidden by default, slides
-          // in on hover, locks in when the item is expanded (Chakra sets
-          // aria-expanded=true on the trigger child).
+          // in on hover, locks in when the section is expanded.
           _before: {
             content: '""',
             position: 'absolute',
@@ -114,107 +226,31 @@ export default function CVSectionShell({
           },
         }}
       >
-        {({ isExpanded }: { isExpanded: boolean }) => (
-          <>
-            <AccordionButton
-              px={[5, 7]}
-              py={[5, 6]}
-              _hover={{ bg: 'transparent' }}
-              _expanded={{ bg: 'transparent' }}
-              // Keyboard focus gets an inset accent ring (the item clips overflow).
-              _focus={{ boxShadow: 'none' }}
-              _focusVisible={{ outline: 'none', boxShadow: 'inset 0 0 0 2px var(--accent)' }}
-            >
-              <Flex w="full" align="center" gap={[3, 4]}>
-                {/* Mono index */}
-                {typeof index === 'number' && (
-                  <Text
-                    as="span"
-                    fontFamily={monoFont}
-                    fontSize={['10px', '11px']}
-                    color={indexColor}
-                    letterSpacing="0.08em"
-                    flexShrink={0}
-                  >
-                    [{padded(index)}]
-                  </Text>
-                )}
-
-                {/* Label — wraps rather than truncating a long title on phones */}
-                <Text
-                  as="span"
-                  flex="1"
-                  minW={0}
-                  lineHeight="1.35"
-                  textAlign="left"
-                  fontWeight={600}
-                  fontSize={['14px', '15px']}
-                  letterSpacing="0.06em"
-                  textTransform="uppercase"
-                  color={isExpanded ? labelExpanded : labelColor}
-                  sx={{ transition: 'color 240ms cubic-bezier(0.22,1,0.36,1)' }}
-                >
-                  {label}
-                </Text>
-
-                {/* Count chip */}
-                {typeof count === 'number' && count > 0 && (
-                  <Text
-                    as="span"
-                    fontFamily={monoFont}
-                    fontSize={['10px', '11px']}
-                    color={metaColor}
-                    letterSpacing="0.08em"
-                    flexShrink={0}
-                    display={['none', 'inline']}
-                  >
-                    {count} {countSuffix}
-                  </Text>
-                )}
-
-                {/* Custom chevron — single inline svg, rotates on expand */}
-                <Box
-                  as="span"
-                  flexShrink={0}
-                  display="inline-flex"
-                  alignItems="center"
-                  justifyContent="center"
-                  sx={{
-                    transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
-                    transition: 'transform 320ms cubic-bezier(0.22,1,0.36,1)',
-                  }}
-                  color={isExpanded ? labelExpanded : indexColor}
-                  aria-hidden
-                >
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 14 14"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={1.5}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <polyline points="5 3 9 7 5 11" />
-                  </svg>
-                </Box>
-              </Flex>
-            </AccordionButton>
-
-            <AccordionPanel
-              px={[5, 7]}
-              pt={5}
-              pb={[6, 7]}
-              borderTop="1px solid"
-              borderColor={panelDivider}
-            >
-              {children}
-            </AccordionPanel>
-          </>
+        {/* The toggle inside a heading when the page asks for one (accordion pattern). */}
+        {headingLevel ? (
+          <Heading as={headingLevel} m={0} fontSize="inherit" fontWeight="inherit" lineHeight="inherit" letterSpacing="inherit">
+            {button}
+          </Heading>
+        ) : (
+          button
         )}
-      </AccordionItem>
-    </Accordion>
+
+        <Collapse open={isExpanded} id={panelId}>
+          <Box
+            role="region"
+            aria-labelledby={buttonId}
+            className="chakra-accordion__panel"
+            px={[5, 7]}
+            pt={5}
+            pb={[6, 7]}
+            borderTop="1px solid"
+            borderColor={panelDivider}
+          >
+            {children}
+          </Box>
+        </Collapse>
+      </Box>
+    </Box>
   )
 }
 

@@ -16,7 +16,7 @@ import { sendMail } from '../../lib/mailer'
 import { rateLimit } from '../../lib/rateLimit'
 import { isAdminRequest } from '../../lib/auth'
 import { sendVersionedJson } from '../../lib/http'
-import { revalidatePaths } from '../../lib/revalidate'
+import { HOME_PAGE_PATHS, revalidatePaths } from '../../lib/revalidate'
 import { withApi } from '../../lib/apiHandler'
 import type { Logger } from '../../lib/log'
 
@@ -39,11 +39,11 @@ const isAuthed = isAdminRequest
 
 /**
  * Statically generated (ISR) pages that render home data, regenerated after a
- * save or restore. Only ISR pages belong here: `/`, `/about` and `/contact`
- * are server-rendered on every request (getServerSideProps) and are always
- * fresh. /now shows hero.currentlyCoding.
+ * save or restore (lib/revalidate.ts HOME_PAGE_PATHS: /, /about, /now). Only
+ * ISR pages belong here: /contact is server-rendered on every request
+ * (getServerSideProps) and always fresh.
  */
-export const HOME_STATIC_PATHS: readonly string[] = ['/now']
+export const HOME_STATIC_PATHS: readonly string[] = [...HOME_PAGE_PATHS]
 
 /** Regenerate home-backed static pages; never fails the (already stored) write. */
 async function revalidateHomePages(res: NextApiResponse): Promise<{ revalidated: string[]; revalidateFailed?: string[] }> {
