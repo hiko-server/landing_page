@@ -1,4 +1,10 @@
-import { appliedMigrations, currentVersion, migrationDrift, type Migration, type MigrationReport } from '../scripts/db/migrate.mjs'
+import {
+  appliedMigrations,
+  currentVersion,
+  migrationDrift,
+  type Migration,
+  type MigrationReport,
+} from '../scripts/db/migrate.mjs'
 import { log } from './log'
 
 /**
@@ -41,7 +47,11 @@ export type SchemaStatus = {
 }
 
 /** Version, pending/ahead state and name drift of an open store. */
-export function schemaStatus(label: string, db: Db, migrations: readonly Migration[]): SchemaStatus {
+export function schemaStatus(
+  label: string,
+  db: Db,
+  migrations: readonly Migration[]
+): SchemaStatus {
   const version = currentVersion(db)
   const latest = migrations.length
   const applied = appliedMigrations(db)

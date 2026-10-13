@@ -48,11 +48,18 @@ test('validateMigrations: versions 1…n in order, slug names, an up() each', ()
   const ok = [m(1, 'a', () => {}), m(2, 'b-2', () => {})]
   assert.doesNotThrow(() => validateMigrations(ok))
   assert.throws(() => validateMigrations([m(2, 'a', () => {})]), /versions must be 1…n/)
-  assert.throws(() => validateMigrations([m(1, 'a', () => {}), m(3, 'c', () => {})]), /without gaps/)
+  assert.throws(
+    () => validateMigrations([m(1, 'a', () => {}), m(3, 'c', () => {})]),
+    /without gaps/
+  )
   assert.throws(() => validateMigrations([m(1, 'a', () => {}), m(1, 'b', () => {})]), /version 1/)
   assert.throws(() => validateMigrations([m(1, 'Bad Name', () => {})]), /slug name/)
-  assert.throws(() => validateMigrations([{ version: 1, name: 'a' } as unknown as Migration]), /up\(db\)/)
-  for (const list of [CONTENT_MIGRATIONS, ANALYTICS_MIGRATIONS, AUTH_MIGRATIONS]) assert.doesNotThrow(() => validateMigrations(list))
+  assert.throws(
+    () => validateMigrations([{ version: 1, name: 'a' } as unknown as Migration]),
+    /up\(db\)/
+  )
+  for (const list of [CONTENT_MIGRATIONS, ANALYTICS_MIGRATIONS, AUTH_MIGRATIONS])
+    assert.doesNotThrow(() => validateMigrations(list))
 })
 
 test('a fresh store gets every migration once, recorded in schema_version and user_version', () => {
@@ -62,13 +69,13 @@ test('a fresh store gets every migration once, recorded in schema_version and us
   assert.equal(report.to, ANALYTICS_MIGRATIONS.length)
   assert.deepEqual(
     report.applied.map((a) => a.name),
-    ANALYTICS_MIGRATIONS.map((x) => x.name),
+    ANALYTICS_MIGRATIONS.map((x) => x.name)
   )
   assert.equal(currentVersion(db), ANALYTICS_MIGRATIONS.length)
   assert.equal(db.pragma('user_version', { simple: true }), ANALYTICS_MIGRATIONS.length)
   assert.deepEqual(
     appliedMigrations(db).map((a) => [a.version, a.appliedAt]),
-    ANALYTICS_MIGRATIONS.map((x) => [x.version, 1234]),
+    ANALYTICS_MIGRATIONS.map((x) => [x.version, 1234])
   )
   const again = runMigrations(db, ANALYTICS_MIGRATIONS, { label: 'analytics' })
   assert.deepEqual(again.applied, [])
@@ -86,7 +93,10 @@ test('a failing migration rolls back completely and leaves the store at the last
       throw new Error('boom')
     }),
   ]
-  assert.throws(() => runMigrations(db, list, { label: 'test' }), /test migration 2 \(two\) failed: boom/)
+  assert.throws(
+    () => runMigrations(db, list, { label: 'test' }),
+    /test migration 2 \(two\) failed: boom/
+  )
   assert.equal(currentVersion(db), 1)
   assert.equal(db.prepare("SELECT name FROM sqlite_master WHERE name = 'b'").get(), undefined)
   assert.equal(count(db, 'SELECT count(*) AS n FROM a'), 0)
@@ -99,7 +109,10 @@ test('a failing migration rolls back completely and leaves the store at the last
 
 test('a migration may not end the runner transaction itself', () => {
   const db = new Database(':memory:')
-  assert.throws(() => runMigrations(db, [m(1, 'sneaky', (d) => d.exec('COMMIT'))], { label: 't' }), /ended the runner's transaction/)
+  assert.throws(
+    () => runMigrations(db, [m(1, 'sneaky', (d) => d.exec('COMMIT'))], { label: 't' }),
+    /ended the runner's transaction/
+  )
   assert.equal(currentVersion(db), 0)
   db.close()
 })
@@ -118,7 +131,9 @@ test('migrationDrift names versions recorded under a different name', () => {
   const db = new Database(':memory:')
   runMigrations(db, [m(1, 'baseline', () => {})])
   assert.deepEqual(migrationDrift(db, [m(1, 'baseline', () => {})]), [])
-  assert.deepEqual(migrationDrift(db, [m(1, 'other', () => {})]), ['version 1: store says "baseline", code says "other"'])
+  assert.deepEqual(migrationDrift(db, [m(1, 'other', () => {})]), [
+    'version 1: store says "baseline", code says "other"',
+  ])
   db.close()
 })
 
@@ -132,7 +147,11 @@ test('a content store from before migrations adopts the baseline without touchin
     legacy.prepare("INSERT INTO kv VALUES ('home', '{\"a\":1}', 5)").run()
     legacy.prepare("INSERT INTO pages VALUES ('now', '{}', 'body', 6)").run()
     legacy.prepare("INSERT INTO collection_items VALUES ('blog', 'x', '{}', 'b', 7)").run()
-    const before = legacy.prepare("SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name").all()
+    const before = legacy
+      .prepare(
+        "SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name"
+      )
+      .all()
     legacy.close()
 
     const db = new Database(file)
@@ -140,7 +159,9 @@ test('a content store from before migrations adopts the baseline without touchin
     assert.deepEqual(report.applied, [{ version: 1, name: 'baseline' }])
     assert.equal(fs.existsSync(path.join(dir, 'pre')), false, 'adopting the baseline needs no copy')
     const after = db
-      .prepare("SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name != 'schema_version' ORDER BY name")
+      .prepare(
+        "SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name != 'schema_version' ORDER BY name"
+      )
       .all()
     assert.deepEqual(after, before)
     assert.equal(count(db, 'SELECT count(*) AS n FROM kv'), 1)
@@ -160,7 +181,10 @@ test('a versioned store is copied aside (VACUUM INTO) before a new migration, ne
     runMigrations(db, CONTENT_MIGRATIONS)
     db.prepare("INSERT INTO kv VALUES ('home', '{}', 1)").run()
     const pre = path.join(dir, 'pre')
-    const next = [...CONTENT_MIGRATIONS, m(2, 'add-x', (d) => d.exec('ALTER TABLE kv ADD COLUMN x TEXT'))]
+    const next = [
+      ...CONTENT_MIGRATIONS,
+      m(2, 'add-x', (d) => d.exec('ALTER TABLE kv ADD COLUMN x TEXT')),
+    ]
     let copy: string | null = null
     runMigrations(db, next, {
       label: 'content',
@@ -175,9 +199,17 @@ test('a versioned store is copied aside (VACUUM INTO) before a new migration, ne
     snap.close()
 
     for (let i = 0; i < PRE_MIGRATION_KEEP + 3; i++) {
-      backupBeforeMigration(db, { dir: pre, label: 'content', from: 2, now: new Date(Date.UTC(2026, 0, 1, 0, 0, i)) })
+      backupBeforeMigration(db, {
+        dir: pre,
+        label: 'content',
+        from: 2,
+        now: new Date(Date.UTC(2026, 0, 1, 0, 0, i)),
+      })
     }
-    assert.equal(fs.readdirSync(pre).filter((f) => f.startsWith('content-v')).length, PRE_MIGRATION_KEEP)
+    assert.equal(
+      fs.readdirSync(pre).filter((f) => f.startsWith('content-v')).length,
+      PRE_MIGRATION_KEEP
+    )
     assert.equal(backupBeforeMigration(db, { dir: pre, label: 'content', from: 0 }), null)
     db.close()
   } finally {
@@ -189,10 +221,16 @@ test('an analytics store created before vitals.vkey gains the column and its uni
   const db = new Database(':memory:')
   db.exec(`CREATE TABLE vitals (ts INTEGER NOT NULL, day TEXT NOT NULL, route TEXT NOT NULL, name TEXT NOT NULL,
              value REAL NOT NULL, rating TEXT NOT NULL, device TEXT, nav TEXT)`)
-  db.prepare("INSERT INTO vitals VALUES (1, '2026-01-01', '/', 'LCP', 1200, 'good', 'desktop', 'navigate')").run()
+  db.prepare(
+    "INSERT INTO vitals VALUES (1, '2026-01-01', '/', 'LCP', 1200, 'good', 'desktop', 'navigate')"
+  ).run()
   const report = migrateAnalyticsDb(db)
   assert.equal(report.to, ANALYTICS_MIGRATIONS.length)
-  assert.ok((db.prepare('PRAGMA table_info(vitals)').all() as Array<{ name: string }>).some((c) => c.name === 'vkey'))
+  assert.ok(
+    (db.prepare('PRAGMA table_info(vitals)').all() as Array<{ name: string }>).some(
+      (c) => c.name === 'vkey'
+    )
+  )
   assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'idx_vitals_key'").get())
   assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'errors'").get())
   assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'restore_drills'").get())
@@ -215,20 +253,29 @@ test('processes migrating the same new file at once apply each migration exactly
       db.close()
     `
     const runs = await Promise.all(
-      Array.from({ length: 4 }, () =>
-        new Promise<{ code: number | null; out: string; err: string }>((resolve) => {
-          const child = spawn(process.execPath, ['--input-type=module', '-e', script, file], { cwd: ROOT })
-          let out = ''
-          let err = ''
-          child.stdout.on('data', (c) => (out += c))
-          child.stderr.on('data', (c) => (err += c))
-          child.on('close', (code) => resolve({ code, out, err }))
-        }),
-      ),
+      Array.from(
+        { length: 4 },
+        () =>
+          new Promise<{ code: number | null; out: string; err: string }>((resolve) => {
+            const child = spawn(process.execPath, ['--input-type=module', '-e', script, file], {
+              cwd: ROOT,
+            })
+            let out = ''
+            let err = ''
+            child.stdout.on('data', (c) => (out += c))
+            child.stderr.on('data', (c) => (err += c))
+            child.on('close', (code) => resolve({ code, out, err }))
+          })
+      )
     )
     for (const r of runs) assert.equal(r.code, 0, r.err)
-    const appliedAcross = runs.flatMap((r) => JSON.parse(r.out.trim()) as number[]).sort((a, b) => a - b)
-    assert.deepEqual(appliedAcross, ANALYTICS_MIGRATIONS.map((x) => x.version))
+    const appliedAcross = runs
+      .flatMap((r) => JSON.parse(r.out.trim()) as number[])
+      .sort((a, b) => a - b)
+    assert.deepEqual(
+      appliedAcross,
+      ANALYTICS_MIGRATIONS.map((x) => x.version)
+    )
     const db = new Database(file, { readonly: true })
     assert.equal(count(db, 'SELECT count(*) AS n FROM schema_version'), ANALYTICS_MIGRATIONS.length)
     db.close()
@@ -245,13 +292,23 @@ test('the operator CLI reports status without writing and migrates a given file'
     legacy.exec(LEGACY_CONTENT_DDL)
     legacy.close()
     const cli = path.join(ROOT, 'scripts/migrate-db.mjs')
-    const status = spawnSync(process.execPath, [cli, '--status', '--db', 'content', '--file', file], { encoding: 'utf8' })
+    const status = spawnSync(
+      process.execPath,
+      [cli, '--status', '--db', 'content', '--file', file],
+      { encoding: 'utf8' }
+    )
     assert.equal(status.status, 0, status.stderr)
     assert.match(status.stdout, /content\s+v0\/1\s+behind: 1-baseline/)
-    const migrated = spawnSync(process.execPath, [cli, '--db', 'content', '--file', file], { encoding: 'utf8' })
+    const migrated = spawnSync(process.execPath, [cli, '--db', 'content', '--file', file], {
+      encoding: 'utf8',
+    })
     assert.equal(migrated.status, 0, migrated.stderr)
     assert.match(migrated.stdout, /content: migrated v0 → v1 \(1-baseline\)/)
-    const again = spawnSync(process.execPath, [cli, '--status', '--db', 'content', '--file', file], { encoding: 'utf8' })
+    const again = spawnSync(
+      process.execPath,
+      [cli, '--status', '--db', 'content', '--file', file],
+      { encoding: 'utf8' }
+    )
     assert.match(again.stdout, /content\s+v1\/1\s+current/)
     const bad = spawnSync(process.execPath, [cli, '--db', 'nope'], { encoding: 'utf8' })
     assert.equal(bad.status, 2)
@@ -263,28 +320,41 @@ test('the operator CLI reports status without writing and migrates a given file'
 // A copy of the live snapshot, when one is present (the realistic data the
 // stream setup copies into data/content.db; never committed).
 const LIVE = path.join(ROOT, 'data', 'content.db')
-test('migrating a copy of the live content snapshot keeps every row and passes integrity_check', { skip: !fs.existsSync(LIVE) && 'no data/content.db' }, () => {
-  const dir = tmpDir()
-  try {
-    const src = new Database(LIVE, { readonly: true })
-    const copyFile = path.join(dir, 'live-copy.db')
-    src.prepare('VACUUM INTO ?').run(copyFile)
-    const tables = ['pages', 'collection_items', 'kv', 'r2_pending']
-    const before = Object.fromEntries(tables.map((t) => [t, count(src, `SELECT count(*) AS n FROM ${t}`)]))
-    const checksum = (db: Database.Database) =>
-      (db.prepare("SELECT group_concat(key || ':' || length(value) || ':' || updated_at, ',') AS s FROM (SELECT * FROM kv ORDER BY key)").get() as { s: string }).s
-    const kvBefore = checksum(src)
-    src.close()
+test(
+  'migrating a copy of the live content snapshot keeps every row and passes integrity_check',
+  { skip: !fs.existsSync(LIVE) && 'no data/content.db' },
+  () => {
+    const dir = tmpDir()
+    try {
+      const src = new Database(LIVE, { readonly: true })
+      const copyFile = path.join(dir, 'live-copy.db')
+      src.prepare('VACUUM INTO ?').run(copyFile)
+      const tables = ['pages', 'collection_items', 'kv', 'r2_pending']
+      const before = Object.fromEntries(
+        tables.map((t) => [t, count(src, `SELECT count(*) AS n FROM ${t}`)])
+      )
+      const checksum = (db: Database.Database) =>
+        (
+          db
+            .prepare(
+              "SELECT group_concat(key || ':' || length(value) || ':' || updated_at, ',') AS s FROM (SELECT * FROM kv ORDER BY key)"
+            )
+            .get() as { s: string }
+        ).s
+      const kvBefore = checksum(src)
+      src.close()
 
-    const db = new Database(copyFile)
-    const report = initSchema(db, { backupDir: path.join(dir, 'pre') })
-    assert.equal(report.to, CONTENT_MIGRATIONS.length)
-    for (const t of tables) assert.equal(count(db, `SELECT count(*) AS n FROM ${t}`), before[t], t)
-    assert.equal(checksum(db), kvBefore)
-    assert.equal(db.pragma('integrity_check', { simple: true }), 'ok')
-    assert.equal(initSchema(db).applied.length, 0, 'idempotent')
-    db.close()
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true })
+      const db = new Database(copyFile)
+      const report = initSchema(db, { backupDir: path.join(dir, 'pre') })
+      assert.equal(report.to, CONTENT_MIGRATIONS.length)
+      for (const t of tables)
+        assert.equal(count(db, `SELECT count(*) AS n FROM ${t}`), before[t], t)
+      assert.equal(checksum(db), kvBefore)
+      assert.equal(db.pragma('integrity_check', { simple: true }), 'ok')
+      assert.equal(initSchema(db).applied.length, 0, 'idempotent')
+      db.close()
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
   }
-})
+)

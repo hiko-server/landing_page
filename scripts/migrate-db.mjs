@@ -15,7 +15,14 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import Database from 'better-sqlite3'
-import { appliedMigrations, backupBeforeMigration, currentVersion, ensureWal, migrationDrift, runMigrations } from './db/migrate.mjs'
+import {
+  appliedMigrations,
+  backupBeforeMigration,
+  currentVersion,
+  ensureWal,
+  migrationDrift,
+  runMigrations,
+} from './db/migrate.mjs'
 import { CONTENT_MIGRATIONS } from './db/content/index.mjs'
 import { ANALYTICS_MIGRATIONS } from './db/analytics/index.mjs'
 import { AUTH_MIGRATIONS } from './db/auth/index.mjs'
@@ -40,7 +47,8 @@ function parseArgs(argv) {
     else return { error: `unknown argument: ${a}` }
   }
   if (out.file && !out.db) return { error: '--file needs --db content|analytics|auth' }
-  if (out.db && !STORES[out.db]) return { error: `unknown store: ${out.db} (content | analytics | auth)` }
+  if (out.db && !STORES[out.db])
+    return { error: `unknown store: ${out.db} (content | analytics | auth)` }
   return out
 }
 
@@ -50,8 +58,15 @@ function describe(label, db, migrations) {
   const pending = migrations.filter((m) => m.version > version).map((m) => `${m.version}-${m.name}`)
   const last = appliedMigrations(db).at(-1)
   const drift = migrationDrift(db, migrations)
-  const state = version === latest ? 'current' : version < latest ? `behind: ${pending.join(', ')}` : `ahead of this build (${latest})`
-  console.log(`${label.padEnd(9)} v${version}/${latest}  ${state}${last ? `  (last applied ${new Date(last.appliedAt).toISOString()})` : ''}`)
+  const state =
+    version === latest
+      ? 'current'
+      : version < latest
+        ? `behind: ${pending.join(', ')}`
+        : `ahead of this build (${latest})`
+  console.log(
+    `${label.padEnd(9)} v${version}/${latest}  ${state}${last ? `  (last applied ${new Date(last.appliedAt).toISOString()})` : ''}`
+  )
   for (const d of drift) console.log(`          drift: ${d}`)
 }
 
@@ -62,7 +77,9 @@ function main() {
     return 2
   }
   if (args.help) {
-    console.log('usage: node scripts/migrate-db.mjs [--status] [--db content|analytics|auth [--file <path>]]')
+    console.log(
+      'usage: node scripts/migrate-db.mjs [--status] [--db content|analytics|auth [--file <path>]]'
+    )
     return 0
   }
   const targets = args.db
@@ -77,7 +94,9 @@ function main() {
         console.error(`${label}: ${file} does not exist`)
         failed = true
       } else {
-        console.log(`${label.padEnd(9)} (no ${path.relative(process.cwd(), file) || file} yet — created on first use)`)
+        console.log(
+          `${label.padEnd(9)} (no ${path.relative(process.cwd(), file) || file} yet — created on first use)`
+        )
       }
       continue
     }
@@ -92,14 +111,22 @@ function main() {
         label,
         beforeMigrate: ({ from }) => {
           if (!store.backup) return
-          const copy = backupBeforeMigration(db, { dir: path.join(path.dirname(file), 'backups', 'pre-migration'), label, from })
+          const copy = backupBeforeMigration(db, {
+            dir: path.join(path.dirname(file), 'backups', 'pre-migration'),
+            label,
+            from,
+          })
           if (copy) console.log(`${label}: copied to ${copy} first`)
         },
       })
       if (report.applied.length) {
-        console.log(`${label}: migrated v${report.from} → v${report.to} (${report.applied.map((m) => `${m.version}-${m.name}`).join(', ')})`)
+        console.log(
+          `${label}: migrated v${report.from} → v${report.to} (${report.applied.map((m) => `${m.version}-${m.name}`).join(', ')})`
+        )
       } else if (report.ahead) {
-        console.log(`${label}: v${report.from} is newer than this build (v${report.latest}); nothing to do`)
+        console.log(
+          `${label}: v${report.from} is newer than this build (v${report.latest}); nothing to do`
+        )
       } else {
         console.log(`${label}: already current (v${report.to})`)
       }

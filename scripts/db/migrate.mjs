@@ -67,16 +67,22 @@ export function validateMigrations(migrations) {
   migrations.forEach((m, i) => {
     if (!m || typeof m !== 'object') throw new TypeError(`migration #${i + 1} is not an object`)
     if (m.version !== i + 1) {
-      throw new Error(`migration #${i + 1} has version ${String(m.version)}; versions must be 1…n in order, without gaps`)
+      throw new Error(
+        `migration #${i + 1} has version ${String(m.version)}; versions must be 1…n in order, without gaps`
+      )
     }
-    if (typeof m.name !== 'string' || !NAME_RE.test(m.name)) throw new Error(`migration ${m.version} needs a slug name`)
-    if (typeof m.up !== 'function') throw new Error(`migration ${m.version} (${m.name}) has no up(db) function`)
+    if (typeof m.name !== 'string' || !NAME_RE.test(m.name))
+      throw new Error(`migration ${m.version} needs a slug name`)
+    if (typeof m.up !== 'function')
+      throw new Error(`migration ${m.version} (${m.name}) has no up(db) function`)
   })
 }
 
 /** @param {SqliteDb} db */
 function hasSchemaTable(db) {
-  return !!db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`).get(SCHEMA_TABLE)
+  return !!db
+    .prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`)
+    .get(SCHEMA_TABLE)
 }
 
 /**
@@ -86,7 +92,9 @@ function hasSchemaTable(db) {
  */
 export function currentVersion(db) {
   if (!hasSchemaTable(db)) return 0
-  const row = /** @type {{ v: number | null } | undefined} */ (db.prepare(`SELECT max(version) AS v FROM ${SCHEMA_TABLE}`).get())
+  const row = /** @type {{ v: number | null } | undefined} */ (
+    db.prepare(`SELECT max(version) AS v FROM ${SCHEMA_TABLE}`).get()
+  )
   return Number(row?.v) || 0
 }
 
@@ -100,7 +108,11 @@ export function appliedMigrations(db) {
   const rows = /** @type {Array<{ version: number, name: string, applied_at: number }>} */ (
     db.prepare(`SELECT version, name, applied_at FROM ${SCHEMA_TABLE} ORDER BY version`).all()
   )
-  return rows.map((r) => ({ version: Number(r.version), name: String(r.name), appliedAt: Number(r.applied_at) }))
+  return rows.map((r) => ({
+    version: Number(r.version),
+    name: String(r.name),
+    appliedAt: Number(r.applied_at),
+  }))
 }
 
 /**
@@ -215,9 +227,15 @@ export function runMigrations(db, migrations, options = {}) {
       }
       m.up(db)
       if (!db.inTransaction) {
-        throw new Error(`${label} migration ${m.version} (${m.name}) ended the runner's transaction`)
+        throw new Error(
+          `${label} migration ${m.version} (${m.name}) ended the runner's transaction`
+        )
       }
-      db.prepare(`INSERT INTO ${SCHEMA_TABLE} (version, name, applied_at) VALUES (?, ?, ?)`).run(m.version, m.name, now())
+      db.prepare(`INSERT INTO ${SCHEMA_TABLE} (version, name, applied_at) VALUES (?, ?, ?)`).run(
+        m.version,
+        m.name,
+        now()
+      )
       db.pragma(`user_version = ${m.version}`)
       db.exec('COMMIT')
       report.to = m.version
@@ -225,7 +243,9 @@ export function runMigrations(db, migrations, options = {}) {
     } catch (err) {
       if (db.inTransaction) db.exec('ROLLBACK')
       const reason = err instanceof Error ? err.message : String(err)
-      throw new Error(`${label} migration ${m.version} (${m.name}) failed: ${reason}`, { cause: err })
+      throw new Error(`${label} migration ${m.version} (${m.name}) failed: ${reason}`, {
+        cause: err,
+      })
     }
   }
   return report
@@ -242,7 +262,9 @@ export function migrationDrift(db, migrations) {
   const byVersion = new Map(migrations.map((m) => [m.version, m.name]))
   return appliedMigrations(db)
     .filter((a) => byVersion.has(a.version) && byVersion.get(a.version) !== a.name)
-    .map((a) => `version ${a.version}: store says "${a.name}", code says "${byVersion.get(a.version)}"`)
+    .map(
+      (a) => `version ${a.version}: store says "${a.name}", code says "${byVersion.get(a.version)}"`
+    )
 }
 
 /**
@@ -252,7 +274,9 @@ export function migrationDrift(db, migrations) {
  * @param {string} column
  */
 export function hasColumn(db, table, column) {
-  const cols = /** @type {Array<{ name: string }>} */ (db.prepare(`PRAGMA table_info(${JSON.stringify(table)})`).all())
+  const cols = /** @type {Array<{ name: string }>} */ (
+    db.prepare(`PRAGMA table_info(${JSON.stringify(table)})`).all()
+  )
   return cols.some((c) => c.name === column)
 }
 
@@ -263,7 +287,11 @@ export function hasColumn(db, table, column) {
  * @param {Date} [d]
  */
 export function preMigrationFilename(label, from, d = new Date()) {
-  const stamp = d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z').replace('T', '-')
+  const stamp = d
+    .toISOString()
+    .replace(/[-:]/g, '')
+    .replace(/\.\d{3}Z$/, 'Z')
+    .replace('T', '-')
   return `${label}-v${from}-${stamp}.db`
 }
 
@@ -290,6 +318,7 @@ export function backupBeforeMigration(db, { dir, label, from, now = new Date() }
     .filter((f) => f.startsWith(prefix) && f.endsWith('.db'))
     .map((f) => ({ f, at: fs.statSync(path.join(dir, f)).mtimeMs }))
     .sort((a, b) => b.at - a.at || b.f.localeCompare(a.f))
-  for (const old of copies.slice(PRE_MIGRATION_KEEP)) fs.rmSync(path.join(dir, old.f), { force: true })
+  for (const old of copies.slice(PRE_MIGRATION_KEEP))
+    fs.rmSync(path.join(dir, old.f), { force: true })
   return file
 }
