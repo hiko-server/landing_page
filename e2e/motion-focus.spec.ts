@@ -436,7 +436,7 @@ test.describe('mobile menu', () => {
     // Focus the last control before the bar (in DOM order) without scrolling, then Tab into the bar.
     const entered = await page.evaluate(() => {
       const nav = document.querySelector('nav[data-bottom-bar]')!
-      const focusable = Array.from(document.querySelectorAll<HTMLElement>('main a[href], main button:not([disabled]), main [tabindex="0"]')).filter(
+      const focusable = Array.from(document.querySelectorAll<HTMLElement>('main a[href], main button:not([disabled]), main [tabindex="0"], main details > summary')).filter(
         (el) => el.checkVisibility() && !nav.contains(el) && el.compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING,
       )
       const before = focusable[focusable.length - 1]

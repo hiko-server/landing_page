@@ -6,8 +6,8 @@ import { uploadNamesIn } from './uploadVariants'
 /**
  * On-demand ISR revalidation.
  *
- * /, /about, /blog, /work, /now, /uses, the posts, case studies and
- * /colophon are statically generated with a revalidate window. Without this, an admin save
+ * /, /about, /cv, /cv/zh, /blog, /work, /now, /uses, the posts, case
+ * studies and /colophon are statically generated with a revalidate window. Without this, an admin save
  * only shows up on the public page after that window elapses *and* someone
  * visits twice. Calling `res.revalidate()` right after a successful write
  * regenerates the affected pages immediately, so "Save" means "live".
@@ -16,23 +16,36 @@ import { uploadNamesIn } from './uploadVariants'
  * time-based revalidation is still there as a fallback. The list of paths
  * that could not be refreshed is returned so the API can report it.
  *
+ * `confirm` paths are regenerated a second time once the first pass is done.
+ * Next batches regenerations per path: an on-demand revalidation that
+ * arrives while a background regeneration of the same page is running (a
+ * visitor hit a stale copy just before the save) joins it — and that render
+ * read the store BEFORE the write. The second pass always starts after the
+ * first finished, so the stored page comes from a render that read the new
+ * content. Used where a stale copy matters: hiding a CV entry must take
+ * effect (CV_PAGE_PATHS, HOME_PAGE_PATHS).
+ *
  * Every path that did refresh is then handed to the edge (`notifyEdge`):
  * purged from the Cloudflare cache when CF_ZONE_ID + CF_API_TOKEN are set and
  * pushed to IndexNow when INDEXNOW_KEY is set. Both are fire-and-forget.
  */
-export async function revalidatePaths(res: NextApiResponse, paths: string[]): Promise<string[]> {
+export async function revalidatePaths(res: NextApiResponse, paths: string[], opts: { confirm?: readonly string[] } = {}): Promise<string[]> {
   const unique = Array.from(new Set(paths.filter((p) => typeof p === 'string' && p.startsWith('/'))))
   const failed: string[] = []
-  await Promise.all(
-    unique.map(async (p) => {
-      try {
-        await revalidateSerially(p, () => res.revalidate(p))
-      } catch (err) {
-        failed.push(p)
-        log.warn('revalidate failed', { path: p, err })
-      }
-    }),
-  )
+  const pass = (list: string[]) =>
+    Promise.all(
+      list.map(async (p) => {
+        try {
+          await revalidateSerially(p, () => res.revalidate(p))
+        } catch (err) {
+          if (!failed.includes(p)) failed.push(p)
+          log.warn('revalidate failed', { path: p, err })
+        }
+      }),
+    )
+  await pass(unique)
+  const again = unique.filter((p) => opts.confirm?.includes(p) && !failed.includes(p))
+  if (again.length) await pass(again)
   const refreshed = unique.filter((p) => !failed.includes(p))
   if (refreshed.length) void notifyEdge(refreshed)
   return failed
@@ -82,22 +95,25 @@ export const MAX_SIBLING_PATHS = 50
 
 /**
  * ISR pages that render the home document: / (everything), /about (hero,
- * portrait, socials, availability) and /now (hero.currentlyCoding).
+ * portrait, socials, availability), /now (hero.currentlyCoding) and the CV
+ * pages (socials, portrait and availability feed the CV header).
  */
-export const HOME_PAGE_PATHS: readonly string[] = ['/', '/about', '/now']
+export const HOME_PAGE_PATHS: readonly string[] = ['/', '/about', '/now', '/cv', '/cv/zh']
 
 /**
  * ISR pages that render the public CV: / (identity, hero facts, projects,
  * experience, skills, certifications), /about (identity, the CV sections),
- * /now (current roles and studies) and /work (the "All projects" archive of
- * every public CV project).
+ * /now (current roles and studies), /work (the "All projects" archive of
+ * every public CV project) and the CV itself (/cv, /cv/zh).
  */
-export const CV_PAGE_PATHS: readonly string[] = ['/', '/about', '/now', '/work']
+export const CV_PAGE_PATHS: readonly string[] = ['/', '/about', '/now', '/work', '/cv', '/cv/zh']
 
 /**
  * Pages outside a collection that a post or case-study save changes: the
  * home page lists the latest writing and links projects and roles to case
- * studies; /about links roles and CV projects to case studies.
+ * studies; /about links roles and CV projects to case studies. (The CV pages,
+ * CV_DOCUMENT_PATHS, are added by refreshCollection: their skill evidence
+ * cites posts and case studies, and projects link their case study.)
  */
 export const COLLECTION_EXTRA_PATHS: Record<Collection, readonly string[]> = {
   blog: ['/'],
@@ -140,11 +156,19 @@ export function pathsReferencingUploads(names: Iterable<string>, sources: readon
 }
 
 /**
- * Every statically generated (ISR) public page whose data lives in the content
- * store (a restore regenerates them all). The server-rendered pages (/cv,
- * /cv/zh, /contact) are fresh on every request and need no revalidation.
+ * The bilingual CV (ISR, lib/cvPage.ts). It renders the CV, the home socials,
+ * portrait and availability (header, profile links, Person facts, the job
+ * intent and work-authorisation lines) and the published posts and case
+ * studies (skill evidence, case-study links), so CV, home, post and
+ * case-study writes all regenerate it.
  */
-export const STATIC_CONTENT_PATHS = ['/', '/about', '/blog', '/work', '/now', '/uses', '/colophon'] as const
+export const CV_DOCUMENT_PATHS = ['/cv', '/cv/zh'] as const
+
+/**
+ * Every statically generated (ISR) public page whose data lives in the content
+ * store (a restore regenerates them all).
+ */
+export const STATIC_CONTENT_PATHS = ['/', '/about', '/blog', '/work', '/now', '/uses', '/colophon', ...CV_DOCUMENT_PATHS] as const
 
 // ── Edge notifications (Cloudflare purge, IndexNow) ──────────────────────
 
@@ -174,17 +198,25 @@ export function chunk<T>(items: readonly T[], size: number): T[][] {
 /** Feeds, sitemap and search index list every post and case study. */
 const COLLECTION_DERIVED_PATHS = ['/feed.xml', '/feed.json', '/work/feed.xml', '/api/rss.xml', '/sitemap.xml', '/api/search-index']
 
+/** The downloadable files of each CV page (lib/cvExport/files.ts EXPORT_PATHS). */
+const CV_FILE_PATHS: Record<string, readonly string[]> = {
+  '/cv': ['/cv.pdf', '/cv.txt', '/cv.json'],
+  '/cv/zh': ['/cv/zh.pdf', '/cv/zh.txt', '/cv/zh.json'],
+}
+
 /**
  * Edge-cached responses derived from the given pages that must be purged with
  * them: a post or case-study change alters the feeds, the sitemap and the
  * search index; the /now, /uses and /about (bio) bodies are part of the
- * search index.
+ * search index; a CV page change alters its PDF, plain-text and JSON Resume
+ * files.
  */
 export function derivedPurgePaths(paths: readonly string[]): string[] {
   const out = new Set<string>()
   for (const p of paths) {
     if (/^\/(blog|work)(\/|$)/.test(p)) COLLECTION_DERIVED_PATHS.forEach((d) => out.add(d))
     else if (p === '/now' || p === '/uses' || p === '/about') out.add('/api/search-index')
+    else if (CV_FILE_PATHS[p]) CV_FILE_PATHS[p].forEach((d) => out.add(d))
   }
   return Array.from(out)
 }

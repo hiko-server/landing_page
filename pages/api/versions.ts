@@ -38,6 +38,7 @@ import { kvEtag, restoreErrorStatus, safeSnapshotName } from '../../lib/contentS
 import { isAdminRequest } from '../../lib/auth'
 import { sendVersionedJson } from '../../lib/http'
 import { CV_PAGE_PATHS, HOME_PAGE_PATHS, revalidatePaths } from '../../lib/revalidate'
+import { warmCvExports } from '../../lib/cvExport/service'
 import { withApi } from '../../lib/apiHandler'
 import { log } from '../../lib/log'
 import {
@@ -65,11 +66,11 @@ type VersionType = JsonDocType | SnapshotKind
 const TYPES: readonly VersionType[] = ['cv', 'home', 'blog', 'work', 'page']
 
 /**
- * Statically generated (ISR) pages rendered from each document (/, /about
- * and /now, lib/revalidate.ts), so restoring either one regenerates them
- * instead of leaving the ISR copy live. The pages that read them with
- * getServerSideProps (/contact, /cv, /cv/zh) are rendered per request and
- * need no revalidation.
+ * Statically generated (ISR) pages rendered from each document
+ * (lib/revalidate.ts CV_PAGE_PATHS / HOME_PAGE_PATHS: /, /about, /now, the
+ * CV pages and, for the CV, /work), so restoring either one regenerates
+ * them instead of leaving the ISR copy live. /contact reads the home
+ * document with getServerSideProps and needs no revalidation.
  */
 const STATIC_PATHS: Record<JsonDocType, string[]> = { cv: [...CV_PAGE_PATHS], home: [...HOME_PAGE_PATHS] }
 
@@ -226,7 +227,8 @@ export default withApi('versions', async (req, res) => {
       if (!result.ok) return res.status(restoreErrorStatus(result.error)).json({ error: result.error })
       const etag = kvEtag(result.updatedAt)
       const paths = STATIC_PATHS[type]
-      const failed = await revalidatePaths(res, paths)
+      if (type === 'cv') warmCvExports()
+      const failed = await revalidatePaths(res, paths, { confirm: paths })
       return sendVersionedJson(res, 200, {
         ok: true,
         etag,

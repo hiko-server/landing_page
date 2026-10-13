@@ -18,3 +18,23 @@ export function sendVersionedJson(res: NextApiResponse, status: number, body: un
   res.setHeader('ETag', etag)
   res.end(payload)
 }
+
+/**
+ * Send a file body (Buffer) with the caller's ETag kept as set — same reason
+ * as sendVersionedJson: `res.send()` would replace it with a body hash. The
+ * caller sets Content-Type / Content-Disposition. `headOnly` writes the
+ * headers and no body (HEAD requests).
+ */
+export function sendVersionedBody(res: NextApiResponse, status: number, body: Buffer, etag: string, headOnly = false): void {
+  res.statusCode = status
+  res.setHeader('Content-Length', body.length)
+  res.setHeader('ETag', etag)
+  res.end(headOnly ? undefined : body)
+}
+
+/** 304 Not Modified with the caller's ETag (no body). */
+export function sendNotModified(res: NextApiResponse, etag: string): void {
+  res.statusCode = 304
+  res.setHeader('ETag', etag)
+  res.end()
+}

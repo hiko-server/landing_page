@@ -366,7 +366,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const restoredPaths: string[] = []
-    // A restored CV or home document changes the ISR pages that render it.
+    // A restored CV or home document changes the ISR pages that render it
+    // (both lists include /now and the CV pages).
     if (counts.cv) restoredPaths.push(...CV_PAGE_PATHS)
     if (counts.home) restoredPaths.push(...HOME_PAGE_PATHS)
     if (wants('content')) {

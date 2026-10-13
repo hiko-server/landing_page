@@ -1,10 +1,15 @@
+import React from 'react'
 import { Box, Flex, Link, Text } from '@chakra-ui/react'
 import type { PersonalInformation } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'
 import { cvLabels, displayUrl, safeHref } from '../../lib/cvFormat'
+import { profileLinks } from '../../lib/cvLinks'
 import EmailText from '../Common/EmailText'
+import { composeName } from './cvName'
 import { cvSectionAnchor, field } from './fields'
 import { ANCHOR_SCROLL_MARGIN } from './primitives'
+
+export { composeName, publicNameZh } from './cvName'
 
 /**
  * A4 header: name + website on the left, location and contact on the right,
@@ -16,37 +21,24 @@ import { ANCHOR_SCROLL_MARGIN } from './primitives'
  * The name is a styled paragraph, not a heading: the page's h1 is the /cv
  * PageHeader and the sheet's section titles are the h2s. E-mail and phone
  * render through EmailText (Cloudflare-safe, hydration-safe).
+ *
+ * Profile links (GitHub / LinkedIn, lib/cvLinks.ts) follow the website on
+ * the name's line: the page decorates the public section with them (the
+ * CV's own value, else Home → Socials; nothing for a hidden field).
  */
-
-export function composeName(data: Partial<PersonalInformation>, lang: CvLang): { main: string; aside: string } {
-  const first = field(data, 'firstName')
-  const last = field(data, 'lastName')
-  const nick = field(data, 'nickName')
-  if (lang === 'zh') {
-    // Chinese order: family name + given name, preferred name as a quiet aside.
-    return { main: `${last}${first}`, aside: nick }
-  }
-  const lead = [nick, last.toUpperCase()].filter(Boolean).join(' ')
-  return { main: [lead, first].filter(Boolean).join(', '), aside: '' }
-}
-
-/** The public Chinese name ("李彦霈") from the Chinese CV's personal information; '' when hidden or unset. */
-export function publicNameZh(zhSections: ReadonlyArray<{ sessionName?: string }> | null | undefined): string {
-  const info = (zhSections || []).find((s) => s?.sessionName === 'personalInformation')
-  return info ? composeName(info as Partial<PersonalInformation>, 'zh').main : ''
-}
 
 const PersonalInformationSection = ({ data, lang = 'en' }: { data: PersonalInformation; lang?: CvLang }) => {
   const L = cvLabels(lang)
   const { main, aside } = composeName(data, lang)
   const website = field(data, 'personalWebsite')
   const websiteHref = safeHref(website)
+  const profiles = profileLinks(data)
   const address = field(data, 'address')
   const phone = field(data, 'phoneNumber')
   const email = field(data, 'email')
   const intro = field(data, 'introduction')
 
-  const hasHeader = !!(main || aside || website || address || phone || email)
+  const hasHeader = !!(main || aside || website || profiles.length || address || phone || email)
   if (!hasHeader && !intro) return null
   const sep = lang === 'zh' ? '：' : ': '
 
@@ -72,20 +64,27 @@ const PersonalInformationSection = ({ data, lang = 'en' }: { data: PersonalInfor
                 ) : null}
               </Text>
             ) : null}
-            {website && websiteHref ? (
-              <Link
-                href={websiteHref}
-                isExternal
-                color="var(--cv-separator-color, blue)"
-                fontSize="12px"
-                display="inline-block"
-                mt="2px"
-              >
-                {displayUrl(website)}
-              </Link>
-            ) : website ? (
-              <Text fontSize="12px" mt="2px">
-                {displayUrl(website)}
+            {website || profiles.length ? (
+              <Text fontSize="12px" mt="2px" lineHeight="1.5">
+                {website && websiteHref ? (
+                  <Link href={websiteHref} isExternal color="var(--cv-separator-color, blue)">
+                    {displayUrl(website)}
+                  </Link>
+                ) : website ? (
+                  displayUrl(website)
+                ) : null}
+                {profiles.map((p, i) => (
+                  <React.Fragment key={p.kind}>
+                    {website || i > 0 ? (
+                      <Text as="span" px="5px" aria-hidden>
+                        ·
+                      </Text>
+                    ) : null}
+                    <Link href={p.href} isExternal color="var(--cv-separator-color, blue)" aria-label={`${p.label}: ${p.text}`}>
+                      {p.text}
+                    </Link>
+                  </React.Fragment>
+                ))}
               </Text>
             ) : null}
           </Box>

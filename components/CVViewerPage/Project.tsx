@@ -1,6 +1,8 @@
 import type { Project } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'
 import { useReferenceMonth } from '../../lib/clock'
+import { projectLinks } from '../../lib/cvLinks'
+import { SheetLinks } from './evidence'
 import { cvEntryAnchor, cvSectionAnchor, entryRange, field, indexedList, list } from './fields'
 import { EntryStack, EntryText, EntryTitle, FeatureBullets, MetaLine, SheetEntry, SheetSection } from './primitives'
 
@@ -33,6 +35,7 @@ const ProjectSection = ({ data, lang = 'en' }: { data: Project; lang?: CvLang })
               }
             >
               <FeatureBullets items={list(pro, 'features')} />
+              <SheetLinks links={projectLinks(pro, lang)} sep={lang === 'zh' ? '：' : ': '} />
             </SheetEntry>
           )
         })}

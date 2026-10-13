@@ -6,6 +6,10 @@
  * number never reaches the card) and, for TITLE / ORG, a work-experience
  * entry that has no end date. Pure and dependency-light so it is unit-tested.
  *
+ *   - Profiles (GitHub / LinkedIn, lib/cvLinks profileLinks — the CV's own
+ *     value, else Home → Socials, never for a hidden field) become RFC 9554
+ *     SOCIALPROFILE lines, plus Apple's X-SOCIALPROFILE twin, which Apple
+ *     Contacts reads.
  *   - TEXT values are escaped per RFC 6350 §3.4 (\\ \n \, \;); URIs are not.
  *   - Lines are folded at 75 octets (UTF-8) with CRLF + one space, never
  *     splitting a multi-byte character.
@@ -23,6 +27,13 @@ export type VcardExtras = {
   photoUrl?: string
   /** The site URL for the URL property (defaults to the canonical origin). */
   siteUrl?: string
+  /** Public social profiles (label "GitHub" / "LinkedIn", absolute https URL). */
+  profiles?: ReadonlyArray<{ label: string; href: string }>
+}
+
+/** Parameter-safe service name: letters, digits and "-" only. */
+function serviceType(label: string): string {
+  return label.replace(/[^A-Za-z0-9-]/g, '')
 }
 
 const CRLF = '\r\n'
@@ -170,6 +181,13 @@ export function buildVcard(
   if (email) lines.push(`EMAIL;TYPE=work:${escapeVcardText(email)}`)
   if (phone) lines.push(`TEL;TYPE=cell:${escapeVcardText(phone)}`)
   lines.push(`URL:${extras.siteUrl || SITE_URL}`)
+  for (const p of extras.profiles || []) {
+    const href = typeof p?.href === 'string' ? p.href.trim() : ''
+    const service = serviceType(typeof p?.label === 'string' ? p.label : '')
+    if (!/^https:\/\/[^\s"<>]+$/i.test(href) || !service) continue
+    lines.push(`SOCIALPROFILE;SERVICE-TYPE=${service}:${href}`)
+    lines.push(`X-SOCIALPROFILE;TYPE=${service.toLowerCase()}:${href}`)
+  }
   if (title) lines.push(`TITLE:${escapeVcardText(title)}`)
   if (org) lines.push(`ORG:${escapeVcardText(org)}`)
   // Free-text location in the street component: clients show it as written.

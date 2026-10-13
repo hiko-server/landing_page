@@ -88,8 +88,9 @@ const About = ({ hero, identity, portrait, availability, bio, cv, work, personFa
         description="About Li Yanpei (Lucian), a software engineer in Hong Kong: background, education, experience, projects, skills, patents and awards."
         url={absUrl('/about')}
         image={ogPresetUrl('about')}
+        type="profile"
         jsonLd={[
-          profilePageNode({ path: '/about', name: `About — ${PERSON_NAME}` }),
+          profilePageNode({ path: '/about', name: `About — ${PERSON_NAME}`, dateModified: personFacts.dateModified }),
           personNode(personFacts),
           breadcrumb([
             { name: 'Home', path: '/' },

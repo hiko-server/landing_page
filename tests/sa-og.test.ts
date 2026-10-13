@@ -174,9 +174,10 @@ test('the route runs on the Node runtime, never the deprecated Edge runtime', ()
   assert.match(src, /withApi\('og'/)
   assert.match(src, /resolveCard\(search, ogSigningKey\(\)\)/)
   const config = fs.readFileSync(path.join(ROOT, 'next.config.js'), 'utf8')
+  // One tracing map for every runtime asset (the PDF CV adds its own entry).
   assert.match(
     config,
-    /outputFileTracingIncludes: \{ '\/api\/og': \['\.\/assets\/og\/\*\.ttf'\] \}/
+    /outputFileTracingIncludes: \{[^}]*'\/api\/og': \['\.\/assets\/og\/\*\.ttf'\]/
   )
   for (const f of ['Geist-Regular.ttf', 'Geist-SemiBold.ttf', 'GeistMono-Regular.ttf'])
     assert.ok(fs.existsSync(path.join(ROOT, 'assets/og', f)), f)

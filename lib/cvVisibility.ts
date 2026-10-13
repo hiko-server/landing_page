@@ -118,6 +118,12 @@ function pruneNode(node: any): any {
     }
     out[key] = pruneNode(value)
   }
+  // A field hidden before it ever had a value (no key stored yet) is still
+  // "hidden", not "empty": renderers that fill an empty field from another
+  // public source (e.g. GitHub from Home → Socials, lib/cvLinks) must not.
+  for (const name of hidden) {
+    if (typeof name === 'string' && !(name in node) && !(VISIBILITY_KEYS as readonly string[]).includes(name)) redacted.push(name)
+  }
   if (redacted.length) out[REDACTED_KEY] = redacted
   return out
 }

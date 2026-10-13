@@ -43,16 +43,17 @@ const isAuthed = isAdminRequest
 
 /**
  * Statically generated (ISR) pages that render home data, regenerated after a
- * save or restore (lib/revalidate.ts HOME_PAGE_PATHS: /, /about, /now). Only
- * ISR pages belong here: /contact is server-rendered on every request
- * (getServerSideProps) and always fresh.
+ * save or restore (lib/revalidate.ts HOME_PAGE_PATHS: / and /about render
+ * the hero, portrait, socials and availability; /now shows
+ * hero.currentlyCoding; /cv and /cv/zh show the socials — header, GitHub /
+ * LinkedIn fallbacks — the portrait and the availability lines).
  */
 export const HOME_STATIC_PATHS: readonly string[] = [...HOME_PAGE_PATHS]
 
 /** Regenerate home-backed static pages; never fails the (already stored) write. */
 async function revalidateHomePages(res: NextApiResponse): Promise<{ revalidated: string[]; revalidateFailed?: string[] }> {
   const paths = [...HOME_STATIC_PATHS]
-  const failed = await revalidatePaths(res, paths)
+  const failed = await revalidatePaths(res, paths, { confirm: paths })
   return {
     revalidated: paths.filter((p) => !failed.includes(p)),
     ...(failed.length ? { revalidateFailed: failed } : {}),

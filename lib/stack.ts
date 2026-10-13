@@ -59,6 +59,8 @@ const CATALOG: Array<{ label: string; hint: string; entries: Array<[pkg: string,
       ['gray-matter', 'gray-matter'],
       ['sharp', 'sharp'],
       ['@vercel/og', 'OG images'],
+      // The downloadable PDF CVs (lib/cvExport/pdf.ts).
+      ['pdfkit', 'PDFKit'],
     ],
   },
   {

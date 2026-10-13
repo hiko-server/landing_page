@@ -38,6 +38,9 @@ backup, and a hardened admin GUI for non-engineers.
 - **Bilingual CV** — English at `/cv`, Chinese at `/cv/zh` (the legacy
   `/cv?lang=zh` answers 308), `?print=1`, language-aware dates and labels,
   A4 print/PDF with real per-page margins, rolling version history.
+  Downloadable as a server-rendered, tagged PDF (`/cv.pdf`, `/cv/zh.pdf`),
+  plain text (`/cv.txt`) and JSON Resume (`/cv.json`), with skill evidence
+  and GitHub / LinkedIn / case-study links.
 - **CV Studio with visibility at every level** — hide/show any *section*
   (separately for the CV/PDF and the website), any *entry* (a degree, a
   job, a highlight), any *field* (GPA, phone, …) and any single *bullet or
@@ -784,8 +787,11 @@ overlay and follow a contact message into the Inbox.
 |---|---|
 | `/` | Home — hero, proof strip and the `[NN]` sections in the owner's order (ISR, hourly + on save) |
 | `/about` | Identity rail, the owner's bio and the open bilingual CV (ISR, hourly + on save) |
-| `/cv` | Printable CV in English (browser print-to-PDF target, `?print=1`) |
+| `/cv` | CV in English (ISR, every minute + on save): A4 sheet / Reading view, skill evidence, downloads; `?print=1` prints it |
 | `/cv/zh` | The same CV in Chinese (`/cv?lang=zh` redirects here) |
+| `/cv.pdf`, `/cv/zh.pdf` | Server-rendered A4 PDF (tagged, embedded fonts), dated file name, ETag |
+| `/cv.txt`, `/cv/zh.txt` | Plain-text CV for paste-in application forms |
+| `/cv.json`, `/cv/zh.json` | JSON Resume 1.0.0 of the public CV |
 | `/work` | Case-study index (MDX) |
 | `/work/[slug]` | Case study page with cover image + body |
 | `/blog` | Blog index with tag filters + feed links |

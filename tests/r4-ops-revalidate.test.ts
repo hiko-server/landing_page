@@ -172,6 +172,24 @@ test('revalidatePaths reports failures, never throws, and only notifies refreshe
   }
 })
 
+test('confirm paths are regenerated a second time, after the first pass has finished', async () => {
+  const order: string[] = []
+  let running = 0
+  const res = {
+    revalidate: async (p: string) => {
+      running++
+      order.push(`start ${p} (${running} running)`)
+      await new Promise((r) => setTimeout(r, 5))
+      running--
+    },
+  } as any
+  const failed = await revalidatePaths(res, ['/cv', '/blog'], { confirm: ['/cv'] })
+  assert.deepEqual(failed, [])
+  assert.deepEqual(order, ['start /cv (1 running)', 'start /blog (2 running)', 'start /cv (1 running)'])
+  const flaky = { calls: 0, revalidate: async () => { flaky.calls++; if (flaky.calls === 2) throw new Error('second pass failed') } } as any
+  assert.deepEqual(await revalidatePaths(flaky, ['/cv'], { confirm: ['/cv'] }), ['/cv'], 'a failed confirmation is reported')
+})
+
 test('derived purge paths and helpers', () => {
   assert.deepEqual(derivedPurgePaths(['/now']), ['/api/search-index'])
   assert.deepEqual(derivedPurgePaths(['/colophon']), [])
@@ -182,8 +200,11 @@ test('derived purge paths and helpers', () => {
   assert.deepEqual(chunk([], 30), [])
   // The /about bio is part of the search index (G1 / A4).
   assert.deepEqual(derivedPurgePaths(['/about']), ['/api/search-index'])
-  // ISR pages only (/ and /about since G1): the SSR pages are fresh on every request.
-  assert.deepEqual([...STATIC_CONTENT_PATHS], ['/', '/about', '/blog', '/work', '/now', '/uses', '/colophon'])
+  // ISR pages only (/ and /about since home-about G1, /cv and /cv/zh since cv-docs G1).
+  assert.deepEqual([...STATIC_CONTENT_PATHS], ['/', '/about', '/blog', '/work', '/now', '/uses', '/colophon', '/cv', '/cv/zh'])
+  // A CV page change purges its downloadable files with it.
+  assert.deepEqual(derivedPurgePaths(['/cv']), ['/cv.pdf', '/cv.txt', '/cv.json'])
+  assert.deepEqual(derivedPurgePaths(['/cv/zh']), ['/cv/zh.pdf', '/cv/zh.txt', '/cv/zh.json'])
 })
 
 function fakeRes() {

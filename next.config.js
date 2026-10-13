@@ -43,14 +43,25 @@ const nextConfig = {
   // directory would otherwise make Next trace from there and nest the
   // standalone output (server.js) under the parent's relative path.
   outputFileTracingRoot: path.join(__dirname),
-  // /api/og (Node runtime) reads its brand fonts from assets/og at request
-  // time; make sure the standalone output carries them.
-  outputFileTracingIncludes: { '/api/og': ['./assets/og/*.ttf'] },
   reactStrictMode: true,
-  // ISR pages answer `s-maxage=<revalidate>, stale-while-revalidate=<expireTime
-  // - revalidate>`: a CDN may serve a stale copy for at most a day after it
-  // went stale (the default is a year), while it refetches in the background.
+  // ISR pages send `s-maxage=<revalidate>, stale-while-revalidate=<expireTime
+  // − revalidate>`. A day bounds how long the edge may keep serving a stale
+  // copy when the origin cannot regenerate (default: a year), while it
+  // refetches in the background; saves purge the edge immediately anyway
+  // (lib/revalidate notifyEdge).
   expireTime: 86400,
+  // The PDF CV renderer (lib/cvExport/pdf.ts, /api/cv/export) stays a plain
+  // Node require at runtime: pdfkit reads its own data files relative to its
+  // install location, and the fonts it embeds are read from assets/ (traced
+  // into the standalone build below).
+  serverExternalPackages: ['pdfkit', 'fontkit', 'linebreak'],
+  // Runtime assets read from disk at request time, so the standalone output
+  // carries them: /api/og (Node runtime) reads its brand fonts from
+  // assets/og; the PDF CV embeds Geist and the Noto Sans SC subset.
+  outputFileTracingIncludes: {
+    '/api/og': ['./assets/og/*.ttf'],
+    '/api/cv/export': ['./assets/og/Geist-Regular.ttf', './assets/og/Geist-SemiBold.ttf', './assets/pdf/**/*'],
+  },
   // Don't publish full client source (incl. the admin UI) as .map files.
   productionBrowserSourceMaps: false,
   poweredByHeader: false,
@@ -90,11 +101,18 @@ const nextConfig = {
   // no rewrite loop.
   // /.well-known/security.txt (RFC 9116) is generated per request from the
   // public CV contact and a rolling expiry date (pages/api/security-txt.ts).
+  // The downloadable CVs keep stable URLs (/cv.pdf, /cv/zh.json, …) served by
+  // /api/cv/export (lib/cvExport/files.ts lists them).
   async rewrites() {
+    const cvFiles = ['pdf', 'txt', 'json'].flatMap((format) => [
+      { source: `/cv.${format}`, destination: `/api/cv/export?lang=en&format=${format}` },
+      { source: `/cv/zh.${format}`, destination: `/api/cv/export?lang=zh&format=${format}` },
+    ])
     return {
       beforeFiles: [
         { source: '/uploads/:path*', destination: '/api/uploads/:path*' },
         { source: '/.well-known/security.txt', destination: '/api/security-txt' },
+        ...cvFiles,
       ],
     }
   },

@@ -3,8 +3,10 @@ import { Box, Flex, Link, Text } from '@chakra-ui/react'
 import type { CvLang } from '../../lib/cvVisibility'
 import { useReferenceMonth } from '../../lib/clock'
 import { cvLabels, displayUrl, formatCvDate, majorAddsInfo, safeHref } from '../../lib/cvFormat'
+import { profileLinks, projectLinks } from '../../lib/cvLinks'
 import EmailText from '../Common/EmailText'
-import { composeName } from './PersonalInformation'
+import { composeName } from './cvName'
+import { SkillName, skillLinkLabel, useSkillLinkId } from './evidence'
 import { ANCHOR_SCROLL_MARGIN } from './primitives'
 import {
   bullets,
@@ -36,6 +38,10 @@ import {
  * `data-cv-anchor`, and the /cv page scrolls to them when the sheet is the
  * hidden view (CvPageView). The name is a paragraph — the page h1 is the
  * PageHeader — and section cards are the h2s.
+ *
+ * Evidence: GitHub / LinkedIn sit with the contacts, projects list their
+ * case study / live / code links (lib/cvLinks), and skills with evidence
+ * link to their row in the page's skill evidence index (./evidence).
  */
 
 const mono = 'var(--font-geist-mono), ui-monospace, monospace'
@@ -176,7 +182,7 @@ function Body({ children }: { children: string }) {
   )
 }
 
-function Bullets({ items }: { items: Array<{ text: string; sub?: string[] }> }) {
+function Bullets({ items }: { items: Array<{ text: string; sub?: string[]; node?: React.ReactNode }> }) {
   if (!items.length) return null
   return (
     <Box as="ul" mt={2} pl="1.1em" fontSize={{ base: '15px', sm: '16px' }} lineHeight="1.65" color="page.fg">
@@ -188,7 +194,7 @@ function Bullets({ items }: { items: Array<{ text: string; sub?: string[] }> }) 
           listStyleType={b.text ? undefined : 'none'}
           sx={{ '&::marker': { color: 'var(--accent)' } }}
         >
-          {b.text}
+          {b.node ?? b.text}
           {b.sub && b.sub.length ? (
             <Box as="ul" pl="1.1em" mt={1} color="page.fg-secondary" listStyleType="circle">
               {b.sub.map((s, j) => (
@@ -210,25 +216,63 @@ function features(node: unknown) {
     .filter((f) => f.text || f.sub.length)
 }
 
-function Chips({ items }: { items: string[] }) {
+const chipSx = {
+  fontFamily: mono,
+  fontSize: '11px',
+  lineHeight: '1.4',
+  px: 2,
+  py: 0.5,
+  border: '1px solid',
+  borderColor: 'page.border-strong',
+  borderRadius: 'full',
+  color: 'page.fg-secondary',
+} as const
+
+/** A related-skill chip; with evidence on the page it links to the skill's evidence row. */
+function Chip({ name, lang }: { name: string; lang: CvLang }) {
+  const id = useSkillLinkId(name)
+  if (!id) return <Box sx={chipSx}>{name}</Box>
+  return (
+    <Box
+      as="a"
+      href={`#${id}`}
+      aria-label={skillLinkLabel(name, lang)}
+      display="inline-block"
+      sx={chipSx}
+      color="page.fg"
+      _hover={{ borderColor: 'var(--accent)', color: 'accent.text' }}
+      _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
+    >
+      {name}
+    </Box>
+  )
+}
+
+function Chips({ items, lang }: { items: string[]; lang: CvLang }) {
   if (!items.length) return null
   return (
     <Flex as="ul" listStyleType="none" wrap="wrap" gap={1.5} mt={3} p={0}>
       {items.map((s, i) => (
-        <Box
-          as="li"
-          key={i}
-          fontFamily={mono}
-          fontSize="11px"
-          lineHeight="1.4"
-          px={2}
-          py={0.5}
-          border="1px solid"
-          borderColor="page.border-strong"
-          borderRadius="full"
-          color="page.fg-secondary"
-        >
-          {s}
+        <Box as="li" key={i}>
+          <Chip name={s} lang={lang} />
+        </Box>
+      ))}
+    </Flex>
+  )
+}
+
+/** Case study / live / code links under a project. */
+function ProjectLinkRow({ project, lang }: { project: unknown; lang: CvLang }) {
+  const links = projectLinks(project, lang)
+  if (!links.length) return null
+  return (
+    <Flex as="ul" listStyleType="none" wrap="wrap" columnGap={4} rowGap={1} mt={2.5} p={0} fontSize="14px">
+      {links.map((l) => (
+        <Box as="li" key={l.kind}>
+          <Text as="span" fontFamily={mono} fontSize="11px" letterSpacing="0.06em" textTransform="uppercase" color="page.fg-secondary" mr={1.5}>
+            {l.label}
+          </Text>
+          <MaybeLink url={l.path || l.href}>{l.text}</MaybeLink>
         </Box>
       ))}
     </Flex>
@@ -269,6 +313,7 @@ function IdentityCard({ data, lang }: { data: Section; lang: CvLang }) {
   if (website) contacts.push({ label: lang === 'zh' ? '网站' : 'Web', node: <MaybeLink url={website}>{displayUrl(website)}</MaybeLink> })
   if (email) contacts.push({ label: L.email, node: <MaybeLink url={`mailto:${email}`}><EmailText value={email} /></MaybeLink> })
   if (phone) contacts.push({ label: L.phone, node: <MaybeLink url={`tel:${phone.replace(/[^\d+]/g, '')}`}><EmailText value={phone} /></MaybeLink> })
+  for (const p of profileLinks(data)) contacts.push({ label: p.label, node: <MaybeLink url={p.href}>{p.text}</MaybeLink> })
   if (address) contacts.push({ label: lang === 'zh' ? '地址' : 'Based in', node: address })
   if (!main && !aside && !contacts.length && !intro) return null
 
@@ -375,7 +420,7 @@ function renderBody(section: Section, lang: CvLang, month: string): React.ReactN
                 >
                   <Body>{field(e, 'jobDescription')}</Body>
                   <Bullets items={features(e)} />
-                  <Chips items={bullets(e, 'relatedSkills')} />
+                  <Chips items={bullets(e, 'relatedSkills')} lang={lang} />
                 </Entry>
               ),
             }
@@ -399,6 +444,7 @@ function renderBody(section: Section, lang: CvLang, month: string): React.ReactN
               >
                 <Body>{field(p, 'description')}</Body>
                 <Bullets items={features(p)} />
+                <ProjectLinkRow project={p} lang={lang} />
               </Entry>
             ),
           }))}
@@ -492,7 +538,7 @@ function renderBody(section: Section, lang: CvLang, month: string): React.ReactN
                 {languages.map((l, i) => (
                   <React.Fragment key={i}>
                     <Text as="dt" fontWeight={600} color="page.fg">
-                      {field(l, 'language')}
+                      <SkillName name={field(l, 'language')} variant="page" />
                     </Text>
                     <Text as="dd" m={0} color="page.fg-secondary">
                       {field(l, 'level')}
@@ -505,7 +551,7 @@ function renderBody(section: Section, lang: CvLang, month: string): React.ReactN
           {groups.map((g, i) => (
             <Box key={i}>
               {field(g, 'name') ? <SubHeading>{field(g, 'name')}</SubHeading> : null}
-              <Bullets items={bullets(g, 'description').map((text) => ({ text }))} />
+              <Bullets items={bullets(g, 'description').map((text) => ({ text, node: <SkillName name={text} variant="page" /> }))} />
             </Box>
           ))}
         </Flex>

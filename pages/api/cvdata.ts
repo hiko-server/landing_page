@@ -16,6 +16,7 @@ import { rateLimit } from '../../lib/rateLimit'
 import { isAdminRequest, readAdminClaims } from '../../lib/auth'
 import { sendVersionedJson } from '../../lib/http'
 import { CV_PAGE_PATHS, revalidatePaths } from '../../lib/revalidate'
+import { warmCvExports } from '../../lib/cvExport/service'
 import { validateCvDoc, type CvValidationError } from '../../lib/cvValidate'
 import { withApi } from '../../lib/apiHandler'
 import type { Logger } from '../../lib/log'
@@ -62,17 +63,20 @@ function isSectionArray(v: unknown): v is any[] {
 /**
  * Statically generated (ISR) pages that render CV data, regenerated after a
  * save, restore or import so an entry the owner just hid is not served from
- * the ISR cache (lib/revalidate.ts CV_PAGE_PATHS: /, /about, /now and /work,
- * whose archive lists every public project). Only ISR pages belong here:
- * `/cv`, `/cv/zh` and `/contact` are server-rendered on every request
- * (getServerSideProps) and are always fresh.
+ * the ISR cache (lib/revalidate.ts CV_PAGE_PATHS: /, /about, /now, /work —
+ * whose archive lists every public project — and the CV itself, /cv and
+ * /cv/zh).
  */
 export const CV_STATIC_PATHS: readonly string[] = [...CV_PAGE_PATHS]
 
-/** Regenerate CV-backed static pages; never fails the (already stored) write. */
+/**
+ * Regenerate CV-backed static pages and re-render the downloadable PDFs in
+ * the background; never fails the (already stored) write.
+ */
 async function revalidateCvPages(res: NextApiResponse): Promise<{ revalidated: string[]; revalidateFailed?: string[] }> {
   const paths = [...CV_STATIC_PATHS]
-  const failed = await revalidatePaths(res, paths)
+  warmCvExports()
+  const failed = await revalidatePaths(res, paths, { confirm: paths })
   return {
     revalidated: paths.filter((p) => !failed.includes(p)),
     ...(failed.length ? { revalidateFailed: failed } : {}),

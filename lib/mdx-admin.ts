@@ -9,7 +9,7 @@ import type { ApiHandler } from './apiHandler'
 import { isAdminRequest } from './auth'
 import { requireRecentAuth } from './adminAuth/stepUp'
 import { rateLimit } from './rateLimit'
-import { COLLECTION_EXTRA_PATHS, collectionPaths, revalidatePaths } from './revalidate'
+import { COLLECTION_EXTRA_PATHS, CV_DOCUMENT_PATHS, collectionPaths, revalidatePaths } from './revalidate'
 import { ensurePosters } from './videoPoster'
 import {
   getPage,
@@ -388,13 +388,15 @@ export async function mdxProblem(body: string): Promise<MdxProblem | null> {
 
 /**
  * Public pages to regenerate after a write to `slug`: the index, the item,
- * its siblings (prev/next and related links) and the pages outside the
+ * its siblings (prev/next and related links), the pages outside the
  * collection that list or link it (COLLECTION_EXTRA_PATHS: the home page's
- * latest writing, case-study links on / and /about). A failed refresh never
- * fails the write (the ISR window still applies).
+ * latest writing, case-study links on / and /about) and the CV pages (their
+ * skill evidence cites posts and case studies, and projects link their case
+ * study). A failed refresh never fails the write (the ISR window still
+ * applies).
  */
 export async function refreshCollection(res: NextApiResponse, c: Collection, slug: string) {
-  const paths = [...collectionPaths(c, slug, listAll(c).map((i) => i.slug)), ...COLLECTION_EXTRA_PATHS[c]]
+  const paths = [...collectionPaths(c, slug, listAll(c).map((i) => i.slug)), ...COLLECTION_EXTRA_PATHS[c], ...CV_DOCUMENT_PATHS]
   const failed = await revalidatePaths(res, paths)
   return {
     revalidated: paths.filter((p) => !failed.includes(p)),

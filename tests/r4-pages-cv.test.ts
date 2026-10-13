@@ -22,6 +22,11 @@ register(
     encodeURIComponent(`
       let ts
       export async function initialize(data) { ts = (await import(data.ts)).default }
+      // next/<entry> are CommonJS files without an exports map: add the extension.
+      export async function resolve(specifier, context, next) {
+        if (/^next\\/[a-z-]+$/.test(specifier)) return next(specifier + '.js', context)
+        return next(specifier, context)
+      }
       export async function load(url, context, next) {
         if (!url.startsWith('file:') || !url.endsWith('.tsx')) return next(url, context)
         const { readFile } = await import('node:fs/promises')
