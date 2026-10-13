@@ -44,10 +44,12 @@ English → [README.md](./README.md)
   两种语言共用一套撤销历史、拖拽排序、自适应宽度的 A4 实时预览（含分页参考线）、
   本地草稿恢复与覆盖保护。
 - **面向非工程师的后台**：可视化编辑 Hero、品牌、社交、照片墙、博客、
-  案例研究、CV（Studio + 原始 JSON），以及 Now/Uses。
-- **逐节可见性开关**：首页所有 `[NN]` 板块（Open Source / Tech Stack /
-  Activity / Projects / Experience / Certs / Photos / Contact）都可
-  从后台直接隐藏，无需改代码。
+  案例研究、CV（Studio + 原始 JSON）、Now/Uses，以及关于页自述。
+- **逐节可见性与排序**：首页所有 `[NN]` 板块（Open Source / Skills /
+  Activity / Projects / Writing / Experience / Certs / Photos / Contact）都可
+  从后台隐藏、拖拽排序，或一键套用「招聘者优先」预设，无需改代码。
+- **成就条**：Hero 下方最多 4 个站长亲写的成就块，每块链接到出处；编辑器从公开
+  CV（奖项、专利、学历）原文生成建议，保存之前首页不显示任何内容。
 - **联系面板可编辑**：标题、眉标、副标语、原因下拉项均来自
   `data/home.json`；留空时回退到内置默认值。
 - **后台收件箱**：联系表单的每条留言都会连同是否已发出邮件一起保存，
@@ -84,8 +86,12 @@ English → [README.md](./README.md)
   和当前部署的提交。
 - **首页**：预先生成的响应式 Hero 图、逐词浮现的标题、随光标点亮的卡片边框、
   随滚动填充的经历时间轴、取自 CV 的技能、「写作与案例」板块，以及带共享元素
-  灯箱的全宽 Field Notes 照片带。GitHub 数据（站长精选仓库、有意义的统计、
-  靛蓝色贡献图）直接渲染进 HTML。
+  灯箱的全宽 Field Notes 照片带。紧凑的开源板块（有意义的统计、按级别各用一条
+  path 绘制并附文字摘要的靛蓝色贡献图、前五语言加「其他」的单根堆叠条、三个置顶
+  仓库）只把实际渲染的字段写进 HTML；联系板块是可用状态卡片加一个通往
+  `/contact` 的「Write to me」按钮。
+- **关于页**：粘性身份栏（头像、姓名、可用状态、简历、社交链接、章节导航），右侧是
+  站长自述（后台 → About bio，留空则不显示）和全部展开的双语 CV。
 - **联系页**：可用状态卡片（仅当站长设置时显示）、复制按钮、vCard
   （`/api/vcard`）及用于保存联系人的二维码。
 - **文章**：GitHub 风格 Markdown、零布局偏移且带 `srcset` 与点按放大的图片、
@@ -114,8 +120,8 @@ English → [README.md](./README.md)
 - **富文本编辑器**：斜杠命令菜单，以及链接与图片替代文本的气泡菜单。
 - **无需按请求优化的图片流水线**：上传时生成 WebP 尺寸变体并记录宽高（已有
   上传可补生成），外链图片可一键经防 SSRF 的抓取器导入。
-- **首页编辑器**：照片 / Logo / 链接卡片可排序（鼠标、触控、键盘），可用状态、
-  精选仓库、Logo 缩放、站点名称。
+- **首页编辑器**：照片 / Logo / 链接卡片和板块顺序可排序（鼠标、触控、键盘），
+  带 CV 建议的成就条、可用状态、精选仓库、Logo 缩放、站点名称。
 - **更安全的导航**：用「保存并离开 / 放弃 / 留下」对话框取代浏览器确认框，
   相对时间的保存状态（"Saved · 12 s ago"），所有后台页面按 `?` 打开快捷键面板。
 - **Analytics 标签页**：第一方、无 Cookie 的访问统计与真实用户 Core Web Vitals
@@ -376,12 +382,15 @@ uploads/*
 
 ### 分节可见性
 
-首页所有 `[NN]` 板块都过一遍 `isSectionVisible(home, key)`，
-`key ∈ {introduction, brands, open-source, tech-stack, activity, projects,
-experience, certifications, photos, contact}`。键缺失默认**显示**——
-新装实例自带完整页面。
+首页所有板块都过一遍 `isSectionVisible(home, key)`，
+`key ∈ {introduction, highlights, brands, open-source, tech-stack, activity,
+projects, writing, experience, certifications, photos, contact}`。键缺失默认
+**显示**——新装实例自带完整页面。带编号的板块按 `home.sectionOrder` 排列，
+经 `resolveSectionOrder`（`lib/homeSections.ts`）读取：未知的键被丢弃，旧文档里
+缺少的板块插回默认位置，因此旧文档永远不会隐藏某个板块。
 
-入口：**后台 → Home → Visibility**。
+入口：**后台 → Home → Sections**（「Recruiter-first」把项目、经历、写作和技能
+排到 GitHub 动态之前）。
 
 ### Currently-coding 芯片
 
@@ -578,8 +587,8 @@ CI（`.github/workflows/ci.yml`）在每次推送和 Pull Request 时运行：
 
 | 路由 | 说明 |
 |---|---|
-| `/` | 首页 — 按可见性组合 `[NN]` 板块 |
-| `/about` | 长版本介绍 + GitHub 数据 + 双语 CV 栈 |
+| `/` | 首页 — Hero、成就条，以及按站长顺序排列的 `[NN]` 板块（ISR，每小时及保存时更新） |
+| `/about` | 身份栏、站长自述与全部展开的双语 CV（ISR，每小时及保存时更新） |
 | `/cv` | 可打印的英文 CV（浏览器另存 PDF，`?print=1`） |
 | `/cv/zh` | 同一份 CV 的中文版（`/cv?lang=zh` 跳转至此） |
 | `/work` | 案例研究索引（MDX） |
@@ -608,7 +617,8 @@ API 在 `/api/*`；`/api/admin/*` 全部需要鉴权（Middleware 把关）。
 | `/admin/login` | 登录（**隐蔽**入口：导航无可见链接；走 ⌘K 命令面板或直接输 URL） |
 | `/admin/forgot` + `/admin/reset` | 邮件密码重置流程 |
 | `/admin` | 状态中心：需要处理的事项、实时计数、各编辑器入口 |
-| `/admin/dashboard?tab=home` | HomeEditor — Hero / Contact / 可见性 / 品牌 / 照片 |
+| `/admin/dashboard?tab=home` | HomeEditor — Hero / 成就条 / 板块顺序与可见性 / 品牌 / 照片 / Contact |
+| `/admin/about` | 关于页自述（MDX，留空则 /about 不显示自述） |
 | `/admin/dashboard?tab=cv` | CV Studio（逐字段显示/隐藏、隐藏项面板、A4 / 网站预览）+ 原始 JSON |
 | `/admin/dashboard?tab=versions` | 版本回滚 |
 | `/admin/dashboard?tab=storage` | SQLite + R2 清单，手动 Backup / Pull |
