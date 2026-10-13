@@ -303,12 +303,23 @@ export function ogImageUrl(o: OgImageOptions): string {
  * 1200×630 social card and its 1200×1200 square variant.
  */
 export function articleImages(card: OgImageOptions, cover?: string): string[] {
+  return articleImageUrls({ card: ogImageUrl({ ...card, size: undefined }), square: ogImageUrl({ ...card, size: 'square' }) }, cover)
+}
+
+/**
+ * Same, from card URLs computed elsewhere — the signed URLs a page loader
+ * passes down (lib/og/sign.ts signedOgImageUrl).
+ */
+export function articleImageUrls(cards: { card: string; square: string }, cover?: string): string[] {
   const out: string[] = []
   const c = (cover || '').trim()
   if (c && (/^https:\/\//i.test(c) || c.startsWith('/'))) out.push(absUrl(c))
-  out.push(ogImageUrl({ ...card, size: undefined }), ogImageUrl({ ...card, size: 'square' }))
+  out.push(cards.card, cards.square)
   return out
 }
+
+/** The social card options of an article (the page loader signs them; lib/og/sign.ts). */
+export type ArticleCards = { card: string; square: string }
 
 type ArticleNodeInput = {
   path: string

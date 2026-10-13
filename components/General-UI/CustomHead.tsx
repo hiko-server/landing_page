@@ -5,8 +5,6 @@ import {
   absUrl,
   clampDescription,
   composeTitle,
-  ogImageUrl,
-  ogLangOf,
   ogLocale,
   serializeJsonLd,
   withXDefault,
@@ -14,6 +12,7 @@ import {
   type Alternate,
 } from '../../lib/schema'
 import { FEEDS } from '../../lib/feeds'
+import { defaultOgImageUrl } from '../../lib/og/presets'
 
 // Brand/site name shown in the browser tab and <title>. We want this to track
 // the domain the deployment is actually served from (e.g. "lucian-dev.com") rather
@@ -120,8 +119,9 @@ const CustomHead = ({
   const explicitUrl = canonical || url
   const canonicalUrl = explicitUrl ? absUrl(explicitUrl) : ''
   // og:image must be absolute on the canonical origin or crawlers drop it.
-  // Pages without an image get a generic social card titled after the page.
-  const ogImage = image ? absUrl(image) : ogImageUrl({ kind: 'page', title: title || SITE_HOST, lang: ogLangOf(lang) })
+  // Pages without an image get the generic default card: /api/og renders free
+  // text only behind a signature (lib/og), which a client render cannot make.
+  const ogImage = image ? absUrl(image) : defaultOgImageUrl()
   const languageLinks = withXDefault(alternates || hreflang)
   const locale = ogLocale(lang)
   const altLocales = Array.from(

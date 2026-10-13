@@ -8,7 +8,8 @@ import PageHeader from '../../components/General-UI/PageHeader'
 import { useSpotlight } from '../../components/General-UI/useSpotlight'
 import { listWorkInDisplayOrder, type WorkFrontmatter, type MDXIndexEntry } from '../../lib/mdx'
 import { variantSrcSet } from '../../lib/uploadVariants'
-import { absUrl, ogImageUrl, PERSON_NAME } from '../../lib/schema'
+import { absUrl, PERSON_NAME } from '../../lib/schema'
+import { ogPresetUrl } from '../../lib/og/presets'
 
 /**
  * /work — case studies, featured first. Cards with a frontmatter cover show
@@ -248,11 +249,7 @@ export default function WorkIndex({ items }: Props) {
             : '.')
         }
         url={absUrl('/work')}
-        image={ogImageUrl({
-          kind: 'work',
-          title: 'Selected Work',
-          subtitle: 'Project case studies',
-        })}
+        image={ogPresetUrl('work')}
         jsonLd={{
           '@context': 'https://schema.org',
           '@type': 'ItemList',

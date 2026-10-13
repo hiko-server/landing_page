@@ -5,7 +5,8 @@ import { Flex, Box, Heading } from '@chakra-ui/react'
 import LandingCVSections, { CV_WEBSITE_SECTIONS } from '../../components/LandingPage/LandingCVSections'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
-import { absUrl, personNode, profilePageNode, breadcrumb, ogImageUrl, PERSON_NAME, type PersonFacts } from '../../lib/schema'
+import { absUrl, personNode, profilePageNode, breadcrumb, PERSON_NAME, type PersonFacts } from '../../lib/schema'
+import { ogPresetUrl } from '../../lib/og/presets'
 import ActivityFeed from '../../components/GitHub/ActivityFeed'
 import StatsBar from '../../components/GitHub/StatsBar'
 import ContributionGraph from '../../components/GitHub/ContributionGraph'
@@ -61,7 +62,7 @@ const About = ({ hero, identity, cv, githubUser, github, work, personFacts }: Pr
         title="About"
         description="About Li Yanpei (Lucian), a software engineer in Hong Kong: background, education, skills, GitHub activity and project case studies."
         url={absUrl('/about')}
-        image={ogImageUrl({ kind: 'page', title: 'About', subtitle: 'Background, skills & projects' })}
+        image={ogPresetUrl('about')}
         jsonLd={[
           profilePageNode({ path: '/about', name: `About — ${PERSON_NAME}` }),
           personNode(personFacts),

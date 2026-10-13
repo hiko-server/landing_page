@@ -43,6 +43,9 @@ const nextConfig = {
   // directory would otherwise make Next trace from there and nest the
   // standalone output (server.js) under the parent's relative path.
   outputFileTracingRoot: path.join(__dirname),
+  // /api/og (Node runtime) reads its brand fonts from assets/og at request
+  // time; make sure the standalone output carries them.
+  outputFileTracingIncludes: { '/api/og': ['./assets/og/*.ttf'] },
   reactStrictMode: true,
   // Don't publish full client source (incl. the admin UI) as .map files.
   productionBrowserSourceMaps: false,

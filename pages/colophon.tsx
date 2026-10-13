@@ -12,7 +12,8 @@ import { compileMdx } from '../lib/mdx'
 import { groupMarkdown, parseChangelog } from '../lib/changelog'
 import { readStack, type StackGroup } from '../lib/stack'
 import { log } from '../lib/log'
-import { absUrl, breadcrumb, ogImageUrl, personAuthor } from '../lib/schema'
+import { absUrl, breadcrumb, personAuthor } from '../lib/schema'
+import { ogPresetUrl } from '../lib/og/presets'
 import { clearOfHeader } from '../lib/anchorOffset'
 
 /**
@@ -164,7 +165,7 @@ export default function ColophonPage({ releases, stack, buildSha, builtAt }: Pro
         title="Colophon"
         description="How lucian-dev.com is built and run: stack, type, hosting, what the cookieless analytics stores, and every release."
         url={absUrl('/colophon')}
-        image={ogImageUrl({ kind: 'page', title: 'Colophon', subtitle: 'How this site is made' })}
+        image={ogPresetUrl('colophon')}
         jsonLd={[
           {
             '@context': 'https://schema.org',

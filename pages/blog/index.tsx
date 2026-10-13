@@ -7,7 +7,8 @@ import CustomHead from '../../components/General-UI/CustomHead'
 import PageHeader from '../../components/General-UI/PageHeader'
 import { listPosts, type PostFrontmatter, type MDXIndexEntry } from '../../lib/mdx'
 import { formatPostDate, isoDate } from '../../lib/postDate'
-import { absUrl, ogImageUrl, personAuthor, PERSON_NAME, SITE_HOST } from '../../lib/schema'
+import { absUrl, personAuthor, PERSON_NAME, SITE_HOST } from '../../lib/schema'
+import { ogPresetUrl } from '../../lib/og/presets'
 
 type Props = {
   posts: MDXIndexEntry<PostFrontmatter>[]
@@ -53,7 +54,7 @@ export default function BlogIndex({ posts }: Props) {
         title="Writing"
         description={`Essays, notes, and technical write-ups by ${PERSON_NAME} on software engineering, machine learning, and building products.`}
         url={absUrl('/blog')}
-        image={ogImageUrl({ kind: 'blog', title: 'Writing', subtitle: 'Essays, notes, and write-ups' })}
+        image={ogPresetUrl('writing')}
         jsonLd={{
           '@context': 'https://schema.org',
           '@type': 'Blog',

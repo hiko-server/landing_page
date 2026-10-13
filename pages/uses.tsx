@@ -8,7 +8,8 @@ import MDXContent from '../components/MDX/MDXContent'
 import { getStaticMdxPage, type MDXRendered, type PageFrontmatter } from '../lib/mdx'
 import { getPage } from '../lib/contentStore'
 import { readStack, type StackGroup } from '../lib/stack'
-import { absUrl, ogImageUrl, personAuthor } from '../lib/schema'
+import { absUrl, personAuthor } from '../lib/schema'
+import { ogPresetUrl } from '../lib/og/presets'
 
 /**
  * /uses — tools & setup.
@@ -102,11 +103,7 @@ export default function UsesPage({ tree, updated, ownDescription, stack }: Props
         description={description}
         fallbackDescription={fallbackDescription}
         url={absUrl('/uses')}
-        image={ogImageUrl({
-          kind: 'page',
-          title: written ? 'Uses' : 'How this site is built',
-          subtitle: written ? 'Tools & setup' : BUILT_DESCRIPTION,
-        })}
+        image={ogPresetUrl(written ? 'uses' : 'uses-built')}
         jsonLd={{
           '@context': 'https://schema.org',
           '@type': 'WebPage',

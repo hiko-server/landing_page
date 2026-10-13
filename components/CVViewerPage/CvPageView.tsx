@@ -16,7 +16,6 @@ import {
   absUrl,
   breadcrumb,
   CV_ALTERNATES,
-  ogImageUrl,
   personAuthor,
   personNode,
   personRef,
@@ -24,6 +23,7 @@ import {
   SITE_HOST,
   type PersonFacts,
 } from '../../lib/schema'
+import { ogPresetUrl } from '../../lib/og/presets'
 import type { CvLang } from '../../lib/cvVisibility'
 import type { HomeData } from '../../lib/homeShape'
 import { useBottomBarOffset } from '../Common/useBottomBarOffset'
@@ -224,7 +224,7 @@ export default function CvPageView({
         alternates={CV_ALTERNATES}
         lang={HTML_LANG[language]}
         nameZh={nameZh || undefined}
-        image={ogImageUrl({ kind: 'cv', lang: language, title: T.title })}
+        image={ogPresetUrl('cv', { lang: language === 'zh' ? 'zh' : 'en' })}
         jsonLd={[
           {
             '@context': 'https://schema.org',

@@ -5,7 +5,8 @@ import LandingContent from '../components/LandingPage/LandingContent'
 import HeaderFooter from '../layout/HeaderFooter'
 import CustomHead from '../components/General-UI/CustomHead'
 import { HERO_AVIF_SRCSET, HERO_SIZES } from '../components/Background/HeroAmbient'
-import { absUrl, websiteNode, personNode, profilePageNode, ogImageUrl, type PersonFacts } from '../lib/schema'
+import { absUrl, websiteNode, personNode, profilePageNode, type PersonFacts } from '../lib/schema'
+import { ogPresetUrl } from '../lib/og/presets'
 import { isSectionVisible, type HomeData, type SectionKey } from '../lib/homeShape'
 import type { CvSectionLike } from '../lib/cvVisibility'
 import { safeHref } from '../lib/cvFormat'
@@ -53,7 +54,7 @@ const LandingPage = ({ home, cv, identity, autoCoding, meta, work, avatar, photo
         home
         description="Li Yanpei (Lucian) — software engineer in Hong Kong building full-stack web apps, machine-learning / computer-vision, and embedded systems. CV, projects, and contact."
         url={absUrl('/')}
-        image={ogImageUrl({ kind: 'home', title: 'Li Yanpei (Lucian)', subtitle: 'Software engineer: full-stack, ML / computer vision, embedded' })}
+        image={ogPresetUrl('home')}
         type="website"
         jsonLd={[websiteNode(), profilePageNode({ path: '/' }), personNode(personFacts)]}
       />

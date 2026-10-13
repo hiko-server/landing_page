@@ -25,7 +25,8 @@ import {
 } from '../lib/nowSignals'
 import type { HomeData } from '../lib/homeShape'
 import { referenceMonth } from '../lib/clock'
-import { absUrl, ogImageUrl, personAuthor } from '../lib/schema'
+import { absUrl, personAuthor } from '../lib/schema'
+import { ogPresetUrl } from '../lib/og/presets'
 
 /**
  * /now — what I'm focused on.
@@ -63,7 +64,7 @@ export default function NowPage({ tree, updated, signals, signalsUpdated }: Prop
         title="Now"
         description="What Li Yanpei (Lucian) is focused on right now: current work and studies, what he is building, and the latest writing."
         url={absUrl('/now')}
-        image={ogImageUrl({ kind: 'page', title: 'Now', subtitle: 'What I’m focused on' })}
+        image={ogPresetUrl('now')}
         jsonLd={{
           '@context': 'https://schema.org',
           '@type': 'WebPage',

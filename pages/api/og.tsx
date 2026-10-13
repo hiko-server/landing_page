@@ -1,15 +1,21 @@
+import { readFile } from 'fs/promises'
+import path from 'path'
+import type { NextApiRequest, NextApiResponse } from 'next'
 import { ImageResponse } from '@vercel/og'
-import type { NextRequest } from 'next/server'
-import { getClientIpHeaderName } from '../../lib/env'
-import { ipBucket, pickClientIp } from '../../lib/security/ip'
-import { parseOgParams, type OgParams } from '../../lib/security/ogParams'
-import { sharedLimiter } from '../../lib/security/rateLimitCore'
+import { withApi } from '../../lib/apiHandler'
+import { rateLimit } from '../../lib/rateLimit'
+import { defaultCardParams, resolveCard, type CardSource } from '../../lib/og/resolve'
+import { ogSigningKey } from '../../lib/og/sign'
+import type { OgParams } from '../../lib/security/ogParams'
 import { SITE_URL } from '../../lib/schema'
 
-// Dynamic Open Graph card rendered to PNG via @vercel/og (Satori + Resvg).
+// Open Graph card rendered to PNG via @vercel/og (Satori + Resvg).
 //
+//   /api/og?card=about                              fixed card (lib/og/presets)
 //   /api/og?kind=blog&title=…&date=2026-05-30&mins=6&tags=Edge%20AI,YOLO
-//          &cover=/uploads/x.webp&lang=zh&size=square&v=1780000000000
+//          &cover=/uploads/x.jpg&lang=zh&size=square&v=1780000000000&sig=…
+//                                                  content card, HMAC-signed
+//   /api/og                                         generic default card
 //
 // Brand card: #050505 with an 8px dot grid and one indigo glow, a mono
 // "[BLOG] Li Yanpei (Lucian)" row, the title in Geist SemiBold (sized by
@@ -18,43 +24,48 @@ import { SITE_URL } from '../../lib/schema'
 // switches the static strings. CJK glyphs fall back to @vercel/og's dynamic
 // font loading.
 //
-// Runs on the Edge runtime — required by @vercel/og for streaming PNG output
-// with WASM-backed image rendering.
+// Runs on the Node.js runtime (the Edge runtime is deprecated in Next 16).
+// Next resolves `@vercel/og` to its bundled copy and loads the Node build —
+// the same Satori and resvg-wasm as the Edge build, so cards are the same
+// bytes. The brand fonts are read from assets/og (traced into the standalone
+// output through next.config.js outputFileTracingIncludes).
 //
-// Hardening: every param is validated (lib/security/ogParams — the cover is
-// only ever a same-site /uploads file, never an arbitrary URL), renders are
-// rate limited per client, and a card is a pure function of its URL, so it
-// is cached hard — a day in browsers, a year (immutable) at Cloudflare.
-
-export const config = {
-  runtime: 'edge',
-}
+// Hardening: no free text is ever rendered without a valid signature
+// (lib/og/resolve: fixed cards by id, signed content cards, else the default
+// card), every param is validated (lib/security/ogParams — the cover is only
+// ever a same-site /uploads file), renders are rate limited per client, and
+// a card is a pure function of its URL, so it is cached hard — a day in
+// browsers, a year (immutable) at Cloudflare. A refused URL gets the default
+// card, cached for a day only; the default card itself is rendered once per
+// size and kept in memory.
 
 const RENDERS_PER_MINUTE = 60
 const CACHE_CONTROL = 'public, max-age=86400, s-maxage=31536000, immutable'
+const REFUSED_CACHE_CONTROL = 'public, max-age=3600, s-maxage=86400'
 
-type FontSpec = { name: string; data: ArrayBuffer; weight: 400 | 600; style: 'normal' }
+type FontSpec = { name: string; data: Buffer; weight: 400 | 600; style: 'normal' }
 
-let fontsPromise: Promise<FontSpec[]> | null = null
+type OgGlobal = typeof globalThis & {
+  __ogFonts?: Promise<FontSpec[]> | null
+  __ogDefaultCards?: Map<string, Buffer>
+}
+const g = globalThis as OgGlobal
 
-/** The brand fonts, loaded once per isolate (static TTFs bundled with the route). */
+/** The brand fonts, read once per process. */
 function loadFonts(): Promise<FontSpec[]> {
-  if (!fontsPromise) {
-    const file = (url: URL) => fetch(url).then((r) => r.arrayBuffer())
-    fontsPromise = Promise.all([
-      file(new URL('../../assets/og/Geist-Regular.ttf', import.meta.url)),
-      file(new URL('../../assets/og/Geist-SemiBold.ttf', import.meta.url)),
-      file(new URL('../../assets/og/GeistMono-Regular.ttf', import.meta.url)),
-    ]).then(([regular, semibold, mono]) => [
+  if (!g.__ogFonts) {
+    const dir = path.join(process.cwd(), 'assets', 'og')
+    const file = (name: string) => readFile(path.join(dir, name))
+    g.__ogFonts = Promise.all([file('Geist-Regular.ttf'), file('Geist-SemiBold.ttf'), file('GeistMono-Regular.ttf')]).then(([regular, semibold, mono]) => [
       { name: 'Geist', data: regular, weight: 400, style: 'normal' },
       { name: 'Geist', data: semibold, weight: 600, style: 'normal' },
       { name: 'Geist Mono', data: mono, weight: 400, style: 'normal' },
     ])
-    fontsPromise.catch(() => {
-      fontsPromise = null
+    g.__ogFonts.catch(() => {
+      g.__ogFonts = null
     })
   }
-  return fontsPromise
+  return g.__ogFonts
 }
 
 const LABELS = {
@@ -85,29 +96,8 @@ function metaLine(p: OgParams): string {
 const MONO = '"Geist Mono", ui-monospace, monospace'
 const SANS = 'Geist, system-ui, sans-serif'
 
-export default async function handler(req: NextRequest) {
-  // The edge runtime exposes no socket peer; the trusted client-IP header
-  // (cf-connecting-ip behind Cloudflare) is the only signal.
-  const headerName = getClientIpHeaderName()
-  const ip = pickClientIp({
-    peer: '',
-    headerName,
-    headerValue: headerName ? req.headers.get(headerName) : null,
-    trusted: [],
-  })
-  const hit = sharedLimiter('og', 5_000).hit(`og|${ipBucket(ip)}`, RENDERS_PER_MINUTE, 60_000)
-  if (!hit.allowed) {
-    return new Response('Too many requests', {
-      status: 429,
-      headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Cache-Control': 'no-store',
-        'Retry-After': String(Math.max(1, Math.ceil((hit.resetAt - Date.now()) / 1000))),
-      },
-    })
-  }
-
-  const p = parseOgParams(new URL(req.url).searchParams)
+/** Render one card to PNG bytes. */
+async function renderCard(p: OgParams): Promise<Buffer> {
   const square = p.size === 'square'
   const height = square ? 1200 : 630
   const padding = square ? 88 : 72
@@ -144,7 +134,7 @@ export default async function handler(req: NextRequest) {
     </div>
   )
 
-  return new ImageResponse(
+  const image = new ImageResponse(
     (
       <div style={{ width: '100%', height: '100%', display: 'flex', position: 'relative', backgroundColor: '#050505' }}>
         {/* 8px dot grid */}
@@ -201,17 +191,59 @@ export default async function handler(req: NextRequest) {
         </div>
       </div>
     ),
-    {
-      width: 1200,
-      height,
-      fonts,
-      // Lower-case key on purpose: ImageResponse builds its headers as
-      // { 'cache-control': <1-year immutable default>, ...headers }, so only
-      // the identical key REPLACES the default. 'Cache-Control' would be a
-      // second key and both values would be sent joined in one header.
-      headers: {
-        'cache-control': CACHE_CONTROL,
-      },
-    },
+    { width: 1200, height, fonts },
   )
+  return Buffer.from(await image.arrayBuffer())
 }
+
+/** The default card, rendered once per size per process. */
+async function defaultCard(p: OgParams): Promise<Buffer> {
+  if (!g.__ogDefaultCards) g.__ogDefaultCards = new Map()
+  const hit = g.__ogDefaultCards.get(p.size)
+  if (hit) return hit
+  const png = await renderCard(p)
+  g.__ogDefaultCards.set(p.size, png)
+  return png
+}
+
+function send(res: NextApiResponse, png: Buffer, cacheControl: string, source: CardSource) {
+  res.setHeader('Content-Type', 'image/png')
+  res.setHeader('Content-Length', String(png.length))
+  res.setHeader('Cache-Control', cacheControl)
+  res.setHeader('X-Card', source)
+  res.status(200).end(png)
+}
+
+export default withApi('og', async (req: NextApiRequest, res: NextApiResponse, ctx) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.setHeader('Allow', 'GET, HEAD')
+    return res.status(405).end()
+  }
+  const search = new URLSearchParams((req.url || '').split('?')[1] || '')
+  const card = resolveCard(search, ogSigningKey())
+  const isDefault = card.source === 'default' || card.source === 'refused'
+  const cacheControl = card.source === 'refused' ? REFUSED_CACHE_CONTROL : CACHE_CONTROL
+
+  if (isDefault && g.__ogDefaultCards?.has(card.params.size)) {
+    return send(res, g.__ogDefaultCards.get(card.params.size) as Buffer, cacheControl, card.source)
+  }
+
+  const hit = rateLimit(req, RENDERS_PER_MINUTE, 60_000, 'og')
+  if (!hit.allowed) {
+    res.setHeader('Cache-Control', 'no-store')
+    res.setHeader('Retry-After', String(Math.max(1, Math.ceil((hit.resetAt - Date.now()) / 1000))))
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+    return res.status(429).end('Too many requests')
+  }
+
+  try {
+    const png = isDefault ? await defaultCard(card.params) : await renderCard(card.params)
+    return send(res, png, cacheControl, card.source)
+  } catch (err) {
+    // A card that cannot render (an unreachable cover, a font fetch that
+    // failed) degrades to the default card, cached briefly.
+    ctx.log.error('social card render failed; serving the default card', { err, source: card.source })
+    const png = await defaultCard(defaultCardParams(search))
+    return send(res, png, REFUSED_CACHE_CONTROL, 'refused')
+  }
+})

@@ -7,7 +7,8 @@ import AvailabilityCard from '../../components/Contact/AvailabilityCard'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 import PageHeader from '../../components/General-UI/PageHeader'
-import { absUrl, breadcrumb, ogImageUrl, PERSON_ID } from '../../lib/schema'
+import { absUrl, breadcrumb, PERSON_ID } from '../../lib/schema'
+import { ogPresetUrl } from '../../lib/og/presets'
 import type { HomeData } from '../../lib/homeShape'
 
 type ContactHome = {
@@ -43,11 +44,7 @@ const Contact = ({ home, availability, vcardQr }: Props) => {
         title="Contact"
         description="Get in touch with Li Yanpei (Lucian), a software engineer in Hong Kong: send a message, write an e-mail or save the contact card."
         url={absUrl('/contact')}
-        image={ogImageUrl({
-          kind: 'page',
-          title: 'Get in touch',
-          subtitle: 'Contact Li Yanpei (Lucian)',
-        })}
+        image={ogPresetUrl('contact')}
         jsonLd={[
           {
             '@context': 'https://schema.org',
