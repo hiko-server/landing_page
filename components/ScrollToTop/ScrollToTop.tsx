@@ -67,7 +67,7 @@ const ScrollToTop: React.FC = () => {
       boxShadow="0 8px 28px rgba(0,0,0,0.12)"
       _hover={{ color: 'page.fg', borderColor: 'page.border-strong', bg: 'page.float-bg' }}
       _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
-      className="no-print"
+      className="no-print glass"
       aria-label="Scroll to top"
       title="Scroll to top"
       display={isVisible ? 'inline-flex' : 'none'}

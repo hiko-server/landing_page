@@ -14,28 +14,45 @@ import {
   useToast,
 } from '@chakra-ui/react'
 import { useRouter } from 'next/router'
-import { highlightSegments, rankItems } from '../Article/fuzzyMatch'
+import {
+  highlightSegments,
+  parseSearchIndex,
+  rankItems,
+  rankSearchDocs,
+  truncate,
+  type DocHit,
+  type SearchDocLike,
+  type SearchIndex,
+  type Segment,
+} from '../Article/fuzzyMatch'
 import { jumpToSection } from '../Article/useActiveHeading'
 import { copyText } from '../MDX/clipboard'
+import { NAV_SHORTCUTS, adminEditTarget, shortcutLabelFor } from '../Chrome/chrome'
+import { toggleThemeWithTransition } from '../../lib/themeTransition'
 
 /**
- * ⌘K command palette.
+ * ⌘K command palette (loaded on demand by CommandPaletteLazy).
  *
- *   - Fuzzy search over pages, actions, posts, case studies and the sections
- *     of the current page (elements with `data-nav-label` + id, and article
- *     headings), ranked best-first with the matched characters highlighted.
- *   - Empty query: recently used items, this page's sections, everything
- *     grouped, and a keyboard-shortcut cheatsheet.
+ *   - Fuzzy search over pages, actions, the sections of the current page
+ *     (elements with `data-nav-label` + id, and article headings) and the
+ *     site's content index (/api/search-index: posts, case studies, pages and
+ *     CV entries — titles, tags, descriptions, headings and body text),
+ *     ranked best-first with the matched characters highlighted and, for
+ *     content, where the match was found.
+ *   - Empty query: recently used items, this page's sections, the owner's
+ *     Admin group (signed in only), everything else grouped, and a
+ *     keyboard-shortcut cheatsheet.
  *   - WAI-ARIA combobox: the input owns a listbox, the active option is
  *     announced via aria-activedescendant, result counts via a live region.
- *   - Honours prefers-reduced-motion (no open/close animation, instant
- *     section jumps).
+ *   - Opens instantly (a 120ms scale-in, none under reduced motion); the list
+ *     glides between heights as results change.
  *
- * Posts / case studies are fetched once, the first time the palette opens.
- * Recent items live in localStorage (per browser; failures are ignored).
+ * The search index is fetched once per visit (full page load), the first time
+ * the palette opens. Recent items live in localStorage (per browser; failures
+ * ignored).
  */
 
-type Group = 'Recent' | 'On this page' | 'Pages' | 'Actions' | 'Writing' | 'Work'
+type Group = 'Recent' | 'On this page' | 'Admin' | 'Pages' | 'Actions' | 'Writing' | 'Work' | 'Content'
 type Kind = 'nav' | 'action' | 'section'
 
 type Item = {
@@ -44,6 +61,8 @@ type Item = {
   kind: Kind
   label: string
   hint?: string
+  /** Right-hand label while searching (defaults to the group). */
+  badge?: string
   shortcut?: string
   href?: string
   external?: boolean
@@ -52,20 +71,43 @@ type Item = {
   lang?: string
 }
 
-type Row = { item: Item; group: Group; indices: number[] }
+type Detail = { prefix: string; segments: Segment[] }
 
-type ListEntry = { slug: string; title: string; permalink: string; description?: string | null; tags?: string[]; tech?: string[]; lang?: string }
-type DynamicLists = { posts: ListEntry[]; work: ListEntry[] }
+type Row = { item: Item; group: Group; indices: number[]; detail?: Detail }
 
 type RecentRecord = { id: string; label: string; href?: string; group: Item['group'] }
+
+export type CommandPaletteProps = { isOpen: boolean; onClose: () => void; isAdmin?: boolean }
 
 const HIKO_EMAIL = 'hi@lucian-dev.com'
 const RECENT_KEY = 'cmdk:recent:v1'
 const RECENT_MAX = 5
 const RESULT_LIMIT = 40
-const GROUP_ORDER: Group[] = ['Recent', 'On this page', 'Pages', 'Actions', 'Writing', 'Work']
-const GROUP_BOOST: Record<Item['group'], number> = { Pages: 6, Actions: 4, 'On this page': 3, Writing: 2, Work: 2 }
+const BROWSE_LIMIT = 6
+const GROUP_ORDER: Group[] = ['Recent', 'On this page', 'Admin', 'Pages', 'Actions', 'Writing', 'Work', 'Content']
+const GROUP_BOOST: Record<Item['group'], number> = { Pages: 6, Admin: 5, Actions: 4, 'On this page': 3, Writing: 2, Work: 2, Content: 2 }
+const KIND_LABEL: Record<SearchDocLike['kind'], string> = { post: 'Post', work: 'Case study', page: 'Page', cv: 'CV' }
 const MONO = 'var(--font-geist-mono), monospace'
+
+// ── Search index (one request per visit) ────────────────────────────────
+
+let indexRequest: Promise<SearchIndex> | null = null
+
+function loadSearchIndex(): Promise<SearchIndex> {
+  if (!indexRequest) {
+    indexRequest = fetch('/api/search-index')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then(parseSearchIndex)
+      .catch((err) => {
+        // Let the next open try again.
+        indexRequest = null
+        throw err
+      })
+  }
+  return indexRequest
+}
+
+// ── Recents ─────────────────────────────────────────────────────────────────
 
 function readRecent(): RecentRecord[] {
   try {
@@ -86,6 +128,8 @@ function writeRecent(list: RecentRecord[]) {
     // Storage disabled / full — recents are a convenience only.
   }
 }
+
+// ── Sections of the current page ────────────────────────────────────────────
 
 /** Visible text of a heading without the "#" self-link marker. */
 function headingLabel(el: HTMLElement): string {
@@ -120,17 +164,22 @@ function collectSections(): Item[] {
   return out
 }
 
+// ── Rendering helpers ───────────────────────────────────────────────────────
+
+/** Matched characters: accent text AND weight, so the match never relies on colour alone. */
+function Mark({ children }: { children: React.ReactNode }) {
+  return (
+    <Box as="mark" bg="transparent" color="accent.text" fontWeight={600}>
+      {children}
+    </Box>
+  )
+}
+
 function Highlighted({ text, indices }: { text: string; indices: number[] }) {
   return (
     <>
       {highlightSegments(text, indices).map((seg, i) =>
-        seg.match ? (
-          <Box as="mark" key={i} bg="transparent" color="var(--accent)" fontWeight={600}>
-            {seg.text}
-          </Box>
-        ) : (
-          <React.Fragment key={i}>{seg.text}</React.Fragment>
-        ),
+        seg.match ? <Mark key={i}>{seg.text}</Mark> : <React.Fragment key={i}>{seg.text}</React.Fragment>,
       )}
     </>
   )
@@ -144,7 +193,31 @@ function Key({ children }: { children: React.ReactNode }) {
   )
 }
 
-export default function CommandPalette({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
+function docItem(doc: SearchDocLike, group: Item['group']): Item {
+  return {
+    id: `doc:${doc.href}`,
+    group,
+    kind: 'nav',
+    label: doc.title,
+    href: doc.href,
+    hint: group === 'Content' ? undefined : doc.description ? truncate(doc.description) : undefined,
+    badge: KIND_LABEL[doc.kind],
+    lang: doc.lang && doc.lang !== 'en' ? doc.lang : undefined,
+  }
+}
+
+/** "in: …" line for a content hit (nothing extra when only the title matched). */
+function docDetail(hit: DocHit<SearchDocLike>): Detail | undefined {
+  if (hit.field === 'title') {
+    return hit.doc.description ? { prefix: '', segments: [{ text: truncate(hit.doc.description), match: false }] } : undefined
+  }
+  if (hit.field === 'body' && hit.snippet) return { prefix: 'in: ', segments: hit.snippet }
+  return { prefix: 'in: ', segments: [{ text: truncate(hit.value), match: false }] }
+}
+
+// ── Component ───────────────────────────────────────────────────────────────
+
+export default function CommandPalette({ isOpen, onClose, isAdmin = false }: CommandPaletteProps) {
   const router = useRouter()
   const toast = useToast()
   const reduceMotion = usePrefersReducedMotion()
@@ -155,16 +228,16 @@ export default function CommandPalette({ isOpen, onClose }: { isOpen: boolean; o
 
   const [query, setQuery] = useState('')
   const [activeIdx, setActiveIdx] = useState(0)
-  const [dyn, setDyn] = useState<DynamicLists | null>(null)
+  const [index, setIndex] = useState<SearchIndex | null>(null)
   const [loading, setLoading] = useState(false)
   const [sections, setSections] = useState<Item[]>([])
   const [recent, setRecent] = useState<RecentRecord[]>([])
   const [restoreFocus, setRestoreFocus] = useState(true)
   const [isMac, setIsMac] = useState(true)
+  const [unread, setUnread] = useState<number | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
-  const listRef = useRef<HTMLDivElement | null>(null)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
   const pending = useRef<(() => void) | null>(null)
-  const dynLoaded = useRef(false)
 
   useEffect(() => {
     setIsMac(/Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent))
@@ -180,22 +253,40 @@ export default function CommandPalette({ isOpen, onClose }: { isOpen: boolean; o
     setRecent(readRecent())
   }, [isOpen])
 
-  // Posts + case studies: fetched once, cached for the session.
+  // Content index: one request per visit (shared by every open).
   useEffect(() => {
-    if (!isOpen || dynLoaded.current) return
-    dynLoaded.current = true
+    if (!isOpen || index) return
+    let alive = true
     setLoading(true)
-    Promise.all([
-      fetch('/api/blog/list').then((r) => (r.ok ? r.json() : { items: [] })),
-      fetch('/api/work/list').then((r) => (r.ok ? r.json() : { items: [] })),
-    ])
-      .then(([blog, work]) => setDyn({ posts: blog.items || [], work: work.items || [] }))
-      .catch(() => {
-        dynLoaded.current = false
-        setDyn({ posts: [], work: [] })
+    loadSearchIndex()
+      .then((idx) => {
+        if (alive) setIndex(idx)
       })
-      .finally(() => setLoading(false))
-  }, [isOpen])
+      .catch(() => {
+        // Pages and actions still work; the next open retries.
+      })
+      .finally(() => {
+        if (alive) setLoading(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [isOpen, index])
+
+  // Owner: unread contact messages on the Inbox item (fresh on each open).
+  useEffect(() => {
+    if (!isOpen || !isAdmin) return
+    let alive = true
+    fetch('/api/admin/inbox?summary=1', { cache: 'no-store', credentials: 'same-origin' })
+      .then((r) => (r.ok ? (r.json() as Promise<{ unread?: unknown }>) : null))
+      .then((b) => {
+        if (alive && b && typeof b.unread === 'number') setUnread(b.unread)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [isOpen, isAdmin])
 
   const copyAndToast = useCallback(
     async (text: string, title: string) => {
@@ -205,25 +296,100 @@ export default function CommandPalette({ isOpen, onClose }: { isOpen: boolean; o
     [toast],
   )
 
+  const backUpNow = useCallback(async () => {
+    toast({ status: 'loading', title: 'Backing up…', id: 'cmdk-backup', duration: null })
+    try {
+      const res = await fetch('/api/admin/storage/backup', { method: 'POST', credentials: 'same-origin' })
+      const body = (await res.json().catch(() => ({}))) as { error?: string; r2?: { pushed?: boolean; error?: string } }
+      toast.close('cmdk-backup')
+      if (res.status === 409) toast({ status: 'warning', title: 'A backup is already running' })
+      else if (!res.ok) toast({ status: 'error', title: 'Backup failed', description: body.error || `HTTP ${res.status}`, duration: 6000 })
+      else if (body.r2?.error) toast({ status: 'warning', title: 'Backup saved locally', description: `R2 upload failed: ${body.r2.error}`, duration: 6000 })
+      else toast({ status: 'success', title: 'Backup complete', description: body.r2?.pushed ? 'Saved locally and to R2' : 'Saved locally' })
+    } catch {
+      toast.close('cmdk-backup')
+      toast({ status: 'error', title: 'Backup failed', description: 'Network error' })
+    }
+  }, [toast])
+
+  const logOut = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/logout', { method: 'POST', credentials: 'same-origin' })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      window.location.reload()
+    } catch {
+      toast({ status: 'error', title: 'Logout failed' })
+    }
+  }, [toast])
+
+  const slug = router.query.slug
+  const editTarget = useMemo(() => adminEditTarget(router.pathname, slug), [router.pathname, slug])
+
   const items: Item[] = useMemo(() => {
-    const page = (label: string, href: string, shortcut?: string, keywords?: string): Item => ({
+    const page = (label: string, href: string, keywords?: string): Item => ({
       id: `page:${href}`,
       group: 'Pages',
       kind: 'nav',
       label,
       href,
-      shortcut,
+      shortcut: shortcutLabelFor(href),
       keywords,
     })
-    const list: Item[] = [
-      page('Home', '/', 'G H', 'start landing index'),
-      page('About', '/about', 'G A', 'bio profile'),
-      page('Work', '/work', 'G W', 'case studies projects portfolio'),
-      page('Writing', '/blog', 'G B', 'blog posts essays articles'),
-      page('CV', '/cv', 'G C', 'resume curriculum vitae'),
-      page('Now', '/now', 'G N', 'status current focus'),
-      page('Uses', '/uses', 'G U', 'tools gear setup'),
-      page('Contact', '/contact', undefined, 'email message hire'),
+    const admin = (id: string, label: string, href: string, keywords: string, hint?: string): Item => ({
+      id: `admin:${id}`,
+      group: 'Admin',
+      kind: 'nav',
+      label,
+      href,
+      hint,
+      keywords: `admin ${keywords}`,
+    })
+    const list: Item[] = []
+
+    if (isAdmin) {
+      if (editTarget) list.push(admin('edit-current', editTarget.label, editTarget.href, 'edit this page', 'this page'))
+      list.push(
+        admin('inbox', 'Inbox', '/admin/dashboard?tab=inbox', 'messages contact mail', unread ? `${unread} unread` : undefined),
+        admin('cv', 'CV Studio', '/admin/dashboard?tab=cv', 'resume edit cv'),
+        admin('home', 'Home editor', '/admin/dashboard?tab=home', 'landing edit home'),
+        admin('versions', 'Versions', '/admin/dashboard?tab=versions', 'history snapshots restore undo'),
+        admin('storage', 'Storage', '/admin/dashboard?tab=storage', 'backup r2 restore database'),
+        admin('analytics', 'Analytics', '/admin/dashboard?tab=analytics', 'visitors views stats web vitals'),
+        admin('new-post', 'New post', '/admin/blog/edit', 'write blog article create'),
+        admin('new-work', 'New case study', '/admin/work/edit', 'project portfolio create'),
+        admin('now', 'Edit /now', '/admin/now', 'now page status'),
+        admin('uses', 'Edit /uses', '/admin/uses', 'uses page tools'),
+        {
+          id: 'admin:backup',
+          group: 'Admin',
+          kind: 'action',
+          label: 'Back up now',
+          hint: 'snapshot to disk + R2',
+          run: backUpNow,
+          keywords: 'admin backup snapshot save storage',
+        },
+        {
+          id: 'admin:logout',
+          group: 'Admin',
+          kind: 'action',
+          label: 'Log out',
+          hint: 'every device',
+          run: logOut,
+          keywords: 'admin sign out logout',
+        },
+      )
+    }
+
+    list.push(
+      page('Home', '/', 'start landing index'),
+      page('About', '/about', 'bio profile'),
+      page('Work', '/work', 'case studies projects portfolio'),
+      page('Writing', '/blog', 'blog posts essays articles'),
+      page('CV', '/cv', 'resume curriculum vitae'),
+      page('Now', '/now', 'status current focus'),
+      page('Uses', '/uses', 'tools gear setup'),
+      page('Contact', '/contact', 'email message hire'),
+      page('Colophon', '/colophon', 'about this site fonts stack privacy analytics'),
       {
         id: 'action:cv-pdf',
         group: 'Actions',
@@ -239,16 +405,39 @@ export default function CommandPalette({ isOpen, onClose }: { isOpen: boolean; o
         kind: 'nav',
         label: 'CV in 中文',
         hint: 'Chinese version',
-        href: '/cv?lang=zh',
+        href: '/cv/zh',
         keywords: 'chinese zh resume 简历 中文 cv',
       },
+      {
+        id: 'action:vcard',
+        group: 'Actions',
+        kind: 'action',
+        label: 'Download vCard',
+        hint: 'add to contacts',
+        run: () => window.location.assign('/api/vcard'),
+        keywords: 'contact card vcf address book save',
+      },
+    )
+    if (index?.bookingUrl) {
+      list.push({
+        id: 'action:book',
+        group: 'Actions',
+        kind: 'nav',
+        label: 'Book a call',
+        hint: 'opens the booking page',
+        href: index.bookingUrl,
+        external: true,
+        keywords: 'meeting schedule calendar call chat hire',
+      })
+    }
+    list.push(
       {
         id: 'action:theme',
         group: 'Actions',
         kind: 'action',
         label: 'Toggle theme',
         hint: colorMode === 'dark' ? 'switch to light' : 'switch to dark',
-        run: toggleColorMode,
+        run: () => toggleThemeWithTransition(toggleColorMode, null),
         keywords: 'dark light mode appearance colour color',
       },
       {
@@ -285,80 +474,112 @@ export default function CommandPalette({ isOpen, onClose }: { isOpen: boolean; o
         label: 'RSS feed',
         href: '/feed.xml',
         external: true,
-        keywords: 'subscribe feed atom',
+        keywords: 'subscribe feed atom json',
       },
-      {
+    )
+    if (!isAdmin) {
+      list.push({
         id: 'action:admin',
         group: 'Actions',
         kind: 'nav',
         label: 'Admin login',
         href: '/admin/login',
         keywords: 'sign in dashboard',
-      },
-    ]
-    for (const p of dyn?.posts || []) {
-      list.push({
-        id: `post:${p.slug}`,
-        group: 'Writing',
-        kind: 'nav',
-        label: p.title || p.slug,
-        href: p.permalink,
-        keywords: ['post blog', p.description, ...(p.tags || [])].filter(Boolean).join(' '),
-        lang: p.lang && p.lang !== 'en' ? p.lang : undefined,
       })
     }
-    for (const w of dyn?.work || []) {
-      list.push({
-        id: `work:${w.slug}`,
-        group: 'Work',
-        kind: 'nav',
-        label: w.title || w.slug,
-        href: w.permalink,
-        keywords: ['project case study', w.description, ...(w.tech || [])].filter(Boolean).join(' '),
-        lang: w.lang && w.lang !== 'en' ? w.lang : undefined,
-      })
+    for (const doc of index?.docs || []) {
+      if (doc.kind === 'post') list.push(docItem(doc, 'Writing'))
+      else if (doc.kind === 'work') list.push(docItem(doc, 'Work'))
     }
     return list
-  }, [dyn, colorMode, toggleColorMode, copyAndToast])
+  }, [isAdmin, editTarget, unread, index, colorMode, toggleColorMode, copyAndToast, backUpNow, logOut])
 
   const recentItems: Item[] = useMemo(() => {
     const out: Item[] = []
     for (const r of recent) {
       const live = items.find((i) => i.id === r.id)
       if (live) out.push(live)
-      else if (r.href && r.href.startsWith('/') && !r.href.startsWith('//')) {
+      else if (r.href && r.href.startsWith('/') && !r.href.startsWith('//') && !r.id.startsWith('admin:')) {
         out.push({ id: r.id, group: r.group, kind: 'nav', label: r.label, href: r.href })
       }
     }
     return out
   }, [recent, items])
 
-  const rows: Row[] = useMemo(() => {
+  const { rows, total } = useMemo((): { rows: Row[]; total: number } => {
     const q = query.trim()
     if (!q) {
       const grouped: Row[] = []
       const push = (group: Group, list: Item[]) => list.forEach((item) => grouped.push({ item, group, indices: [] }))
       push('Recent', recentItems)
       push('On this page', sections)
-      for (const g of ['Pages', 'Actions', 'Writing', 'Work'] as const) {
+      for (const g of ['Admin', 'Pages', 'Actions', 'Writing', 'Work'] as const) {
         const list = items.filter((i) => i.group === g)
-        push(g, g === 'Writing' || g === 'Work' ? list.slice(0, 6) : list)
+        push(g, g === 'Writing' || g === 'Work' ? list.slice(0, BROWSE_LIMIT) : list)
       }
-      return grouped
+      return { rows: grouped, total: grouped.length }
     }
     const recentIds = new Set(recent.map((r) => r.id))
-    return rankItems([...sections, ...items], q, (it) => GROUP_BOOST[it.group] + (recentIds.has(it.id) ? 8 : 0))
-      .slice(0, RESULT_LIMIT)
-      .map(({ item, indices }) => ({ item, group: item.group, indices }))
-  }, [query, items, sections, recentItems, recent])
+    const boost = (id: string, group: Item['group']) => GROUP_BOOST[group] + (recentIds.has(id) ? 8 : 0)
+    // Commands and sections (posts / case studies are searched as content below).
+    const commands = items.filter((i) => i.group !== 'Writing' && i.group !== 'Work')
+    const ranked: Array<{ row: Row; score: number }> = rankItems([...sections, ...commands], q, (it) => boost(it.id, it.group)).map(
+      ({ item, score, indices }) => ({ row: { item, group: item.group, indices }, score }),
+    )
+    for (const hit of rankSearchDocs(index?.docs || [], q, (doc) => boost(`doc:${doc.href}`, 'Content'))) {
+      ranked.push({
+        row: { item: docItem(hit.doc, 'Content'), group: 'Content', indices: hit.indices, detail: docDetail(hit) },
+        score: hit.score,
+      })
+    }
+    ranked.sort((a, b) => b.score - a.score)
+    return { rows: ranked.slice(0, RESULT_LIMIT).map((r) => r.row), total: ranked.length }
+  }, [query, items, sections, recentItems, recent, index])
 
   useEffect(() => setActiveIdx(0), [query])
 
   useEffect(() => {
     if (!isOpen) return
-    const el = listRef.current?.querySelector<HTMLElement>(`[data-idx="${activeIdx}"]`)
+    const el = scrollRef.current?.querySelector<HTMLElement>(`[data-idx="${activeIdx}"]`)
     el?.scrollIntoView({ block: 'nearest' })
   }, [activeIdx, isOpen])
+
+  // Height glide: the scroll area's height follows its content (capped by
+  // max-height), transitioning only after the first measurement so opening
+  // is instant. Observed while the dialog is mounted.
+  const observerRef = useRef<{ ro: ResizeObserver; frame: { id: number } } | null>(null)
+  const observeContent = useCallback(
+    (node: HTMLDivElement | null) => {
+      const prev = observerRef.current
+      if (prev) {
+        prev.ro.disconnect()
+        cancelAnimationFrame(prev.frame.id)
+        observerRef.current = null
+      }
+      const container = node?.parentElement
+      if (!node || !container || typeof ResizeObserver === 'undefined') return
+      const frame = { id: 0 }
+      let measured = false
+      const ro = new ResizeObserver(() => {
+        cancelAnimationFrame(frame.id)
+        frame.id = requestAnimationFrame(() => {
+          const cs = getComputedStyle(container)
+          const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom)
+          container.style.setProperty('--list-h', `${Math.ceil(node.getBoundingClientRect().height + pad)}px`)
+          if (!measured) {
+            measured = true
+            // Enable the transition from the next change on.
+            frame.id = requestAnimationFrame(() => {
+              if (!reduceMotion) container.dataset.ready = ''
+            })
+          }
+        })
+      })
+      ro.observe(node)
+      observerRef.current = { ro, frame }
+    },
+    [reduceMotion],
+  )
 
   const remember = (item: Item) => {
     if (item.kind === 'section') return
@@ -390,32 +611,6 @@ export default function CommandPalette({ isOpen, onClose }: { isOpen: boolean; o
     run?.()
   }
 
-  // "G then <key>" navigation (the shortcuts listed next to Pages), active
-  // anywhere on the site except while typing in a field.
-  useEffect(() => {
-    const targets: Record<string, string> = {}
-    for (const it of items) {
-      const m = it.shortcut?.match(/^G ([A-Z])$/)
-      if (m && it.href) targets[m[1].toLowerCase()] = it.href
-    }
-    let armedUntil = 0
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (isOpen || e.metaKey || e.ctrlKey || e.altKey || e.repeat) return
-      const el = e.target as HTMLElement | null
-      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return
-      const k = e.key.toLowerCase()
-      if (Date.now() < armedUntil && targets[k]) {
-        armedUntil = 0
-        e.preventDefault()
-        if (router.asPath.split(/[?#]/)[0] !== targets[k]) router.push(targets[k])
-        return
-      }
-      armedUntil = k === 'g' && !e.shiftKey ? Date.now() + 1200 : 0
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [items, isOpen, router])
-
   const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.nativeEvent.isComposing) return
     if (e.key === 'ArrowDown') {
@@ -432,11 +627,12 @@ export default function CommandPalette({ isOpen, onClose }: { isOpen: boolean; o
 
   const mod = isMac ? '⌘' : 'Ctrl'
   const searching = query.trim() !== ''
-  const pageShortcuts = items.filter((i) => i.shortcut)
+  const pageShortcuts = NAV_SHORTCUTS.map((s) => items.find((i) => i.id === `page:${s.url}`)).filter((i): i is Item => !!i)
 
   const renderRow = (row: Row, idx: number) => {
-    const { item } = row
+    const { item, detail } = row
     const active = idx === activeIdx
+    const sideHint = row.group === 'Recent' ? item.group : item.hint
     return (
       <Flex
         key={`${row.group}:${item.id}`}
@@ -448,7 +644,7 @@ export default function CommandPalette({ isOpen, onClose }: { isOpen: boolean; o
         onClick={() => runItem(item)}
         px={3}
         py={2}
-        minH="40px"
+        minH="44px"
         borderRadius="md"
         cursor="pointer"
         bg={active ? 'var(--accent-soft)' : 'transparent'}
@@ -457,20 +653,32 @@ export default function CommandPalette({ isOpen, onClose }: { isOpen: boolean; o
         justifyContent="space-between"
         gap={3}
       >
-        <Flex alignItems="baseline" gap={2} minW={0}>
-          <Text as="span" fontSize="14px" color="page.fg" noOfLines={1} lang={item.lang}>
-            <Highlighted text={item.label} indices={row.indices} />
-          </Text>
-          {(item.hint || row.group === 'Recent') && (
-            <Text as="span" fontFamily={MONO} fontSize="11px" color="page.fg-secondary" noOfLines={1}>
-              {row.group === 'Recent' ? item.group : item.hint}
+        <Box minW={0} flex={1}>
+          <Flex alignItems="baseline" gap={2} minW={0}>
+            <Text as="span" fontSize="14px" color="page.fg" noOfLines={1} lang={item.lang}>
+              <Highlighted text={item.label} indices={row.indices} />
+            </Text>
+            {!detail && sideHint && (
+              <Text as="span" fontFamily={MONO} fontSize="11px" color="page.fg-secondary" noOfLines={1} flexShrink={1} minW={0}>
+                {sideHint}
+              </Text>
+            )}
+          </Flex>
+          {detail && (
+            <Text fontSize="12px" color="page.fg-secondary" noOfLines={1} mt={0.5} lang={item.lang}>
+              {detail.prefix && (
+                <Text as="span" fontFamily={MONO} fontSize="11px">
+                  {detail.prefix}
+                </Text>
+              )}
+              {detail.segments.map((seg, i) => (seg.match ? <Mark key={i}>{seg.text}</Mark> : <React.Fragment key={i}>{seg.text}</React.Fragment>))}
             </Text>
           )}
-        </Flex>
+        </Box>
         <Flex alignItems="center" gap={2} flexShrink={0}>
           {searching && (
             <Text as="span" fontFamily={MONO} fontSize="10px" letterSpacing="0.08em" textTransform="uppercase" color="page.fg-secondary">
-              {item.group}
+              {item.badge || item.group}
             </Text>
           )}
           {!searching && item.shortcut && <Key>{item.shortcut}</Key>}
@@ -512,7 +720,9 @@ export default function CommandPalette({ isOpen, onClose }: { isOpen: boolean; o
   }
 
   const resultText = searching
-    ? `${rows.length} result${rows.length === 1 ? '' : 's'}`
+    ? total > rows.length
+      ? `Showing ${rows.length} of ${total} results`
+      : `${total} result${total === 1 ? '' : 's'}`
     : `${rows.length} command${rows.length === 1 ? '' : 's'}`
 
   return (
@@ -521,7 +731,7 @@ export default function CommandPalette({ isOpen, onClose }: { isOpen: boolean; o
       onClose={onClose}
       onCloseComplete={onCloseComplete}
       size="xl"
-      motionPreset={reduceMotion ? 'none' : 'slideInBottom'}
+      motionPreset="none"
       isCentered={false}
       initialFocusRef={inputRef}
       returnFocusOnClose={restoreFocus}
@@ -529,6 +739,17 @@ export default function CommandPalette({ isOpen, onClose }: { isOpen: boolean; o
       <ModalOverlay backdropFilter="blur(12px)" bg="rgba(0,0,0,0.45)" />
       <ModalContent
         aria-label="Command palette"
+        motionProps={
+          reduceMotion
+            ? undefined
+            : {
+                initial: { opacity: 0, scale: 0.98, y: -4 },
+                animate: { opacity: 1, scale: 1, y: 0 },
+                exit: { opacity: 0, scale: 0.98 },
+                transition: { duration: 0.12, ease: [0.22, 1, 0.36, 1] },
+              }
+        }
+        transformOrigin="top center"
         bg="page.bg"
         border="1px solid"
         borderColor="page.border-strong"
@@ -548,7 +769,7 @@ export default function CommandPalette({ isOpen, onClose }: { isOpen: boolean; o
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKey}
             role="combobox"
-            aria-label="Search pages, sections, actions, posts and projects"
+            aria-label="Search pages, sections, actions, posts, case studies and the CV"
             aria-expanded={rows.length > 0}
             aria-controls={listId}
             aria-autocomplete="list"
@@ -561,60 +782,74 @@ export default function CommandPalette({ isOpen, onClose }: { isOpen: boolean; o
             fontSize="15px"
             color="page.fg"
             _placeholder={{ color: 'page.fg-secondary' }}
+            // The dialog is the focus context and the caret marks the field;
+            // a ring inside the header bar would only add noise.
+            _focusVisible={{ outline: 'none' }}
             flex={1}
           />
-          {loading && <Spinner size="xs" color="page.fg-secondary" label="Loading posts and projects" />}
+          {loading && <Spinner size="xs" color="page.fg-secondary" label="Loading the search index" />}
           <Key>ESC</Key>
         </Flex>
 
-        <Box ref={listRef} maxH={['65vh', '60vh']} overflowY="auto" p={2}>
-          <Box id={listId} role="listbox" aria-label="Commands">
-            {searching ? rows.map((row, i) => renderRow(row, i)) : renderGrouped()}
-          </Box>
-          {searching && rows.length === 0 && (
-            <Flex direction="column" align="center" justify="center" py={10} color="page.fg-secondary" fontFamily={MONO} fontSize="12px" gap={1}>
-              <Text>no matches</Text>
-              <Text opacity={0.75}>try fewer or different letters</Text>
-            </Flex>
-          )}
-          {!searching && (
-            <Box as="section" aria-label="Keyboard shortcuts" mt={2} mx={3} mb={2} pt={4} borderTop="1px solid" borderColor="page.border">
-              <Text fontFamily={MONO} fontSize="10px" letterSpacing="0.16em" textTransform="uppercase" color="page.fg-secondary" mb={3}>
-                Shortcuts
-              </Text>
-              <Box
-                as="dl"
-                display="grid"
-                gridTemplateColumns={{ base: '1fr', sm: '1fr 1fr' }}
-                columnGap={6}
-                rowGap={2}
-                fontSize="12px"
-                color="page.fg-secondary"
-                sx={{ '& > div': { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 3 }, '& dd': { m: 0 } }}
-              >
-                <div>
-                  <dt>Open / close palette</dt>
-                  <dd>
-                    <Key>{mod}</Key> <Key>K</Key>
-                  </dd>
-                </div>
-                <div>
-                  <dt>Move / open</dt>
-                  <dd>
-                    <Key>↑</Key> <Key>↓</Key> <Key>↵</Key>
-                  </dd>
-                </div>
-                {pageShortcuts.map((it) => (
-                  <div key={it.id}>
-                    <dt>Go to {it.label}</dt>
+        <Box
+          ref={scrollRef}
+          maxH={['65vh', '60vh']}
+          overflowY="auto"
+          p={2}
+          sx={{
+            height: { base: 'min(var(--list-h), 65vh)', sm: 'min(var(--list-h), 60vh)' },
+            '&[data-ready]': { transition: 'height 120ms var(--ease-out-quart)' },
+          }}
+        >
+          <Box ref={observeContent}>
+            <Box id={listId} role="listbox" aria-label="Commands">
+              {searching ? rows.map((row, i) => renderRow(row, i)) : renderGrouped()}
+            </Box>
+            {searching && rows.length === 0 && (
+              <Flex direction="column" align="center" justify="center" py={10} color="page.fg-secondary" fontFamily={MONO} fontSize="12px" gap={1}>
+                <Text>no matches</Text>
+                <Text>{loading ? 'still loading posts and projects…' : 'try fewer or different letters'}</Text>
+              </Flex>
+            )}
+            {!searching && (
+              <Box as="section" aria-label="Keyboard shortcuts" mt={2} mx={3} mb={2} pt={4} borderTop="1px solid" borderColor="page.border">
+                <Text fontFamily={MONO} fontSize="10px" letterSpacing="0.16em" textTransform="uppercase" color="page.fg-secondary" mb={3}>
+                  Shortcuts
+                </Text>
+                <Box
+                  as="dl"
+                  display="grid"
+                  gridTemplateColumns={{ base: '1fr', sm: '1fr 1fr' }}
+                  columnGap={6}
+                  rowGap={2}
+                  fontSize="12px"
+                  color="page.fg-secondary"
+                  sx={{ '& > div': { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 3 }, '& dd': { m: 0 } }}
+                >
+                  <div>
+                    <dt>Open / close palette</dt>
                     <dd>
-                      <Key>{it.shortcut}</Key>
+                      <Key>{mod}</Key> <Key>K</Key> <Text as="span">or</Text> <Key>/</Key>
                     </dd>
                   </div>
-                ))}
+                  <div>
+                    <dt>Move / open</dt>
+                    <dd>
+                      <Key>↑</Key> <Key>↓</Key> <Key>↵</Key>
+                    </dd>
+                  </div>
+                  {pageShortcuts.map((it) => (
+                    <div key={it.id}>
+                      <dt>Go to {it.label}</dt>
+                      <dd>
+                        <Key>{it.shortcut}</Key>
+                      </dd>
+                    </div>
+                  ))}
+                </Box>
               </Box>
-            </Box>
-          )}
+            )}
+          </Box>
         </Box>
 
         <Flex
@@ -639,7 +874,7 @@ export default function CommandPalette({ isOpen, onClose }: { isOpen: boolean; o
               <Text>open</Text>
             </Flex>
           </Flex>
-          <Text role="status" aria-live="polite" ml="auto">
+          <Text role="status" aria-live="polite" ml="auto" className="tnum">
             {resultText}
           </Text>
         </Flex>

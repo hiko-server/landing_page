@@ -20,9 +20,10 @@ import { resolveSocialLinks } from './chrome'
  *
  * Profile links (header drawer, footer) come from the public home.socials:
  * `socials` is what the current page shipped (`pageProps.chromeSocials`;
- * null = the home document has no socials). When the first page rendered
- * did not ship it, the public /api/home view is read once after mount. The
- * last known value is kept across navigations to pages that do not ship it.
+ * null = the home document has no socials, which is an answer — nothing is
+ * fetched). Only when the first page rendered did not ship it at all
+ * (undefined) is the public /api/home view read once after mount. The last
+ * known value is kept across navigations to pages that do not ship it.
  */
 
 /** undefined = this page did not ship the value; null = the home document has none. */
@@ -64,7 +65,9 @@ export default function SiteChrome({ children, socials }: { children: React.Reac
         <a className="skip-nav no-print" href="#main">
           Skip to content
         </a>
-        <Box position="sticky" top={0} zIndex={40} className="no-print">
+        {/* Its own view-transition snapshot: the header stays pinned while
+            route transitions slide / fade the page beneath it (globals.css). */}
+        <Box position="sticky" top={0} zIndex={40} className="no-print" style={{ viewTransitionName: 'site-header' }}>
           <Header socials={links} />
         </Box>
         <Box

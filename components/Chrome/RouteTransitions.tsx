@@ -1,16 +1,26 @@
 import { useEffect, useLayoutEffect, useState } from 'react'
 import type { Router } from 'next/router'
 import {
+  HistoryIndex,
   TransitionGate,
   isCrossPageNavigation,
   prefersReducedMotion,
+  resolveDirection,
   startViewTransitionSafely,
   supportsViewTransitions,
+  takePendingDirection,
 } from '../../lib/viewTransition'
 
 /**
  * View transitions for client-side route changes (contract F). See
  * lib/viewTransition.ts for the mechanism; this file wires it to Next's router.
+ *
+ * Direction: every transition gets a type — 'next' / 'prev' when a sequence
+ * link set one (setPendingDirection), 'forward' for an ordinary push, and for
+ * Back / Forward 'back' or 'forward' from the order of the two history
+ * entries (HistoryIndex, keyed by Next's own history.state.key). globals.css
+ * turns the type into a short directional slide; without a type the page
+ * cross-fades.
  */
 
 const gate = new TransitionGate()
@@ -21,6 +31,35 @@ const HOLD_LIMIT_MS = 400
 const COMMIT_WAIT_MS = 1000
 
 const useIsomorphicLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect
+
+/**
+ * True while a route transition holds the incoming page (the old snapshot is
+ * being captured). Other view transitions — the theme reveal — must not start
+ * then, or they would skip the route transition mid-way.
+ */
+export function isRouteTransitionHolding(): boolean {
+  return gate.holding
+}
+
+let historyIndex: HistoryIndex | null = null
+
+function getHistoryIndex(): HistoryIndex {
+  if (!historyIndex) {
+    let storage: Storage | null = null
+    try {
+      storage = window.sessionStorage
+    } catch {
+      storage = null
+    }
+    historyIndex = new HistoryIndex(storage)
+  }
+  return historyIndex
+}
+
+/** Next's key for the history entry currently in the address bar. */
+function currentHistoryKey(): unknown {
+  return (window.history.state as { key?: unknown } | null)?.key
+}
 
 /**
  * Registers the router listeners and returns whether this browser can run
@@ -38,31 +77,57 @@ export function useRouteViewTransitions(events: Router['events'], pageKey: strin
 
   useEffect(() => {
     if (!enabled) return
+    const order = getHistoryIndex()
+    order.enter(currentHistoryKey())
     let safety: ReturnType<typeof setTimeout> | undefined
     const open = () => {
       clearTimeout(safety)
       gate.release()
     }
     // Fires after the next page's code + data have loaded, right before Next
-    // renders it — so holding the render costs one frame, never a fetch.
+    // renders it (and before it writes the new history entry) — so holding
+    // the render costs one frame, never a fetch.
     const onBeforeHistoryChange = (as: string) => {
+      // Always consume the pending direction so it can never leak into a
+      // later, unrelated navigation.
+      const pendingDirection = takePendingDirection()
       if (gate.holding || prefersReducedMotion() || !isCrossPageNavigation(window.location.href, as)) return
+      // On Back / Forward the browser has already moved to the target entry;
+      // on a push the address bar still shows the entry being left.
+      const key = currentHistoryKey()
+      const isPop = typeof key === 'string' && key !== order.current
+      const type = resolveDirection(pendingDirection, isPop, order.currentIndex, isPop ? order.indexOf(key) : null)
       gate.hold()
       safety = setTimeout(open, HOLD_LIMIT_MS)
-      const started = startViewTransitionSafely(document, async () => {
-        open()
-        await gate.waitForCommit(COMMIT_WAIT_MS)
-      })
+      const started = startViewTransitionSafely(
+        document,
+        async () => {
+          open()
+          await gate.waitForCommit(COMMIT_WAIT_MS)
+        },
+        type ? [type] : undefined,
+      )
       if (!started) open()
     }
-    const onComplete = () => gate.markCommitted()
+    const onComplete = () => {
+      order.enter(currentHistoryKey())
+      gate.markCommitted()
+    }
+    const onError = () => {
+      open()
+      order.enter(currentHistoryKey())
+    }
+    // In-page anchors push their own history entries (no route events).
+    const onHashChange = () => order.enter(currentHistoryKey())
     events.on('beforeHistoryChange', onBeforeHistoryChange)
     events.on('routeChangeComplete', onComplete)
-    events.on('routeChangeError', open)
+    events.on('routeChangeError', onError)
+    events.on('hashChangeComplete', onHashChange)
     return () => {
       events.off('beforeHistoryChange', onBeforeHistoryChange)
       events.off('routeChangeComplete', onComplete)
-      events.off('routeChangeError', open)
+      events.off('routeChangeError', onError)
+      events.off('hashChangeComplete', onHashChange)
       open()
     }
   }, [enabled, events])

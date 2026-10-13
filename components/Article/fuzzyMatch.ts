@@ -9,7 +9,11 @@
  *     happens to contain a g and later an h far apart.
  *   - Every whitespace-separated query token must match the label or the
  *     keywords. Only label matches are highlighted.
+ *   - Content documents (posts, case studies, pages, CV entries) are ranked
+ *     by rankSearchDocs with per-field weights.
  */
+
+import { safeHref } from '../../lib/cvFormat'
 
 export type Match = { score: number; indices: number[] }
 
@@ -137,4 +141,191 @@ export function highlightSegments(text: string, indices: readonly number[]): Arr
     else out.push({ text: text[i], match })
   }
   return out
+}
+
+// ── Content search (the /api/search-index documents) ───────────────────────
+
+/** Structural copy of the frozen SearchDoc contract (lib/searchIndex.ts is server-only). */
+export type SearchDocLike = {
+  kind: 'post' | 'work' | 'page' | 'cv'
+  title: string
+  href: string
+  description?: string
+  tags?: string[]
+  headings?: string[]
+  body?: string
+  lang?: string
+}
+
+/** What the palette keeps from GET /api/search-index. */
+export type SearchIndex = { docs: SearchDocLike[]; bookingUrl: string }
+
+function str(v: unknown): string | undefined {
+  return typeof v === 'string' && v.trim() ? v : undefined
+}
+
+function strList(v: unknown): string[] | undefined {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.trim() !== '') : undefined
+}
+
+/**
+ * Validate a GET /api/search-index body: keeps only well-formed docs that
+ * point at a page of this site, and an http(s) booking URL.
+ */
+export function parseSearchIndex(body: unknown): SearchIndex {
+  const raw = body && typeof body === 'object' ? (body as { docs?: unknown; availability?: { bookingUrl?: unknown } }) : {}
+  const docs: SearchDocLike[] = []
+  for (const d of Array.isArray(raw.docs) ? raw.docs : []) {
+    if (!d || typeof d !== 'object') continue
+    const o = d as Record<string, unknown>
+    const kind = o.kind
+    const title = str(o.title)
+    const href = str(o.href)
+    if ((kind !== 'post' && kind !== 'work' && kind !== 'page' && kind !== 'cv') || !title || !href) continue
+    if (!href.startsWith('/') || href.startsWith('//')) continue
+    docs.push({
+      kind,
+      title,
+      href,
+      description: str(o.description),
+      tags: strList(o.tags),
+      headings: strList(o.headings),
+      body: str(o.body),
+      lang: str(o.lang),
+    })
+  }
+  const booking = safeHref(raw.availability?.bookingUrl)
+  return { docs, bookingUrl: /^https?:\/\//i.test(booking) ? booking : '' }
+}
+
+export type DocField = 'title' | 'tag' | 'description' | 'heading' | 'body'
+
+export type Segment = { text: string; match: boolean }
+
+export type DocHit<T> = {
+  doc: T
+  score: number
+  /** The field that explains the match: 'title' when every token hit the title. */
+  field: DocField
+  /** That field's value ('' for title hits; a single tag / heading; a body snippet as text). */
+  value: string
+  /** Title characters to highlight. */
+  indices: number[]
+  /** For field 'body': a ~60-char window with the match marked. */
+  snippet?: Segment[]
+}
+
+/**
+ * Relative field weights (title ×3, tags ×2, description / headings ×1, body
+ * substring ×0.5). Scores are divided by the title weight so a title hit
+ * ranks on the same scale as a palette command's label hit.
+ */
+export const DOC_FIELD_WEIGHT: Record<DocField, number> = { title: 3, tag: 2, description: 1, heading: 1, body: 0.5 }
+const WEIGHT_SCALE = 1 / DOC_FIELD_WEIGHT.title
+/** A body hit is a plain substring (no fuzzy score); it counts as a contiguous match. */
+const BODY_MATCH_SCORE = 100
+const BODY_MIN_QUERY = 3
+export const SNIPPET_CHARS = 60
+
+const normalizedBodies = new WeakMap<object, { text: string; lower: string }>()
+
+function bodyOf(doc: SearchDocLike): { text: string; lower: string } | null {
+  if (!doc.body) return null
+  let cached = normalizedBodies.get(doc)
+  if (!cached) {
+    const text = doc.body.replace(/\s+/g, ' ').trim()
+    cached = { text, lower: text.toLowerCase() }
+    normalizedBodies.set(doc, cached)
+  }
+  return cached
+}
+
+function bestOf(query: string, values: readonly string[] | undefined): { match: Match; value: string } | null {
+  let best: { match: Match; value: string } | null = null
+  for (const value of values || []) {
+    if (typeof value !== 'string' || !value) continue
+    const m = fuzzyMatch(query, value)
+    if (m && (!best || m.score > best.match.score)) best = { match: m, value }
+  }
+  return best
+}
+
+/** A window of about `width` characters of `text` around [at, at+len), with the match marked. */
+export function snippetAround(text: string, at: number, len: number, width = SNIPPET_CHARS): Segment[] {
+  const half = Math.max(0, Math.floor((width - len) / 2))
+  let start = Math.max(0, at - half)
+  const end = Math.min(text.length, Math.max(at + len, start + width))
+  start = Math.max(0, Math.min(start, end - width))
+  const out: Segment[] = []
+  const before = text.slice(start, at)
+  const after = text.slice(at + len, end)
+  out.push({ text: `${start > 0 ? '…' : ''}${before}`, match: false })
+  out.push({ text: text.slice(at, at + len), match: true })
+  out.push({ text: `${after}${end < text.length ? '…' : ''}`, match: false })
+  return out.filter((s) => s.text)
+}
+
+/** `text` cut to `max` characters with an ellipsis. */
+export function truncate(text: string, max = SNIPPET_CHARS): string {
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text
+}
+
+/**
+ * Rank search documents for `query` (best first, stable for ties). Every
+ * whitespace-separated token must hit at least one field; each token counts
+ * with its best weighted field. The hit reports which field explains the
+ * match so the palette can say where it was found.
+ */
+export function rankSearchDocs<T extends SearchDocLike>(docs: readonly T[], query: string, boost?: (doc: T) => number): DocHit<T>[] {
+  const tokens = query.trim().split(/\s+/).filter(Boolean)
+  if (!tokens.length) return []
+  const whole = query.trim().toLowerCase()
+
+  const out: Array<DocHit<T> & { order: number }> = []
+  docs.forEach((doc, order) => {
+    let score = 0
+    const titleHits = new Set<number>()
+    let explain: { field: Exclude<DocField, 'title'>; value: string; weighted: number; snippet?: Segment[] } | null = null
+    const body = bodyOf(doc)
+
+    for (const tok of tokens) {
+      const candidates: Array<{ field: DocField; weighted: number; value: string; indices?: number[]; snippet?: Segment[] }> = []
+      const inTitle = fuzzyMatch(tok, doc.title)
+      if (inTitle) candidates.push({ field: 'title', weighted: inTitle.score * DOC_FIELD_WEIGHT.title, value: '', indices: inTitle.indices })
+      const inTag = bestOf(tok, doc.tags)
+      if (inTag) candidates.push({ field: 'tag', weighted: inTag.match.score * DOC_FIELD_WEIGHT.tag, value: inTag.value })
+      const inDesc = doc.description ? fuzzyMatch(tok, doc.description) : null
+      if (inDesc) candidates.push({ field: 'description', weighted: inDesc.score * DOC_FIELD_WEIGHT.description, value: doc.description as string })
+      const inHeading = bestOf(tok, doc.headings)
+      if (inHeading) candidates.push({ field: 'heading', weighted: inHeading.match.score * DOC_FIELD_WEIGHT.heading, value: inHeading.value })
+      if (body && tok.length >= BODY_MIN_QUERY) {
+        const at = body.lower.indexOf(tok.toLowerCase())
+        if (at >= 0) {
+          const snippet = snippetAround(body.text, at, tok.length)
+          candidates.push({ field: 'body', weighted: BODY_MATCH_SCORE * DOC_FIELD_WEIGHT.body, value: snippet.map((s) => s.text).join(''), snippet })
+        }
+      }
+      if (!candidates.length) return
+      const best = candidates.reduce((a, b) => (b.weighted > a.weighted ? b : a))
+      score += best.weighted
+      if (best.field === 'title') best.indices?.forEach((i) => titleHits.add(i))
+      else if (!explain || best.weighted > explain.weighted) {
+        explain = { field: best.field, value: best.value, weighted: best.weighted, snippet: best.snippet }
+      }
+    }
+
+    if (tokens.length > 1 && doc.title.toLowerCase().includes(whole)) score += 50 * DOC_FIELD_WEIGHT.title
+    out.push({
+      doc,
+      score: score * WEIGHT_SCALE + (boost ? boost(doc) : 0),
+      field: explain ? explain.field : 'title',
+      value: explain ? explain.value : '',
+      indices: Array.from(titleHits).sort((a, b) => a - b),
+      snippet: explain?.snippet,
+      order,
+    })
+  })
+  return out
+    .sort((a, b) => b.score - a.score || a.order - b.order)
+    .map(({ doc, score, field, value, indices, snippet }) => ({ doc, score, field, value, indices, snippet }))
 }
