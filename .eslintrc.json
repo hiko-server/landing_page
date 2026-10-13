@@ -37,6 +37,29 @@
         "react-hooks/exhaustive-deps": "warn",
         "@typescript-eslint/ban-ts-comment": "warn"
     },
+    "overrides": [
+        {
+            "files": [
+                "components/Header/**",
+                "components/Footer/**",
+                "components/Chrome/**",
+                "pages/_app.tsx"
+            ],
+            "rules": {
+                "no-restricted-imports": [
+                    "error",
+                    {
+                        "patterns": [
+                            {
+                                "group": ["react-icons/*"],
+                                "message": "The persistent chrome ships in the shared bundle: use the inline icons in components/Icons/brand.tsx."
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    ],
     "settings": {
         "react": {
             "version": "detect"

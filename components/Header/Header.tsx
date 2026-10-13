@@ -1,40 +1,28 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
-import {
-  Box,
-  Text,
-  Button,
-  Drawer,
-  DrawerOverlay,
-  DrawerContent,
-  DrawerHeader,
-  DrawerBody,
-  DrawerCloseButton,
-  useDisclosure,
-  Flex,
-  IconButton,
-  Link,
-  useToast,
-  useColorMode,
-  Kbd,
-} from '@chakra-ui/react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Box, Text, Button, useDisclosure, Flex, IconButton, Link, useToast, useColorMode, Kbd } from '@chakra-ui/react'
 import NextLink from 'next/link'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/router'
 import { motion } from 'framer-motion'
-import { TfiAlignJustify } from 'react-icons/tfi'
-import { FaGithub, FaGitlab, FaLinkedin, FaWhatsapp } from 'react-icons/fa'
-import { MoonIcon, SunIcon, SearchIcon } from '@chakra-ui/icons'
-import CommandPalette from '../General-UI/CommandPalette'
+import { SearchIcon } from '@chakra-ui/icons'
+import CommandPaletteLazy, { preloadCommandPalette } from '../General-UI/CommandPaletteLazy'
 import {
+  MOBILE_MENU_DIALOG_ID,
   PRIMARY_LINKS,
   SOCIAL_LINKS,
   type SocialLink,
-  type SocialName,
   formatAge,
   isActiveRoute,
+  shortcutTarget,
+  shouldProbeSession,
   shouldRecheckSession,
   splitBrand,
 } from '../Chrome/chrome'
 import { useBrandHost } from '../Chrome/useBrandHost'
+import { useFetchJson } from '../Common/useFetchJson'
+import { MenuIcon } from '../Icons/brand'
+import { toggleThemeWithTransition } from '../../lib/themeTransition'
+import ThemeIcon from './ThemeIcon'
 
 /**
  * v6 Header — rendered once by components/Chrome/SiteChrome (persistent across
@@ -46,59 +34,68 @@ import { useBrandHost } from '../Chrome/useBrandHost'
  * Breakpoints are pure CSS (no JS media query) and every colour is a semantic
  * token (CSS variable), so the header is correct on the very first paint at
  * every width and in both colour modes.
+ *
+ * Weight: the ⌘K palette and the mobile drawer are separate chunks, fetched
+ * when first needed (and warmed on hover / focus / idle); icons are inline.
  */
-
-const SOCIAL_ICONS: Record<SocialName, React.ReactElement> = {
-  GitHub: <FaGithub />,
-  GitLab: <FaGitlab />,
-  LinkedIn: <FaLinkedin />,
-  WhatsApp: <FaWhatsapp />,
-}
 
 const MONO = 'var(--font-geist-mono), ui-monospace, monospace'
 
-/** Mono uppercase group label used inside the mobile drawer. */
-function DrawerLabel({ children, id }: { children: React.ReactNode; id?: string }) {
-  return (
-    <Text
-      id={id}
-      fontFamily={MONO}
-      fontSize="11px"
-      letterSpacing="0.12em"
-      textTransform="uppercase"
-      color="page.fg-subtle"
-      mb={2}
-    >
-      {children}
-    </Text>
-  )
+const loadMobileDrawer = () => import('./MobileDrawer')
+const MobileDrawer = dynamic(loadMobileDrawer, { ssr: false, loading: () => null })
+const preloadMobileDrawer = () => {
+  loadMobileDrawer().catch(() => undefined)
 }
 
-/** "● Last commit · 2h ago" — fetched once per visit (the header is persistent). */
-function LiveStatus() {
-  const [text, setText] = useState<string | null>(null)
-
+/** True while `query` matches (false on the server and until mounted). */
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(false)
   useEffect(() => {
-    let cancelled = false
-    const load = async () => {
-      try {
-        const res = await fetch('/api/github/events')
-        if (!res.ok) return
-        const data = (await res.json()) as { events?: { type?: string; created_at?: string }[] }
-        const events = data.events || []
-        const created = (events.find((e) => e.type === 'PushEvent') || events[0])?.created_at
-        if (!created || cancelled) return
-        setText(formatAge(created, Date.now()))
-      } catch {
-        // Best effort: the pill simply stays hidden.
-      }
+    const mql = window.matchMedia(query)
+    const update = () => setMatches(mql.matches)
+    update()
+    mql.addEventListener('change', update)
+    return () => mql.removeEventListener('change', update)
+  }, [query])
+  return matches
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null
+  return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))
+}
+
+type GithubEvents = { events?: { type?: string; created_at?: string }[] }
+
+/** "● Last commit · 2h ago" — only where it is shown (md+), fetched once per visit. */
+function LiveStatus() {
+  const wide = useMediaQuery('(min-width: 48em)')
+  return wide ? <LiveStatusPill /> : null
+}
+
+function LiveStatusPill() {
+  // Shared with the home activity widgets (concurrent requests are deduped).
+  const { data } = useFetchJson<GithubEvents>('/api/github/events')
+  const created = useMemo(() => {
+    const events = data?.events || []
+    return (events.find((e) => e.type === 'PushEvent') || events[0])?.created_at || null
+  }, [data])
+
+  // The age is computed on the client only (no server/client mismatch) and
+  // recomputed when the page is restored from the back/forward cache.
+  const [now, setNow] = useState<number | null>(null)
+  useEffect(() => {
+    setNow(Date.now())
+  }, [created])
+  useEffect(() => {
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) setNow(Date.now())
     }
-    load()
-    return () => {
-      cancelled = true
-    }
+    window.addEventListener('pageshow', onPageShow)
+    return () => window.removeEventListener('pageshow', onPageShow)
   }, [])
 
+  const text = created && now ? formatAge(created, now) : null
   if (!text) return null
 
   return (
@@ -113,6 +110,7 @@ function LiveStatus() {
       fontSize="11px"
       color="page.fg-subtle"
       letterSpacing="0.02em"
+      className="tnum"
       title={`Last commit · ${text}`}
     >
       <Box position="relative" w="6px" h="6px" aria-hidden>
@@ -131,16 +129,6 @@ function LiveStatus() {
   )
 }
 
-/** Moon in light mode, sun in dark — switched by CSS so the first paint is right. */
-function ThemeIcon() {
-  return (
-    <>
-      <MoonIcon aria-hidden _dark={{ display: 'none' }} />
-      <SunIcon aria-hidden display="none" _dark={{ display: 'inline-block' }} />
-    </>
-  )
-}
-
 /** `socials`: the profile links to offer in the drawer (SiteChrome resolves them from home.socials). */
 const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] }) => {
   const router = useRouter()
@@ -148,21 +136,39 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
   const [isAdmin, setIsAdmin] = useState(false)
   const { isOpen, onOpen, onClose } = useDisclosure()
   const { isOpen: cmdkOpen, onOpen: openCmdk, onClose: closeCmdk } = useDisclosure()
+  // The lazy chunks are rendered from the first time they are asked for on.
+  const [paletteRequested, setPaletteRequested] = useState(false)
+  const [drawerRequested, setDrawerRequested] = useState(false)
   const { colorMode, toggleColorMode } = useColorMode()
-  const firstDrawerLinkRef = useRef<HTMLAnchorElement>(null)
   const brand = useBrandHost()
   const [brandHead, brandTail] = splitBrand(brand)
 
+  const openPalette = useCallback(() => {
+    setPaletteRequested(true)
+    openCmdk()
+  }, [openCmdk])
+
+  const openDrawer = useCallback(() => {
+    setDrawerRequested(true)
+    onOpen()
+  }, [onOpen])
+
   // The session cookie is httpOnly (invisible to document.cookie), so ask the
-  // server (always 200 → { authenticated }). Once on mount, then only when a
-  // navigation can have changed the answer (see shouldRecheckSession). Only
-  // the newest response is applied, and an in-flight check is never dropped
-  // just because the visitor navigated meanwhile.
+  // server (always 200 → { authenticated }) — but only when the visitor can
+  // be signed in at all (the cv_admin_hint cookie, or inside /admin), so
+  // ordinary visitors never send the request. Once on mount, then only when
+  // a navigation can have changed the answer (see shouldRecheckSession).
+  // Only the newest response is applied, and an in-flight check is never
+  // dropped just because the visitor navigated meanwhile.
   const isAdminRef = useRef(isAdmin)
   isAdminRef.current = isAdmin
   const sessionSeq = useRef(0)
-  const checkSession = useCallback(() => {
+  const checkSession = useCallback((pathname: string) => {
     const seq = ++sessionSeq.current
+    if (!shouldProbeSession(document.cookie, pathname)) {
+      setIsAdmin(false)
+      return
+    }
     fetch('/api/admin/session', { credentials: 'same-origin' })
       .then((r) => (r.ok ? r.json() : { authenticated: false }))
       .then((d) => {
@@ -170,19 +176,19 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
       })
       .catch(() => {})
   }, [])
+  const pathname = router.pathname
+  const lastPathRef = useRef(pathname)
   useEffect(() => {
-    checkSession()
+    checkSession(lastPathRef.current)
     return () => {
       // Unmounted: ignore any response still in flight.
       sessionSeq.current += 1
     }
   }, [checkSession])
-  const pathname = router.pathname
-  const lastPathRef = useRef(pathname)
   useEffect(() => {
     const prev = lastPathRef.current
     lastPathRef.current = pathname
-    if (shouldRecheckSession(prev, pathname, isAdminRef.current)) checkSession()
+    if (shouldRecheckSession(prev, pathname, isAdminRef.current)) checkSession(pathname)
   }, [pathname, checkSession])
 
   // The drawer belongs to the page it was opened on: close it whenever a
@@ -197,20 +203,53 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
     setIsMac(/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent))
   }, [])
 
-  // Global ⌘K / Ctrl+K to open the command palette from any page.
+  // Global keys: ⌘K / Ctrl+K toggles the palette anywhere; "/" opens it and
+  // "G then <key>" navigates (both only outside text fields, palette closed).
   useEffect(() => {
+    let armedUntil = 0
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         if (cmdkOpen) closeCmdk()
-        else openCmdk()
+        else openPalette()
+        return
       }
+      if (cmdkOpen || e.metaKey || e.ctrlKey || e.altKey || e.repeat || e.defaultPrevented || isEditableTarget(e.target)) return
+      if (e.key === '/') {
+        e.preventDefault()
+        armedUntil = 0
+        openPalette()
+        return
+      }
+      const k = e.key.toLowerCase()
+      const target = Date.now() < armedUntil ? shortcutTarget(k) : null
+      if (target) {
+        armedUntil = 0
+        e.preventDefault()
+        if (router.asPath.split(/[?#]/)[0] !== target) router.push(target)
+        return
+      }
+      armedUntil = k === 'g' && !e.shiftKey ? Date.now() + 1200 : 0
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [cmdkOpen, openCmdk, closeCmdk])
+  }, [cmdkOpen, openPalette, closeCmdk, router])
 
-  const logout = async () => {
+  // Warm the palette chunk once the browser is idle after load.
+  useEffect(() => {
+    const w = window as Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number
+      cancelIdleCallback?: (id: number) => void
+    }
+    if (w.requestIdleCallback) {
+      const id = w.requestIdleCallback(preloadCommandPalette, { timeout: 5000 })
+      return () => w.cancelIdleCallback?.(id)
+    }
+    const timer = window.setTimeout(preloadCommandPalette, 2000)
+    return () => window.clearTimeout(timer)
+  }, [])
+
+  const logout = useCallback(async () => {
     try {
       const res = await fetch('/api/admin/logout', { method: 'POST' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -221,7 +260,7 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
     } catch {
       toast({ status: 'error', title: 'Logout failed' })
     }
-  }
+  }, [router, toast])
 
   const isDark = colorMode === 'dark'
   const themeLabel = isDark ? 'Switch to light theme' : 'Switch to dark theme'
@@ -236,7 +275,7 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
         backdropFilter="blur(14px)"
         borderBottom="1px solid"
         borderColor="page.border"
-        className="no-print"
+        className="no-print glass"
       >
         <Flex
           maxW="var(--container-content)"
@@ -253,6 +292,9 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
               as={NextLink}
               href="/"
               aria-label={`${brand} — home`}
+              display="inline-flex"
+              alignItems="center"
+              minH="44px"
               fontFamily={MONO}
               fontSize="13px"
               fontWeight={600}
@@ -339,9 +381,12 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
               _hover={{ borderColor: 'page.border-strong', color: 'page.fg' }}
               leftIcon={<SearchIcon boxSize="10px" />}
               iconSpacing={{ base: 0, md: 2 }}
-              onClick={openCmdk}
+              onClick={openPalette}
+              onPointerEnter={preloadCommandPalette}
+              onFocus={preloadCommandPalette}
               aria-label="Open command palette"
-              aria-keyshortcuts={isMac ? 'Meta+K' : 'Control+K'}
+              aria-haspopup="dialog"
+              aria-keyshortcuts={isMac ? 'Meta+K /' : 'Control+K /'}
             >
               <Text as="span" display={{ base: 'none', xl: 'inline' }} mr={2}>
                 Search
@@ -358,7 +403,7 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
               </Kbd>
             </Button>
 
-            {/* Theme toggle */}
+            {/* Theme toggle: the new mode is revealed from this button. */}
             <IconButton
               size="sm"
               variant="ghost"
@@ -367,7 +412,7 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
               aria-label={themeLabel}
               title={themeLabel}
               icon={<ThemeIcon />}
-              onClick={toggleColorMode}
+              onClick={(e) => toggleThemeWithTransition(toggleColorMode, e.currentTarget)}
             />
 
             {/*
@@ -409,13 +454,16 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
             )}
 
             <IconButton
-              icon={<TfiAlignJustify />}
-              onClick={onOpen}
+              icon={<MenuIcon />}
+              onClick={openDrawer}
+              onPointerDown={preloadMobileDrawer}
+              onFocus={preloadMobileDrawer}
               variant="ghost"
               size="sm"
               aria-label="Open menu"
               aria-haspopup="dialog"
               aria-expanded={isOpen}
+              aria-controls={MOBILE_MENU_DIALOG_ID}
               display={{ base: 'inline-flex', lg: 'none' }}
               color="page.fg-subtle"
               _hover={{ color: 'page.fg', bg: 'page.hover' }}
@@ -424,142 +472,9 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
         </Flex>
       </Box>
 
-      {/*
-        Mobile drawer: every primary link, then socials, theme and (signed in)
-        admin. Chakra's Drawer traps focus and closes on Escape; the first
-        link receives focus on open.
-      */}
-      <Drawer isOpen={isOpen} placement="right" onClose={onClose} size="xs" initialFocusRef={firstDrawerLinkRef}>
-        <DrawerOverlay bg="rgba(0,0,0,0.6)" backdropFilter="blur(4px)" />
-        <DrawerContent bg="page.bg" color="page.fg" borderLeft="1px solid" borderColor="page.border">
-          <DrawerCloseButton top="10px" color="page.fg-subtle" _hover={{ color: 'page.fg', bg: 'page.hover' }} />
-          <DrawerHeader
-            borderBottomWidth="1px"
-            borderColor="page.border"
-            fontFamily={MONO}
-            fontSize="11px"
-            fontWeight={500}
-            letterSpacing="0.12em"
-            textTransform="uppercase"
-            color="page.fg-subtle"
-            py={4}
-          >
-            Menu
-          </DrawerHeader>
-          <DrawerBody py={4}>
-            <Flex direction="column" gap={5}>
-              <Box as="nav" aria-labelledby="drawer-nav-label">
-                <DrawerLabel id="drawer-nav-label">Navigate</DrawerLabel>
-                <Flex direction="column" gap={1}>
-                  {PRIMARY_LINKS.map((link, i) => {
-                    const active = isActiveRoute(router.pathname, link.url)
-                    return (
-                      <Link
-                        key={link.name}
-                        as={NextLink}
-                        href={link.url}
-                        ref={i === 0 ? firstDrawerLinkRef : undefined}
-                        aria-current={active ? 'page' : undefined}
-                        onClick={onClose}
-                        display="flex"
-                        alignItems="center"
-                        h="44px"
-                        px={3}
-                        fontSize="15px"
-                        fontWeight={active ? 600 : 500}
-                        color={active ? 'page.fg' : 'page.fg-secondary'}
-                        bg={active ? 'page.hover' : undefined}
-                        borderLeft="2px solid"
-                        borderColor={active ? 'var(--accent)' : 'transparent'}
-                        borderRadius="0 6px 6px 0"
-                        _hover={{ color: 'page.fg', bg: 'page.hover', textDecoration: 'none' }}
-                        _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '-2px' }}
-                      >
-                        {link.name}
-                      </Link>
-                    )
-                  })}
-                </Flex>
-              </Box>
+      {drawerRequested && <MobileDrawer isOpen={isOpen} onClose={onClose} socials={socials} isAdmin={isAdmin} onLogout={logout} />}
 
-              <Box>
-                <DrawerLabel>Elsewhere</DrawerLabel>
-                <Flex gap={2} wrap="wrap">
-                  {socials.map((s) => (
-                    <IconButton
-                      key={s.name}
-                      as="a"
-                      href={s.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      icon={SOCIAL_ICONS[s.name]}
-                      variant="outline"
-                      size="md"
-                      borderColor="page.border"
-                      color="page.fg-subtle"
-                      _hover={{ color: 'page.fg', borderColor: 'page.border-strong' }}
-                      aria-label={`${s.name} (opens in a new tab)`}
-                      title={s.name}
-                    />
-                  ))}
-                </Flex>
-              </Box>
-
-              <Button
-                onClick={toggleColorMode}
-                variant="outline"
-                borderColor="page.border"
-                color="page.fg-secondary"
-                size="sm"
-                w="100%"
-                leftIcon={<ThemeIcon />}
-                _hover={{ borderColor: 'page.border-strong', color: 'page.fg' }}
-              >
-                {isDark ? 'Light mode' : 'Dark mode'}
-              </Button>
-
-              {/*
-                Mobile admin section — matches desktop: hidden when logged
-                out. Visitors reach /admin/login via ⌘K or by typing the URL.
-              */}
-              {isAdmin && (
-                <Box>
-                  <DrawerLabel>Admin</DrawerLabel>
-                  <Flex direction="column" gap={2}>
-                    <Button
-                      as={NextLink}
-                      href="/admin/dashboard"
-                      size="sm"
-                      variant="outline"
-                      borderColor="page.border"
-                      color="page.fg-secondary"
-                      _hover={{ borderColor: 'page.border-strong', color: 'page.fg' }}
-                      onClick={onClose}
-                    >
-                      Dashboard
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      color="page.fg-subtle"
-                      _hover={{ color: 'page.fg', bg: 'page.hover' }}
-                      onClick={() => {
-                        onClose()
-                        logout()
-                      }}
-                    >
-                      Logout
-                    </Button>
-                  </Flex>
-                </Box>
-              )}
-            </Flex>
-          </DrawerBody>
-        </DrawerContent>
-      </Drawer>
-
-      {/* Global ⌘K command palette (lazy-fetched dynamic items on first open) */}
-      <CommandPalette isOpen={cmdkOpen} onClose={closeCmdk} />
+      {paletteRequested && <CommandPaletteLazy isOpen={cmdkOpen} onClose={closeCmdk} isAdmin={isAdmin} />}
     </>
   )
 }

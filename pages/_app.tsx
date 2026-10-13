@@ -10,7 +10,7 @@ import { AnimatePresence, MotionConfig, motion } from 'framer-motion'
 import '../styles/globals.css'
 
 import theme from '../theme/chakra'
-import * as gtag from '../lib/gtag'
+import { useAnalytics } from '../lib/analytics/client'
 import { pageKeyOf } from '../lib/viewTransition'
 import SiteChrome from '../components/Chrome/SiteChrome'
 import ThemeColorMeta from '../components/Chrome/ThemeColorMeta'
@@ -22,48 +22,47 @@ import { HtmlLangContext } from '../components/Common/htmlLang'
 import { RestoreScrollOnMount, useDeferredScrollRestore } from '../components/Common/scrollRestore'
 import { ClockProvider } from '../lib/clock'
 
-// v6 typography — self-hosted variable fonts so the build never depends on
-// Google Fonts being reachable (some networks throttle / block fonts.gstatic.com,
-// which previously caused `next dev` to log AbortError on every boot).
-// Inter Variable covers 300-800 in one file; JetBrains Mono Variable covers
-// 400-700 in one file.
+// Real Core Web Vitals from visitors' browsers → first-party analytics.
+export { reportWebVitals } from '../lib/analytics/client'
+
+// v6 typography — Geist (SIL OFL, public/fonts/OFL-Geist.txt), self-hosted
+// variable fonts so the build never depends on a font CDN. Exactly two files
+// are preloaded (upright sans + mono, ~140 KB together); the italic is its
+// own variable file that the browser fetches only when italic text renders
+// (globals.css maps em / i / cite / [data-italic] to it). The fallback lists
+// end with the platforms' Chinese UI fonts so 中文 never lands on a serif,
+// and the sans fallback is metric-adjusted (Arial) to keep CLS at zero.
 const sans = localFont({
-  src: [
-    {
-      path: '../public/fonts/InterVariable.woff2',
-      style: 'normal',
-      weight: '300 800',
-    },
-    {
-      path: '../public/fonts/InterVariable-Italic.woff2',
-      style: 'italic',
-      weight: '300 800',
-    },
-  ],
-  display: 'swap',
+  src: [{ path: '../public/fonts/Geist-Variable.woff2', style: 'normal', weight: '100 900' }],
   variable: '--font-geist-sans',
+  display: 'swap',
   preload: true,
-  fallback: ['system-ui', 'arial'],
+  fallback: ['system-ui', '-apple-system', 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', 'Microsoft YaHei', 'arial'],
+  adjustFontFallback: 'Arial',
+})
+
+const sansItalic = localFont({
+  src: [{ path: '../public/fonts/Geist-Italic-Variable.woff2', style: 'italic', weight: '100 900' }],
+  variable: '--font-geist-sans-italic',
+  display: 'swap',
+  preload: false,
 })
 
 const mono = localFont({
-  src: [
-    {
-      path: '../public/fonts/JetBrainsMono-Variable.woff2',
-      style: 'normal',
-      weight: '400 700',
-    },
-  ],
-  display: 'swap',
+  src: [{ path: '../public/fonts/GeistMono-Variable.woff2', style: 'normal', weight: '100 900' }],
   variable: '--font-geist-mono',
+  display: 'swap',
   preload: true,
-  fallback: ['ui-monospace', 'monospace'],
+  fallback: ['ui-monospace', 'SF Mono', 'Consolas', 'monospace'],
 })
 
 // The font variables are defined on :root (not on a wrapper element) so that
 // everything Chakra portals to <body> — drawers, the ⌘K palette, menus,
-// tooltips, toasts — resolves the same Inter / JetBrains Mono stacks.
-const FONT_VARIABLES_CSS = `:root{--font-geist-sans:${sans.style.fontFamily};--font-geist-mono:${mono.style.fontFamily}}`
+// tooltips, toasts — resolves the same Geist stacks.
+const FONT_VARIABLES_CSS = `:root{--font-geist-sans:${sans.style.fontFamily};--font-geist-sans-italic:${sansItalic.style.fontFamily};--font-geist-mono:${mono.style.fontFamily}}`
+
+// Every toast: the elevated v6 Alert (theme/chakra.js), bottom centre, short.
+const TOAST_OPTIONS = { defaultOptions: { variant: 'v6', position: 'bottom', duration: 2000, isClosable: true } } as const
 
 const App = ({ Component, pageProps, router }: AppProps) => {
   // Animate between *pages* only: a hash / query change (in-page anchors,
@@ -78,13 +77,8 @@ const App = ({ Component, pageProps, router }: AppProps) => {
   // on the new page (see components/Common/scrollRestore.ts).
   useDeferredScrollRestore(!viewTransitions, pageKey)
 
-  useEffect(() => {
-    if (!gtag.GA_TRACKING_ID) return
-    router.events.on('routeChangeComplete', gtag.pageview)
-    return () => {
-      router.events.off('routeChangeComplete', gtag.pageview)
-    }
-  }, [router.events])
+  // Cookieless first-party page views (lib/analytics/client.ts).
+  useAnalytics(router)
 
   // <html lang> follows the page's `lang` prop (contract E): _document sets it
   // on the server, this keeps it right across client-side navigations. It is
@@ -121,7 +115,7 @@ const App = ({ Component, pageProps, router }: AppProps) => {
   )
 
   return (
-    <ChakraProvider theme={theme}>
+    <ChakraProvider theme={theme} toastOptions={TOAST_OPTIONS}>
       {/* Every framer-motion animation honours prefers-reduced-motion. */}
       <MotionConfig reducedMotion="user">
         <Head>

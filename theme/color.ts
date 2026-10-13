@@ -32,6 +32,8 @@ export const semanticColors = {
   'page.bg-overlay': { light: '#ededed', dark: '#1a1a1a' },
   'page.fg': { light: '#0a0a0a', dark: '#fafafa' },
   'page.fg-secondary': { light: '#525252', dark: '#a1a1a1' },
+  /** Long-form reading text (article paragraphs and lists): softer than page.fg, still AAA-range. */
+  'page.fg-prose': { light: '#27272a', dark: '#d4d4d8' },
   /** Small secondary text (mono labels, captions): AA (≥ 4.5:1) on every page background. */
   'page.fg-subtle': { light: '#666666', dark: '#8a8a8a' },
   /** Decorative only (dividers, disabled glyphs) — NOT for readable text. */
@@ -62,6 +64,13 @@ export const semanticColors = {
   'accent.solid': { light: '#4f46e5', dark: '#4f46e5' },
   'accent.solid-hover': { light: '#4338ca', dark: '#4338ca' },
   'accent.solid-active': { light: '#3730a3', dark: '#3730a3' },
+  /**
+   * Availability status (text + dot). Each is ≥ 4.5:1 on every page
+   * background, and is always paired with a text label — never colour alone.
+   */
+  'status.open': { light: '#15803d', dark: '#4ade80' },
+  'status.limited': { light: '#b45309', dark: '#fbbf24' },
+  'status.closed': { light: '#525252', dark: '#a1a1a1' },
 } as const satisfies Record<string, ModePair>
 
 export type SemanticColorName = keyof typeof semanticColors

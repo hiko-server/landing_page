@@ -5,15 +5,24 @@ import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import {
+  ADMIN_HINT_COOKIE,
   CHROMELESS_ROUTES,
+  MOBILE_MENU_DIALOG_ID,
+  MOBILE_MENU_ID,
+  NAV_SHORTCUTS,
   PRIMARY_LINKS,
   SOCIAL_LINKS,
+  adminEditTarget,
   formatAge,
+  hasAdminHint,
   isActiveRoute,
   normalizeHost,
   resolveHtmlLang,
   resolveSocialLinks,
   routeHasChrome,
+  shortcutLabelFor,
+  shortcutTarget,
+  shouldProbeSession,
   shouldRecheckSession,
   splitBrand,
 } from '../components/Chrome/chrome'
@@ -92,6 +101,57 @@ test('admin session is re-checked only when a navigation can change it', () => {
   assert.equal(shouldRecheckSession('/', '/admin', false), true)
   assert.equal(shouldRecheckSession('/', '/admin/dashboard', true), false)
   assert.equal(shouldRecheckSession('/', '/administrator', false), false)
+})
+
+test('the session probe only runs for a possible admin (hint cookie or the admin area)', () => {
+  assert.equal(ADMIN_HINT_COOKIE, 'cv_admin_hint')
+  assert.equal(hasAdminHint('cv_admin_hint=1'), true)
+  assert.equal(hasAdminHint('theme=dark; cv_admin_hint=1; x=y'), true)
+  assert.equal(hasAdminHint('theme=dark;cv_admin_hint=1'), true)
+  assert.equal(hasAdminHint(''), false)
+  assert.equal(hasAdminHint('cv_admin_hint=0'), false)
+  assert.equal(hasAdminHint('xcv_admin_hint=1'), false)
+  assert.equal(hasAdminHint('cv_admin_hint=12'), false)
+  // Ordinary visitors on public pages never send the request.
+  assert.equal(shouldProbeSession('', '/'), false)
+  assert.equal(shouldProbeSession('theme=dark', '/blog/[slug]'), false)
+  assert.equal(shouldProbeSession('cv_admin_hint=1', '/'), true)
+  // Inside /admin the middleware already required a session (heals sessions without the hint).
+  assert.equal(shouldProbeSession('', '/admin/dashboard'), true)
+  assert.equal(shouldProbeSession('', '/administrator'), false)
+})
+
+test('route-aware "edit this page" targets for the owner', () => {
+  assert.deepEqual(adminEditTarget('/blog/[slug]', 'edge-ai'), { label: 'Edit this post', href: '/admin/blog/edit?slug=edge-ai' })
+  assert.deepEqual(adminEditTarget('/work/[slug]', 'we_green-2'), { label: 'Edit this case study', href: '/admin/work/edit?slug=we_green-2' })
+  assert.equal(adminEditTarget('/blog/[slug]', undefined), null)
+  assert.equal(adminEditTarget('/blog/[slug]', ['a', 'b']), null)
+  assert.equal(adminEditTarget('/blog/[slug]', '../x'), null, 'never builds a URL from an odd slug')
+  assert.equal(adminEditTarget('/cv', undefined)?.href, '/admin/dashboard?tab=cv')
+  assert.equal(adminEditTarget('/cv/zh', undefined)?.href, '/admin/dashboard?tab=cv')
+  assert.equal(adminEditTarget('/', undefined)?.href, '/admin/dashboard?tab=home')
+  assert.equal(adminEditTarget('/now', undefined)?.href, '/admin/now')
+  assert.equal(adminEditTarget('/uses', undefined)?.href, '/admin/uses')
+  assert.equal(adminEditTarget('/contact', undefined), null)
+})
+
+test('"G then key" shortcuts cover the primary pages', () => {
+  assert.equal(shortcutTarget('h'), '/')
+  assert.equal(shortcutTarget('C'), '/cv')
+  assert.equal(shortcutTarget('x'), null)
+  assert.equal(shortcutLabelFor('/blog'), 'G B')
+  assert.equal(shortcutLabelFor('/contact'), undefined)
+  const primary = new Set(PRIMARY_LINKS.map((l) => l.url))
+  for (const s of NAV_SHORTCUTS) assert.ok(primary.has(s.url), s.url)
+  assert.equal(new Set(NAV_SHORTCUTS.map((s) => s.key)).size, NAV_SHORTCUTS.length, 'keys are unique')
+})
+
+test('the hamburger controls the drawer dialog id Chakra renders', () => {
+  assert.equal(MOBILE_MENU_DIALOG_ID, `chakra-modal-${MOBILE_MENU_ID}`)
+  const drawer = readFileSync(path.join(ROOT, 'components/Header/MobileDrawer.tsx'), 'utf8')
+  assert.match(drawer, /<Drawer id=\{MOBILE_MENU_ID\}/)
+  const header = readFileSync(path.join(ROOT, 'components/Header/Header.tsx'), 'utf8')
+  assert.match(header, /aria-controls=\{MOBILE_MENU_DIALOG_ID\}/)
 })
 
 test('html lang accepts BCP-47 tags and falls back to en', () => {
@@ -278,10 +338,25 @@ function contrast(a: string, b: string): number {
 
 test('readable text tokens meet WCAG AA (4.5:1) on every page background in both modes', () => {
   const backgrounds = ['page.bg', 'page.bg-elevated', 'page.bg-overlay'] as const
-  const texts = ['page.fg', 'page.fg-secondary', 'page.fg-subtle'] as const
+  const texts = ['page.fg', 'page.fg-secondary', 'page.fg-subtle', 'page.fg-prose', 'status.closed'] as const
   for (const mode of ['light', 'dark'] as const) {
     for (const t of texts) {
       for (const b of backgrounds) {
+        const ratio = contrast(semanticColors[t][mode], semanticColors[b][mode])
+        assert.ok(ratio >= 4.5, `${t} on ${b} (${mode}) = ${ratio.toFixed(2)}`)
+      }
+    }
+  }
+})
+
+test('availability status colours meet AA on the page and card backgrounds in both modes', () => {
+  assert.deepEqual(semanticColors['page.fg-prose'], { light: '#27272a', dark: '#d4d4d8' })
+  assert.deepEqual(semanticColors['status.open'], { light: '#15803d', dark: '#4ade80' })
+  assert.deepEqual(semanticColors['status.limited'], { light: '#b45309', dark: '#fbbf24' })
+  assert.deepEqual(semanticColors['status.closed'], { light: '#525252', dark: '#a1a1a1' })
+  for (const mode of ['light', 'dark'] as const) {
+    for (const t of ['status.open', 'status.limited', 'status.closed'] as const) {
+      for (const b of ['page.bg', 'page.bg-elevated'] as const) {
         const ratio = contrast(semanticColors[t][mode], semanticColors[b][mode])
         assert.ok(ratio >= 4.5, `${t} on ${b} (${mode}) = ${ratio.toFixed(2)}`)
       }
@@ -344,6 +419,88 @@ test('v6 palette and existing token names are intact', () => {
   }
   assert.equal(themeColorFor('dark'), '#050505')
   assert.equal(themeColorFor('light'), '#fdfdfd')
+})
+
+// ── typography, global CSS, chrome weight ───────────────────────────────────
+
+const read = (rel: string) => readFileSync(path.join(ROOT, rel), 'utf8')
+
+test('Geist is self-hosted: two preloaded faces, a lazily used italic, the old fonts gone', () => {
+  const app = read('pages/_app.tsx')
+  assert.match(app, /Geist-Variable\.woff2/)
+  assert.match(app, /GeistMono-Variable\.woff2/)
+  assert.match(app, /Geist-Italic-Variable\.woff2[^)]*preload:\s*false/s, 'the italic is not preloaded')
+  assert.equal((app.match(/preload:\s*true/g) || []).length, 2, 'exactly two preloaded faces')
+  assert.match(app, /--font-geist-sans-italic/)
+  assert.doesNotMatch(app, /InterVariable|JetBrainsMono/)
+  for (const f of ['Geist-Variable.woff2', 'Geist-Italic-Variable.woff2', 'GeistMono-Variable.woff2', 'OFL-Geist.txt']) {
+    assert.ok(readFileSync(path.join(ROOT, 'public/fonts', f)).length > 0, f)
+  }
+  for (const f of ['InterVariable.woff2', 'InterVariable-Italic.woff2', 'JetBrainsMono-Variable.woff2']) {
+    assert.throws(() => readFileSync(path.join(ROOT, 'public/fonts', f)), f)
+  }
+  // The two preloads stay under the 145 KB budget.
+  const preloaded = ['Geist-Variable.woff2', 'GeistMono-Variable.woff2'].reduce((n, f) => n + readFileSync(path.join(ROOT, 'public/fonts', f)).length, 0)
+  assert.ok(preloaded < 145 * 1024, `${preloaded} bytes`)
+  const theme = read('theme/chakra.js')
+  assert.doesNotMatch(theme, /\bInter\b/)
+  assert.match(theme, /PingFang SC/)
+})
+
+test('globals.css: typography rules, shared utilities and the italic face mapping', () => {
+  const css = read('styles/globals.css')
+  assert.match(css, /h1,\s*h2,\s*h3,\s*\.chakra-heading\s*\{\s*text-wrap:\s*balance/)
+  assert.match(css, /\.article-prose p,\s*\.article-prose li,\s*\.lede\s*\{\s*text-wrap:\s*pretty/)
+  assert.match(css, /\.tnum\s*\{\s*font-variant-numeric:\s*tabular-nums/)
+  assert.match(css, /em,\s*i,\s*cite,\s*\[data-italic\]\s*\{[^}]*var\(--font-geist-sans-italic\)[^}]*font-style:\s*italic/)
+  for (const cls of ['.spotlight', '.hover-list', '.nudge', '.stretched-link::after', '.hit-area::after', '.hint-wrap', '.hint--top', '.hint--left', '.digit', '.hero-word', '.hero-drift', '.rail-fill', '.rail-dot', '.collapse', '.article-prose']) {
+    assert.ok(css.includes(cls), cls)
+  }
+  for (const kf of ['hero-word', 'hero-drift', 'rail-grow', 'dot-on', 'status-pulse', 'vt-out-left', 'vt-in-right', 'vt-out-right', 'vt-in-left']) {
+    assert.match(css, new RegExp(`@keyframes ${kf}\\b`), kf)
+  }
+  assert.match(css, /--grain-opacity:\s*0\.03/)
+  assert.match(css, /--grain-opacity:\s*0\.06/)
+})
+
+test('globals.css: directional view transitions, pinned header, theme reveal, a11y fallbacks', () => {
+  const css = read('styles/globals.css')
+  assert.match(css, /html:active-view-transition-type\(next, forward\)::view-transition-old\(root\)\s*\{[^}]*vt-out-left/)
+  assert.match(css, /html:active-view-transition-type\(prev, back\)::view-transition-new\(root\)\s*\{[^}]*vt-in-left/)
+  assert.match(css, /::view-transition-group\(site-header\)\s*\{\s*animation:\s*none/)
+  assert.match(css, /::view-transition-old\(site-header\)\s*\{\s*display:\s*none/)
+  assert.match(css, /\.theme-vt::view-transition-new\(root\)\s*\{\s*z-index:\s*2/)
+  assert.match(css, /@media \(forced-colors: active\)/)
+  assert.match(css, /@media \(prefers-reduced-transparency: reduce\)/)
+  // The global reduced-motion rule still disables every view-transition pseudo.
+  assert.match(css, /prefers-reduced-motion: reduce\)\s*\{[\s\S]*::view-transition-new\(\*\)\s*\{\s*animation:\s*none !important/)
+  const chrome = read('components/Chrome/SiteChrome.tsx')
+  assert.match(chrome, /viewTransitionName: 'site-header'/)
+})
+
+test('the header keeps the palette and the drawer out of the shared bundle', () => {
+  const header = read('components/Header/Header.tsx')
+  assert.doesNotMatch(header, /from ['"]\.\.\/General-UI\/CommandPalette['"]/, 'no static import of the palette')
+  assert.match(header, /from ['"]\.\.\/General-UI\/CommandPaletteLazy['"]/)
+  assert.doesNotMatch(header, /^import [^\n]*from ['"]\.\/MobileDrawer['"]/m, 'no static import of the drawer')
+  assert.match(header, /import\(['"]\.\/MobileDrawer['"]\)/)
+  assert.match(read('components/General-UI/CommandPaletteLazy.tsx'), /dynamic\(loadCommandPalette, \{ ssr: false/)
+  for (const f of ['components/Header/Header.tsx', 'components/Header/MobileDrawer.tsx', 'components/Footer/Footer.tsx', 'pages/_app.tsx']) {
+    assert.doesNotMatch(read(f), /from ['"]react-icons/, f)
+  }
+  assert.doesNotMatch(read('pages/_app.tsx'), /gtag/)
+})
+
+test('theme: one accent focus ring, press feedback, v6 toasts, no body colour fade', () => {
+  const theme = read('theme/chakra.js')
+  assert.match(theme, /outline:\s*'0 0 0 2px var\(--accent\)'/)
+  assert.match(theme, /'\*:focus-visible'/)
+  assert.match(theme, /_active:\s*\{\s*transform:\s*'scale\(0\.97\)'\s*\}/)
+  assert.match(theme, /v6:\s*\(props\)/)
+  assert.match(theme, /transitionProperty:\s*'none'/)
+  const app = read('pages/_app.tsx')
+  assert.match(app, /variant:\s*'v6',\s*position:\s*'bottom',\s*duration:\s*2000,\s*isClosable:\s*true/)
+  assert.match(app, /toastOptions=\{TOAST_OPTIONS\}/)
 })
 
 // ── manifest + icons ────────────────────────────────────────────────────────

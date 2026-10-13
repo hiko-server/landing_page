@@ -21,6 +21,32 @@ export const PRIMARY_LINKS: readonly NavLink[] = [
 ]
 
 /**
+ * "G then <key>" navigation (Header listens; the ⌘K palette lists them).
+ * Contact has no shortcut on purpose ('c' is the CV).
+ */
+export const NAV_SHORTCUTS: readonly { key: string; url: string }[] = [
+  { key: 'h', url: '/' },
+  { key: 'a', url: '/about' },
+  { key: 'w', url: '/work' },
+  { key: 'b', url: '/blog' },
+  { key: 'c', url: '/cv' },
+  { key: 'n', url: '/now' },
+  { key: 'u', url: '/uses' },
+]
+
+/** Display label ("G H") of the shortcut for a URL, if it has one. */
+export function shortcutLabelFor(url: string): string | undefined {
+  const s = NAV_SHORTCUTS.find((n) => n.url === url)
+  return s ? `G ${s.key.toUpperCase()}` : undefined
+}
+
+/** Target of the second key of a "G then …" sequence, or null. */
+export function shortcutTarget(key: string): string | null {
+  const k = key.toLowerCase()
+  return NAV_SHORTCUTS.find((n) => n.key === k)?.url ?? null
+}
+
+/**
  * Built-in profile links, keyed like home.socials. They are only the fallback
  * for when the home document has no socials (see resolveSocialLinks); the
  * owner's Home editor values drive the header, footer and hero.
@@ -82,15 +108,63 @@ export const AUTH_ROUTES: readonly string[] = ['/admin/login', '/admin/reset', '
 const isAdminArea = (pathname: string) => pathname === '/admin' || pathname.startsWith('/admin/')
 
 /**
- * The header asks /api/admin/session once on mount. Because the chrome is now
- * persistent it must not re-ask on every page; it re-checks only when a
- * navigation can actually have changed the answer: entering or leaving a
- * sign-in screen, or entering the admin area while not known to be signed in.
+ * The header asks /api/admin/session once on mount (when shouldProbeSession
+ * allows it). Because the chrome is persistent it must not re-ask on every
+ * page; it re-checks only when a navigation can actually have changed the
+ * answer: entering or leaving a sign-in screen, or entering the admin area
+ * while not known to be signed in.
  */
 export function shouldRecheckSession(prevPathname: string, nextPathname: string, isAdmin: boolean): boolean {
   if (prevPathname === nextPathname) return false
   if (AUTH_ROUTES.includes(prevPathname) || AUTH_ROUTES.includes(nextPathname)) return true
   return isAdminArea(nextPathname) && !isAdmin
+}
+
+/**
+ * Id given to the mobile menu <Drawer>; Chakra renders the dialog element as
+ * `chakra-modal-<id>`, which the hamburger's aria-controls points at.
+ */
+export const MOBILE_MENU_ID = 'site-menu'
+export const MOBILE_MENU_DIALOG_ID = `chakra-modal-${MOBILE_MENU_ID}`
+
+/** Non-httpOnly hint cookie set next to the admin session (adminshell contract; grants nothing). */
+export const ADMIN_HINT_COOKIE = 'cv_admin_hint'
+
+/** True when document.cookie carries the admin hint, i.e. a session check is worth a request. */
+export function hasAdminHint(cookie: string): boolean {
+  return cookie.split(/;\s*/).includes(`${ADMIN_HINT_COOKIE}=1`)
+}
+
+/**
+ * The header probes /api/admin/session only when it can be signed in: the
+ * hint cookie is present, or the visitor is inside the admin area (which the
+ * middleware only serves to a valid session; this also heals a session that
+ * predates the hint cookie).
+ */
+export function shouldProbeSession(cookie: string, pathname: string): boolean {
+  return hasAdminHint(cookie) || isAdminArea(pathname)
+}
+
+/** The owner's "edit what I am looking at" target for a public route, or null. */
+export function adminEditTarget(pathname: string, slug: unknown): { label: string; href: string } | null {
+  const s = typeof slug === 'string' && /^[\w-]+$/.test(slug) ? slug : ''
+  switch (pathname) {
+    case '/blog/[slug]':
+      return s ? { label: 'Edit this post', href: `/admin/blog/edit?slug=${encodeURIComponent(s)}` } : null
+    case '/work/[slug]':
+      return s ? { label: 'Edit this case study', href: `/admin/work/edit?slug=${encodeURIComponent(s)}` } : null
+    case '/cv':
+    case '/cv/zh':
+      return { label: 'Edit the CV in CV Studio', href: '/admin/dashboard?tab=cv' }
+    case '/':
+      return { label: 'Edit the home page', href: '/admin/dashboard?tab=home' }
+    case '/now':
+      return { label: 'Edit /now', href: '/admin/now' }
+    case '/uses':
+      return { label: 'Edit /uses', href: '/admin/uses' }
+    default:
+      return null
+  }
 }
 
 /** `<html lang>` value from a page's `props.lang` (contract E); 'en' unless a valid BCP-47 tag. */

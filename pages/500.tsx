@@ -18,7 +18,7 @@ export default function Custom500() {
             fontFamily: 'var(--font-geist-mono), ui-monospace, monospace',
             fontSize: 12,
             letterSpacing: '0.16em',
-            color: 'var(--accent, #6366f1)',
+            color: 'var(--chakra-colors-accent-text, #4f46e5)',
             marginBottom: 12,
           }}
         >
@@ -29,7 +29,7 @@ export default function Custom500() {
         </h1>
         <p style={{ color: 'var(--chakra-colors-page-fg-secondary, #525252)' }}>
           An unexpected error occurred. Please try again, or{' '}
-          <Link href="/" style={{ color: 'var(--accent, #4f46e5)', textDecoration: 'underline' }}>
+          <Link href="/" style={{ color: 'var(--chakra-colors-accent-text, #4f46e5)', textDecoration: 'underline' }}>
             go back home
           </Link>
           .

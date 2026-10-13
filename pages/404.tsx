@@ -30,7 +30,7 @@ const Custom404 = () => {
             fontFamily="var(--font-geist-mono), monospace"
             fontSize="12px"
             letterSpacing="0.16em"
-            color="var(--accent)"
+            color="accent.text"
             mb={3}
           >
             ERROR 404
@@ -43,6 +43,10 @@ const Custom404 = () => {
             <Text as="kbd" fontFamily="var(--font-geist-mono), monospace" fontSize="0.9em">
               ⌘K
             </Text>{' '}
+            or{' '}
+            <Text as="kbd" fontFamily="var(--font-geist-mono), monospace" fontSize="0.9em">
+              /
+            </Text>{' '}
             to search.
           </Text>
           <Flex as="nav" aria-label="Suggested pages" justify="center" gap={2} wrap="wrap">
@@ -52,11 +56,13 @@ const Custom404 = () => {
                 as={NextLink}
                 href={l.href}
                 size="sm"
+                minH="44px"
                 variant={i === 0 ? 'solid' : 'outline'}
-                bg={i === 0 ? 'var(--accent)' : undefined}
-                color={i === 0 ? 'white' : undefined}
+                bg={i === 0 ? 'accent.solid' : undefined}
+                color={i === 0 ? 'accent.fg' : undefined}
                 borderColor="page.border-strong"
-                _hover={i === 0 ? { opacity: 0.92 } : { borderColor: 'var(--accent)', color: 'var(--accent)' }}
+                _hover={i === 0 ? { bg: 'accent.solid-hover' } : { borderColor: 'var(--accent)', color: 'accent.text' }}
+                _active={i === 0 ? { bg: 'accent.solid-active', transform: 'scale(0.97)' } : undefined}
               >
                 {i === 0 ? '← ' : ''}
                 {l.label}

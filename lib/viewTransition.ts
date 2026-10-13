@@ -42,8 +42,11 @@ type ViewTransitionLike = {
   updateCallbackDone?: Promise<unknown>
 }
 
+type UpdateCallback = () => Promise<void> | void
+
 type DocumentWithViewTransition = {
-  startViewTransition?: (update: () => Promise<void> | void) => ViewTransitionLike
+  // Level 1 takes the callback; Level 2 also accepts { update, types }.
+  startViewTransition?: (arg: UpdateCallback | { update: UpdateCallback; types: string[] }) => ViewTransitionLike
 }
 
 export function supportsViewTransitions(doc: unknown = typeof document === 'undefined' ? undefined : document): boolean {
@@ -62,23 +65,172 @@ export function prefersReducedMotion(win: unknown = typeof window === 'undefined
 
 const swallow = () => undefined
 
+function swallowRejections(vt: ViewTransitionLike | undefined): void {
+  vt?.ready?.catch(swallow)
+  vt?.finished?.catch(swallow)
+  vt?.updateCallbackDone?.catch(swallow)
+}
+
 /**
  * Starts a view transition and returns true, or returns false when the API
  * is missing or throws. The transition's promises reject when it is skipped
  * (hidden tab, a newer transition, …); those rejections are expected and
  * swallowed so they never surface as unhandled errors.
+ *
+ * `types` (e.g. ['back']) are passed with the Level 2 object form so CSS can
+ * select them with :active-view-transition-type(). Browsers with only the
+ * Level 1 API reject the object with a TypeError; they get the plain callback
+ * form (and the default cross-fade) instead.
  */
-export function startViewTransitionSafely(doc: unknown, update: () => Promise<void> | void): boolean {
+export function startViewTransitionSafely(doc: unknown, update: UpdateCallback, types?: string[]): boolean {
   const start = (doc as DocumentWithViewTransition | undefined)?.startViewTransition
   if (typeof start !== 'function') return false
+  if (types && types.length) {
+    try {
+      swallowRejections(start.call(doc, { update, types }))
+      return true
+    } catch (err) {
+      if (!(err instanceof TypeError)) return false
+      // Level 1 only: fall through to the callback form.
+    }
+  }
   try {
-    const vt = start.call(doc, update)
-    vt?.ready?.catch(swallow)
-    vt?.finished?.catch(swallow)
-    vt?.updateCallbackDone?.catch(swallow)
+    swallowRejections(start.call(doc, update))
     return true
   } catch {
     return false
+  }
+}
+
+// ── Theme reveal ────────────────────────────────────────────────────────────
+
+/** Circle centre (the button's centre, else the viewport's) and the radius that covers the viewport from it. */
+export function revealGeometry(
+  rect: { left: number; top: number; width: number; height: number } | null,
+  viewport: { width: number; height: number },
+): { x: number; y: number; r: number } {
+  const x = rect ? rect.left + rect.width / 2 : viewport.width / 2
+  const y = rect ? rect.top + rect.height / 2 : viewport.height / 2
+  const r = Math.hypot(Math.max(x, viewport.width - x), Math.max(y, viewport.height - y))
+  return { x, y, r }
+}
+
+// ── Direction ───────────────────────────────────────────────────────────────
+
+/** 'next' / 'prev': explicit sequence links; 'forward' / 'back': history order. */
+export type RouteDirection = 'next' | 'prev' | 'forward' | 'back'
+
+/** A pending direction older than this is stale (the click did not navigate, e.g. it opened a new tab). */
+const PENDING_TTL_MS = 10_000
+
+let pending: { direction: 'next' | 'prev'; at: number } | null = null
+
+/**
+ * Set by a link that knows its place in a sequence (article prev / next)
+ * right before it navigates; the next route transition takes it.
+ */
+export function setPendingDirection(direction: 'next' | 'prev' | null, now: number = Date.now()): void {
+  pending = direction ? { direction, at: now } : null
+}
+
+/** Returns and clears the pending direction (null when none, or when it went stale). */
+export function takePendingDirection(now: number = Date.now()): 'next' | 'prev' | null {
+  const p = pending
+  pending = null
+  return p && now - p.at <= PENDING_TTL_MS ? p.direction : null
+}
+
+/**
+ * The transition type for a navigation: an explicit pending direction wins;
+ * a push is 'forward'; a Back / Forward (popstate) compares the history
+ * indices of the entry being left and the one being entered. A popstate to
+ * an entry with no known index gets no type (the plain cross-fade).
+ */
+export function resolveDirection(
+  pendingDirection: 'next' | 'prev' | null,
+  isPop: boolean,
+  oldIdx: number | null | undefined,
+  newIdx: number | null | undefined,
+): RouteDirection | null {
+  if (pendingDirection) return pendingDirection
+  if (!isPop) return 'forward'
+  if (typeof oldIdx !== 'number' || typeof newIdx !== 'number' || oldIdx === newIdx) return null
+  return newIdx < oldIdx ? 'back' : 'forward'
+}
+
+// ── History order ───────────────────────────────────────────────────────────
+
+type KeyStore = Pick<Storage, 'getItem' | 'setItem'>
+
+const INDEX_STORAGE_KEY = 'vt:history-index:v1'
+const INDEX_MAX_ENTRIES = 200
+
+/**
+ * Orders history entries without writing into history.state (Next owns it):
+ * each entry is identified by Next's own `history.state.key` and mapped to a
+ * monotonically increasing index kept in sessionStorage, so the order
+ * survives reloads within the tab. An entry pushed after going Back gets a
+ * higher index than every entry still on the stack, so comparisons stay
+ * correct. Storage failures degrade to an in-memory map.
+ */
+export class HistoryIndex {
+  private map: Record<string, number> = {}
+  private max = 0
+  private currentKey: string | null = null
+  private readonly storage: KeyStore | null
+
+  constructor(storage: KeyStore | null) {
+    this.storage = storage
+    try {
+      const raw = storage?.getItem(INDEX_STORAGE_KEY)
+      const parsed = raw ? (JSON.parse(raw) as { map?: unknown; max?: unknown }) : null
+      if (parsed && parsed.map && typeof parsed.map === 'object' && !Array.isArray(parsed.map)) {
+        for (const [k, v] of Object.entries(parsed.map as Record<string, unknown>)) {
+          if (typeof v === 'number' && Number.isFinite(v)) this.map[k] = v
+        }
+      }
+      if (typeof parsed?.max === 'number' && Number.isFinite(parsed.max)) this.max = parsed.max
+      this.max = Math.max(this.max, 0, ...Object.values(this.map))
+    } catch {
+      this.map = {}
+      this.max = 0
+    }
+  }
+
+  /** Index of a known entry key, or null. */
+  indexOf(key: unknown): number | null {
+    return typeof key === 'string' && key in this.map ? this.map[key] : null
+  }
+
+  /** Key of the entry on screen (the last one passed to enter()). */
+  get current(): string | null {
+    return this.currentKey
+  }
+
+  /** Index of the entry on screen, or null before the first enter(). */
+  get currentIndex(): number | null {
+    return this.indexOf(this.currentKey)
+  }
+
+  /** Record that `key` is now on screen; a key never seen before gets the next index. */
+  enter(key: unknown): void {
+    if (typeof key !== 'string' || !key) return
+    this.currentKey = key
+    if (key in this.map) return
+    this.max += 1
+    this.map[key] = this.max
+    const keys = Object.keys(this.map)
+    if (keys.length > INDEX_MAX_ENTRIES) {
+      keys
+        .sort((a, b) => this.map[a] - this.map[b])
+        .slice(0, keys.length - INDEX_MAX_ENTRIES)
+        .forEach((k) => delete this.map[k])
+    }
+    try {
+      this.storage?.setItem(INDEX_STORAGE_KEY, JSON.stringify({ map: this.map, max: this.max }))
+    } catch {
+      // Quota / disabled storage: the in-memory order still works for this page view.
+    }
   }
 }
 
