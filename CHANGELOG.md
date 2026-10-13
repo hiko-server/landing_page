@@ -8,6 +8,46 @@ portfolio CMS, no public package). Entries are grouped by release date.
 
 ## [Unreleased]
 
+## [2.3.0] — 2026-10-13
+
+A research round across eight directions (UI, motion, reading, recruiter
+value, admin, performance/SEO/accessibility, advanced features, security and
+operations) with a live defect sweep of production, followed by the fixes
+for every confirmed defect that needed no owner input, an adversarial review
+of those fixes, and the move to Next.js 16.
+
+### Fixed
+
+- The home page no longer widens past the screen once its lazy sections
+  mount (phones zoomed out to 1439 px); stat labels and accordion titles wrap
+  instead of breaking or truncating.
+- The hero only claims what is current: an ongoing role or study, otherwise
+  no chip (it showed a job that ended in March); location and languages come
+  from the CV in the CV's order. One Person entity on every page, with the
+  real portrait.
+- Real-user Web Vitals are recorded (none were before), and a CLS or INP that
+  grows after a tab switch replaces the earlier value.
+- Admin saves keep frontmatter fields the editors do not show (SEO title,
+  updated date, language, cover alt); article images get their srcset once
+  variants exist; footnotes stay out of the table of contents, are localised
+  in Chinese articles, and highlighted code lines and file names render.
+- Back/Forward run the directional page transition; open menus and dialogs no
+  longer ghost over the next page; sections are visible in the first frame
+  after a client navigation; printing shows every row.
+- Keyboard: focus moves to the new page after navigation and is never hidden
+  under the sticky header (WCAG 2.4.11), focusing the header or the CV action
+  bar no longer scrolls the page, and single-key shortcuts can be switched off
+  (WCAG 2.1.4).
+- English chrome on Chinese pages is marked `lang="en"`; header glass and form
+  errors meet contrast; light visitors no longer see a repaint; the mono
+  fallback no longer shifts article metadata; dark-theme prints are readable,
+  and only the CV page forces A4 without margins; head tags are unique.
+- Operations: `/api/health` shows details only to the admin (or a
+  `HEALTH_TOKEN`), and a malformed session cookie can no longer make admin
+  routes answer 500; deploy backups keep the 10 newest; the IndexNow key is
+  served from the site root; `/.well-known/security.txt` exists; `/colophon`
+  and SECURITY.md describe the stack accurately.
+
 ### Platform
 
 - Next.js 15.5.27 → 16.3.8 (Pages Router, React 18.3 unchanged: the Pages
