@@ -23,9 +23,14 @@ export const DEFAULT_RECENT_AUTH_MINUTES = 10
  * (whole minutes, 1–60; default 10). Read on every check, so a change to the
  * env applies on the next restart without a rebuild.
  */
-export function recentAuthWindowMs(raw: string | undefined = process.env.ADMIN_RECENT_AUTH_MINUTES): number {
+export function recentAuthWindowMs(
+  raw: string | undefined = process.env.ADMIN_RECENT_AUTH_MINUTES
+): number {
   const n = Number(raw)
-  const minutes = raw !== undefined && raw.trim() !== '' && Number.isInteger(n) ? Math.min(60, Math.max(1, n)) : DEFAULT_RECENT_AUTH_MINUTES
+  const minutes =
+    raw !== undefined && raw.trim() !== '' && Number.isInteger(n)
+      ? Math.min(60, Math.max(1, n))
+      : DEFAULT_RECENT_AUTH_MINUTES
   return minutes * 60_000
 }
 
@@ -34,12 +39,19 @@ export type StepUpMethods = { methods: Array<'passkey' | 'password'>; recoveryRe
 export function stepUpMethods(): StepUpMethods {
   const passkeys = passkeyCount()
   const required = passkeys > 0 && isPasskeyRequired()
-  return { methods: passkeys > 0 ? ['passkey', 'password'] : ['password'], recoveryRequired: required }
+  return {
+    methods: passkeys > 0 ? ['passkey', 'password'] : ['password'],
+    recoveryRequired: required,
+  }
 }
 
 /** Did this session sign in or re-verify within the recent-auth window? (A pre-session token never counts.) */
 export function hasRecentAuth(ctx: AdminContext, now = Date.now()): boolean {
-  return !!ctx.session && now - ctx.session.verifiedAt <= recentAuthWindowMs() && ctx.session.verifiedAt <= now
+  return (
+    !!ctx.session &&
+    now - ctx.session.verifiedAt <= recentAuthWindowMs() &&
+    ctx.session.verifiedAt <= now
+  )
 }
 
 /**
@@ -47,7 +59,11 @@ export function hasRecentAuth(ctx: AdminContext, now = Date.now()): boolean {
  * proceed; otherwise answers 401 (no session) or 403 STEP_UP_REQUIRED and
  * returns null.
  */
-export function requireRecentAuth(req: NextApiRequest, res: NextApiResponse, now = Date.now()): AdminContext | null {
+export function requireRecentAuth(
+  req: NextApiRequest,
+  res: NextApiResponse,
+  now = Date.now()
+): AdminContext | null {
   const ctx = readAdminContext(req, res)
   if (!ctx) {
     res.status(401).json({ error: 'Unauthorized', code: 'NO_SESSION' })

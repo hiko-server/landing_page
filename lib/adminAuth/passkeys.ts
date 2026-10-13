@@ -46,7 +46,13 @@ export type ChallengePurpose = 'register' | 'login' | 'step-up'
 
 export type RelyingParty = { rpID: string; rpName: string; origin: string }
 
-export type PasskeyErrorCode = 'NO_RP' | 'CHALLENGE' | 'UNKNOWN_CREDENTIAL' | 'VERIFICATION' | 'DUPLICATE' | 'LIMIT'
+export type PasskeyErrorCode =
+  | 'NO_RP'
+  | 'CHALLENGE'
+  | 'UNKNOWN_CREDENTIAL'
+  | 'VERIFICATION'
+  | 'DUPLICATE'
+  | 'LIMIT'
 
 export class PasskeyError extends Error {
   readonly code: PasskeyErrorCode
@@ -74,7 +80,8 @@ export function relyingPartyFor(req: Pick<NextApiRequest, 'headers'>): RelyingPa
   if (!requestHost) return null
   if (requestHost === 'localhost' || requestHost.endsWith('.localhost')) {
     if (!/^[a-z0-9.-]+(:\d{1,5})?$/.test(hostHeader)) return null
-    const proto = (header(req, 'x-forwarded-proto').split(',')[0] || '').trim() === 'https' ? 'https' : 'http'
+    const proto =
+      (header(req, 'x-forwarded-proto').split(',')[0] || '').trim() === 'https' ? 'https' : 'http'
     return { rpID: requestHost, rpName: requestHost, origin: `${proto}://${hostHeader}` }
   }
   if (IP_LITERAL.test(requestHost) || isLocalHostname(requestHost)) return null
@@ -87,44 +94,61 @@ export function relyingPartyFor(req: Pick<NextApiRequest, 'headers'>): RelyingPa
 
 // ── Challenges ────────────────────────────────────────────────────────────
 
-function storeChallenge(challenge: string, purpose: ChallengePurpose, sessionId: string | null, now: number) {
+function storeChallenge(
+  challenge: string,
+  purpose: ChallengePurpose,
+  sessionId: string | null,
+  now: number
+) {
   const db = getAuthDb()
   db.prepare('DELETE FROM webauthn_challenges WHERE expires_at <= ?').run(now)
   const n = (db.prepare('SELECT count(*) AS n FROM webauthn_challenges').get() as { n: number }).n
   if (n >= MAX_OUTSTANDING_CHALLENGES) {
     db.prepare(
-      `DELETE FROM webauthn_challenges WHERE challenge IN (SELECT challenge FROM webauthn_challenges ORDER BY expires_at ASC LIMIT ?)`,
+      `DELETE FROM webauthn_challenges WHERE challenge IN (SELECT challenge FROM webauthn_challenges ORDER BY expires_at ASC LIMIT ?)`
     ).run(n - MAX_OUTSTANDING_CHALLENGES + 1)
   }
-  db.prepare('INSERT INTO webauthn_challenges (challenge, purpose, session_id, expires_at) VALUES (?, ?, ?, ?)').run(
-    challenge,
-    purpose,
-    sessionId,
-    now + CHALLENGE_TTL_MS,
-  )
+  db.prepare(
+    'INSERT INTO webauthn_challenges (challenge, purpose, session_id, expires_at) VALUES (?, ?, ?, ?)'
+  ).run(challenge, purpose, sessionId, now + CHALLENGE_TTL_MS)
 }
 
 /** The challenge a response signed (from its clientDataJSON), or null. */
-export function challengeOf(response: { response?: { clientDataJSON?: unknown } } | null | undefined): string | null {
+export function challengeOf(
+  response: { response?: { clientDataJSON?: unknown } } | null | undefined
+): string | null {
   const raw = response?.response?.clientDataJSON
   if (typeof raw !== 'string' || raw.length > 4096) return null
   try {
-    const data = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as { challenge?: unknown }
-    return typeof data.challenge === 'string' && /^[A-Za-z0-9_-]{16,128}$/.test(data.challenge) ? data.challenge : null
+    const data = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')) as {
+      challenge?: unknown
+    }
+    return typeof data.challenge === 'string' && /^[A-Za-z0-9_-]{16,128}$/.test(data.challenge)
+      ? data.challenge
+      : null
   } catch {
     return null
   }
 }
 
 /** Delete-and-return: the challenge is gone after this, whether verification then succeeds or not. */
-function consumeChallenge(challenge: string | null, purpose: ChallengePurpose, sessionId: string | null, now: number): string {
+function consumeChallenge(
+  challenge: string | null,
+  purpose: ChallengePurpose,
+  sessionId: string | null,
+  now: number
+): string {
   if (!challenge) throw new PasskeyError('The passkey response carries no challenge.', 'CHALLENGE')
   const row = getAuthDb()
     .prepare(
-      `DELETE FROM webauthn_challenges WHERE challenge = ? AND purpose = ? AND session_id IS ? AND expires_at > ? RETURNING challenge`,
+      `DELETE FROM webauthn_challenges WHERE challenge = ? AND purpose = ? AND session_id IS ? AND expires_at > ? RETURNING challenge`
     )
     .get(challenge, purpose, sessionId, now) as { challenge: string } | undefined
-  if (!row) throw new PasskeyError('This passkey request expired or was already used. Try again.', 'CHALLENGE')
+  if (!row)
+    throw new PasskeyError(
+      'This passkey request expired or was already used. Try again.',
+      'CHALLENGE'
+    )
   return row.challenge
 }
 
@@ -159,7 +183,9 @@ const TRANSPORTS = new Set(['ble', 'cable', 'hybrid', 'internal', 'nfc', 'smart-
 function parseTransports(raw: string): string[] {
   try {
     const v = JSON.parse(raw) as unknown
-    return Array.isArray(v) ? v.filter((t): t is string => typeof t === 'string' && TRANSPORTS.has(t)) : []
+    return Array.isArray(v)
+      ? v.filter((t): t is string => typeof t === 'string' && TRANSPORTS.has(t))
+      : []
   } catch {
     return []
   }
@@ -181,11 +207,17 @@ function toPasskey(r: CredRow): StoredPasskey {
 export const MAX_PASSKEYS = 20
 
 export function listPasskeys(): StoredPasskey[] {
-  return (getAuthDb().prepare('SELECT * FROM webauthn_credentials ORDER BY created_at ASC').all() as CredRow[]).map(toPasskey)
+  return (
+    getAuthDb()
+      .prepare('SELECT * FROM webauthn_credentials ORDER BY created_at ASC')
+      .all() as CredRow[]
+  ).map(toPasskey)
 }
 
 export function passkeyCount(): number {
-  return (getAuthDb().prepare('SELECT count(*) AS n FROM webauthn_credentials').get() as { n: number }).n
+  return (
+    getAuthDb().prepare('SELECT count(*) AS n FROM webauthn_credentials').get() as { n: number }
+  ).n
 }
 
 const CRED_ID_RE = /^[A-Za-z0-9_-]{16,1366}$/
@@ -194,7 +226,10 @@ export function renamePasskey(id: string, name: unknown): StoredPasskey | null {
   const clean = cleanPasskeyName(name)
   if (!clean || !CRED_ID_RE.test(id)) return null
   const db = getAuthDb()
-  if (db.prepare('UPDATE webauthn_credentials SET name = ? WHERE id = ?').run(clean, id).changes !== 1) return null
+  if (
+    db.prepare('UPDATE webauthn_credentials SET name = ? WHERE id = ?').run(clean, id).changes !== 1
+  )
+    return null
   return toPasskey(db.prepare('SELECT * FROM webauthn_credentials WHERE id = ?').get(id) as CredRow)
 }
 
@@ -205,7 +240,9 @@ export function deletePasskey(id: string): boolean {
 
 export function getPasskey(id: string): StoredPasskey | null {
   if (!CRED_ID_RE.test(id)) return null
-  const row = getAuthDb().prepare('SELECT * FROM webauthn_credentials WHERE id = ?').get(id) as CredRow | undefined
+  const row = getAuthDb().prepare('SELECT * FROM webauthn_credentials WHERE id = ?').get(id) as
+    | CredRow
+    | undefined
   return row ? toPasskey(row) : null
 }
 
@@ -215,10 +252,11 @@ export async function registrationOptions(
   rp: RelyingParty,
   sessionId: string,
   userName: string,
-  now = Date.now(),
+  now = Date.now()
 ): Promise<PublicKeyCredentialCreationOptionsJSON> {
   const existing = listPasskeys()
-  if (existing.length >= MAX_PASSKEYS) throw new PasskeyError(`At most ${MAX_PASSKEYS} passkeys can be registered.`, 'LIMIT')
+  if (existing.length >= MAX_PASSKEYS)
+    throw new PasskeyError(`At most ${MAX_PASSKEYS} passkeys can be registered.`, 'LIMIT')
   const options = await generateRegistrationOptions({
     rpName: rp.rpName,
     rpID: rp.rpID,
@@ -239,7 +277,7 @@ export async function verifyRegistration(
   sessionId: string,
   response: RegistrationResponseJSON,
   opts: { name?: unknown; userAgent?: string | null },
-  now = Date.now(),
+  now = Date.now()
 ): Promise<StoredPasskey> {
   const challenge = consumeChallenge(challengeOf(response), 'register', sessionId, now)
   let verification: Awaited<ReturnType<typeof verifyRegistrationResponse>>
@@ -252,9 +290,13 @@ export async function verifyRegistration(
       requireUserVerification: true,
     })
   } catch (err) {
-    throw new PasskeyError(`The passkey could not be verified: ${err instanceof Error ? err.message : String(err)}`, 'VERIFICATION')
+    throw new PasskeyError(
+      `The passkey could not be verified: ${err instanceof Error ? err.message : String(err)}`,
+      'VERIFICATION'
+    )
   }
-  if (!verification.verified) throw new PasskeyError('The passkey could not be verified.', 'VERIFICATION')
+  if (!verification.verified)
+    throw new PasskeyError('The passkey could not be verified.', 'VERIFICATION')
   const info = verification.registrationInfo
   const db = getAuthDb()
   if (db.prepare('SELECT 1 FROM webauthn_credentials WHERE id = ?').get(info.credential.id)) {
@@ -263,7 +305,7 @@ export async function verifyRegistration(
   const name = cleanPasskeyName(opts.name) || suggestPasskeyName(info.aaguid, opts.userAgent)
   db.prepare(
     `INSERT INTO webauthn_credentials (id, public_key, counter, transports, device_type, backed_up, aaguid, name, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     info.credential.id,
     Buffer.from(info.credential.publicKey),
@@ -273,7 +315,7 @@ export async function verifyRegistration(
     info.credentialBackedUp ? 1 : 0,
     info.aaguid && info.aaguid !== '00000000-0000-0000-0000-000000000000' ? info.aaguid : null,
     name,
-    now,
+    now
   )
   return getPasskey(info.credential.id) as StoredPasskey
 }
@@ -284,13 +326,16 @@ export async function authenticationOptions(
   rp: RelyingParty,
   purpose: 'login' | 'step-up',
   sessionId: string | null,
-  now = Date.now(),
+  now = Date.now()
 ): Promise<PublicKeyCredentialRequestOptionsJSON> {
   const options = await generateAuthenticationOptions({
     rpID: rp.rpID,
     timeout: CEREMONY_TIMEOUT_MS,
     userVerification: 'required',
-    allowCredentials: purpose === 'step-up' ? listPasskeys().map((c) => ({ id: c.id, transports: c.transports })) : [],
+    allowCredentials:
+      purpose === 'step-up'
+        ? listPasskeys().map((c) => ({ id: c.id, transports: c.transports }))
+        : [],
   })
   storeChallenge(options.challenge, purpose, purpose === 'step-up' ? sessionId : null, now)
   return options
@@ -301,13 +346,21 @@ export async function verifyAuthentication(
   purpose: 'login' | 'step-up',
   sessionId: string | null,
   response: AuthenticationResponseJSON,
-  now = Date.now(),
+  now = Date.now()
 ): Promise<StoredPasskey> {
-  const challenge = consumeChallenge(challengeOf(response), purpose, purpose === 'step-up' ? sessionId : null, now)
+  const challenge = consumeChallenge(
+    challengeOf(response),
+    purpose,
+    purpose === 'step-up' ? sessionId : null,
+    now
+  )
   const id = typeof response?.id === 'string' ? response.id : ''
   const db = getAuthDb()
-  const row = CRED_ID_RE.test(id) ? (db.prepare('SELECT * FROM webauthn_credentials WHERE id = ?').get(id) as CredRow | undefined) : undefined
-  if (!row) throw new PasskeyError('This passkey is not registered for this site.', 'UNKNOWN_CREDENTIAL')
+  const row = CRED_ID_RE.test(id)
+    ? (db.prepare('SELECT * FROM webauthn_credentials WHERE id = ?').get(id) as CredRow | undefined)
+    : undefined
+  if (!row)
+    throw new PasskeyError('This passkey is not registered for this site.', 'UNKNOWN_CREDENTIAL')
   let verification: Awaited<ReturnType<typeof verifyAuthenticationResponse>>
   try {
     verification = await verifyAuthenticationResponse({
@@ -318,21 +371,26 @@ export async function verifyAuthentication(
       requireUserVerification: true,
       credential: {
         id: row.id,
-        publicKey: new Uint8Array(row.public_key) as Parameters<typeof verifyAuthenticationResponse>[0]['credential']['publicKey'],
+        publicKey: new Uint8Array(row.public_key) as Parameters<
+          typeof verifyAuthenticationResponse
+        >[0]['credential']['publicKey'],
         counter: row.counter,
-        transports: parseTransports(row.transports) as Parameters<typeof verifyAuthenticationResponse>[0]['credential']['transports'],
+        transports: parseTransports(row.transports) as Parameters<
+          typeof verifyAuthenticationResponse
+        >[0]['credential']['transports'],
       },
     })
   } catch (err) {
-    throw new PasskeyError(`The passkey could not be verified: ${err instanceof Error ? err.message : String(err)}`, 'VERIFICATION')
+    throw new PasskeyError(
+      `The passkey could not be verified: ${err instanceof Error ? err.message : String(err)}`,
+      'VERIFICATION'
+    )
   }
-  if (!verification.verified) throw new PasskeyError('The passkey could not be verified.', 'VERIFICATION')
+  if (!verification.verified)
+    throw new PasskeyError('The passkey could not be verified.', 'VERIFICATION')
   const info = verification.authenticationInfo
-  db.prepare('UPDATE webauthn_credentials SET counter = ?, backed_up = ?, last_used_at = ? WHERE id = ?').run(
-    info.newCounter,
-    info.credentialBackedUp ? 1 : 0,
-    now,
-    row.id,
-  )
+  db.prepare(
+    'UPDATE webauthn_credentials SET counter = ?, backed_up = ?, last_used_at = ? WHERE id = ?'
+  ).run(info.newCounter, info.credentialBackedUp ? 1 : 0, now, row.id)
   return getPasskey(row.id) as StoredPasskey
 }

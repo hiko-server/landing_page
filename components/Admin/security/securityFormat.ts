@@ -55,16 +55,27 @@ export function relativeTime(ms: number, now: number): string {
   if (abs < 3600) return rtf.format(Math.round(diff / 60), 'minute')
   if (abs < 86_400) return rtf.format(Math.round(diff / 3600), 'hour')
   if (abs < 30 * 86_400) return rtf.format(Math.round(diff / 86_400), 'day')
-  return new Intl.DateTimeFormat('en', { day: 'numeric', month: 'short', year: 'numeric' }).format(ms)
+  return new Intl.DateTimeFormat('en', { day: 'numeric', month: 'short', year: 'numeric' }).format(
+    ms
+  )
 }
 
 /** "13 Oct 2026, 14:05" in the viewer's time zone. */
 export function absoluteTime(ms: number): string {
-  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(ms)
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(ms)
 }
 
 /** "Hong Kong · 203.0.113.x" style network line (either part may be missing). */
-export function whereLabel(country: string | null | undefined, ipPrefix: string | null | undefined): string {
+export function whereLabel(
+  country: string | null | undefined,
+  ipPrefix: string | null | undefined
+): string {
   let place = ''
   if (country) {
     try {

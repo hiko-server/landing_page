@@ -19,10 +19,35 @@ import {
   relativeTime,
   whereLabel,
 } from '../components/Admin/security/securityFormat'
-import { markStepUpCancelled, parseStepUpChallenge, wasStepUpCancelled } from '../components/Admin/security/stepUpClient'
-import { describeWebAuthnError, isCeremonyCancelled } from '../components/Admin/security/webauthnClient'
-import { browserTally, checkTone, formatBytes, formatDuration, formatUptime, kindLabel, seriesTotal, sourceLabel, sparkHeights } from '../components/Admin/system/systemFormat'
-import { clearLogEntries, logEntryTotal, pushLogEntry, recentLogEntries, LOG_RING_SIZE } from '../lib/logBuffer'
+import {
+  cancelledStepUpResponse,
+  markStepUpCancelled,
+  parseRecentStatus,
+  parseStepUpChallenge,
+  wasStepUpCancelled,
+} from '../components/Admin/security/stepUpClient'
+import {
+  describeWebAuthnError,
+  isCeremonyCancelled,
+} from '../components/Admin/security/webauthnClient'
+import {
+  browserTally,
+  checkTone,
+  formatBytes,
+  formatDuration,
+  formatUptime,
+  kindLabel,
+  seriesTotal,
+  sourceLabel,
+  sparkHeights,
+} from '../components/Admin/system/systemFormat'
+import {
+  clearLogEntries,
+  logEntryTotal,
+  pushLogEntry,
+  recentLogEntries,
+  LOG_RING_SIZE,
+} from '../lib/logBuffer'
 
 const prevCwd = process.cwd()
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sa-admin-ui-'))
@@ -49,7 +74,10 @@ test('security labels', () => {
   assert.equal(eventLabel('something-new'), 'something-new')
   assert.equal(isWarningEvent('step-up-failed'), true)
   assert.equal(isWarningEvent('signin'), false)
-  assert.equal(passkeySyncLabel({ backedUp: false, deviceType: 'singleDevice' }), 'This device only')
+  assert.equal(
+    passkeySyncLabel({ backedUp: false, deviceType: 'singleDevice' }),
+    'This device only'
+  )
   assert.equal(passkeySyncLabel({ backedUp: true, deviceType: 'singleDevice' }), 'Synced')
   const hongKong = new Intl.DisplayNames(['en'], { type: 'region' }).of('HK')
   assert.equal(whereLabel('HK', '203.0.113.x'), `${hongKong} · 203.0.113.x`)
@@ -68,20 +96,43 @@ test('security labels', () => {
 test('step-up challenge parsing and the cancelled marker', () => {
   assert.equal(parseStepUpChallenge(401, { code: 'STEP_UP_REQUIRED' }), null)
   assert.equal(parseStepUpChallenge(403, { code: 'CSRF' }), null)
-  assert.deepEqual(parseStepUpChallenge(403, { code: 'STEP_UP_REQUIRED', methods: ['passkey', 'password', 'telepathy'], recoveryRequired: true, windowMinutes: 5 }), {
-    methods: ['passkey', 'password'],
-    recoveryRequired: true,
-    windowMinutes: 5,
+  assert.deepEqual(
+    parseStepUpChallenge(403, {
+      code: 'STEP_UP_REQUIRED',
+      methods: ['passkey', 'password', 'telepathy'],
+      recoveryRequired: true,
+      windowMinutes: 5,
+    }),
+    {
+      methods: ['passkey', 'password'],
+      recoveryRequired: true,
+      windowMinutes: 5,
+    }
+  )
+  assert.deepEqual(parseStepUpChallenge(403, { code: 'STEP_UP_REQUIRED' }), {
+    methods: ['password'],
+    recoveryRequired: false,
+    windowMinutes: 10,
   })
-  assert.deepEqual(parseStepUpChallenge(403, { code: 'STEP_UP_REQUIRED' }), { methods: ['password'], recoveryRequired: false, windowMinutes: 10 })
   const res = new Response(null, { status: 403 })
   assert.equal(wasStepUpCancelled(res), false)
   assert.equal(markStepUpCancelled(res), res)
   assert.equal(wasStepUpCancelled(res), true)
+  const cancelled = cancelledStepUpResponse()
+  assert.equal(cancelled.status, 403)
+  assert.equal(wasStepUpCancelled(cancelled), true)
+  assert.deepEqual(parseRecentStatus({ recent: false, methods: ['password'], recoveryRequired: true, windowMinutes: 1 }), {
+    recent: false,
+    challenge: { methods: ['password'], recoveryRequired: true, windowMinutes: 1 },
+  })
+  assert.equal(parseRecentStatus({ nope: 1 }), null)
 })
 
 test('WebAuthn error wording', () => {
-  assert.match(describeWebAuthnError({ code: 'ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED' }), /already has a passkey/)
+  assert.match(
+    describeWebAuthnError({ code: 'ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED' }),
+    /already has a passkey/
+  )
   assert.match(describeWebAuthnError({ name: 'NotAllowedError' }), /closed or timed out/)
   assert.match(describeWebAuthnError({ code: 'ERROR_INVALID_RP_ID' }), /don’t work on this address/)
   assert.match(describeWebAuthnError(new Error('weird')), /failed: weird/)
@@ -120,10 +171,17 @@ test('the recent-log ring keeps the newest warn / error entries, redacted and bo
   pushLogEntry('warn', 'first', { password: 'p', big: 'x'.repeat(5000) })
   for (let i = 0; i < LOG_RING_SIZE + 5; i++) pushLogEntry('error', `e${i}`, {})
   const entries = recentLogEntries(3)
-  assert.deepEqual(entries.map((e) => e.msg), [`e${LOG_RING_SIZE + 4}`, `e${LOG_RING_SIZE + 3}`, `e${LOG_RING_SIZE + 2}`])
+  assert.deepEqual(
+    entries.map((e) => e.msg),
+    [`e${LOG_RING_SIZE + 4}`, `e${LOG_RING_SIZE + 3}`, `e${LOG_RING_SIZE + 2}`]
+  )
   assert.equal(recentLogEntries(1000).length, LOG_RING_SIZE)
   assert.equal(logEntryTotal(), LOG_RING_SIZE + 6)
-  assert.equal(recentLogEntries(1000, 'warn').length, 0, 'the warn entry was pushed out of the ring')
+  assert.equal(
+    recentLogEntries(1000, 'warn').length,
+    0,
+    'the warn entry was pushed out of the ring'
+  )
   clearLogEntries()
   pushLogEntry('warn', 'w', { password: 'secret-value', note: 'y'.repeat(5000) })
   const [w] = recentLogEntries(1)
@@ -134,11 +192,14 @@ test('the recent-log ring keeps the newest warn / error entries, redacted and bo
 test('the system snapshot reports every store, disk and warning without throwing', async () => {
   const { diskInfo, diskWarnings, systemSnapshot } = await import('../lib/systemHealth')
   const snap = systemSnapshot()
-  assert.deepEqual(snap.databases.map((d) => [d.name, d.schema?.state]), [
-    ['content', 'current'],
-    ['analytics', 'current'],
-    ['auth', 'current'],
-  ])
+  assert.deepEqual(
+    snap.databases.map((d) => [d.name, d.schema?.state]),
+    [
+      ['content', 'current'],
+      ['analytics', 'current'],
+      ['auth', 'current'],
+    ]
+  )
   assert.ok(snap.databases.every((d) => (d.bytes ?? 0) > 0))
   assert.equal(snap.backup.localCount, 0)
   assert.ok(snap.release.uptimeS >= 0)
@@ -148,7 +209,23 @@ test('the system snapshot reports every store, disk and warning without throwing
   assert.equal(snap.r2.configured, false)
   const disk = diskInfo(tmp)
   assert.ok(disk && disk.totalBytes > 0 && disk.freeBytes >= 0)
-  assert.deepEqual(diskWarnings({ path: '/', freeBytes: 500 * 1024 ** 2, totalBytes: 100 * 1024 ** 3, usedPct: 99.5 }).length, 1)
-  assert.deepEqual(diskWarnings({ path: '/', freeBytes: 50 * 1024 ** 3, totalBytes: 100 * 1024 ** 3, usedPct: 50 }), [])
+  assert.deepEqual(
+    diskWarnings({
+      path: '/',
+      freeBytes: 500 * 1024 ** 2,
+      totalBytes: 100 * 1024 ** 3,
+      usedPct: 99.5,
+    }).length,
+    1
+  )
+  assert.deepEqual(
+    diskWarnings({
+      path: '/',
+      freeBytes: 50 * 1024 ** 3,
+      totalBytes: 100 * 1024 ** 3,
+      usedPct: 50,
+    }),
+    []
+  )
   assert.equal(diskInfo('/definitely/not/here'), null)
 })

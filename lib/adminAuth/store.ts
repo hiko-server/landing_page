@@ -9,7 +9,9 @@ import { getAuthDb } from './db'
 // ── Settings ──────────────────────────────────────────────────────────────
 
 export function getSetting(key: string): string | null {
-  const row = getAuthDb().prepare('SELECT value FROM auth_settings WHERE key = ?').get(key) as { value: string } | undefined
+  const row = getAuthDb().prepare('SELECT value FROM auth_settings WHERE key = ?').get(key) as
+    | { value: string }
+    | undefined
   return row ? row.value : null
 }
 
@@ -17,7 +19,7 @@ export function setSetting(key: string, value: string, now = Date.now()): void {
   getAuthDb()
     .prepare(
       `INSERT INTO auth_settings (key, value, updated_at) VALUES (?, ?, ?)
-       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
     )
     .run(key, value, now)
 }
@@ -28,7 +30,9 @@ export function webauthnUserId(): Uint8Array {
   if (existing) return new Uint8Array(Buffer.from(existing, 'base64url'))
   const id = crypto.randomBytes(32)
   getAuthDb()
-    .prepare(`INSERT OR IGNORE INTO auth_settings (key, value, updated_at) VALUES ('webauthn_user_id', ?, ?)`)
+    .prepare(
+      `INSERT OR IGNORE INTO auth_settings (key, value, updated_at) VALUES ('webauthn_user_id', ?, ?)`
+    )
     .run(id.toString('base64url'), Date.now())
   return new Uint8Array(Buffer.from(getSetting('webauthn_user_id') as string, 'base64url'))
 }
@@ -75,16 +79,27 @@ export type AuthEventInput = {
   detail?: string | null
 }
 
-export type AuthEvent = Required<{ [K in keyof AuthEventInput]: Exclude<AuthEventInput[K], undefined> }> & { id: number; at: number }
+export type AuthEvent = Required<{
+  [K in keyof AuthEventInput]: Exclude<AuthEventInput[K], undefined>
+}> & { id: number; at: number }
 
 export function recordAuthEvent(e: AuthEventInput, now = Date.now()): void {
   const db = getAuthDb()
   db.prepare(
     `INSERT INTO auth_events (at, type, method, session_id, device, ip_prefix, country, detail)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(now, e.type, e.method ?? null, e.sessionId ?? null, e.device ?? null, e.ipPrefix ?? null, e.country ?? null, e.detail ? e.detail.slice(0, 200) : null)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    now,
+    e.type,
+    e.method ?? null,
+    e.sessionId ?? null,
+    e.device ?? null,
+    e.ipPrefix ?? null,
+    e.country ?? null,
+    e.detail ? e.detail.slice(0, 200) : null
+  )
   db.prepare(
-    `DELETE FROM auth_events WHERE at < ? OR id NOT IN (SELECT id FROM auth_events ORDER BY at DESC, id DESC LIMIT ?)`,
+    `DELETE FROM auth_events WHERE at < ? OR id NOT IN (SELECT id FROM auth_events ORDER BY at DESC, id DESC LIMIT ?)`
   ).run(now - AUTH_EVENT_DAYS * 86_400_000, AUTH_EVENT_KEEP)
 }
 
@@ -153,7 +168,9 @@ export function hashRecoveryCode(normalized: string): string {
 
 /** Replace every recovery code with a fresh set; returns the codes (shown once, never stored). */
 export function generateRecoveryCodes(now = Date.now()): string[] {
-  const codes = Array.from({ length: RECOVERY_CODE_COUNT }, () => formatRecoveryCode(crypto.randomBytes(10)))
+  const codes = Array.from({ length: RECOVERY_CODE_COUNT }, () =>
+    formatRecoveryCode(crypto.randomBytes(10))
+  )
   const db = getAuthDb()
   db.transaction(() => {
     db.prepare('DELETE FROM recovery_codes').run()
@@ -177,7 +194,13 @@ export type RecoveryStatus = { total: number; remaining: number; generatedAt: nu
 
 export function recoveryStatus(): RecoveryStatus {
   const row = getAuthDb()
-    .prepare('SELECT count(*) AS total, sum(CASE WHEN used_at IS NULL THEN 1 ELSE 0 END) AS remaining, max(created_at) AS at FROM recovery_codes')
+    .prepare(
+      'SELECT count(*) AS total, sum(CASE WHEN used_at IS NULL THEN 1 ELSE 0 END) AS remaining, max(created_at) AS at FROM recovery_codes'
+    )
     .get() as { total: number; remaining: number | null; at: number | null }
-  return { total: Number(row.total) || 0, remaining: Number(row.remaining) || 0, generatedAt: row.at ?? null }
+  return {
+    total: Number(row.total) || 0,
+    remaining: Number(row.remaining) || 0,
+    generatedAt: row.at ?? null,
+  }
 }

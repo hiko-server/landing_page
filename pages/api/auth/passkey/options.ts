@@ -22,14 +22,20 @@ export default withApi('auth/passkey/options', async (req, res) => {
   ]
   const refused = hits.filter((h) => !h.allowed)
   if (refused.length) {
-    res.setHeader('Retry-After', String(Math.max(1, Math.ceil((Math.max(...refused.map((h) => h.resetAt)) - Date.now()) / 1000))))
+    res.setHeader(
+      'Retry-After',
+      String(
+        Math.max(1, Math.ceil((Math.max(...refused.map((h) => h.resetAt)) - Date.now()) / 1000))
+      )
+    )
     return res.status(429).json({ error: 'Too many sign-in attempts. Please wait and try again.' })
   }
   const rp = relyingPartyFor(req)
   if (!rp) {
     return res.status(400).json({
       code: 'PASSKEY_UNAVAILABLE',
-      error: 'Passkeys need a host name. Open the admin through the site’s address (or localhost), not an IP address.',
+      error:
+        'Passkeys need a host name. Open the admin through the site’s address (or localhost), not an IP address.',
     })
   }
   return res.status(200).json({ options: await authenticationOptions(rp, 'login', null) })

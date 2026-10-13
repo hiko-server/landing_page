@@ -22,7 +22,15 @@ import { recoveryCodesText } from './securityFormat'
  * the dialog can close — the server keeps only hashes, so a lost set can only
  * be replaced.
  */
-export default function RecoveryCodesDialog({ codes, site, onClose }: { codes: string[]; site: string; onClose: () => void }) {
+export default function RecoveryCodesDialog({
+  codes,
+  site,
+  onClose,
+}: {
+  codes: string[]
+  site: string
+  onClose: () => void
+}) {
   const [saved, setSaved] = useState(false)
   const [copied, setCopied] = useState(false)
   const createdAt = useRef(Date.now()).current
@@ -49,11 +57,26 @@ export default function RecoveryCodesDialog({ codes, site, onClose }: { codes: s
   }
 
   return (
-    <Modal isOpen onClose={() => saved && onClose()} isCentered size="lg" closeOnOverlayClick={false} closeOnEsc={saved}>
+    <Modal
+      isOpen
+      onClose={() => saved && onClose()}
+      isCentered
+      size="lg"
+      closeOnOverlayClick={false}
+      closeOnEsc={saved}
+    >
       <ModalOverlay />
       <ModalContent bg="page.bg-elevated" border="1px solid" borderColor="page.border" mx={4}>
         <ModalHeader pb={1}>
-          <Text as="span" display="block" fontFamily={MONO} fontSize="10px" letterSpacing="0.16em" textTransform="uppercase" color="accent.500">
+          <Text
+            as="span"
+            display="block"
+            fontFamily={MONO}
+            fontSize="10px"
+            letterSpacing="0.16em"
+            textTransform="uppercase"
+            color="accent.text"
+          >
             [recovery codes]
           </Text>
           <Text as="span" fontSize="lg" fontWeight={600} letterSpacing="-0.02em">
@@ -62,8 +85,8 @@ export default function RecoveryCodesDialog({ codes, site, onClose }: { codes: s
         </ModalHeader>
         <ModalBody>
           <Text fontSize="sm">
-            Each code signs in once, together with your password, when you can’t use a passkey. This is the only time they are shown — store them offline or in a
-            password manager.
+            Each code signs in once, together with your password, when you can’t use a passkey. This
+            is the only time they are shown — store them offline or in a password manager.
           </Text>
           <SimpleGrid
             as="ol"
@@ -80,7 +103,14 @@ export default function RecoveryCodesDialog({ codes, site, onClose }: { codes: s
             aria-label="Recovery codes"
           >
             {codes.map((c, i) => (
-              <Box as="li" key={c} fontFamily={MONO} fontSize="sm" className="tnum" letterSpacing="0.04em">
+              <Box
+                as="li"
+                key={c}
+                fontFamily={MONO}
+                fontSize="sm"
+                className="tnum"
+                letterSpacing="0.04em"
+              >
                 <Box as="span" color="page.fg-secondary" mr={2} aria-hidden>
                   {String(i + 1).padStart(2, '0')}
                 </Box>
@@ -99,7 +129,12 @@ export default function RecoveryCodesDialog({ codes, site, onClose }: { codes: s
           <Box role="status" aria-live="polite" srOnly>
             {copied ? 'Recovery codes copied to the clipboard.' : ''}
           </Box>
-          <Checkbox mt={5} isChecked={saved} onChange={(e) => setSaved(e.target.checked)} colorScheme="purple">
+          <Checkbox
+            mt={5}
+            isChecked={saved}
+            onChange={(e) => setSaved(e.target.checked)}
+            colorScheme="purple"
+          >
             <Text as="span" fontSize="sm">
               I have saved these codes somewhere safe
             </Text>

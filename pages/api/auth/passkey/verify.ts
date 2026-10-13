@@ -4,7 +4,11 @@ import { ensureAdminFromEnv, readAdmin } from '../../../../lib/admin'
 import { knownDeviceIdOf, requestOrigin, startAdminSession } from '../../../../lib/auth'
 import { withApi } from '../../../../lib/apiHandler'
 import { rateLimit, rateLimitNetwork } from '../../../../lib/rateLimit'
-import { PasskeyError, relyingPartyFor, verifyAuthentication } from '../../../../lib/adminAuth/passkeys'
+import {
+  PasskeyError,
+  relyingPartyFor,
+  verifyAuthentication,
+} from '../../../../lib/adminAuth/passkeys'
 import { recordAuthEvent } from '../../../../lib/adminAuth/store'
 
 /**
@@ -31,7 +35,8 @@ function responseOf(req: NextApiRequest): AuthenticationResponseJSON | null {
   if (!r || typeof r !== 'object' || Array.isArray(r)) return null
   if (JSON.stringify(r).length > MAX_RESPONSE_CHARS) return null
   const o = r as Record<string, unknown>
-  if (typeof o.id !== 'string' || typeof o.rawId !== 'string' || o.type !== 'public-key') return null
+  if (typeof o.id !== 'string' || typeof o.rawId !== 'string' || o.type !== 'public-key')
+    return null
   if (!o.response || typeof o.response !== 'object') return null
   return r as AuthenticationResponseJSON
 }
@@ -48,11 +53,19 @@ export default withApi('auth/passkey/verify', async (req, res, ctx) => {
   ]
   const refused = hits.filter((h) => !h.allowed)
   if (refused.length) {
-    res.setHeader('Retry-After', String(Math.max(1, Math.ceil((Math.max(...refused.map((h) => h.resetAt)) - Date.now()) / 1000))))
+    res.setHeader(
+      'Retry-After',
+      String(
+        Math.max(1, Math.ceil((Math.max(...refused.map((h) => h.resetAt)) - Date.now()) / 1000))
+      )
+    )
     return res.status(429).json({ error: 'Too many sign-in attempts. Please wait and try again.' })
   }
   const rp = relyingPartyFor(req)
-  if (!rp) return res.status(400).json({ code: 'PASSKEY_UNAVAILABLE', error: 'Passkeys are not available on this host.' })
+  if (!rp)
+    return res
+      .status(400)
+      .json({ code: 'PASSKEY_UNAVAILABLE', error: 'Passkeys are not available on this host.' })
   const response = responseOf(req)
   if (!response) return res.status(400).json({ error: 'Missing or invalid passkey response' })
 
@@ -62,17 +75,29 @@ export default withApi('auth/passkey/verify', async (req, res, ctx) => {
 
   try {
     const passkey = await verifyAuthentication(rp, 'login', null, response)
-    startAdminSession(req, res, { email: admin.email, method: 'passkey', credentialId: passkey.id, knownDeviceId: knownDeviceIdOf(req, res) })
+    startAdminSession(req, res, {
+      email: admin.email,
+      method: 'passkey',
+      credentialId: passkey.id,
+      knownDeviceId: knownDeviceIdOf(req, res),
+    })
     return res.status(200).json({ ok: true })
   } catch (err) {
     if (err instanceof PasskeyError) {
       try {
-        recordAuthEvent({ type: 'signin-failed', method: 'passkey', country: requestOrigin(req).country, detail: err.code.toLowerCase() })
+        recordAuthEvent({
+          type: 'signin-failed',
+          method: 'passkey',
+          country: requestOrigin(req).country,
+          detail: err.code.toLowerCase(),
+        })
       } catch {
         // History is best effort.
       }
       if (err.code === 'UNKNOWN_CREDENTIAL') {
-        return res.status(401).json({ code: err.code, error: err.message, credentialId: response.id })
+        return res
+          .status(401)
+          .json({ code: err.code, error: err.message, credentialId: response.id })
       }
       return res.status(401).json({ code: err.code, error: err.message })
     }

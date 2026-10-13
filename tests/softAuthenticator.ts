@@ -66,7 +66,12 @@ export class SoftAuthenticator {
     this.credentialId = crypto.randomBytes(32)
     this.id = b64u(this.credentialId)
     this.keys = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' })
-    this.opts = { synced: true, userVerified: true, aaguid: 'fbfc3007-154e-4ecc-8c0b-6e020557d7bd', ...opts }
+    this.opts = {
+      synced: true,
+      userVerified: true,
+      aaguid: 'fbfc3007-154e-4ecc-8c0b-6e020557d7bd',
+      ...opts,
+    }
   }
 
   private flags(extra: number): number {
@@ -85,13 +90,22 @@ export class SoftAuthenticator {
         [-1, 1],
         [-2, Buffer.from(jwk.x, 'base64url')],
         [-3, Buffer.from(jwk.y, 'base64url')],
-      ]),
+      ])
     )
   }
 
   /** A registration response for creation options (as @simplewebauthn/browser would send it). */
-  register(options: { challenge: string; rp: { id?: string }; user: { id: string } }, origin: string, rpId = options.rp.id || '') {
-    const clientDataJSON = JSON.stringify({ type: 'webauthn.create', challenge: options.challenge, origin, crossOrigin: false })
+  register(
+    options: { challenge: string; rp: { id?: string }; user: { id: string } },
+    origin: string,
+    rpId = options.rp.id || ''
+  ) {
+    const clientDataJSON = JSON.stringify({
+      type: 'webauthn.create',
+      challenge: options.challenge,
+      origin,
+      crossOrigin: false,
+    })
     const counter = Buffer.alloc(4)
     counter.writeUInt32BE(this.counter, 0)
     const idLen = Buffer.alloc(2)
@@ -110,27 +124,45 @@ export class SoftAuthenticator {
         ['fmt', 'none'],
         ['attStmt', new Map()],
         ['authData', authData],
-      ]),
+      ])
     )
     this.userHandle = options.user.id
     return {
       id: this.id,
       rawId: this.id,
       type: 'public-key' as const,
-      response: { clientDataJSON: b64u(clientDataJSON), attestationObject: b64u(attestationObject), transports: ['internal', 'hybrid'] },
+      response: {
+        clientDataJSON: b64u(clientDataJSON),
+        attestationObject: b64u(attestationObject),
+        transports: ['internal', 'hybrid'],
+      },
       clientExtensionResults: {},
       authenticatorAttachment: 'platform' as const,
     }
   }
 
   /** An assertion for request options. `counterStep` 0 replays the previous counter (a clone). */
-  authenticate(options: { challenge: string; rpId?: string }, origin: string, rpId = options.rpId || '', counterStep = 1) {
+  authenticate(
+    options: { challenge: string; rpId?: string },
+    origin: string,
+    rpId = options.rpId || '',
+    counterStep = 1
+  ) {
     this.counter += counterStep
-    const clientDataJSON = JSON.stringify({ type: 'webauthn.get', challenge: options.challenge, origin, crossOrigin: false })
+    const clientDataJSON = JSON.stringify({
+      type: 'webauthn.get',
+      challenge: options.challenge,
+      origin,
+      crossOrigin: false,
+    })
     const counter = Buffer.alloc(4)
     counter.writeUInt32BE(this.counter, 0)
     const authenticatorData = Buffer.concat([sha256(rpId), Buffer.from([this.flags(0)]), counter])
-    const signature = crypto.sign('sha256', Buffer.concat([authenticatorData, sha256(clientDataJSON)]), this.keys.privateKey)
+    const signature = crypto.sign(
+      'sha256',
+      Buffer.concat([authenticatorData, sha256(clientDataJSON)]),
+      this.keys.privateKey
+    )
     return {
       id: this.id,
       rawId: this.id,

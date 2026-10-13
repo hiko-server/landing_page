@@ -43,7 +43,14 @@ export function deviceLabel(ua: string | undefined | null): string {
 export function ipPrefix(raw: string | undefined | null): string | null {
   const addr = parseIp(raw)
   if (!addr) return null
-  if (addr.v === 4) return `${formatIp({ v: 4, bytes: [...addr.bytes.slice(0, 3), 0] }).replace(/\.0$/, '')}.x`
+  // This machine (a local run, or a request that came straight to the container).
+  if (
+    (addr.v === 4 && addr.bytes[0] === 127) ||
+    (addr.v === 6 && addr.bytes.slice(0, 15).every((b) => b === 0) && addr.bytes[15] === 1)
+  )
+    return 'loopback'
+  if (addr.v === 4)
+    return `${formatIp({ v: 4, bytes: [...addr.bytes.slice(0, 3), 0] }).replace(/\.0$/, '')}.x`
   return ipv6Network48(raw)
 }
 
@@ -69,7 +76,10 @@ export function passkeyProvider(aaguid: string | null | undefined): string | nul
 }
 
 /** Suggested passkey name: the provider when known, plus where it was added. */
-export function suggestPasskeyName(aaguid: string | null | undefined, ua: string | null | undefined): string {
+export function suggestPasskeyName(
+  aaguid: string | null | undefined,
+  ua: string | null | undefined
+): string {
   const provider = passkeyProvider(aaguid)
   const device = deviceLabel(ua)
   if (!provider) return device === 'Unknown device' ? 'Passkey' : device
@@ -80,7 +90,10 @@ export function suggestPasskeyName(aaguid: string | null | undefined, ua: string
 export function cleanPasskeyName(raw: unknown): string | null {
   if (typeof raw !== 'string') return null
   // eslint-disable-next-line no-control-regex
-  const s = raw.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim()
+  const s = raw
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
   if (!s) return null
   return Array.from(s).slice(0, 60).join('')
 }

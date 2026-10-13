@@ -15,7 +15,12 @@ import {
   verifyRegistration,
 } from '../../../../lib/adminAuth/passkeys'
 import { requireRecentAuth } from '../../../../lib/adminAuth/stepUp'
-import { generateRecoveryCodes, isPasskeyRequired, recordAuthEvent, recoveryStatus } from '../../../../lib/adminAuth/store'
+import {
+  generateRecoveryCodes,
+  isPasskeyRequired,
+  recordAuthEvent,
+  recoveryStatus,
+} from '../../../../lib/adminAuth/store'
 
 /**
  * Passkey management (admin only; adding and removing need a recent
@@ -33,9 +38,20 @@ const MAX_RESPONSE_CHARS = 32_768
 
 function registrationResponse(req: NextApiRequest): RegistrationResponseJSON | null {
   const r = (req.body as { response?: unknown } | null)?.response
-  if (!r || typeof r !== 'object' || Array.isArray(r) || JSON.stringify(r).length > MAX_RESPONSE_CHARS) return null
+  if (
+    !r ||
+    typeof r !== 'object' ||
+    Array.isArray(r) ||
+    JSON.stringify(r).length > MAX_RESPONSE_CHARS
+  )
+    return null
   const o = r as Record<string, unknown>
-  return typeof o.id === 'string' && o.type === 'public-key' && o.response && typeof o.response === 'object' ? (r as RegistrationResponseJSON) : null
+  return typeof o.id === 'string' &&
+    o.type === 'public-key' &&
+    o.response &&
+    typeof o.response === 'object'
+    ? (r as RegistrationResponseJSON)
+    : null
 }
 
 const header = (req: NextApiRequest, name: string) => {
@@ -53,15 +69,28 @@ export default withApi('admin/security/passkeys', async (req, res, apiCtx) => {
     if (!ctx) return
     if (!ctx.session) return res.status(409).json({ error: 'Reload the page and try again.' })
     const rp = relyingPartyFor(req)
-    if (!rp) return res.status(400).json({ code: 'PASSKEY_UNAVAILABLE', error: 'Passkeys need a host name — open the admin through the site’s address, not an IP address.' })
+    if (!rp)
+      return res
+        .status(400)
+        .json({
+          code: 'PASSKEY_UNAVAILABLE',
+          error:
+            'Passkeys need a host name — open the admin through the site’s address, not an IP address.',
+        })
     const rl = rateLimit(req, 20, 10 * 60_000, 'admin:passkey-register')
-    if (!rl.allowed) return res.status(429).json({ error: 'Too many attempts — try again shortly.' })
+    if (!rl.allowed)
+      return res.status(429).json({ error: 'Too many attempts — try again shortly.' })
 
     if (body.action === 'options') {
       try {
-        return res.status(200).json({ options: await registrationOptions(rp, ctx.session.id, readAdmin()?.email || 'admin') })
+        return res
+          .status(200)
+          .json({
+            options: await registrationOptions(rp, ctx.session.id, readAdmin()?.email || 'admin'),
+          })
       } catch (err) {
-        if (err instanceof PasskeyError) return res.status(409).json({ code: err.code, error: err.message })
+        if (err instanceof PasskeyError)
+          return res.status(409).json({ code: err.code, error: err.message })
         throw err
       }
     }
@@ -70,29 +99,54 @@ export default withApi('admin/security/passkeys', async (req, res, apiCtx) => {
       if (!response) return res.status(400).json({ error: 'Missing or invalid passkey response' })
       try {
         const firstEver = passkeyCount() === 0
-        const passkey = await verifyRegistration(rp, ctx.session.id, response, { name: body.name, userAgent: header(req, 'user-agent') })
-        recordAuthEvent({ type: 'passkey-added', method: 'passkey', sessionId: ctx.session.id, detail: passkey.name, ...requestOrigin(req) })
+        const passkey = await verifyRegistration(rp, ctx.session.id, response, {
+          name: body.name,
+          userAgent: header(req, 'user-agent'),
+        })
+        recordAuthEvent({
+          type: 'passkey-added',
+          method: 'passkey',
+          sessionId: ctx.session.id,
+          detail: passkey.name,
+          ...requestOrigin(req),
+        })
         let recoveryCodes: string[] | undefined
         if (firstEver && recoveryStatus().remaining === 0) {
           recoveryCodes = generateRecoveryCodes()
-          recordAuthEvent({ type: 'recovery-codes-generated', sessionId: ctx.session.id, ...requestOrigin(req) })
+          recordAuthEvent({
+            type: 'recovery-codes-generated',
+            sessionId: ctx.session.id,
+            ...requestOrigin(req),
+          })
         }
         return res.status(200).json({ passkey, ...(recoveryCodes ? { recoveryCodes } : {}) })
       } catch (err) {
-        if (err instanceof PasskeyError) return res.status(err.code === 'DUPLICATE' ? 409 : 400).json({ code: err.code, error: err.message })
+        if (err instanceof PasskeyError)
+          return res
+            .status(err.code === 'DUPLICATE' ? 409 : 400)
+            .json({ code: err.code, error: err.message })
         apiCtx.log.error('passkey registration failed unexpectedly', { err })
         return res.status(500).json({ error: 'The passkey could not be saved. Try again.' })
       }
     }
-    return res.status(400).json({ error: 'Send { action: "options" } or { action: "register", response }' })
+    return res
+      .status(400)
+      .json({ error: 'Send { action: "options" } or { action: "register", response }' })
   }
 
   if (req.method === 'PATCH') {
     if (typeof body.id !== 'string') return res.status(400).json({ error: 'Missing id' })
     const before = getPasskey(body.id)
     const passkey = renamePasskey(body.id, body.name)
-    if (!passkey) return res.status(before ? 400 : 404).json({ error: before ? 'Names are 1–60 characters.' : 'Not found' })
-    recordAuthEvent({ type: 'passkey-renamed', detail: `${before?.name} → ${passkey.name}`, ...requestOrigin(req) })
+    if (!passkey)
+      return res
+        .status(before ? 400 : 404)
+        .json({ error: before ? 'Names are 1–60 characters.' : 'Not found' })
+    recordAuthEvent({
+      type: 'passkey-renamed',
+      detail: `${before?.name} → ${passkey.name}`,
+      ...requestOrigin(req),
+    })
     return res.status(200).json({ passkey })
   }
 
@@ -103,10 +157,21 @@ export default withApi('admin/security/passkeys', async (req, res, apiCtx) => {
     const target = getPasskey(body.id)
     if (!target) return res.status(404).json({ error: 'Not found' })
     if (isPasskeyRequired() && passkeyCount() <= 1) {
-      return res.status(409).json({ code: 'LAST_PASSKEY', error: 'This is your only passkey and “Require a passkey” is on. Add another passkey, or turn the requirement off first.' })
+      return res
+        .status(409)
+        .json({
+          code: 'LAST_PASSKEY',
+          error:
+            'This is your only passkey and “Require a passkey” is on. Add another passkey, or turn the requirement off first.',
+        })
     }
     deletePasskey(target.id)
-    recordAuthEvent({ type: 'passkey-removed', sessionId: ctx.session?.id ?? null, detail: target.name, ...requestOrigin(req) })
+    recordAuthEvent({
+      type: 'passkey-removed',
+      sessionId: ctx.session?.id ?? null,
+      detail: target.name,
+      ...requestOrigin(req),
+    })
     return res.status(200).json({ ok: true, id: target.id })
   }
 

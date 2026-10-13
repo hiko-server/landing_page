@@ -1,6 +1,12 @@
 import { useCallback, useRef, useState, type ReactNode } from 'react'
 import dynamic from 'next/dynamic'
-import { markStepUpCancelled, parseStepUpChallenge, type StepUpChallenge } from './stepUpClient'
+import {
+  cancelledStepUpResponse,
+  markStepUpCancelled,
+  parseRecentStatus,
+  parseStepUpChallenge,
+  type StepUpChallenge,
+} from './stepUpClient'
 
 // The dialog (and the passkey library behind it) loads only when a step-up is needed.
 const StepUpDialog = dynamic(() => import('./StepUpDialog'), { ssr: false })
@@ -8,14 +14,19 @@ const StepUpDialog = dynamic(() => import('./StepUpDialog'), { ssr: false })
 type Pending = { reason: string; challenge: StepUpChallenge; resolve: (ok: boolean) => void }
 
 /**
- * `fetch` for dangerous admin actions. When the server answers 403
- * STEP_UP_REQUIRED, the "Confirm it's you" dialog opens; after a successful
- * verification the request is sent once more and that response returned.
- * When the owner closes the dialog the original 403 comes back, marked so
- * `wasStepUpCancelled(res)` is true (show nothing then).
+ * `fetch` for dangerous admin actions (server rule: lib/adminAuth/stepUp.ts).
+ *
+ * Before sending, it asks GET /api/admin/security/recent; when this browser
+ * has not signed in or verified recently, the "Confirm it's you" dialog opens
+ * first, so the action normally never meets a 403. Should the server still
+ * answer 403 STEP_UP_REQUIRED (the window ran out in between), the dialog
+ * opens and the request is sent once more. When the owner closes the dialog
+ * a 403 response comes back marked so `wasStepUpCancelled(res)` is true
+ * (show nothing then).
  *
  *   const { fetchWithStepUp, stepUpElement } = useStepUp()
  *   const res = await fetchWithStepUp(url, init, 'Restoring replaces the live site.')
+ *   if (wasStepUpCancelled(res)) return
  *   …
  *   return <>{…}{stepUpElement}</>
  */
@@ -41,11 +52,25 @@ export function useStepUp(): {
         pendingRef.current = p
         setPending(p)
       }),
-    [],
+    []
   )
 
   const fetchWithStepUp = useCallback(
     async (input: string, init?: RequestInit, reason = 'This action changes the live site.') => {
+      // Ask first (a 200 either way), so the normal path has no failed request.
+      try {
+        const pre = await fetch('/api/admin/security/recent', {
+          cache: 'no-store',
+          credentials: 'same-origin',
+        })
+        if (pre.ok) {
+          const status = parseRecentStatus(await pre.json())
+          if (status && !status.recent && !(await ask(reason, status.challenge)))
+            return cancelledStepUpResponse()
+        }
+      } catch {
+        // The action itself still answers 403 when a check is needed.
+      }
       const res = await fetch(input, init)
       if (res.status !== 403) return res
       let body: unknown = null
@@ -56,11 +81,10 @@ export function useStepUp(): {
       }
       const challenge = parseStepUpChallenge(res.status, body)
       if (!challenge) return res
-      const ok = await ask(reason, challenge)
-      if (!ok) return markStepUpCancelled(res)
+      if (!(await ask(reason, challenge))) return markStepUpCancelled(res)
       return fetch(input, init)
     },
-    [ask],
+    [ask]
   )
 
   const stepUpElement = pending ? (

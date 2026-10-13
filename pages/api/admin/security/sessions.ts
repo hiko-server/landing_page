@@ -1,7 +1,11 @@
 import { bumpSessionVersion } from '../../../../lib/admin'
 import { clearAdminCookies, readAdminContext, requestOrigin } from '../../../../lib/auth'
 import { withApi } from '../../../../lib/apiHandler'
-import { revokeSession, revokeSessionsExcept, SESSION_ID_RE } from '../../../../lib/adminAuth/sessions'
+import {
+  revokeSession,
+  revokeSessionsExcept,
+  SESSION_ID_RE,
+} from '../../../../lib/adminAuth/sessions'
 import { requireRecentAuth } from '../../../../lib/adminAuth/stepUp'
 import { recordAuthEvent } from '../../../../lib/adminAuth/store'
 
@@ -32,7 +36,8 @@ export default withApi('admin/security/sessions', (req, res) => {
     if (!SESSION_ID_RE.test(body.id)) return res.status(400).json({ error: 'Invalid session id' })
     const own = body.id === currentId
     if (!own && !requireRecentAuth(req, res)) return
-    if (!revokeSession(body.id, own ? 'signed out' : 'signed out from another browser')) return res.status(404).json({ error: 'Not found' })
+    if (!revokeSession(body.id, own ? 'signed out' : 'signed out from another browser'))
+      return res.status(404).json({ error: 'Not found' })
     recordAuthEvent({ type: own ? 'signout' : 'session-revoked', sessionId: body.id, ...origin })
     if (own) clearAdminCookies(req, res)
     return res.status(200).json({ ok: true })
@@ -41,12 +46,20 @@ export default withApi('admin/security/sessions', (req, res) => {
   if (body.others === true || body.all === true) {
     if (!requireRecentAuth(req, res)) return
     const all = body.all === true
-    const revoked = revokeSessionsExcept(all ? null : currentId, all ? 'signed out everywhere' : 'signed out from another browser')
+    const revoked = revokeSessionsExcept(
+      all ? null : currentId,
+      all ? 'signed out everywhere' : 'signed out from another browser'
+    )
     if (all) {
       bumpSessionVersion()
       clearAdminCookies(req, res)
     }
-    recordAuthEvent({ type: 'sessions-revoked', sessionId: currentId, detail: all ? `everywhere (${revoked})` : `other browsers (${revoked})`, ...origin })
+    recordAuthEvent({
+      type: 'sessions-revoked',
+      sessionId: currentId,
+      detail: all ? `everywhere (${revoked})` : `other browsers (${revoked})`,
+      ...origin,
+    })
     return res.status(200).json({ revoked })
   }
 

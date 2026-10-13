@@ -19,7 +19,11 @@ const TOUCH_EVERY_MS = 60_000
 /** Expired or revoked rows are kept this long for the history view, then deleted. */
 const KEEP_ENDED_MS = 30 * 86_400_000
 
-export type SessionOrigin = { device: string | null; ipPrefix: string | null; country: string | null }
+export type SessionOrigin = {
+  device: string | null
+  ipPrefix: string | null
+  country: string | null
+}
 
 export type AdminSession = {
   id: string
@@ -73,23 +77,41 @@ export function newSessionId(): string {
 }
 
 export function createSession(
-  input: { method: AuthMethod; ttlMs: number; credentialId?: string | null; verifiedAt?: number } & SessionOrigin,
-  now = Date.now(),
+  input: {
+    method: AuthMethod
+    ttlMs: number
+    credentialId?: string | null
+    verifiedAt?: number
+  } & SessionOrigin,
+  now = Date.now()
 ): AdminSession {
   const db = getAuthDb()
   const id = newSessionId()
   const verifiedAt = Math.min(now, input.verifiedAt ?? now)
   db.prepare(
     `INSERT INTO auth_sessions (id, created_at, expires_at, last_seen_at, verified_at, method, credential_id, device, ip_prefix, country)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, now, now + input.ttlMs, now, verifiedAt, input.method, input.credentialId ?? null, input.device, input.ipPrefix, input.country)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    id,
+    now,
+    now + input.ttlMs,
+    now,
+    verifiedAt,
+    input.method,
+    input.credentialId ?? null,
+    input.device,
+    input.ipPrefix,
+    input.country
+  )
   pruneSessions(now)
   return getSession(id) as AdminSession
 }
 
 export function getSession(id: string): AdminSession | null {
   if (!SESSION_ID_RE.test(id)) return null
-  const row = getAuthDb().prepare('SELECT * FROM auth_sessions WHERE id = ?').get(id) as Row | undefined
+  const row = getAuthDb().prepare('SELECT * FROM auth_sessions WHERE id = ?').get(id) as
+    | Row
+    | undefined
   return row ? fromRow(row) : null
 }
 
@@ -103,36 +125,58 @@ export function liveSession(id: string, now = Date.now()): AdminSession | null {
 /** Record activity (throttled to one write a minute per session). */
 export function touchSession(s: AdminSession, now = Date.now()): void {
   if (now - s.lastSeenAt < TOUCH_EVERY_MS) return
-  getAuthDb().prepare('UPDATE auth_sessions SET last_seen_at = ? WHERE id = ? AND revoked_at IS NULL').run(now, s.id)
+  getAuthDb()
+    .prepare('UPDATE auth_sessions SET last_seen_at = ? WHERE id = ? AND revoked_at IS NULL')
+    .run(now, s.id)
 }
 
 /** The owner proved who they are again on this browser. */
 export function markVerified(id: string, now = Date.now()): void {
-  getAuthDb().prepare('UPDATE auth_sessions SET verified_at = ?, last_seen_at = ? WHERE id = ? AND revoked_at IS NULL').run(now, now, id)
+  getAuthDb()
+    .prepare(
+      'UPDATE auth_sessions SET verified_at = ?, last_seen_at = ? WHERE id = ? AND revoked_at IS NULL'
+    )
+    .run(now, now, id)
 }
 
 export function revokeSession(id: string, reason: string, now = Date.now()): boolean {
   if (!SESSION_ID_RE.test(id)) return false
-  return getAuthDb().prepare('UPDATE auth_sessions SET revoked_at = ?, revoked_reason = ? WHERE id = ? AND revoked_at IS NULL').run(now, reason, id).changes === 1
+  return (
+    getAuthDb()
+      .prepare(
+        'UPDATE auth_sessions SET revoked_at = ?, revoked_reason = ? WHERE id = ? AND revoked_at IS NULL'
+      )
+      .run(now, reason, id).changes === 1
+  )
 }
 
 /** Revoke every live session except `keepId` (all when null). Returns how many. */
-export function revokeSessionsExcept(keepId: string | null, reason: string, now = Date.now()): number {
+export function revokeSessionsExcept(
+  keepId: string | null,
+  reason: string,
+  now = Date.now()
+): number {
   return getAuthDb()
-    .prepare('UPDATE auth_sessions SET revoked_at = ?, revoked_reason = ? WHERE revoked_at IS NULL AND expires_at > ? AND id IS NOT ?')
+    .prepare(
+      'UPDATE auth_sessions SET revoked_at = ?, revoked_reason = ? WHERE revoked_at IS NULL AND expires_at > ? AND id IS NOT ?'
+    )
     .run(now, reason, now, keepId).changes
 }
 
 /** Live sessions, most recently active first. */
 export function listLiveSessions(now = Date.now()): AdminSession[] {
   const rows = getAuthDb()
-    .prepare('SELECT * FROM auth_sessions WHERE revoked_at IS NULL AND expires_at > ? ORDER BY last_seen_at DESC')
+    .prepare(
+      'SELECT * FROM auth_sessions WHERE revoked_at IS NULL AND expires_at > ? ORDER BY last_seen_at DESC'
+    )
     .all(now) as Row[]
   return rows.map(fromRow)
 }
 
 export function pruneSessions(now = Date.now()): void {
   getAuthDb()
-    .prepare('DELETE FROM auth_sessions WHERE (revoked_at IS NOT NULL AND revoked_at < ?) OR expires_at < ?')
+    .prepare(
+      'DELETE FROM auth_sessions WHERE (revoked_at IS NOT NULL AND revoked_at < ?) OR expires_at < ?'
+    )
     .run(now - KEEP_ENDED_MS, now - KEEP_ENDED_MS)
 }

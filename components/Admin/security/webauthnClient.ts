@@ -18,6 +18,16 @@ export function webAuthnAvailable(): boolean {
   return typeof window !== 'undefined' && typeof window.PublicKeyCredential === 'function'
 }
 
+/** An IP-literal host (127.0.0.1, [::1]): WebAuthn has no relying-party id there. */
+export function isIpHost(hostname: string): boolean {
+  return /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) || /^\[?[0-9a-f:]+\]?$/i.test(hostname)
+}
+
+/** Can a passkey ceremony work on this page at all (WebAuthn present, a host name, not an IP)? */
+export function passkeysPossibleHere(): boolean {
+  return webAuthnAvailable() && !isIpHost(window.location.hostname)
+}
+
 /** Can the browser offer passkeys in the e-mail field's autofill (conditional mediation)? */
 export async function autofillAvailable(): Promise<boolean> {
   if (!webAuthnAvailable()) return false
@@ -30,13 +40,15 @@ export async function autofillAvailable(): Promise<boolean> {
 
 export async function getAssertion(
   optionsJSON: PublicKeyCredentialRequestOptionsJSON,
-  opts: { autofill?: boolean } = {},
+  opts: { autofill?: boolean } = {}
 ): Promise<AuthenticationResponseJSON> {
   const { startAuthentication } = await lib()
   return startAuthentication({ optionsJSON, useBrowserAutofill: !!opts.autofill })
 }
 
-export async function createPasskey(optionsJSON: PublicKeyCredentialCreationOptionsJSON): Promise<RegistrationResponseJSON> {
+export async function createPasskey(
+  optionsJSON: PublicKeyCredentialCreationOptionsJSON
+): Promise<RegistrationResponseJSON> {
   const { startRegistration } = await lib()
   return startRegistration({ optionsJSON })
 }
@@ -65,9 +77,20 @@ export async function forgetUnknownPasskey(rpID: string, credentialID: string): 
 }
 
 /** Tell the password manager which of this site's passkeys still exist (after a removal). */
-export async function syncAcceptedPasskeys(rpID: string, userID: string, ids: string[]): Promise<void> {
+export async function syncAcceptedPasskeys(
+  rpID: string,
+  userID: string,
+  ids: string[]
+): Promise<void> {
   try {
-    await (await lib()).sendSignal({ signalName: 'allAcceptedCredentials', rpID, userID, allAcceptedCredentialIDs: ids })
+    await (
+      await lib()
+    ).sendSignal({
+      signalName: 'allAcceptedCredentials',
+      rpID,
+      userID,
+      allAcceptedCredentialIDs: ids,
+    })
   } catch {
     // Unsupported or refused: harmless.
   }
@@ -76,7 +99,10 @@ export async function syncAcceptedPasskeys(rpID: string, userID: string, ids: st
 /** Is this the user closing / timing out the passkey prompt (not worth an error message)? */
 export function isCeremonyCancelled(err: unknown): boolean {
   const e = err as { name?: string; code?: string } | null
-  return !!e && (e.name === 'AbortError' || e.code === 'ERROR_CEREMONY_ABORTED' || e.name === 'NotAllowedError')
+  return (
+    !!e &&
+    (e.name === 'AbortError' || e.code === 'ERROR_CEREMONY_ABORTED' || e.name === 'NotAllowedError')
+  )
 }
 
 /** A sentence for a failed ceremony (simplewebauthn WebAuthnError codes and DOMException names). */

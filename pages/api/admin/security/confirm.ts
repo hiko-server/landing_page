@@ -15,5 +15,7 @@ export default withApi('admin/security/confirm', (req, res) => {
   res.setHeader('Cache-Control', 'no-store')
   const ctx = requireRecentAuth(req, res)
   if (!ctx) return
-  return res.status(200).json({ ok: true, recentUntil: (ctx.session?.verifiedAt ?? Date.now()) + recentAuthWindowMs() })
+  return res
+    .status(200)
+    .json({ ok: true, recentUntil: (ctx.session?.verifiedAt ?? Date.now()) + recentAuthWindowMs() })
 })

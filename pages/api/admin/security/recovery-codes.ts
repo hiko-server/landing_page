@@ -17,6 +17,10 @@ export default withApi('admin/security/recovery-codes', (req, res) => {
   const ctx = requireRecentAuth(req, res)
   if (!ctx) return
   const codes = generateRecoveryCodes()
-  recordAuthEvent({ type: 'recovery-codes-generated', sessionId: ctx.session?.id ?? null, ...requestOrigin(req) })
+  recordAuthEvent({
+    type: 'recovery-codes-generated',
+    sessionId: ctx.session?.id ?? null,
+    ...requestOrigin(req),
+  })
   return res.status(200).json({ codes })
 })

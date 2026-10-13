@@ -22,7 +22,7 @@ import {
   forgetUnknownPasskey,
   getAssertion,
   isCeremonyCancelled,
-  webAuthnAvailable,
+  passkeysPossibleHere,
 } from '../../components/Admin/security/webauthnClient'
 
 /**
@@ -66,7 +66,8 @@ export default function AdminLogin() {
   const [submitting, setSubmitting] = useState(false)
   const [passkeyBusy, setPasskeyBusy] = useState(false)
   // Rendered from the first paint (every current browser has WebAuthn), hidden
-  // after mount only where it is missing — so the card never grows late.
+  // after mount only where it cannot work — so the card never grows late on
+  // the site's own address.
   const [passkeys, setPasskeys] = useState(true)
   const emailRef = useRef<HTMLInputElement>(null)
   const passwordRef = useRef<HTMLInputElement>(null)
@@ -126,7 +127,8 @@ export default function AdminLogin() {
 
   // Passkeys offered in the e-mail field's autofill (conditional mediation).
   useEffect(() => {
-    if (!webAuthnAvailable()) {
+    // No WebAuthn, or an IP address (no relying-party id): password only.
+    if (!passkeysPossibleHere()) {
       setPasskeys(false)
       return
     }
@@ -241,7 +243,7 @@ export default function AdminLogin() {
           subtitle="Manage the CV, home page, writing and storage."
           footer={
             <Flex justify="flex-end">
-              <Link as={NextLink} href="/admin/forgot" color="accent.500">
+              <Link as={NextLink} href="/admin/forgot" color="accent.text">
                 Forgot password?
               </Link>
             </Flex>

@@ -56,6 +56,7 @@ before(async () => {
   await load('policy', '../pages/api/admin/security/policy')
   await load('sessions', '../pages/api/admin/security/sessions')
   await load('confirm', '../pages/api/admin/security/confirm')
+  await load('recent', '../pages/api/admin/security/recent')
   await load('logout', '../pages/api/admin/logout')
   await load('session', '../pages/api/admin/session')
   await load('reset', '../pages/api/auth/reset-password')
@@ -77,7 +78,10 @@ after(() => {
 type Out = { statusCode: number; headers: Record<string, string | string[]>; body: any }
 let ipSeq = 10
 
-async function call(handler: Handler, opts: { method: string; body?: unknown; cookie?: string; host?: string; ua?: string }): Promise<Out> {
+async function call(
+  handler: Handler,
+  opts: { method: string; body?: unknown; cookie?: string; host?: string; ua?: string }
+): Promise<Out> {
   ipSeq++
   const req = {
     method: opts.method,
@@ -87,7 +91,9 @@ async function call(handler: Handler, opts: { method: string; body?: unknown; co
     headers: {
       host: opts.host || HOST,
       'cf-connecting-ip': `203.0.113.${ipSeq % 250}`,
-      'user-agent': opts.ua || 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36',
+      'user-agent':
+        opts.ua ||
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36',
       'cf-ipcountry': 'HK',
       ...(opts.cookie ? { cookie: opts.cookie } : {}),
     },
@@ -133,11 +139,20 @@ const setCookies = (o: Out): string[] => {
   return Array.isArray(v) ? v : v ? [v] : []
 }
 /** The session cookie pair ("cv_admin_token=…") a response set. */
-const sessionCookieOf = (o: Out) => (setCookies(o).find((c) => c.startsWith('cv_admin_token=') && !/Max-Age=0/.test(c)) || '').split(';')[0]
-const claimsOf = (cookie: string) => jwt.decode(decodeURIComponent(cookie.split('=')[1])) as Record<string, any>
+const sessionCookieOf = (o: Out) =>
+  (setCookies(o).find((c) => c.startsWith('cv_admin_token=') && !/Max-Age=0/.test(c)) || '').split(
+    ';'
+  )[0]
+const claimsOf = (cookie: string) =>
+  jwt.decode(decodeURIComponent(cookie.split('=')[1])) as Record<string, any>
 
-async function passwordLogin(extra: Record<string, unknown> = {}): Promise<{ out: Out; cookie: string }> {
-  const out = await call(H.login, { method: 'POST', body: { email: OWNER, password: PASS, ...extra } })
+async function passwordLogin(
+  extra: Record<string, unknown> = {}
+): Promise<{ out: Out; cookie: string }> {
+  const out = await call(H.login, {
+    method: 'POST',
+    body: { email: OWNER, password: PASS, ...extra },
+  })
   return { out, cookie: sessionCookieOf(out) }
 }
 
@@ -145,25 +160,49 @@ async function passwordLogin(extra: Record<string, unknown> = {}): Promise<{ out
 function readCtx(cookie: string) {
   const [name, ...rest] = cookie.split('=')
   const req = { headers: { cookie }, cookies: { [name]: decodeURIComponent(rest.join('=')) } }
-  return auth.readAdminContext(req as any, { getHeader: () => undefined, setHeader: () => {} } as any)
+  return auth.readAdminContext(
+    req as any,
+    { getHeader: () => undefined, setHeader: () => {} } as any
+  )
 }
 
 /** Make a session's last verification older than the recent-auth window. */
 function ageVerification(cookie: string, ms = 11 * 60_000) {
   const sid = claimsOf(cookie).sid as string
-  authDb.getAuthDb().prepare('UPDATE auth_sessions SET verified_at = verified_at - ? WHERE id = ?').run(ms, sid)
+  authDb
+    .getAuthDb()
+    .prepare('UPDATE auth_sessions SET verified_at = verified_at - ? WHERE id = ?')
+    .run(ms, sid)
 }
 
 // ── Pure helpers ───────────────────────────────────────────────────────────
 
 test('describe: coarse device, network prefix and suggested passkey names', () => {
-  assert.equal(describe.deviceLabel('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1'), 'Safari on iOS')
-  assert.equal(describe.deviceLabel('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36 Edg/141.0'), 'Edge on Windows')
+  assert.equal(
+    describe.deviceLabel(
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1'
+    ),
+    'Safari on iOS'
+  )
+  assert.equal(
+    describe.deviceLabel(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36 Edg/141.0'
+    ),
+    'Edge on Windows'
+  )
   assert.equal(describe.deviceLabel(''), 'Unknown device')
   assert.equal(describe.ipPrefix('203.0.113.77'), '203.0.113.x')
   assert.equal(describe.ipPrefix('2001:db8:abcd:12::1'), '2001:db8:abcd::/48')
   assert.equal(describe.ipPrefix('nonsense'), null)
-  assert.equal(describe.suggestPasskeyName('fbfc3007-154e-4ecc-8c0b-6e020557d7bd', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) Version/18.0 Safari/605.1.15'), 'iCloud Keychain (Safari on macOS)')
+  assert.equal(describe.ipPrefix('127.0.0.1'), 'loopback')
+  assert.equal(describe.ipPrefix('::1'), 'loopback')
+  assert.equal(
+    describe.suggestPasskeyName(
+      'fbfc3007-154e-4ecc-8c0b-6e020557d7bd',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) Version/18.0 Safari/605.1.15'
+    ),
+    'iCloud Keychain (Safari on macOS)'
+  )
   assert.equal(describe.suggestPasskeyName(null, ''), 'Passkey')
   assert.equal(describe.cleanPasskeyName('  Work\n laptop  '), 'Work laptop')
   assert.equal(describe.cleanPasskeyName('   '), null)
@@ -182,15 +221,27 @@ test('recovery codes: 80-bit Crockford base32, forgiving input, stored as hashes
 
 test('relying party: the public host, localhost for local work, nothing for IP literals', () => {
   const rp = (host: string) => passkeys.relyingPartyFor({ headers: { host } })
-  assert.deepEqual(rp('localhost:3407'), { rpID: 'localhost', rpName: 'localhost', origin: 'http://localhost:3407' })
+  assert.deepEqual(rp('localhost:3407'), {
+    rpID: 'localhost',
+    rpName: 'localhost',
+    origin: 'http://localhost:3407',
+  })
   assert.equal(rp('admin.localhost:3000')?.rpID, 'admin.localhost')
   assert.equal(rp('127.0.0.1:3407'), null)
   assert.equal(rp('[::1]:3407'), null)
   assert.equal(rp(''), null)
-  assert.deepEqual(rp('example.org'), { rpID: 'example.org', rpName: 'example.org', origin: 'https://example.org' })
+  assert.deepEqual(rp('example.org'), {
+    rpID: 'example.org',
+    rpName: 'example.org',
+    origin: 'https://example.org',
+  })
   process.env.SITE_URL = 'https://lucian-dev.com'
   try {
-    assert.deepEqual(rp('lucian-dev.com'), { rpID: 'lucian-dev.com', rpName: 'lucian-dev.com', origin: 'https://lucian-dev.com' })
+    assert.deepEqual(rp('lucian-dev.com'), {
+      rpID: 'lucian-dev.com',
+      rpName: 'lucian-dev.com',
+      origin: 'https://lucian-dev.com',
+    })
     assert.equal(rp('evil.example')?.rpID, 'lucian-dev.com', 'a forged Host never becomes the RP')
   } finally {
     delete process.env.SITE_URL
@@ -229,7 +280,11 @@ test('password sign-in creates a session row bound to the token (sid), recorded 
 })
 
 test('a passkey is registered from a fresh session; the first one comes with ten recovery codes', async () => {
-  const opt = await call(H.passkeys, { method: 'POST', body: { action: 'options' }, cookie: cookieA })
+  const opt = await call(H.passkeys, {
+    method: 'POST',
+    body: { action: 'options' },
+    cookie: cookieA,
+  })
   assert.equal(opt.statusCode, 200, JSON.stringify(opt.body))
   const options = opt.body.options
   assert.equal(options.rp.id, 'localhost')
@@ -240,7 +295,11 @@ test('a passkey is registered from a fresh session; the first one comes with ten
   assert.deepEqual(options.excludeCredentials, [])
 
   const response = authenticator.register(options, ORIGIN)
-  const reg = await call(H.passkeys, { method: 'POST', body: { action: 'register', response }, cookie: cookieA })
+  const reg = await call(H.passkeys, {
+    method: 'POST',
+    body: { action: 'register', response },
+    cookie: cookieA,
+  })
   assert.equal(reg.statusCode, 200, JSON.stringify(reg.body))
   assert.equal(reg.body.passkey.id, authenticator.id)
   assert.equal(reg.body.passkey.name, 'iCloud Keychain (Chrome on macOS)')
@@ -248,24 +307,48 @@ test('a passkey is registered from a fresh session; the first one comes with ten
   assert.equal(reg.body.recoveryCodes.length, 10)
   recoveryCodes = reg.body.recoveryCodes
   assert.deepEqual(store.recoveryStatus().remaining, 10)
-  const stored = authDb.getAuthDb().prepare('SELECT code_hash FROM recovery_codes').all() as Array<{ code_hash: string }>
-  assert.ok(stored.every((r) => /^[0-9a-f]{64}$/.test(r.code_hash)), 'only hashes are stored')
+  const stored = authDb.getAuthDb().prepare('SELECT code_hash FROM recovery_codes').all() as Array<{
+    code_hash: string
+  }>
+  assert.ok(
+    stored.every((r) => /^[0-9a-f]{64}$/.test(r.code_hash)),
+    'only hashes are stored'
+  )
   assert.ok(!JSON.stringify(stored).includes(recoveryCodes[0].replace(/-/g, '')))
 
   // The challenge was consumed: the same response cannot register twice.
-  const replay = await call(H.passkeys, { method: 'POST', body: { action: 'register', response }, cookie: cookieA })
+  const replay = await call(H.passkeys, {
+    method: 'POST',
+    body: { action: 'register', response },
+    cookie: cookieA,
+  })
   assert.equal(replay.statusCode, 400)
   assert.equal(replay.body.code, 'CHALLENGE')
   // The next registration excludes the authenticator already there.
-  const again = await call(H.passkeys, { method: 'POST', body: { action: 'options' }, cookie: cookieA })
-  assert.deepEqual(again.body.options.excludeCredentials.map((c: { id: string }) => c.id), [authenticator.id])
+  const again = await call(H.passkeys, {
+    method: 'POST',
+    body: { action: 'options' },
+    cookie: cookieA,
+  })
+  assert.deepEqual(
+    again.body.options.excludeCredentials.map((c: { id: string }) => c.id),
+    [authenticator.id]
+  )
 })
 
 test('a registration from the wrong origin is refused', async () => {
   const other = new SoftAuthenticator()
-  const opt = await call(H.passkeys, { method: 'POST', body: { action: 'options' }, cookie: cookieA })
+  const opt = await call(H.passkeys, {
+    method: 'POST',
+    body: { action: 'options' },
+    cookie: cookieA,
+  })
   const response = other.register(opt.body.options, 'https://evil.example')
-  const reg = await call(H.passkeys, { method: 'POST', body: { action: 'register', response }, cookie: cookieA })
+  const reg = await call(H.passkeys, {
+    method: 'POST',
+    body: { action: 'register', response },
+    cookie: cookieA,
+  })
   assert.equal(reg.statusCode, 400)
   assert.equal(reg.body.code, 'VERIFICATION')
   assert.equal(passkeys.passkeyCount(), 1)
@@ -276,7 +359,11 @@ let cookieB = ''
 test('sign in with the passkey: a new session (method passkey), the counter is stored', async () => {
   const opt = await call(H.pkOptions, { method: 'POST', body: {} })
   assert.equal(opt.statusCode, 200)
-  assert.deepEqual(opt.body.options.allowCredentials, [], 'discoverable: the browser lists the passkeys')
+  assert.deepEqual(
+    opt.body.options.allowCredentials,
+    [],
+    'discoverable: the browser lists the passkeys'
+  )
   assert.equal(opt.body.options.userVerification, 'required')
   const response = authenticator.authenticate(opt.body.options, ORIGIN)
   const ok = await call(H.pkVerify, { method: 'POST', body: { response } })
@@ -286,7 +373,10 @@ test('sign in with the passkey: a new session (method passkey), the counter is s
   assert.deepEqual(claims.amr, ['passkey'])
   assert.equal(sessions.liveSession(claims.sid)?.credentialId, authenticator.id)
   assert.ok(passkeys.getPasskey(authenticator.id)?.lastUsedAt)
-  assert.ok(setCookies(ok).some((c) => c.startsWith('cv_known_device=')), 'known-device cookie')
+  assert.ok(
+    setCookies(ok).some((c) => c.startsWith('cv_known_device=')),
+    'known-device cookie'
+  )
   // The challenge is single use.
   const replay = await call(H.pkVerify, { method: 'POST', body: { response } })
   assert.equal(replay.statusCode, 401)
@@ -295,19 +385,34 @@ test('sign in with the passkey: a new session (method passkey), the counter is s
 
 test('a cloned authenticator (stale counter), a foreign passkey and a wrong origin cannot sign in', async () => {
   let opt = await call(H.pkOptions, { method: 'POST', body: {} })
-  const clone = await call(H.pkVerify, { method: 'POST', body: { response: authenticator.authenticate(opt.body.options, ORIGIN, 'localhost', 0) } })
+  const clone = await call(H.pkVerify, {
+    method: 'POST',
+    body: { response: authenticator.authenticate(opt.body.options, ORIGIN, 'localhost', 0) },
+  })
   assert.equal(clone.statusCode, 401)
   assert.equal(clone.body.code, 'VERIFICATION')
 
   opt = await call(H.pkOptions, { method: 'POST', body: {} })
   const stranger = new SoftAuthenticator()
-  const unknown = await call(H.pkVerify, { method: 'POST', body: { response: stranger.authenticate(opt.body.options, ORIGIN) } })
+  const unknown = await call(H.pkVerify, {
+    method: 'POST',
+    body: { response: stranger.authenticate(opt.body.options, ORIGIN) },
+  })
   assert.equal(unknown.statusCode, 401)
   assert.equal(unknown.body.code, 'UNKNOWN_CREDENTIAL')
   assert.equal(unknown.body.credentialId, stranger.id)
 
   opt = await call(H.pkOptions, { method: 'POST', body: {} })
-  const phished = await call(H.pkVerify, { method: 'POST', body: { response: authenticator.authenticate(opt.body.options, 'https://lucian-dev.com.evil.example', 'localhost') } })
+  const phished = await call(H.pkVerify, {
+    method: 'POST',
+    body: {
+      response: authenticator.authenticate(
+        opt.body.options,
+        'https://lucian-dev.com.evil.example',
+        'localhost'
+      ),
+    },
+  })
   assert.equal(phished.statusCode, 401)
   assert.equal(phished.body.code, 'VERIFICATION')
 
@@ -328,14 +433,29 @@ test('dangerous actions need a recent verification: 403 STEP_UP_REQUIRED, then a
 
   const opt = await call(H.verify, { method: 'POST', body: { action: 'options' }, cookie: cookieA })
   assert.equal(opt.statusCode, 200)
-  assert.deepEqual(opt.body.options.allowCredentials.map((c: { id: string }) => c.id), [authenticator.id])
+  assert.deepEqual(
+    opt.body.options.allowCredentials.map((c: { id: string }) => c.id),
+    [authenticator.id]
+  )
   // The challenge belongs to session A: session B cannot use it.
-  const stolen = await call(H.verify, { method: 'POST', body: { method: 'passkey', response: authenticator.authenticate(opt.body.options, ORIGIN) }, cookie: cookieB })
+  const stolen = await call(H.verify, {
+    method: 'POST',
+    body: { method: 'passkey', response: authenticator.authenticate(opt.body.options, ORIGIN) },
+    cookie: cookieB,
+  })
   assert.equal(stolen.statusCode, 401)
   assert.equal(stolen.body.code, 'CHALLENGE')
 
-  const opt2 = await call(H.verify, { method: 'POST', body: { action: 'options' }, cookie: cookieA })
-  const ok = await call(H.verify, { method: 'POST', body: { method: 'passkey', response: authenticator.authenticate(opt2.body.options, ORIGIN) }, cookie: cookieA })
+  const opt2 = await call(H.verify, {
+    method: 'POST',
+    body: { action: 'options' },
+    cookie: cookieA,
+  })
+  const ok = await call(H.verify, {
+    method: 'POST',
+    body: { method: 'passkey', response: authenticator.authenticate(opt2.body.options, ORIGIN) },
+    cookie: cookieA,
+  })
   assert.equal(ok.statusCode, 200, JSON.stringify(ok.body))
   assert.ok(ok.body.recentUntil > Date.now())
   const codes = await call(H.codes, { method: 'POST', body: {}, cookie: cookieA })
@@ -348,18 +468,37 @@ test('dangerous actions need a recent verification: 403 STEP_UP_REQUIRED, then a
 
 test('a password step-up works too, and a wrong password is refused and recorded', async () => {
   ageVerification(cookieA)
-  const wrong = await call(H.verify, { method: 'POST', body: { method: 'password', password: 'nope' }, cookie: cookieA })
+  const wrong = await call(H.verify, {
+    method: 'POST',
+    body: { method: 'password', password: 'nope' },
+    cookie: cookieA,
+  })
   assert.equal(wrong.statusCode, 401)
-  const ok = await call(H.verify, { method: 'POST', body: { method: 'password', password: PASS }, cookie: cookieA })
+  const stale = await call(H.recent, { method: 'GET', cookie: cookieA })
+  assert.deepEqual([stale.statusCode, stale.body.recent, stale.body.recentUntil], [200, false, null])
+  assert.deepEqual(stale.body.methods, ['passkey', 'password'])
+  const ok = await call(H.verify, {
+    method: 'POST',
+    body: { method: 'password', password: PASS },
+    cookie: cookieA,
+  })
   assert.equal(ok.statusCode, 200)
   const confirm = await call(H.confirm, { method: 'POST', body: {}, cookie: cookieA })
   assert.equal(confirm.statusCode, 200)
+  const fresh = await call(H.recent, { method: 'GET', cookie: cookieA })
+  assert.equal(fresh.body.recent, true)
+  assert.ok(fresh.body.recentUntil > Date.now())
+  assert.equal((await call(H.recent, { method: 'GET' })).statusCode, 401)
   const types = store.listAuthEvents(4).map((e) => e.type)
   assert.ok(types.includes('step-up') && types.includes('step-up-failed'), types.join(','))
 })
 
 test('"Require a passkey": the password alone stops working; password + a recovery code (once) signs in', async () => {
-  const on = await call(H.policy, { method: 'PUT', body: { passkeyRequired: true }, cookie: cookieA })
+  const on = await call(H.policy, {
+    method: 'PUT',
+    body: { passkeyRequired: true },
+    cookie: cookieA,
+  })
   assert.equal(on.statusCode, 200)
   assert.equal(store.isPasskeyRequired(), true)
 
@@ -368,17 +507,29 @@ test('"Require a passkey": the password alone stops working; password + a recove
   assert.equal(plain.out.body.code, 'PASSKEY_REQUIRED')
   assert.equal(plain.cookie, '')
   // The answer does not depend on the password (nothing was checked).
-  const wrongPlain = await call(H.login, { method: 'POST', body: { email: OWNER, password: 'wrong' } })
+  const wrongPlain = await call(H.login, {
+    method: 'POST',
+    body: { email: OWNER, password: 'wrong' },
+  })
   assert.deepEqual([wrongPlain.statusCode, wrongPlain.body.code], [403, 'PASSKEY_REQUIRED'])
 
   const badCode = await passwordLogin({ recoveryCode: 'AAAA-AAAA-AAAA-AAAA' })
   assert.equal(badCode.out.statusCode, 401)
   assert.equal(badCode.out.body.code, 'PASSWORD_OR_RECOVERY_INVALID')
-  const wrongPass = await call(H.login, { method: 'POST', body: { email: OWNER, password: 'wrong', recoveryCode: recoveryCodes[1] } })
-  assert.deepEqual([wrongPass.statusCode, wrongPass.body.code], [401, 'PASSWORD_OR_RECOVERY_INVALID'], 'same answer for a wrong password')
+  const wrongPass = await call(H.login, {
+    method: 'POST',
+    body: { email: OWNER, password: 'wrong', recoveryCode: recoveryCodes[1] },
+  })
+  assert.deepEqual(
+    [wrongPass.statusCode, wrongPass.body.code],
+    [401, 'PASSWORD_OR_RECOVERY_INVALID'],
+    'same answer for a wrong password'
+  )
   assert.equal(store.recoveryStatus().remaining, 10, 'a wrong password spends no code')
 
-  const ok = await passwordLogin({ recoveryCode: recoveryCodes[1].toLowerCase().replace(/-/g, ' ') })
+  const ok = await passwordLogin({
+    recoveryCode: recoveryCodes[1].toLowerCase().replace(/-/g, ' '),
+  })
   assert.equal(ok.out.statusCode, 200, JSON.stringify(ok.out.body))
   assert.deepEqual(claimsOf(ok.cookie).amr, ['pwd', 'recovery'])
   assert.equal(store.recoveryStatus().remaining, 9)
@@ -387,21 +538,41 @@ test('"Require a passkey": the password alone stops working; password + a recove
 
   // Step-up by password now needs a code as well.
   ageVerification(cookieA)
-  const noCode = await call(H.verify, { method: 'POST', body: { method: 'password', password: PASS }, cookie: cookieA })
+  const noCode = await call(H.verify, {
+    method: 'POST',
+    body: { method: 'password', password: PASS },
+    cookie: cookieA,
+  })
   assert.deepEqual([noCode.statusCode, noCode.body.code], [400, 'RECOVERY_CODE_REQUIRED'])
-  const withCode = await call(H.verify, { method: 'POST', body: { method: 'password', password: PASS, recoveryCode: recoveryCodes[2] }, cookie: cookieA })
+  const withCode = await call(H.verify, {
+    method: 'POST',
+    body: { method: 'password', password: PASS, recoveryCode: recoveryCodes[2] },
+    cookie: cookieA,
+  })
   assert.equal(withCode.statusCode, 200)
 
   // The only passkey cannot be removed while the requirement is on.
-  const last = await call(H.passkeys, { method: 'DELETE', body: { id: authenticator.id }, cookie: cookieA })
+  const last = await call(H.passkeys, {
+    method: 'DELETE',
+    body: { id: authenticator.id },
+    cookie: cookieA,
+  })
   assert.deepEqual([last.statusCode, last.body.code], [409, 'LAST_PASSKEY'])
-  const off = await call(H.policy, { method: 'PUT', body: { passkeyRequired: false }, cookie: cookieA })
+  const off = await call(H.policy, {
+    method: 'PUT',
+    body: { passkeyRequired: false },
+    cookie: cookieA,
+  })
   assert.equal(off.statusCode, 200)
 })
 
 test('renaming needs no step-up; removing does; the overview lists everything', async () => {
   ageVerification(cookieA)
-  const renamed = await call(H.passkeys, { method: 'PATCH', body: { id: authenticator.id, name: 'MacBook' }, cookie: cookieA })
+  const renamed = await call(H.passkeys, {
+    method: 'PATCH',
+    body: { id: authenticator.id, name: 'MacBook' },
+    cookie: cookieA,
+  })
   assert.equal(renamed.statusCode, 200)
   assert.equal(renamed.body.passkey.name, 'MacBook')
   const overview = await call(H.security, { method: 'GET', cookie: cookieA })
@@ -411,7 +582,11 @@ test('renaming needs no step-up; removing does; the overview lists everything', 
   assert.ok(overview.body.sessions.some((s: { current: boolean }) => s.current))
   assert.equal(overview.body.current.recentUntil, null)
   assert.match(overview.body.userId, /^[A-Za-z0-9_-]{43}$/)
-  const remove = await call(H.passkeys, { method: 'DELETE', body: { id: authenticator.id }, cookie: cookieA })
+  const remove = await call(H.passkeys, {
+    method: 'DELETE',
+    body: { id: authenticator.id },
+    cookie: cookieA,
+  })
   assert.equal(remove.statusCode, 403)
   assert.equal(remove.body.code, 'STEP_UP_REQUIRED')
 })
@@ -475,7 +650,10 @@ test('a password reset signs every session out and is recorded', async () => {
   const before = sessions.listLiveSessions().length
   assert.ok(before >= 1)
   const reset = admin.createResetToken()
-  const out = await call(H.reset, { method: 'POST', body: { token: reset!.token, password: 'a brand new passphrase 42' } })
+  const out = await call(H.reset, {
+    method: 'POST',
+    body: { token: reset!.token, password: 'a brand new passphrase 42' },
+  })
   assert.equal(out.statusCode, 200)
   assert.equal(sessions.listLiveSessions().length, 0)
   assert.equal(store.listAuthEvents(1)[0].type, 'password-reset')

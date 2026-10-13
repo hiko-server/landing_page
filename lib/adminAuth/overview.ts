@@ -4,7 +4,15 @@ import { passkeyProvider } from './describe'
 import { listPasskeys, relyingPartyFor, type StoredPasskey } from './passkeys'
 import { listLiveSessions } from './sessions'
 import { recentAuthWindowMs, stepUpMethods, type StepUpMethods } from './stepUp'
-import { isPasskeyRequired, listAuthEvents, recoveryStatus, webauthnUserId, type AuthEvent, type AuthMethod, type RecoveryStatus } from './store'
+import {
+  isPasskeyRequired,
+  listAuthEvents,
+  recoveryStatus,
+  webauthnUserId,
+  type AuthEvent,
+  type AuthMethod,
+  type RecoveryStatus,
+} from './store'
 
 /** Everything the admin Security page shows (GET /api/admin/security). */
 export type SecurityOverview = {
@@ -30,7 +38,11 @@ export type SecurityOverview = {
   stepUp: StepUpMethods & { windowMinutes: number }
 }
 
-export function securityOverview(req: NextApiRequest, ctx: AdminContext, now = Date.now()): SecurityOverview {
+export function securityOverview(
+  req: NextApiRequest,
+  ctx: AdminContext,
+  now = Date.now()
+): SecurityOverview {
   const rp = relyingPartyFor(req)
   const currentId = ctx.session?.id ?? null
   const verifiedAt = ctx.session?.verifiedAt ?? null
@@ -56,7 +68,8 @@ export function securityOverview(req: NextApiRequest, ctx: AdminContext, now = D
     current: {
       sessionId: currentId,
       verifiedAt,
-      recentUntil: verifiedAt !== null && now - verifiedAt <= windowMs ? verifiedAt + windowMs : null,
+      recentUntil:
+        verifiedAt !== null && now - verifiedAt <= windowMs ? verifiedAt + windowMs : null,
     },
     events: listAuthEvents(40),
     stepUp: { ...stepUpMethods(), windowMinutes: windowMs / 60_000 },

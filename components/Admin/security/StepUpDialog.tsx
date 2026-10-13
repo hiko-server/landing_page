@@ -19,7 +19,12 @@ import { readJsonObject } from '../shell/http'
 import { NETWORK_ERROR } from '../shell/authMessages'
 import { KeyIcon } from './icons'
 import type { StepUpChallenge } from './stepUpClient'
-import { describeWebAuthnError, getAssertion, isCeremonyCancelled, webAuthnAvailable } from './webauthnClient'
+import {
+  describeWebAuthnError,
+  getAssertion,
+  isCeremonyCancelled,
+  passkeysPossibleHere,
+} from './webauthnClient'
 
 /**
  * "Confirm it's you" — re-verification before a dangerous admin action
@@ -36,7 +41,7 @@ export default function StepUpDialog({
   challenge: StepUpChallenge
   onDone: (ok: boolean) => void
 }) {
-  const canPasskey = challenge.methods.includes('passkey') && webAuthnAvailable()
+  const canPasskey = challenge.methods.includes('passkey') && passkeysPossibleHere()
   const canPassword = challenge.methods.includes('password')
   const [busy, setBusy] = useState<'passkey' | 'password' | null>(null)
   const [error, setError] = useState('')
@@ -53,7 +58,9 @@ export default function StepUpDialog({
     })
     const json = await readJsonObject(res)
     if (res.ok && json.ok) return true
-    setError(typeof json.error === 'string' ? json.error : `Verification failed (HTTP ${res.status}).`)
+    setError(
+      typeof json.error === 'string' ? json.error : `Verification failed (HTTP ${res.status}).`
+    )
     return false
   }
 
@@ -69,14 +76,22 @@ export default function StepUpDialog({
       })
       const json = await readJsonObject(res)
       if (!res.ok || !json.options) {
-        setError(typeof json.error === 'string' ? json.error : `Could not start the passkey check (HTTP ${res.status}).`)
+        setError(
+          typeof json.error === 'string'
+            ? json.error
+            : `Could not start the passkey check (HTTP ${res.status}).`
+        )
         return
       }
       let response: unknown
       try {
         response = await getAssertion(json.options)
       } catch (err) {
-        setError(isCeremonyCancelled(err) ? 'The passkey prompt was closed. Try again, or use your password.' : describeWebAuthnError(err))
+        setError(
+          isCeremonyCancelled(err)
+            ? 'The passkey prompt was closed. Try again, or use your password.'
+            : describeWebAuthnError(err)
+        )
         return
       }
       if (await verify({ method: 'passkey', response })) onDone(true)
@@ -102,7 +117,11 @@ export default function StepUpDialog({
     setBusy('password')
     setError('')
     try {
-      const ok = await verify({ method: 'password', password, ...(challenge.recoveryRequired ? { recoveryCode: code } : {}) })
+      const ok = await verify({
+        method: 'password',
+        password,
+        ...(challenge.recoveryRequired ? { recoveryCode: code } : {}),
+      })
       if (ok) onDone(true)
       else requestAnimationFrame(() => passwordRef.current?.select())
     } catch {
@@ -113,11 +132,26 @@ export default function StepUpDialog({
   }
 
   return (
-    <Modal isOpen onClose={() => onDone(false)} isCentered size="md" initialFocusRef={canPasskey ? passkeyRef : passwordRef} closeOnOverlayClick={!busy}>
+    <Modal
+      isOpen
+      onClose={() => onDone(false)}
+      isCentered
+      size="md"
+      initialFocusRef={canPasskey ? passkeyRef : passwordRef}
+      closeOnOverlayClick={!busy}
+    >
       <ModalOverlay />
       <ModalContent bg="page.bg-elevated" border="1px solid" borderColor="page.border" mx={4}>
         <ModalHeader pb={1}>
-          <Text as="span" display="block" fontFamily={MONO} fontSize="10px" letterSpacing="0.16em" textTransform="uppercase" color="accent.500">
+          <Text
+            as="span"
+            display="block"
+            fontFamily={MONO}
+            fontSize="10px"
+            letterSpacing="0.16em"
+            textTransform="uppercase"
+            color="accent.text"
+          >
             [security]
           </Text>
           <Text as="span" fontSize="lg" fontWeight={600} letterSpacing="-0.02em">
@@ -128,18 +162,34 @@ export default function StepUpDialog({
         <ModalBody>
           <Text fontSize="sm">{reason}</Text>
           <Text fontSize="xs" color="page.fg-secondary" mt={1.5} mb={4}>
-            Actions like this need a sign-in or a check from the last {challenge.windowMinutes} minutes.
+            Actions like this need a sign-in or a check from the last{' '}
+            {challenge.windowMinutes === 1 ? 'minute' : `${challenge.windowMinutes} minutes`}.
           </Text>
           <AuthError>{error}</AuthError>
           {canPasskey ? (
-            <Button ref={passkeyRef} w="full" leftIcon={<KeyIcon />} onClick={() => void verifyWithPasskey()} isLoading={busy === 'passkey'} loadingText="Waiting for your passkey…" isDisabled={busy === 'password'} {...primaryButtonProps}>
+            <Button
+              ref={passkeyRef}
+              w="full"
+              leftIcon={<KeyIcon />}
+              onClick={() => void verifyWithPasskey()}
+              isLoading={busy === 'passkey'}
+              loadingText="Waiting for your passkey…"
+              isDisabled={busy === 'password'}
+              {...primaryButtonProps}
+            >
               Use a passkey
             </Button>
           ) : null}
           {canPasskey && canPassword ? (
             <Flex align="center" gap={3} my={4} aria-hidden>
               <Box flex={1} h="1px" bg="page.border" />
-              <Text fontFamily={MONO} fontSize="10px" letterSpacing="0.12em" textTransform="uppercase" color="page.fg-secondary">
+              <Text
+                fontFamily={MONO}
+                fontSize="10px"
+                letterSpacing="0.12em"
+                textTransform="uppercase"
+                color="page.fg-secondary"
+              >
                 or your password
               </Text>
               <Box flex={1} h="1px" bg="page.border" />
@@ -149,7 +199,14 @@ export default function StepUpDialog({
             <form onSubmit={verifyWithPassword} noValidate aria-label="Confirm with your password">
               <VStack align="stretch" spacing={3}>
                 {/* A hidden username field lets password managers fill the right account. */}
-                <input type="text" name="username" autoComplete="username" hidden readOnly value="" />
+                <input
+                  type="text"
+                  name="username"
+                  autoComplete="username"
+                  hidden
+                  readOnly
+                  value=""
+                />
                 <PasswordField
                   label="Password"
                   name="password"
@@ -175,7 +232,14 @@ export default function StepUpDialog({
                     helper="“Require a passkey” is on: the password needs one of your recovery codes (each works once)."
                   />
                 ) : null}
-                <Button type="submit" variant={canPasskey ? 'outline' : 'solid'} isLoading={busy === 'password'} loadingText="Checking…" isDisabled={busy === 'passkey'} {...(canPasskey ? { borderColor: 'page.border-strong' } : primaryButtonProps)}>
+                <Button
+                  type="submit"
+                  variant={canPasskey ? 'outline' : 'solid'}
+                  isLoading={busy === 'password'}
+                  loadingText="Checking…"
+                  isDisabled={busy === 'passkey'}
+                  {...(canPasskey ? { borderColor: 'page.border-strong' } : primaryButtonProps)}
+                >
                   Confirm with password
                 </Button>
               </VStack>

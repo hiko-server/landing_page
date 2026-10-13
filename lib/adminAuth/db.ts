@@ -1,7 +1,12 @@
 import fs from 'fs'
 import path from 'path'
 import Database from 'better-sqlite3'
-import { backupBeforeMigration, ensureWal, runMigrations, type MigrationReport } from '../../scripts/db/migrate.mjs'
+import {
+  backupBeforeMigration,
+  ensureWal,
+  runMigrations,
+  type MigrationReport,
+} from '../../scripts/db/migrate.mjs'
 import { AUTH_MIGRATIONS } from '../../scripts/db/auth/index.mjs'
 import { logMigrationReport } from '../dbMigrations'
 import { log } from '../log'

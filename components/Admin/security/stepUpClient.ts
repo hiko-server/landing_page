@@ -16,12 +16,38 @@ export function parseStepUpChallenge(status: number, body: unknown): StepUpChall
   if (status !== 403 || !body || typeof body !== 'object') return null
   const b = body as Record<string, unknown>
   if (b.code !== 'STEP_UP_REQUIRED') return null
-  const methods = Array.isArray(b.methods) ? b.methods.filter((m): m is 'passkey' | 'password' => m === 'passkey' || m === 'password') : []
+  const methods = Array.isArray(b.methods)
+    ? b.methods.filter((m): m is 'passkey' | 'password' => m === 'passkey' || m === 'password')
+    : []
   return {
     methods: methods.length ? methods : ['password'],
     recoveryRequired: b.recoveryRequired === true,
-    windowMinutes: typeof b.windowMinutes === 'number' && b.windowMinutes > 0 ? b.windowMinutes : 10,
+    windowMinutes:
+      typeof b.windowMinutes === 'number' && b.windowMinutes > 0 ? b.windowMinutes : 10,
   }
+}
+
+/** GET /api/admin/security/recent → whether to ask now, and how. */
+export function parseRecentStatus(
+  body: unknown
+): { recent: boolean; challenge: StepUpChallenge } | null {
+  if (
+    !body ||
+    typeof body !== 'object' ||
+    typeof (body as { recent?: unknown }).recent !== 'boolean'
+  )
+    return null
+  const challenge = parseStepUpChallenge(403, { ...(body as object), code: 'STEP_UP_REQUIRED' })
+  return challenge ? { recent: (body as { recent: boolean }).recent, challenge } : null
+}
+
+/** What fetchWithStepUp returns when the owner closed the dialog before the request was sent. */
+export function cancelledStepUpResponse(): Response {
+  const res = new Response(JSON.stringify({ code: 'STEP_UP_REQUIRED', error: 'Cancelled.' }), {
+    status: 403,
+    headers: { 'Content-Type': 'application/json' },
+  })
+  return markStepUpCancelled(res)
 }
 
 const cancelled = new WeakSet<Response>()
