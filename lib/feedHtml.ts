@@ -7,6 +7,7 @@ import { classList, element, isElement, type HastElement, type HastNode } from '
 import { safeLinkHref, safeMediaSrc } from './rehype/safeUrls'
 import { isValidUploadName } from './security/uploadName'
 import { isoDate } from './postDate'
+import { VIDEO_PROVIDER_LABEL, videoRefFromProps, videoWatchUrl } from './videoUrl'
 import { isoWithTz, PERSON_NAME, PERSON_SHORT_NAME, SITE_TZ_OFFSET } from './schema'
 import { cdata, xmlEscape } from './feeds'
 
@@ -17,7 +18,8 @@ import { cdata, xmlEscape } from './feeds'
  * renderFeedHtml() turns an article tree into self-contained HTML for feed
  * readers: same-site links and images become absolute, heading self-links
  * are unwrapped, embeds become plain links to the video (readers do not run
- * iframes), and presentation-only attributes (inline styles, data-*,
+ * iframes), callouts become quotes that start with their label, galleries a
+ * flat list of figures, and presentation-only attributes (inline styles, data-*,
  * lazy-loading hints, srcset) are dropped. URLs are checked again with the
  * compile-time rules (lib/rehype/safeUrls.ts): a refused link is unwrapped
  * and a refused image dropped, so no javascript: / data: URL can reach a
@@ -52,6 +54,11 @@ export function videoPageUrl(src: string): string {
   const vimeo = /^https:\/\/player\.vimeo\.com\/video\/(\d+)/.exec(src)
   if (vimeo) return `https://vimeo.com/${vimeo[1]}`
   return src
+}
+
+function toHtmlText(node: HastNode): string {
+  if (node.type === 'text') return node.value ?? ''
+  return (node.children || []).map(toHtmlText).join('').replace(/\s+/g, ' ').trim()
 }
 
 function videoLink(href: string, label: string): HastElement {
@@ -89,10 +96,33 @@ function transform(parent: HastNode, ctx: FeedSite): void {
       if (href) out.push(videoLink(href, `Watch ${title}`))
       continue
     }
-    if (child.tagName === 'youtube-embed') {
-      const id = child.properties.dataYoutubeId
-      const title = typeof child.properties.title === 'string' ? child.properties.title : 'the video'
-      if (typeof id === 'string') out.push(videoLink(`https://www.youtube.com/watch?v=${id}`, `Watch on YouTube: ${title}`))
+    if (child.tagName === 'youtube-embed' || child.tagName === 'vimeo-embed') {
+      // Click-to-load players (a lone video link, <YouTube>): the plain link again.
+      const video = videoRefFromProps(child.properties)
+      const title = typeof child.properties.title === 'string' && child.properties.title.trim() ? child.properties.title.trim() : 'the video'
+      if (video) out.push(videoLink(videoWatchUrl(video), `Watch on ${VIDEO_PROVIDER_LABEL[video.provider]}: ${title}`))
+      continue
+    }
+    if (child.tagName === 'div' && classList(child).includes('callout')) {
+      // Callout → a quote opening with its label ("Note:" / "备注：").
+      const label = typeof child.properties.dataCalloutLabel === 'string' && child.properties.dataCalloutLabel.trim() ? child.properties.dataCalloutLabel.trim() : 'Note'
+      const colon = /[\u3400-\u9fff]/.test(label) ? '：' : ':'
+      const quote = element('blockquote', {}, [element('p', {}, [element('strong', {}, [{ type: 'text', value: `${label}${colon}` }])]), ...child.children])
+      transform(quote, ctx)
+      out.push(quote)
+      continue
+    }
+    if (child.tagName === 'figure' && classList(child).includes('article-gallery')) {
+      // Gallery → its figures one after another, then the shared caption.
+      const flat: HastNode = { type: 'root', children: [] }
+      let caption = ''
+      for (const part of child.children) {
+        if (isElement(part, 'div')) flat.children!.push(...part.children.filter((c) => isElement(c, 'figure')))
+        else if (isElement(part, 'figcaption')) caption = toHtmlText(part)
+      }
+      if (caption) flat.children!.push(element('p', {}, [element('em', {}, [{ type: 'text', value: caption }])]))
+      transform(flat, ctx)
+      out.push(...flat.children!)
       continue
     }
     const anchorClasses = classList(child)

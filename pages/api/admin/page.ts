@@ -11,6 +11,7 @@ import { rateLimit } from '../../../lib/rateLimit'
 import { isAdminRequest } from '../../../lib/auth'
 import { sendVersionedJson } from '../../../lib/http'
 import { revalidatePaths } from '../../../lib/revalidate'
+import { ensurePosters } from '../../../lib/videoPoster'
 
 /**
  * Admin CRUD for the single MDX pages (/now, /uses).
@@ -55,6 +56,7 @@ export default withApi('admin/page', async (req, res) => {
     if (text.trim()) {
       const problem = await mdxProblem(text)
       if (problem) return res.status(422).json(problem)
+      await ensurePosters(text)
     }
 
     if (!checkIfMatch(req, res, readPage(name).updatedAt)) return

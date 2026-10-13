@@ -96,8 +96,10 @@ export function collectImages(tree: HastNode): TreeImage[] {
     }
     let nextCaption = caption
     if (isElement(node, 'figure')) {
+      // A figure in a gallery without a caption of its own shows the gallery's.
       const cap = node.children.find((c) => isElement(c, 'figcaption'))
-      nextCaption = cap ? textOf(cap).replace(/\s+/g, ' ').trim() || undefined : undefined
+      const inGallery = caption !== undefined && classList(node).includes('article-figure')
+      nextCaption = cap ? textOf(cap).replace(/\s+/g, ' ').trim() || undefined : inGallery ? caption : undefined
     }
     const link = inLink || isElement(node, 'a')
     for (const child of node.children ?? []) visit(child, nextCaption, link)

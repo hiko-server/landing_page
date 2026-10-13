@@ -18,10 +18,11 @@
  *                  Vimeo /video/<id> player URL (rebuilt by embedSrc);
  *                  attributes reduced to a safe set
  *       YouTube    `<YouTube id="…" title="…" />` → `youtube-embed`, a
- *                  click-to-load facade (components/MDX/YouTube.tsx)
- *       Figure     `<Figure src alt caption />` → the same
+ *                  click-to-load facade (components/MDX/VideoEmbed.tsx)
+ *       Figure     `<Figure src alt caption size="wide|full" />` → the same
  *                  `figure.article-figure > img + figcaption` shape a lone
- *                  markdown image gets (lib/rehype/images.ts sizes it)
+ *                  markdown image gets (lib/rehype/images.ts sizes it;
+ *                  `size` becomes data-width, lib/rehype/galleries.ts)
  *       br, kbd, sub, sup, mark, small, abbr[title], details[open], summary
  *                  attribute-less presentational tags
  *     Anything else (e.g. `<script>`, `<Foo>`, `<iframe src=evil>`) is
@@ -143,7 +144,9 @@ function mapIframe(attrs: Record<string, string | true>): Mapped {
 function mapYouTube(attrs: Record<string, string | true>): Mapped {
   const id = str(attrs.id)
   if (!YOUTUBE_ID_RE.test(id)) return null
-  return { hName: 'youtube-embed', hProperties: { dataYoutubeId: id, title: str(attrs.title) || 'YouTube video' } }
+  const title = str(attrs.title)
+  // No title: the facade names it "YouTube video" itself.
+  return { hName: 'youtube-embed', hProperties: title ? { dataYoutubeId: id, title } : { dataYoutubeId: id } }
 }
 
 function mapFigure(attrs: Record<string, string | true>): Mapped {
@@ -154,7 +157,9 @@ function mapFigure(attrs: Record<string, string | true>): Mapped {
   const img = { type: 'element', tagName: 'img', properties: { src, alt }, children: [] }
   const children: unknown[] = [img]
   if (caption) children.push({ type: 'element', tagName: 'figcaption', properties: {}, children: [{ type: 'text', value: caption }] })
-  return { hName: 'figure', hProperties: { className: ['article-figure'] }, hChildren: children }
+  const size = str(attrs.size)
+  const width = size === 'wide' || size === 'full' ? { dataWidth: size } : {}
+  return { hName: 'figure', hProperties: { className: ['article-figure'], ...width }, hChildren: children }
 }
 
 function mapPlain(name: string, attrs: Record<string, string | true>): Mapped {

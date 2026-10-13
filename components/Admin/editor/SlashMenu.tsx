@@ -4,14 +4,14 @@ import { Box, Button, Flex, Input, Spinner, Text } from '@chakra-ui/react'
 import { computePosition, flip, offset, shift } from '@floating-ui/dom'
 import { rankItems } from '../../Article/fuzzyMatch'
 import { MONO } from '../shell/ui'
-import { CODE_LANGUAGES, filterSlashItems, youtubeId, type SlashItem, type SlashItemId } from './slashItems'
+import { CODE_LANGUAGES, filterSlashItems, videoLinkUrl, type SlashItem, type SlashItemId } from './slashItems'
 
 /**
  * The "/" command menu shared by the visual editor (TipTap Suggestion) and
  * the raw-MDX textarea. A WAI-ARIA listbox driven from the editing surface:
  * while choosing a command, focus stays in the editor (↑ ↓ Enter Esc are
  * forwarded through `keyRef`) and the surface gets aria-controls /
- * aria-activedescendant. Commands that need input (code language, YouTube
+ * aria-activedescendant. Commands that need input (code language, video
  * URL, post search) switch the menu to a small form that takes focus.
  *
  * Positioned with Floating UI (bottom-start, offset 6, flip, shift); fades
@@ -23,7 +23,8 @@ export type BlockId = Exclude<SlashItemId, 'code' | 'youtube' | 'link'>
 export type SlashResult =
   | { kind: 'block'; id: BlockId }
   | { kind: 'code'; language: string }
-  | { kind: 'youtube'; id: string; title: string }
+  /** A YouTube / Vimeo watch URL, inserted as a link alone in its paragraph (it compiles to the player). */
+  | { kind: 'video'; url: string; title: string }
   | { kind: 'link'; title: string; href: string }
 
 type Step = 'code' | 'youtube' | 'link'
@@ -229,12 +230,12 @@ export default function SlashMenu({ open, query, anchor, anchorKey, controller, 
   }, [open, step, items, active, choose, onClose, keyRef])
 
   const submitYoutube = () => {
-    const id = youtubeId(ytUrl)
-    if (!id) {
-      setYtError('That isn’t a YouTube video link.')
+    const url = videoLinkUrl(ytUrl)
+    if (!url) {
+      setYtError('That isn’t a YouTube or Vimeo video link.')
       return
     }
-    onResult({ kind: 'youtube', id, title: ytTitle.trim() })
+    onResult({ kind: 'video', url, title: ytTitle.trim() })
   }
 
   const formKeys = (e: React.KeyboardEvent, submit: () => void) => {
@@ -346,7 +347,7 @@ export default function SlashMenu({ open, query, anchor, anchorKey, controller, 
       ) : step === 'youtube' ? (
         <Box as="form" onSubmit={(e: React.FormEvent) => e.preventDefault()} p={1}>
           <Text as="label" htmlFor={`${listId}-yt`} display="block" fontSize="12px" color="page.fg-secondary" mb={1.5}>
-            YouTube link
+            YouTube or Vimeo link
           </Text>
           <Input
             id={`${listId}-yt`}
@@ -360,13 +361,13 @@ export default function SlashMenu({ open, query, anchor, anchorKey, controller, 
               setYtError('')
             }}
             onKeyDown={(e) => formKeys(e, submitYoutube)}
-            placeholder="https://youtu.be/…"
+            placeholder="https://youtu.be/… or https://vimeo.com/…"
             aria-invalid={!!ytError}
             aria-describedby={ytError ? `${listId}-yt-err` : undefined}
             autoComplete="off"
           />
           <Text as="label" htmlFor={`${listId}-yt-title`} display="block" fontSize="12px" color="page.fg-secondary" mt={2} mb={1.5}>
-            Video title (for screen readers)
+            Video title (on the player, read by screen readers)
           </Text>
           <Input
             id={`${listId}-yt-title`}

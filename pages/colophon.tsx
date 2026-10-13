@@ -402,6 +402,13 @@ export default function ColophonPage({ releases, stack, buildSha, builtAt }: Pro
                     </>,
                   ]}
                 />
+                <Para>
+                  Videos in articles are click-to-load. Until you press play, the page shows a still
+                  image stored on this site and makes no request to YouTube or Vimeo. Pressing play
+                  loads the player from <Code>youtube-nocookie.com</Code> (YouTube&rsquo;s
+                  privacy-enhanced mode) or <Code>player.vimeo.com</Code> (with Do Not Track), and
+                  their own privacy policies apply from then on.
+                </Para>
               </Section>
 
               <Section id="build" title="Build">

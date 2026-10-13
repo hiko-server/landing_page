@@ -114,9 +114,10 @@ test('MDXContent renders a compiled tree: figure, YouTube facade, iframe frame, 
   assert.match(out, /<figure[^>]*class="[^"]*article-figure/)
   assert.match(out, /<img[^>]*width="800"[^>]*height="500"|<img[^>]*height="500"[^>]*width="800"/)
   assert.match(out, /<figcaption[^>]*>A chart of latency<\/figcaption>/)
-  // Facade: a labelled button with the thumbnail, no player frame yet.
+  // Facade: a labelled button, no player frame yet, and no thumbnail from
+  // YouTube (posters are copies in /uploads — reading-work D3).
   assert.match(out, /<button[^>]*aria-label="Play video: Demo run"/)
-  assert.match(out, /i\.ytimg\.com\/vi\/jkAqK3vqILI\/hqdefault\.jpg/)
+  assert.ok(!out.includes('ytimg.com'))
   assert.ok(!out.includes('youtube-nocookie.com/embed/jkAqK3vqILI'))
   assert.match(out, /<iframe[^>]*src="https:\/\/player\.vimeo\.com\/video\/1"/)
   assert.match(out, /aria-label="Copy code"/)
