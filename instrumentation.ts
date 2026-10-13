@@ -1,8 +1,10 @@
 // Next.js instrumentation hook (stable in Next 15). `register` runs once per
 // server/edge runtime on startup:
 //   - Node runtime: starts the scheduled, change-aware backups (lib/backupSchedule)
-//     — never during `next build`, and only once per process — and loads the
-//     server Sentry init when a DSN is configured.
+//     — never during `next build`, and only once per process —, adds
+//     `Cache-Control: no-transform` to HTML documents (lib/htmlNoTransform: keeps
+//     Cloudflare from injecting its analytics beacon) and loads the server
+//     Sentry init when a DSN is configured.
 //   - Edge runtime: loads the edge Sentry init when a DSN is configured.
 // Both imports are dynamic and sit behind the NEXT_RUNTIME checks, so the edge
 // bundle never contains fs/SQLite code and a deployment without Sentry never
@@ -24,6 +26,10 @@ export async function register() {
         const { log } = await import('./lib/log')
         log.error('could not start the backup schedule', { err })
       }
+    }
+    if (process.env.NEXT_PHASE !== 'phase-production-build') {
+      const { installHtmlNoTransform } = await import('./lib/htmlNoTransform')
+      installHtmlNoTransform()
     }
     if (sentryDsn()) await import('./sentry.server.config')
   }
