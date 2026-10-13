@@ -3,7 +3,7 @@
  * restore, compare one with the live document as a readable structural diff,
  * download it, or restore it.
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertDialog,
   AlertDialogBody,

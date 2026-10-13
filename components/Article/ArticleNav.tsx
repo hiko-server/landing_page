@@ -1,4 +1,3 @@
-import React from 'react'
 import NextLink from 'next/link'
 import { Box, Flex, SimpleGrid, Text } from '@chakra-ui/react'
 import type { ArticleLink } from './collectionNav'

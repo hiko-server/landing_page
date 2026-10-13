@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Box, Grid } from '@chakra-ui/react'
 import type { Root as HastRoot } from 'hast'
 import MDXContent from '../MDX/MDXContent'

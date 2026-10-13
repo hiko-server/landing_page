@@ -1,5 +1,3 @@
-import React from 'react'
-
 /**
  * An e-mail address or phone number as text that survives Cloudflare's
  * e-mail obfuscation without breaking hydration.

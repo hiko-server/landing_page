@@ -1,4 +1,3 @@
-import React from 'react'
 import type { GetStaticPaths, GetStaticProps } from 'next'
 import { Box, Flex, Link } from '@chakra-ui/react'
 import NextLink from 'next/link'

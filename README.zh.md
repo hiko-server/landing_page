@@ -128,7 +128,7 @@ English → [README.md](./README.md)
 
 **安全与交付**
 
-- Next.js 15.5；图片优化器已禁用（`/_next/image` 返回 404 —
+- Next.js 16.3（以 webpack 构建）；图片优化器已禁用（`/_next/image` 返回 404 —
   GHSA-2xp9-vwfh-vxw4）；生产环境 CSP 不含 `'unsafe-eval'`。
 - 中间件对公开域名做 HTTP → HTTPS（308）跳转并处理旧 CV 地址；服务端抓取由
   内容或后台提供的 URL 时一律经过 `lib/security/safeFetch.ts`。
@@ -146,7 +146,7 @@ English → [README.md](./README.md)
 
 | 层 | 选型 | 取舍说明 |
 |---|---|---|
-| 框架 | **Next.js 15（Pages Router）** | 成熟的 SSR/ISR、文件式 API、Edge Middleware |
+| 框架 | **Next.js 16（Pages Router，webpack 构建）** + **React 18** | 成熟的 SSR/ISR、文件式 API、Edge Middleware |
 | UI | **Chakra UI 2** | 可组合原语，开箱即用的深色模式 |
 | 动效 | **Framer Motion** | Hero 入场、分节 reveal |
 | 内容存储 | **better-sqlite3** + **Cloudflare R2** | 本地优先 + 廉价异地副本 |
@@ -560,7 +560,7 @@ CI（`.github/workflows/ci.yml`）在每次推送和 Pull Request 时运行：
 
 | 任务 | 必须通过 |
 |---|---|
-| build | `tsc`、零警告的 ESLint、单元测试、`next build`，以及性能预算（`scripts/perf-budget.mjs`：共享与逐页首屏 JS、共享 CSS、预加载字体的数量与体积） |
+| build | `tsc`、零警告的 ESLint、单元测试、`next build --webpack`，以及性能预算（`scripts/perf-budget.mjs`：共享与逐页首屏 JS、共享 CSS、预加载字体的数量与体积） |
 | audit | `scripts/check-audit.mjs`：生产依赖中不得有高危 / 严重漏洞，除非在 `security/audit-allowlist.json` 中写明理由与到期日；过期条目同样失败。完整报告作为构建产物保留 |
 | docker | 合并后的 compose 配置只暴露回环地址；镜像能构建、在空数据卷上启动、提供服务、预热 ISR 页面并优雅停止；随后针对该容器运行 Playwright + axe 测试 |
 

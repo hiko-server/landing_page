@@ -1,4 +1,3 @@
-import React from 'react'
 import NextLink from 'next/link'
 import { Box, Button, Flex, Heading, Text } from '@chakra-ui/react'
 import HeaderFooter from '../layout/HeaderFooter'

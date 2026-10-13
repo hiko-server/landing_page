@@ -108,6 +108,7 @@ test('the committed allowlist is well-formed and never covers next itself', () =
   const file = path.join(process.cwd(), 'security', 'audit-allowlist.json')
   const list = JSON.parse(fs.readFileSync(file, 'utf8'))
   assert.deepEqual(validateAllowlist(list), [])
-  assert.ok(list.length > 0)
+  // Empty is fine: since Next 16 (postcss 8.5) and the Sentry removal no advisory needs an exception.
+  assert.ok(Array.isArray(list))
   for (const e of list) assert.notEqual(e.package, 'next', 'no Next.js advisory may be allowlisted')
 })

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Box, Flex, IconButton, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay, Text } from '@chakra-ui/react'
 import { motion, useReducedMotion, type PanInfo } from 'framer-motion'
 import { GoArrowLeft, GoArrowRight } from 'react-icons/go'

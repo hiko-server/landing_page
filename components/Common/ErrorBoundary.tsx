@@ -6,9 +6,7 @@ import { log } from '../../lib/log'
 /**
  * Error boundary for independent UI islands (a home widget, the command
  * palette, an admin panel): a crash there renders a small fallback instead
- * of blanking the whole page. Every caught error is logged; it is also
- * reported to Sentry when a client DSN was configured at build time (the SDK
- * is imported only then).
+ * of blanking the whole page. Every caught error is logged.
  *
  *   <ErrorBoundary name="home/activity">
  *     <ActivityFeed />
@@ -52,16 +50,6 @@ function report(error: Error, info: React.ErrorInfo, name?: string) {
     err: error,
     componentStack: info.componentStack,
   })
-  if (!process.env.NEXT_PUBLIC_SENTRY_DSN) return
-  import('@sentry/nextjs')
-    .then((Sentry) =>
-      Sentry.withScope((scope) => {
-        if (name) scope.setTag('boundary', name)
-        scope.setExtra('componentStack', info.componentStack)
-        Sentry.captureException(error)
-      }),
-    )
-    .catch((reportErr: unknown) => log.warn('Sentry report failed', { err: reportErr }))
 }
 
 /** Did any reset key change (by identity, or the list length)? */

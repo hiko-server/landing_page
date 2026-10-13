@@ -1,4 +1,4 @@
-import React, { useRef } from 'react'
+import { useRef } from 'react'
 import { Box, Flex, Text } from '@chakra-ui/react'
 import { useBottomBarOffset } from '../Common/useBottomBarOffset'
 

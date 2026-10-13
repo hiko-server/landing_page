@@ -1,4 +1,3 @@
-import React from 'react'
 import dynamic from 'next/dynamic'
 import ErrorBoundary from '../Common/ErrorBoundary'
 import type { CommandPaletteProps } from './CommandPalette'

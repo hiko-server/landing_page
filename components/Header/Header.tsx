@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Box, Text, Button, useDisclosure, Flex, IconButton, Link, useColorMode, Kbd } from '@chakra-ui/react'
 import NextLink from 'next/link'
 import dynamic from 'next/dynamic'

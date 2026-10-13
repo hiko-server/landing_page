@@ -1,4 +1,3 @@
-import React from 'react'
 import { Badge, HStack, Text } from '@chakra-ui/react'
 import CollectionIndex, { type Column } from '../../../components/Admin/shell/CollectionIndex'
 

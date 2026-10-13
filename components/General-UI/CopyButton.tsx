@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Box } from '@chakra-ui/react'
 import { copyText } from '../MDX/clipboard'
 

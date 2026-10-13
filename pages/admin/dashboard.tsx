@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import NextLink from 'next/link'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/router'

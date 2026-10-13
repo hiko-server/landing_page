@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import { Box, Flex, Input, Text } from '@chakra-ui/react'
 import type { Editor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'

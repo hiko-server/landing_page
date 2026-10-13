@@ -1,4 +1,3 @@
-import React from 'react'
 import { Box, Button, Flex, Text } from '@chakra-ui/react'
 import { AddIcon } from '@chakra-ui/icons'
 import SortableList from '../shell/SortableList'

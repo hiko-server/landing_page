@@ -1,4 +1,3 @@
-import React from 'react'
 import type { CompetitionAwards as CompetitionAwardsType } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'
 import { formatCvDate } from '../../lib/cvFormat'

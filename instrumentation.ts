@@ -1,18 +1,16 @@
-// Next.js instrumentation hook (stable in Next 15). `register` runs once per
-// server/edge runtime on startup:
-//   - Node runtime: starts the scheduled, change-aware backups (lib/backupSchedule)
-//     — never during `next build`, and only once per process —, adds
-//     `Cache-Control: no-transform` to HTML documents (lib/htmlNoTransform: keeps
-//     Cloudflare from injecting its analytics beacon) and loads the server
-//     Sentry init when a DSN is configured.
-//   - Edge runtime: loads the edge Sentry init when a DSN is configured.
-// Both imports are dynamic and sit behind the NEXT_RUNTIME checks, so the edge
-// bundle never contains fs/SQLite code and a deployment without Sentry never
-// loads the SDK.
+// Next.js instrumentation hook. `register` runs once per server/edge runtime
+// on startup; only the Node runtime has work to do:
+//   - starts the scheduled, change-aware backups (lib/backupSchedule) — never
+//     during `next build`, and only once per process;
+//   - adds `Cache-Control: no-transform` to HTML documents
+//     (lib/htmlNoTransform: keeps Cloudflare from injecting its analytics
+//     beacon).
+// Both imports are dynamic and sit inside the `NEXT_RUNTIME === 'nodejs'`
+// block (keep that shape: the bundler drops the block from the edge bundle
+// only when the import is nested in it), so the edge bundle never contains
+// fs/SQLite code.
 
 type InstrumentationGlobal = typeof globalThis & { __backupScheduleStarted?: boolean }
-
-const sentryDsn = () => process.env.SENTRY_DSN || process.env.NEXT_PUBLIC_SENTRY_DSN
 
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
@@ -31,19 +29,5 @@ export async function register() {
       const { installHtmlNoTransform } = await import('./lib/htmlNoTransform')
       installHtmlNoTransform()
     }
-    if (sentryDsn()) await import('./sentry.server.config')
   }
-  if (process.env.NEXT_RUNTIME === 'edge' && sentryDsn()) {
-    await import('./sentry.edge.config')
-  }
-}
-
-/**
- * Server-side request errors (API routes, getServerSideProps, middleware)
- * go to Sentry when a DSN is configured; the SDK is loaded only then.
- */
-export async function onRequestError(...args: Parameters<typeof import('@sentry/nextjs').captureRequestError>) {
-  if (!sentryDsn()) return
-  const Sentry = await import('@sentry/nextjs')
-  Sentry.captureRequestError(...args)
 }

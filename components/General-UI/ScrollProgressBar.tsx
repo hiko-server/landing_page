@@ -1,4 +1,3 @@
-import React from 'react'
 import { Box } from '@chakra-ui/react'
 import { useRouter } from 'next/router'
 import { motion, useReducedMotion, useScroll, useSpring } from 'framer-motion'
