@@ -14,6 +14,7 @@ import { GitHubIcon, GitLabIcon, LinkedInIcon, WhatsAppIcon } from '../Icons/bra
 import { heroCopy, portraitAlt, type HeroIdentity, type HeroMeta } from './heroIdentity'
 import { resolveSocialLinks, type SocialName } from '../Chrome/chrome'
 import { revealSx, settleSx } from './heroReveal'
+import { portraitFrameSx } from './portraitFrame'
 
 /**
  * [01] Introduction — the home hero.
@@ -152,7 +153,7 @@ const PersonalInfo = ({
       border="1px solid"
       borderColor="page.border-strong"
       bg="page.bg-elevated"
-      sx={settleSx(2)}
+      sx={{ ...settleSx(2), ...portraitFrameSx('avatar') }}
     >
       {portrait('64px', alt)}
     </Box>
@@ -314,6 +315,7 @@ const PersonalInfo = ({
                 borderColor="page.border-strong"
                 bg="page.bg-elevated"
                 boxShadow="0 24px 60px rgba(0,0,0,0.22)"
+                sx={portraitFrameSx('card')}
               >
                 {portrait('(min-width: 62em) 260px, 220px', alt)}
               </Box>

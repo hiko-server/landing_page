@@ -59,13 +59,15 @@ test.describe('head', () => {
       await settle(page)
       const head = await page.evaluate(() => ({
         icon: document.querySelectorAll('link[rel="icon"]').length,
+        svgIcon: document.querySelectorAll('link[rel="icon"][type="image/svg+xml"]').length,
         appleTouchIcon: document.querySelectorAll('link[rel="apple-touch-icon"]').length,
         themeColor: document.querySelectorAll('meta[name="theme-color"]').length,
         xUaCompatible: document.querySelectorAll('meta[http-equiv="X-UA-Compatible" i]').length,
         viewport: document.querySelectorAll('meta[name="viewport"]').length,
         hrefs: Array.from(document.querySelectorAll('link[rel="icon"], link[rel="apple-touch-icon"]')).map((l) => l.getAttribute('href') || ''),
       }))
-      expect(head, path).toMatchObject({ icon: 1, appleTouchIcon: 1, themeColor: 1, xUaCompatible: 0, viewport: 1 })
+      // One icon set: the adaptive SVG favicon and its ICO fallback.
+      expect(head, path).toMatchObject({ icon: 2, svgIcon: 1, appleTouchIcon: 1, themeColor: 1, xUaCompatible: 0, viewport: 1 })
       for (const href of head.hrefs) {
         const res = await request.get(href)
         expect(res.status(), `${path}: ${href}`).toBe(200)

@@ -304,13 +304,15 @@ test('one icon set, one theme-color, no X-UA-Compatible', () => {
   const head = code('components/General-UI/CustomHead.tsx')
   const doc = code('pages/_document.tsx')
   const all = [app, head, doc].join('\n')
-  assert.equal((all.match(/rel="icon"/g) || []).length, 1)
+  // One icon set: the adaptive SVG plus its ICO fallback (chrome-identity A3).
+  assert.equal((all.match(/rel="icon"/g) || []).length, 2)
+  assert.equal((all.match(/rel="icon" type="image\/svg\+xml"/g) || []).length, 1)
   assert.equal((all.match(/rel="apple-touch-icon"/g) || []).length, 1)
   assert.equal((all.match(/name="theme-color"/g) || []).length, 1)
   assert.doesNotMatch(all, /X-UA-Compatible/i)
   assert.doesNotMatch(head, /themeColor|VPColor/)
   // The icons point at files that exist.
-  for (const href of [...app.matchAll(/rel="(?:icon|apple-touch-icon)"[^>]*href="([^"]+)"/g)].map((m) => m[1])) {
+  for (const href of [...app.matchAll(/rel="(?:icon|apple-touch-icon)"[^>]*?href="([^"]+)"/g)].map((m) => m[1])) {
     assert.ok(existsSync(path.join(ROOT, 'public', href)), href)
   }
   assert.match(app, /href="\/icons\/apple-touch-icon\.png"/)
