@@ -159,3 +159,24 @@ test('(h) social cards: fixed pages use presets, articles sign their free-text c
   }
   assert.match(read('components/CVViewerPage/CvPageView.tsx'), /image=\{ogPresetUrl\('cv'/)
 })
+
+// ── (i) security-a's migration runner owns every schema change ──────────────
+
+test('(i) no table, column or index is created outside scripts/db migrations', () => {
+  const ddl = /\b(create|alter)\s+table\b|\bcreate\s+(unique\s+)?index\b|\badd\s+column\b/i
+  const files = [...sources('lib'), ...sources('pages'), ...sources('components'), ...sources('scripts')].filter(
+    (f) => !f.startsWith('scripts/db/'),
+  )
+  const mjs = readdirSync(path.join(ROOT, 'scripts'))
+    .filter((n) => n.endsWith('.mjs'))
+    .map((n) => `scripts/${n}`)
+  const offenders = [...files, ...mjs].filter((f) => ddl.test(read(f)))
+  assert.deepEqual(offenders, [], 'schema changes belong in scripts/db/<store>/NNN-name.mjs')
+  // Each store's index registers its migrations in order.
+  for (const store of ['content', 'analytics', 'auth']) {
+    const dir = path.join(ROOT, 'scripts/db', store)
+    const files = readdirSync(dir).filter((n) => /^\d{3}-.+\.mjs$/.test(n)).sort()
+    const index = read(`scripts/db/${store}/index.mjs`)
+    for (const f of files) assert.ok(index.includes(`./${f}`), `${store}: ${f} registered`)
+  }
+})
