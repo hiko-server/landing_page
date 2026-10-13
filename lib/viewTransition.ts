@@ -36,6 +36,53 @@ export function isCrossPageNavigation(currentHref: string, nextAs: string): bool
   }
 }
 
+/**
+ * True when a route change about to render (Next's `beforeHistoryChange`)
+ * leaves the page on screen.
+ *
+ * On a push the address bar still shows the entry being left, so the URL
+ * comparison above applies. On Back / Forward (popstate) the browser has
+ * already moved the address bar to the target entry, so comparing it with
+ * `nextAs` would compare the target with itself: the page on screen is the
+ * one React last committed (`committedPageKey`, see TransitionGate).
+ */
+export function isRouteTransitionNavigation(
+  currentHref: string,
+  nextAs: string,
+  isPop: boolean,
+  committedPageKey: string | null,
+): boolean {
+  if (!isPop) return isCrossPageNavigation(currentHref, nextAs)
+  if (committedPageKey === null) return false
+  try {
+    const current = new URL(currentHref)
+    const next = new URL(nextAs, current)
+    const onScreen = new URL(committedPageKey, current)
+    return next.origin === current.origin && next.pathname !== onScreen.pathname
+  } catch {
+    return false
+  }
+}
+
+/** What a `popstate` listener records about the Back / Forward in progress. */
+export type PopRecord = { key: unknown; hasUAVisualTransition: boolean }
+
+/** Reads a PopStateEvent: the target entry's Next key and whether the browser animated it itself. */
+export function popRecordOf(event: { state?: unknown; hasUAVisualTransition?: unknown }): PopRecord {
+  const state = event.state as { key?: unknown } | null | undefined
+  return { key: state?.key, hasUAVisualTransition: event.hasUAVisualTransition === true }
+}
+
+/**
+ * True when the browser already ran its own visual transition for this
+ * Back / Forward (an iOS / Android edge swipe), so an author transition
+ * would play a second animation on top. Only the popstate of the entry
+ * being entered counts.
+ */
+export function uaAnimatedPop(pop: PopRecord | null, isPop: boolean, historyKey: unknown): boolean {
+  return isPop && !!pop && pop.hasUAVisualTransition && pop.key === historyKey
+}
+
 type ViewTransitionLike = {
   ready?: Promise<unknown>
   finished?: Promise<unknown>
@@ -83,22 +130,106 @@ function swallowRejections(vt: ViewTransitionLike | undefined): void {
  * form (and the default cross-fade) instead.
  */
 export function startViewTransitionSafely(doc: unknown, update: UpdateCallback, types?: string[]): boolean {
+  return beginViewTransition(doc, update, types) !== null
+}
+
+/**
+ * startViewTransitionSafely, returning the transition (its promises already
+ * guarded) so the caller can clean up once it settles; null when none started.
+ */
+export function beginViewTransition(doc: unknown, update: UpdateCallback, types?: string[]): ViewTransitionLike | null {
   const start = (doc as DocumentWithViewTransition | undefined)?.startViewTransition
-  if (typeof start !== 'function') return false
+  if (typeof start !== 'function') return null
   if (types && types.length) {
     try {
-      swallowRejections(start.call(doc, { update, types }))
-      return true
+      const vt = start.call(doc, { update, types })
+      swallowRejections(vt)
+      return vt || {}
     } catch (err) {
-      if (!(err instanceof TypeError)) return false
+      if (!(err instanceof TypeError)) return null
       // Level 1 only: fall through to the callback form.
     }
   }
   try {
-    swallowRejections(start.call(doc, update))
-    return true
+    const vt = start.call(doc, update)
+    swallowRejections(vt)
+    return vt || {}
   } catch {
-    return false
+    return null
+  }
+}
+
+/** Resolves once a started transition has finished or been skipped (at once when there is nothing to wait for). */
+export function transitionSettled(vt: ViewTransitionLike | null): Promise<void> {
+  const done = vt?.finished
+  if (!done || typeof done.then !== 'function') return Promise.resolve()
+  return done.then(swallow, swallow)
+}
+
+// ── Open overlays ───────────────────────────────────────────────────────────
+
+/**
+ * The scrim and the panel of every open Chakra modal layer: the mobile menu
+ * drawer, the ⌘K palette, the lightbox and any other dialog.
+ */
+export const DISMISSIBLE_LAYER_SELECTOR = '.chakra-modal__overlay, .chakra-modal__content'
+
+/** view-transition-name prefix of a lifted layer (`vt-layer-0`, `vt-layer-1`, …). */
+export const LAYER_NAME_PREFIX = 'vt-layer-'
+
+type LayerStyle = { viewTransitionName: string; visibility: string }
+type LayerElement = { style: LayerStyle; isConnected?: boolean }
+type LayerRoot = { querySelectorAll(selector: string): ArrayLike<unknown> }
+
+export type LiftedLayers = {
+  /** Number of layers lifted out of the page snapshot. */
+  readonly count: number
+  /** Run in the update callback (the old snapshot is taken): keep the layers out of the new state. */
+  hideFromNewState(): void
+  /** Run once the transition settled: anything still mounted shows again. */
+  restore(): void
+}
+
+/**
+ * An overlay that is open when a route transition starts (a drawer link was
+ * tapped, Back was pressed with the palette open) would be captured in the
+ * page's old snapshot and slide over the incoming page with it. Each open
+ * layer gets its own view-transition-name before the old snapshot is taken,
+ * so it leaves on its own: the UA fades the lone old image out in place
+ * while the page transitions underneath. In the update callback the layers
+ * lose their names and are hidden, so none of them is part of the new state
+ * even if its dialog's own exit animation is still running.
+ */
+export function liftDismissibleLayers(root: LayerRoot | null | undefined): LiftedLayers {
+  let layers: LayerElement[] = []
+  try {
+    layers = Array.from((root?.querySelectorAll(DISMISSIBLE_LAYER_SELECTOR) || []) as ArrayLike<LayerElement>).filter(
+      (el) => !!el && typeof el === 'object' && !!el.style,
+    )
+  } catch {
+    layers = []
+  }
+  const previous = layers.map((el) => ({ name: el.style.viewTransitionName, visibility: el.style.visibility }))
+  layers.forEach((el, i) => {
+    el.style.viewTransitionName = `${LAYER_NAME_PREFIX}${i}`
+  })
+  let hidden = false
+  return {
+    count: layers.length,
+    hideFromNewState() {
+      if (hidden) return
+      hidden = true
+      layers.forEach((el, i) => {
+        el.style.viewTransitionName = previous[i].name
+        el.style.visibility = 'hidden'
+      })
+    },
+    restore() {
+      layers.forEach((el, i) => {
+        el.style.viewTransitionName = previous[i].name
+        if (el.isConnected !== false) el.style.visibility = previous[i].visibility
+      })
+    },
   }
 }
 
@@ -265,6 +396,11 @@ export class TransitionGate {
 
   get holding(): boolean {
     return this.holdPromise !== null
+  }
+
+  /** The page React has committed — the one on screen (null before the first commit). */
+  get committedPageKey(): string | null {
+    return this.committedKey
   }
 
   /** Close the gate: renders of any page other than the committed one suspend. */

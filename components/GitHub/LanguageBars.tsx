@@ -2,8 +2,10 @@ import React, { useMemo } from 'react'
 import { Box, Flex, Skeleton, Text } from '@chakra-ui/react'
 import { motion, useReducedMotion, type Variants } from 'framer-motion'
 
+import { revealVariant } from '../../lib/reveal'
 import { useFetchJson } from '../Common/useFetchJson'
 import WidgetNotice from '../Common/WidgetNotice'
+import { useScrollReveal } from '../General-UI/useScrollReveal'
 import type { GhLanguages } from '../Common/githubEvents'
 
 /** GitHub's canonical language colours; anything unlisted uses the site accent. */
@@ -38,9 +40,9 @@ const MotionFlex = motion(Flex)
 const ROWS = 10
 const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1]
 /**
- * One parent stagger. The hidden state is the same for everyone (server and
- * client markup match); reduced motion only makes the reveal instant
- * (MotionConfig reducedMotion="user" already drops the transforms).
+ * One parent stagger, played only when the list scrolls up from below the
+ * fold (lib/reveal.ts): the server, the first frame and a list already on
+ * screen show full bars; reduced motion never hides them.
  */
 const staggerVariants = (reduce: boolean | null): { list: Variants; row: Variants; bar: Variants } => ({
   list: { hidden: {}, show: { transition: { staggerChildren: reduce ? 0 : 0.03 } } },
@@ -57,6 +59,7 @@ const staggerVariants = (reduce: boolean | null): { list: Variants; row: Variant
  */
 export default function LanguageBars({ initialData }: { initialData?: GhLanguages | null }) {
   const reduce = useReducedMotion()
+  const reveal = useScrollReveal<HTMLElement>()
   const { data, error, retry } = useFetchJson<GhLanguages>('/api/github/languages', { initialData })
 
   const items = useMemo(() => {
@@ -99,14 +102,14 @@ export default function LanguageBars({ initialData }: { initialData?: GhLanguage
   return (
     <MotionFlex
       as="ul"
+      ref={reveal.ref}
       listStyleType="none"
       direction="column"
       gap={3}
       aria-label="Languages by share of code"
       variants={variants.list}
-      initial="hidden"
-      whileInView="show"
-      viewport={{ once: true, amount: 0.2 }}
+      initial={false}
+      animate={revealVariant(reveal.phase)}
     >
       {items.map(({ name, pct }) => (
         <MotionBox as="li" key={name} variants={variants.row}>

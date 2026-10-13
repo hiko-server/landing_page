@@ -68,7 +68,7 @@ function Section({
       as="section"
       aria-labelledby={`${id}-title`}
       mb={[12, 16]}
-      sx={{ scrollMarginTop: '96px' }}
+      sx={{ scrollMarginTop: '24px' }}
       id={id}
     >
       <Heading
@@ -440,7 +440,7 @@ export default function ColophonPage({ releases, stack, buildSha, builtAt }: Pro
                       mt={6}
                       borderTop="1px solid"
                       borderColor="page.border"
-                      sx={{ scrollMarginTop: '96px' }}
+                      sx={{ scrollMarginTop: '24px' }}
                     >
                       <Heading
                         as="h3"

@@ -20,9 +20,12 @@ import {
 } from '../Chrome/chrome'
 import { useBrandHost } from '../Chrome/useBrandHost'
 import { useChromeToast } from '../Chrome/useChromeToast'
+import { useShortcutsEnabled } from '../Chrome/useShortcutsEnabled'
 import { useFetchJson } from '../Common/useFetchJson'
 import { MenuIcon } from '../Icons/brand'
 import { toggleThemeWithTransition } from '../../lib/themeTransition'
+import { getShortcutsEnabled, isImeComposing } from '../../lib/keyboardShortcuts'
+import { pageKeyOf } from '../../lib/viewTransition'
 import ThemeIcon from './ThemeIcon'
 
 /**
@@ -143,13 +146,20 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
   const { colorMode, toggleColorMode } = useColorMode()
   const brand = useBrandHost()
   const [brandHead, brandTail] = splitBrand(brand)
+  const shortcutsOn = useShortcutsEnabled()
+  // A dialog closed because the visitor left the page must not pull focus
+  // back to its trigger in the header: focus moves into the new page's
+  // <main> instead (components/Chrome/routeFocus.ts).
+  const [dialogsReturnFocus, setDialogsReturnFocus] = useState(true)
 
   const openPalette = useCallback(() => {
+    setDialogsReturnFocus(true)
     setPaletteRequested(true)
     openCmdk()
   }, [openCmdk])
 
   const openDrawer = useCallback(() => {
+    setDialogsReturnFocus(true)
     setDrawerRequested(true)
     onOpen()
   }, [onOpen])
@@ -193,11 +203,25 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
   }, [pathname, checkSession])
 
   // The drawer belongs to the page it was opened on: close it whenever a
-  // navigation starts (links, ⌘K, "G then …" shortcuts, Back/Forward).
+  // navigation starts (links, ⌘K, "G then …" shortcuts, Back/Forward). The
+  // palette closes too when the page changes under it (Back / Forward while
+  // it is open); its own navigations close it first. Whatever is still on
+  // screen when the route transition starts fades out in place
+  // (RouteTransitions lifts open layers out of the page snapshot).
+  const pageKeyRef = useRef(pageKeyOf(router.asPath))
+  pageKeyRef.current = pageKeyOf(router.asPath)
   useEffect(() => {
-    router.events.on('routeChangeStart', onClose)
-    return () => router.events.off('routeChangeStart', onClose)
-  }, [router.events, onClose])
+    const onRouteChangeStart = (as: string) => {
+      const leavesPage = pageKeyOf(as) !== pageKeyRef.current
+      if (leavesPage) {
+        setDialogsReturnFocus(false)
+        closeCmdk()
+      }
+      onClose()
+    }
+    router.events.on('routeChangeStart', onRouteChangeStart)
+    return () => router.events.off('routeChangeStart', onRouteChangeStart)
+  }, [router.events, onClose, closeCmdk])
 
   const [isMac, setIsMac] = useState(true)
   useEffect(() => {
@@ -205,10 +229,14 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
   }, [])
 
   // Global keys: ⌘K / Ctrl+K toggles the palette anywhere; "/" opens it and
-  // "G then <key>" navigates (both only outside text fields, palette closed).
+  // "G then <key>" navigates (both only outside text fields, palette closed,
+  // and only while the visitor has not turned single-key shortcuts off —
+  // WCAG 2.1.4, lib/keyboardShortcuts). Keys typed into an input method's
+  // composition are never shortcuts.
   useEffect(() => {
     let armedUntil = 0
     const onKey = (e: KeyboardEvent) => {
+      if (isImeComposing(e)) return
       if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k') {
         // A focused widget that owns ⌘K (the rich editor's link form) handled it.
         if (e.defaultPrevented) return
@@ -218,6 +246,10 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
         return
       }
       if (cmdkOpen || e.metaKey || e.ctrlKey || e.altKey || e.repeat || e.defaultPrevented || isEditableTarget(e.target)) return
+      if (!getShortcutsEnabled()) {
+        armedUntil = 0
+        return
+      }
       if (e.key === '/') {
         e.preventDefault()
         armedUntil = 0
@@ -389,7 +421,7 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
               onFocus={preloadCommandPalette}
               aria-label="Open command palette"
               aria-haspopup="dialog"
-              aria-keyshortcuts={isMac ? 'Meta+K /' : 'Control+K /'}
+              aria-keyshortcuts={`${isMac ? 'Meta+K' : 'Control+K'}${shortcutsOn ? ' /' : ''}`}
             >
               <Text as="span" display={{ base: 'none', xl: 'inline' }} mr={2}>
                 Search
@@ -475,9 +507,20 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
         </Flex>
       </Box>
 
-      {drawerRequested && <MobileDrawer isOpen={isOpen} onClose={onClose} socials={socials} isAdmin={isAdmin} onLogout={logout} />}
+      {drawerRequested && (
+        <MobileDrawer
+          isOpen={isOpen}
+          onClose={onClose}
+          socials={socials}
+          isAdmin={isAdmin}
+          onLogout={logout}
+          returnFocusOnClose={dialogsReturnFocus}
+        />
+      )}
 
-      {paletteRequested && <CommandPaletteLazy isOpen={cmdkOpen} onClose={closeCmdk} isAdmin={isAdmin} />}
+      {paletteRequested && (
+        <CommandPaletteLazy isOpen={cmdkOpen} onClose={closeCmdk} isAdmin={isAdmin} returnFocusOnClose={dialogsReturnFocus} />
+      )}
     </>
   )
 }

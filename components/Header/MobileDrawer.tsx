@@ -53,9 +53,11 @@ export type MobileDrawerProps = {
   socials: readonly SocialLink[]
   isAdmin: boolean
   onLogout: () => void
+  /** False when the menu closes because the visitor left the page (focus then moves to the new page). */
+  returnFocusOnClose?: boolean
 }
 
-export default function MobileDrawer({ isOpen, onClose, socials, isAdmin, onLogout }: MobileDrawerProps) {
+export default function MobileDrawer({ isOpen, onClose, socials, isAdmin, onLogout, returnFocusOnClose = true }: MobileDrawerProps) {
   const router = useRouter()
   const { colorMode, toggleColorMode } = useColorMode()
   const firstLinkRef = useRef<HTMLAnchorElement>(null)
@@ -64,7 +66,7 @@ export default function MobileDrawer({ isOpen, onClose, socials, isAdmin, onLogo
   const chromeLang = useChromeLang()
 
   return (
-    <Drawer id={MOBILE_MENU_ID} isOpen={isOpen} placement="right" onClose={onClose} size="xs" initialFocusRef={firstLinkRef}>
+    <Drawer id={MOBILE_MENU_ID} isOpen={isOpen} placement="right" onClose={onClose} size="xs" initialFocusRef={firstLinkRef} returnFocusOnClose={returnFocusOnClose}>
       <DrawerOverlay bg="rgba(0,0,0,0.6)" backdropFilter="blur(4px)" />
       <DrawerContent lang={chromeLang} bg="page.bg" color="page.fg" borderLeft="1px solid" borderColor="page.border">
         <DrawerCloseButton top="10px" color="page.fg-subtle" _hover={{ color: 'page.fg', bg: 'page.hover' }} />

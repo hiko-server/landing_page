@@ -81,8 +81,9 @@ const headingProps = {
   fontFamily: 'var(--font-geist-sans), Inter, sans-serif',
   letterSpacing: '-0.02em',
   fontWeight: 600,
-  // Clear the 56px sticky header when the heading is a jump target.
-  scrollMarginTop: '88px',
+  // A little air above a jumped-to heading; html { scroll-padding-top }
+  // (globals.css) already clears the sticky header.
+  scrollMarginTop: '16px',
   position: 'relative' as const,
   sx: {
     '& .heading-anchor': { color: 'inherit', textDecoration: 'none' },

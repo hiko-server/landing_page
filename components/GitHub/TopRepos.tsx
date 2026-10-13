@@ -1,11 +1,13 @@
-import React, { useRef } from 'react'
+import React, { useCallback, useRef } from 'react'
 import { Box, Grid, Link, Text, Flex, Skeleton } from '@chakra-ui/react'
 import { motion, useReducedMotion, type Variants } from 'framer-motion'
 import { FaStar, FaCodeBranch } from 'react-icons/fa'
 
 import { safeHref } from '../../lib/cvFormat'
+import { revealVariant } from '../../lib/reveal'
 import { useFetchJson, useRenderNow } from '../Common/useFetchJson'
 import WidgetNotice from '../Common/WidgetNotice'
+import { useScrollReveal } from '../General-UI/useScrollReveal'
 import { useSpotlight } from '../General-UI/useSpotlight'
 import { relativeTime, type GhRepo, type GhTopRepos } from '../Common/githubEvents'
 
@@ -33,9 +35,9 @@ const CARD_H = '132px'
 const MotionGrid = motion(Grid)
 const MotionLi = motion(Box)
 /**
- * One parent stagger. The hidden state is the same for everyone (server and
- * client markup match); reduced motion only makes the reveal instant
- * (MotionConfig reducedMotion="user" already drops the rise).
+ * One parent stagger, played only when the grid scrolls up from below the
+ * fold (lib/reveal.ts): the server, the first frame and a grid already on
+ * screen show the tiles; reduced motion never hides them.
  */
 const staggerVariants = (reduce: boolean | null): { list: Variants; item: Variants } => ({
   list: { hidden: {}, show: { transition: { staggerChildren: reduce ? 0 : 0.03 } } },
@@ -91,7 +93,16 @@ export default function TopRepos({ initialData }: { initialData?: GhTopRepos | n
 /** The loaded grid (its own component so the spotlight attaches once the list exists). */
 function RepoGrid({ repos, asOf }: { repos: GhRepo[]; asOf?: number }) {
   const reduce = useReducedMotion()
-  const listRef = useRef<HTMLElement>(null)
+  const listRef = useRef<HTMLElement | null>(null)
+  const reveal = useScrollReveal<HTMLElement>()
+  const revealRef = reveal.ref
+  const setListRef = useCallback(
+    (el: HTMLElement | null) => {
+      listRef.current = el
+      revealRef(el)
+    },
+    [revealRef],
+  )
   useSpotlight(listRef)
   const now = useRenderNow(asOf)
   const variants = staggerVariants(reduce)
@@ -99,7 +110,7 @@ function RepoGrid({ repos, asOf }: { repos: GhRepo[]; asOf?: number }) {
   return (
     <MotionGrid
       as="ul"
-      ref={listRef}
+      ref={setListRef}
       className="hover-list"
       listStyleType="none"
       templateColumns={COLUMNS}
@@ -107,9 +118,8 @@ function RepoGrid({ repos, asOf }: { repos: GhRepo[]; asOf?: number }) {
       w="100%"
       aria-label="Repositories"
       variants={variants.list}
-      initial="hidden"
-      whileInView="show"
-      viewport={{ once: true, amount: 0.2 }}
+      initial={false}
+      animate={revealVariant(reveal.phase)}
     >
       {repos.map((r) => {
         const langColor = r.language ? LANG_COLORS[r.language] || 'var(--accent)' : 'var(--accent)'

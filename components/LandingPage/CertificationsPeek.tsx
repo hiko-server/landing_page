@@ -3,8 +3,10 @@ import { Box, Flex, Link, Text } from '@chakra-ui/react'
 import { motion, useReducedMotion } from 'framer-motion'
 
 import { field, list } from '../CVViewerPage/fields'
+import { useScrollReveal } from '../General-UI/useScrollReveal'
 import { safeHref } from '../../lib/cvFormat'
 import type { CvSectionLike } from '../../lib/cvVisibility'
+import { revealVariant } from '../../lib/reveal'
 import { labelLang } from '../../lib/toc'
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
@@ -17,11 +19,13 @@ type Org = { key: string; name: string; certs: Array<{ key: string; name: string
  * Built from the public CV; a hidden certificate, URL or org name is simply
  * absent. Credential links go through safeHref, so only http(s) URLs become
  * links — anything else renders as a plain chip. Organisations fade in with
- * one stagger for the block (instant under reduced motion); names carry
- * their own `lang`.
+ * one stagger for the block when it scrolls up from below the fold (static
+ * when already on screen or under reduced motion, lib/reveal.ts); names
+ * carry their own `lang`.
  */
 export default function CertificationsPeek({ cvEn }: { cvEn?: CvSectionLike[] }) {
   const reduce = useReducedMotion()
+  const reveal = useScrollReveal<HTMLDivElement>()
 
   const orgs: Org[] = useMemo(() => {
     const section = Array.isArray(cvEn) ? cvEn.find((s) => s?.sessionName === 'certification') : undefined
@@ -45,7 +49,7 @@ export default function CertificationsPeek({ cvEn }: { cvEn?: CvSectionLike[] })
 
   return (
     <Box w="100%" maxW="1100px" mx="auto">
-      <motion.div initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.2 }} variants={stagger}>
+      <motion.div ref={reveal.ref} initial={false} animate={revealVariant(reveal.phase)} variants={stagger}>
         {orgs.map((org) => (
           <motion.section key={org.key} aria-label={org.name || undefined} variants={row} style={{ marginBottom: 24 }}>
             {org.name && (

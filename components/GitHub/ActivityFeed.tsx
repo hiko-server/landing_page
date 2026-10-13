@@ -3,9 +3,11 @@ import { Box, Flex, Link, Skeleton, Text } from '@chakra-ui/react'
 import { motion, useReducedMotion, type Variants } from 'framer-motion'
 import { FaBolt, FaChevronDown, FaCode, FaCodeBranch, FaExclamationCircle, FaPlus } from 'react-icons/fa'
 
+import { revealVariant } from '../../lib/reveal'
 import { useFetchJson, useRenderNow } from '../Common/useFetchJson'
 import WidgetNotice from '../Common/WidgetNotice'
 import Collapse from '../General-UI/Collapse'
+import { useScrollReveal } from '../General-UI/useScrollReveal'
 import {
   absoluteTime,
   eventAction,
@@ -30,9 +32,9 @@ const SKELETON_ROWS = 6
 const MotionOl = motion(Flex)
 const MotionLi = motion(Box)
 /**
- * One parent stagger. The hidden state is the same for everyone (server and
- * client markup match); reduced motion only makes the reveal instant
- * (MotionConfig reducedMotion="user" already drops the rise).
+ * One parent stagger, played only when the feed scrolls up from below the
+ * fold (lib/reveal.ts): the server, the first frame and a feed already on
+ * screen show every row; reduced motion never hides them.
  */
 const staggerVariants = (reduce: boolean | null): { list: Variants; row: Variants } => ({
   list: { hidden: {}, show: { transition: { staggerChildren: reduce ? 0 : 0.03 } } },
@@ -221,6 +223,7 @@ function GroupRow({ group, now }: { group: EventGroup; now: number }) {
  */
 export default function ActivityFeed({ initialData }: { initialData?: GhEventsPayload | null }) {
   const reduce = useReducedMotion()
+  const reveal = useScrollReveal<HTMLElement>()
   const { data, error, retry } = useFetchJson<GhEventsPayload>('/api/github/events', { initialData })
   const now = useRenderNow(data?.asOf)
 
@@ -256,15 +259,15 @@ export default function ActivityFeed({ initialData }: { initialData?: GhEventsPa
       <Box as="span" aria-hidden position="absolute" left="13px" top={3} bottom={3} w="1px" bg="page.border" />
       <MotionOl
         as="ol"
+        ref={reveal.ref}
         className="hover-list"
         listStyleType="none"
         direction="column"
         gap={2}
         aria-label="Recent GitHub activity"
         variants={variants.list}
-        initial="hidden"
-        whileInView="show"
-        viewport={{ once: true, amount: 0.2 }}
+        initial={false}
+        animate={revealVariant(reveal.phase)}
       >
         {groups.map((g, i) => (
           <MotionLi as="li" key={g.key} position="relative" variants={variants.row}>

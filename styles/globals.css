@@ -42,6 +42,19 @@
   /* --bottom-bar-h is set (in px) on <html> only while a page shows a sticky
      bottom action bar on phones (components/Common/useBottomBarOffset.ts);
      floating controls such as scroll-to-top sit above it. Unset otherwise. */
+
+  /* Rendered height of the sticky site header (56px bar + 1px hairline).
+     components/Chrome/SiteChrome.tsx keeps it measured on <html>. */
+  --header-h: 57px;
+}
+
+/* Keyboard focus, in-page anchors and scrollIntoView() land clear of the
+   sticky header (WCAG 2.2 SC 2.4.11, technique C43) and of a page's sticky
+   bottom bar. Per-element scroll-margin-top values only add a little air on
+   top of this, never the header height again. */
+html {
+  scroll-padding-top: calc(var(--header-h) + 16px);
+  scroll-padding-bottom: var(--bottom-bar-h, 0px);
 }
 
 [data-theme='dark'],

@@ -94,7 +94,9 @@ English → [README.md](./README.md)
   社交卡片，以及全文订阅源：`/feed.xml`（RSS，逐条标注语言）、
   `/work/feed.xml`、`/feed.json`，并在页脚「订阅」中列出。
 - **命令面板 3.0**（⌘K / `/`）：按需加载，通过 `/api/search-index` 全文搜索；
-  站长登录后多出「Admin」分组，含随当前页面变化的「编辑此页」。
+  站长登录后多出「Admin」分组，含随当前页面变化的「编辑此页」。面板里的
+  「Keyboard shortcuts: on/off」（后台 `?` 面板里也有）可按浏览器关闭单键快捷键
+  （`/`、`G` 加字母）。
 - **克制的动效**：从切换按钮展开的圆形主题过渡、带方向的路由过渡与固定的
   顶栏；`prefers-reduced-motion` 下全部关闭，装饰性表面都提供
   `forced-colors` 回退。

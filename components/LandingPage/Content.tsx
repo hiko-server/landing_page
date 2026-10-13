@@ -200,9 +200,11 @@ const Content = ({
   ]
   const visible = sections.filter((s) => isSectionVisible(home, s.key))
 
-  // Anchor targets land below the sticky header, and focus (for keyboard
-  // users jumping via the section nav) doesn't paint an outline box.
-  const sectionSx = { scrollMarginTop: '80px', '&:focus': { outline: 'none' } }
+  // Anchor targets land a little below the sticky header (html
+  // { scroll-padding-top } in globals.css clears the header itself), and
+  // focus (for keyboard users jumping via the section nav) doesn't paint an
+  // outline box.
+  const sectionSx = { scrollMarginTop: '8px', '&:focus': { outline: 'none' } }
 
   return (
     <Box

@@ -3,7 +3,9 @@ import { Box, Flex, Text } from '@chakra-ui/react'
 import { motion, useReducedMotion } from 'framer-motion'
 
 import Hint, { HintGroup } from '../General-UI/Hint'
+import { useScrollReveal } from '../General-UI/useScrollReveal'
 import type { CvSectionLike } from '../../lib/cvVisibility'
+import { revealVariant } from '../../lib/reveal'
 import { labelLang } from '../../lib/toc'
 import { skillGroups, type Skill } from './projectMatch'
 
@@ -33,11 +35,14 @@ const chipSx = {
  * A one-word proficiency ("Proficient") is a muted suffix on the chip; a
  * longer note ("Experienced in backend development.") is a Hint on a
  * focusable chip, so chips stay short. One stagger for the whole block,
- * started when it scrolls into view (instant under reduced motion).
+ * started when it scrolls into view — only when it was below the fold;
+ * chips already on screen are there from the first frame (lib/reveal.ts;
+ * never hidden under reduced motion).
  * Renders nothing when the section is hidden or empty.
  */
 export default function Skills({ cvEn }: { cvEn?: CvSectionLike[] }) {
   const reduce = useReducedMotion()
+  const reveal = useScrollReveal<HTMLDivElement>()
   const groups = useMemo(() => {
     const section = Array.isArray(cvEn) ? cvEn.find((s) => s?.sessionName === 'skill') : undefined
     return skillGroups(section)
@@ -53,7 +58,7 @@ export default function Skills({ cvEn }: { cvEn?: CvSectionLike[] }) {
 
   return (
     <HintGroup>
-      <motion.div initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.2 }} variants={stagger}>
+      <motion.div ref={reveal.ref} initial={false} animate={revealVariant(reveal.phase)} variants={stagger}>
         <Box as="dl" w="100%" maxW="1100px" mx="auto">
           {groups.map((g, gi) => (
             <Flex

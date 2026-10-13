@@ -4,8 +4,10 @@ import NextLink from 'next/link'
 import { motion, useReducedMotion } from 'framer-motion'
 
 import Collapse from '../General-UI/Collapse'
+import { useScrollReveal } from '../General-UI/useScrollReveal'
 import { bullets, entryRange, field, list } from '../CVViewerPage/fields'
 import type { CvSectionLike } from '../../lib/cvVisibility'
+import { revealVariant } from '../../lib/reveal'
 import { labelLang } from '../../lib/toc'
 import { chipList, matchCaseStudy, type WorkIndexItem } from './projectMatch'
 
@@ -40,8 +42,9 @@ const RAIL_LEFT = { base: '10px', md: '12px' }
  *   each dot lights as its row enters (CSS scroll-driven animations,
  *   styles/globals.css: `.rail-fill` on the `--xp` view timeline, `.rail-dot`);
  *   without support, or with reduced motion, the rail is simply full.
- * - Rows fade in with the section's single stagger; hovering a row dims the
- *   others (`.hover-list`).
+ * - Rows fade in with the section's single stagger when the list scrolls up
+ *   from below the fold (already on screen: static from the first frame,
+ *   lib/reveal.ts); hovering a row dims the others (`.hover-list`).
  */
 export default function ExperienceTimeline({
   cvEn,
@@ -55,6 +58,7 @@ export default function ExperienceTimeline({
   defaultExpanded?: boolean
 }) {
   const reduce = useReducedMotion()
+  const reveal = useScrollReveal<HTMLOListElement>()
 
   const rows: Row[] = useMemo(() => {
     const section = Array.isArray(cvEn) ? cvEn.find((s) => s?.sessionName === 'workExperience') : undefined
@@ -103,10 +107,10 @@ export default function ExperienceTimeline({
       />
 
       <motion.ol
+        ref={reveal.ref}
         className="hover-list"
-        initial="hidden"
-        whileInView="show"
-        viewport={{ once: true, amount: 0.1 }}
+        initial={false}
+        animate={revealVariant(reveal.phase)}
         variants={stagger}
         style={{ listStyle: 'none', margin: 0, padding: 0 }}
       >

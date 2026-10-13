@@ -3,12 +3,17 @@ import type { Router } from 'next/router'
 import {
   HistoryIndex,
   TransitionGate,
-  isCrossPageNavigation,
+  beginViewTransition,
+  isRouteTransitionNavigation,
+  liftDismissibleLayers,
+  popRecordOf,
   prefersReducedMotion,
   resolveDirection,
-  startViewTransitionSafely,
   supportsViewTransitions,
   takePendingDirection,
+  transitionSettled,
+  uaAnimatedPop,
+  type PopRecord,
 } from '../../lib/viewTransition'
 
 /**
@@ -20,7 +25,12 @@ import {
  * Back / Forward 'back' or 'forward' from the order of the two history
  * entries (HistoryIndex, keyed by Next's own history.state.key). globals.css
  * turns the type into a short directional slide; without a type the page
- * cross-fades.
+ * cross-fades. A Back / Forward the browser already animated itself (an
+ * edge swipe: PopStateEvent.hasUAVisualTransition) gets no second animation.
+ *
+ * Open overlays (the mobile menu, the ⌘K palette) are lifted out of the
+ * page snapshot so they fade out in place instead of sliding over the
+ * incoming page (liftDismissibleLayers).
  */
 
 const gate = new TransitionGate()
@@ -84,30 +94,44 @@ export function useRouteViewTransitions(events: Router['events'], pageKey: strin
       clearTimeout(safety)
       gate.release()
     }
+    // Next's own popstate listener was added first, and its route change
+    // awaits the route before beforeHistoryChange, so this has always run by
+    // then for a Back / Forward.
+    let lastPop: PopRecord | null = null
+    const onPopState = (event: PopStateEvent) => {
+      lastPop = popRecordOf(event)
+    }
     // Fires after the next page's code + data have loaded, right before Next
     // renders it (and before it writes the new history entry) — so holding
     // the render costs one frame, never a fetch.
     const onBeforeHistoryChange = (as: string) => {
-      // Always consume the pending direction so it can never leak into a
-      // later, unrelated navigation.
+      // Always consume the pending direction and the popstate record so they
+      // can never leak into a later, unrelated navigation.
       const pendingDirection = takePendingDirection()
-      if (gate.holding || prefersReducedMotion() || !isCrossPageNavigation(window.location.href, as)) return
+      const pop = lastPop
+      lastPop = null
+      if (gate.holding || prefersReducedMotion()) return
       // On Back / Forward the browser has already moved to the target entry;
       // on a push the address bar still shows the entry being left.
       const key = currentHistoryKey()
       const isPop = typeof key === 'string' && key !== order.current
+      if (!isRouteTransitionNavigation(window.location.href, as, isPop, gate.committedPageKey)) return
+      if (uaAnimatedPop(pop, isPop, key)) return
       const type = resolveDirection(pendingDirection, isPop, order.currentIndex, isPop ? order.indexOf(key) : null)
       gate.hold()
       safety = setTimeout(open, HOLD_LIMIT_MS)
-      const started = startViewTransitionSafely(
+      const layers = liftDismissibleLayers(document)
+      const vt = beginViewTransition(
         document,
         async () => {
+          layers.hideFromNewState()
           open()
           await gate.waitForCommit(COMMIT_WAIT_MS)
         },
         type ? [type] : undefined,
       )
-      if (!started) open()
+      if (!vt) open()
+      void transitionSettled(vt).then(() => layers.restore())
     }
     const onComplete = () => {
       order.enter(currentHistoryKey())
@@ -119,11 +143,13 @@ export function useRouteViewTransitions(events: Router['events'], pageKey: strin
     }
     // In-page anchors push their own history entries (no route events).
     const onHashChange = () => order.enter(currentHistoryKey())
+    window.addEventListener('popstate', onPopState)
     events.on('beforeHistoryChange', onBeforeHistoryChange)
     events.on('routeChangeComplete', onComplete)
     events.on('routeChangeError', onError)
     events.on('hashChangeComplete', onHashChange)
     return () => {
+      window.removeEventListener('popstate', onPopState)
       events.off('beforeHistoryChange', onBeforeHistoryChange)
       events.off('routeChangeComplete', onComplete)
       events.off('routeChangeError', onError)

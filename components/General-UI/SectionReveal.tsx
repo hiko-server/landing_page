@@ -1,8 +1,6 @@
-import React, { useRef } from 'react'
+import React from 'react'
 import { Box, BoxProps } from '@chakra-ui/react'
-import { motion, useInView, useReducedMotion } from 'framer-motion'
-
-const MotionBox = motion(Box)
+import { useScrollReveal } from './useScrollReveal'
 
 type Props = BoxProps & {
   children: React.ReactNode
@@ -17,6 +15,14 @@ type Props = BoxProps & {
 /**
  * Fade-and-rise wrapper used as the outer slot for every "[NN]" section
  * on the home + about pages.
+ *
+ * One path for every arrival (lib/reveal.ts): the wrapper renders visible —
+ * in the server HTML, in the first frame after a client-side navigation and
+ * in the route transition's snapshot — and only a section that lies wholly
+ * below the viewport is hidden (after that first frame, where nobody can see
+ * it) and rises in when it scrolls into view. Under prefers-reduced-motion,
+ * or without IntersectionObserver, nothing is ever hidden. Print always
+ * shows everything.
  *
  * `width="100%"` is the default and matters:
  *
@@ -33,44 +39,24 @@ type Props = BoxProps & {
  *   states. Callers can still override via the spread.
  */
 
-const EASE_OUT_QUART = [0.22, 1, 0.36, 1] as const
+const REVEAL_TRANSITION = 'opacity 350ms var(--ease-out-quart), transform 350ms var(--ease-out-quart)'
+
+const SECTION_SX = {
+  '&[data-reveal="pending"]': { opacity: 0, transform: 'translate3d(0, 24px, 0)' },
+  '&[data-reveal="shown"]': { transition: REVEAL_TRANSITION },
+  '@media print': { opacity: '1 !important', transform: 'none !important' },
+} as const
+
+const LABEL_SX = {
+  '&[data-reveal="pending"] .section-label-rule': { opacity: 0, transform: 'translate3d(0, 12px, 0)' },
+  '&[data-reveal="shown"] .section-label-rule': { transition: REVEAL_TRANSITION },
+  '@media print': { '& .section-label-rule': { opacity: '1 !important', transform: 'none !important' } },
+} as const
 
 export default function SectionReveal({ children, labelOnly, ...rest }: Props) {
-  // Under prefers-reduced-motion the section appears as soon as it enters the
-  // viewport — no rise (MotionConfig already drops transforms) and no fade.
-  // Only `transition` depends on it, so server and client markup match.
-  const reduceMotion = useReducedMotion()
-  if (labelOnly) return <LabelReveal {...rest}>{children}</LabelReveal>
+  const { ref, phase } = useScrollReveal<HTMLDivElement>()
   return (
-    <MotionBox
-      width="100%"
-      initial={{ opacity: 0, y: 24 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.2 }}
-      transition={reduceMotion ? { duration: 0 } : { duration: 0.35, ease: EASE_OUT_QUART }}
-      {...rest}
-    >
-      {children}
-    </MotionBox>
-  )
-}
-
-function LabelReveal({ children, ...rest }: BoxProps & { children: React.ReactNode }) {
-  const ref = useRef<HTMLDivElement | null>(null)
-  const shown = useInView(ref, { once: true, amount: 0.2 })
-  return (
-    <Box
-      ref={ref}
-      width="100%"
-      data-revealed={shown ? 'true' : 'false'}
-      sx={{
-        '& .section-label-rule': {
-          transition: 'opacity 350ms var(--ease-out-quart), transform 350ms var(--ease-out-quart)',
-        },
-        '&[data-revealed="false"] .section-label-rule': { opacity: 0, transform: 'translate3d(0, 12px, 0)' },
-      }}
-      {...rest}
-    >
+    <Box ref={ref} width="100%" data-reveal={phase} sx={labelOnly ? LABEL_SX : SECTION_SX} {...rest}>
       {children}
     </Box>
   )
