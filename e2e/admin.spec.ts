@@ -143,4 +143,59 @@ test.describe('admin', { tag: '@admin' }, () => {
       await adminFetch('DELETE', `/api/admin/posts?slug=${slug}`)
     }
   })
+
+  test('saving a post from the editor keeps the frontmatter fields the form does not show', async ({ page }) => {
+    await loginAsAdmin(page)
+    const slug = `e2e-frontmatter-${Date.now()}`
+    const adminFetch = (method: string, url: string, body?: unknown) =>
+      page.evaluate(
+        async ([m, u, b]) => {
+          const res = await fetch(u as string, {
+            method: m as string,
+            headers: { 'Content-Type': 'application/json' },
+            body: b === undefined ? undefined : JSON.stringify(b),
+          })
+          return { status: res.status, text: await res.text() }
+        },
+        [method, url, body] as const,
+      )
+    const created = await adminFetch('PUT', '/api/admin/posts', {
+      slug,
+      create: true,
+      frontmatter: {
+        title: 'E2E frontmatter check',
+        seoTitle: 'E2E frontmatter check — search title',
+        date: new Date().toISOString().slice(0, 10),
+        updated: '2026-01-02',
+        lang: 'en',
+        coverAlt: 'Alt text the post form does not edit',
+        description: 'Created by the end-to-end suite to check that a save keeps unmodelled fields; deleted afterwards.',
+        draft: true,
+      },
+      body: 'First version.\n',
+    })
+    expect(created.status, created.text).toBe(200)
+    try {
+      await page.goto(`/admin/blog/edit?slug=${slug}`)
+      const title = page.getByLabel(/^title\b/i)
+      await expect(title).toHaveValue('E2E frontmatter check')
+      await title.fill('E2E frontmatter check (edited)')
+      const saved = page.waitForResponse((r) => new URL(r.url()).pathname === '/api/admin/posts' && r.request().method() === 'PUT')
+      await page.keyboard.press('ControlOrMeta+KeyS')
+      expect((await saved).status()).toBe(200)
+
+      const stored = await adminFetch('GET', `/api/admin/posts?slug=${slug}`)
+      expect(stored.status, stored.text).toBe(200)
+      const fm = (JSON.parse(stored.text) as { frontmatter: Record<string, unknown> }).frontmatter
+      expect(fm.title).toBe('E2E frontmatter check (edited)')
+      expect(fm).toMatchObject({
+        seoTitle: 'E2E frontmatter check — search title',
+        updated: '2026-01-02',
+        lang: 'en',
+        coverAlt: 'Alt text the post form does not edit',
+      })
+    } finally {
+      await adminFetch('DELETE', `/api/admin/posts?slug=${slug}`)
+    }
+  })
 })

@@ -6,81 +6,24 @@ import CoverImageField from '../../../components/Admin/shell/CoverImageField'
 import { useMdxItemEditor } from '../../../components/Admin/shell/useMdxItemEditor'
 import MdxItemEditorFrame from '../../../components/Admin/editor/MdxItemEditorFrame'
 import { DESCRIPTION_MAX, TITLE_MAX } from '../../../components/Admin/shell/publishChecks'
-
-type Status = 'live' | 'case-study' | 'archived'
-
-type Frontmatter = {
-  title: string
-  description: string
-  role: string
-  period: string
-  tech: string[]
-  status: Status
-  featured: boolean
-  link: string
-  repo: string
-  cover: string
-  coverAlt: string
-  /** Hidden from /work until published; a missing flag means published. */
-  draft: boolean
-}
-
-const STATUSES: Status[] = ['case-study', 'live', 'archived']
-
-const EMPTY: Frontmatter = {
-  title: '',
-  description: '',
-  role: '',
-  period: '',
-  tech: [],
-  status: 'case-study',
-  featured: false,
-  link: '',
-  repo: '',
-  cover: '',
-  coverAlt: '',
-  draft: true,
-}
-
-const fromServer = (f: Record<string, any>): Frontmatter => ({
-  title: String(f.title || ''),
-  description: String(f.description || ''),
-  role: String(f.role || ''),
-  period: String(f.period || ''),
-  tech: Array.isArray(f.tech) ? f.tech.map(String) : [],
-  status: STATUSES.includes(f.status) ? f.status : 'case-study',
-  featured: Boolean(f.featured),
-  link: String(f.link || ''),
-  repo: String(f.repo || ''),
-  cover: String(f.cover || ''),
-  coverAlt: String(f.coverAlt || ''),
-  draft: f.draft === true,
-})
-
-const toServer = (fm: Frontmatter, tech: string[]) => ({
-  title: fm.title,
-  description: fm.description || undefined,
-  role: fm.role || undefined,
-  period: fm.period || undefined,
-  tech: tech.length ? tech : undefined,
-  status: fm.status,
-  featured: fm.featured || undefined,
-  link: fm.link || undefined,
-  repo: fm.repo || undefined,
-  cover: fm.cover || undefined,
-  coverAlt: (fm.cover && fm.coverAlt.trim()) || undefined,
-  draft: fm.draft || undefined,
-})
+import {
+  WORK_EMPTY,
+  WORK_STATUSES,
+  workFromServer,
+  workToServer,
+  type WorkFrontmatter,
+  type WorkStatus,
+} from '../../../components/Admin/shell/itemFrontmatter'
 
 function WorkEditor() {
-  const ed = useMdxItemEditor<Frontmatter>({
+  const ed = useMdxItemEditor<WorkFrontmatter>({
     collection: 'work',
     endpoint: '/api/admin/work',
     noun: 'case study',
-    empty: EMPTY,
+    empty: WORK_EMPTY,
     listField: 'tech',
-    fromServer,
-    toServer,
+    fromServer: workFromServer,
+    toServer: workToServer,
   })
   const { fm, setFm } = ed
 
@@ -180,9 +123,9 @@ function WorkEditor() {
                 {...inputProps}
                 id="item-status"
                 value={fm.status}
-                onChange={(e) => setFm({ ...fm, status: e.target.value as Status })}
+                onChange={(e) => setFm({ ...fm, status: e.target.value as WorkStatus })}
               >
-                {STATUSES.map((s) => (
+                {WORK_STATUSES.map((s) => (
                   <option key={s} value={s}>
                     {s}
                   </option>

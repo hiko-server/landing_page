@@ -190,6 +190,18 @@ a:focus-visible > .link-underline {
   color: var(--shiki-dark);
 }
 
+/* Highlighted code lines / characters ({2}, /word/ — components/MDX/
+   CodeBlock.tsx). The band never lowers the tokens' contrast: it is lighter
+   than page.bg-elevated (#f5f5f5) in light mode and darker than it (#161616)
+   in dark mode; the accent rule beside the line is what marks it. */
+:root {
+  --code-line-highlight: #f4f5ff;
+}
+[data-theme='dark'],
+.chakra-ui-dark {
+  --code-line-highlight: #10101a;
+}
+
 /* ──────────────────────────────────────────────────────────────────────────
  * View transitions — client-side route changes (components/Chrome/
  * RouteTransitions.tsx starts them only when motion is allowed).

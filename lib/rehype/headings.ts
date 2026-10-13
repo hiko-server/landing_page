@@ -13,12 +13,23 @@ import { element, hasDescendant, isElement, textOf, walk, type HastNode } from '
  *   - h2/h3 entries are reported through `onToc` in document order. The TOC
  *     is therefore built from the very tree that is rendered, so its ids
  *     always match the page.
+ *
+ * The GFM endnotes label (remark-rehype's visually hidden
+ * `<h2 id="footnote-label">` inside `<section data-footnotes>`) is left as
+ * it is: it names the notes for screen readers, but it is not a section of
+ * the article — no TOC entry, and no self-link a keyboard user would tab to
+ * without seeing it.
  */
 export type HeadingsOptions = {
   onToc?: (toc: TocEntry[]) => void
 }
 
 const HEADINGS = ['h2', 'h3', 'h4', 'h5', 'h6'] as const
+
+/** The label heading of the GFM endnotes section. */
+export function isFootnoteLabel(node: HastNode, parent: HastNode | null): boolean {
+  return !!parent && isElement(parent, 'section') && !!parent.properties.dataFootnotes && isElement(node, HEADINGS)
+}
 
 export default function rehypeHeadings(options: HeadingsOptions = {}) {
   return (tree: HastNode) => {
@@ -30,8 +41,8 @@ export default function rehypeHeadings(options: HeadingsOptions = {}) {
     })
 
     const toc: TocEntry[] = []
-    walk(tree, (node) => {
-      if (!isElement(node, HEADINGS)) return
+    walk(tree, (node, parent) => {
+      if (!isElement(node, HEADINGS) || isFootnoteLabel(node, parent)) return
       const text = textOf(node).replace(/\s+/g, ' ').trim()
       if (!text) return
       const existing = node.properties.id

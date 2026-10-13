@@ -5,7 +5,7 @@ import { Fragment, jsx, jsxs } from 'react/jsx-runtime'
 import { toJsxRuntime, type Components, type Jsx } from 'hast-util-to-jsx-runtime'
 import type { Root as HastRoot } from 'hast'
 import { safeHref } from '../../lib/cvFormat'
-import CodeBlock from './CodeBlock'
+import CodeBlock, { CodeFigure } from './CodeBlock'
 import ArticleFigure, { FigCaption, InsideLinkContext, MdxImage } from './Figure'
 import YouTube from './YouTube'
 
@@ -29,7 +29,11 @@ import YouTube from './YouTube'
  *   - `<YouTube>` is a click-to-load facade (./YouTube); allowed iframes
  *     (YouTube / Vimeo players) sit in a 16:9 frame.
  *   - Fenced code is pre-highlighted on the server (rehype-pretty-code) and
- *     gets a copy button (CodeBlock).
+ *     gets a copy button, a filename tab for `title="…"`, highlighted lines
+ *     and line numbers (CodeBlock).
+ *   - GFM footnotes: the endnotes are set apart from the body, references and
+ *     back links read as links, and both jump targets clear the sticky
+ *     header (labels in the article's language: lib/rehype/footnotes.ts).
  *   - Paragraphs and lists use the prose colour token; the column is 68ch
  *     and shares the page's left edge with the title.
  */
@@ -48,6 +52,23 @@ const Prose = ({ children, as = 'article', ...rest }: ChakraProps & { children: 
       '& p, & li': { color: 'page.fg-prose' },
       '& blockquote p, & blockquote li': { color: 'page.fg-secondary' },
       '& h1, & h2, & h3, & h4, & h5, & h6': { color: 'page.fg' },
+      '& section[data-footnotes]': { mt: 12, pt: 6, borderTop: '1px solid', borderColor: 'page.border', fontSize: '0.875em' },
+      '& section[data-footnotes] p': { mb: 2 },
+      // Footnotes (user-content-fn-*) and references (user-content-fnref-*): clear the 56px sticky header.
+      '& [id^="user-content-fn"]': { scrollMarginTop: '88px' },
+      // Underlined, not colour alone: they sit inside running text (WCAG 1.4.1).
+      '& a[data-footnote-ref], & a[data-footnote-backref]': {
+        color: 'accent.text',
+        textDecoration: 'underline',
+        textUnderlineOffset: '0.15em',
+        px: '0.15em',
+      },
+      '& a[data-footnote-ref]:hover, & a[data-footnote-backref]:hover': { textDecorationThickness: '2px' },
+      '& a[data-footnote-ref]:focus-visible, & a[data-footnote-backref]:focus-visible': {
+        outline: '2px solid var(--accent)',
+        outlineOffset: '2px',
+        borderRadius: '2px',
+      },
     }}
     {...rest}
   >
@@ -197,7 +218,7 @@ const mdxComponents = {
     </InsidePreContext.Provider>
   ),
   img: MdxImage,
-  figure: ArticleFigure,
+  figure: (props: any) => (props['data-rehype-pretty-code-figure'] !== undefined ? <CodeFigure {...props} /> : <ArticleFigure {...props} />),
   figcaption: FigCaption,
   iframe: MdxIframe,
   'youtube-embed': YouTube,

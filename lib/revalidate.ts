@@ -1,6 +1,7 @@
 import type { NextApiResponse } from 'next'
 import { getCloudflarePurgeConfig, getIndexNowKey, getPublicHost } from './env'
 import { log } from './log'
+import { uploadNamesIn } from './uploadVariants'
 
 /**
  * On-demand ISR revalidation.
@@ -55,6 +56,26 @@ export function collectionPaths(collection: Collection, slug?: string, siblings:
     if (typeof s === 'string' && s && s !== slug) out.push(`${base}/${s}`)
   }
   return Array.from(new Set(out))
+}
+
+/** A public page and the content it renders (body, cover URLs, …). */
+export type ContentSource = { path: string; text: string }
+
+/**
+ * Pages whose content references at least one of the given uploads (original
+ * file names, e.g. "photo.png" for /uploads/photo.png). Used after the
+ * media-optimize backfill: those pages embed the uploads' srcsets, which only
+ * change when they are regenerated.
+ */
+export function pathsReferencingUploads(names: Iterable<string>, sources: readonly ContentSource[]): string[] {
+  const wanted = new Set(names)
+  if (!wanted.size) return []
+  const out = new Set<string>()
+  for (const s of sources) {
+    if (typeof s.path !== 'string' || !s.path.startsWith('/')) continue
+    if (uploadNamesIn(s.text).some((n) => wanted.has(n))) out.add(s.path)
+  }
+  return Array.from(out)
 }
 
 /**

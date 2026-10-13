@@ -6,54 +6,17 @@ import CoverImageField from '../../../components/Admin/shell/CoverImageField'
 import { useMdxItemEditor } from '../../../components/Admin/shell/useMdxItemEditor'
 import MdxItemEditorFrame from '../../../components/Admin/editor/MdxItemEditorFrame'
 import { DESCRIPTION_MAX, TITLE_MAX } from '../../../components/Admin/shell/publishChecks'
-
-type Frontmatter = {
-  title: string
-  description: string
-  date: string
-  tags: string[]
-  draft: boolean
-  cover: string
-}
-
-const todayISO = () => new Date().toISOString().slice(0, 10)
-
-const EMPTY: Frontmatter = {
-  title: '',
-  description: '',
-  date: todayISO(),
-  tags: [],
-  draft: true,
-  cover: '',
-}
-
-const fromServer = (f: Record<string, any>): Frontmatter => ({
-  title: String(f.title || ''),
-  description: String(f.description || ''),
-  date: String(f.date || todayISO()).slice(0, 10),
-  tags: Array.isArray(f.tags) ? f.tags.map(String) : [],
-  draft: Boolean(f.draft),
-  cover: String(f.cover || ''),
-})
-
-const toServer = (fm: Frontmatter, tags: string[]) => ({
-  title: fm.title,
-  description: fm.description || undefined,
-  date: fm.date,
-  tags: tags.length ? tags : undefined,
-  draft: fm.draft || undefined,
-  cover: fm.cover || undefined,
-})
+import { BLOG_EMPTY, blogFromServer, blogToServer, type BlogFrontmatter } from '../../../components/Admin/shell/itemFrontmatter'
 
 function BlogEditor() {
-  const ed = useMdxItemEditor<Frontmatter>({
+  const ed = useMdxItemEditor<BlogFrontmatter>({
     collection: 'blog',
     endpoint: '/api/admin/posts',
     noun: 'post',
-    empty: EMPTY,
+    empty: BLOG_EMPTY,
     listField: 'tags',
-    fromServer,
-    toServer,
+    fromServer: blogFromServer,
+    toServer: blogToServer,
   })
   const { fm, setFm } = ed
 
