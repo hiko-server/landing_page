@@ -104,3 +104,78 @@ export function entryStatus(node: unknown, now: CvNow = new Date()): EntryStatus
   const start = field(node, 'startDate')
   return start && isFuture(start, now) ? 'upcoming' : 'current'
 }
+
+// ── Stable anchors (/cv#cv-workExperience-0) ─────────────────────────────
+// Search results and the command palette link to CV sections and entries.
+// The index is the entry's position in the public (pruned) list of visible
+// entries — `list(section, key)` — before any renderer-specific filtering,
+// so the same entry has the same anchor on the A4 sheet and in the Reading
+// view. Certifications count across all visible issuers in order.
+
+/** Anchor id of a CV section: `cv-<sessionName>`. */
+export function cvSectionAnchor(sessionName: string): string {
+  return `cv-${sessionName}`
+}
+
+/** Anchor id of a CV entry: `cv-<sessionName>-<index>`. */
+export function cvEntryAnchor(sessionName: string, index: number): string {
+  return `cv-${sessionName}-${index}`
+}
+
+/** Visible entries of node[key] paired with their anchor index. */
+export function indexedList<T = any>(node: unknown, key: string): Array<{ item: T; index: number }> {
+  return list<T>(node, key).map((item, index) => ({ item, index }))
+}
+
+/** Every visible certificate across the visible issuers, with its anchor index. */
+export function indexedCertificates(section: unknown): Array<{ org: any; cert: any; index: number }> {
+  return list(section, 'certifications')
+    .flatMap((org) => list<any>(org, 'CertificationList').map((cert) => ({ org, cert })))
+    .map((row, index) => ({ ...row, index }))
+}
+
+// ── /cv and /cv/zh SEO copy ──────────────────────────────────────────────
+// Descriptions name only sections that actually have public content, in a
+// fixed order, so the meta description never promises a hidden section.
+
+/** Sections the descriptions mention, in mention order, with the list that holds their entries. */
+const SEO_SECTIONS: ReadonlyArray<{ name: string; keys: readonly string[]; en: string; zh: string }> = [
+  { name: 'education', keys: ['educationExperience'], en: 'education', zh: '教育' },
+  { name: 'workExperience', keys: ['experiences'], en: 'experience', zh: '工作经历' },
+  { name: 'project', keys: ['projectExperience'], en: 'projects', zh: '项目' },
+  { name: 'patents', keys: ['patentExperience'], en: 'patents', zh: '专利' },
+  { name: 'competitionAwards', keys: ['awards'], en: 'awards', zh: '奖项' },
+  { name: 'certification', keys: ['certifications'], en: 'certifications', zh: '证书' },
+]
+
+/** sessionNames (from SEO_SECTIONS) that have at least one visible entry in these public sections. */
+export function publicSeoSections(sections: readonly unknown[] | null | undefined): string[] {
+  const all = Array.isArray(sections) ? sections : []
+  return SEO_SECTIONS.filter(({ name, keys }) => {
+    const section = all.find((s) => isObject(s) && s.sessionName === name && s.isVisible !== false)
+    return !!section && keys.some((k) => list(section, k).length > 0)
+  }).map((s) => s.name)
+}
+
+function enumerate(items: string[], lang: CvLang): string {
+  if (items.length <= 1) return items.join('')
+  if (lang === 'zh') return `${items.slice(0, -1).join('、')}与${items[items.length - 1]}`
+  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
+}
+
+/**
+ * Meta description of the CV page in its language, from the public section
+ * names present (publicSeoSections) and the public Chinese name (zh only).
+ */
+export function cvDescription(lang: CvLang, opts: { present: readonly string[]; nameZh?: string }): string {
+  const parts = SEO_SECTIONS.filter((s) => opts.present.includes(s.name)).map((s) => (lang === 'zh' ? s.zh : s.en))
+  if (lang === 'zh') {
+    const who = opts.nameZh ? `${opts.nameZh}（Lucian）` : 'Li Yanpei（Lucian）'
+    return parts.length
+      ? `${who}的中文简历：${enumerate(parts, 'zh')}，可打印为 A4 PDF。`
+      : `${who}的中文简历，可打印为 A4 PDF。`
+  }
+  return parts.length
+    ? `The CV / résumé of Li Yanpei (Lucian) in English and Chinese: ${enumerate(parts, 'en')}, printable as an A4 PDF.`
+    : 'The CV / résumé of Li Yanpei (Lucian) in English and Chinese, printable as an A4 PDF.'
+}

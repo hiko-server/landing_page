@@ -1,3 +1,5 @@
+import { log } from './log'
+
 type MailOptions = { to: string; subject: string; text?: string; html?: string; replyTo?: string }
 
 /**
@@ -15,12 +17,12 @@ export async function sendMail(opts: MailOptions): Promise<{ ok: boolean; skippe
   const from = process.env.FROM_EMAIL || user
 
   if (!host || !user || !pass || !from) {
-    console.log(`[mail] SMTP not configured; skipped "${opts.subject}" → ${opts.to}`)
+    log.info('mail: SMTP not configured, message skipped', { subject: opts.subject, to: opts.to })
     return { ok: false, skipped: true }
   }
-  // dynamic import nodemailer only when configured
-  const nodemailer = (await import('nodemailer')).default
-  const transporter = nodemailer.createTransport({
+  // Loaded only when SMTP is configured (nodemailer ships its own types).
+  const { createTransport } = await import('nodemailer')
+  const transporter = createTransport({
     host,
     port,
     secure: port === 465,

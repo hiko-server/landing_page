@@ -3,7 +3,7 @@ import path from 'path'
 
 /**
  * The site's own tech stack, grouped and human-named — shared by
- * GET /api/stack (home page tech cloud) and the /uses page.
+ * GET /api/stack, the /uses page and /colophon.
  *
  * Derived from package.json (so it never goes stale) but curated: only
  * packages that say something about how the site is built are listed, with
@@ -42,9 +42,13 @@ const CATALOG: Array<{ label: string; hint: string; entries: Array<[pkg: string,
     label: 'Content',
     hint: 'Writing and publishing pipeline',
     entries: [
-      ['next-mdx-remote', 'MDX'],
+      // MDX is compiled on the server by unified + remark-mdx into a plain
+      // hast tree (no client-side eval), with GitHub-flavoured Markdown.
+      ['remark-mdx', 'MDX'],
+      ['remark-gfm', 'GFM'],
       ['shiki', 'Shiki'],
       ['gray-matter', 'gray-matter'],
+      ['sharp', 'sharp'],
       ['@vercel/og', 'OG images'],
     ],
   },
@@ -55,7 +59,6 @@ const CATALOG: Array<{ label: string; hint: string; entries: Array<[pkg: string,
       ['better-sqlite3', 'SQLite'],
       ['@aws-sdk/client-s3', 'Cloudflare R2'],
       ['mongodb', 'MongoDB'],
-      ['zod', 'Zod'],
     ],
   },
   {

@@ -1,11 +1,14 @@
 import React from 'react'
 import type { GetServerSideProps } from 'next'
-import { Flex } from '@chakra-ui/react'
+import { Box } from '@chakra-ui/react'
 
 import ContactPro from '../../components/Contact/ContactPro'
+import AvailabilityCard from '../../components/Contact/AvailabilityCard'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
-import { absUrl, breadcrumb, PERSON_ID } from '../../lib/schema'
+import PageHeader from '../../components/General-UI/PageHeader'
+import { absUrl, breadcrumb, ogImageUrl, PERSON_ID } from '../../lib/schema'
+import type { HomeData } from '../../lib/homeShape'
 
 type ContactHome = {
   hero: { email?: string; phone?: string; brand?: string }
@@ -13,17 +16,38 @@ type ContactHome = {
   contact: { heading?: string; blurb?: string; eyebrow?: string; reasons?: string[] }
 }
 
-type Props = { home: ContactHome | null }
+type Props = {
+  home: ContactHome | null
+  availability: NonNullable<HomeData['availability']> | null
+  /** QR code (inline SVG) of the vCard URL; null when it could not be generated. */
+  vcardQr: string | null
+  chromeSocials?: HomeData['socials'] | null
+}
 
-const Contact = ({ home }: Props) => {
+const FALLBACK_LEDE = 'Questions, roles or collaborations: send a note.'
+const VCARD_PATH = '/api/vcard'
+
+/**
+ * /contact — page header, the owner's availability (when set in the Home
+ * editor), the reach-me panel (copyable e-mail / phone, vCard download and
+ * QR) and the message form. Server-rendered on every request so edits to the
+ * home document show immediately; the form's human-check nonce is fetched
+ * client side.
+ */
+const Contact = ({ home, availability, vcardQr }: Props) => {
+  const lede = (home?.contact?.blurb ?? '').trim() || FALLBACK_LEDE
 
   return (
     <React.Fragment>
       <CustomHead
         title="Contact"
-        description="Get in touch with Li Yanpei (Lucian) — a software engineer in Hong Kong. Reach out via LinkedIn, GitHub, or the contact form for work and collaboration."
+        description="Get in touch with Li Yanpei (Lucian), a software engineer in Hong Kong: send a message, write an e-mail or save the contact card."
         url={absUrl('/contact')}
-        image={absUrl('/api/og?title=Contact&kind=page&subtitle=Let%27s%20get%20in%20touch')}
+        image={ogImageUrl({
+          kind: 'page',
+          title: 'Get in touch',
+          subtitle: 'Contact Li Yanpei (Lucian)',
+        })}
         jsonLd={[
           {
             '@context': 'https://schema.org',
@@ -39,9 +63,15 @@ const Contact = ({ home }: Props) => {
         ]}
       />
       <HeaderFooter>
-        <Flex direction="column" alignItems="center" justifyContent="center" px={{ base: 4, md: 10 }} py={{ base: 8, md: 12 }}>
-          <ContactPro home={home || undefined} headingAs="h1" />
-        </Flex>
+        <Box maxW="var(--container-content)" mx="auto" w="100%" px={[4, 6, 8]} py={[12, 16]}>
+          <PageHeader eyebrow="Contact" title="Get in touch" lede={lede} />
+          <AvailabilityCard availability={availability} />
+          <ContactPro
+            home={home || undefined}
+            hideBlurb
+            vcard={{ href: VCARD_PATH, qrSvg: vcardQr }}
+          />
+        </Box>
       </HeaderFooter>
     </React.Fragment>
   )
@@ -56,19 +86,37 @@ function defined<T extends Record<string, unknown>>(o: T): T {
 
 export const getServerSideProps: GetServerSideProps<Props> = async () => {
   let home: ContactHome | null = null
+  let availability: Props['availability'] = null
+  let chromeSocials: HomeData['socials'] | null | undefined
   try {
     const { readPublicHome } = await import('../../lib/home')
     const h = readPublicHome()
-    // Only what the contact panel renders — not the whole home document.
+    chromeSocials = h?.socials ?? null
+    // Only what the contact page renders — not the whole home document.
     if (h) {
       home = {
         hero: defined({ email: h.hero?.email, phone: h.hero?.phone, brand: h.hero?.brand }),
         socials: defined({ ...h.socials }),
         contact: defined({ ...h.contact }),
       }
+      availability = h.availability?.status ? defined({ ...h.availability }) : null
     }
   } catch {
-    /* best effort — render with what we have */
+    /* render with built-in defaults; the chrome loads the public home view itself */
   }
-  return { props: { home } }
+  let vcardQr: string | null = null
+  try {
+    const { qrSvg } = await import('../../lib/qr')
+    vcardQr = await qrSvg(absUrl(VCARD_PATH))
+  } catch {
+    /* the panel keeps the .vcf link without the QR code */
+  }
+  return {
+    props: {
+      home,
+      availability,
+      vcardQr,
+      ...(chromeSocials !== undefined ? { chromeSocials } : {}),
+    },
+  }
 }

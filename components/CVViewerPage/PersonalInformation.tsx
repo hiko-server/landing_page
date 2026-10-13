@@ -3,7 +3,9 @@ import { Box, Flex, Link, Text } from '@chakra-ui/react'
 import type { PersonalInformation } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'
 import { cvLabels, displayUrl, safeHref } from '../../lib/cvFormat'
-import { field, labelled } from './fields'
+import EmailText from '../Common/EmailText'
+import { cvSectionAnchor, field } from './fields'
+import { ANCHOR_SCROLL_MARGIN } from './primitives'
 
 /**
  * A4 header: name + website on the left, location and contact on the right,
@@ -11,6 +13,10 @@ import { field, labelled } from './fields'
  * listed in hiddenFields on an editor document) are skipped together with
  * their label and separator; the block disappears entirely only when nothing
  * at all is left to show.
+ *
+ * The name is a styled paragraph, not a heading: the page's h1 is the /cv
+ * PageHeader and the sheet's section titles are the h2s. E-mail and phone
+ * render through EmailText (Cloudflare-safe, hydration-safe).
  */
 
 export function composeName(data: Partial<PersonalInformation>, lang: CvLang): { main: string; aside: string } {
@@ -25,6 +31,12 @@ export function composeName(data: Partial<PersonalInformation>, lang: CvLang): {
   return { main: [lead, first].filter(Boolean).join(', '), aside: '' }
 }
 
+/** The public Chinese name ("李彦霈") from the Chinese CV's personal information; '' when hidden or unset. */
+export function publicNameZh(zhSections: ReadonlyArray<{ sessionName?: string }> | null | undefined): string {
+  const info = (zhSections || []).find((s) => s?.sessionName === 'personalInformation')
+  return info ? composeName(info as Partial<PersonalInformation>, 'zh').main : ''
+}
+
 const PersonalInformationSection = ({ data, lang = 'en' }: { data: PersonalInformation; lang?: CvLang }) => {
   const L = cvLabels(lang)
   const { main, aside } = composeName(data, lang)
@@ -37,9 +49,10 @@ const PersonalInformationSection = ({ data, lang = 'en' }: { data: PersonalInfor
 
   const hasHeader = !!(main || aside || website || address || phone || email)
   if (!hasHeader && !intro) return null
+  const sep = lang === 'zh' ? '：' : ': '
 
   return (
-    <Box as="header" className="cv-sheet-section">
+    <Box as="header" className="cv-sheet-section" id={cvSectionAnchor('personalInformation')} sx={{ scrollMarginTop: ANCHOR_SCROLL_MARGIN }}>
       {hasHeader ? (
         <Flex
           px="10px"
@@ -51,7 +64,7 @@ const PersonalInformationSection = ({ data, lang = 'en' }: { data: PersonalInfor
         >
           <Box minW={0}>
             {main || aside ? (
-              <Text as="h2" fontSize="24px" fontWeight={600} lineHeight="1.2">
+              <Text fontSize="24px" fontWeight={600} lineHeight="1.2">
                 {main}
                 {aside ? (
                   <Text as="span" fontSize="15px" fontWeight={500} color="#555" ml="8px">
@@ -82,13 +95,25 @@ const PersonalInformationSection = ({ data, lang = 'en' }: { data: PersonalInfor
               {address ? <Text>{address}</Text> : null}
               {phone || email ? (
                 <Text>
-                  {labelled(L.phone, phone, lang)}
+                  {phone ? (
+                    <>
+                      {L.phone}
+                      {sep}
+                      <EmailText value={phone} />
+                    </>
+                  ) : null}
                   {phone && email ? (
                     <Text as="span" px="5px">
                       |
                     </Text>
                   ) : null}
-                  {labelled(L.email, email, lang)}
+                  {email ? (
+                    <>
+                      {L.email}
+                      {sep}
+                      <EmailText value={email} />
+                    </>
+                  ) : null}
                 </Text>
               ) : null}
             </Flex>

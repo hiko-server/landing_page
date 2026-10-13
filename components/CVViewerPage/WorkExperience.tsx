@@ -3,25 +3,26 @@ import { Text } from '@chakra-ui/react'
 import type { Experiences } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'
 import { cvLabels } from '../../lib/cvFormat'
-import { bullets, entryRange, field, list } from './fields'
+import { bullets, cvEntryAnchor, cvSectionAnchor, entryRange, field, indexedList, list } from './fields'
 import { EntryStack, EntryText, EntryTitle, FeatureBullets, MetaLine, SheetEntry, SheetSection } from './primitives'
 
 const WorkExperience = ({ data, lang = 'en' }: { data: Experiences; lang?: CvLang }) => {
   const L = cvLabels(lang)
-  const items = list(data, 'experiences').filter(
-    (e) => field(e, 'jobTitle') || field(e, 'companyName') || field(e, 'jobDescription') || list(e, 'features').length,
+  const items = indexedList(data, 'experiences').filter(
+    ({ item: e }) => field(e, 'jobTitle') || field(e, 'companyName') || field(e, 'jobDescription') || list(e, 'features').length,
   )
   if (!items.length) return null
   return (
-    <SheetSection title={data.headerName}>
+    <SheetSection title={data.headerName} id={cvSectionAnchor('workExperience')}>
       <EntryStack>
-        {items.map((exp, k) => {
+        {items.map(({ item: exp, index }) => {
           const title = field(exp, 'jobTitle')
           const company = field(exp, 'companyName')
           const skills = bullets(exp, 'relatedSkills')
           return (
             <SheetEntry
-              key={k}
+              key={index}
+              id={cvEntryAnchor('workExperience', index)}
               left={
                 <>
                   {title || company ? (

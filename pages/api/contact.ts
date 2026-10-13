@@ -1,4 +1,3 @@
-import type { NextApiRequest, NextApiResponse } from 'next'
 import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
 import { rateLimit } from '../../lib/rateLimit'
@@ -7,6 +6,7 @@ import { getJwtSecret } from '../../lib/env'
 import { inboxCapacity, storeInboxMessage } from '../../lib/inbox'
 import { sharedReplayGuard } from '../../lib/security/replayGuard'
 import { verifyChallenge } from '../../lib/security/contactChallenge'
+import { withApi } from '../../lib/apiHandler'
 
 /**
  * Contact endpoint.
@@ -39,146 +39,144 @@ const UNAVAILABLE = 'Message could not be delivered right now — please email d
 const BUSY =
   'The inbox is taking a short break after an unusual number of messages. Please try again later, or email directly.'
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-
-  try {
-    const rl = rateLimit(req, 5, 10 * 60 * 1000)
-    res.setHeader('X-RateLimit-Remaining', String(rl.remaining))
-    if (!rl.allowed) return res.status(429).json({ error: 'Too many requests, try later' })
-
-    const { name, email, subject, message, nonce, mathAnswer, hp } = req.body || {}
-
-    // 1. Honeypot (silent accept — pretend it worked so bot doesn't retry)
-    if (typeof hp === 'string' && hp.trim().length > 0) {
-      return res.status(200).json({ ok: true })
-    }
-
-    // 2. Required fields
-    if (!name || !email || !subject || !message) {
-      return res.status(400).json({ error: 'Missing required fields' })
-    }
-
-    // 3. Nonce
-    if (!nonce || typeof nonce !== 'string') {
-      return res.status(400).json({ error: 'Missing verification token' })
-    }
-    let nonceExpiresAt: number
-    let nonceId: unknown
-    let answerHash: unknown
-    try {
-      const decoded = jwt.verify(nonce, getJwtSecret(), { algorithms: ['HS256'], audience: 'contact-form' }) as {
-        iat?: number
-        exp?: number
-        jti?: unknown
-        ah?: unknown
-        t?: string
-      }
-      if (decoded.t !== 'contact-nonce') {
-        return res.status(400).json({ error: 'Invalid verification token' })
-      }
-      const issuedAt = (decoded.iat || 0) * 1000
-      const elapsed = Date.now() - issuedAt
-      if (elapsed < 2_000) {
-        return res.status(400).json({ error: 'Please slow down a moment.' })
-      }
-      nonceExpiresAt = (decoded.exp || 0) * 1000
-      nonceId = decoded.jti
-      answerHash = decoded.ah
-    } catch {
-      return res.status(400).json({ error: 'Verification token expired — refresh the form.' })
-    }
-
-    // 4. Sum. Nonces minted before the server-side check existed carry no
-    // answer hash; for those (≤ 30 min after a deploy) presence is enough.
-    if (!mathAnswer && mathAnswer !== 0) {
-      return res.status(400).json({ error: 'Please complete the human check.' })
-    }
-    if (answerHash !== undefined && !verifyChallenge(getJwtSecret(), nonceId, mathAnswer, answerHash)) {
-      // One attempt per challenge: burn the nonce so the 17 possible sums
-      // can't be tried against it. The form fetches a fresh one.
-      nonces().claim(nonceKey(nonce, nonceId), nonceExpiresAt)
-      return res
-        .status(400)
-        .json({ error: 'That answer to the human check isn’t right — here is a new one.', code: 'BAD_CHALLENGE' })
-    }
-
-    // 5. Sanitize: strip CR/LF (mail-header injection) + cap lengths.
-    const clean = (v: unknown, max: number) =>
-      String(v ?? '').replace(/[\r\n]+/g, ' ').slice(0, max).trim()
-    const safeName = clean(name, 200)
-    const safeEmail = clean(email, 254)
-    const safeSubject = clean(subject, 200)
-    const safeMessage = String(message ?? '').slice(0, 10_000)
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeEmail)) {
-      return res.status(400).json({ error: 'Please enter a valid email address.' })
-    }
-
-    // 6. One message per nonce. Claimed now, released below if nothing was accepted.
-    const key = nonceKey(nonce, nonceId)
-    if (!nonces().claim(key, nonceExpiresAt)) {
-      return res.status(400).json({ error: 'Verification token expired — refresh the form.' })
-    }
-
-    const to = process.env.NOTIFY_EMAIL || process.env.ADMIN_EMAIL
-    const capacity = inboxCapacity()
-    const refuse = (retryAfterMs: number | null, error: string) => {
-      nonces().release(key)
-      if (retryAfterMs) res.setHeader('Retry-After', String(Math.max(1, Math.ceil(retryAfterMs / 1000))))
-      return res.status(503).json({ error })
-    }
-    // Inbox paused and no recipient to email: nothing could accept the message.
-    if (!capacity.ok && !to) return refuse(capacity.retryAfterMs, BUSY)
-
-    // 7. Deliver — and NEVER drop the message silently. The message is
-    // emailed when a recipient and SMTP are configured, and kept in the admin
-    // Inbox (data/contact-inbox.jsonl, bind-mounted) unless a site-wide cap
-    // is reached; the owner can read and answer it from
-    // /admin/dashboard?tab=inbox even without SMTP.
-    let delivered = false
-    if (to) {
-      try {
-        const result = await sendMail({
-          to,
-          subject: `[Contact] ${safeSubject}`,
-          text: `From: ${safeName} <${safeEmail}>\n\n${safeMessage}`,
-          // Hitting "Reply" answers the visitor directly.
-          replyTo: safeEmail,
-        })
-        delivered = !!result?.ok
-      } catch (e) {
-        console.error('[contact] sendMail threw', e)
-      }
-    }
-
-    let persisted = false
-    let paused: { retryAfterMs: number | null } | null = null
-    try {
-      const stored = storeInboxMessage({
-        name: safeName,
-        email: safeEmail,
-        subject: safeSubject,
-        message: safeMessage,
-        delivered,
-      })
-      if (stored.stored) {
-        persisted = true
-        if (!delivered) console.error('[contact] mail NOT delivered — message kept in the admin Inbox')
-      } else {
-        paused = { retryAfterMs: stored.retryAfterMs }
-      }
-    } catch (e) {
-      console.error('[contact] FAILED to store the contact message in the inbox', e)
-    }
-
-    // Only claim success when the message actually exists somewhere.
-    if (!delivered && !persisted) {
-      return paused ? refuse(paused.retryAfterMs, BUSY) : refuse(null, UNAVAILABLE)
-    }
-
-    return res.status(200).json({ ok: true })
-  } catch (err) {
-    console.error('Contact form error:', err)
-    return res.status(500).json({ error: 'Internal server error' })
+export default withApi('contact', async (req, res, { log }) => {
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'POST')
+    return res.status(405).json({ error: 'Method not allowed' })
   }
-}
+
+  const rl = rateLimit(req, 5, 10 * 60 * 1000)
+  res.setHeader('X-RateLimit-Remaining', String(rl.remaining))
+  if (!rl.allowed) return res.status(429).json({ error: 'Too many requests, try later' })
+
+  const { name, email, subject, message, nonce, mathAnswer, hp } = req.body || {}
+
+  // 1. Honeypot (silent accept — pretend it worked so bot doesn't retry)
+  if (typeof hp === 'string' && hp.trim().length > 0) {
+    return res.status(200).json({ ok: true })
+  }
+
+  // 2. Required fields
+  if (!name || !email || !subject || !message) {
+    return res.status(400).json({ error: 'Missing required fields' })
+  }
+
+  // 3. Nonce
+  if (!nonce || typeof nonce !== 'string') {
+    return res.status(400).json({ error: 'Missing verification token' })
+  }
+  let nonceExpiresAt: number
+  let nonceId: unknown
+  let answerHash: unknown
+  try {
+    const decoded = jwt.verify(nonce, getJwtSecret(), { algorithms: ['HS256'], audience: 'contact-form' }) as {
+      iat?: number
+      exp?: number
+      jti?: unknown
+      ah?: unknown
+      t?: string
+    }
+    if (decoded.t !== 'contact-nonce') {
+      return res.status(400).json({ error: 'Invalid verification token' })
+    }
+    const issuedAt = (decoded.iat || 0) * 1000
+    const elapsed = Date.now() - issuedAt
+    if (elapsed < 2_000) {
+      return res.status(400).json({ error: 'Please slow down a moment.' })
+    }
+    nonceExpiresAt = (decoded.exp || 0) * 1000
+    nonceId = decoded.jti
+    answerHash = decoded.ah
+  } catch {
+    return res.status(400).json({ error: 'Verification token expired — refresh the form.' })
+  }
+
+  // 4. Sum. Nonces minted before the server-side check existed carry no
+  // answer hash; for those (≤ 30 min after a deploy) presence is enough.
+  if (!mathAnswer && mathAnswer !== 0) {
+    return res.status(400).json({ error: 'Please complete the human check.' })
+  }
+  if (answerHash !== undefined && !verifyChallenge(getJwtSecret(), nonceId, mathAnswer, answerHash)) {
+    // One attempt per challenge: burn the nonce so the 17 possible sums
+    // can't be tried against it. The form fetches a fresh one.
+    nonces().claim(nonceKey(nonce, nonceId), nonceExpiresAt)
+    return res
+      .status(400)
+      .json({ error: 'That answer to the human check isn’t right — here is a new one.', code: 'BAD_CHALLENGE' })
+  }
+
+  // 5. Sanitize: strip CR/LF (mail-header injection) + cap lengths.
+  const clean = (v: unknown, max: number) =>
+    String(v ?? '').replace(/[\r\n]+/g, ' ').slice(0, max).trim()
+  const safeName = clean(name, 200)
+  const safeEmail = clean(email, 254)
+  const safeSubject = clean(subject, 200)
+  const safeMessage = String(message ?? '').slice(0, 10_000)
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeEmail)) {
+    return res.status(400).json({ error: 'Please enter a valid email address.' })
+  }
+
+  // 6. One message per nonce. Claimed now, released below if nothing was accepted.
+  const key = nonceKey(nonce, nonceId)
+  if (!nonces().claim(key, nonceExpiresAt)) {
+    return res.status(400).json({ error: 'Verification token expired — refresh the form.' })
+  }
+
+  const to = process.env.NOTIFY_EMAIL || process.env.ADMIN_EMAIL
+  const capacity = inboxCapacity()
+  const refuse = (retryAfterMs: number | null, error: string) => {
+    nonces().release(key)
+    if (retryAfterMs) res.setHeader('Retry-After', String(Math.max(1, Math.ceil(retryAfterMs / 1000))))
+    return res.status(503).json({ error })
+  }
+  // Inbox paused and no recipient to email: nothing could accept the message.
+  if (!capacity.ok && !to) return refuse(capacity.retryAfterMs, BUSY)
+
+  // 7. Deliver — and NEVER drop the message silently. The message is
+  // emailed when a recipient and SMTP are configured, and kept in the admin
+  // Inbox (data/contact-inbox.jsonl, bind-mounted) unless a site-wide cap
+  // is reached; the owner can read and answer it from
+  // /admin/dashboard?tab=inbox even without SMTP.
+  let delivered = false
+  if (to) {
+    try {
+      const result = await sendMail({
+        to,
+        subject: `[Contact] ${safeSubject}`,
+        text: `From: ${safeName} <${safeEmail}>\n\n${safeMessage}`,
+        // Hitting "Reply" answers the visitor directly.
+        replyTo: safeEmail,
+      })
+      delivered = !!result?.ok
+    } catch (err) {
+      log.error('contact: sendMail threw', { err })
+    }
+  }
+
+  let persisted = false
+  let paused: { retryAfterMs: number | null } | null = null
+  try {
+    const stored = storeInboxMessage({
+      name: safeName,
+      email: safeEmail,
+      subject: safeSubject,
+      message: safeMessage,
+      delivered,
+    })
+    if (stored.stored) {
+      persisted = true
+      if (!delivered) log.warn('contact: mail not delivered, message kept in the admin Inbox')
+    } else {
+      paused = { retryAfterMs: stored.retryAfterMs }
+    }
+  } catch (err) {
+    log.error('contact: failed to store the message in the inbox', { err })
+  }
+
+  // Only claim success when the message actually exists somewhere.
+  if (!delivered && !persisted) {
+    return paused ? refuse(paused.retryAfterMs, BUSY) : refuse(null, UNAVAILABLE)
+  }
+
+  return res.status(200).json({ ok: true })
+})

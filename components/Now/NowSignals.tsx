@@ -17,36 +17,26 @@ import { formatPostDate } from '../../lib/postDate'
 const mono = 'var(--font-geist-mono), ui-monospace, monospace'
 const ease = 'var(--ease-out-quart, cubic-bezier(0.22,1,0.36,1))'
 
-export function AutoUpdatedLabel({ composed }: { composed: string }) {
+/**
+ * "Updated Oct 13, 2026 · from CV and writing" — when the newest source of
+ * the signals last changed (lib/nowSignals signalsUpdatedOn, a YYYY-MM-DD
+ * computed on the server; formatted in UTC so server and client agree).
+ */
+export function UpdatedLine({ updatedOn }: { updatedOn: string }) {
   return (
-    <Flex align="center" gap={2} fontFamily={mono} fontSize="11px" letterSpacing="0.04em" color="page.fg-secondary">
-      <Box as="span" position="relative" w="6px" h="6px" flexShrink={0} aria-hidden>
-        <Box as="span" className="pulse-dot" position="absolute" inset={0} borderRadius="full" />
-        <Box as="span" position="absolute" inset={0} borderRadius="full" bg="var(--live-green)" />
-      </Box>
-      <Text as="span">
-        Auto-updated from my CV and writing
-        {composed ? (
-          <>
-            {' · '}
-            <time dateTime={composed}>{formatPostDate(composed)}</time>
-          </>
-        ) : null}
-      </Text>
-    </Flex>
+    <Text fontFamily={mono} fontSize="12px" letterSpacing="0.02em" color="page.fg-secondary" className="tnum" m={0}>
+      {updatedOn ? (
+        <>
+          Updated <time dateTime={updatedOn}>{formatPostDate(updatedOn)}</time> · from CV and writing
+        </>
+      ) : (
+        'From CV and writing'
+      )}
+    </Text>
   )
 }
 
-export default function NowSignals({
-  signals,
-  variant,
-  startAt = 2,
-}: {
-  signals: Signals
-  variant: 'full' | 'compact'
-  /** Section number of the first group (full variant). */
-  startAt?: number
-}) {
+export default function NowSignals({ signals, variant }: { signals: Signals; variant: 'full' | 'compact' }) {
   const compact = variant === 'compact'
   const groups: Array<{ key: string; title: string; body: React.ReactNode }> = []
 
@@ -101,7 +91,7 @@ export default function NowSignals({
 
   return (
     <Flex direction="column" gap={compact ? 6 : [10, 12]}>
-      {groups.map((g, i) => (
+      {groups.map((g) => (
         <Box as="section" key={g.key} aria-labelledby={`now-${variant}-${g.key}`}>
           <Text
             as={compact ? 'h3' : 'h2'}
@@ -114,11 +104,6 @@ export default function NowSignals({
             color="page.fg-secondary"
             mb={compact ? 2 : 5}
           >
-            {compact ? null : (
-              <Text as="span" aria-hidden mr="0.6em">
-                [{String(startAt + i).padStart(2, '0')}]
-              </Text>
-            )}
             {g.title}
           </Text>
           {g.body}
@@ -210,7 +195,7 @@ function WritingCard({
           {kind}
         </Text>
         {item.date ? (
-          <Text fontFamily={mono} fontSize="11px" color="page.fg-secondary" whiteSpace="nowrap">
+          <Text fontFamily={mono} fontSize="11px" color="page.fg-secondary" whiteSpace="nowrap" className="tnum">
             {item.dateTime ? <time dateTime={item.dateTime}>{item.date}</time> : item.date}
           </Text>
         ) : null}

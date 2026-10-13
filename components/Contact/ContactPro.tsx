@@ -6,6 +6,7 @@ import {
   Heading,
   IconButton,
   Input,
+  Link,
   Textarea,
   Text,
   FormControl,
@@ -14,16 +15,17 @@ import {
   FormLabel,
   HStack,
   VStack,
-  useToast,
-  Tooltip,
   Divider,
   Select,
+  chakra,
 } from '@chakra-ui/react'
 import { keyframes } from '@emotion/react'
-import { FaGithub, FaGitlab, FaLinkedin, FaWhatsapp, FaCopy } from 'react-icons/fa'
+import { FaGithub, FaGitlab, FaLinkedin, FaWhatsapp } from 'react-icons/fa'
 import { motion, useReducedMotion } from 'framer-motion'
 
 import { safeHref } from '../../lib/cvFormat'
+import CopyButton from '../General-UI/CopyButton'
+import EmailText from '../Common/EmailText'
 import {
   MESSAGE_MAX,
   isContactValid,
@@ -89,6 +91,23 @@ const inputProps = {
 type Sent = { name: string; email: string; subject: string }
 
 /**
+ * Rows of the form that sit side by side once the form itself is at least
+ * 30rem wide (a container query on the <form>, so the layout follows the
+ * panel's width — not the viewport's — and never overflows on tablets).
+ */
+const responsiveRow = {
+  flexDirection: 'column',
+  '@container (min-width: 30rem)': { flexDirection: 'row' },
+} as const
+
+/** The actions: stacked full-width below 30rem, one wrapping row above. */
+const actionRow = {
+  flexDirection: 'column',
+  alignItems: 'stretch',
+  '@container (min-width: 30rem)': { flexDirection: 'row', alignItems: 'center' },
+} as const
+
+/**
  * Contact panel: optional "reach me" info card + the message form.
  *
  *   - Inline validation (shown once a field is left, or after a send
@@ -101,18 +120,26 @@ type Sent = { name: string; email: string; subject: string }
  *     with { name, email, subject, message, nonce, mathAnswer, hp }.
  *   - Human check: signed nonce (server-verified, ≥ 2s old) + visible sum +
  *     hidden honeypot. Drafts autosave locally and clear on send.
+ *   - E-mail / phone render through EmailText (Cloudflare-safe, no hydration
+ *     mismatch) with morphing copy buttons; /contact adds "Save contact
+ *     (.vcf)" and a QR code for the vCard (`vcard`).
  */
 export default function ContactPro({
   home,
   formOnly,
   headingAs = 'h2',
+  hideBlurb,
+  vcard,
 }: {
   home?: HomeData
   formOnly?: boolean
-  /** The info-panel heading is the page title on /contact. */
+  /** Heading level of the info panel (the page title is an h1 above it on /contact). */
   headingAs?: 'h1' | 'h2'
+  /** Leave the blurb out of the info panel (when the page header already shows it). */
+  hideBlurb?: boolean
+  /** "Save contact (.vcf)" link and, from md up, a QR code (inline SVG, lib/qr.ts) of the same URL. */
+  vcard?: { href: string; qrSvg?: string | null }
 }) {
-  const toast = useToast()
   const reduce = useReducedMotion()
 
   // Admin copy wins when non-blank; blank / missing entries use the defaults.
@@ -285,13 +312,6 @@ export default function ContactPro({
     if (sent) successRef.current?.focus()
   }, [sent])
 
-  const onCopy = (txt: string, label: string) => {
-    navigator.clipboard
-      .writeText(txt)
-      .then(() => toast({ status: 'success', title: label, duration: 2000 }))
-      .catch(() => toast({ status: 'error', title: 'Copy failed' }))
-  }
-
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setAttempted(true)
@@ -345,9 +365,9 @@ export default function ContactPro({
   }
 
   const contactRows = [
-    email ? { label: 'email', value: email, copied: 'Email copied' } : null,
-    phone ? { label: 'tel', value: phone, copied: 'Phone copied' } : null,
-  ].filter((r): r is { label: string; value: string; copied: string } => r !== null)
+    email ? { label: 'email', value: email, copyLabel: 'Copy email address', copied: 'Email copied' } : null,
+    phone ? { label: 'tel', value: phone, copyLabel: 'Copy phone number', copied: 'Phone number copied' } : null,
+  ].filter((r): r is { label: string; value: string; copyLabel: string; copied: string } => r !== null)
 
   const socials = [
     { name: 'GitHub', icon: <FaGithub />, href: safeHref(home?.socials?.github) },
@@ -384,41 +404,78 @@ export default function ContactPro({
               <Heading as={headingAs} size="md" fontWeight={500} letterSpacing="-0.015em" color="page.fg">
                 {headingText}
               </Heading>
-              <Text fontSize="sm" color="page.fg-secondary" mt={1}>
-                {blurbText}
-              </Text>
+              {hideBlurb ? null : (
+                <Text fontSize="sm" color="page.fg-secondary" mt={1}>
+                  {blurbText}
+                </Text>
+              )}
             </Box>
 
             {contactRows.length > 0 && (
               <>
                 <Divider borderColor="page.border" />
-                <VStack as="ul" listStyleType="none" align="stretch" spacing={2}>
-                  {contactRows.map((it) => (
-                    <Flex as="li" key={it.label} justify="space-between" align="center" gap={2}>
-                      <HStack spacing={3} minW={0}>
-                        <Text fontFamily={monoFont} fontSize="11px" color="page.fg-secondary" letterSpacing="0.04em" w="44px" flexShrink={0}>
-                          {it.label}
-                        </Text>
-                        <Text fontSize="14px" color="page.fg" isTruncated>
-                          {it.value}
-                        </Text>
-                      </HStack>
-                      <Tooltip label="Copy" hasArrow openDelay={300}>
-                        <IconButton
-                          aria-label={`Copy ${it.label === 'tel' ? 'phone number' : 'email address'}`}
-                          icon={<FaCopy />}
-                          size="sm"
-                          variant="ghost"
-                          color="page.fg-secondary"
-                          _hover={{ color: 'var(--accent)', bg: 'transparent' }}
-                          onClick={() => onCopy(it.value, it.copied)}
-                        />
-                      </Tooltip>
-                    </Flex>
-                  ))}
-                </VStack>
+                <Box>
+                  <VStack as="ul" listStyleType="none" align="stretch" spacing={2}>
+                    {contactRows.map((it) => (
+                      <Flex as="li" key={it.label} justify="space-between" align="center" gap={2}>
+                        <HStack spacing={3} minW={0}>
+                          <Text as="span" fontFamily={monoFont} fontSize="11px" color="page.fg-secondary" letterSpacing="0.04em" w="44px" flexShrink={0}>
+                            {it.label}
+                          </Text>
+                          <Text as="span" fontSize="14px" color="page.fg" isTruncated>
+                            <EmailText value={it.value} />
+                          </Text>
+                        </HStack>
+                        <CopyButton value={it.value} label={it.copyLabel} srLabel={it.copied} />
+                      </Flex>
+                    ))}
+                  </VStack>
+                  {vcard ? (
+                    <Link
+                      href={vcard.href}
+                      download="Li-Yanpei.vcf"
+                      display="inline-flex"
+                      alignItems="center"
+                      gap={1.5}
+                      mt={3}
+                      py={1}
+                      fontFamily={monoFont}
+                      fontSize="12px"
+                      color="accent.text"
+                      textDecoration="underline"
+                      textUnderlineOffset="3px"
+                      textDecorationColor="var(--accent-ring)"
+                      _hover={{ textDecorationColor: 'currentColor' }}
+                    >
+                      Save contact (.vcf)
+                    </Link>
+                  ) : null}
+                </Box>
               </>
             )}
+
+            {vcard?.qrSvg ? (
+              <Flex display={{ base: 'none', md: 'flex' }} align="center" gap={4}>
+                <Box
+                  role="img"
+                  aria-label="QR code that saves this contact"
+                  w="96px"
+                  h="96px"
+                  p="8px"
+                  flexShrink={0}
+                  borderRadius="md"
+                  border="1px solid"
+                  borderColor="page.border"
+                  bg="white"
+                  color="#0a0a0a"
+                  sx={{ '& svg': { display: 'block', width: '100%', height: '100%' } }}
+                  dangerouslySetInnerHTML={{ __html: vcard.qrSvg }}
+                />
+                <Text fontFamily={monoFont} fontSize="11px" letterSpacing="0.04em" color="page.fg-secondary">
+                  Scan to save contact
+                </Text>
+              </Flex>
+            ) : null}
 
             {socials.length > 0 && (
               <>
@@ -508,9 +565,16 @@ export default function ContactPro({
               ▸ Send a message
             </Text>
 
-            <form ref={formRef} onSubmit={onSubmit} onFocus={warmNonce} noValidate aria-describedby={serverError ? 'contact-server-error' : undefined}>
+            <chakra.form
+              ref={formRef}
+              onSubmit={onSubmit}
+              onFocus={warmNonce}
+              noValidate
+              aria-describedby={serverError ? 'contact-server-error' : undefined}
+              sx={{ containerType: 'inline-size' }}
+            >
               <VStack spacing={5} align="stretch">
-                <Flex gap={4} direction={{ base: 'column', sm: 'row' }} align="flex-start">
+                <Flex gap={4} align="flex-start" sx={responsiveRow}>
                   <FormControl isRequired isInvalid={!!shown.name} flex={1} minW={0}>
                     <FormLabel {...labelProps}>Name</FormLabel>
                     <Input ref={nameRef} value={values.name} onChange={set('name')} onBlur={touch('name')} autoComplete="name" placeholder="Your name" {...inputProps} />
@@ -532,7 +596,7 @@ export default function ContactPro({
                   </FormControl>
                 </Flex>
 
-                <Flex gap={4} direction={{ base: 'column', sm: 'row' }} align="flex-start">
+                <Flex gap={4} align="flex-start" sx={responsiveRow}>
                   <FormControl flex={1} minW={0}>
                     <FormLabel {...labelProps}>Reason</FormLabel>
                     <Select value={values.reason} onChange={set('reason')} {...inputProps}>
@@ -652,15 +716,16 @@ export default function ContactPro({
                   </Flex>
                 )}
 
-                <Flex direction={{ base: 'column', sm: 'row' }} justify="space-between" align={{ base: 'stretch', sm: 'center' }} gap={3} pt={1}>
+                <Flex flexWrap="wrap" gap={3} pt={1} sx={actionRow}>
                   <HStack spacing={2}>
                     <Button
                       type="submit"
-                      flex={{ base: 1, sm: 'none' }}
-                      bg="var(--accent)"
-                      color="white"
-                      _hover={{ bg: '#4f46e5', _disabled: { bg: 'var(--accent)' } }}
-                      _active={{ bg: '#4338ca' }}
+                      flex="none"
+                      sx={{ '@container (width < 30rem)': { flex: '1' } }}
+                      bg="accent.solid"
+                      color="accent.fg"
+                      _hover={{ bg: 'accent.solid-hover', _disabled: { bg: 'accent.solid' } }}
+                      _active={{ bg: 'accent.solid-active' }}
                       _disabled={{ opacity: 0.45, cursor: 'not-allowed' }}
                       _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '3px' }}
                       isDisabled={!valid}
@@ -668,7 +733,10 @@ export default function ContactPro({
                       loadingText="Sending…"
                       aria-describedby={!valid && hint ? hintId : undefined}
                     >
-                      Send message →
+                      Send message
+                      <Box as="span" aria-hidden className="nudge" ml={1.5}>
+                        →
+                      </Box>
                     </Button>
                     <Button
                       variant="ghost"
@@ -689,13 +757,18 @@ export default function ContactPro({
                         `Reason: ${values.reason}\n\n${values.message}`,
                       )}`}
                       variant="ghost"
+                      ml="auto"
+                      whiteSpace="nowrap"
                       color="page.fg-secondary"
                       _hover={{ color: 'page.fg', bg: 'transparent' }}
                       fontFamily={monoFont}
                       fontSize="13px"
                       fontWeight={400}
                     >
-                      Use mail app ↗
+                      Use mail app
+                      <Box as="span" aria-hidden className="nudge-ne" display="inline-block" ml={1.5}>
+                        ↗
+                      </Box>
                     </Button>
                   )}
                 </Flex>
@@ -705,7 +778,7 @@ export default function ContactPro({
                   </Text>
                 )}
               </VStack>
-            </form>
+            </chakra.form>
           </>
         )}
       </MotionBox>

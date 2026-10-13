@@ -2,23 +2,24 @@ import React from 'react'
 import type { Project } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'
 import { useReferenceMonth } from '../../lib/clock'
-import { entryRange, field, list } from './fields'
+import { cvEntryAnchor, cvSectionAnchor, entryRange, field, indexedList, list } from './fields'
 import { EntryStack, EntryText, EntryTitle, FeatureBullets, MetaLine, SheetEntry, SheetSection } from './primitives'
 
 const ProjectSection = ({ data, lang = 'en' }: { data: Project; lang?: CvLang }) => {
   const month = useReferenceMonth()
-  const items = list(data, 'projectExperience').filter(
-    (p) => field(p, 'title') || field(p, 'description') || list(p, 'features').length,
+  const items = indexedList(data, 'projectExperience').filter(
+    ({ item: p }) => field(p, 'title') || field(p, 'description') || list(p, 'features').length,
   )
   if (!items.length) return null
   return (
-    <SheetSection title={data.headerName}>
+    <SheetSection title={data.headerName} id={cvSectionAnchor('project')}>
       <EntryStack>
-        {items.map((pro, k) => {
+        {items.map(({ item: pro, index }) => {
           const title = field(pro, 'title')
           return (
             <SheetEntry
-              key={k}
+              key={index}
+              id={cvEntryAnchor('project', index)}
               left={
                 <>
                   {title ? <EntryTitle>{title}</EntryTitle> : null}
