@@ -23,17 +23,21 @@ export default function ScaledSheet({
   maxScale = 1,
   pageGuides = false,
   onScale,
+  onPages,
 }: {
   children: React.ReactNode
   zoom?: 'fit' | number
   maxScale?: number
   pageGuides?: boolean
   onScale?: (scale: number) => void
+  /** With `pageGuides`: called with the measured number of A4 pages (Studio readiness check). */
+  onPages?: (pages: number) => void
 }) {
   const outerRef = useRef<HTMLDivElement | null>(null)
   const sheetRef = useRef<HTMLDivElement | null>(null)
   const [fit, setFit] = useState<number | null>(null)
-  const [pages, setPages] = useState(1)
+  // null until the sheet has been measured (a hidden pane is never measured).
+  const [pages, setPages] = useState<number | null>(null)
 
   useIsoLayoutEffect(() => {
     const el = outerRef.current
@@ -53,7 +57,9 @@ export default function ScaledSheet({
     const el = sheetRef.current
     if (!el || typeof ResizeObserver === 'undefined') return
     const ro = new ResizeObserver(() => {
-      // offsetHeight is in the sheet's own (un-zoomed) CSS pixels.
+      // offsetHeight is in the sheet's own (un-zoomed) CSS pixels; 0 while
+      // the sheet is not displayed (a hidden pane) — nothing to measure then.
+      if (!el.offsetHeight) return
       setPages(Math.max(1, Math.ceil((el.offsetHeight - 2) / A4_HEIGHT_PX)))
     })
     ro.observe(el)
@@ -64,6 +70,9 @@ export default function ScaledSheet({
   useEffect(() => {
     if (scale && onScale) onScale(scale)
   }, [scale, onScale])
+  useEffect(() => {
+    if (pageGuides && onPages && pages !== null) onPages(pages)
+  }, [pageGuides, pages, onPages])
 
   return (
     <Box ref={outerRef} className="cv-print-flow" w="100%" overflowX={zoom === 'fit' ? 'visible' : 'auto'}>
@@ -79,7 +88,7 @@ export default function ScaledSheet({
         }}
       >
         <Box ref={sheetRef}>{children}</Box>
-        {pageGuides && pages > 1
+        {pageGuides && pages !== null && pages > 1
           ? Array.from({ length: pages - 1 }, (_, i) => (
               <Box
                 key={i}

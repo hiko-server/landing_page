@@ -7,6 +7,7 @@ import { inboxCapacity, storeInboxMessage } from '../../lib/inbox'
 import { sharedReplayGuard } from '../../lib/security/replayGuard'
 import { verifyChallenge } from '../../lib/security/contactChallenge'
 import { withApi } from '../../lib/apiHandler'
+import { inquiryRows, normalizeInquiry } from '../../lib/inquiry'
 
 /**
  * Contact endpoint.
@@ -28,6 +29,12 @@ import { withApi } from '../../lib/apiHandler'
  * cap a message is still emailed when SMTP works; only when it can be
  * neither emailed nor stored does the visitor get a 503 — never a fake
  * success.
+ *
+ * Structured inquiry (optional, lib/inquiry.ts): `reason`, `intent`
+ * (role / freelance / collab / other), `company`, `roleUrl`, `timeline`.
+ * Each is capped; fields the intent does not ask for are dropped; the link
+ * must be a plain https URL (400 otherwise) and is never fetched. They are
+ * stored as the Inbox message's `meta` and listed at the top of the e-mail.
  */
 
 const nonces = () => sharedReplayGuard('contact-nonce')
@@ -49,7 +56,7 @@ export default withApi('contact', async (req, res, { log }) => {
   res.setHeader('X-RateLimit-Remaining', String(rl.remaining))
   if (!rl.allowed) return res.status(429).json({ error: 'Too many requests, try later' })
 
-  const { name, email, subject, message, nonce, mathAnswer, hp } = req.body || {}
+  const { name, email, subject, message, nonce, mathAnswer, hp, reason, intent, company, roleUrl, timeline } = req.body || {}
 
   // 1. Honeypot (silent accept — pretend it worked so bot doesn't retry)
   if (typeof hp === 'string' && hp.trim().length > 0) {
@@ -115,6 +122,11 @@ export default withApi('contact', async (req, res, { log }) => {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeEmail)) {
     return res.status(400).json({ error: 'Please enter a valid email address.' })
   }
+  // Checked before the nonce is claimed, so the visitor can fix the link and resend.
+  const inquiry = normalizeInquiry({ reason, intent, company, roleUrl, timeline })
+  if (!inquiry.ok) return res.status(400).json({ error: inquiry.error, field: inquiry.field })
+  const meta = inquiry.meta
+  const details = inquiryRows(meta).map((r) => `${r.label}: ${r.value}`)
 
   // 6. One message per nonce. Claimed now, released below if nothing was accepted.
   const key = nonceKey(nonce, nonceId)
@@ -143,7 +155,7 @@ export default withApi('contact', async (req, res, { log }) => {
       const result = await sendMail({
         to,
         subject: `[Contact] ${safeSubject}`,
-        text: `From: ${safeName} <${safeEmail}>\n\n${safeMessage}`,
+        text: `From: ${safeName} <${safeEmail}>\n${details.length ? `${details.join('\n')}\n` : ''}\n${safeMessage}`,
         // Hitting "Reply" answers the visitor directly.
         replyTo: safeEmail,
       })
@@ -162,6 +174,7 @@ export default withApi('contact', async (req, res, { log }) => {
       subject: safeSubject,
       message: safeMessage,
       delivered,
+      meta,
     })
     if (stored.stored) {
       persisted = true

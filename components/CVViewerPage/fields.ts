@@ -28,6 +28,8 @@ export const SHEET_SECTIONS = [
   'extraSkill',
   'certification',
   'patents',
+  'selfAssessment',
+  'recommendations',
 ] as const
 
 /** Trimmed string at node[key]; '' when hidden by the owner or not a string. */

@@ -4,7 +4,7 @@
  * Both pages are statically generated and regenerated:
  *   - on demand, right after every write that changes what they show — CV
  *     saves / restores / imports, home saves (header socials, portrait,
- *     GitHub / LinkedIn fallbacks), post and case-study saves (skill
+ *     GitHub / LinkedIn fallbacks, the availability lines), post and case-study saves (skill
  *     evidence, case-study links), store restores (lib/revalidate);
  *   - and at the latest every CV_REVALIDATE_SECONDS: "Present" / "Expected"
  *     and the Person facts depend on the current month, and the window is
@@ -18,6 +18,7 @@
  */
 
 import type { CvLang } from './cvVisibility'
+import type { CvHeaderExtras } from './cvLocale'
 import type { HomeData } from './homeShape'
 import type { PersonFacts } from './schema'
 import type { SkillEvidence } from './skillEvidence'
@@ -57,6 +58,11 @@ export type CvPageData = {
   skillLinks: Record<string, string>
   /** Public home.socials for the persistent header / footer (null = none set). */
   chromeSocials?: HomeData['socials'] | null
+  /**
+   * Header lines from the owner's availability (lib/cvLocale cvHeaderExtras):
+   * the right-to-work line, and 求职意向 on /cv/zh. null = none.
+   */
+  headerExtras: CvHeaderExtras | null
 }
 
 export async function loadCvPageProps(lang: CvLang): Promise<{ props: CvPageData; revalidate: number }> {
@@ -133,6 +139,7 @@ export async function loadCvPageProps(lang: CvLang): Promise<{ props: CvPageData
       fileBase,
       skillEvidence,
       skillLinks,
+      headerExtras: src.headerExtras,
       // Omitted when the home document could not be read: the chrome then loads the public view itself.
       ...(src.socials !== undefined ? { chromeSocials: src.socials as HomeData['socials'] | null } : {}),
     },

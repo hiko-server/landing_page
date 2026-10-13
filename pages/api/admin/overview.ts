@@ -10,6 +10,7 @@ import { passkeyCount } from '../../../lib/adminAuth/passkeys'
 import { isPasskeyRequired } from '../../../lib/adminAuth/store'
 import { errorTotals } from '../../../lib/errors/store'
 import { latestRestoreDrill } from '../../../lib/restoreDrill'
+import { readinessCounts } from '../../../lib/cvReadinessServer'
 
 /**
  * GET /api/admin/overview — the admin status hub's numbers (admin only,
@@ -33,6 +34,8 @@ export type AdminOverview = {
   /** Error monitor totals (null when the store cannot be read). */
   errors: { open: number; new24h: number } | null
   restoreDrill: { status: 'passed' | 'failed' | 'skipped'; ranAt: number } | null
+  /** CV readiness checks (lib/cvReadiness, without the page-length check); null when they could not run. */
+  cvReadiness?: { open: number; high: number; dismissed: number } | null
 }
 
 const LAST_EDITS = 5
@@ -104,6 +107,7 @@ export function readOverview(): AdminOverview {
       const d = latestRestoreDrill()
       return d ? { status: d.status, ranAt: d.ranAt } : null
     }),
+    cvReadiness: readinessCounts(),
   }
 }
 

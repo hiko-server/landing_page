@@ -42,6 +42,29 @@ export const VISIBILITY_KEYS = ['isVisible', 'showOnWebsite', 'hiddenFields', 'h
 export const REDACTED_KEY = 'redacted' as const
 
 /**
+ * Editor-only bookkeeping that never reaches a public view: dismissed
+ * readiness checks (CV Studio, lib/cvReadiness.ts).
+ */
+export const EDITOR_META_KEYS = ['readinessDismissed'] as const
+
+/**
+ * Publication rules that hold whatever the visibility switches say:
+ *
+ *   - private fields: owner-only values removed from every public view
+ *     (the PDF photo and its switch — the server-side PDF reads them from
+ *     the full document through lib/cvLocale pdfPhoto);
+ *   - consent lists: entries of a list are public only when their consent
+ *     flag is exactly `true` (recommendations need the person's
+ *     permission); the flag itself is dropped from the output.
+ */
+export const PRIVATE_SECTION_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  personalInformation: ['photo', 'photoOnPdf'],
+}
+export const CONSENT_LISTS: Readonly<Record<string, { list: string; flag: string }>> = {
+  recommendations: { list: 'items', flag: 'permission' },
+}
+
+/**
  * True when `field` was hidden by the owner and blanked during pruning.
  * Works on public (pruned) nodes; on full editor documents it falls back to
  * the hiddenFields metadata, so the Studio preview behaves the same way.
@@ -105,6 +128,7 @@ function pruneNode(node: any): any {
   const redacted: string[] = []
   for (const [key, value] of Object.entries(node)) {
     if ((VISIBILITY_KEYS as readonly string[]).includes(key) || key === REDACTED_KEY) continue
+    if ((EDITOR_META_KEYS as readonly string[]).includes(key)) continue
     if (hidden.has(key)) {
       out[key] = blankOf(value)
       redacted.push(key)
@@ -130,7 +154,35 @@ function pruneNode(node: any): any {
 
 /** Prune one section's body while keeping its section-level switches for the renderer. */
 function pruneSection(section: CvSectionLike): CvSectionLike {
-  const body = pruneNode(section)
+  const name = String(section.sessionName || '')
+  const consent = CONSENT_LISTS[name]
+  // An entry without consent is treated as hidden (positions stay intact, so
+  // hiddenItems indices keep pointing at the right entries).
+  const source =
+    consent && Array.isArray(section[consent.list])
+      ? {
+          ...section,
+          [consent.list]: section[consent.list].map((e: unknown) =>
+            isPlainObject(e) && e[consent.flag] === true ? e : { ...(isPlainObject(e) ? e : {}), isVisible: false },
+          ),
+        }
+      : section
+  const body = pruneNode(source)
+  for (const key of PRIVATE_SECTION_FIELDS[name] || []) {
+    delete body[key]
+    if (Array.isArray(body[REDACTED_KEY])) {
+      body[REDACTED_KEY] = body[REDACTED_KEY].filter((k: string) => k !== key)
+      if (!body[REDACTED_KEY].length) delete body[REDACTED_KEY]
+    }
+  }
+  if (consent && Array.isArray(body[consent.list])) {
+    body[consent.list] = body[consent.list].map((e: unknown) => {
+      if (!isPlainObject(e)) return e
+      const rest = { ...e }
+      delete rest[consent.flag]
+      return rest
+    })
+  }
   if (section.isVisible === false) body.isVisible = false
   if (section.showOnWebsite === false) body.showOnWebsite = false
   return body

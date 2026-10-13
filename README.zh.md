@@ -288,6 +288,7 @@ docker compose up -d --build
 | MongoDB 备份 | `MONGODB_URI`、`MONGODB_DB_NAME` | 可选 |
 | Cloudflare R2 | `R2_ENDPOINT`、`R2_BUCKET`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_REQUIRED` | 可选 |
 | 定时备份 | `BACKUP_INTERVAL_HOURS`（默认 24，`0` 关闭） | 可选 |
+| 留言保存期限 | `CONTACT_RETENTION_DAYS`（默认 365 天，`0` 表示保留到手动删除；每晚自动清理过期留言，超过期限的全站快照也会被清理） | 可选 |
 | 日志 | `LOG_LEVEL`（`debug` / `info` / `warn` / `error`） | 可选 |
 | Cloudflare 缓存清除 | `CF_ZONE_ID`、`CF_API_TOKEN` | 可选 — 两者都设置才会发送 |
 | IndexNow | `INDEXNOW_KEY`（8–128 位 `[A-Za-z0-9-]`） | 可选 — 未设置即关闭 |
@@ -648,7 +649,7 @@ CI（`.github/workflows/ci.yml`）在每次推送和 Pull Request 时运行：
 | `/blog/[slug]` | 单篇博文（语法高亮、目录、可放大的图片） |
 | `/now` | 「最近在做什么」（MDX） |
 | `/uses` | 工具、硬件、服务清单（MDX） |
-| `/contact` | 联系页：表单、可用状态、复制按钮、vCard + 二维码 |
+| `/contact` | 联系页（ISR）：结构化表单与隐私说明、可用状态、复制按钮、vCard + 二维码 |
 | `/colophon` | 本站如何构建、隐私说明、更新日志、部署的提交 |
 | `/feed.xml`、`/work/feed.xml`、`/feed.json` | 全文 RSS（文章、案例）与 JSON Feed |
 | `/sitemap.xml` | 站点地图（含 EN / 中 CV 互链） |

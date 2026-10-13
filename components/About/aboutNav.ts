@@ -1,8 +1,9 @@
 /**
  * The /about section nav (pure, client-safe; unit tested): one entry per
- * block the page renders, in page order — the owner's bio when written, then
- * each CV section that has at least one visible entry. Ids match the anchors
- * the page sets (`about-bio`, `about-<sessionName>`).
+ * block the page renders, in page order — the owner's bio when written, the
+ * recommendations when one may be shown, then each CV section that has at
+ * least one visible entry. Ids match the anchors the page sets (`about-bio`,
+ * `about-recommendations`, `about-<sessionName>`).
  */
 
 import { list } from '../CVViewerPage/fields'
@@ -60,13 +61,14 @@ export function navLabel(headerName: unknown, sessionName: string): string {
   return raw
 }
 
-/** The nav for the page: bio first (when written), then the rendered CV sections. */
+/** The nav for the page: bio first (when written), recommendations (when shown), then the rendered CV sections. */
 export function aboutNavEntries(
   sections: ReadonlyArray<{ sessionName?: unknown; headerName?: unknown; [key: string]: unknown }>,
-  opts: { hasBio: boolean; lang?: 'en' | 'zh' },
+  opts: { hasBio: boolean; hasRecommendations?: boolean; lang?: 'en' | 'zh' },
 ): AboutNavEntry[] {
   const out: AboutNavEntry[] = []
   if (opts.hasBio) out.push({ id: 'about-bio', label: 'Bio' })
+  if (opts.hasRecommendations) out.push({ id: 'about-recommendations', label: 'Recommendations' })
   for (const s of sections) {
     const name = String(s?.sessionName || '')
     if (!name || !cvSectionHasEntries(s)) continue

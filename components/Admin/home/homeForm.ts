@@ -24,6 +24,7 @@ import {
   type SectionKey,
   type SortableSectionKey,
 } from '../../../lib/homeShape'
+import { cleanIntentMap, type InquiryIntent } from '../../../lib/inquiry'
 
 export type Keyed<T> = T & { _id: string }
 
@@ -45,7 +46,14 @@ export type HeroForm = {
 }
 
 export type SocialsForm = { github: string; gitlab: string; linkedin: string; whatsapp: string }
-export type ContactForm = { heading: string; blurb: string; eyebrow: string; reasons: string[] }
+export type ContactForm = {
+  heading: string
+  blurb: string
+  eyebrow: string
+  reasons: string[]
+  /** Kind of each custom reason (lib/inquiry.ts); missing = 'other'. */
+  intents: Record<string, InquiryIntent>
+}
 
 export type AvailabilityForm = {
   /** '' = no availability shown anywhere. */
@@ -55,6 +63,12 @@ export type AvailabilityForm = {
   roles: string[]
   from: string
   bookingUrl: string
+  /** Job intent on the Chinese CV (求职意向). */
+  roles_zh: string[]
+  city_zh: string
+  /** Right-to-work line, English and Chinese. */
+  workStatus: string
+  workStatus_zh: string
   updatedAt: number | null
 }
 
@@ -107,6 +121,10 @@ export const EMPTY_AVAILABILITY: AvailabilityForm = {
   roles: [],
   from: '',
   bookingUrl: '',
+  roles_zh: [],
+  city_zh: '',
+  workStatus: '',
+  workStatus_zh: '',
   updatedAt: null,
 }
 
@@ -175,12 +193,16 @@ export function formFromHome(data: unknown, makeId: () => string = newId): HomeF
     highlights: arr(d.highlights)
       .map(obj)
       .map((h) => ({ _id: makeId(), value: str(h.value), label: str(h.label), href: str(h.href) })),
-    contact: {
-      heading: str(contact.heading),
-      blurb: str(contact.blurb),
-      eyebrow: str(contact.eyebrow),
-      reasons: arr(contact.reasons).filter((r): r is string => typeof r === 'string'),
-    },
+    contact: (() => {
+      const reasons = arr(contact.reasons).filter((r): r is string => typeof r === 'string')
+      return {
+        heading: str(contact.heading),
+        blurb: str(contact.blurb),
+        eyebrow: str(contact.eyebrow),
+        reasons,
+        intents: cleanIntentMap(reasons, contact.intents),
+      }
+    })(),
     availability: status
       ? {
           status,
@@ -189,6 +211,10 @@ export function formFromHome(data: unknown, makeId: () => string = newId): HomeF
           roles: arr(availability.roles).filter((r): r is string => typeof r === 'string'),
           from: str(availability.from),
           bookingUrl: str(availability.bookingUrl),
+          roles_zh: arr(availability.roles_zh).filter((r): r is string => typeof r === 'string'),
+          city_zh: str(availability.city_zh),
+          workStatus: str(availability.workStatus),
+          workStatus_zh: str(availability.workStatus_zh),
           updatedAt: typeof availability.updatedAt === 'number' ? availability.updatedAt : null,
         }
       : { ...EMPTY_AVAILABILITY },
@@ -274,16 +300,23 @@ export function serializeHome(form: HomeForm, origin = 'http://localhost'): Home
       visible: p.visible,
     })),
     sections: { ...form.sections },
-    contact: {
-      heading: form.contact.heading.trim(),
-      blurb: form.contact.blurb.trim(),
-      eyebrow: form.contact.eyebrow.trim(),
-      reasons: form.contact.reasons.map((r) => r.trim()).filter(Boolean),
-    },
+    contact: (() => {
+      const reasons = form.contact.reasons.map((r) => r.trim()).filter(Boolean)
+      const intents = cleanIntentMap(reasons, form.contact.intents)
+      return {
+        heading: form.contact.heading.trim(),
+        blurb: form.contact.blurb.trim(),
+        eyebrow: form.contact.eyebrow.trim(),
+        reasons,
+        ...(Object.keys(intents).length ? { intents } : {}),
+      }
+    })(),
   }
   const a = form.availability
   if (a.status) {
     const roles = a.roles.map((r) => r.trim()).filter(Boolean)
+    const rolesZh = (a.roles_zh || []).map((r) => r.trim()).filter(Boolean)
+    const line = (v: string | undefined) => (v || '').trim()
     out.availability = {
       status: a.status,
       ...(a.label.trim() ? { label: a.label.trim() } : {}),
@@ -291,6 +324,10 @@ export function serializeHome(form: HomeForm, origin = 'http://localhost'): Home
       ...(roles.length ? { roles } : {}),
       ...(a.from ? { from: a.from } : {}),
       ...(a.bookingUrl.trim() ? { bookingUrl: a.bookingUrl.trim() } : {}),
+      ...(rolesZh.length ? { roles_zh: rolesZh } : {}),
+      ...(line(a.city_zh) ? { city_zh: line(a.city_zh) } : {}),
+      ...(line(a.workStatus) ? { workStatus: line(a.workStatus) } : {}),
+      ...(line(a.workStatus_zh) ? { workStatus_zh: line(a.workStatus_zh) } : {}),
       ...(a.updatedAt ? { updatedAt: a.updatedAt } : {}),
     }
   }

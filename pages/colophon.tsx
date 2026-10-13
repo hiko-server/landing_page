@@ -608,6 +608,30 @@ export default function ColophonPage({ releases, stack, buildSha, builtAt }: Pro
                   privacy-enhanced mode) or <Code>player.vimeo.com</Code> (with Do Not Track), and
                   their own privacy policies apply from then on.
                 </Para>
+                <Para>
+                  Messages sent through the <InlineLink href="/contact">contact form</InlineLink> are
+                  handled separately:
+                </Para>
+                <Bullets
+                  items={[
+                    <>
+                      What you type — your name, e-mail address, message and any details you add
+                      about a role or project — is stored in a private inbox on this server, and may
+                      be forwarded to my own mailbox, only so I can reply. It is never shared,
+                      published or used for anything else. The form sets no cookie; an unsent draft
+                      is kept only in your own browser and cleared when you send it.
+                    </>,
+                    <>
+                      Messages are deleted automatically after the period stated under the form (12
+                      months unless configured otherwise); a nightly job removes older ones. Full-site
+                      backups, which include the inbox, are rotated, and backups older than that
+                      period are deleted as well (the newest one is always kept).
+                    </>,
+                    <>
+                      To have a message deleted sooner, write to the address on the contact page.
+                    </>,
+                  ]}
+                />
               </Section>
 
               <Section id="build" title="Build">

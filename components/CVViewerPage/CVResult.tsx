@@ -22,6 +22,8 @@ import SkillSection from './Skill'
 import WorkExperience from './WorkExperience'
 import CompetitionAwardsSection from './CompetitionAwards'
 import PatentsSection from './Patents'
+import SelfAssessmentSection from './SelfAssessment'
+import RecommendationsSection from './Recommendations'
 import CvQr from './CvQr'
 
 /**
@@ -68,6 +70,10 @@ function renderSection(section: CVData[number], lang: CvLang): React.ReactNode {
       return <CertificateSection data={section as Certification} lang={lang} />
     case 'patents':
       return <PatentsSection data={section as Patents} lang={lang} />
+    case 'selfAssessment':
+      return <SelfAssessmentSection data={section as any} />
+    case 'recommendations':
+      return <RecommendationsSection data={section as any} lang={lang} />
     default:
       return null
   }

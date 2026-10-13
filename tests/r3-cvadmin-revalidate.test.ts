@@ -3,8 +3,9 @@
  * restore) and home write (PUT, restore, versions restore) regenerates the
  * ISR pages that render that data (CV_STATIC_PATHS / HOME_STATIC_PATHS) and
  * reports them; the version ETag survives untouched. Server-rendered pages
- * (/, /about, /contact) are always fresh and never listed; /cv and /cv/zh
- * are ISR (lib/cvPage.ts) and regenerate on CV and home writes (G1).
+ * reports them; the version ETag survives untouched. Every page that renders
+ * CV or home data is ISR since wave 2a (G1): /, /about, /cv, /cv/zh and
+ * /contact regenerate with the writes that change them.
  */
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
@@ -25,8 +26,10 @@ let cvdata: Handler, home: Handler, versions: Handler
 let closeDb: () => void
 let CV_PATHS: readonly string[] = []
 let HOME_PATHS: readonly string[] = []
-// /, /about (home-about-isr G1) and /cv, /cv/zh (cv-docs G1) are ISR and belong in both lists.
-const SSR_PATHS = ['/contact']
+// /, /about (home-about-isr G1), /cv, /cv/zh (cv-docs G1) and /contact
+// (cv-studio-contact G1) are ISR: no page that renders CV / home data is
+// server-rendered any more.
+const SSR_PATHS: string[] = []
 const CV_PAGES = ['/cv', '/cv/zh']
 
 type MockRes = { statusCode: number; headers: Record<string, string>; body: any; revalidated: string[] }
@@ -116,8 +119,10 @@ test('the path lists hold only ISR pages that render CV / home data', () => {
   }
   for (const p of CV_PAGES) {
     assert.ok(CV_PATHS.includes(p), `CV: ${p} renders the CV`)
-    assert.ok(HOME_PATHS.includes(p), `home: ${p} renders the socials and the portrait`)
+    assert.ok(HOME_PATHS.includes(p), `home: ${p} renders the socials, the portrait and the availability lines`)
   }
+  assert.ok(HOME_PATHS.includes('/contact'), 'home: /contact (ISR) renders the contact copy and availability')
+  assert.ok(!CV_PATHS.includes('/contact'), 'CV: /contact renders no CV data')
   for (const p of SSR_PATHS) {
     assert.ok(!CV_PATHS.includes(p), `CV list must not contain the SSR page ${p}`)
     assert.ok(!HOME_PATHS.includes(p), `home list must not contain the SSR page ${p}`)
@@ -167,6 +172,7 @@ test('versions restore regenerates /now for CV and home', async () => {
     assert.equal(r.statusCode, 200, `versions ${type}`)
     assert.ok(r.revalidated.includes('/now'), `versions ${type}: /now regenerated`)
     for (const p of CV_PAGES) assert.ok(r.revalidated.includes(p), `versions ${type}: ${p} regenerated`)
+    if (type === 'home') assert.ok(r.revalidated.includes('/contact'), 'versions home: /contact regenerated')
     assert.deepEqual([...r.body.revalidated].sort(), [...new Set(r.revalidated)].sort(), `versions ${type}: reported`)
     assert.equal(r.headers.etag, r.body.etag, `versions ${type}: version ETag kept`)
   }

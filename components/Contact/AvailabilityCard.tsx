@@ -7,6 +7,7 @@ import { availabilityView, type AvailabilityStatus } from '../Common/contactForm
  * work" badge.
  *
  *   ● Available for new work        From 2026-11
+ *   work authorisation  <the owner's own line, when set>
  *   [Backend] [ML engineering]      [Book a call ↗]
  *
  * The 8px dot uses the status.* tokens; for 'open' a ring behind it pulses
@@ -108,6 +109,15 @@ export default function AvailabilityCard({
           </Text>
         ) : null}
       </Flex>
+
+      {view.workStatus ? (
+        <Text mt={3} fontSize="14px" lineHeight="1.55" color="page.fg" data-work-status="">
+          <Text as="span" fontFamily={mono} fontSize="11px" letterSpacing="0.04em" color="page.fg-secondary" mr={2}>
+            work authorisation
+          </Text>
+          {view.workStatus}
+        </Text>
+      ) : null}
 
       {view.roles.length || view.bookingUrl ? (
         <Flex mt={4} align="center" justify="space-between" gap={3} flexWrap="wrap">

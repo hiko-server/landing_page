@@ -1,11 +1,14 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { isAdminRequest } from '../../../lib/auth'
 import { deleteInbox, isInboxId, listInbox, markInbox } from '../../../lib/inbox'
+import { getRetentionStatus } from '../../../lib/inboxRetention'
 
 /**
  * Contact inbox for the admin.
  *
- *   GET  /api/admin/inbox                       → { messages, unread, total, truncated, storage }
+ *   GET  /api/admin/inbox                       → { messages, unread, total, truncated, storage,
+ *                                                 retentionDays, retention: { days, scheduled,
+ *                                                 nextAt, lastRun } }
  *   GET  /api/admin/inbox?summary=1             → { unread, total }   (badge polling: no
  *                                                 message bodies, no storage stats)
  *   POST /api/admin/inbox { action, ids }       → { ok, affected, unread, total, storage }
@@ -37,7 +40,7 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       if (wantsSummary(req.query.summary)) {
         return res.status(200).json({ unread: listing.unread, total: listing.total })
       }
-      return res.status(200).json(listing)
+      return res.status(200).json({ ...listing, retention: getRetentionStatus() })
     } catch (err: any) {
       console.error('[inbox] read failed', err)
       return res.status(500).json({ error: 'Could not read the inbox' })

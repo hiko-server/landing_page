@@ -11,6 +11,7 @@ import {
   type KvPutResult,
 } from './contentStore'
 import { publicCvDoc, type CvAudience, type CvDoc, type CvLang } from './cvVisibility'
+import { pdfPhoto } from './cvLocale'
 
 const snapshotDir = path.join(process.cwd(), 'data', 'cv_snapshots')
 
@@ -63,6 +64,16 @@ export function readPublicCvSections(
   const pick = (lang: CvLang) =>
     langs.includes(lang) ? doc[lang].filter((s) => wanted.has(String(s.sessionName))) : []
   return { en: pick('en'), zh: pick('zh') }
+}
+
+/**
+ * PDF hook (E10): the photo the given language's PDF may print, or null.
+ * Reads the FULL document — public views never carry the photo — and
+ * applies lib/cvLocale pdfPhoto (switch on, section on the CV). For the
+ * server-side PDF generator only; never send the result to a web page.
+ */
+export function readCvPdfPhoto(lang: CvLang): string | null {
+  return pdfPhoto(readCvData()[lang])
 }
 
 /** Write the full document. Pass `precondition` for an atomic If-Match check. */

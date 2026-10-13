@@ -6,8 +6,8 @@ import { uploadNamesIn } from './uploadVariants'
 /**
  * On-demand ISR revalidation.
  *
- * /, /about, /cv, /cv/zh, /blog, /work, /now, /uses, the posts, case
- * studies and /colophon are statically generated with a revalidate window. Without this, an admin save
+ * /, /about, /cv, /cv/zh, /contact, /blog, /work, /now, /uses, the posts,
+ * case studies and /colophon are statically generated with a revalidate window. Without this, an admin save
  * only shows up on the public page after that window elapses *and* someone
  * visits twice. Calling `res.revalidate()` right after a successful write
  * regenerates the affected pages immediately, so "Save" means "live".
@@ -95,10 +95,11 @@ export const MAX_SIBLING_PATHS = 50
 
 /**
  * ISR pages that render the home document: / (everything), /about (hero,
- * portrait, socials, availability), /now (hero.currentlyCoding) and the CV
- * pages (socials, portrait and availability feed the CV header).
+ * portrait, socials, availability), /now (hero.currentlyCoding), /contact
+ * (contact copy, reasons and their kinds, availability, e-mail / phone) and
+ * the CV pages (socials, portrait and availability feed the CV header).
  */
-export const HOME_PAGE_PATHS: readonly string[] = ['/', '/about', '/now', '/cv', '/cv/zh']
+export const HOME_PAGE_PATHS: readonly string[] = ['/', '/about', '/now', '/contact', '/cv', '/cv/zh']
 
 /**
  * ISR pages that render the public CV: / (identity, hero facts, projects,
@@ -168,7 +169,7 @@ export const CV_DOCUMENT_PATHS = ['/cv', '/cv/zh'] as const
  * Every statically generated (ISR) public page whose data lives in the content
  * store (a restore regenerates them all).
  */
-export const STATIC_CONTENT_PATHS = ['/', '/about', '/blog', '/work', '/now', '/uses', '/colophon', ...CV_DOCUMENT_PATHS] as const
+export const STATIC_CONTENT_PATHS = ['/', '/about', '/blog', '/work', '/now', '/uses', '/colophon', '/contact', ...CV_DOCUMENT_PATHS] as const
 
 // ── Edge notifications (Cloudflare purge, IndexNow) ──────────────────────
 

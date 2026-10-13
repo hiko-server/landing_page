@@ -8,6 +8,7 @@ import EmailText from '../Common/EmailText'
 import { composeName } from './cvName'
 import { cvSectionAnchor, field } from './fields'
 import { ANCHOR_SCROLL_MARGIN } from './primitives'
+import { SheetHeaderExtras, useCvHeaderLines } from './HeaderExtras'
 
 export { composeName, publicNameZh } from './cvName'
 
@@ -37,6 +38,8 @@ const PersonalInformationSection = ({ data, lang = 'en' }: { data: PersonalInfor
   const phone = field(data, 'phoneNumber')
   const email = field(data, 'email')
   const intro = field(data, 'introduction')
+  // Owner-entered lines from the availability (right-to-work, 求职意向), via context.
+  const extras = useCvHeaderLines(lang)
 
   const hasHeader = !!(main || aside || website || profiles.length || address || phone || email)
   if (!hasHeader && !intro) return null
@@ -51,7 +54,7 @@ const PersonalInformationSection = ({ data, lang = 'en' }: { data: PersonalInfor
           justify="space-between"
           align="flex-end"
           gap="16px"
-          borderBottom={intro ? '3px solid var(--cv-separator-color, blue)' : undefined}
+          borderBottom={intro && !extras.length ? '3px solid var(--cv-separator-color, blue)' : undefined}
         >
           <Box minW={0}>
             {main || aside ? (
@@ -118,6 +121,7 @@ const PersonalInformationSection = ({ data, lang = 'en' }: { data: PersonalInfor
           ) : null}
         </Flex>
       ) : null}
+      {hasHeader ? <SheetHeaderExtras lines={extras} lang={lang} rule={!!intro} /> : null}
       {intro ? (
         <Box px="10px" pt="8px" pb="16px">
           <Text fontSize="12px" lineHeight="1.55">

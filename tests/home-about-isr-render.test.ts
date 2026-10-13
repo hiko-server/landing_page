@@ -141,7 +141,7 @@ test('A4: the identity rail is the page header: h1, availability in words, CV li
       brand: 'Lucian Sphere',
       identity: { name: 'Li Yanpei', nameZh: '李彦霈', nick: 'Lucian' } as never,
       portrait: { src: '/uploads/a.jpg', x: 10, y: 20, scale: 1, alt: 'Portrait of Li Yanpei', width: 800, height: 800 },
-      availability: { status: 'open', label: 'Open to backend roles', roles: [], from: '2026-11', bookingUrl: '' },
+      availability: { status: 'open', label: 'Open to backend roles', roles: [], from: '2026-11', bookingUrl: '', workStatus: '' },
       socials: [{ key: 'github', name: 'GitHub', url: 'https://github.com/x' }],
       nav: [
         { id: 'about-bio', label: 'Bio' },

@@ -200,8 +200,8 @@ test('derived purge paths and helpers', () => {
   assert.deepEqual(chunk([], 30), [])
   // The /about bio is part of the search index (G1 / A4).
   assert.deepEqual(derivedPurgePaths(['/about']), ['/api/search-index'])
-  // ISR pages only (/ and /about since home-about G1, /cv and /cv/zh since cv-docs G1).
-  assert.deepEqual([...STATIC_CONTENT_PATHS], ['/', '/about', '/blog', '/work', '/now', '/uses', '/colophon', '/cv', '/cv/zh'])
+  // ISR pages only (/ and /about since home-about G1, /cv and /cv/zh since cv-docs G1, /contact since cv-studio-contact G1).
+  assert.deepEqual([...STATIC_CONTENT_PATHS], ['/', '/about', '/blog', '/work', '/now', '/uses', '/colophon', '/contact', '/cv', '/cv/zh'])
   // A CV page change purges its downloadable files with it.
   assert.deepEqual(derivedPurgePaths(['/cv']), ['/cv.pdf', '/cv.txt', '/cv.json'])
   assert.deepEqual(derivedPurgePaths(['/cv/zh']), ['/cv/zh.pdf', '/cv/zh.txt', '/cv/zh.json'])

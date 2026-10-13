@@ -6,9 +6,10 @@
 //   - migrates the SQLite stores (content.db, analytics.db, auth.db) at boot
 //     instead of on the first request (scripts/db; each migration is
 //     transactional and idempotent) — never during `next build`;
-//   - starts the scheduled, change-aware backups (lib/backupSchedule) and the
-//     weekly restore drill (lib/restoreDrill) — never during `next build`,
-//     and only once per process;
+//   - starts the scheduled, change-aware backups (lib/backupSchedule), the
+//     weekly restore drill (lib/restoreDrill) and the nightly expiry of
+//     contact messages (lib/inboxRetention) — never during `next build`, and
+//     only once per process;
 //   - adds `Cache-Control: no-transform` to HTML documents
 //     (lib/htmlNoTransform: keeps Cloudflare from injecting its analytics
 //     beacon).
@@ -20,7 +21,11 @@
 // only when the import is nested in it), so the edge bundle never contains
 // fs/SQLite code.
 
-type InstrumentationGlobal = typeof globalThis & { __backupScheduleStarted?: boolean; __restoreDrillStarted?: boolean }
+type InstrumentationGlobal = typeof globalThis & {
+  __backupScheduleStarted?: boolean
+  __restoreDrillStarted?: boolean
+  __inboxRetentionStarted?: boolean
+}
 
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
@@ -61,6 +66,16 @@ export async function register() {
       } catch (err) {
         const { log } = await import('./lib/log')
         log.error('could not start the restore drill schedule', { err })
+      }
+    }
+    if (!building && !g.__inboxRetentionStarted) {
+      g.__inboxRetentionStarted = true
+      try {
+        const { startInboxRetention } = await import('./lib/inboxRetention')
+        startInboxRetention()
+      } catch (err) {
+        const { log } = await import('./lib/log')
+        log.error('could not start the contact message expiry', { err })
       }
     }
     if (!building) {

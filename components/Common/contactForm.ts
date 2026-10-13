@@ -8,12 +8,16 @@
  * is one the server accepts.
  */
 
+import { INQUIRY_LIMITS, INTENT_FIELDS, ROLE_URL_ERROR, type InquiryIntent, type InquiryTimeline } from '../../lib/inquiry'
+import { retentionPeriodText } from '../../lib/retention'
+import { isHttpsUrl } from '../../lib/url'
+
 export const MESSAGE_MAX = 5000
 
 /** Same pattern the API uses to reject malformed addresses. */
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-export type ContactField = 'name' | 'email' | 'subject' | 'message' | 'mathAnswer'
+export type ContactField = 'name' | 'email' | 'subject' | 'roleUrl' | 'message' | 'mathAnswer'
 
 export type ContactValues = {
   name: string
@@ -22,17 +26,24 @@ export type ContactValues = {
   subject: string
   message: string
   mathAnswer: string
+  /** Structured inquiry fields (lib/inquiry.ts) — only the ones the reason's intent discloses are sent. */
+  company: string
+  roleUrl: string
+  timeline: InquiryTimeline | ''
 }
+
+export const EMPTY_INQUIRY = { company: '', roleUrl: '', timeline: '' } as const
 
 export type ContactErrors = Partial<Record<ContactField, string>>
 
 /** Order in which problems are listed in the submit hint (= visual order). */
-export const FIELD_ORDER: readonly ContactField[] = ['name', 'email', 'subject', 'message', 'mathAnswer']
+export const FIELD_ORDER: readonly ContactField[] = ['name', 'email', 'subject', 'roleUrl', 'message', 'mathAnswer']
 
 const HINT_LABEL: Record<ContactField, string> = {
   name: 'your name',
   email: 'a valid email',
   subject: 'a subject',
+  roleUrl: 'an https:// link (or leave it empty)',
   message: 'a message',
   mathAnswer: 'the human-check answer',
 }
@@ -40,14 +51,20 @@ const HINT_LABEL: Record<ContactField, string> = {
 /**
  * @param expectedMath the human-check sum, or null while it is not generated yet
  *                     (the form cannot be valid until it is).
+ * @param intent       the chosen reason's intent; its disclosed fields are checked
+ *                     ('other' / omitted: none).
  */
-export function validateContact(v: ContactValues, expectedMath: number | null): ContactErrors {
+export function validateContact(v: ContactValues, expectedMath: number | null, intent: InquiryIntent = 'other'): ContactErrors {
   const errors: ContactErrors = {}
   if (!v.name.trim()) errors.name = 'Please enter your name.'
   const email = v.email.trim()
   if (!email) errors.email = 'Please enter your email address.'
   else if (!EMAIL_RE.test(email)) errors.email = 'That email address doesn’t look right.'
   if (!v.subject.trim() && !v.reason.trim()) errors.subject = 'Add a subject or pick a reason.'
+  const link = (v.roleUrl || '').trim()
+  if (INTENT_FIELDS[intent].includes('roleUrl') && link && (link.length > INQUIRY_LIMITS.roleUrlMax || !isHttpsUrl(link))) {
+    errors.roleUrl = ROLE_URL_ERROR
+  }
   if (!v.message.trim()) errors.message = 'Please write a message.'
   else if (v.message.length > MESSAGE_MAX) errors.message = `Keep the message under ${MESSAGE_MAX.toLocaleString('en-US')} characters.`
   if (expectedMath === null) errors.mathAnswer = 'The human check is still loading.'
@@ -108,6 +125,8 @@ export type AvailabilityView = {
   from: string
   /** An https booking link, or '' (other schemes are never linked). */
   bookingUrl: string
+  /** The owner's right-to-work line (English), or ''. */
+  workStatus: string
 }
 
 const DEFAULT_AVAILABILITY_LABEL: Record<AvailabilityStatus, string> = {
@@ -136,7 +155,10 @@ function httpsUrl(v: unknown): string {
  * description of that status. `label_zh` is for Chinese pages and not used here.
  */
 export function availabilityView(
-  a: { status?: unknown; label?: unknown; roles?: unknown; from?: unknown; bookingUrl?: unknown } | null | undefined,
+  a:
+    | { status?: unknown; label?: unknown; roles?: unknown; from?: unknown; bookingUrl?: unknown; workStatus?: unknown }
+    | null
+    | undefined,
 ): AvailabilityView | null {
   if (!a || !isStatus(a.status)) return null
   const roles = Array.isArray(a.roles) ? Array.from(new Set(a.roles.map(text).filter(Boolean))) : []
@@ -147,5 +169,36 @@ export function availabilityView(
     roles,
     from: from ? from[1] : '',
     bookingUrl: httpsUrl(a.bookingUrl),
+    workStatus: text(a.workStatus).replace(/[\r\n]+/g, ' '),
   }
+}
+
+/**
+ * The contact form's privacy notice: what is kept, why and for how long.
+ * `retentionDays`: the server's CONTACT_RETENTION_DAYS (0 = no automatic
+ * expiry), or null while it is not known yet (the sentence about the
+ * period is left out rather than guessed).
+ */
+export function privacyNoticeText(retentionDays: number | null): string {
+  const what =
+    'Your name, e-mail address and message are kept in my private inbox (and may be forwarded to my own mailbox), only so I can reply.'
+  if (retentionDays === null || !Number.isFinite(retentionDays) || retentionDays < 0) return what
+  if (retentionDays === 0) return `${what} I delete them myself when they are no longer needed.`
+  return `${what} They are deleted automatically after ${retentionPeriodText(retentionDays)}.`
+}
+
+/** The structured fields to send for an intent (blank ones and undisclosed ones left out). */
+export function inquiryPayload(
+  v: Pick<ContactValues, 'reason' | 'company' | 'roleUrl' | 'timeline'>,
+  intent: InquiryIntent,
+): { reason: string; intent: InquiryIntent; company?: string; roleUrl?: string; timeline?: InquiryTimeline } {
+  const fields = INTENT_FIELDS[intent]
+  const out: { reason: string; intent: InquiryIntent; company?: string; roleUrl?: string; timeline?: InquiryTimeline } = {
+    reason: v.reason.trim(),
+    intent,
+  }
+  if (fields.includes('company') && v.company.trim()) out.company = v.company.trim()
+  if (fields.includes('roleUrl') && v.roleUrl.trim()) out.roleUrl = v.roleUrl.trim()
+  if (fields.includes('timeline') && v.timeline) out.timeline = v.timeline
+  return out
 }

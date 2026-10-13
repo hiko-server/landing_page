@@ -17,16 +17,10 @@ import {
   SimpleGrid,
   Spinner,
   Stack,
-  Tag,
-  TagCloseButton,
-  TagLabel,
   Text,
   Textarea,
-  Wrap,
-  WrapItem,
   useToast,
 } from '@chakra-ui/react'
-import { AddIcon } from '@chakra-ui/icons'
 // Pure shape import — must NOT come from lib/home.ts (server-only, drags
 // better-sqlite3 into the client bundle). lib/homeShape.ts has no Node deps.
 import { type HomeFieldError, type SectionKey, type SortableSectionKey } from '../../lib/homeShape'
@@ -58,8 +52,7 @@ import OpenSourceSection from './home/OpenSourceSection'
 import SiteSection from './home/SiteSection'
 import SectionsSection from './home/SectionsSection'
 import HighlightsSection from './home/HighlightsSection'
-
-const DEFAULT_CONTACT_REASONS = ['Project Inquiry', 'Hiring', 'Collaboration', 'Consulting', 'Mentorship', 'Other']
+import ContactReasonsField from './home/ContactReasonsField'
 
 const RETURN_PATH = '/admin/dashboard?tab=home'
 
@@ -111,7 +104,6 @@ export default function HomeEditor({ onUnsavedSource }: { onUnsavedSource?: (get
     [],
   )
   const { hero, socials, contact, sections } = form
-  const [newReason, setNewReason] = useState('')
   // CV-derived defaults for the "currently coding" chip, shown as
   // placeholders. Best-effort: stays empty on any fetch error.
   const [ccAuto, setCcAuto] = useState({ label: '', project: '', note: '' })
@@ -342,17 +334,6 @@ export default function HomeEditor({ onUnsavedSource }: { onUnsavedSource?: (get
 
   const toggleSection = (key: SectionKey, visible: boolean) => set.sections((prev) => ({ ...prev, [key]: visible }))
   const setSectionOrder = (order: SortableSectionKey[]) => setForm((prev) => ({ ...prev, sectionOrder: order }))
-
-  const addReason = () => {
-    const v = newReason.trim()
-    if (!v) return
-    if (contact.reasons.includes(v)) {
-      toast({ status: 'info', title: 'Already in the list' })
-      return
-    }
-    set.contact((c) => ({ ...c, reasons: [...c.reasons, v] }))
-    setNewReason('')
-  }
 
   const uploadAvatar = async (file: File) => {
     try {
@@ -685,60 +666,13 @@ export default function HomeEditor({ onUnsavedSource }: { onUnsavedSource?: (get
         </FormControl>
       </SimpleGrid>
       <Box mt={4}>
-        <FormLabel mb={2}>
-          Reasons (dropdown)
-          <Text as="span" color="page.fg-secondary" fontWeight="normal" fontSize="xs" ml={2}>
-            empty list = use defaults
-          </Text>
-        </FormLabel>
-        <Wrap spacing={2} mb={3}>
-          {contact.reasons.length === 0 ? (
-            <Text fontSize="xs" color="page.fg-secondary" fontStyle="italic">
-              No custom reasons — the dropdown will show: <strong>{DEFAULT_CONTACT_REASONS.join(', ')}</strong>
-            </Text>
-          ) : null}
-          {contact.reasons.map((r, idx) => (
-            <WrapItem key={`${r}-${idx}`}>
-              <Tag size="md" borderRadius="full" variant="outline" color="page.fg" boxShadow="inset 0 0 0 1px var(--chakra-colors-page-border-strong)">
-                <TagLabel>{r}</TagLabel>
-                <TagCloseButton aria-label={`Remove reason ${r}`} onClick={() => set.contact((c) => ({ ...c, reasons: c.reasons.filter((_, i) => i !== idx) }))} />
-              </Tag>
-            </WrapItem>
-          ))}
-        </Wrap>
-        <Flex gap={2} flexWrap="wrap">
-          <Input
-            flex="1 1 200px"
-            aria-label="New reason"
-            placeholder="Add a reason (e.g. Speaking engagement)"
-            value={newReason}
-            onChange={(e) => setNewReason(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault()
-                addReason()
-              }
-            }}
-          />
-          <Button size="sm" {...outlineButtonProps} onClick={addReason} leftIcon={<AddIcon boxSize={2.5} />} flexShrink={0}>
-            Add
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            color="page.fg-secondary"
-            onClick={() => set.contact((c) => ({ ...c, reasons: [...DEFAULT_CONTACT_REASONS] }))}
-            flexShrink={0}
-          >
-            Restore defaults
-          </Button>
-        </Flex>
+        <ContactReasonsField value={contact} onChange={set.contact} />
       </Box>
 
       <SectionLabel
         index={9}
         title="Availability"
-        hint="Whether you are open to work, shown on the home page’s contact band, /about, /contact and in the command palette. Clear it to show nothing."
+        hint="Whether you are open to work, shown on the home page’s contact band, /about, /contact, in the command palette and (right-to-work line, Chinese job intent) on the CV. Clear it to show nothing."
       />
       <AvailabilitySection value={form.availability} onChange={set.availability} />
 

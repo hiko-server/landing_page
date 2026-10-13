@@ -68,9 +68,9 @@ const TYPES: readonly VersionType[] = ['cv', 'home', 'blog', 'work', 'page']
 /**
  * Statically generated (ISR) pages rendered from each document
  * (lib/revalidate.ts CV_PAGE_PATHS / HOME_PAGE_PATHS: /, /about, /now, the
- * CV pages and, for the CV, /work), so restoring either one regenerates
- * them instead of leaving the ISR copy live. /contact reads the home
- * document with getServerSideProps and needs no revalidation.
+ * CV pages, /work for the CV and /contact for the home document), so
+ * restoring either one regenerates them instead of leaving the ISR copy
+ * live.
  */
 const STATIC_PATHS: Record<JsonDocType, string[]> = { cv: [...CV_PAGE_PATHS], home: [...HOME_PAGE_PATHS] }
 

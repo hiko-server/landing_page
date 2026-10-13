@@ -33,6 +33,7 @@ import {
 import { ogPresetUrl } from '../../lib/og/presets'
 import type { CvLang } from '../../lib/cvVisibility'
 import { useBottomBarOffset } from '../Common/useBottomBarOffset'
+import { CvHeaderExtrasContext } from './HeaderExtras'
 
 /**
  * The bilingual CV page: /cv (English) and /cv/zh (Chinese) render this with
@@ -143,6 +144,7 @@ export default function CvPageView({
   fileBase,
   skillEvidence,
   skillLinks,
+  headerExtras = null,
 }: CvPageProps) {
   const router = useRouter()
   const toast = useToast()
@@ -281,6 +283,7 @@ export default function CvPageView({
         </Head>
       ) : null}
 
+      <CvHeaderExtrasContext.Provider value={headerExtras}>
       <HeaderFooter>
         <Box
           className="cv-print-flow"
@@ -600,6 +603,7 @@ export default function CvPageView({
           </Flex>
         </Box>
       </HeaderFooter>
+      </CvHeaderExtrasContext.Provider>
     </React.Fragment>
   )
 }

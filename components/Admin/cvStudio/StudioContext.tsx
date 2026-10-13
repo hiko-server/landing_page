@@ -27,6 +27,11 @@ export type StudioApi = {
    * unambiguous twin (section missing there, or an enclosing list differs).
    */
   twinLength: (listPath: CvPath) => number | null
+  /**
+   * Value at the same place in the other language (the section matched by
+   * name, the rest of the path as is), or undefined when there is none.
+   */
+  twinValue?: (path: CvPath) => unknown
   /** Latest jump request; lists expand the entries on its path. */
   focus: FocusTarget | null
 }

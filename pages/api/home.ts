@@ -45,7 +45,8 @@ const isAuthed = isAdminRequest
  * Statically generated (ISR) pages that render home data, regenerated after a
  * save or restore (lib/revalidate.ts HOME_PAGE_PATHS: / and /about render
  * the hero, portrait, socials and availability; /now shows
- * hero.currentlyCoding; /cv and /cv/zh show the socials — header, GitHub /
+ * hero.currentlyCoding; /contact the contact copy, reasons, availability and
+ * e-mail / phone; /cv and /cv/zh show the socials — header, GitHub /
  * LinkedIn fallbacks — the portrait and the availability lines).
  */
 export const HOME_STATIC_PATHS: readonly string[] = [...HOME_PAGE_PATHS]

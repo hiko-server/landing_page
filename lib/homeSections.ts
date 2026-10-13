@@ -7,6 +7,7 @@
  * server code and the admin can keep importing from there.
  */
 
+import { isHttpsUrl } from './url'
 import type { HomeData, HomeHighlight, SectionKey } from './homeShape'
 
 /** Limits of the proof strip (part of HOME_LIMITS in lib/homeShape). */
@@ -94,16 +95,9 @@ export function isSameOrder(order: readonly string[], preset: readonly string[])
   return order.length === preset.length && order.every((k, i) => k === preset[i])
 }
 
-/** An absolute https:// URL with a host and no embedded credentials. */
-export function isHttpsUrl(value: unknown): value is string {
-  if (typeof value !== 'string' || !value.trim() || /\s/.test(value.trim())) return false
-  try {
-    const u = new URL(value.trim())
-    return u.protocol === 'https:' && !!u.hostname && !u.username && !u.password
-  } catch {
-    return false
-  }
-}
+// An absolute https:// URL with a host and no embedded credentials (one
+// implementation, lib/url.ts; re-exported for the home readers).
+export { isHttpsUrl }
 
 /** A link a highlight may point to: a site path (not protocol-relative) or a full https:// URL. */
 export function isHighlightHref(value: unknown): value is string {

@@ -6,13 +6,16 @@
  * Reads the PUBLIC, CV-audience sections (lib/cvdata readPublicCvSections —
  * hidden sections, entries, fields and bullets are already removed),
  * resolves the evidence links (lib/cvLinks: profiles from Home → Socials,
- * published case studies only) and the CV's last save. Each source is best
+ * published case studies only), the header lines from the owner's public
+ * availability (lib/cvLocale cvHeaderExtras: the right-to-work line, and
+ * 求职意向 on the Chinese CV) and the CV's last save. Each source is best
  * effort: a failing read contributes nothing instead of failing the page or
  * the file.
  */
 
 import type { CvLang, CvSectionLike } from './cvVisibility'
 import { referenceMonth } from './clock'
+import { cvHeaderExtras, type CvHeaderExtras } from './cvLocale'
 import { withEvidenceLinks, type CvWork, type PublicSocials } from './cvLinks'
 import { SHEET_SECTIONS } from '../components/CVViewerPage/fields'
 
@@ -30,6 +33,8 @@ export type CvSource = {
   works: CvWork[]
   /** Public Home socials (GitHub / LinkedIn fallbacks); null when none are set, undefined when the read failed. */
   socials: PublicSocials | null | undefined
+  /** Header lines from the public availability (right-to-work line; 求职意向 in Chinese); null = none. */
+  headerExtras: CvHeaderExtras | null
 }
 
 function safe<T>(fn: () => T, fallback: T): T {
@@ -62,7 +67,9 @@ export async function loadCvSource(lang: CvLang, now: string = referenceMonth())
   const { getKvMeta } = await import('./contentStore')
   const { readPublicHome } = await import('./home')
   const works = await publishedWorks()
-  const socials = safe<PublicSocials | null | undefined>(() => (readPublicHome()?.socials as PublicSocials | undefined) ?? null, undefined)
+  const home = safe(() => readPublicHome(), undefined)
+  const socials: PublicSocials | null | undefined = home === undefined ? undefined : ((home?.socials as PublicSocials | undefined) ?? null)
+  const headerExtras = safe(() => cvHeaderExtras(home?.availability, lang), null)
   const langs: CvLang[] = lang === 'en' ? ['en'] : ['en', 'zh']
   const cv = safe(() => readPublicCvSections('cv', SHEET_SECTIONS, langs), { en: [], zh: [] })
   const raw = lang === 'en' ? cv.en : cv.zh
@@ -74,5 +81,6 @@ export async function loadCvSource(lang: CvLang, now: string = referenceMonth())
     now,
     works,
     socials,
+    headerExtras,
   }
 }

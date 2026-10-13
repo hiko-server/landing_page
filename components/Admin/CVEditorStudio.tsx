@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import dynamic from 'next/dynamic'
 import {
   AlertDialog,
   AlertDialogBody,
@@ -31,7 +32,7 @@ import {
 } from '@chakra-ui/react'
 import { ChevronDownIcon, DeleteIcon, ViewOffIcon } from '@chakra-ui/icons'
 import { FaRedo, FaUndo, FaSave, FaFileExport, FaFileImport, FaLink, FaUnlink, FaEllipsisH } from 'react-icons/fa'
-import { FiFileText, FiGlobe, FiColumns, FiLayout } from 'react-icons/fi'
+import { FiCheckCircle, FiFileText, FiGlobe, FiColumns, FiLayout } from 'react-icons/fi'
 import { SECTION_BY_NAME, blankSection, type ListDef, type SectionDef } from '../../lib/cvSections'
 import {
   countHidden,
@@ -84,6 +85,17 @@ import Sidebar, { type SectionAlignment } from './cvStudio/Sidebar'
 import Preview from './cvStudio/Preview'
 import HiddenPanel from './cvStudio/HiddenPanel'
 import { monoFont, useStudioTokens } from './cvStudio/fields'
+import {
+  partitionFindings,
+  runReadinessChecks,
+  withDismissal,
+  type ReadinessContext,
+  type ReadinessFinding,
+} from '../../lib/cvReadiness'
+import { referenceMonth } from '../../lib/clock'
+
+// The readiness drawer only loads when it is first opened.
+const ReadinessPanel = dynamic(() => import('./cvStudio/ReadinessPanel'), { ssr: false })
 
 /* ─────────────────────────────────────────────────────────────────────────
  * CV Editor Studio
@@ -239,6 +251,12 @@ export default function CVEditorStudio() {
   const conflict = useDisclosure()
   const removeDialog = useDisclosure()
   const hiddenPanel = useDisclosure()
+  const readinessPanel = useDisclosure()
+  // Readiness checks (E9): server context (home e-mail, case studies) + measured A4 pages.
+  const [readyCtx, setReadyCtx] = useState<ReadinessContext | null>(null)
+  const [readyErr, setReadyErr] = useState('')
+  const [pages, setPages] = useState<Partial<Record<CvLang, number>>>({})
+  const [readinessLoaded, setReadinessLoaded] = useState(false)
   const cancelRef = useRef<HTMLButtonElement | null>(null)
   const removeCancelRef = useRef<HTMLButtonElement | null>(null)
   const { border, dim, faint, surfaceAlt, hiddenFg } = useStudioTokens()
@@ -248,6 +266,33 @@ export default function CVEditorStudio() {
   useEffect(() => {
     setLinked(readPref(LINK_KEY, true))
     setShowPreview(readPref(PREVIEW_KEY, true))
+  }, [])
+
+  // Readiness context; ?panel=readiness (from the status hub) opens the panel.
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/admin/cv-readiness', { cache: 'no-store', credentials: 'same-origin' })
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const body = (await res.json()) as ReadinessContext
+        if (!cancelled) setReadyCtx(body)
+      })
+      .catch(() => {
+        if (!cancelled) setReadyErr('The case-study and home-page checks could not load; the others ran on the CV alone.')
+      })
+    try {
+      if (new URLSearchParams(window.location.search).get('panel') === 'readiness') {
+        setReadinessLoaded(true)
+        readinessPanel.onOpen()
+      }
+    } catch {
+      /* no URL access — the panel opens from the toolbar */
+    }
+    return () => {
+      cancelled = true
+    }
+    // Runs once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Re-render every 30s so "saved 2m ago" stays truthful.
@@ -418,8 +463,14 @@ export default function CVEditorStudio() {
         }
       },
       twinLength: (listPath: CvPath) => twinListLength(getDoc(), lang, listPath),
+      twinValue: (path: CvPath) => {
+        const d = getDoc()
+        const name = d[lang][Number(path[0])]?.sessionName
+        const at = d[other].findIndex((s) => s.sessionName === name)
+        return at < 0 ? undefined : getAt(d[other], [at, ...path.slice(1)])
+      },
     }),
-    [apply, run, getDoc, lang, linked, focus, reportVisibility, applyListOp, announce, unlinkedReason, sectionNameAt],
+    [apply, run, getDoc, lang, other, linked, focus, reportVisibility, applyListOp, announce, unlinkedReason, sectionNameAt],
   )
 
   const confirmPendingRemove = (both: boolean) => {
@@ -473,6 +524,49 @@ export default function CVEditorStudio() {
 
   // ── Hidden items panel ─────────────────────────────────────────────────
   const hiddenRows = useMemo(() => collectHidden(doc), [doc])
+
+  // ── Readiness panel ────────────────────────────────────────────────────
+  const deferredDoc = React.useDeferredValue(doc)
+  const findings = useMemo(
+    () =>
+      runReadinessChecks(deferredDoc, {
+        now: readyCtx?.now || referenceMonth(),
+        homeEmail: readyCtx?.homeEmail,
+        caseStudies: readyCtx?.caseStudies,
+        pages,
+      }),
+    [deferredDoc, readyCtx, pages],
+  )
+  const readiness = useMemo(() => partitionFindings(deferredDoc, findings), [deferredDoc, findings])
+  const onPages = useCallback(
+    (l: CvLang, n: number) => setPages((p) => (p[l] === n ? p : { ...p, [l]: n })),
+    [],
+  )
+
+  const jumpToFinding = (f: ReadinessFinding) => {
+    if (!f.path) return
+    readinessPanel.onClose()
+    setLang(f.lang)
+    setSelected(f.sectionName)
+    setMobilePane('edit')
+    setFocus({ lang: f.lang, path: f.path, nonce: Date.now() })
+  }
+
+  const previewFinding = (f: ReadinessFinding) => {
+    readinessPanel.onClose()
+    setLang(f.lang)
+    setMobilePane('preview')
+    if (!showPreview) {
+      writePref(PREVIEW_KEY, true)
+      setShowPreview(true)
+    }
+  }
+
+  const setDismissed = (f: ReadinessFinding, dismissed: boolean) => {
+    const live = new Set(findings.map((x) => x.id))
+    apply((d) => withDismissal(d, f, dismissed, live))
+    announce(dismissed ? 'Dismissed — save the CV to keep it' : 'Restored to the readiness list')
+  }
 
   const jumpTo = (row: HiddenRow) => {
     hiddenPanel.onClose()
@@ -832,7 +926,7 @@ export default function CVEditorStudio() {
     </Flex>
   )
 
-  const preview = <Preview sections={sections} lang={lang} />
+  const preview = <Preview sections={sections} lang={lang} onPages={onPages} />
 
   return (
     <StudioContext.Provider value={api}>
@@ -963,6 +1057,31 @@ export default function CVEditorStudio() {
                 {hiddenRows.length}
               </Box>
               <VisuallyHidden> hidden items</VisuallyHidden>
+            </Button>
+          </Tooltip>
+
+          <Tooltip label="Recruiter-readiness checks: dates, contradictions, weak highlights, links (EN + 中)" hasArrow>
+            <Button
+              size="sm"
+              variant="outline"
+              borderColor={readiness.open.some((f) => f.severity === 'high') ? 'red.300' : readiness.open.length ? 'orange.300' : border}
+              color={readiness.open.length ? undefined : dim}
+              leftIcon={<FiCheckCircle aria-hidden />}
+              onClick={() => {
+                setReadinessLoaded(true)
+                readinessPanel.onOpen()
+              }}
+              fontSize="12px"
+              aria-haspopup="dialog"
+              data-readiness-count={readiness.open.length}
+            >
+              <Box as="span" display={{ base: 'none', md: 'inline' }} mr={1}>
+                Readiness
+              </Box>
+              <Box as="span" fontFamily={monoFont}>
+                {readiness.open.length}
+              </Box>
+              <VisuallyHidden> readiness findings to review</VisuallyHidden>
             </Button>
           </Tooltip>
 
@@ -1249,6 +1368,21 @@ export default function CVEditorStudio() {
         onJump={jumpTo}
         onShow={showRow}
       />
+
+      {readinessLoaded ? (
+        <ReadinessPanel
+          isOpen={readinessPanel.isOpen}
+          onClose={readinessPanel.onClose}
+          open={readiness.open}
+          dismissed={readiness.dismissed}
+          pages={pages}
+          contextError={readyErr}
+          onJump={jumpToFinding}
+          onPreview={previewFinding}
+          onDismiss={(f) => setDismissed(f, true)}
+          onRestore={(f) => setDismissed(f, false)}
+        />
+      ) : null}
 
       {/* Conflict: the CV changed on the server since this version was loaded */}
       <AlertDialog isOpen={conflict.isOpen} onClose={conflict.onClose} leastDestructiveRef={cancelRef} isCentered>

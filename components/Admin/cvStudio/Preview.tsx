@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { Box, Button, ButtonGroup, Flex, HStack, IconButton, Text, Tooltip, useColorModeValue } from '@chakra-ui/react'
 import { ExternalLinkIcon } from '@chakra-ui/icons'
 import { FaPrint } from 'react-icons/fa'
@@ -24,7 +24,16 @@ const MODE_KEY = 'cv-studio:preview-mode'
  *   Website → the CV stack on /about (publicSections 'website')
  * Rendering is deferred so typing never waits on the preview.
  */
-export default function Preview({ sections, lang }: { sections: Section[]; lang: CvLang }) {
+export default function Preview({
+  sections,
+  lang,
+  onPages,
+}: {
+  sections: Section[]
+  lang: CvLang
+  /** Measured A4 page count of this language (readiness check). */
+  onPages?: (lang: CvLang, pages: number) => void
+}) {
   const deferred = useDeferredValue(sections)
   const [mode, setMode] = useState<Mode>('cv')
   const cvData = useMemo(() => (mode === 'cv' ? publicSections(deferred, 'cv') : []), [deferred, mode])
@@ -33,6 +42,7 @@ export default function Preview({ sections, lang }: { sections: Section[]; lang:
   const { border, dim } = useStudioTokens()
   const canvas = useColorModeValue('gray.100', 'blackAlpha.600')
   const stale = deferred !== sections
+  const reportPages = useCallback((n: number) => onPages?.(lang, n), [onPages, lang])
 
   useEffect(() => {
     try {
@@ -128,7 +138,7 @@ export default function Preview({ sections, lang }: { sections: Section[]; lang:
       </Flex>
       {mode === 'cv' ? (
         <Box flex={1} minH={0} overflow="auto" p={{ base: 3, md: 5 }} bg={canvas}>
-          <ScaledSheet zoom={zoom} pageGuides onScale={setScale}>
+          <ScaledSheet zoom={zoom} pageGuides onScale={setScale} onPages={reportPages}>
             <CVResult cvData={cvData as any} lang={lang} />
           </ScaledSheet>
         </Box>

@@ -28,6 +28,9 @@ import { FaInbox, FaRedo, FaReply, FaTrashAlt, FaEnvelopeOpen, FaEnvelope, FaCop
 import { Eyebrow, MONO, Panel, SessionExpiredNotice, outlineButtonProps, primaryButtonProps } from './shell/ui'
 import { readJsonObject } from './shell/http'
 import { formatBytes, formatWhen, inboxArrowTarget, relative, replyHref } from './shell/inboxFormat'
+import InquiryDetails, { IntentBadge } from './inbox/InquiryDetails'
+import type { InquiryMeta } from '../../lib/inquiry'
+import { retentionPeriodText } from '../../lib/retention'
 
 /**
  * Admin Inbox — every message sent through the public contact form
@@ -45,6 +48,8 @@ export type InboxMessage = {
   message: string
   delivered: boolean | null
   read: boolean
+  /** Structured inquiry (reason, kind, company, link, timeline); older messages have none. */
+  meta?: InquiryMeta
 }
 
 type LoadState = 'loading' | 'ready' | 'error' | 'session'
@@ -83,6 +88,8 @@ export default function InboxPanel({ onUnreadChange }: { onUnreadChange?: (unrea
   const [messages, setMessages] = useState<InboxMessage[]>([])
   const [storage, setStorage] = useState<Storage | null>(null)
   const [truncated, setTruncated] = useState(false)
+  /** CONTACT_RETENTION_DAYS as the server applies it (0 = no automatic expiry); null until loaded. */
+  const [retentionDays, setRetentionDays] = useState<number | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [now, setNow] = useState(() => Date.now())
@@ -113,6 +120,7 @@ export default function InboxPanel({ onUnreadChange }: { onUnreadChange?: (unrea
       setMessages(body.messages as InboxMessage[])
       setStorage(parseStorage(body.storage))
       setTruncated(body.truncated === true)
+      setRetentionDays(typeof body.retentionDays === 'number' && body.retentionDays >= 0 ? body.retentionDays : null)
       setNow(Date.now())
       setState('ready')
     } catch (e: any) {
@@ -241,6 +249,13 @@ export default function InboxPanel({ onUnreadChange }: { onUnreadChange?: (unrea
               </Text>
             ) : null}
           </Text>
+          {state === 'ready' && retentionDays !== null ? (
+            <Text mt={1} fontSize="12px" color="page.fg-secondary" data-retention="">
+              {retentionDays > 0
+                ? `Messages are deleted automatically after ${retentionPeriodText(retentionDays)} (CONTACT_RETENTION_DAYS), as the contact form says.`
+                : 'Automatic deletion is off (CONTACT_RETENTION_DAYS=0): messages stay until you delete them.'}
+            </Text>
+          ) : null}
         </Box>
         <Button size="sm" leftIcon={<FaRedo />} {...outlineButtonProps} onClick={() => load()} isLoading={state === 'loading'}>
           Refresh
@@ -365,6 +380,7 @@ export default function InboxPanel({ onUnreadChange }: { onUnreadChange?: (unrea
                       <Text flex={1} minW={0} noOfLines={1} fontSize="12px" color="page.fg-secondary">
                         {m.message}
                       </Text>
+                      <IntentBadge meta={m.meta} />
                       {m.delivered === false ? (
                         <Badge variant="outline" colorScheme="orange" fontSize="9px" flexShrink={0}>
                           not emailed
@@ -418,6 +434,7 @@ export default function InboxPanel({ onUnreadChange }: { onUnreadChange?: (unrea
                     </Text>
                   </HStack>
                 </Box>
+                <InquiryDetails meta={selected.meta} />
                 <Box
                   borderTop="1px solid"
                   borderColor="page.border"

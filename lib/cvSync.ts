@@ -3,12 +3,19 @@
  * the Studio (where it is an undoable edit you can review before saving).
  */
 
-import { VISIBILITY_KEYS } from './cvVisibility'
+import { EDITOR_META_KEYS, PRIVATE_SECTION_FIELDS, VISIBILITY_KEYS } from './cvVisibility'
 
 const isPlainObject = (v: unknown): v is Record<string, any> =>
   !!v && typeof v === 'object' && !Array.isArray(v)
 
 const isVisibilityKey = (key: string) => (VISIBILITY_KEYS as readonly string[]).includes(key)
+
+/**
+ * Keys that belong to one language and are never mirrored: dismissed
+ * readiness checks, and the per-output PDF photo and its switch (each
+ * language's PDF decides on its own; off by default).
+ */
+const PER_LANGUAGE_KEYS = new Set<string>([...EDITOR_META_KEYS, ...Object.values(PRIVATE_SECTION_FIELDS).flat()])
 
 function stringList(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
@@ -74,9 +81,10 @@ export function syncStructure(template: any, target: any): any {
     const result: any = {}
     const tObj = isPlainObject(target) ? target : {}
     for (const key of Object.keys(template)) {
-      if (isVisibilityKey(key)) continue
+      if (isVisibilityKey(key) || PER_LANGUAGE_KEYS.has(key)) continue
       result[key] = syncStructure(template[key], tObj[key])
     }
+    for (const key of PER_LANGUAGE_KEYS) if (key in tObj) result[key] = clone(tObj[key])
     for (const key of VISIBILITY_KEYS) {
       if (!(key in template) && !(key in tObj)) continue
       const merged = mergeVisibility(key, template[key], tObj[key], result)

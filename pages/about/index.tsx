@@ -11,6 +11,8 @@ import IdentityRail, { type RailPortrait } from '../../components/About/Identity
 import { aboutNavEntries } from '../../components/About/aboutNav'
 import { heroIdentity, portraitAlt, taglinePhrases, type HeroIdentity } from '../../components/LandingPage/heroIdentity'
 import { ogPresetUrl } from '../../lib/og/presets'
+import AboutRecommendations from '../../components/About/Recommendations'
+import { recommendationsSection } from '../../components/CVViewerPage/recommendationView'
 import type { WorkIndexItem } from '../../components/LandingPage/projectMatch'
 import { availabilityView, type AvailabilityView } from '../../components/Common/contactForm'
 import { resolveSocialLinks } from '../../components/Chrome/chrome'
@@ -43,6 +45,8 @@ type Props = {
   clockMonth: string
   /** Public home.socials for the persistent header / footer and the rail (null = none set). */
   chromeSocials?: HomeData['socials'] | null
+  /** Website-pruned Recommendations section (permitted entries only), or null. */
+  recommendations?: CvSectionLike | null
 }
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
@@ -50,7 +54,7 @@ const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 /** "[01] Bio" — the page's h2s, in the site's mono section style. */
 function RowHeading({ n, id, children }: { n: number; id: string; children: React.ReactNode }) {
   return (
-    <Text as="h2" id={id} m={0} fontFamily={monoFont} fontSize="11px" letterSpacing="0.12em" textTransform="uppercase" color="page.fg-subtle" fontWeight={400} whiteSpace="nowrap">
+    <Text as="h2" id={id} m={0} sx={{ scrollMarginTop: clearOfHeader('8px') }} fontFamily={monoFont} fontSize="11px" letterSpacing="0.12em" textTransform="uppercase" color="page.fg-subtle" fontWeight={400} whiteSpace="nowrap">
       <Text as="span" aria-hidden>
         [{String(n).padStart(2, '0')}]
       </Text>{' '}
@@ -65,21 +69,29 @@ function RowHeading({ n, id, children }: { n: number; id: string; children: Reac
  *   identity rail │ the tagline's lead and focus areas
  *   (sticky, lg)  │ [01] Bio      the owner's own words (admin → About bio);
  *                 │               omitted while empty, never drafted from the CV
- *                 │ [02] CV       every CV section, open, with the EN / 中 toggle
+ *                 │ [02] Recommendations  entries given with permission (CV Studio);
+ *                 │               omitted while there is none
+ *                 │ [03] CV       every CV section, open, with the EN / 中 toggle
  *
  * The GitHub widgets and the experience timeline live on the home page only.
  * Below lg the rail is the page header; the section nav shows from lg up.
  */
-const About = ({ hero, identity, portrait, availability, bio, cv, work, personFacts, chromeSocials }: Props) => {
+const About = ({ hero, identity, portrait, availability, bio, cv, work, personFacts, chromeSocials, recommendations }: Props) => {
   const [lang, setLang] = useState<'en' | 'zh'>('en')
   const [lead, ...focus] = taglinePhrases(hero.tagline)
   const socials = useMemo(() => resolveSocialLinks(chromeSocials), [chromeSocials])
   const active = lang === 'zh' && hasChineseCv(cv.zh) ? 'zh' : 'en'
   const nav = useMemo(
-    () => aboutNavEntries(renderedCvSections(active === 'zh' ? cv.zh : cv.en), { hasBio: !!bio, lang: active }),
-    [active, cv.en, cv.zh, bio],
+    () =>
+      aboutNavEntries(renderedCvSections(active === 'zh' ? cv.zh : cv.en), {
+        hasBio: !!bio,
+        hasRecommendations: !!recommendations,
+        lang: active,
+      }),
+    [active, cv.en, cv.zh, bio, recommendations],
   )
-  const cvNumber = bio ? 2 : 1
+  const recommendationsNumber = bio ? 2 : 1
+  const cvNumber = 1 + (bio ? 1 : 0) + (recommendations ? 1 : 0)
 
   return (
     <React.Fragment>
@@ -156,6 +168,22 @@ const About = ({ hero, identity, portrait, availability, bio, cv, work, personFa
                 </Box>
               ) : null}
 
+              {recommendations ? (
+                <Box mb={{ base: 14, md: 16 }}>
+                  <AboutRecommendations
+                    section={recommendations}
+                    title={
+                      <Flex align="center" gap={4} mb={{ base: 5, md: 6 }}>
+                        <RowHeading n={recommendationsNumber} id="about-recommendations">
+                          Recommendations
+                        </RowHeading>
+                        <Box flex="1" h="1px" bg="page.border" />
+                      </Flex>
+                    }
+                  />
+                </Box>
+              ) : null}
+
               <Box as="section" aria-labelledby="about-cv-heading">
                 <LandingCVSections
                   en={cv.en}
@@ -223,6 +251,16 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
     identity = heroIdentity(pi.en[0], pi.zh[0], { storedHasPersonalInfo })
   } catch {
     /* best effort — render with what we have */
+  }
+
+  // Recommendations (E11): the website view of the English CV keeps only
+  // entries with permission; the section renders only when one is left.
+  let recommendations: CvSectionLike | null = null
+  try {
+    const { readPublicCvSections } = await import('../../lib/cvdata')
+    recommendations = recommendationsSection(readPublicCvSections('website', ['recommendations'], ['en']).en)
+  } catch {
+    /* no recommendations section */
   }
 
   try {
@@ -303,6 +341,7 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
       cv,
       work,
       personFacts,
+      recommendations,
       clockMonth: referenceMonth(),
       // Omitted when the home document could not be read: the chrome then
       // loads the public view itself.
