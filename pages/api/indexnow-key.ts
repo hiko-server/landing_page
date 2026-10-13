@@ -2,11 +2,14 @@ import { withApi } from '../../lib/apiHandler'
 import { getIndexNowKey } from '../../lib/env'
 
 /**
- * IndexNow key file. lib/revalidate.ts submits changed URLs to IndexNow with
- * `keyLocation: https://<host>/api/indexnow-key`; search engines fetch this
- * URL to verify that the submitter controls the host. The key is not a
- * secret (the protocol publishes it), but it is served only when INDEXNOW_KEY
- * is configured and well-formed — otherwise 404, and IndexNow stays off.
+ * IndexNow key file, published at the site root as `/<INDEXNOW_KEY>.txt`:
+ * middleware.ts rewrites exactly that path (and no other) to this route, and
+ * lib/revalidate.ts submits changed URLs with `keyLocation:
+ * https://<host>/<key>.txt`. The protocol only accepts URLs in the key
+ * file's directory and below, so the file must be at the root to cover
+ * every page. The key is not a secret (the protocol publishes it), but it is
+ * served only when INDEXNOW_KEY is configured and well-formed — otherwise
+ * 404, and IndexNow stays off.
  */
 export default withApi('indexnow-key', (req, res) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') {

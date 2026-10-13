@@ -2,10 +2,10 @@ blank_issues_enabled: false
 
 contact_links:
   - name: Security vulnerability
-    url: https://github.com/hiko-server/landing_page/security/advisories/new
+    url: https://lucian-dev.com/.well-known/security.txt
     about: |
-      Please report security issues privately via GitHub's advisory flow,
-      NOT as a public issue. See SECURITY.md.
+      Please report security issues privately by e-mail to the Contact
+      address in security.txt, NOT as a public issue. See SECURITY.md.
   - name: Documentation question
     url: https://github.com/hiko-server/landing_page#readme
     about: Most "how do I…" answers live in the README + lib docstrings.

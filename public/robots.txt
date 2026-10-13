@@ -2,6 +2,8 @@ User-agent: *
 Allow: /
 # Social-card images must stay fetchable for link previews and search.
 Allow: /api/og
+# The IndexNow key file (/<key>.txt) and /.well-known/security.txt live at
+# the root, outside /api/, so they stay fetchable too.
 Disallow: /admin
 Disallow: /api/
 

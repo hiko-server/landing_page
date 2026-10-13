@@ -140,8 +140,8 @@ backup, and a hardened admin GUI for non-engineers.
 - **Analytics tab** — first-party, cookieless page views and real-user Core
   Web Vitals (see [Privacy](#privacy-first-party-analytics)).
 - **Scheduled backups** — change-aware whole-site snapshots every
-  `BACKUP_INTERVAL_HOURS` (default 24), with the backup age in
-  `/api/health` and the Storage panel.
+  `BACKUP_INTERVAL_HOURS` (default 24), with the backup age in the Storage
+  panel and in the `/api/health` detail (admin or `HEALTH_TOKEN` only).
 - **Operability** — structured JSON logs with request ids (`LOG_LEVEL`),
   error boundaries per page region.
 
@@ -318,6 +318,7 @@ All variables are documented in [`.env.example`](./.env.example). Headlines:
 | Logging | `LOG_LEVEL` (`debug` / `info` / `warn` / `error`) | optional |
 | Cloudflare purge | `CF_ZONE_ID`, `CF_API_TOKEN` | optional — nothing is sent unless both are set |
 | IndexNow | `INDEXNOW_KEY` (8–128 of `[A-Za-z0-9-]`) | optional — off unless set |
+| Health detail | `HEALTH_TOKEN` (bearer token for monitors) | optional — without it only a signed-in admin sees the `/api/health` detail |
 
 > The repo never commits a real `.env`. `.env.example` contains placeholders
 > only — copy and fill in for your own deployment.
@@ -568,7 +569,10 @@ scripts/deploy.sh                         # --force rebuilds the deployed commit
    …:pre-<timestamp> …:latest && docker compose up -d --no-build`, the
    checkout reset, the failed container's last 100 log lines and the backup
    paths printed. On success: `.deployed-sha`, image pruning (the three
-   newest rollback images are kept).
+   newest rollback images are kept) and backup pruning: only the ten newest
+   `<UTC timestamp>/` backup directories are kept (each holds a copy of
+   `.env`), every removed one is listed, and nothing else in
+   `/root/landing_page-backups/` is touched.
 
 Afterwards, run the public E2E suite against production:
 
@@ -614,7 +618,9 @@ At runtime, with `CF_ZONE_ID` + `CF_API_TOKEN` (a token with Cache Purge
 only) every on-demand revalidation purges the refreshed URLs — plus the
 feeds, sitemap and search index when posts or case studies change — in
 batches of 30; with `INDEXNOW_KEY` the page URLs are submitted to IndexNow
-(the key is served at `/api/indexnow-key`). Both are fire-and-forget with a
+(the key file is served at the site root as `/<INDEXNOW_KEY>.txt`, because a
+key file only covers URLs in its own directory and below; the middleware
+rewrites exactly that path to `/api/indexnow-key`). Both are fire-and-forget with a
 3 s timeout, logged, and never fail a save; without the env nothing is
 sent.
 
@@ -663,7 +669,8 @@ overlay and follow a contact message into the Inbox.
 | `/sitemap.xml` | Sitemap with EN / 中 CV alternates |
 | `/api/search-index` | Public search documents for the command palette |
 | `/api/vcard` | vCard of the public contact details |
-| `/api/health` | Health: store, content, backup age, pending R2 writes |
+| `/api/health` | Health: `{"status":"ok"\|"empty"\|"degraded"}` for everyone; store, content, backup age and pending R2 writes only for an admin or `Authorization: Bearer <HEALTH_TOKEN>` |
+| `/.well-known/security.txt` | RFC 9116 security contact (public CV e-mail, rolling 180-day expiry; 404 while the e-mail is hidden) |
 
 API surface lives under `/api/*`; admin-only endpoints under `/api/admin/*`
 are gated by the middleware.
@@ -709,8 +716,11 @@ contain real credentials, paid dashboards, or personal contact details.
 ## Security disclosure
 
 If you discover a security issue, please **do not** open a public issue.
-Use [GitHub's private security advisory flow](https://github.com/hiko-server/landing_page/security/advisories/new)
-or email the maintainer directly. Coordinated disclosure preferred.
+E-mail the maintainer at the `Contact:` address in
+[`/.well-known/security.txt`](https://lucian-dev.com/.well-known/security.txt)
+(RFC 9116; see [SECURITY.md](./SECURITY.md) for scope and response times).
+Coordinated disclosure preferred. Each deployment generates its own
+security.txt from the public CV e-mail (404 while the CV hides it).
 
 Known limitations (by design, document and accept):
 - In-memory rate limiter resets on server restart. Behind a reverse

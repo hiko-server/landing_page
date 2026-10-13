@@ -16,7 +16,8 @@ import { absUrl, ogImageUrl, personAuthor } from '../lib/schema'
  *
  * The owner's own write-up (admin → pages → uses) comes first when it has
  * content, followed by "Colophon: how this site is built" — the curated stack
- * from this site's package.json (lib/stack.ts, the same data as /api/stack).
+ * from this site's package.json with the installed versions (lib/stack.ts,
+ * the same data as /api/stack).
  * While the write-up is empty the page is honestly titled "How this site is
  * built" and shows only that stack. ISR (60 s).
  */
@@ -165,8 +166,8 @@ export default function UsesPage({ tree, updated, ownDescription, stack }: Props
                 maxW="62ch"
                 mb={[8, 10]}
               >
-                Read from this site&rsquo;s own package.json and deployment when the page is
-                generated, so the versions below are the ones serving this page.
+                Read from the packages this build installed and from the deployment when the
+                page is generated, so the versions below are the ones serving this page.
               </Text>
               <StackList groups={stack} />
               {colophonLink}

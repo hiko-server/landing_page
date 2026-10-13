@@ -17,7 +17,7 @@ register(
   import.meta.url,
 )
 const { NextRequest } = await import('next/server.js')
-const { edgeRedirect, forwardedScheme, isPublicAdminApi, middleware } = await import('../middleware')
+const { edgeRedirect, forwardedScheme, isIndexNowKeyPath, isPublicAdminApi, middleware } = await import('../middleware')
 
 const HOST = 'lucian-dev.com'
 
@@ -141,5 +141,33 @@ test('leaving Draft Mode works without a session; entering it does not', async (
   } finally {
     if (prev === undefined) delete process.env.JWT_SECRET
     else process.env.JWT_SECRET = prev
+  }
+})
+
+test('the IndexNow key file is served at the site root, for the configured key only (FIX-28)', async () => {
+  const KEY = 'abcdef0123456789'
+  assert.equal(isIndexNowKeyPath(`/${KEY}.txt`, KEY), true)
+  for (const p of [`/${KEY}`, `/${KEY}.txt/`, `/api/${KEY}.txt`, '/other0123456789.txt', `/${KEY.toUpperCase()}.txt`, '/robots.txt']) {
+    assert.equal(isIndexNowKeyPath(p, KEY), false, p)
+  }
+  assert.equal(isIndexNowKeyPath('/null.txt', null), false)
+
+  const prev = process.env.INDEXNOW_KEY
+  try {
+    process.env.INDEXNOW_KEY = KEY
+    const res = await middleware(req(`https://lucian-dev.com/${KEY}.txt?x=1`))
+    // NextResponse.rewrite: the internal route answers under the root URL.
+    const target = new URL(res.headers.get('x-middleware-rewrite') || '', 'http://placeholder.invalid')
+    assert.equal(target.pathname + target.search, '/api/indexnow-key')
+    assert.ok(res.headers.get('content-security-policy'), 'security headers on the rewrite')
+    const other = await middleware(req('https://lucian-dev.com/wrongkey0123456.txt'))
+    assert.equal(other.headers.get('x-middleware-rewrite'), null)
+
+    delete process.env.INDEXNOW_KEY
+    const off = await middleware(req(`https://lucian-dev.com/${KEY}.txt`))
+    assert.equal(off.headers.get('x-middleware-rewrite'), null, 'no key configured: nothing is rewritten')
+  } finally {
+    if (prev === undefined) delete process.env.INDEXNOW_KEY
+    else process.env.INDEXNOW_KEY = prev
   }
 })

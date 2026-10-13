@@ -11,12 +11,17 @@ new commits and a redeploy is the upgrade path.
 
 **Please do not open a public GitHub issue for security bugs.**
 
-Preferred channel:
+Report privately by e-mail to the address in the site's
+[`/.well-known/security.txt`](https://lucian-dev.com/.well-known/security.txt)
+(RFC 9116). Its `Contact:` line is the maintainer's public e-mail, taken
+from the CV the site publishes, and its `Expires:` date always lies about
+six months ahead. GitHub's private vulnerability reporting is not enabled
+for this repository, so e-mail is the channel.
 
-> [Open a private security advisory](https://github.com/hiko-server/landing_page/security/advisories/new)
-
-This routes the report straight to the maintainer through GitHub's
-private flow (encrypted at rest, no public trace until a fix lands).
+Every deployment of this project serves its own file at
+`https://<host>/.well-known/security.txt` (`pages/api/security-txt.ts`,
+`lib/securityTxt.ts`): the contact comes from the public CV, and the file
+answers `404` while the CV hides its e-mail address.
 
 Acknowledgement target: 72 hours. Initial assessment: 7 days. Coordinated
 disclosure preferred — public write-ups land after a patch is available.
@@ -26,7 +31,7 @@ disclosure preferred — public write-ups land after a patch is available.
 - A minimal reproduction (URL or curl command + expected vs actual).
 - Affected commit SHA from `main` (`git rev-parse HEAD`).
 - Your assessment of impact and severity.
-- Whether you'd like public credit when the advisory closes.
+- Whether you'd like public credit when the fix is published.
 
 ### Out of scope
 
@@ -189,6 +194,12 @@ For `POST` / `PUT` / `PATCH` / `DELETE` to `/api/admin/*`, `/api/auth/*`,
 - **`/api/og`** — text clamped by code point, per-IP render limit (60/min),
   `Cache-Control: public, max-age=86400, s-maxage=31536000, immutable` so
   repeat crawls are served by the CDN.
+- **`/api/health`** — anonymous callers get only `{"status": …}` (`200`, or
+  `503` when the store is unreachable). The operational detail (backup
+  times, R2 configuration, pending R2 writes, warnings, uptime) goes only to
+  a signed-in admin or to `Authorization: Bearer <HEALTH_TOKEN>` when that
+  variable is set (constant-time compare), so the public cannot read the
+  last deploy or backup time off it.
 - **MongoDB backup target** (`/api/mongo`, admin-only) — connection strings
   are masked by a URI-grammar parser that also handles multi-host URIs and
   passwords containing `@` or `/`; secret query options are redacted; error
@@ -206,9 +217,12 @@ strict-origin-when-cross-origin`, `Permissions-Policy`, and one shared CSP.
 Admin responses add `X-Robots-Tag: noindex, nofollow, noarchive` and
 `Cache-Control: no-store`.
 
-Known CSP loosenings (documented in `lib/csp.js`): `script-src` includes
-`'unsafe-eval'` (MDX pages are compiled at runtime) and `'unsafe-inline'`
-(Next/Chakra inline bootstrap and styles). XSS defence therefore rests on
+Known CSP loosening (documented in `lib/csp.js`): `script-src` includes
+`'unsafe-inline'` (Next/Chakra inline bootstrap and styles). It does **not**
+include `'unsafe-eval'` in production (since 2.2.0): MDX articles are
+compiled to a plain tree on the server and rendered without evaluating
+code in the browser; only the development server adds `'unsafe-eval'`, for
+Fast Refresh. Because of `'unsafe-inline'`, XSS defence still rests on
 React escaping and on the link sanitiser (`lib/cvFormat.ts` `safeHref`)
 rather than on the CSP.
 

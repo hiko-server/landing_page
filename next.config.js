@@ -1,10 +1,39 @@
-/* eslint-disable @typescript-eslint/no-var-requires -- CommonJS config file */
+/* eslint-disable @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports -- CommonJS config file */
+const fs = require('fs')
 const path = require('path')
 const { buildCsp } = require('./lib/csp')
+
+/**
+ * Installed version of every direct dependency, read from node_modules when
+ * the build starts. lib/stack.ts (/uses, /colophon, /api/stack) shows these
+ * instead of the floors of the semver ranges in package.json; the standalone
+ * server only ships the node_modules it traced, so build- and browser-only
+ * packages (typescript, @tiptap/*, @dnd-kit/*) could not be read at runtime.
+ */
+function installedDependencyVersions() {
+  const out = {}
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'))
+    for (const name of Object.keys({ ...pkg.devDependencies, ...pkg.dependencies })) {
+      try {
+        const { version } = JSON.parse(fs.readFileSync(path.join(__dirname, 'node_modules', name, 'package.json'), 'utf8'))
+        if (typeof version === 'string') out[name] = version
+      } catch {
+        // Not installed: lib/stack.ts shows no version for it.
+      }
+    }
+  } catch {
+    // No readable package.json: lib/stack.ts falls back to node_modules.
+  }
+  return out
+}
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+  // Inlined at build time wherever process.env.STACK_INSTALLED_VERSIONS is
+  // read — only lib/stack.ts, which is server code.
+  env: { STACK_INSTALLED_VERSIONS: JSON.stringify(installedDependencyVersions()) },
   // Pin the tracing root to this project: a stray lockfile in a parent
   // directory would otherwise make Next 15 trace from there and nest the
   // standalone output (server.js) under the parent's relative path.
@@ -45,10 +74,13 @@ const nextConfig = {
   // images 404. `beforeFiles` runs ahead of the filesystem check; the
   // destination (/api/uploads/*) doesn't match `/uploads/:path*`, so there is
   // no rewrite loop.
+  // /.well-known/security.txt (RFC 9116) is generated per request from the
+  // public CV contact and a rolling expiry date (pages/api/security-txt.ts).
   async rewrites() {
     return {
       beforeFiles: [
         { source: '/uploads/:path*', destination: '/api/uploads/:path*' },
+        { source: '/.well-known/security.txt', destination: '/api/security-txt' },
       ],
     }
   },

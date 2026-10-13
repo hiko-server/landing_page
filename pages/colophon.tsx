@@ -15,7 +15,7 @@ import { log } from '../lib/log'
 import { absUrl, breadcrumb, ogImageUrl, personAuthor } from '../lib/schema'
 
 /**
- * /colophon — how the site is made: stack (lib/stack.ts, from package.json),
+ * /colophon — how the site is made: stack (lib/stack.ts, installed versions),
  * type, hosting, how /now and /uses assemble themselves, exactly what the
  * first-party analytics stores, the build this page came from and every
  * release from CHANGELOG.md.
@@ -257,8 +257,8 @@ export default function ColophonPage({ releases, stack, buildSha, builtAt }: Pro
             <Box minW={0}>
               <Section id="stack" title="Stack">
                 <Para>
-                  Read from this site&rsquo;s package.json when the page is built, so the versions
-                  are the ones serving it. The same list, with more detail, is on{' '}
+                  Read from the packages installed when the page is built, so the versions are
+                  the ones serving it. The same list, with more detail, is on{' '}
                   <InlineLink href="/uses">/uses</InlineLink>.
                 </Para>
                 {stack.length ? (
@@ -334,8 +334,8 @@ export default function ColophonPage({ releases, stack, buildSha, builtAt }: Pro
                       in Tokyo.
                     </>,
                     <>
-                      Traffic arrives through a Cloudflare Tunnel: the server opens no inbound
-                      ports, and Cloudflare terminates TLS.
+                      The container publishes no public port: it is reached only through a
+                      Cloudflare Tunnel, and Cloudflare terminates TLS.
                     </>,
                     <>
                       Content lives in SQLite on the server and is mirrored to Cloudflare R2
@@ -361,8 +361,8 @@ export default function ColophonPage({ releases, stack, buildSha, builtAt }: Pro
                 </Para>
                 <Para>
                   <InlineLink href="/uses">/uses</InlineLink> works the same way: my own write-up
-                  first when there is one, then the stack above, read from package.json each time
-                  the page is generated.
+                  first when there is one, then the stack above, with the versions this build
+                  installed, each time the page is generated.
                 </Para>
               </Section>
 
