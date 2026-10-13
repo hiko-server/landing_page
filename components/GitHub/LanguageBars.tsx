@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import { useMemo } from 'react'
 import { Box, Flex, Skeleton, Text } from '@chakra-ui/react'
 import { motion, useReducedMotion, type Variants } from 'framer-motion'
 

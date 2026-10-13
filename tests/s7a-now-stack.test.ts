@@ -5,7 +5,7 @@ import { currentRoles, currentlyCodingSignal, hasSignals, latestPost, latestWork
 import { deriveCurrentlyCoding, mergeCurrentlyCoding } from '../lib/currentlyCoding'
 import { buildStack, shortVersion } from '../lib/stack'
 
-// More stack coverage (installed versions, Sentry gating): tests/r6-ops-stack.test.ts
+// More stack coverage (installed versions): tests/r6-ops-stack.test.ts
 
 const NOW = new Date('2026-10-12T00:00:00Z')
 

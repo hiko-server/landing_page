@@ -28,6 +28,11 @@ function installedDependencyVersions() {
   return out
 }
 
+// Bundler: webpack. Next 16 defaults to Turbopack; package.json passes
+// --webpack to `next dev` and `next build` (and so do the Dockerfile and CI,
+// through `yarn build`), keeping the chunking that scripts/perf-budget.mjs
+// measures, the standalone trace this image was verified with and the
+// `webpack` hook below (a plain `next build` would use Turbopack and ignore it).
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
@@ -35,7 +40,7 @@ const nextConfig = {
   // read — only lib/stack.ts, which is server code.
   env: { STACK_INSTALLED_VERSIONS: JSON.stringify(installedDependencyVersions()) },
   // Pin the tracing root to this project: a stray lockfile in a parent
-  // directory would otherwise make Next 15 trace from there and nest the
+  // directory would otherwise make Next trace from there and nest the
   // standalone output (server.js) under the parent's relative path.
   outputFileTracingRoot: path.join(__dirname),
   reactStrictMode: true,
@@ -47,7 +52,6 @@ const nextConfig = {
   // advisories). Images are resized and converted at upload time instead, so
   // next/image emits original URLs and /_next/image answers 404.
   images: { unoptimized: true },
-  // instrumentation.ts is stable in Next 15 (no flag needed).
   experimental: {
     // Back / Forward return to the previous scroll position instead of the
     // top. Next saves each history entry's position and restores it in the
@@ -55,16 +59,19 @@ const nextConfig = {
     // framer-motion page swap (components/Common/scrollRestore.ts).
     scrollRestoration: true,
   },
-  // The server SDK (imported by instrumentation.ts) pulls in OpenTelemetry's
-  // runtime instrumentation, which loads modules through a computed require.
-  // Webpack flags that as "Critical dependency" although it is intended and
-  // harmless on Node. withSentryConfig silences exactly these two; do the same
-  // when the build is not wrapped, so the build output stays warning-free.
+  // Next 16's `next/server` entry (middleware.ts imports NextResponse from it)
+  // re-exports App Router helpers whose module calls process.cwd() on a code
+  // path that never runs in middleware, so the edge compiler warns "A Node.js
+  // API is used (process.cwd …) which is not supported in the Edge Runtime"
+  // (still so in Next 16.4). Silence exactly that warning from exactly that
+  // Next module: any other Node API in edge code still surfaces.
   webpack(webpackConfig) {
     webpackConfig.ignoreWarnings = [
       ...(webpackConfig.ignoreWarnings || []),
-      { module: /@opentelemetry[\\/]instrumentation/, message: /Critical dependency/ },
-      { module: /require-in-the-middle/, message: /Critical dependency/ },
+      {
+        module: /[\\/]node_modules[\\/]next[\\/]dist[\\/]esm[\\/]server[\\/]app-render[\\/]dynamic-rendering\.js/,
+        message: /A Node\.js API is used \(process\.cwd /,
+      },
     ]
     return webpackConfig
   },
@@ -111,49 +118,4 @@ const nextConfig = {
   },
 }
 
-// Sentry is opt-in at BUILD time. NEXT_PUBLIC_SENTRY_DSN is inlined into the
-// client bundle (it arrives as a Docker build arg), so without it there is
-// nothing the browser SDK could report to — and then the build is not wrapped
-// at all: no client SDK in the shared _app chunk (~120 KB raw / ~40 KB gzip),
-// no auto-instrumentation loaders. The server/edge SDK still initialises from
-// instrumentation.ts whenever SENTRY_DSN is present at runtime.
-//
-// When enabled, unused SDK code paths are compiled out: debug logging and
-// Session Replay (the app never adds the replay integration) everywhere, and
-// browser tracing in the CLIENT bundle unless a non-zero
-// NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE is set. Server/edge tracing is left
-// intact because SENTRY_TRACES_SAMPLE_RATE is a runtime setting. Source maps
-// upload only when SENTRY_ORG + SENTRY_PROJECT + SENTRY_AUTH_TOKEN are all set.
-const sentryDsn = (process.env.NEXT_PUBLIC_SENTRY_DSN || '').trim()
-const clientTracing = Number(process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE || 0) > 0
-
-if (sentryDsn) {
-  const { withSentryConfig } = require('@sentry/nextjs')
-  const config = clientTracing
-    ? nextConfig
-    : {
-        ...nextConfig,
-        webpack(webpackConfig, context) {
-          const cfg = nextConfig.webpack(webpackConfig, context)
-          if (!context.isServer) cfg.plugins.push(new context.webpack.DefinePlugin({ __SENTRY_TRACING__: false }))
-          return cfg
-        },
-      }
-  module.exports = withSentryConfig(config, {
-    silent: true,
-    telemetry: false,
-    org: process.env.SENTRY_ORG,
-    project: process.env.SENTRY_PROJECT,
-    authToken: process.env.SENTRY_AUTH_TOKEN,
-    widenClientFileUpload: false,
-    disableLogger: true,
-    bundleSizeOptimizations: {
-      excludeDebugStatements: true,
-      excludeReplayShadowDom: true,
-      excludeReplayIframe: true,
-      excludeReplayWorker: true,
-    },
-  })
-} else {
-  module.exports = nextConfig
-}
+module.exports = nextConfig

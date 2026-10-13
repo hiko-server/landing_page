@@ -1,4 +1,3 @@
-import React from 'react'
 import { Text } from '@chakra-ui/react'
 import type { Experiences } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'

@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import NextLink from 'next/link'
 import { Box, Flex, Text, Link, Divider, chakra } from '@chakra-ui/react'
 import { PRIMARY_LINKS, SOCIAL_LINKS, type SocialLink } from '../Chrome/chrome'

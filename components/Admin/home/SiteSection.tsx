@@ -1,4 +1,3 @@
-import React from 'react'
 import { Box } from '@chakra-ui/react'
 import { HOME_LIMITS } from '../../../lib/homeShape'
 import { PERSON_NAME } from '../../../lib/schema'

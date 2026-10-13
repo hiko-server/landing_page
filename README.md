@@ -149,8 +149,9 @@ backup, and a hardened admin GUI for non-engineers.
 
 **Security and delivery**
 
-- Next.js 15.5; the image optimizer is disabled (`/_next/image` answers
-  404 — GHSA-2xp9-vwfh-vxw4); the production CSP has no `'unsafe-eval'`.
+- Next.js 16.3 (built with webpack); the image optimizer is disabled
+  (`/_next/image` answers 404 — GHSA-2xp9-vwfh-vxw4); the production CSP has
+  no `'unsafe-eval'` and no third-party origin besides the GitHub API.
 - HTTP → HTTPS (308) for the public host and the legacy CV redirect in the
   middleware; server-side fetches of admin- or content-supplied URLs go
   through `lib/security/safeFetch.ts`.
@@ -190,7 +191,7 @@ the full document.
 
 | Layer | Choice | Why |
 |---|---|---|
-| Framework | **Next.js 15 (Pages router)** | Mature SSR/ISR, file-routed APIs, edge middleware |
+| Framework | **Next.js 16 (Pages router, webpack build)** + **React 18** | Mature SSR/ISR, file-routed APIs, edge middleware |
 | UI | **Chakra UI 2** | Composable primitives, dark-mode out of the box |
 | Animations | **Framer Motion** | Hero entry, section reveal |
 | Content store | **better-sqlite3** + **Cloudflare R2** | Local-first, cheap off-site replica |
@@ -634,7 +635,7 @@ CI (`.github/workflows/ci.yml`) runs on every push and pull request:
 
 | Job | What must pass |
 |---|---|
-| build | `tsc`, ESLint with zero warnings, unit tests, `next build`, and the performance budget (`scripts/perf-budget.mjs`: shared and per-page first-load JS, shared CSS, number and weight of preloaded fonts) |
+| build | `tsc`, ESLint with zero warnings, unit tests, `next build --webpack`, and the performance budget (`scripts/perf-budget.mjs`: shared and per-page first-load JS, shared CSS, number and weight of preloaded fonts) |
 | audit | `scripts/check-audit.mjs`: no high/critical advisory in production dependencies unless allowlisted in `security/audit-allowlist.json` with a reason and an expiry date; expired entries fail too. The full report is kept as an artifact |
 | docker | the merged compose config publishes loopback only; the image builds, starts on an empty data volume, serves, warms its ISR pages and stops gracefully; then the Playwright + axe suite runs against that exact container |
 

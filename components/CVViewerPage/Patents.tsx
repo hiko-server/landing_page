@@ -1,4 +1,3 @@
-import React from 'react'
 import type { Patents } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'
 import { cvLabels, formatCvDate } from '../../lib/cvFormat'

@@ -1,4 +1,3 @@
-import React from 'react'
 import { Box, Toast, useToast, type UseToastOptions } from '@chakra-ui/react'
 import { CHROME_LANG, useChromeLang } from './chromeLang'
 

@@ -1,4 +1,3 @@
-import React from 'react'
 import { Box, Flex, Link, Text } from '@chakra-ui/react'
 import { Certification } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'

@@ -1,4 +1,3 @@
-import React from 'react'
 import type { Project } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'
 import { useReferenceMonth } from '../../lib/clock'

@@ -1,5 +1,4 @@
 import { Box } from '@chakra-ui/react'
-import React from 'react'
 
 import PersonalInfo, { type AvatarMeta } from './PersonalInfo'
 import Content, { type HomeWriting } from './Content'

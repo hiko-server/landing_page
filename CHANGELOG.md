@@ -8,6 +8,36 @@ portfolio CMS, no public package). Entries are grouped by release date.
 
 ## [Unreleased]
 
+### Platform
+
+- Next.js 15.5.27 → 16.3.8 (Pages Router, React 18.3 unchanged: the Pages
+  Router uses the React in package.json and Next 16 still accepts 18.2+).
+  16.3.8 carries the same 2026-09-30 security fixes as 15.5.27 (SSG/ISR
+  cache poisoning) and more; Next 15 leaves maintenance LTS on 2026-10-21.
+- Builds stay on webpack: Next 16 defaults to Turbopack, so `yarn dev` /
+  `yarn build` (and with them the Dockerfile and CI) run `next dev --webpack`
+  / `next build --webpack`. `next build` no longer runs ESLint (CI lints
+  separately, as before).
+- Next 16 sets `"jsx": "react-jsx"` in tsconfig.json; the classic
+  `import React from 'react'` lines that only served JSX are gone (76 files).
+- Still on deprecated-but-supported Edge conventions, kept on purpose:
+  `middleware.ts` (Next 16 calls it `proxy.ts`, which cannot run on the Edge
+  runtime) and the Edge `/api/og` route. `next build` prints a deprecation
+  notice for each.
+
+### Removed
+
+- The optional Sentry integration (`@sentry/nextjs` 8 does not support
+  Next 16, and no DSN was ever configured): the `withSentryConfig` wrap, the
+  `sentry.*.config.ts` files, the Sentry parts of `instrumentation.ts` (it
+  still starts the backup schedule and adds `no-transform` to HTML), the API
+  wrapper, the error boundary and `_error`, the `NEXT_PUBLIC_SENTRY_*` build
+  args, the env docs and the Sentry hosts in the CSP `connect-src` (now
+  `'self' https://api.github.com`). The standalone output no longer ships the
+  SDK or OpenTelemetry (135 MB → 109 MB).
+- Every audit allowlist entry: none is reported any more (Next 16 ships
+  postcss 8.5; the Sentry build plugin was the only path to the others).
+
 ## [2.2.0] — 2026-10-13
 
 A research-driven round (benchmarks of leading developer portfolios and CMS

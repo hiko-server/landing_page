@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import NextLink from 'next/link'
 import { Box } from '@chakra-ui/react'
 import { ADMIN_HINT_COOKIE } from '../../lib/adminHint'

@@ -9,7 +9,7 @@ import path from 'path'
  * packages that say something about how the site is built are listed, with
  * their display name and the major.minor of the version actually INSTALLED
  * (not the floor of the semver range in package.json). Tooling / type
- * packages are left out, and Sentry is listed only when a DSN is configured.
+ * packages are left out.
  *
  * Installed versions come from the build-time snapshot next.config.js
  * inlines as process.env.STACK_INSTALLED_VERSIONS — the standalone server
@@ -72,19 +72,13 @@ const CATALOG: Array<{ label: string; hint: string; entries: Array<[pkg: string,
   },
   {
     label: 'Platform',
-    hint: 'Monitoring, auth and mail',
+    hint: 'Auth and mail',
     entries: [
-      ['@sentry/nextjs', 'Sentry'],
       ['jose', 'JOSE (JWT)'],
       ['nodemailer', 'Nodemailer'],
     ],
   },
 ]
-
-/** Error reporting: listed only when it is actually configured (a DSN is set). */
-const SENTRY = '@sentry/nextjs'
-/** Hint of the Platform group when Sentry is not listed. */
-const PLATFORM_HINT_WITHOUT_MONITORING = 'Auth and mail'
 
 /** "^14.2.3" → "14.2"; undefined when no version can be read. */
 export function shortVersion(range: unknown): string | undefined {
@@ -100,8 +94,6 @@ export function pinnedVersion(spec: unknown): string | undefined {
 export type BuildStackOptions = {
   /** Installed version per package name (installedVersions()). */
   installed?: Readonly<Record<string, string>>
-  /** True when Sentry is configured (a DSN is set); otherwise Sentry is left out. */
-  sentry?: boolean
 }
 
 /**
@@ -117,13 +109,10 @@ export function buildStack(
   const all: Record<string, string> = { ...(pkg?.devDependencies || {}), ...(pkg?.dependencies || {}) }
   const installed = options.installed || {}
   const groups: StackGroup[] = CATALOG.map((g) => {
-    const entries = g.entries.filter(
-      ([name]) => Object.prototype.hasOwnProperty.call(all, name) && (name !== SENTRY || options.sentry === true),
-    )
-    const monitoringLeftOut = g.entries.some(([name]) => name === SENTRY) && !entries.some(([name]) => name === SENTRY)
+    const entries = g.entries.filter(([name]) => Object.prototype.hasOwnProperty.call(all, name))
     return {
       label: g.label,
-      hint: monitoringLeftOut ? PLATFORM_HINT_WITHOUT_MONITORING : g.hint,
+      hint: g.hint,
       items: entries.map(([name, display]) => {
         const version = NO_VERSION.has(name) ? undefined : (shortVersion(installed[name]) ?? pinnedVersion(all[name]))
         return version ? { name: display, version } : { name: display }
@@ -180,11 +169,6 @@ export function installedVersions(
   return out
 }
 
-/** Sentry reports anything only with a DSN (server SENTRY_DSN or the build-time NEXT_PUBLIC_SENTRY_DSN). */
-export function sentryConfigured(): boolean {
-  return !!(process.env.SENTRY_DSN || '').trim() || !!(process.env.NEXT_PUBLIC_SENTRY_DSN || '').trim()
-}
-
 let cached: Stack | null = null
 
 /** The stack of this deployment; an empty stack when package.json cannot be read. */
@@ -192,7 +176,7 @@ export function readStack(): Stack {
   if (cached) return cached
   try {
     const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8'))
-    cached = buildStack(pkg, process.versions.node, { installed: installedVersions(STACK_PACKAGES), sentry: sentryConfigured() })
+    cached = buildStack(pkg, process.versions.node, { installed: installedVersions(STACK_PACKAGES) })
     return cached
   } catch {
     return { groups: [], packages: [] }

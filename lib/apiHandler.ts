@@ -11,10 +11,9 @@ import { log, type Logger } from './log'
  *     matched to the edge request), else a sane incoming `x-request-id`, else
  *     a fresh UUID; echoed as the `X-Request-Id` response header and
  *     available as ctx.requestId / ctx.log (a child logger carrying it)
- *   - uncaught errors are logged with the route, method and request id,
- *     reported to Sentry when a DSN is configured (the SDK is imported only
- *     then), and answered with a generic 500 JSON body that carries only the
- *     request id (no internals)
+ *   - uncaught errors are logged with the route, method and request id, and
+ *     answered with a generic 500 JSON body that carries only the request id
+ *     (no internals)
  *   - 5xx responses and slow requests (> 1 s) are logged; everything else is
  *     logged at debug level only
  *
@@ -23,15 +22,6 @@ import { log, type Logger } from './log'
 
 export type ApiContext = { requestId: string; log: Logger }
 export type ApiHandler = (req: NextApiRequest, res: NextApiResponse, ctx: ApiContext) => unknown | Promise<unknown>
-
-type SentryLike = {
-  captureException: (err: unknown, hint?: { tags?: Record<string, string>; extra?: Record<string, unknown> }) => unknown
-}
-
-export type WithApiOptions = {
-  /** Loads the Sentry SDK (injectable for tests). Called only when a DSN is configured. */
-  importSentry?: () => Promise<SentryLike>
-}
 
 const REQUEST_ID_RE = /^[A-Za-z0-9._:-]{8,128}$/
 export const SLOW_MS = 1000
@@ -50,27 +40,7 @@ export function requestIdOf(req: NextApiRequest): string {
   return crypto.randomUUID()
 }
 
-const defaultImportSentry = () => import('@sentry/nextjs') as Promise<SentryLike>
-
-async function reportToSentry(
-  err: unknown,
-  route: string,
-  extra: Record<string, unknown>,
-  importSentry: () => Promise<SentryLike>,
-  rlog: Logger,
-) {
-  if (!process.env.SENTRY_DSN && !process.env.NEXT_PUBLIC_SENTRY_DSN) return
-  try {
-    const Sentry = await importSentry()
-    Sentry.captureException(err, { tags: { route }, extra })
-  } catch (reportErr) {
-    // Reporting must never break the response.
-    rlog.warn('Sentry report failed', { err: reportErr })
-  }
-}
-
-export function withApi(route: string, handler: ApiHandler, options: WithApiOptions = {}): NextApiHandler {
-  const importSentry = options.importSentry || defaultImportSentry
+export function withApi(route: string, handler: ApiHandler): NextApiHandler {
   return async (req, res) => {
     const started = Date.now()
     const requestId = requestIdOf(req)
@@ -84,7 +54,6 @@ export function withApi(route: string, handler: ApiHandler, options: WithApiOpti
       await handler(req, res, { requestId, log: rlog })
     } catch (err) {
       rlog.error('unhandled API error', { method: req.method, err })
-      await reportToSentry(err, route, { reqId: requestId, method: String(req.method) }, importSentry, rlog)
       if (!res.headersSent) {
         res.status(500).json({ error: 'Internal server error', requestId })
       } else if (!res.writableEnded) {

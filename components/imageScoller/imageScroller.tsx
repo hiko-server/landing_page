@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Box, Flex, HStack, IconButton, Link, Text } from '@chakra-ui/react'
 import { LayoutGroup, motion, useReducedMotion } from 'framer-motion'
 import { GoArrowLeft, GoArrowRight } from 'react-icons/go'

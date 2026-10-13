@@ -52,69 +52,26 @@ test('a successful handler gets the id in ctx and the X-Request-Id header', asyn
   assert.equal(m.body.ok, true)
 })
 
-test('a throw becomes a generic 500 carrying only the request id; Sentry is not imported without a DSN', async () => {
+test('a throw becomes a generic 500 carrying only the request id', async () => {
   const m = mockRes()
-  let imported = 0
-  await withApi(
-    'admin/x',
-    () => {
-      throw new Error('db exploded at /secret/path')
-    },
-    {
-      importSentry: async () => {
-        imported++
-        return { captureException: () => undefined }
-      },
-    },
-  )(req(), m.res)
+  await withApi('admin/x', () => {
+    throw new Error('db exploded at /secret/path')
+  })(req(), m.res)
   assert.equal(m.res.statusCode, 500)
   assert.equal(m.body.error, 'Internal server error')
   assert.equal(m.body.requestId, m.headers['x-request-id'])
   assert.equal(JSON.stringify(m.body).includes('secret'), false)
-  assert.equal(imported, 0)
 })
 
-test('with a DSN the error goes to Sentry tagged with the route and the request id', async () => {
+test('a leftover Sentry DSN in the environment changes nothing (the integration was removed)', async () => {
   process.env.SENTRY_DSN = 'https://key@o0.ingest.sentry.io/0'
-  const m = mockRes()
-  const calls: Array<{ err: unknown; hint: any }> = []
-  const boom = new Error('boom')
-  await withApi(
-    'admin/y',
-    () => {
-      throw boom
-    },
-    {
-      importSentry: async () => ({
-        captureException: (err: unknown, hint?: unknown) => {
-          calls.push({ err, hint })
-        },
-      }),
-    },
-  )(req({ 'x-request-id': 'req-00000001' }), m.res)
-  assert.equal(calls.length, 1)
-  assert.equal(calls[0].err, boom)
-  assert.deepEqual(calls[0].hint.tags, { route: 'admin/y' })
-  assert.equal(calls[0].hint.extra.reqId, 'req-00000001')
-  assert.equal(m.res.statusCode, 500)
-})
-
-test('a failing Sentry import never breaks the 500 response', async () => {
   process.env.NEXT_PUBLIC_SENTRY_DSN = 'https://key@o0.ingest.sentry.io/0'
   const m = mockRes()
-  await withApi(
-    't',
-    () => {
-      throw new Error('x')
-    },
-    {
-      importSentry: async () => {
-        throw new Error('module not found')
-      },
-    },
-  )(req(), m.res)
+  await withApi('admin/y', () => {
+    throw new Error('boom')
+  })(req({ 'x-request-id': 'req-00000001' }), m.res)
   assert.equal(m.res.statusCode, 500)
-  assert.equal(m.body.error, 'Internal server error')
+  assert.deepEqual(m.body, { error: 'Internal server error', requestId: 'req-00000001' })
 })
 
 test('a handler that already answered is ended, not answered twice', async () => {

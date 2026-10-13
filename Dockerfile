@@ -29,18 +29,15 @@ COPY . .
 # sets NEXT_PUBLIC_BUILD_SHA to the deployed commit for /colophon).
 ARG NEXT_PUBLIC_SITE_HOST=""
 ARG NEXT_PUBLIC_PRODUCT_NAME=""
-ARG NEXT_PUBLIC_SENTRY_DSN=""
-ARG NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE="0"
 ARG NEXT_PUBLIC_BUILD_SHA=""
 ENV NEXT_PUBLIC_SITE_HOST=$NEXT_PUBLIC_SITE_HOST \
     NEXT_PUBLIC_PRODUCT_NAME=$NEXT_PUBLIC_PRODUCT_NAME \
-    NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN \
-    NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE=$NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE \
     NEXT_PUBLIC_BUILD_SHA=$NEXT_PUBLIC_BUILD_SHA \
     NEXT_TELEMETRY_DISABLED=1
 
-# Next's webpack cache persists in a cache mount between builds (it is not
-# part of the image either way).
+# `yarn build` is `next build --webpack` (package.json): Next 16 builds with
+# Turbopack unless told otherwise. Next's webpack cache persists in a cache
+# mount between builds (it is not part of the image either way).
 RUN --mount=type=cache,target=/app/.next/cache \
     yarn build
 

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import type { GetStaticProps } from 'next'
 import { Box, Flex, Text, Link, HStack, Button } from '@chakra-ui/react'
 import NextLink from 'next/link'

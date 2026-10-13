@@ -1,4 +1,3 @@
-import React from 'react'
 import { Box, Flex, Text } from '@chakra-ui/react'
 import { Patents } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'

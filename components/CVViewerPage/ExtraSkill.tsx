@@ -1,4 +1,3 @@
-import React from 'react'
 import type { ExtraSkill } from '../../types/cvProps'
 import { bullets, cvSectionAnchor } from './fields'
 import { PlainBullets, SheetSection } from './primitives'

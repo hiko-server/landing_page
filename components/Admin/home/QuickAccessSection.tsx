@@ -1,4 +1,3 @@
-import React from 'react'
 import { Box, Button, Flex, IconButton, SimpleGrid, Text } from '@chakra-ui/react'
 import { AddIcon, DeleteIcon } from '@chakra-ui/icons'
 import SortableList, { SortableHandle } from '../shell/SortableList'

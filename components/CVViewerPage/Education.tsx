@@ -1,4 +1,3 @@
-import React from 'react'
 import type { Education } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'
 import { cvLabels, majorAddsInfo } from '../../lib/cvFormat'

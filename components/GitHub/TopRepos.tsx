@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react'
+import { useCallback, useRef } from 'react'
 import { Box, Grid, Link, Text, Flex, Skeleton } from '@chakra-ui/react'
 import { motion, useReducedMotion, type Variants } from 'framer-motion'
 import { FaStar, FaCodeBranch } from 'react-icons/fa'

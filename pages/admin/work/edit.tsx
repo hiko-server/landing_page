@@ -1,4 +1,3 @@
-import React from 'react'
 import { Checkbox, FormControl, FormHelperText, FormLabel, Input, Select, SimpleGrid, Stack } from '@chakra-ui/react'
 import { AdminDirtyProvider } from '../../../components/Admin/AdminDirtyContext'
 import { MONO, inputProps } from '../../../components/Admin/shell/ui'

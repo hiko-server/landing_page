@@ -1,7 +1,8 @@
 /**
  * FIX-26: /colophon, /uses and /api/stack show the INSTALLED versions (not
- * the floors of package.json's semver ranges), Sentry only with a DSN, and
- * the hosting / CSP descriptions match what the deployment really does.
+ * the floors of package.json's semver ranges), and the hosting / CSP
+ * descriptions match what the deployment really does. (Sentry used to be
+ * listed when a DSN was configured; the integration was removed.)
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -9,7 +10,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { execFileSync } from 'node:child_process'
-import { STACK_PACKAGES, buildStack, installedVersions, pinnedVersion, sentryConfigured } from '../lib/stack'
+import { STACK_PACKAGES, buildStack, installedVersions, pinnedVersion } from '../lib/stack'
 
 const ROOT = process.cwd()
 const read = (p: string) => fs.readFileSync(path.join(ROOT, p), 'utf8')
@@ -32,27 +33,12 @@ test('versions are the installed ones; a bare range never shows its floor', () =
   for (const range of ['^18.2.0', '~5.4.5', '>=1.0.0', 'latest', '', undefined]) assert.equal(pinnedVersion(range), undefined, String(range))
 })
 
-test('Sentry is listed only when a DSN is configured, and the group hint follows', () => {
-  const off = find(buildStack(PKG, '22.0.0', { sentry: false }), 'Platform')
-  assert.deepEqual(off?.items.map((i) => i.name), ['JOSE (JWT)', 'Nodemailer'])
-  assert.equal(off?.hint, 'Auth and mail')
-  const on = find(buildStack(PKG, '22.0.0', { sentry: true, installed: { '@sentry/nextjs': '8.55.0' } }), 'Platform')
-  assert.deepEqual(on?.items[0], { name: 'Sentry', version: '8.55' })
-  assert.equal(on?.hint, 'Monitoring, auth and mail')
-
-  const saved = { s: process.env.SENTRY_DSN, n: process.env.NEXT_PUBLIC_SENTRY_DSN }
-  try {
-    delete process.env.SENTRY_DSN
-    process.env.NEXT_PUBLIC_SENTRY_DSN = '  '
-    assert.equal(sentryConfigured(), false)
-    process.env.SENTRY_DSN = 'https://k@o0.ingest.sentry.io/1'
-    assert.equal(sentryConfigured(), true)
-  } finally {
-    for (const [k, v] of [['SENTRY_DSN', saved.s], ['NEXT_PUBLIC_SENTRY_DSN', saved.n]] as const) {
-      if (v === undefined) delete process.env[k]
-      else process.env[k] = v
-    }
-  }
+test('Sentry is never listed (the integration was removed); Platform is auth and mail', () => {
+  // PKG still names @sentry/nextjs: even a package.json that has it lists nothing for it.
+  const platform = find(buildStack(PKG, '22.0.0', { installed: { '@sentry/nextjs': '8.55.0' } }), 'Platform')
+  assert.deepEqual(platform?.items.map((i) => i.name), ['JOSE (JWT)', 'Nodemailer'])
+  assert.equal(platform?.hint, 'Auth and mail')
+  assert.ok(!STACK_PACKAGES.some((name) => name.startsWith('@sentry/')))
 })
 
 test('installedVersions prefers the build snapshot, falls back to node_modules, and never throws', () => {

@@ -160,6 +160,9 @@ test('the production CSP has no unsafe-eval; development keeps it for React Refr
   assert.ok(!prod.includes("'unsafe-eval'"), prod)
   assert.match(prod, /script-src 'self' 'unsafe-inline'/)
   assert.match(prod, /frame-src https:\/\/www\.youtube-nocookie\.com/)
+  // Only the GitHub API besides 'self' (the optional Sentry hosts went with the integration).
+  assert.match(prod, /(^|; )connect-src 'self' https:\/\/api\.github\.com;/)
+  assert.ok(!/sentry/i.test(prod), prod)
   assert.ok(!buildCsp('test').includes("'unsafe-eval'"))
   assert.match(buildCsp('development'), /script-src [^;]*'unsafe-eval'/)
 })

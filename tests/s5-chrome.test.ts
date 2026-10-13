@@ -531,31 +531,32 @@ test('web manifest declares real, correctly sized icons and the v6 colours', () 
   assert.deepEqual(pngSize('icons/apple-touch-icon.png'), { width: 180, height: 180 })
 })
 
-// ── Sentry build gating ─────────────────────────────────────────────────────
+// ── next.config: a plain object, built with webpack ─────────────────────────
 
 function loadNextConfig(env: Record<string, string>) {
   const out = execFileSync(
     process.execPath,
     [
       '-e',
-      // `sentry` reports whether @sentry/nextjs was loaded at all — the only
-      // reliable signal that the config was wrapped by withSentryConfig.
-      "const c = require('./next.config.js'); const sentry = Object.keys(require.cache).some((k) => /[\\\\/]@sentry[\\\\/]nextjs[\\\\/]/.test(k)); process.stdout.write(JSON.stringify({ webpack: typeof c.webpack, output: c.output, headers: typeof c.headers, sentry, scrollRestoration: c.experimental && c.experimental.scrollRestoration }))",
+      // `sentry` reports whether any @sentry package was loaded at all.
+      "const c = require('./next.config.js'); const sentry = Object.keys(require.cache).some((k) => /[\\\\/]@sentry[\\\\/]/.test(k)); process.stdout.write(JSON.stringify({ webpack: typeof c.webpack, output: c.output, headers: typeof c.headers, sentry, scrollRestoration: c.experimental && c.experimental.scrollRestoration }))",
     ],
     { cwd: ROOT, env: { PATH: process.env.PATH ?? '', NODE_ENV: 'production', ...env }, encoding: 'utf8' },
   )
   return JSON.parse(out) as { webpack: string; output: string; headers: string; sentry: boolean; scrollRestoration: boolean }
 }
 
-test('next.config is only wrapped with Sentry when a DSN is set at build time', () => {
-  const plain = loadNextConfig({})
-  // The base config always has a webpack hook (it silences two known
-  // OpenTelemetry warnings) but never loads the Sentry build plugin.
-  assert.deepEqual(plain, { webpack: 'function', output: 'standalone', headers: 'function', sentry: false, scrollRestoration: true })
-  const wrapped = loadNextConfig({ NEXT_PUBLIC_SENTRY_DSN: 'https://public@o0.ingest.sentry.io/0' })
-  assert.equal(wrapped.sentry, true)
-  assert.equal(wrapped.webpack, 'function')
-  assert.equal(wrapped.output, 'standalone')
-  assert.equal(wrapped.headers, 'function')
-  assert.equal(wrapped.scrollRestoration, true)
+test('next.config is the plain config object: no Sentry wrap (removed), even with a DSN in the environment', () => {
+  // webpack: the hook that silences one known Next-internal edge warning (next.config.js).
+  const expected = { webpack: 'function', output: 'standalone', headers: 'function', sentry: false, scrollRestoration: true }
+  assert.deepEqual(loadNextConfig({}), expected)
+  assert.deepEqual(loadNextConfig({ NEXT_PUBLIC_SENTRY_DSN: 'https://public@o0.ingest.sentry.io/0' }), expected)
+})
+
+test('dev and build opt out of Turbopack (the Next 16 default) with --webpack; no Sentry SDK dependency', () => {
+  const pkg = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'))
+  assert.match(pkg.scripts.build, /^next build --webpack(\s|$)/)
+  assert.match(pkg.scripts.dev, /^next dev --webpack(\s|$)/)
+  assert.equal(pkg.dependencies['@sentry/nextjs'], undefined)
+  assert.equal(pkg.devDependencies['@sentry/nextjs'], undefined)
 })

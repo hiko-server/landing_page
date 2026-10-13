@@ -1,4 +1,4 @@
-import React, { useId } from 'react'
+import { useId } from 'react'
 
 /**
  * Sun ⇄ moon toggle glyph (20px, decorative). One SVG: a disc masked by a

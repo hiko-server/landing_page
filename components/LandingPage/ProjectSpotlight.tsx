@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Box, Flex, IconButton, Text } from '@chakra-ui/react'
 import NextLink from 'next/link'
 import { GoArrowLeft, GoArrowRight } from 'react-icons/go'
