@@ -62,7 +62,7 @@ backup, and a hardened admin GUI for non-engineers.
 - **Admin GUI for non-engineers** — visual editors for hero, brands,
   socials, photo strip, blog posts, case studies, the CV (Studio + raw
   JSON), the Now/Uses pages and the About bio.
-- **Per-section visibility and order** — toggle any `[NN]` row on the home
+- **Per-section visibility and order** — toggle any section of the home
   page (Open Source, Skills, Activity, Projects, Writing, Experience, Certs,
   Photos, Contact) and drag them into any order, or apply the one-click
   *Recruiter-first* preset, without touching code.
@@ -142,7 +142,8 @@ backup, and a hardened admin GUI for non-engineers.
   following the OS while on System.
 - **Design system** — fluid type scale, text styles, radii, container widths
   and one motion curve with three durations as tokens (`theme/tokens.ts`),
-  a page grid with breakout lines, status and elevation colour tokens, and one
+  a page grid with breakout lines, status and elevation colour tokens, one
+  plain section-heading style (no index numbers or bracket labels) and one
   Lucide icon set on the 4 px grid; affiliation logos are measured on save and
   sized optically.
 - **Motion with restraint** — circular theme reveal, directional route
@@ -671,7 +672,11 @@ Linux capability, sets `no-new-privileges` and a PID limit (CI asserts all
 three and runs the E2E suite against a container started the same way). The
 root file system stays writable: ISR rewrites prerendered pages under
 `/app/.next/server`; making it read-only would need that directory on a
-volume re-seeded from the image on every deploy. The production server
+volume re-seeded from the image on every deploy. A page that turns into a
+404 (a deleted or unpublished post or case study, `/publications` without
+a paper) has its persisted copies removed there after every content write
+and at start (`lib/isrCache`, `lib/isrPages`), because Next would otherwise
+serve the last 200 copy again after a restart. The production server
 was migrated once — its locally modified, previously tracked override was
 set aside, the deletion pulled, and the server copy put back;
 `scripts/deploy.sh` does exactly that automatically.
@@ -817,7 +822,7 @@ overlay and follow a contact message into the Inbox.
 
 | Route | Description |
 |---|---|
-| `/` | Home — hero, proof strip and the `[NN]` sections in the owner's order (ISR, hourly + on save) |
+| `/` | Home — hero, proof strip and the sections in the owner's order (ISR, hourly + on save) |
 | `/about` | Identity rail, the owner's bio and the open bilingual CV (ISR, hourly + on save) |
 | `/cv` | CV in English (ISR, every minute + on save): A4 sheet / Reading view, skill evidence, downloads; `?print=1` opens the print dialog (every *Download PDF* link uses `/cv.pdf` / `/cv/zh.pdf`) |
 | `/cv/zh` | The same CV in Chinese (`/cv?lang=zh` redirects here) |

@@ -454,6 +454,42 @@ The seven streams above, merged and working together.
   case-protected, stable `lastnameYEARword` keys), APA 7, JSON-LD and JSON
   Resume `publications`, ready for the PDF CV, the exports and the home
   page.
+- **With wave 2A**: the nav flag flows through the ISR loaders of /, /about,
+  /cv, /cv/zh and /contact into the redesigned header, drawer, footer
+  columns and palette; /publications is regenerated with the other CV pages
+  on every CV save, restore and import, and a flip of the nav link also
+  regenerates /blog, /uses, /contact and the collection pages. Its social
+  card is a fixed preset, its icons the Lucide set.
+- The `/cv` meta description names publications once a public paper exists
+  (and still fits 160 columns with every section); CV Studio's sidebar says
+  the Publications section appears on `/publications`, not on /about.
+
+### Changed
+
+- **No more "[01] INTRODUCTION" labels** (owner request): the public site
+  has no `[NN]` index markers or bracket labels any more. Every page section
+  opens with one plain heading (`components/General-UI/SectionHeading`, the
+  new `section` text style: sans, title size, weight 500) — the home
+  sections, Bio / Recommendations / CV on /about, /now's groups, the /cv
+  skill evidence and the 404 suggestions — keeping the section ids,
+  `aria-labelledby`, the section navs and the label-only reveal. The hero
+  loses its "Introduction" label, the /about CV cards their `[01]`…`[08]`
+  prefixes (titles and counts stay), the mobile menu its `01`…`09` link
+  numbers, the latest-writing list and the social cards their `[POST]` /
+  `[BLOG]` brackets. A unit test keeps bracket and zero-padded index labels
+  out of public components.
+
+### Fixed
+
+- **Deleted pages stay deleted after a restart**: Next.js keeps the last 200
+  copy of an ISR page on disk when the page turns into a 404, so a restart
+  served a deleted or unpublished post or case study (or /publications
+  without a paper) again. The persisted copies of every page whose content
+  is gone are now removed after each content write — deletes, unpublishing,
+  renames, snapshot / backup / Mongo restores, storage pulls, CV saves
+  (`lib/isrCache`, `lib/isrPages`, run by `revalidatePaths`) — and at server
+  start.
+- The lint run no longer crashes on the admin auth store's mapped type.
 
 ## [2.3.0] — 2026-10-13
 
