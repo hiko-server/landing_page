@@ -312,7 +312,9 @@ test('A5: the drawer theme control pairs each icon with its own label', () => {
   assert.doesNotMatch(sw, /toggleColorMode|useColorMode/, 'never a two-state toggle that would overwrite System')
   // Quick actions and large links.
   assert.match(drawer, /aria-label="Quick actions"/)
-  assert.match(drawer, /href="\/cv\?print=1"/)
+  // CV as PDF downloads the server-rendered PDF in the page's language (cv-docs E2).
+  assert.match(drawer, /href=\{cvPdfPath\(chromeLang \? 'zh' : 'en'\)\} download/)
+  assert.doesNotMatch(drawer, /print=1/)
   assert.match(drawer, /href="\/cv\/zh"/)
   assert.match(drawer, /onClick=\{onSearch\} aria-haspopup="dialog"/)
   assert.match(drawer, /fontSize="26px"/)

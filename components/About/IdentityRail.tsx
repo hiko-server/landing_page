@@ -9,6 +9,8 @@ import type { SocialLink, SocialName } from '../Chrome/chrome'
 import type { AvailabilityView } from '../Common/contactForm'
 import type { HeroIdentity } from '../LandingPage/heroIdentity'
 import { clearOfHeader } from '../../lib/anchorOffset'
+import { cvPdfPath } from '../../lib/cvExport/paths'
+import type { CvLang } from '../../lib/cvVisibility'
 import { aboutHeading, type AboutNavEntry } from './aboutNav'
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
@@ -77,6 +79,7 @@ export default function IdentityRail({
   availability,
   socials,
   nav,
+  cvLang = 'en',
 }: {
   brand?: string
   identity?: HeroIdentity | null
@@ -84,6 +87,8 @@ export default function IdentityRail({
   availability: AvailabilityView | null
   socials: SocialLink[]
   nav: AboutNavEntry[]
+  /** Language the page's CV stack shows: View CV and Download PDF follow it (/cv or /cv/zh, /cv.pdf or /cv/zh.pdf). */
+  cvLang?: CvLang
 }) {
   const heading = aboutHeading(identity)
   const nick = identity?.name && identity.nick && identity.nick !== heading ? identity.nick : ''
@@ -191,7 +196,7 @@ export default function IdentityRail({
         <Flex gap={2} mt={6} wrap="wrap" sx={{ '@media print': { display: 'none' } }}>
           <Button
             as={NextLink}
-            href="/cv"
+            href={cvLang === 'zh' ? '/cv/zh' : '/cv'}
             h="40px"
             px={5}
             bg="accent.solid"
@@ -206,7 +211,9 @@ export default function IdentityRail({
           </Button>
           <Button
             as="a"
-            href="/cv?print=1"
+            href={cvPdfPath(cvLang)}
+            download
+            hrefLang={cvLang === 'zh' ? 'zh-Hans' : 'en'}
             h="40px"
             px={4}
             variant="outline"

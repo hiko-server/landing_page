@@ -19,6 +19,7 @@ import NextLink from 'next/link'
 import { useRouter } from 'next/router'
 import { MOBILE_MENU_ID, PRIMARY_LINKS, type SocialLink, type SocialName, isActiveRoute } from '../Chrome/chrome'
 import { useChromeLang } from '../Chrome/chromeLang'
+import { cvPdfPath } from '../../lib/cvExport/paths'
 import { GitHubIcon, GitLabIcon, LinkedInIcon, WhatsAppIcon } from '../Icons/brand'
 import ThemeSwitch from './ThemeSwitch'
 import {
@@ -465,7 +466,7 @@ export default function MobileDrawer({
                   </chakra.button>
                 </li>
                 <li>
-                  <Link as={NextLink} href="/cv?print=1" sx={TILE} onClick={onClose}>
+                  <Link href={cvPdfPath(chromeLang ? 'zh' : 'en')} download type="application/pdf" sx={TILE} onClick={onClose}>
                     <DownloadGlyph />
                     CV as PDF
                   </Link>

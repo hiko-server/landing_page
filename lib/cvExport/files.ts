@@ -13,14 +13,9 @@
 
 import type { CvLang } from '../cvVisibility'
 import { field } from '../../components/CVViewerPage/fields'
+import { EXPORT_FORMATS, EXPORT_PATHS, type ExportFormat } from './paths'
 
-export const EXPORT_FORMATS = ['pdf', 'txt', 'json'] as const
-export type ExportFormat = (typeof EXPORT_FORMATS)[number]
-
-export const EXPORT_PATHS: Record<CvLang, Record<ExportFormat, string>> = {
-  en: { pdf: '/cv.pdf', txt: '/cv.txt', json: '/cv.json' },
-  zh: { pdf: '/cv/zh.pdf', txt: '/cv/zh.txt', json: '/cv/zh.json' },
-}
+export { EXPORT_FORMATS, EXPORT_PATHS, cvPdfPath, type ExportFormat } from './paths'
 
 export const EXPORT_CONTENT_TYPES: Record<ExportFormat, string> = {
   pdf: 'application/pdf',

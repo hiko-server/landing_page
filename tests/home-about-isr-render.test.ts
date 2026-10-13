@@ -156,10 +156,16 @@ test('A4: the identity rail is the page header: h1, availability in words, CV li
   assert.match(out, /Open to backend roles/)
   assert.match(out, /<time dateTime="2026-11"|<time datetime="2026-11"/)
   assert.match(out, /href="\/cv"/)
-  assert.match(out, /href="\/cv\?print=1"/)
+  // Download PDF is the server-rendered PDF (cv-docs E2), not the print dialog.
+  assert.match(out, /href="\/cv\.pdf"[^>]*download=""/)
+  assert.doesNotMatch(out, /print=1/)
   assert.match(out, /aria-label="GitHub \(opens in a new tab\)"/)
   assert.match(out, /<nav[^>]*aria-label="On this page"/)
   assert.match(out, /href="#about-bio"/)
+  // With the CV stack in Chinese, both CV links follow it.
+  const zh = html(createElement(IdentityRail, { identity: null, portrait: null, availability: null, socials: [], nav: [], cvLang: 'zh' }))
+  assert.match(zh, /href="\/cv\/zh"/)
+  assert.match(zh, /href="\/cv\/zh\.pdf"[^>]*download=""/)
   // One entry is not a nav; no availability set means no badge.
   const minimal = html(createElement(IdentityRail, { identity: null, portrait: null, availability: null, socials: [], nav: [{ id: 'about-education', label: 'Education' }] }))
   assert.doesNotMatch(minimal, /<nav/)

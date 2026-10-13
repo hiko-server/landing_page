@@ -135,7 +135,7 @@ test.describe('mobile menu', () => {
     const current = menu.getByRole('link', { name: 'Work', exact: true })
     await expect(current).toHaveAttribute('aria-current', 'page')
     expect(await current.evaluate((el) => parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(24)
-    await expect(menu.getByRole('link', { name: 'CV as PDF' })).toHaveAttribute('href', '/cv?print=1')
+    await expect(menu.getByRole('link', { name: 'CV as PDF' })).toHaveAttribute('href', '/cv.pdf')
     await expect(menu.getByRole('link', { name: '中文简历' })).toHaveAttribute('href', '/cv/zh')
 
     const theme = menu.getByRole('group', { name: 'Theme' })

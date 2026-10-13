@@ -113,7 +113,7 @@ const About = ({ hero, identity, portrait, availability, bio, cv, work, personFa
       <HeaderFooter>
         <Box w="100%" maxW="var(--container-content)" mx="auto" px={{ base: 4, md: 6, lg: 8 }} py={{ base: 10, md: 14, lg: 16 }}>
           <Grid templateColumns={{ base: 'minmax(0, 1fr)', lg: 'minmax(0, 20rem) minmax(0, 1fr)' }} columnGap={{ lg: 16 }} rowGap={{ base: 10, md: 12 }} alignItems="start">
-            <IdentityRail brand={hero.brand} identity={identity} portrait={portrait} availability={availability} socials={socials} nav={nav} />
+            <IdentityRail brand={hero.brand} identity={identity} portrait={portrait} availability={availability} socials={socials} nav={nav} cvLang={active} />
 
             <Box minW={0}>
               {lead || focus.length ? (

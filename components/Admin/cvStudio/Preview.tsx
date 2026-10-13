@@ -1,10 +1,11 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { Box, Button, ButtonGroup, Flex, HStack, IconButton, Text, Tooltip, useColorModeValue } from '@chakra-ui/react'
 import { ExternalLinkIcon } from '@chakra-ui/icons'
-import { FaPrint } from 'react-icons/fa'
+import { FaFilePdf } from 'react-icons/fa'
 import CVResult from '../../CVViewerPage/CVResult'
 import ScaledSheet from '../../CVViewerPage/ScaledSheet'
 import { publicSections, type CvLang } from '../../../lib/cvVisibility'
+import { cvPdfPath } from '../../../lib/cvExport/paths'
 import { monoFont, useStudioTokens } from './fields'
 import WebsitePreview from './WebsitePreview'
 import type { Section } from './docOps'
@@ -121,14 +122,14 @@ export default function Preview({
             />
           </Tooltip>
           {mode === 'cv' ? (
-            <Tooltip label="Print / Save as PDF (saved version)" hasArrow>
+            <Tooltip label="Open the PDF (saved version)" hasArrow>
               <IconButton
                 as="a"
-                href={`/cv?lang=${lang}&print=1`}
+                href={cvPdfPath(lang)}
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-label="Print or save the CV as PDF"
-                icon={<FaPrint />}
+                aria-label="Open the CV as PDF"
+                icon={<FaFilePdf />}
                 size="xs"
                 variant="ghost"
               />
