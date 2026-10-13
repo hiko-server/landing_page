@@ -1,9 +1,11 @@
+import React from 'react'
 import { Text } from '@chakra-ui/react'
 import type { Experiences } from '../../types/cvProps'
 import type { CvLang } from '../../lib/cvVisibility'
 import { cvLabels } from '../../lib/cvFormat'
 import { bullets, cvEntryAnchor, cvSectionAnchor, entryRange, field, indexedList, list } from './fields'
 import { EntryStack, EntryText, EntryTitle, FeatureBullets, MetaLine, SheetEntry, SheetSection } from './primitives'
+import { SkillName } from './evidence'
 
 const WorkExperience = ({ data, lang = 'en' }: { data: Experiences; lang?: CvLang }) => {
   const L = cvLabels(lang)
@@ -43,7 +45,12 @@ const WorkExperience = ({ data, lang = 'en' }: { data: Experiences; lang?: CvLan
               <FeatureBullets items={list(exp, 'features')} />
               {skills.length ? (
                 <Text fontSize="12px" fontWeight={300} mt="4px" lineHeight="1.5">
-                  {skills.join(' | ')}
+                  {skills.map((name, i) => (
+                    <React.Fragment key={`${name}-${i}`}>
+                      {i ? ' | ' : null}
+                      <SkillName name={name} />
+                    </React.Fragment>
+                  ))}
                 </Text>
               ) : null}
             </SheetEntry>
