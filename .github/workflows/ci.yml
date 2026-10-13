@@ -107,8 +107,10 @@ jobs:
 
       # The production host merges docker-compose.override.yml (a copy of the
       # example) over the base file: whatever the merge publishes must be bound
-      # to loopback only, with the site on 127.0.0.1:3002.
-      - name: Compose config publishes loopback only
+      # to loopback only, with the site on 127.0.0.1:3002, and the runtime
+      # hardening (no capabilities, no-new-privileges, a PID limit) must hold
+      # after the merge.
+      - name: Compose config publishes loopback only and keeps the hardening
         run: |
           set -eu
           touch .env
@@ -120,6 +122,9 @@ jobs:
           jq -e '[.services[].ports[]?] | length == 1' "$RUNNER_TEMP/merged.json"
           jq -e '[.services[].ports[]? | select((.published | tostring) == "3002" and .target == 3000)] | length == 1' "$RUNNER_TEMP/merged.json"
           jq -e '.services["landing-page"].logging.driver == "local"' "$RUNNER_TEMP/merged.json"
+          for f in base merged; do
+            jq -e '.services["landing-page"] | (.cap_drop == ["ALL"]) and ((.security_opt // []) | index("no-new-privileges:true") != null) and (.pids_limit > 0 and .pids_limit <= 512)' "$RUNNER_TEMP/$f.json"
+          done
           rm .env
 
       # Same build the server runs (scripts/deploy.sh → docker compose build):
@@ -137,7 +142,9 @@ jobs:
       # new server (docker-compose.override.example.yml mounts the checkout's
       # ./data and ./public/uploads): only the git seeds (home.json,
       # cvdata.json, the tracked uploads) and no content.db. The container
-      # must start, build content.db from those seeds and serve.
+      # must start, build content.db from those seeds and serve — under the
+      # same runtime restrictions as docker-compose.yml (no capabilities,
+      # no-new-privileges, PID limit).
       - name: Start container (fresh volumes with the git seeds, no R2)
         run: |
           mkdir -p "$RUNNER_TEMP/data" "$RUNNER_TEMP/uploads"
@@ -146,6 +153,7 @@ jobs:
           chmod 0777 "$RUNNER_TEMP/data" "$RUNNER_TEMP/uploads"
           chmod 0666 "$RUNNER_TEMP"/data/*.json "$RUNNER_TEMP"/uploads/*
           docker run -d --name lp -p 127.0.0.1:3000:3000 \
+            --cap-drop ALL --security-opt no-new-privileges:true --pids-limit 256 \
             -e NODE_ENV=production \
             -e JWT_SECRET=ci-smoke-placeholder-not-a-real-secret-32chars \
             -e ADMIN_EMAIL \
@@ -180,6 +188,10 @@ jobs:
           docker logs lp 2>&1 | grep '\[warm-isr\] regenerated'
           # Runs as the image's non-root user and could write the mounted data dir.
           test "$(docker exec lp id -u)" = 1001
+          # …with no capabilities and no way to gain any.
+          docker exec lp sh -c 'grep -E "^Cap(Eff|Bnd):" /proc/1/status'
+          test "$(docker exec lp sh -c 'grep "^CapBnd:" /proc/self/status | tr -d "[:space:]" | cut -d: -f2')" = 0000000000000000
+          test "$(docker exec lp sh -c 'grep "^NoNewPrivs:" /proc/self/status | tr -d "[:space:]" | cut -d: -f2')" = 1
           test -f "$RUNNER_TEMP/data/content.db"
           # The image optimizer is disabled (GHSA-2xp9-vwfh-vxw4): 404, never a resize.
           test "$(curl -s -o /dev/null -w '%{http_code}' 'http://127.0.0.1:3000/_next/image?url=%2Ffavicon.ico&w=64&q=75')" = 404
