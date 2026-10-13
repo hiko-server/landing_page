@@ -134,15 +134,17 @@ jobs:
           docker image ls landing-page:ci
 
       # Fresh bind-mounted data + uploads dirs and no R2 env, laid out like a
-      # new server: its ./data is the checkout's, so it holds only the git
-      # seeds (home.json, cvdata.json) and no content.db. The container must
-      # start, build content.db from those seeds and serve.
-      - name: Start container (fresh data volume with the git seeds, no R2)
+      # new server (docker-compose.override.example.yml mounts the checkout's
+      # ./data and ./public/uploads): only the git seeds (home.json,
+      # cvdata.json, the tracked uploads) and no content.db. The container
+      # must start, build content.db from those seeds and serve.
+      - name: Start container (fresh volumes with the git seeds, no R2)
         run: |
           mkdir -p "$RUNNER_TEMP/data" "$RUNNER_TEMP/uploads"
           cp data/home.json data/cvdata.json "$RUNNER_TEMP/data/"
+          git ls-files -z public/uploads | xargs -0 -I{} cp {} "$RUNNER_TEMP/uploads/"
           chmod 0777 "$RUNNER_TEMP/data" "$RUNNER_TEMP/uploads"
-          chmod 0666 "$RUNNER_TEMP"/data/*.json
+          chmod 0666 "$RUNNER_TEMP"/data/*.json "$RUNNER_TEMP"/uploads/*
           docker run -d --name lp -p 127.0.0.1:3000:3000 \
             -e NODE_ENV=production \
             -e JWT_SECRET=ci-smoke-placeholder-not-a-real-secret-32chars \
