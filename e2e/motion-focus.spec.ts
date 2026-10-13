@@ -320,7 +320,11 @@ test('heading, section and footnote anchors land just below the sticky header (n
 
   // Article headings, when the store has a post.
   await page.goto('/blog')
-  const post = await page.locator('main a[href^="/blog/"]').first().getAttribute('href').catch(() => null)
+  await settle(page)
+  // An empty store (the CI container) has no post: count first, so nothing waits for a link that never comes.
+  const postLink = page.locator('main a[href^="/blog/"]').first()
+  if ((await postLink.count()) === 0) return
+  const post = await postLink.getAttribute('href')
   if (!post) return
   await page.goto(post)
   await settle(page)

@@ -114,10 +114,14 @@ test('COR-1: a CLS that grows after the tab came back is sent again, latest valu
   const [, again] = cls()
   expect(again.k).toBe(first.k)
   expect(again.value!).toBeGreaterThan(first.value!)
-  // Hiding again with nothing new sends nothing more.
+  // Hiding again never repeats a value: any later report is the same instance
+  // with a strictly larger CLS (late fonts or images on a slow runner can still
+  // shift the page, and that growth must be reported too).
   await setVisibility(page, 'hidden')
   await page.waitForTimeout(300)
-  expect(cls()).toHaveLength(2)
+  const reports = cls()
+  expect(new Set(reports.map((e) => e.k))).toEqual(new Set([first.k]))
+  for (let i = 1; i < reports.length; i++) expect(reports[i].value!).toBeGreaterThan(reports[i - 1].value!)
 })
 
 test('/api/health answers the public with the verdict only', async ({ request }) => {
