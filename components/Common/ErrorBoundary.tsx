@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { Box, Button, Flex, Text } from '@chakra-ui/react'
 import { copyText } from '../MDX/clipboard'
 import { log } from '../../lib/log'
+import { reportBoundaryError } from '../../lib/errors/capture'
 
 /**
  * Error boundary for independent UI islands (a home widget, the command
@@ -50,6 +51,9 @@ function report(error: Error, info: React.ErrorInfo, name?: string) {
     err: error,
     componentStack: info.componentStack,
   })
+  // A caught render error never reaches window.onerror: send it to the
+  // first-party error monitor explicitly (no-op on the server).
+  reportBoundaryError(error, name)
 }
 
 /** Did any reset key change (by identity, or the list length)? */
