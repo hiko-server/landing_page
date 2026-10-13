@@ -14,6 +14,22 @@ import { cleanList, cvLabels, formatCvDate, formatCvRange, formatGraduation, isF
 
 const isObject = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v)
 
+/**
+ * Every section type the A4 sheet (and the downloadable CVs, lib/cvExport)
+ * can render; pages load exactly these from the public CV.
+ */
+export const SHEET_SECTIONS = [
+  'personalInformation',
+  'education',
+  'skill',
+  'project',
+  'workExperience',
+  'competitionAwards',
+  'extraSkill',
+  'certification',
+  'patents',
+] as const
+
 /** Trimmed string at node[key]; '' when hidden by the owner or not a string. */
 export function field(node: unknown, key: string): string {
   if (!isObject(node) || isRedacted(node, key)) return ''

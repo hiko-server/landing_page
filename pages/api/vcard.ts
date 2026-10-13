@@ -1,7 +1,8 @@
 import { withApi } from '../../lib/apiHandler'
-import { readPublicCvSections } from '../../lib/cvdata'
 import { readPublicHome } from '../../lib/home'
 import { referenceMonth } from '../../lib/clock'
+import { profileLinks } from '../../lib/cvLinks'
+import { loadCvSource } from '../../lib/cvSource'
 import { absUrl } from '../../lib/schema'
 import { buildVcard, currentRoleFrom, vcardFileName } from '../../lib/vcard'
 
@@ -10,8 +11,9 @@ import { buildVcard, currentRoleFrom, vcardFileName } from '../../lib/vcard'
  * follows the visible name and is neutral when the owner hides it).
  *
  * Built from the public, CV-scoped personal information (hidden e-mail /
- * phone / address never appear), the current role from work experience and
- * the public home avatar. Cached at the edge for an hour.
+ * phone / address never appear), the current role from work experience, the
+ * public GitHub / LinkedIn profiles the CV prints (lib/cvLinks) and the
+ * public home avatar. Cached at the edge for an hour.
  */
 export default withApi('vcard', async (req, res) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
@@ -19,13 +21,15 @@ export default withApi('vcard', async (req, res) => {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const { en } = readPublicCvSections('cv', ['personalInformation', 'workExperience'], ['en'])
-  const personal = en.find((s) => s.sessionName === 'personalInformation') ?? null
-  const work = en.find((s) => s.sessionName === 'workExperience') ?? null
+  const now = referenceMonth()
+  const { sections } = await loadCvSource('en', now)
+  const personal = sections.find((s) => s.sessionName === 'personalInformation') ?? null
+  const work = sections.find((s) => s.sessionName === 'workExperience') ?? null
   const avatar = (readPublicHome()?.hero?.avatarUrl || '').trim()
 
-  const card = buildVcard(personal, currentRoleFrom(work, referenceMonth()), {
+  const card = buildVcard(personal, currentRoleFrom(work, now), {
     photoUrl: avatar ? absUrl(avatar) : undefined,
+    profiles: profileLinks(personal),
   })
 
   res.setHeader('Content-Type', 'text/vcard; charset=utf-8')

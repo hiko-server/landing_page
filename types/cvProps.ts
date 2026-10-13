@@ -90,6 +90,10 @@ export interface PersonalInformation extends CVSection {
   email: string
   phoneNumber: string
   personalWebsite: string
+  /** GitHub profile URL (empty: Home → Socials is used on the CV, lib/cvLinks.ts). */
+  github?: string
+  /** LinkedIn profile URL (empty: Home → Socials is used on the CV). */
+  linkedin?: string
   address: string
   introduction: string
   separatorColor?: string
@@ -134,6 +138,12 @@ export interface ProjectExperience extends Visibility {
   endDate: string
   projectLocation: string
   description: string
+  /** Slug of the project's case study (/work/<slug>); public views carry only published slugs. */
+  caseStudy?: string
+  /** Live site URL. */
+  url?: string
+  /** Source repository URL. */
+  repo?: string
   features: Feature[]
 }
 
