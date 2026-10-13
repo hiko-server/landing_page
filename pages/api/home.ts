@@ -18,6 +18,7 @@ import { isAdminRequest } from '../../lib/auth'
 import { sendVersionedJson } from '../../lib/http'
 import { revalidatePaths } from '../../lib/revalidate'
 import { withApi } from '../../lib/apiHandler'
+import { withLogoMetrics } from '../../lib/logoMetrics'
 import type { Logger } from '../../lib/log'
 
 const isAuthed = isAdminRequest
@@ -33,7 +34,10 @@ const isAuthed = isAdminRequest
  *                          Availability, open-source picks, the site name
  *                          and logo scales are validated and normalised
  *                          (lib/homeShape normalizeHomeWrite): 422
- *                          {code:'INVALID_HOME', error, errors} on bad input
+ *                          {code:'INVALID_HOME', error, errors} on bad input.
+ *                          Brand logos are measured for optical sizing
+ *                          (lib/logoMetrics withLogoMetrics: new or changed
+ *                          images only; stored as brands[].metrics)
  *   POST {action}          admin: snapshot / restore
  */
 
@@ -126,11 +130,16 @@ export default withApi('home', async (req: NextApiRequest, res: NextApiResponse,
         errors: checked.errors,
       })
     }
-    const body = checked.home
-
     const ifMatch = req.headers['if-match']
     const current = readHomeWithVersion()
     if (!ifMatchAllows(ifMatch, current.version)) return sendConflict(res, current.version)
+
+    // Optical logo sizing: measure new or changed brand images (metrics of
+    // unchanged ones are carried over from the stored document).
+    const body: HomeData = {
+      ...checked.home,
+      brands: await withLogoMetrics(checked.home.brands, current.home?.brands, ctx.log),
+    }
 
     // Nothing changed: no snapshot, no write, version (ETag) unchanged.
     if (current.home && stableStringify(body) === stableStringify(current.home)) {

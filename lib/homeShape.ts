@@ -13,6 +13,8 @@
  * the same on server and client.
  */
 
+import type { LogoMetrics } from './logoSize'
+
 export type HomeData = {
   hero: {
     welcome: string
@@ -92,8 +94,13 @@ export type HomeData = {
   site?: HomeSite
 }
 
-/** One logo of the brand strip. `scale` multiplies the rendered logo size (0.5–2). */
-export type HomeBrand = { name: string; href: string; image: string; scale?: number }
+/**
+ * One logo of the brand strip. `scale` multiplies the rendered logo size
+ * (0.5–2); `metrics` (content box, aspect, ink density) is measured by the
+ * server when the document is saved (lib/logoMetrics.ts) and sizes the logo
+ * optically (lib/logoSize.ts).
+ */
+export type HomeBrand = { name: string; href: string; image: string; scale?: number; metrics?: LogoMetrics }
 
 export const AVAILABILITY_STATUSES = ['open', 'limited', 'closed'] as const
 export type AvailabilityStatus = (typeof AVAILABILITY_STATUSES)[number]

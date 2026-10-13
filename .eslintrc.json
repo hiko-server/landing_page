@@ -68,7 +68,8 @@
                 "components/GitHub/StatsBar.tsx",
                 "components/Icons/**",
                 "components/Header/ThemeControl.tsx",
-                "components/Header/ThemeMenu.tsx"
+                "components/Header/ThemeMenu.tsx",
+                "components/BrandShowcase/BrandShowcase.tsx"
             ],
             "rules": {
                 "no-restricted-syntax": [
