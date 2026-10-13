@@ -180,3 +180,22 @@ test('(i) no table, column or index is created outside scripts/db migrations', (
     for (const f of files) assert.ok(index.includes(`./${f}`), `${store}: ${f} registered`)
   }
 })
+
+// ── security-a + cv-docs: the image carries every runtime asset ─────────────
+
+test('the Docker image carries the runtime assets and libraries the merged code reads', () => {
+  const cfg = createRequire(import.meta.url)('../next.config.js') as {
+    outputFileTracingIncludes: Record<string, string[]>
+    serverExternalPackages: string[]
+  }
+  assert.deepEqual(cfg.outputFileTracingIncludes['/api/og'], ['./assets/og/*.ttf'])
+  assert.ok(cfg.outputFileTracingIncludes['/api/cv/export'].includes('./assets/pdf/**/*'))
+  assert.deepEqual([...cfg.serverExternalPackages].sort(), ['fontkit', 'linebreak', 'pdfkit'])
+  const docker = read('Dockerfile')
+  assert.match(docker, /test -f \/app\/assets\/og\/Geist-Regular\.ttf/)
+  assert.match(docker, /test -f \/app\/assets\/pdf\/NotoSansSC-Regular\.subset\.ttf/)
+  assert.match(docker, /require\('pdfkit'\); require\('fontkit'\); require\('linebreak'\)/)
+  assert.match(docker, /test -f \/app\/scripts\/db\/migrate\.mjs/)
+  // assets/ is part of the build context (only runtime data and uploads are ignored).
+  assert.doesNotMatch(read('.dockerignore'), /^assets/m)
+})
