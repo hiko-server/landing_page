@@ -59,7 +59,9 @@ backup, and a hardened admin GUI for non-engineers.
 - **Admin Inbox** — every contact message is stored with its delivery
   status and can be read and answered from the dashboard, even when SMTP
   is not configured.
-- **Industry-grade admin auth** — scrypt with 16-byte salt; per-(email, IP)
+- **Industry-grade admin auth** — passkeys (WebAuthn) with one-time recovery
+  codes, per-browser sessions, sign-in history and step-up re-verification
+  for dangerous actions; scrypt with 16-byte salt; per-(email, IP)
   lockout with a site-wide throughput cap under attack; httpOnly
   + sameSite=Strict + Secure cookies; JWT via `jose` in edge middleware
   so unauth visitors never see admin UI for a frame; HSTS / CSP / X-Frame
@@ -322,6 +324,8 @@ All variables are documented in [`.env.example`](./.env.example). Headlines:
 | Cloudflare purge | `CF_ZONE_ID`, `CF_API_TOKEN` | optional — nothing is sent unless both are set |
 | IndexNow | `INDEXNOW_KEY` (8–128 of `[A-Za-z0-9-]`) | optional — off unless set |
 | Health detail | `HEALTH_TOKEN` (bearer token for monitors) | optional — without it only a signed-in admin sees the `/api/health` detail |
+| Admin step-up | `ADMIN_RECENT_AUTH_MINUTES` (1–60, default 10) | optional |
+| Restore drills | `RESTORE_DRILL_INTERVAL_HOURS` (default 168, `0` disables) | optional |
 
 > The repo never commits a real `.env`. `.env.example` contains placeholders
 > only — copy and fill in for your own deployment.
@@ -360,6 +364,21 @@ All variables are documented in [`.env.example`](./.env.example). Headlines:
 - **Container boot** runs `scripts/sync-from-r2.mjs` (set `R2_REQUIRED=1`
   in prod to make missing R2 fatal — otherwise it warns and proceeds).
 
+### Versioned SQLite migrations
+
+Every store (`content.db`, `analytics.db`, `auth.db`) has an ordered list of
+migration modules in `scripts/db/<store>/NNN-name.mjs`, applied by
+`scripts/db/migrate.mjs` — shared by the app and the plain-Node boot scripts.
+Each migration runs in its own `BEGIN IMMEDIATE` transaction together with
+its row in `schema_version` (mirrored in `PRAGMA user_version`), so it
+applies completely or not at all, exactly once even when several processes
+open the store together. Migrations run when a store opens and at server
+start; a store that is already versioned is copied aside with `VACUUM INTO`
+(`data/backups/pre-migration/`, newest 5) before a new step touches it. Only
+additive changes are allowed (rollback safety: the previous image keeps
+working on the newer schema). `yarn db:status` shows each store's version;
+inside the container: `docker exec <container> node scripts/migrate-db.mjs --status`.
+
 ### Backup pipeline
 
 Whole-site atomic snapshots packed by `lib/backup.ts`:
@@ -373,12 +392,39 @@ data/snapshots/{cv,home,blog,work,page}_snapshots/**
 uploads/*
 ```
 
+`MANIFEST.json` records every file's size and SHA-256, the row counts and
+the schema version of `db/content.db`.
+
 Pipeline: `tar pack → gzip → fs.WriteStream → atomic rename`. Local copy at
 `data/backups/snapshot-<UTC>.tgz`, plus R2 push to `backups/<UTC>.tgz` and
 `backups/latest.tgz` (the cheap pull target).
 
 Restore is symmetric: extract to a sibling temp dir, close the live DB
 handle, swap the file, then mirror trees back over the live ones.
+
+**Restore drills** (`lib/restoreDrill.ts`): every
+`RESTORE_DRILL_INTERVAL_HOURS` (default weekly) the newest backup — the R2
+`backups/latest.tgz` when configured, else the newest local snapshot — is
+extracted into a scratch folder and checked: archive and manifest, every
+file's size and SHA-256, `PRAGMA integrity_check`, this build's migrations,
+row counts against the manifest, a render of the newest published article.
+The live site is never touched; results (and a "Run drill now" button) are
+in Admin → System, and a failed or overdue drill is a `/api/health`
+warning.
+
+### Error monitoring and system health
+
+First-party only, nothing leaves the server: uncaught browser errors,
+unhandled rejections and error-boundary catches (the reporter loads only
+when something fails), Content-Security-Policy violations (`report-uri
+/api/e`), and server errors (API routes, page renders, any logged
+exception) are grouped by fingerprint in `data/analytics.db` — scrubbed of
+query strings, e-mail / IP addresses, tokens and ID-like numbers, with no
+address, user agent or cookie — and listed in Admin → System → Errors
+(resolve, ignore, reopen; a resolved error that recurs reopens itself).
+Admin → System → Health shows the deployed build, uptime, memory, free
+disk, each database's size, WAL and schema version, backups, the restore
+drill and the recent warn / error log entries.
 
 <div align="center">
   <img src="docs/screenshots/admin-storage.png" alt="Storage & backup admin panel" width="780" />
@@ -406,8 +452,22 @@ handle, swap the file, then mirror trees back over the live ones.
 - **CSRF**: the middleware refuses cross-site (`Origin` / `Sec-Fetch-Site`)
   and non-JSON writes to every admin and content API, on top of
   `SameSite=Strict`.
-- **Session revocation**: logout and password reset bump a session version
-  in `data/admin.json`, invalidating every issued token.
+- **Passkeys** (WebAuthn, `@simplewebauthn/server`): sign in with Face ID /
+  Touch ID / Windows Hello / a security key, from the button or the e-mail
+  field's autofill; the password stays as a fallback. Ten one-time recovery
+  codes (stored as hashes). **Require a passkey** makes the password alone
+  insufficient (it then needs a recovery code). Managed in Admin → Security.
+- **Sessions**: one row per signed-in browser in `data/auth.db` (the JWT
+  carries its id); Log out ends this browser only, Admin → Security lists
+  the browsers (coarse device, network prefix, country) and signs any of
+  them out, or everywhere. A password reset revokes every session.
+- **Step-up**: restoring a backup, deleting a post or case study, MongoDB
+  restore / target changes and every passkey, code, policy or other-browser
+  change need a sign-in or a re-check within `ADMIN_RECENT_AUTH_MINUTES`
+  (default 10) — a "Confirm it's you" dialog asks for a passkey or the
+  password (+ code) and the action continues.
+- **Sign-in history**: sign-ins, failures (time, method, country and a reason
+  code; no address or device) and security changes.
 - **JWT** is HS256 (pinned), 7d expiry, signed with `JWT_SECRET`.
 - **Cookies**: `httpOnly`, `sameSite: 'strict'`, `secure` in prod, `path: /`.
 - **Reset tokens**: 24 random bytes, 30 min TTL, single-use, constant-time
@@ -480,6 +540,9 @@ third-party script and no cookie.
 - **Storage and retention**: a separate `data/analytics.db` (never part of
   `content.db`, R2 sync or restores). Raw page views are kept 35 days, raw
   Web Vitals 30 days, daily roll-ups 400 days.
+- **Error reports** (see [Error monitoring](#error-monitoring-and-system-health))
+  carry no visitor id either and are dropped under DNT / GPC; they are kept
+  at most 90 days.
 - `/colophon` states the same facts publicly.
 
 ---
@@ -494,6 +557,8 @@ yarn content:list       # list R2 objects
 yarn check              # tsc + ESLint + unit tests
 yarn e2e                # Playwright + axe against E2E_BASE_URL (default http://127.0.0.1:3000)
 yarn audit:deps         # production-dependency audit gate (security/audit-allowlist.json)
+yarn db:status          # schema version of each SQLite store (no writes)
+yarn db:migrate         # apply pending migrations (also happens on start)
 node scripts/perf-budget.mjs          # performance budget over the last `yarn build`
 node --env-file=.env scripts/cloudflare-config.mjs --dry-run   # Cloudflare zone config
 scripts/deploy.sh                     # deploy main to production
@@ -513,7 +578,12 @@ copy, made from `docker-compose.override.example.yml`. The example binds the
 site to `127.0.0.1:3002` only (the Cloudflare Tunnel connects there; CI
 asserts that the merged config publishes nothing beyond loopback), replaces
 the named volumes with bind mounts of `./data` and `./public/uploads`, and
-rotates container logs (`local` driver, 5 × 10 MB). The production server
+rotates container logs (`local` driver, 5 × 10 MB). The base file drops every
+Linux capability, sets `no-new-privileges` and a PID limit (CI asserts all
+three and runs the E2E suite against a container started the same way). The
+root file system stays writable: ISR rewrites prerendered pages under
+`/app/.next/server`; making it read-only would need that directory on a
+volume re-seeded from the image on every deploy. The production server
 was migrated once — its locally modified, previously tracked override was
 set aside, the deletion pulled, and the server copy put back;
 `scripts/deploy.sh` does exactly that automatically.
@@ -675,7 +745,8 @@ overlay and follow a contact message into the Inbox.
 | `/sitemap.xml` | Sitemap with EN / 中 CV alternates |
 | `/api/search-index` | Public search documents for the command palette |
 | `/api/vcard` | vCard of the public contact details |
-| `/api/health` | Health: `{"status":"ok"\|"empty"\|"degraded"}` for everyone; store, content, backup age and pending R2 writes only for an admin or `Authorization: Bearer <HEALTH_TOKEN>` |
+| `/api/health` | Health: `{"status":"ok"\|"empty"\|"degraded"}` for everyone; store, content, backup age, the restore drill, open errors and pending R2 writes only for an admin or `Authorization: Bearer <HEALTH_TOKEN>` |
+| `/api/og` | Social cards: `?card=<id>` for the fixed pages, HMAC-signed parameters for articles; anything else gets the default card |
 | `/.well-known/security.txt` | RFC 9116 security contact (public CV e-mail, rolling 180-day expiry; 404 while the e-mail is hidden) |
 
 API surface lives under `/api/*`; admin-only endpoints under `/api/admin/*`
@@ -700,6 +771,8 @@ are gated by the middleware.
 | `/admin/work`, `/admin/work/edit?slug=…` | Case-study manager |
 | `/admin/now`, `/admin/uses` | One-off page editors |
 | `/admin/db-config` | MongoDB connection + manual backup/restore |
+| `/admin/security` | Passkeys, recovery codes, "Require a passkey", signed-in browsers, sign-in history |
+| `/admin/system` | Health (build, disk, databases, backups, restore drill, recent warnings) and `?view=errors` |
 
 Press `?` on any admin page for the keyboard shortcuts.
 

@@ -8,6 +8,51 @@ portfolio CMS, no public package). Entries are grouped by release date.
 
 ## [Unreleased]
 
+### security-a
+
+Security and reliability foundation.
+
+- **Passkeys for the admin** (WebAuthn): sign in with Face ID, Touch ID,
+  Windows Hello, a phone or a security key — from the button or straight from
+  the e-mail field's autofill. Ten one-time recovery codes (stored as hashes
+  only), and an optional **Require a passkey** policy under which the password
+  alone no longer signs in. The password still works as a fallback.
+- **Sessions and history**: every signed-in browser is listed in the new
+  Admin → Security page and can be signed out on its own; **Log out now signs
+  out this browser only** ("Sign out everywhere" is on the Security page). A
+  sign-in history records sign-ins, failures (time, method, country and a
+  reason code; no address or device) and security changes.
+- **Step-up**: restoring a backup, deleting a post or case study, MongoDB
+  restore or target changes and every passkey / recovery-code / session change
+  ask "Confirm it's you" (passkey, or password) when the last sign-in or check
+  is older than `ADMIN_RECENT_AUTH_MINUTES` (default 10).
+- **Error monitoring without third parties**: browser errors, unhandled
+  rejections, error-boundary catches, CSP violations and server errors are
+  grouped by cause in Admin → System → Errors — scrubbed of query strings,
+  e-mail and IP addresses and anything ID-like, with no visitor identifier;
+  nothing is sent under Do Not Track / Global Privacy Control. /colophon
+  describes it.
+- **System health** (Admin → System): deployed build, uptime, memory, free
+  disk, each database's size and schema version, backups, restore drills and
+  the recent warnings.
+- **Restore drills**: every week (`RESTORE_DRILL_INTERVAL_HOURS`) the newest
+  backup — the R2 copy when configured — is restored into a scratch folder and
+  checked (checksums, SQLite integrity, migrations, row counts, an article
+  render); a failure is flagged in the admin and in `/api/health`. Snapshot
+  manifests now record a SHA-256 per file and the row counts.
+- **Versioned SQLite migrations** (`scripts/db`, `yarn db:status`,
+  `yarn db:migrate`): ordered, transactional, idempotent, shared by the app
+  and the boot scripts, run at start, with a copy taken before a versioned
+  store changes. Existing stores adopt the baseline unchanged.
+- **Social cards** (`/api/og`) run on the Node.js runtime (no more Edge
+  deprecation notice) and never render free text without a signature: fixed
+  pages use fixed cards by id, articles use HMAC-signed parameters computed
+  on the server; anything else gets the default card.
+- **Container hardening**: no Linux capabilities, `no-new-privileges` and a
+  PID limit in `docker-compose.yml`, asserted and exercised in CI.
+- Admin primary buttons, eyebrows and section numbers use the contrast-safe
+  indigo shades (accent.500 on white was 4.47:1).
+
 ## [2.3.0] — 2026-10-13
 
 A research round across eight directions (UI, motion, reading, recruiter

@@ -278,6 +278,8 @@ docker compose up -d --build
 | Cloudflare 缓存清除 | `CF_ZONE_ID`、`CF_API_TOKEN` | 可选 — 两者都设置才会发送 |
 | IndexNow | `INDEXNOW_KEY`（8–128 位 `[A-Za-z0-9-]`） | 可选 — 未设置即关闭 |
 | 健康详情 | `HEALTH_TOKEN`（供监控使用的 Bearer 令牌） | 可选 — 未设置时只有已登录的管理员能看到 `/api/health` 详情 |
+| 后台二次验证 | `ADMIN_RECENT_AUTH_MINUTES`（1–60，默认 10） | 可选 |
+| 恢复演练 | `RESTORE_DRILL_INTERVAL_HOURS`（默认 168，`0` 关闭） | 可选 |
 
 > 仓库里**永远不会**提交真实 `.env`。`.env.example` 仅含占位值 — 拷贝
 > 一份再按自己的部署填即可。
@@ -314,6 +316,17 @@ docker compose up -d --build
 - **容器启动**先跑 `scripts/sync-from-r2.mjs`（生产建议设
   `R2_REQUIRED=1` 让缺 R2 时立即失败，否则只警告然后继续）。
 
+### SQLite 版本化迁移
+
+每个数据库（`content.db`、`analytics.db`、`auth.db`）在
+`scripts/db/<库>/NNN-name.mjs` 有一组有序迁移，由 `scripts/db/migrate.mjs` 执行，
+应用与容器启动脚本共用。每个迁移连同它在 `schema_version`（同步到
+`PRAGMA user_version`）中的记录在一个 `BEGIN IMMEDIATE` 事务里完成，要么全部
+生效要么完全不生效，多个进程同时打开也只执行一次。数据库打开时与服务启动时
+都会迁移；已版本化的库在新迁移前会先用 `VACUUM INTO` 复制到
+`data/backups/pre-migration/`（保留最新 5 份）。只允许增量变更（回滚到旧镜像
+仍能运行）。`yarn db:status` 查看各库版本。
+
 ### 备份流水线
 
 `lib/backup.ts` 打包的全站原子快照：
@@ -333,6 +346,21 @@ uploads/*
 
 恢复是对称的：先解到同级临时目录，关闭活跃 DB 句柄，替换文件，再把
 其它目录镜像回活跃树。
+
+`MANIFEST.json` 记录每个文件的大小与 SHA-256、行数和 `db/content.db` 的版本。
+
+**恢复演练**（`lib/restoreDrill.ts`）：每隔 `RESTORE_DRILL_INTERVAL_HOURS`（默认每周）
+把最新备份（配置了 R2 时用 `backups/latest.tgz`，否则用本地最新快照）解到临时目录
+检查：归档与清单、每个文件的大小与 SHA-256、`PRAGMA integrity_check`、本版本的迁移、
+与清单比对行数、渲染最新一篇已发布文章。不触碰线上站点；结果与"立即演练"按钮在
+后台 → 系统，失败或过期的演练会出现在 `/api/health` 警告中。
+
+**错误监控与系统健康**：完全自建，数据不离开服务器——浏览器未捕获错误、未处理的
+Promise 拒绝、错误边界捕获、CSP 违规（`report-uri /api/e`）与服务端错误按指纹归组
+存入 `data/analytics.db`，去除查询字符串、邮箱/IP、令牌和类 ID 数字，不存地址、
+UA 或 Cookie；在 后台 → 系统 → 错误 中处理（已解决的错误再次出现会自动重开）。
+系统健康页显示部署版本、运行时长、内存、磁盘余量、各数据库大小/WAL/版本、备份、
+恢复演练与近期警告日志。
 
 <div align="center">
   <img src="docs/screenshots/admin-storage.png" alt="存储与备份面板" width="780" />
@@ -355,8 +383,18 @@ uploads/*
   映射到达的方式），除非设置了 `TRUSTED_PROXY_IPS`。
 - **CSRF**：中间件拒绝所有跨站（`Origin` / `Sec-Fetch-Site`）以及非 JSON 的
   后台与内容写入请求，作为 `SameSite=Strict` 之上的纵深防御。
-- **会话吊销**：登出与重置密码会提升 `data/admin.json` 中的会话版本，
-  所有已签发的 Token 立即失效。
+- **通行密钥（Passkey）**：基于 WebAuthn（`@simplewebauthn/server`），可用
+  Face ID / Touch ID / Windows Hello / 安全密钥登录（按钮或邮箱输入框的自动
+  填充），密码仍可作为后备。十个一次性恢复码（只存哈希）。开启"必须使用通行
+  密钥"后，仅凭密码无法登录，还需一个恢复码。在 后台 → 安全 中管理。
+- **会话**：每个已登录的浏览器在 `data/auth.db` 中有一行（JWT 携带其 id）；
+  登出只结束当前浏览器，后台 → 安全 列出所有浏览器（粗粒度设备、网段、国家）
+  并可单独或全部登出；重置密码会吊销全部会话。
+- **二次验证（Step-up）**：恢复备份、删除文章或案例、MongoDB 恢复/目标变更，
+  以及任何通行密钥、恢复码、策略或其他浏览器的变更，都要求在
+  `ADMIN_RECENT_AUTH_MINUTES`（默认 10）分钟内登录或重新验证过，否则弹出
+  "确认是你本人"对话框（通行密钥，或密码 + 恢复码）后再继续。
+- **登录记录**：登录、失败（仅时间、方式、国家与原因代码，不含地址或设备）与安全变更。
 - **JWT** 走 HS256（固定算法），7 天有效期，签名密钥 `JWT_SECRET`。
 - **Cookie**：`httpOnly`、`sameSite: 'strict'`、生产开 `secure`、`path: /`。
 - **重置 Token**：24 字节随机、30 分钟 TTL、一次性、常量时间比较、
@@ -434,6 +472,8 @@ yarn content:list       # 列出 R2 对象
 yarn check              # tsc + ESLint + 单元测试
 yarn e2e                # 针对 E2E_BASE_URL 运行 Playwright + axe（默认 http://127.0.0.1:3000）
 yarn audit:deps         # 生产依赖审计关卡（security/audit-allowlist.json）
+yarn db:status          # 各 SQLite 库的版本（只读）
+yarn db:migrate         # 执行待迁移（启动时也会自动执行）
 node scripts/perf-budget.mjs          # 对最近一次 `yarn build` 做性能预算检查
 node --env-file=.env scripts/cloudflare-config.mjs --dry-run   # Cloudflare 区域配置
 scripts/deploy.sh                     # 把 main 部署到生产环境
@@ -452,7 +492,10 @@ docker compose up -d --build
 `docker-compose.override.example.yml` 保留自己的副本。示例只把站点绑定到
 `127.0.0.1:3002`（Cloudflare Tunnel 从这里接入；CI 会断言合并后的配置不对
 回环以外的地址暴露端口），用 `./data` 与 `./public/uploads` 的绑定挂载取代
-具名卷，并轮转容器日志（`local` 驱动，5 × 10 MB）。生产服务器已迁移过一次——
+具名卷，并轮转容器日志（`local` 驱动，5 × 10 MB）。基础文件还去掉了全部 Linux
+capability、设置 `no-new-privileges` 与进程数上限（CI 断言这三项，并用同样参数
+启动容器跑 E2E）。根文件系统保持可写：ISR 会改写 `/app/.next/server` 下的预渲染
+页面，只读镜像需要把该目录放到每次部署都重新初始化的卷上。生产服务器已迁移过一次——
 先把本地修改过、之前被跟踪的覆盖文件挪开，拉取删除它的提交，再放回服务器
 副本；`scripts/deploy.sh` 会自动完成这一步。
 
@@ -618,6 +661,8 @@ API 在 `/api/*`；`/api/admin/*` 全部需要鉴权（Middleware 把关）。
 | `/admin/work`、`/admin/work/edit?slug=…` | 案例研究管理 |
 | `/admin/now`、`/admin/uses` | 单页编辑器 |
 | `/admin/db-config` | MongoDB 连接 + 手动备份/恢复 |
+| `/admin/security` | 通行密钥、恢复码、"必须使用通行密钥"、已登录浏览器、登录记录 |
+| `/admin/system` | 系统健康（版本、磁盘、数据库、备份、恢复演练、近期警告）与 `?view=errors` 错误监控（自建，不发给第三方） |
 
 在任意后台页面按 `?` 可查看键盘快捷键。
 
