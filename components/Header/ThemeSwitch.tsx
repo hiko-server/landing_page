@@ -1,40 +1,27 @@
-import type { ReactElement } from 'react'
-import { Box, chakra, useColorMode } from '@chakra-ui/react'
-import { toggleThemeWithTransition } from '../../lib/themeTransition'
+import { Box, chakra } from '@chakra-ui/react'
+import { MonitorIcon, MoonIcon, SunIcon } from '../Icons/ui/theme'
+import { useThemePreference } from '../Chrome/useThemePreference'
+import type { ThemePreference } from '../../lib/themePreference'
+import { cssTransition } from '../../theme/tokens'
+import { THEME_OPTIONS as PREFERENCE_OPTIONS } from './themeMenuKeys'
 
 /**
- * Light / Dark segmented control (the mobile menu). Each segment shows its
- * own mode's icon next to its own name, and the current one is pressed, so
- * icon, label and state always agree — unlike a single toggle whose icon
- * shows the current mode while its label names the other. Choosing the
- * other mode runs the same circular reveal as the header toggle, from the
- * segment that was pressed.
+ * System / Light / Dark segmented control (the mobile menu). The same
+ * preference model as the header's theme menu and the ⌘K palette
+ * (lib/themePreference via useThemePreference), so all three always agree:
+ * the pressed segment is the stored PREFERENCE, and System follows the
+ * operating system live. Each segment shows its own icon next to its own
+ * name. Choosing another preference runs the same circular reveal as the
+ * header, from the segment that was pressed, when the mode on screen
+ * changes.
  */
 
-type Mode = 'light' | 'dark'
+const ICONS: Record<ThemePreference, typeof SunIcon> = { system: MonitorIcon, light: SunIcon, dark: MoonIcon }
 
-const SunGlyph = () => (
-  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
-    <circle cx="12" cy="12" r="4.25" fill="currentColor" />
-    <g stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" />
-    </g>
-  </svg>
-)
-
-const MoonGlyph = () => (
-  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false">
-    <path fill="currentColor" d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z" />
-  </svg>
-)
-
-export const THEME_OPTIONS: readonly { mode: Mode; label: string; icon: () => ReactElement }[] = [
-  { mode: 'light', label: 'Light', icon: SunGlyph },
-  { mode: 'dark', label: 'Dark', icon: MoonGlyph },
-]
+export const THEME_OPTIONS = PREFERENCE_OPTIONS.map((o) => ({ ...o, icon: ICONS[o.value] }))
 
 export default function ThemeSwitch() {
-  const { colorMode, toggleColorMode } = useColorMode()
+  const { preference, choose } = useThemePreference()
 
   return (
     <Box
@@ -49,33 +36,34 @@ export default function ThemeSwitch() {
       borderRadius="10px"
       bg="page.bg"
     >
-      {THEME_OPTIONS.map(({ mode, label, icon: Icon }) => {
-        const pressed = colorMode === mode
+      {THEME_OPTIONS.map(({ value, label, icon: Icon }) => {
+        const pressed = preference === value
         return (
           <chakra.button
-            key={mode}
+            key={value}
             type="button"
             aria-pressed={pressed}
             onClick={(e) => {
-              if (!pressed) toggleThemeWithTransition(toggleColorMode, e.currentTarget)
+              if (!pressed) choose(value, e.currentTarget)
             }}
             display="inline-flex"
             alignItems="center"
             justifyContent="center"
             gap={2}
             h="40px"
+            minW={0}
             borderRadius="7px"
             fontSize="14px"
             fontWeight={500}
             color={pressed ? 'page.fg' : 'page.fg-secondary'}
             bg={pressed ? 'page.bg-elevated' : 'transparent'}
             boxShadow={pressed ? '0 0 0 1px var(--chakra-colors-page-border-strong)' : 'none'}
-            transition="color 150ms, background-color 150ms"
+            transition={cssTransition(['color', 'background-color'], 'fast')}
             _hover={{ color: 'page.fg' }}
             _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '1px' }}
             sx={{ '@media (forced-colors: active)': pressed ? { outline: '2px solid CanvasText' } : {} }}
           >
-            <Icon />
+            <Icon size="sm" />
             {label}
           </chakra.button>
         )

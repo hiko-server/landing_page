@@ -301,11 +301,15 @@ test('A5: the drawer theme control pairs each icon with its own label', () => {
   assert.doesNotMatch(drawer, /'Light mode'|'Dark mode'/)
   assert.match(drawer, /<ThemeSwitch \/>/)
   const sw = code('components/Header/ThemeSwitch.tsx')
-  assert.match(sw, /\{ mode: 'light', label: 'Light', icon: SunGlyph \}/)
-  assert.match(sw, /\{ mode: 'dark', label: 'Dark', icon: MoonGlyph \}/)
+  // System / Light / Dark from the tokens-theme preference model: the same options, icons and store as the header menu.
+  assert.match(sw, /const ICONS: Record<ThemePreference, typeof SunIcon> = \{ system: MonitorIcon, light: SunIcon, dark: MoonIcon \}/)
+  assert.match(sw, /import \{ THEME_OPTIONS as PREFERENCE_OPTIONS \} from '\.\/themeMenuKeys'/)
+  assert.match(sw, /const \{ preference, choose \} = useThemePreference\(\)/)
+  assert.match(sw, /const pressed = preference === value/)
   assert.match(sw, /aria-pressed=\{pressed\}/)
   assert.match(sw, /role="group"\s*aria-label="Theme"/)
-  assert.match(sw, /if \(!pressed\) toggleThemeWithTransition\(toggleColorMode, e\.currentTarget\)/)
+  assert.match(sw, /if \(!pressed\) choose\(value, e\.currentTarget\)/)
+  assert.doesNotMatch(sw, /toggleColorMode|useColorMode/, 'never a two-state toggle that would overwrite System')
   // Quick actions and large links.
   assert.match(drawer, /aria-label="Quick actions"/)
   assert.match(drawer, /href="\/cv\?print=1"/)

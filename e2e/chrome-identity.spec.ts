@@ -153,6 +153,30 @@ test.describe('mobile menu', () => {
     expect(await seriousA11yViolations(page)).toEqual([])
   })
 
+  test('the drawer offers System like the header menu and the palette, and they agree', async ({ page }) => {
+    await page.emulateMedia({ colorScheme: 'dark' })
+    await useColorMode(page, 'light')
+    await page.goto('/work')
+    await settle(page)
+    const menu = await openMenu(page)
+    const theme = menu.getByRole('group', { name: 'Theme' })
+    const buttons = theme.getByRole('button')
+    await expect(buttons).toHaveText(['System', 'Light', 'Dark'])
+    await expect(theme.getByRole('button', { name: 'Light' })).toHaveAttribute('aria-pressed', 'true')
+    const system = theme.getByRole('button', { name: 'System' })
+    await system.click()
+    // System follows the OS (dark here) and is what is stored.
+    await expect(page.locator('html')).toHaveAttribute('data-theme-preference', 'system')
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+    await expect(system).toHaveAttribute('aria-pressed', 'true')
+    await expect(theme.getByRole('button', { name: 'Dark' })).toHaveAttribute('aria-pressed', 'false')
+    expect(await page.evaluate(() => localStorage.getItem('theme-preference'))).toBe('system')
+    // The OS switching to light is followed live while on System.
+    await page.emulateMedia({ colorScheme: 'light' })
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light')
+    await expect(system).toHaveAttribute('aria-pressed', 'true')
+  })
+
   test('Search closes the menu and opens the palette', async ({ page }) => {
     await page.goto('/about')
     await settle(page)
