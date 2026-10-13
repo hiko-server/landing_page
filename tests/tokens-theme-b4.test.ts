@@ -245,4 +245,6 @@ test('the home save measures logos; the public strip renders the optical size; t
   assert.match(endpoint, /isAdminRequest\(req, res\)/)
   assert.match(endpoint, /rateLimit\(req, 120/)
   assert.match(read('lib/homeShape.ts'), /metrics\?: LogoMetrics/)
+  // The editor's logo cards show the whole logo (Chakra's AspectRatio forces cover on a direct <img>).
+  assert.match(read('components/Admin/home/ImageCards.tsx'), /sx=\{variant === 'brand' \? \{ '&&': \{ objectFit: 'contain' \} \} : undefined\}/)
 })
