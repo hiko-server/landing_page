@@ -5,6 +5,7 @@ import NextLink from 'next/link'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 import PageHeader from '../../components/General-UI/PageHeader'
+import EmptyState from '../../components/General-UI/EmptyState'
 import { useSpotlight } from '../../components/General-UI/useSpotlight'
 import { listWorkInDisplayOrder, type WorkFrontmatter, type MDXIndexEntry } from '../../lib/mdx'
 import { variantSrcSet } from '../../lib/uploadVariants'
@@ -274,20 +275,15 @@ export default function WorkIndex({ items }: Props) {
           />
 
           {items.length === 0 ? (
-            <Box
-              border="1px dashed"
-              borderColor="page.border"
-              borderRadius="lg"
-              p={[6, 10]}
-              textAlign="center"
+            <EmptyState
+              title="No case studies yet"
+              actions={[
+                { label: 'Writing', href: '/blog' },
+                { label: 'CV', href: '/cv' },
+              ]}
             >
-              <Text fontFamily={monoFont} fontSize="12px" color="page.fg-secondary" mb={2}>
-                [ no case studies yet ]
-              </Text>
-              <Text color="page.fg-secondary" fontSize="14px">
-                Case studies will appear here as they&rsquo;re published.
-              </Text>
-            </Box>
+              Case studies will appear here as they&rsquo;re published.
+            </EmptyState>
           ) : (
             <Box ref={gridRef}>
               {featured.length > 0 && (

@@ -1,9 +1,9 @@
 import type { GetStaticProps } from 'next'
-import NextLink from 'next/link'
-import { Box, Grid, Link, Text } from '@chakra-ui/react'
+import { Box, Grid } from '@chakra-ui/react'
 import HeaderFooter from '../layout/HeaderFooter'
 import CustomHead from '../components/General-UI/CustomHead'
 import PageHeader from '../components/General-UI/PageHeader'
+import EmptyState from '../components/General-UI/EmptyState'
 import MDXContent from '../components/MDX/MDXContent'
 import NowSignals, { UpdatedLine } from '../components/Now/NowSignals'
 import {
@@ -25,36 +25,38 @@ import {
 } from '../lib/nowSignals'
 import type { HomeData } from '../lib/homeShape'
 import { referenceMonth } from '../lib/clock'
-import { absUrl, ogImageUrl, personAuthor } from '../lib/schema'
+import { absUrl, ogImageUrl, personAuthor, SITE_HOST } from '../lib/schema'
+import { bodyReferences, dedupeNowSignals, nowUpdatedOn } from '../lib/nowDedupe'
 
 /**
  * /now — what I'm focused on.
  *
  * When the owner has written the page (admin → pages → now), that text is the
- * primary content and the live signals sit beside it as a compact sidebar.
- * When the body is empty, the page is composed only from real data
- * (lib/nowSignals.ts): current roles / studies from the public CV, the
- * "currently coding" note and the latest post and case study, under one
- * status line saying when those sources last changed. How it assembles itself
- * is explained on /colophon. ISR (60 s), so it follows the content store.
+ * primary content and the live signals sit beside it as a compact sidebar —
+ * minus whatever the text already links to or names (lib/nowDedupe.ts), so
+ * nothing shows twice. When the body is empty, the page is composed only
+ * from real data (lib/nowSignals.ts): current roles / studies from the
+ * public CV, the "currently coding" note and the latest post and case
+ * study. Either way the header carries the page's one "Updated" date (the
+ * newest of the owner's date and the shown signals' sources). How it
+ * assembles itself is explained on /colophon. ISR (60 s), so it follows the
+ * content store.
  */
 
 type Props = {
   tree: MDXRendered<PageFrontmatter>['tree'] | null
-  updated: string | null
+  /** The page's one "updated" day (YYYY-MM-DD, '' when unknown). */
+  updatedOn: string
   signals: Signals
-  /** YYYY-MM-DD of the newest change among the signals' sources ('' when unknown). */
-  signalsUpdated: string
   /** Reference month ('YYYY-MM', lib/clock.ts) the signals were composed for. */
   clockMonth: string
   /** Public home.socials for the persistent header / footer (null = none set). */
   chromeSocials?: HomeData['socials'] | null
 }
 
-const mono = 'var(--font-geist-mono), monospace'
 const TITLE = 'What I’m focused on.'
 
-export default function NowPage({ tree, updated, signals, signalsUpdated }: Props) {
+export default function NowPage({ tree, updatedOn, signals }: Props) {
   const live = hasSignals(signals)
 
   return (
@@ -69,7 +71,7 @@ export default function NowPage({ tree, updated, signals, signalsUpdated }: Prop
           '@type': 'WebPage',
           name: 'Now',
           url: absUrl('/now'),
-          dateModified: (tree ? updated : signalsUpdated) || undefined,
+          dateModified: updatedOn || undefined,
           author: personAuthor,
         }}
       />
@@ -80,19 +82,11 @@ export default function NowPage({ tree, updated, signals, signalsUpdated }: Prop
             title={TITLE}
             actions={
               tree ? (
-                updated ? (
-                  <Text
-                    fontFamily={mono}
-                    fontSize="12px"
-                    color="page.fg-secondary"
-                    className="tnum"
-                    m={0}
-                  >
-                    Last updated · <time dateTime={updated}>{updated}</time>
-                  </Text>
+                updatedOn ? (
+                  <UpdatedLine updatedOn={updatedOn} source={null} />
                 ) : null
               ) : live ? (
-                <UpdatedLine updatedOn={signalsUpdated} />
+                <UpdatedLine updatedOn={updatedOn} />
               ) : null
             }
           />
@@ -121,9 +115,6 @@ export default function NowPage({ tree, updated, signals, signalsUpdated }: Prop
                   pt={{ base: 8, lg: 0 }}
                   pl={{ lg: 8 }}
                 >
-                  <Box mb={6}>
-                    <UpdatedLine updatedOn={signalsUpdated} />
-                  </Box>
                   <NowSignals signals={signals} variant="compact" />
                 </Box>
               ) : null}
@@ -131,27 +122,15 @@ export default function NowPage({ tree, updated, signals, signalsUpdated }: Prop
           ) : live ? (
             <NowSignals signals={signals} variant="full" />
           ) : (
-            <Box
-              border="1px dashed"
-              borderColor="page.border-strong"
-              borderRadius="12px"
-              px={[5, 8]}
-              py={[8, 10]}
-              textAlign="center"
+            <EmptyState
+              title="Nothing to report yet"
+              actions={[
+                { label: 'Read the CV', href: '/cv' },
+                { label: 'Browse the blog', href: '/blog' },
+              ]}
             >
-              <Text fontSize={['15px', '16px']} color="page.fg-secondary" lineHeight="1.65">
-                Nothing to report yet: the CV lists no current role and nothing has been published.
-              </Text>
-              <Text fontFamily={mono} fontSize="12px" mt={4} color="page.fg-secondary">
-                <Link as={NextLink} href="/cv" color="accent.text">
-                  Read the CV
-                </Link>
-                {' · '}
-                <Link as={NextLink} href="/blog" color="accent.text">
-                  Browse the blog
-                </Link>
-              </Text>
-            </Box>
+              The CV lists no current role and nothing has been published.
+            </EmptyState>
           )}
         </Box>
       </HeaderFooter>
@@ -209,14 +188,16 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
 
   const posts = safe(() => listPosts(), [])
   const work = safe(() => listWork(), [])
-  const roles = currentRoles(cvEn, clockMonth)
-  const signals: Signals = {
-    roles,
+  const allSignals: Signals = {
+    roles: currentRoles(cvEn, clockMonth),
     coding: currentlyCodingSignal(cvEn, manualCoding, clockMonth),
     post: latestPost(posts),
     work: latestWork(work),
     composed: now.toISOString().slice(0, 10),
   }
+  // Beside the owner's text, only what the text does not already cover.
+  const signals = tree ? dedupeNowSignals(allSignals, bodyReferences(tree, SITE_HOST), SITE_HOST) : allSignals
+  const roles = signals.roles
 
   // When the sources behind the visible signals last changed: the CV (roles,
   // a CV-derived "currently coding"), the home document (an owner-written
@@ -234,9 +215,8 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
   return {
     props: {
       tree,
-      updated,
+      updatedOn: tree ? nowUpdatedOn(updated, signalsUpdated, hasSignals(signals)) : signalsUpdated,
       signals,
-      signalsUpdated,
       clockMonth,
       // Omitted when the home document could not be read: the chrome then
       // loads the public view itself.
