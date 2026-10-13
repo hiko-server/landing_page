@@ -131,8 +131,18 @@ test.describe('A2: the home page', () => {
     )
     await page.goto('/')
     const legend = page.getByRole('list', { name: /languages by share of code/i })
+    // The notice is the shared inline EmptyState (chrome-identity B5): its retry button sits beside the message row.
+    const retry = page
+      .locator('#section-open-source [data-empty-state="inline"]')
+      .filter({ hasText: 'Language breakdown is unavailable right now.' })
+      .getByRole('button', { name: 'Try again' })
+    // Wait until the band has settled on one of its two states (it hydrates with the page).
+    await page.locator('#section-open-source').scrollIntoViewIfNeeded().catch(() => undefined)
+    await expect
+      .poll(async () => (await legend.count()) + (await retry.count()), { timeout: 10_000 })
+      .toBeGreaterThan(0)
+      .catch(() => undefined)
     if ((await legend.count()) === 0) {
-      const retry = page.locator('#section-open-source').getByText('Language breakdown is unavailable right now.').locator('..').getByRole('button', { name: 'Try again' })
       test.skip((await retry.count()) === 0, 'the Open Source band is not on this home page')
       await retry.click()
       await expect(legend).toHaveAttribute('aria-label', 'Languages by share of code, top 5 of 8')

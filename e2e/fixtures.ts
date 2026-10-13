@@ -1,3 +1,6 @@
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { test as base, expect, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 
@@ -173,12 +176,82 @@ export async function undersizedTargets(page: Page): Promise<TargetOffender[]> {
 /** Admin credentials from the job env (the CI container is started with the same values). */
 export const ADMIN = { email: process.env.ADMIN_EMAIL || '', password: process.env.ADMIN_PASS || '' }
 
-/** Sign in through the real login form and land on the admin portal. */
-export async function loginAsAdmin(page: Page): Promise<void> {
-  await page.goto('/admin/login')
+/** Fill and submit the real login form (the page is on /admin/login) and wait for the admin portal. */
+async function submitLoginForm(page: Page): Promise<void> {
   // Required fields carry a visual "*" in their label, hence the prefix match.
   await page.getByLabel(/^email/i).fill(ADMIN.email)
   await page.getByLabel(/^password/i).fill(ADMIN.password)
   await page.getByRole('button', { name: 'Sign in', exact: true }).click()
   await page.waitForURL((url) => url.pathname.startsWith('/admin') && url.pathname !== '/admin/login')
+}
+
+/**
+ * Where this test run keeps its shared admin session for an origin. Workers
+ * are children of the one runner process, so its pid names the run.
+ */
+function sharedSessionFile(origin: string): string {
+  const host = new URL(origin).host.replace(/[^a-z0-9.-]/gi, '_')
+  return path.join(os.tmpdir(), `e2e-admin-session-${host}-${process.ppid}.json`)
+}
+
+function readSharedCookies(file: string): Parameters<ReturnType<Page['context']>['addCookies']>[0] | null {
+  try {
+    const state = JSON.parse(fs.readFileSync(file, 'utf8')) as { cookies?: Parameters<ReturnType<Page['context']>['addCookies']>[0] }
+    return Array.isArray(state.cookies) && state.cookies.length ? state.cookies : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Land on the admin portal signed in.
+ *
+ * The login route allows 10 attempts per client address per 5 minutes, and
+ * the merged suite has more admin tests than that, all from 127.0.0.1. So by
+ * default every test of a run shares ONE session per origin: the first test
+ * signs in through the real form (under a lock file, so parallel workers do
+ * not race) and saves the cookies; the others reuse them, and sign in again
+ * only when that session has ended (a test signed it out, or it expired).
+ * `fresh: true` always signs in through the form — for tests that need a
+ * session of their own (a second browser, a session they will end).
+ */
+export async function loginAsAdmin(page: Page, opts: { fresh?: boolean } = {}): Promise<void> {
+  await page.goto('/admin/login')
+  if (opts.fresh) return submitLoginForm(page)
+  const origin = new URL(page.url()).origin
+  const file = sharedSessionFile(origin)
+  const lock = `${file}.lock`
+  const signedIn = async () => {
+    await page.goto('/admin')
+    return !new URL(page.url()).pathname.startsWith('/admin/login')
+  }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const cookies = readSharedCookies(file)
+    if (cookies) {
+      await page.context().addCookies(cookies)
+      if (await signedIn()) return
+      fs.rmSync(file, { force: true })
+    }
+    let holder = false
+    try {
+      fs.writeFileSync(lock, String(process.pid), { flag: 'wx' })
+      holder = true
+    } catch {
+      /* another worker is signing in: wait for its session below */
+    }
+    if (holder) {
+      try {
+        await page.goto('/admin/login')
+        await submitLoginForm(page)
+        await page.context().storageState({ path: file })
+      } finally {
+        fs.rmSync(lock, { force: true })
+      }
+      return
+    }
+    const deadline = Date.now() + 30_000
+    while (!fs.existsSync(file) && fs.existsSync(lock) && Date.now() < deadline) await page.waitForTimeout(250)
+  }
+  await page.goto('/admin/login')
+  await submitLoginForm(page)
 }

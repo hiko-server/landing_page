@@ -225,7 +225,8 @@ test.describe('admin security', { tag: '@admin' }, () => {
     try {
       const page = await context.newPage()
       const { cdp, id } = await addVirtualAuthenticator(page)
-      await loginAsAdmin(page)
+      // A session of its own: this test signs it out below.
+      await loginAsAdmin(page, { fresh: true })
       // A previous failed run may have left "Require a passkey" on.
       await adminJson(page, 'PUT', '/api/admin/security/policy', { passkeyRequired: false })
 
@@ -315,7 +316,8 @@ test.describe('admin security', { tag: '@admin' }, () => {
     const other = await browser.newContext({ baseURL: BASE, storageState: SIGNED_OUT })
     try {
       const otherPage = await other.newPage()
-      await loginAsAdmin(otherPage)
+      // A second, distinct session: this test ends it.
+      await loginAsAdmin(otherPage, { fresh: true })
       const mine = (await adminJson(page, 'GET', '/api/admin/security')).json.current
         .sessionId as string
       const theirs = (await adminJson(otherPage, 'GET', '/api/admin/security')).json.current
