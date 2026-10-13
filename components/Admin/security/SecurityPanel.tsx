@@ -452,12 +452,14 @@ export default function SecurityPanel() {
               key={c.label}
               px={4}
               py={3}
-              borderRight={{
-                base: i % 2 === 0 ? '1px solid' : 'none',
-                md: i < 3 ? '1px solid' : 'none',
-              }}
-              borderBottom={{ base: i < 2 ? '1px solid' : 'none', md: 'none' }}
+              // Widths only per breakpoint: a responsive `border` shorthand would
+              // reset the colour to currentColor inside the media query.
+              borderStyle="solid"
               borderColor="page.border"
+              borderWidth={{
+                base: `0 ${i % 2 === 0 ? '1px' : '0'} ${i < 2 ? '1px' : '0'} 0`,
+                md: `0 ${i < 3 ? '1px' : '0'} 0 0`,
+              }}
               minW={0}
             >
               <Text
