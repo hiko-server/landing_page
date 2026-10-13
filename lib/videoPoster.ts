@@ -67,12 +67,12 @@ export function posterStem(v: VideoRef): string {
   return `video-${v.provider}-${v.id}`
 }
 
-/** Intrinsic size of an image file (its header), null when unreadable. */
+/** Intrinsic size of an image file (its header; stored posters carry no metadata), null when unreadable. */
 function fileImageSize(file: string): ImageSize | null {
   let fd: number | null = null
   try {
     fd = fs.openSync(file, 'r')
-    const buf = Buffer.alloc(256 * 1024)
+    const buf = Buffer.alloc(64 * 1024)
     const n = fs.readSync(fd, buf, 0, buf.length, 0)
     return imageSizeFromBytes(buf.subarray(0, n))
   } catch {
@@ -242,9 +242,10 @@ export async function ensurePosters(body: unknown, opts: { budgetMs?: number; de
  * cache key (lib/mdx compileMdxCached), so an article recompiles once its
  * poster arrives.
  */
-export function posterState(body: unknown): string {
+export function posterState(body: unknown, dir: string = uploadsDir()): string {
+  // Existence only (no file reads): this runs on every cached compile lookup.
   return videosIn(body)
-    .map((v) => `${posterStem(v)}:${findPoster(v) ? 1 : 0}`)
+    .map((v) => `${posterStem(v)}:${POSTER_EXTS.some((ext) => fs.existsSync(path.join(dir, `${posterStem(v)}${ext}`))) ? 1 : 0}`)
     .join('|')
 }
 

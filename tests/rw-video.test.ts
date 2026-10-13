@@ -20,6 +20,7 @@ import {
   findPoster,
   importPoster,
   posterStem,
+  posterState,
   resetPosterState,
   thumbnailCandidates,
   videosIn,
@@ -306,6 +307,15 @@ test('D3 Vimeo thumbnails come from oEmbed and only from i.vimeocdn.com', async 
   assert.deepEqual(await thumbnailCandidates({ provider: 'vimeo', id: '5' }, json('https://evil.example/x.jpg')), [])
   assert.deepEqual(await thumbnailCandidates({ provider: 'vimeo', id: '5' }, json('http://i.vimeocdn.com/x.jpg')), [])
   assert.deepEqual(await thumbnailCandidates({ provider: 'vimeo', id: '5' }, json(42)), [])
+})
+
+test('D3 posterState (part of the compile cache key) changes once a poster is stored', () => {
+  const dir = uploadsTmp()
+  const body = `https://youtu.be/${ID}\n\nText.`
+  assert.equal(posterState(body, dir), `video-youtube-${ID}:0`)
+  fs.writeFileSync(path.join(dir, `video-youtube-${ID}.jpg`), Buffer.from([0xff, 0xd8, 0xff]))
+  assert.equal(posterState(body, dir), `video-youtube-${ID}:1`)
+  assert.equal(posterState('no video', dir), '')
 })
 
 test('D3 ensurePosters waits at most its budget and never throws', async () => {
