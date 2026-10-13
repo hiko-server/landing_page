@@ -142,35 +142,36 @@ export const HOME_LIMITS = {
 } as const
 
 /**
- * Stable ID for every [NN] home-page section. Keep this in sync with the
+ * Stable ID for every home-page section (the [NN] labels are numbered at
+ * render time from the visible sections). Keep this in sync with the
  * `HOME_SECTION_META` table below — the home renderer + admin editor both
  * import this so the two views can't drift.
  */
 export type SectionKey =
-  | 'introduction' // [01] PersonalInfo
+  | 'introduction' // PersonalInfo (hero)
   | 'brands'       // brand strip under hero
-  | 'open-source'  // [02] StatsBar + TopRepos
-  | 'tech-stack'   // [03] TechCloud + LanguageBars
-  | 'activity'     // [04] ActivityFeed
-  | 'projects'     // [05] ProjectSpotlight
-  | 'experience'   // [06] ExperienceTimeline
-  | 'certifications' // [07] CertificationsPeek
-  | 'photos'       // [08] ImageScroller (Field Notes)
-  | 'contact'      // [09] ContactPro
+  | 'open-source'  // StatsBar + contribution graph + TopRepos
+  | 'tech-stack'   // Skills (from the CV) + LanguageBars
+  | 'activity'     // ActivityFeed
+  | 'projects'     // ProjectSpotlight
+  | 'experience'   // ExperienceTimeline
+  | 'certifications' // CertificationsPeek
+  | 'photos'       // Field Notes photo strip
+  | 'contact'      // ContactPro
   | 'writing'      // latest posts + case studies
 
 /** Display metadata for each section — drives the admin checkboxes. */
 export const HOME_SECTION_META: Array<{ key: SectionKey; label: string; hint: string }> = [
-  { key: 'introduction', label: 'Introduction', hint: '[01] hero + avatar + CTAs' },
+  { key: 'introduction', label: 'Introduction', hint: 'hero + avatar + CTAs' },
   { key: 'brands', label: 'Brand strip', hint: 'logo row under hero' },
-  { key: 'open-source', label: 'Open source', hint: '[02] GitHub stats + top repos' },
-  { key: 'tech-stack', label: 'Tech stack', hint: '[03] tech cloud + language bars' },
-  { key: 'activity', label: 'Recent activity', hint: '[04] GitHub event feed' },
-  { key: 'projects', label: 'Selected projects', hint: '[05] horizontal spotlight' },
-  { key: 'experience', label: 'Experience', hint: '[06] CV timeline' },
-  { key: 'certifications', label: 'Certifications', hint: '[07] CV cert peek' },
-  { key: 'photos', label: 'Field notes', hint: '[08] photo scroller' },
-  { key: 'contact', label: 'Contact', hint: '[09] form + reach-me panel' },
+  { key: 'open-source', label: 'Open source', hint: 'GitHub stats, contribution graph, top repos' },
+  { key: 'tech-stack', label: 'Skills', hint: 'skills from your CV + language bars' },
+  { key: 'activity', label: 'Recent activity', hint: 'GitHub event feed' },
+  { key: 'projects', label: 'Selected projects', hint: 'horizontal spotlight' },
+  { key: 'experience', label: 'Experience', hint: 'CV timeline' },
+  { key: 'certifications', label: 'Certifications', hint: 'certifications from your CV' },
+  { key: 'photos', label: 'Field notes', hint: 'full-width photo strip' },
+  { key: 'contact', label: 'Contact', hint: 'form + reach-me panel' },
   { key: 'writing', label: 'Writing & case studies', hint: 'latest posts and case studies' },
 ]
 
