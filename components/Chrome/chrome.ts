@@ -5,6 +5,7 @@
  */
 
 import { safeHref } from '../../lib/cvFormat'
+import { ADMIN_HINT_COOKIE } from '../../lib/adminHint'
 
 export type NavLink = { name: string; url: string }
 
@@ -128,7 +129,7 @@ export const MOBILE_MENU_ID = 'site-menu'
 export const MOBILE_MENU_DIALOG_ID = `chakra-modal-${MOBILE_MENU_ID}`
 
 /** Non-httpOnly hint cookie set next to the admin session (adminshell contract; grants nothing). */
-export const ADMIN_HINT_COOKIE = 'cv_admin_hint'
+export { ADMIN_HINT_COOKIE }
 
 /** True when document.cookie carries the admin hint, i.e. a session check is worth a request. */
 export function hasAdminHint(cookie: string): boolean {

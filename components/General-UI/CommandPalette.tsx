@@ -217,6 +217,30 @@ function docDetail(hit: DocHit<SearchDocLike>): Detail | undefined {
 
 // ── Component ───────────────────────────────────────────────────────────────
 
+/** Unread count of an inbox response (`{unread}`, summary or full listing); null when absent or malformed. */
+function unreadOf(body: unknown): number | null {
+  const n = body && typeof body === 'object' ? (body as { unread?: unknown }).unread : undefined
+  return typeof n === 'number' && Number.isInteger(n) && n >= 0 ? n : null
+}
+
+/**
+ * Unread contact messages for the Inbox item: GET /api/admin/inbox?summary=1
+ * ({unread, total}, no message bodies). A server without the summary mode
+ * (it rejects the parameter with 400/404, or answers without a count) falls
+ * back to the full listing, which carries `unread` too. A signed-out answer
+ * (401/403), a server error or any network failure resolves to null and the
+ * item simply shows no count.
+ */
+async function fetchUnreadCount(signal: AbortSignal): Promise<number | null> {
+  const get = (url: string) => fetch(url, { cache: 'no-store', credentials: 'same-origin', signal })
+  const summary = await get('/api/admin/inbox?summary=1')
+  if (!summary.ok && summary.status !== 400 && summary.status !== 404) return null
+  const fromSummary = summary.ok ? unreadOf(await summary.json().catch(() => null)) : null
+  if (fromSummary !== null || signal.aborted) return fromSummary
+  const full = await get('/api/admin/inbox')
+  return full.ok ? unreadOf(await full.json().catch(() => null)) : null
+}
+
 export default function CommandPalette({ isOpen, onClose, isAdmin = false }: CommandPaletteProps) {
   const router = useRouter()
   const toast = useToast()
@@ -276,16 +300,13 @@ export default function CommandPalette({ isOpen, onClose, isAdmin = false }: Com
   // Owner: unread contact messages on the Inbox item (fresh on each open).
   useEffect(() => {
     if (!isOpen || !isAdmin) return
-    let alive = true
-    fetch('/api/admin/inbox?summary=1', { cache: 'no-store', credentials: 'same-origin' })
-      .then((r) => (r.ok ? (r.json() as Promise<{ unread?: unknown }>) : null))
-      .then((b) => {
-        if (alive && b && typeof b.unread === 'number') setUnread(b.unread)
+    const ctrl = new AbortController()
+    fetchUnreadCount(ctrl.signal)
+      .then((n) => {
+        if (!ctrl.signal.aborted && n !== null) setUnread(n)
       })
       .catch(() => {})
-    return () => {
-      alive = false
-    }
+    return () => ctrl.abort()
   }, [isOpen, isAdmin])
 
   const copyAndToast = useCallback(

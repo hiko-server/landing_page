@@ -129,23 +129,45 @@ export class MdxCompileError extends Error {
   }
 }
 
+type Point = { line?: unknown; column?: unknown }
+
 type VFileMessageLike = {
   reason?: unknown
   message?: unknown
   line?: unknown
   column?: unknown
-  place?: { line?: unknown; column?: unknown; start?: { line?: unknown; column?: unknown } } | null
+  /** vfile-message ≥ 4: a point, or a position ({start, end}). */
+  place?: (Point & { start?: Point | null }) | null
+  /** vfile-message < 4. */
+  position?: { start?: Point | null } | null
 }
 
 const posInt = (v: unknown): number | undefined => (typeof v === 'number' && Number.isInteger(v) && v > 0 ? v : undefined)
+
+/**
+ * `(3:1-3:10)` / `(3:1)` inside a message reason. Some mdast-util-mdx-jsx
+ * errors (e.g. "Expected a closing tag for `<Callout>` (3:1-3:10)" at the end
+ * of the document) carry their position only in the text, with no place.
+ */
+const REASON_POSITION_RE = /\((\d+):(\d+)(?:-\d+:\d+)?\)/
+
+/** Line/column of a parser message: its place/position when present, else the position in its reason. */
+function messagePosition(err: unknown): { line?: number; column?: number } {
+  const e = (err && typeof err === 'object' ? err : {}) as VFileMessageLike
+  const place = e.place || undefined
+  const start = place?.start || e.position?.start || undefined
+  const line = posInt(e.line) ?? posInt(start?.line) ?? posInt(place?.line)
+  if (line) return { line, column: posInt(e.column) ?? posInt(start?.column) ?? posInt(place?.column) }
+  const m = REASON_POSITION_RE.exec(String(e.reason || e.message || ''))
+  if (!m) return {}
+  return { line: posInt(Number(m[1])), column: posInt(Number(m[2])) }
+}
 
 function toCompileError(err: unknown): MdxCompileError {
   if (err instanceof MdxCompileError) return err
   const e = (err && typeof err === 'object' ? err : {}) as VFileMessageLike
   const reason = String(e.reason || e.message || err || 'Could not compile the MDX body').trim()
-  const place = e.place || undefined
-  const line = posInt(e.line) ?? posInt(place?.start?.line) ?? posInt(place?.line)
-  const column = posInt(e.column) ?? posInt(place?.start?.column) ?? posInt(place?.column)
+  const { line, column } = messagePosition(err)
   return new MdxCompileError(reason, line, column)
 }
 

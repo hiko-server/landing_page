@@ -1,6 +1,7 @@
 import crypto from 'crypto'
 import type { NextApiRequest } from 'next'
 import { ADMIN_COOKIE } from '../auth'
+import { ADMIN_HINT_COOKIE } from '../adminHint'
 import { ipFromReq, rateLimit } from '../rateLimit'
 import { log } from '../log'
 import { getAnalyticsDb } from './db'
@@ -45,7 +46,6 @@ export const RAW_HITS_DAYS = 35
 export const RAW_VITALS_DAYS = 30
 export const ROLLUP_DAYS = 400
 const MAX_EVENTS_PER_BEACON = 10
-const ADMIN_HINT_COOKIE = 'cv_admin_hint'
 
 export const BOT_UA =
   /bot|crawl|spider|slurp|archiver|facebookexternalhit|embedly|quora link preview|whatsapp|telegram|discord|preview|headless|phantom|puppeteer|playwright|selenium|lighthouse|pagespeed|gtmetrix|pingdom|uptime|monitor|statuscake|curl|wget|httpie|python|aiohttp|go-http|okhttp|java\/|libwww|node-fetch|axios|undici|scrapy|feedfetcher|feed|rss/i

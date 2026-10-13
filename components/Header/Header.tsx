@@ -209,6 +209,8 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
     let armedUntil = 0
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k') {
+        // A focused widget that owns ⌘K (the rich editor's link form) handled it.
+        if (e.defaultPrevented) return
         e.preventDefault()
         if (cmdkOpen) closeCmdk()
         else openPalette()

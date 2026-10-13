@@ -2,7 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { safeFetch } from '../security/safeFetch'
 import { isValidUploadName } from '../security/uploadName'
-import { isR2Configured, r2GetBuffer } from '../r2'
+import { isR2Configured, r2GetRange } from '../r2'
 import type { ImageSize } from './images'
 
 /**
@@ -11,7 +11,7 @@ import type { ImageSize } from './images'
  * VP8/VP8L/VP8X). Used when articles are compiled (build / ISR / preview) so
  * every <img> carries width/height and never shifts the layout:
  *
- *   /uploads/<name>   public/uploads on disk, else the R2 copy
+ *   /uploads/<name>   public/uploads on disk, else a ranged read of the R2 copy
  *   /images/… etc.    other files under public/
  *   https://…         a ranged request for the first bytes, through
  *                     lib/security/safeFetch (no internal addresses, short
@@ -182,13 +182,17 @@ const defaultFetchRemote: RemoteFetcher = async (url, init) => {
 
 /**
  * Header bytes of an upload's R2 copy (only used when the file is missing on
- * disk, e.g. before the boot sync restored it). lib/r2 has no ranged getter,
- * so the object is fetched whole and sliced; the result is cached.
+ * disk, e.g. before the boot sync restored it). Ranged reads, like remote
+ * images: the first REMOTE_HEAD_BYTES, and up to HEADER_BYTES (the amount
+ * read from disk) only when a JPEG's SOF sits behind large EXIF/ICC blocks.
+ * The resolver caches the result.
  */
 async function defaultReadR2(name: string): Promise<Uint8Array | null> {
   if (!isR2Configured()) return null
-  const buf = await r2GetBuffer(`uploads/${name}`)
-  return buf ? buf.subarray(0, HEADER_BYTES) : null
+  const key = `uploads/${name}`
+  const head = await r2GetRange(key, REMOTE_HEAD_BYTES)
+  if (!head || head.length < REMOTE_HEAD_BYTES || imageSizeFromBytes(head)) return head
+  return await r2GetRange(key, HEADER_BYTES)
 }
 
 function header(headers: RemoteResponse['headers'], name: string): string {

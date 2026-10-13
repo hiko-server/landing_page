@@ -1,22 +1,27 @@
 import React, { useEffect, useState } from 'react'
 import NextLink from 'next/link'
 import { Box } from '@chakra-ui/react'
+import { ADMIN_HINT_COOKIE } from '../../lib/adminHint'
 
 /**
  * Owner-only "Edit" pill in an article header, linking to the admin editor.
  *
  * Client-only: renders nothing until mounted, so the static HTML that every
  * visitor (and the CDN) receives never contains it. It appears only when
- * the non-secret `cv_admin_hint=1` cookie is present (set by the admin
- * session endpoints) AND GET /api/admin/session confirms a valid session —
- * the hint alone never shows it. Shortcut: E (ignored while typing).
+ * the non-secret admin hint cookie (lib/adminHint ADMIN_HINT_COOKIE, set by lib/auth on
+ * admin session endpoints) is present AND GET /api/admin/session confirms a
+ * valid session — the hint alone never shows it. Shortcut: E (ignored while typing).
  */
 
-/** Cookie set alongside the httpOnly admin session (lib/auth ADMIN_HINT_COOKIE). */
-const ADMIN_HINT_COOKIE = 'cv_admin_hint'
+/**
+ * Name of the hint cookie set alongside the httpOnly admin session
+ * (lib/adminHint — dependency-free, so it is safe in the client bundle).
+ */
+const HINT_COOKIE = ADMIN_HINT_COOKIE
 
+/** True when a `document.cookie` string carries the admin hint (`<ADMIN_HINT_COOKIE>=1`). */
 export function hasAdminHint(cookie: string): boolean {
-  return cookie.split(';').some((part) => part.trim() === `${ADMIN_HINT_COOKIE}=1`)
+  return cookie.split(';').some((part) => part.trim() === `${HINT_COOKIE}=1`)
 }
 
 /** True while the user is typing somewhere (the shortcut must not fire). */

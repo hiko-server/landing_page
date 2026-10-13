@@ -7,6 +7,16 @@ import { getItem, getPage } from './contentStore'
 import { readPublicCvData } from './cvdata'
 import { readPublicHome } from './home'
 import { cleanList, formatCvDate, formatCvRange, safeHref } from './cvFormat'
+import {
+  bullets,
+  cvEntryAnchor,
+  cvSectionAnchor,
+  entries,
+  field,
+  indexedCertificates,
+  indexedList,
+  list,
+} from '../components/CVViewerPage/fields'
 import { readableText } from './toc'
 import type { CvSectionLike } from './cvVisibility'
 
@@ -16,10 +26,12 @@ import type { CvSectionLike } from './cvVisibility'
  *   posts / case studies  frontmatter, h2/h3 headings and the first 4,000
  *                         characters of body text (code excluded)
  *   /now, /uses           page bodies
- *   CV                    one doc per entry of the PUBLIC website CV
- *                         (readPublicCvData('website'): hidden sections,
- *                         entries and fields are already gone), EN only,
- *                         linking to the entry anchor `/cv#cv-<section>-<i>`
+ *   CV                    one doc per entry of the PUBLIC A4 CV — the
+ *                         audience /cv renders (readPublicCvData('cv'):
+ *                         hidden sections, entries and fields are already
+ *                         gone), EN only, linking to the anchors /cv
+ *                         renders: `/cv#cv-<section>-<i>` for entries,
+ *                         `/cv#cv-<section>` for skill groups
  *
  * Contact details are never indexed. Drafts never appear (listPosts /
  * listWork exclude them).
@@ -88,12 +100,14 @@ export function outlineOf(body: string): { headings: string[]; text: string } {
 
 const str = (v: unknown): string => (typeof v === 'string' ? squash(v) : '')
 const joinDot = (...parts: unknown[]) => parts.map(str).filter(Boolean).join(' · ')
-const range = (start: unknown, end: unknown) => formatCvRange(start, end, 'en', { futureEndAsPresent: true })
+const range = (start: string, end: string) => formatCvRange(start, end, 'en', { futureEndAsPresent: true })
 
-function featureText(features: unknown): string {
-  if (!Array.isArray(features)) return ''
-  return features
-    .map((f: any) => [str(f?.description), ...cleanList(f?.furtherExplanation).map(str)].filter(Boolean).join(' '))
+/** A string field of a public CV node ('' when redacted by the owner), whitespace squashed. */
+const f = (node: unknown, key: string): string => squash(field(node, key))
+
+function featureText(entry: unknown): string {
+  return list(entry, 'features')
+    .map((feat) => [f(feat, 'description'), ...bullets(feat, 'furtherExplanation').map(squash)].filter(Boolean).join(' '))
     .filter(Boolean)
     .join(' ')
 }
@@ -108,60 +122,101 @@ function cvDoc(title: string, href: string, description: string, body: string, t
   return doc
 }
 
-/** One search doc per entry of the PUBLIC (already pruned) EN CV sections. */
+const sectionHref = (sessionName: string) => `/cv#${cvSectionAnchor(sessionName)}`
+const entryHref = (sessionName: string, index: number) => `/cv#${cvEntryAnchor(sessionName, index)}`
+
+/**
+ * One search doc per entry of the PUBLIC (already pruned) EN sections of the
+ * A4 CV (readPublicCvData('cv'), the audience /cv renders). Anchors are
+ * computed with the same helpers the sheet and the Reading view use
+ * (components/CVViewerPage/fields): the entry index is its position in the
+ * visible list (`indexedList`), certificates are numbered across all visible
+ * issuers in order (`indexedCertificates`). Entries without a title get no
+ * doc, but still count towards the index, exactly as on the page.
+ */
 export function cvSearchDocs(sections: readonly CvSectionLike[] | null | undefined): SearchDoc[] {
   const out: (SearchDoc | null)[] = []
-  const anchor = (section: string, i?: number) => `/cv#cv-${section}${i === undefined ? '' : `-${i}`}`
-  for (const s of Array.isArray(sections) ? sections : []) {
+  for (const s of entries(Array.isArray(sections) ? sections : [])) {
     const name = String(s?.sessionName || '')
-    const list = (key: string): any[] => (Array.isArray(s?.[key]) ? s[key] : [])
     switch (name) {
       case 'education':
-        list('educationExperience').forEach((e, i) =>
-          out.push(cvDoc(str(e?.schoolName), anchor(name, i), joinDot(e?.degree, range(e?.startDate, e?.endDate)), joinDot(e?.major, e?.schoolLocation))),
-        )
-        break
-      case 'workExperience':
-        list('experiences').forEach((e, i) =>
+        for (const { item: e, index } of indexedList(s, 'educationExperience')) {
           out.push(
             cvDoc(
-              str(e?.jobTitle),
-              anchor(name, i),
-              joinDot(e?.companyName, range(e?.startDate, e?.endDate)),
-              `${str(e?.jobDescription)} ${featureText(e?.features)}`,
-              cleanList(e?.relatedSkills).map(str),
+              f(e, 'schoolName'),
+              entryHref(name, index),
+              joinDot(f(e, 'degree'), range(field(e, 'startDate'), field(e, 'endDate'))),
+              joinDot(f(e, 'major'), f(e, 'schoolLocation')),
             ),
-          ),
-        )
+          )
+        }
+        break
+      case 'workExperience':
+        for (const { item: e, index } of indexedList(s, 'experiences')) {
+          out.push(
+            cvDoc(
+              f(e, 'jobTitle'),
+              entryHref(name, index),
+              joinDot(f(e, 'companyName'), range(field(e, 'startDate'), field(e, 'endDate'))),
+              `${f(e, 'jobDescription')} ${featureText(e)}`,
+              bullets(e, 'relatedSkills').map(squash),
+            ),
+          )
+        }
         break
       case 'project':
-        list('projectExperience').forEach((e, i) =>
-          out.push(cvDoc(str(e?.title), anchor(name, i), joinDot(e?.projectLocation, range(e?.startDate, e?.endDate)), `${str(e?.description)} ${featureText(e?.features)}`)),
-        )
+        for (const { item: e, index } of indexedList(s, 'projectExperience')) {
+          out.push(
+            cvDoc(
+              f(e, 'title'),
+              entryHref(name, index),
+              joinDot(f(e, 'projectLocation'), range(field(e, 'startDate'), field(e, 'endDate'))),
+              `${f(e, 'description')} ${featureText(e)}`,
+            ),
+          )
+        }
         break
       case 'patents':
-        list('patentExperience').forEach((e, i) =>
-          out.push(cvDoc(str(e?.title), anchor(name, i), joinDot(e?.organization, e?.status, formatCvDate(e?.date)), cleanList(e?.patents).join(' '))),
-        )
+        for (const { item: e, index } of indexedList(s, 'patentExperience')) {
+          out.push(
+            cvDoc(
+              f(e, 'title'),
+              entryHref(name, index),
+              joinDot(f(e, 'organization'), f(e, 'status'), formatCvDate(field(e, 'date'))),
+              bullets(e, 'patents').join(' '),
+            ),
+          )
+        }
         break
       case 'competitionAwards':
-        list('awards').forEach((e, i) =>
-          out.push(cvDoc(str(e?.contestName), anchor(name, i), joinDot(e?.award, e?.organization, formatCvDate(e?.date)), cleanList(e?.description).join(' '))),
-        )
+        for (const { item: e, index } of indexedList(s, 'awards')) {
+          out.push(
+            cvDoc(
+              f(e, 'contestName'),
+              entryHref(name, index),
+              joinDot(f(e, 'award'), f(e, 'organization'), formatCvDate(field(e, 'date'))),
+              bullets(e, 'description').join(' '),
+            ),
+          )
+        }
         break
       case 'certification':
-        list('certifications').forEach((issuer, i) => {
-          const certs = Array.isArray(issuer?.CertificationList) ? issuer.CertificationList : []
-          for (const c of certs) {
-            out.push(cvDoc(str(c?.certificationName), anchor(name, i), joinDot(issuer?.issuingOrganization, formatCvDate(c?.issuedDate)), ''))
-          }
-        })
+        for (const { org, cert, index } of indexedCertificates(s)) {
+          out.push(
+            cvDoc(
+              f(cert, 'certificationName'),
+              entryHref(name, index),
+              joinDot(f(org, 'issuingOrganization'), formatCvDate(field(cert, 'issuedDate'))),
+              '',
+            ),
+          )
+        }
         break
       case 'skill':
-        list('technical').forEach((g) => {
-          const items = cleanList(g?.description).map(str)
-          out.push(cvDoc(str(g?.name), anchor(name), items.join(', '), '', items))
-        })
+        for (const g of list(s, 'technical')) {
+          const items = bullets(g, 'description').map(squash)
+          out.push(cvDoc(f(g, 'name'), sectionHref(name), items.join(', '), '', items))
+        }
         break
       default:
         break
@@ -223,7 +278,7 @@ export function buildSearchIndex(): SearchIndex {
     ...listWorkInDisplayOrder().map((w) => articleDoc('work', w, bodyOf('work', w.slug), w.frontmatter.tech)),
     pageDoc('now', 'Now'),
     pageDoc('uses', 'Uses'),
-    ...cvSearchDocs(readPublicCvData('website').en),
+    ...cvSearchDocs(readPublicCvData('cv').en),
   ]
   const home = readPublicHome() as { availability?: { bookingUrl?: unknown } } | null
   const bookingUrl = safeHref(home?.availability?.bookingUrl)

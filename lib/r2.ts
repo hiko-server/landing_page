@@ -105,6 +105,28 @@ export async function r2GetBuffer(key: string): Promise<Buffer | null> {
   }
 }
 
+/**
+ * The first `bytes` bytes of an object (GetObject with `Range: bytes=0-(n-1)`),
+ * e.g. an image header, without downloading the whole file. Objects shorter
+ * than the range come back whole; an empty object (416 InvalidRange) yields
+ * an empty buffer. null when the key does not exist. Same client, timeouts
+ * and retries as every other helper.
+ */
+export async function r2GetRange(key: string, bytes: number): Promise<Buffer | null> {
+  if (!Number.isSafeInteger(bytes) || bytes < 1) throw new RangeError(`r2GetRange: bytes must be a positive integer, got ${bytes}`)
+  try {
+    const out = await getClient().send(new GetObjectCommand({ Bucket: BUCKET, Key: key, Range: `bytes=0-${bytes - 1}` }))
+    if (!out.Body) return null
+    const buf = await streamToBuffer(out.Body as NodeJS.ReadableStream)
+    // A server that ignores Range answers 200 with the full object: never hand back more than asked.
+    return buf.length > bytes ? buf.subarray(0, bytes) : buf
+  } catch (err: any) {
+    if (err?.name === 'NoSuchKey' || err?.$metadata?.httpStatusCode === 404) return null
+    if (err?.name === 'InvalidRange' || err?.$metadata?.httpStatusCode === 416) return Buffer.alloc(0)
+    throw err
+  }
+}
+
 export async function r2PutText(key: string, body: string, contentType = 'text/plain; charset=utf-8'): Promise<void> {
   await getClient().send(
     new PutObjectCommand({

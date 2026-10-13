@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken'
 import { getJwtSecret, isProd } from './env'
 import { getSessionVersion } from './admin'
 import { isSessionCurrent, SESSION_VERSION_CLAIM } from './security/session'
+import { ADMIN_HINT_COOKIE } from './adminHint'
 
 /**
  * Single admin-session check for every Node API route.
@@ -31,7 +32,7 @@ export const ADMIN_SESSION_TTL_S = 60 * 60 * 24 * 7
  * readable from JS. Set on sign-in and on every valid session check, cleared
  * on logout, password reset and any invalid session check.
  */
-export const ADMIN_HINT_COOKIE = 'cv_admin_hint'
+export { ADMIN_HINT_COOKIE }
 
 function hintCookieOptions(req: NextApiRequest, res: NextApiResponse, maxAge: number) {
   return { req, res, path: '/', sameSite: 'lax' as const, secure: isProd(), httpOnly: false, maxAge }
