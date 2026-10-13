@@ -113,7 +113,10 @@ test.describe('publications in CV Studio', { tag: '@admin' }, () => {
       // ── Add the section and a paper ───────────────────────────────────
       await page.goto('/admin/dashboard?tab=cv')
       await page.getByRole('button', { name: 'Add section' }).click()
-      await page.getByRole('menuitem', { name: /^Publications/ }).click()
+      // By keyboard: with every other section available too, a pointer click
+      // after scrolling the long menu can land under the sticky admin bar.
+      await page.getByRole('menuitem', { name: /^Publications/ }).focus()
+      await page.keyboard.press('Enter')
       await page.getByRole('button', { name: 'Add paper' }).click()
 
       // Required fields add a visual "•" to their label text: match the accessible name instead.

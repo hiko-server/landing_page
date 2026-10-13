@@ -1,5 +1,5 @@
 import React from 'react'
-import { Badge, Box, Button, Flex, HStack, IconButton, Menu, MenuButton, MenuItem, MenuList, Text, Tooltip, VisuallyHidden } from '@chakra-ui/react'
+import { Badge, Box, Button, Flex, HStack, IconButton, Menu, MenuButton, MenuItem, MenuList, Portal, Text, Tooltip, VisuallyHidden } from '@chakra-ui/react'
 import { AddIcon, ChevronDownIcon } from '@chakra-ui/icons'
 import { FaGripVertical } from 'react-icons/fa'
 import { FiFileText, FiGlobe } from 'react-icons/fi'
@@ -276,18 +276,21 @@ export default function Sidebar({
           >
             Add section
           </MenuButton>
-          <MenuList fontSize="13px" maxH="320px" overflowY="auto">
-            {available.map((d) => (
-              <MenuItem key={d.sessionName} onClick={() => onAdd(d.sessionName)}>
-                <Box>
-                  <Text fontWeight={500}>{d.label}</Text>
-                  <Text fontSize="11px" color={dim}>
-                    {d.description}
-                  </Text>
-                </Box>
-              </MenuItem>
-            ))}
-          </MenuList>
+          {/* Portaled: the sidebar's stacking context would otherwise put the lower items under the page footer. */}
+          <Portal>
+            <MenuList fontSize="13px" maxH="320px" overflowY="auto" zIndex="dropdown">
+              {available.map((d) => (
+                <MenuItem key={d.sessionName} onClick={() => onAdd(d.sessionName)}>
+                  <Box>
+                    <Text fontWeight={500}>{d.label}</Text>
+                    <Text fontSize="11px" color={dim}>
+                      {d.description}
+                    </Text>
+                  </Box>
+                </MenuItem>
+              ))}
+            </MenuList>
+          </Portal>
         </Menu>
         <Text mt={2} px={1} fontSize="10px" color={faint} lineHeight="1.5">
           <Box as="span" display="inline-flex" verticalAlign="-2px" mr={1}>
