@@ -103,7 +103,8 @@ backup, and a hardened admin GUI for non-engineers.
 - **Discoverability** — titles that carry the owner's name, ProfilePage /
   Person JSON-LD, social cards in the brand font, and full-content feeds:
   `/feed.xml` (RSS with per-item language), `/work/feed.xml` and
-  `/feed.json`, listed under *Subscribe* in the footer.
+  `/feed.json`, listed in the footer's *This site* column next to the
+  colophon and the privacy notes.
 - **Command palette 3.0** (⌘K / `/`) — loads on demand, searches the full
   content through `/api/search-index`, and gives the signed-in owner an
   *Admin* group with a route-aware *Edit this page*. Its *Keyboard

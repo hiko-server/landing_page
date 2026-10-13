@@ -1,22 +1,33 @@
-import { useEffect, useId, useRef, useState } from 'react'
 import NextLink from 'next/link'
-import { Box, Flex, Text, Link, Divider, chakra } from '@chakra-ui/react'
-import { PRIMARY_LINKS, SOCIAL_LINKS, type SocialLink } from '../Chrome/chrome'
+import { Box, Flex, Link, Text } from '@chakra-ui/react'
+import { SOCIAL_LINKS, splitBrand, type SocialLink } from '../Chrome/chrome'
 import { useBrandHost } from '../Chrome/useBrandHost'
 import { referenceYear, useReferenceMonth } from '../../lib/clock'
-import { FEEDS } from '../../lib/feeds'
+import { BUILD_COMMIT } from '../../lib/build'
+import BrandMark from '../Icons/BrandMark'
+import { ABOUT_SITE_LINKS, SITE_LINKS, type FooterLink } from './footerLinks'
 
 /**
- * v6 Footer — rendered once by components/Chrome/SiteChrome.
+ * Footer — rendered once by components/Chrome/SiteChrome.
  *
- * Minimal layout:
- *   1. Navigation links (client-side via next/link, hover-underline)
- *   2. Social links (new tab) + Subscribe (the site's feeds) + copyright
+ *   ≥ md   [LY lucian-dev.com]   Site        This site     Elsewhere
+ *                                Home …      Colophon …    GitHub ↗ …
+ *          ─────────────────────────────────────────────────────────────
+ *          © 2026 lucian-dev.com          Built with Next.js · Set in Geist · Build 1a2e842
  *
- * Every link is a ≥ 44px target on phones (32px from md, where a pointer is
- * likely). Colours are semantic tokens, so the footer is right on the first
- * paint in both colour modes. The year comes from the page's reference month
- * (lib/clock.ts), so the server HTML and the hydrating client agree.
+ *   phones the brand on top, then Site beside This site + Elsewhere (every
+ *          list is a column, so no link is ever left alone on a row), then
+ *          the sign-off lines.
+ *
+ * "This site" carries the colophon, the privacy promise (/colophon#privacy),
+ * the feeds and the source. The build line names the commit the image was
+ * built from (NEXT_PUBLIC_BUILD_SHA, lib/build.ts) and is left out of local
+ * builds that have none. Every link is a ≥ 44px target on phones (32px from
+ * md, where a pointer is likely). Colours are semantic tokens, so the footer
+ * is right on the first paint in both colour modes. The year comes from the
+ * page's reference month (lib/clock.ts), so the server HTML and the
+ * hydrating client agree. No client state: nothing here adds JavaScript
+ * beyond the markup.
  */
 
 const MONO = 'var(--font-geist-mono), ui-monospace, monospace'
@@ -26,102 +37,66 @@ const TARGET = {
   display: 'inline-flex',
   alignItems: 'center',
   minH: { base: '44px', md: '32px' },
-  py: { base: 3, md: 1 },
+  py: { base: 2.5, md: 1 },
 } as const
 
-/**
- * "Subscribe" disclosure listing the feeds. A plain button + panel (no
- * popover engine in the shared bundle): Escape or a click outside closes it
- * and returns focus to the button when focus was inside.
- */
-function Subscribe() {
-  const [open, setOpen] = useState(false)
-  const panelId = useId()
-  const rootRef = useRef<HTMLDivElement>(null)
-  const buttonRef = useRef<HTMLButtonElement>(null)
+const LINK_HOVER = { color: 'page.fg', textDecoration: 'none' } as const
 
-  useEffect(() => {
-    if (!open) return
-    const onPointerDown = (e: PointerEvent) => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false)
-    }
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return
-      const hadFocus = rootRef.current?.contains(document.activeElement)
-      setOpen(false)
-      if (hadFocus) buttonRef.current?.focus()
-    }
-    document.addEventListener('pointerdown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
-    }
-  }, [open])
+/** Column heading id, from its title ("This site" → "footer-this-site"). */
+const columnId = (title: string) => `footer-${title.toLowerCase().replace(/\s+/g, '-')}`
 
+function ColumnTitle({ title }: { title: string }) {
   return (
-    <Box ref={rootRef} position="relative">
-      <chakra.button
-        ref={buttonRef}
-        type="button"
-        {...TARGET}
-        gap="6px"
-        fontFamily={MONO}
-        fontSize="11px"
-        color="page.fg-subtle"
-        _hover={{ color: 'page.fg' }}
-        aria-expanded={open}
-        aria-controls={panelId}
-        onClick={() => setOpen((v) => !v)}
-      >
-        Subscribe
-        <Text as="span" aria-hidden display="inline-block" transition="transform 160ms var(--ease-out-quart)" transform={open ? 'rotate(180deg)' : 'none'}>
-          ▾
-        </Text>
-      </chakra.button>
-      <Box
-        as="ul"
-        id={panelId}
-        hidden={!open}
-        aria-label="Feeds"
-        listStyleType="none"
-        // Phones: expands in place (never overflows a narrow screen); from md
-        // it floats above the button.
-        position={{ base: 'static', md: 'absolute' }}
-        bottom="calc(100% + 4px)"
-        left={0}
-        zIndex={20}
-        minW={{ base: 0, md: '220px' }}
-        mb={{ base: 2, md: 0 }}
-        py={1}
-        bg="page.bg-elevated"
-        border="1px solid"
-        borderColor="page.border"
-        borderRadius="md"
-        boxShadow="0 12px 32px -8px rgba(0,0,0,0.25)"
-      >
-        {FEEDS.map((f) => (
-          <li key={f.href}>
-            <Link
-              href={f.href}
-              type={f.type}
-              title={f.title}
-              display="flex"
-              alignItems="center"
-              justifyContent="space-between"
-              gap={3}
-              minH="44px"
-              px={3}
-              fontSize="13px"
-              color="page.fg-secondary"
-              _hover={{ color: 'page.fg', bg: 'page.hover', textDecoration: 'none' }}
-              onClick={() => setOpen(false)}
-            >
-              {f.label}
-              <Text as="span" fontFamily={MONO} fontSize="10px" color="page.fg-subtle">
-                {f.type === 'application/feed+json' ? 'JSON' : 'XML'}
-              </Text>
-            </Link>
+    <Text
+      as="h2"
+      id={columnId(title)}
+      fontFamily={MONO}
+      fontSize="11px"
+      fontWeight={500}
+      letterSpacing="0.12em"
+      textTransform="uppercase"
+      color="page.fg-subtle"
+      mb={{ base: 1, md: 3 }}
+    >
+      {title}
+    </Text>
+  )
+}
+
+function FooterItem({ link }: { link: FooterLink }) {
+  if (link.external) {
+    return (
+      <Link href={link.href} isExternal {...TARGET} _hover={LINK_HOVER}>
+        <span className="link-underline">
+          {link.label} <span aria-hidden>↗</span>
+        </span>
+        <span className="sr-only"> (opens in a new tab)</span>
+      </Link>
+    )
+  }
+  // Feeds are documents for feed readers, not pages: a plain link.
+  if (link.type) {
+    return (
+      <Link href={link.href} type={link.type} title={link.title} {...TARGET} _hover={LINK_HOVER}>
+        <span className="link-underline">{link.label}</span>
+      </Link>
+    )
+  }
+  return (
+    <Link as={NextLink} href={link.href} {...TARGET} _hover={LINK_HOVER}>
+      <span className="link-underline">{link.label}</span>
+    </Link>
+  )
+}
+
+function Column({ title, links, area }: { title: string; links: readonly FooterLink[]; area: string }) {
+  return (
+    <Box gridArea={area} minW={0}>
+      <ColumnTitle title={title} />
+      <Box as="ul" listStyleType="none" m={0} p={0} aria-labelledby={columnId(title)} fontSize="14px" color="page.fg-secondary">
+        {links.map((l) => (
+          <li key={l.href}>
+            <FooterItem link={l} />
           </li>
         ))}
       </Box>
@@ -132,7 +107,9 @@ function Subscribe() {
 /** `socials`: the profile links to show (SiteChrome resolves them from home.socials). */
 const Footer = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] }) => {
   const brand = useBrandHost()
+  const [brandHead, brandTail] = splitBrand(brand)
   const year = referenceYear(useReferenceMonth())
+  const elsewhere: FooterLink[] = socials.map((s) => ({ label: s.name, href: s.url, external: true }))
 
   return (
     <Box
@@ -145,69 +122,86 @@ const Footer = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
       mt={16}
       className="no-print glass"
     >
-      <Box maxW="var(--container-content)" mx="auto" px={{ base: 4, md: 6, lg: 8 }} py={10}>
-        <Flex direction="column" gap={6}>
-          {/* Row 1: nav links */}
-          <Flex
-            as="nav"
-            aria-label="Footer"
-            wrap="wrap"
-            columnGap={{ base: 4, md: 6 }}
-            rowGap={0}
-            justifyContent={{ base: 'center', md: 'flex-start' }}
-            fontSize="13px"
-            color="page.fg-secondary"
+      {/* The bottom padding clears the fixed scroll-to-top button (≤ 64px from the bottom edge), so it never covers the last line. */}
+      <Box maxW="var(--container-content)" mx="auto" px={{ base: 4, md: 6, lg: 8 }} pt={{ base: 10, md: 14 }} pb={20}>
+        <Box as="nav" aria-label="Footer">
+          <Box
+            display="grid"
+            gridTemplateColumns={{ base: 'repeat(2, minmax(0, 1fr))', md: 'minmax(0, 1.6fr) repeat(3, minmax(0, 1fr))' }}
+            gridTemplateAreas={{ base: `"brand brand" "site meta" "site else"`, md: `"brand site meta else"` }}
+            gridTemplateRows={{ base: 'auto auto 1fr', md: 'auto' }}
+            columnGap={{ base: 6, md: 8 }}
+            rowGap={{ base: 8, md: 0 }}
           >
-            {PRIMARY_LINKS.map((l) => (
-              <Link key={l.name} as={NextLink} href={l.url} {...TARGET} _hover={{ color: 'page.fg', textDecoration: 'none' }}>
-                <span className="link-underline">{l.name}</span>
+            <Box gridArea="brand">
+              <Link
+                as={NextLink}
+                href="/"
+                display="inline-flex"
+                alignItems="center"
+                gap={2.5}
+                minH="44px"
+                fontFamily={MONO}
+                fontSize="13px"
+                fontWeight={600}
+                letterSpacing="-0.01em"
+                color="page.fg"
+                _hover={{ textDecoration: 'none' }}
+              >
+                <BrandMark size={28} />
+                <span>
+                  {brandHead}
+                  {brandTail && (
+                    <Text as="span" color="accent.text">
+                      {brandTail}
+                    </Text>
+                  )}
+                </span>
               </Link>
-            ))}
-          </Flex>
+            </Box>
+            <Column title="Site" links={SITE_LINKS.map((l) => ({ label: l.name, href: l.url }))} area="site" />
+            <Column title="This site" links={ABOUT_SITE_LINKS} area="meta" />
+            {elsewhere.length > 0 && <Column title="Elsewhere" links={elsewhere} area="else" />}
+          </Box>
+        </Box>
 
-          <Divider borderColor="page.border" />
-
-          {/* Row 2: social + feeds + copyright */}
-          <Flex
-            direction={{ base: 'column', md: 'row' }}
-            justifyContent="space-between"
-            alignItems={{ base: 'flex-start', md: 'center' }}
-            gap={4}
-          >
-            <Flex columnGap={5} rowGap={0} wrap="wrap" alignItems="center" fontFamily={MONO} fontSize="11px" color="page.fg-subtle">
-              {socials.map((s) => (
-                <Link key={s.name} href={s.url} isExternal {...TARGET} _hover={{ color: 'page.fg', textDecoration: 'none' }}>
-                  <span className="link-underline">
-                    {s.name} <span aria-hidden>↗</span>
-                  </span>
+        <Flex
+          mt={{ base: 8, md: 12 }}
+          pt={{ base: 5, md: 6 }}
+          borderTop="1px solid"
+          borderColor="page.border"
+          direction={{ base: 'column', md: 'row' }}
+          justify="space-between"
+          align={{ base: 'flex-start', md: 'center' }}
+          columnGap={6}
+          rowGap={1}
+          fontFamily={MONO}
+          fontSize="11px"
+          letterSpacing="0.02em"
+          color="page.fg-subtle"
+        >
+          <Text as="p" m={0}>
+            ©{' '}
+            <Text as="span" className="tnum" suppressHydrationWarning>
+              {year}
+            </Text>{' '}
+            {brand}
+          </Text>
+          <Flex as="p" m={0} wrap="wrap" align="center" columnGap={2} rowGap={0}>
+            <Link as={NextLink} href="/colophon" {...TARGET} _hover={LINK_HOVER}>
+              <span className="link-underline">Built with Next.js · Set in Geist</span>
+            </Link>
+            {BUILD_COMMIT && (
+              <>
+                <Text as="span" aria-hidden>
+                  ·
+                </Text>
+                <Link href={BUILD_COMMIT.href} isExternal {...TARGET} className="tnum" title={`Deployed from commit ${BUILD_COMMIT.sha}`} _hover={LINK_HOVER}>
+                  <span className="link-underline">Build {BUILD_COMMIT.short}</span>
                   <span className="sr-only"> (opens in a new tab)</span>
                 </Link>
-              ))}
-              <Subscribe />
-            </Flex>
-
-            <Flex gap={3} alignItems="center" fontFamily={MONO} fontSize="11px" color="page.fg-subtle">
-              <Text as="span">
-                ©{' '}
-                <Text as="span" className="tnum" suppressHydrationWarning>
-                  {year}
-                </Text>{' '}
-                <Link
-                  as={NextLink}
-                  href="/"
-                  display="inline-flex"
-                  alignItems="center"
-                  minH="44px"
-                  _hover={{ color: 'page.fg', textDecoration: 'none' }}
-                >
-                  {brand}
-                </Link>
-              </Text>
-              <Text as="span" aria-hidden>
-                ·
-              </Text>
-              <Text as="span">All rights reserved</Text>
-            </Flex>
+              </>
+            )}
           </Flex>
         </Flex>
       </Box>

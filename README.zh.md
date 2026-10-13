@@ -92,7 +92,7 @@ English → [README.md](./README.md)
   YouTube 与 Figure 组件、案例封面、标题锚点和目录。
 - **可发现性**：标题带上站长姓名，ProfilePage / Person JSON-LD，品牌字体的
   社交卡片，以及全文订阅源：`/feed.xml`（RSS，逐条标注语言）、
-  `/work/feed.xml`、`/feed.json`，并在页脚「订阅」中列出。
+  `/work/feed.xml`、`/feed.json`，列在页脚「This site」一栏，与技术说明和隐私说明并列。
 - **命令面板 3.0**（⌘K / `/`）：按需加载，通过 `/api/search-index` 全文搜索；
   站长登录后多出「Admin」分组，含随当前页面变化的「编辑此页」。面板里的
   「Keyboard shortcuts: on/off」（后台 `?` 面板里也有）可按浏览器关闭单键快捷键

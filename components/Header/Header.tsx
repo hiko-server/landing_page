@@ -21,6 +21,8 @@ import {
 import { useBrandHost } from '../Chrome/useBrandHost'
 import { useChromeToast } from '../Chrome/useChromeToast'
 import { useShortcutsEnabled } from '../Chrome/useShortcutsEnabled'
+import { HIDE_ON_COARSE_POINTER, isApplePlatform, paletteKeyShortcuts, paletteShortcutLabel } from '../Chrome/platform'
+import { OPEN_PALETTE_EVENT, normalizePaletteQuery, type OpenPaletteDetail } from '../Chrome/paletteEvents'
 import { useFetchJson } from '../Common/useFetchJson'
 import { MenuIcon } from '../Icons/brand'
 import { toggleThemeWithTransition } from '../../lib/themeTransition'
@@ -142,6 +144,8 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
   const { isOpen: cmdkOpen, onOpen: openCmdk, onClose: closeCmdk } = useDisclosure()
   // The lazy chunks are rendered from the first time they are asked for on.
   const [paletteRequested, setPaletteRequested] = useState(false)
+  // Text the palette opens with (the 404 page's search field); '' otherwise.
+  const [paletteQuery, setPaletteQuery] = useState('')
   const [drawerRequested, setDrawerRequested] = useState(false)
   const { colorMode, toggleColorMode } = useColorMode()
   const brand = useBrandHost()
@@ -152,11 +156,35 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
   // <main> instead (components/Chrome/routeFocus.ts).
   const [dialogsReturnFocus, setDialogsReturnFocus] = useState(true)
 
-  const openPalette = useCallback(() => {
-    setDialogsReturnFocus(true)
-    setPaletteRequested(true)
-    openCmdk()
-  }, [openCmdk])
+  const openPalette = useCallback(
+    (query = '') => {
+      setDialogsReturnFocus(true)
+      setPaletteQuery(query)
+      setPaletteRequested(true)
+      openCmdk()
+    },
+    [openCmdk],
+  )
+
+  // Page content can ask for the palette (components/Chrome/paletteEvents).
+  useEffect(() => {
+    const onOpen = (e: Event) => openPalette(normalizePaletteQuery((e as CustomEvent<OpenPaletteDetail>).detail?.query))
+    window.addEventListener(OPEN_PALETTE_EVENT, onOpen)
+    return () => window.removeEventListener(OPEN_PALETTE_EVENT, onOpen)
+  }, [openPalette])
+
+  // The drawer's Search action: the palette opens once the drawer has left
+  // (one dialog at a time; focus then returns to the hamburger as usual).
+  const paletteAfterDrawer = useRef(false)
+  const searchFromDrawer = useCallback(() => {
+    paletteAfterDrawer.current = true
+    onClose()
+  }, [onClose])
+  const onDrawerCloseComplete = useCallback(() => {
+    if (!paletteAfterDrawer.current) return
+    paletteAfterDrawer.current = false
+    openPalette()
+  }, [openPalette])
 
   const openDrawer = useCallback(() => {
     setDialogsReturnFocus(true)
@@ -217,6 +245,7 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
         setDialogsReturnFocus(false)
         closeCmdk()
       }
+      paletteAfterDrawer.current = false
       onClose()
     }
     router.events.on('routeChangeStart', onRouteChangeStart)
@@ -225,7 +254,7 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
 
   const [isMac, setIsMac] = useState(true)
   useEffect(() => {
-    setIsMac(/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent))
+    setIsMac(isApplePlatform(navigator as Navigator & { userAgentData?: { platform?: string } }))
   }, [])
 
   // Global keys: ⌘K / Ctrl+K toggles the palette anywhere; "/" opens it and
@@ -416,12 +445,12 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
               _hover={{ borderColor: 'page.border-strong', color: 'page.fg' }}
               leftIcon={<SearchIcon boxSize="10px" />}
               iconSpacing={{ base: 0, md: 2 }}
-              onClick={openPalette}
+              onClick={() => openPalette()}
               onPointerEnter={preloadCommandPalette}
               onFocus={preloadCommandPalette}
               aria-label="Open command palette"
               aria-haspopup="dialog"
-              aria-keyshortcuts={`${isMac ? 'Meta+K' : 'Control+K'}${shortcutsOn ? ' /' : ''}`}
+              aria-keyshortcuts={paletteKeyShortcuts(isMac, shortcutsOn)}
             >
               <Text as="span" display={{ base: 'none', xl: 'inline' }} mr={2}>
                 Search
@@ -433,8 +462,10 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
                 border="1px solid"
                 borderColor="page.border"
                 color="page.fg-subtle"
+                // No keyboard hint on touch-first devices (components/Chrome/platform).
+                sx={HIDE_ON_COARSE_POINTER}
               >
-                {isMac ? '⌘K' : 'Ctrl K'}
+                {paletteShortcutLabel(isMac)}
               </Kbd>
             </Button>
 
@@ -514,12 +545,20 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
           socials={socials}
           isAdmin={isAdmin}
           onLogout={logout}
+          onSearch={searchFromDrawer}
+          onCloseComplete={onDrawerCloseComplete}
           returnFocusOnClose={dialogsReturnFocus}
         />
       )}
 
       {paletteRequested && (
-        <CommandPaletteLazy isOpen={cmdkOpen} onClose={closeCmdk} isAdmin={isAdmin} returnFocusOnClose={dialogsReturnFocus} />
+        <CommandPaletteLazy
+          isOpen={cmdkOpen}
+          onClose={closeCmdk}
+          isAdmin={isAdmin}
+          initialQuery={paletteQuery}
+          returnFocusOnClose={dialogsReturnFocus}
+        />
       )}
     </>
   )

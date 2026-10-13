@@ -146,27 +146,7 @@ export function shouldProbeSession(cookie: string, pathname: string): boolean {
   return hasAdminHint(cookie) || isAdminArea(pathname)
 }
 
-/** The owner's "edit what I am looking at" target for a public route, or null. */
-export function adminEditTarget(pathname: string, slug: unknown): { label: string; href: string } | null {
-  const s = typeof slug === 'string' && /^[\w-]+$/.test(slug) ? slug : ''
-  switch (pathname) {
-    case '/blog/[slug]':
-      return s ? { label: 'Edit this post', href: `/admin/blog/edit?slug=${encodeURIComponent(s)}` } : null
-    case '/work/[slug]':
-      return s ? { label: 'Edit this case study', href: `/admin/work/edit?slug=${encodeURIComponent(s)}` } : null
-    case '/cv':
-    case '/cv/zh':
-      return { label: 'Edit the CV in CV Studio', href: '/admin/dashboard?tab=cv' }
-    case '/':
-      return { label: 'Edit the home page', href: '/admin/dashboard?tab=home' }
-    case '/now':
-      return { label: 'Edit /now', href: '/admin/now' }
-    case '/uses':
-      return { label: 'Edit /uses', href: '/admin/uses' }
-    default:
-      return null
-  }
-}
+export { adminEditTarget } from './adminEditTarget'
 
 /** `<html lang>` value from a page's `props.lang` (contract E); 'en' unless a valid BCP-47 tag. */
 export function resolveHtmlLang(lang: unknown): string {
