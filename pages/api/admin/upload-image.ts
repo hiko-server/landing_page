@@ -1,7 +1,7 @@
 import { withApi } from '../../../lib/apiHandler'
 import { rateLimit } from '../../../lib/rateLimit'
 import { isAdminRequest } from '../../../lib/auth'
-import { IMAGE_TYPES, isImageMime, storeUpload } from '../../../lib/imageVariants'
+import { IMAGE_TYPES, ImageRejectedError, isImageMime, storeUpload } from '../../../lib/imageVariants'
 
 /**
  * POST /api/admin/upload-image { filename, dataUrl } → { url, width, height, variants }
@@ -10,8 +10,10 @@ import { IMAGE_TYPES, isImageMime, storeUpload } from '../../../lib/imageVariant
  * optimizer that decoded it is disabled and its decoder carried advisories).
  * The declared type must match the bytes' magic number. The image is
  * processed by lib/imageVariants (EXIF rotation, downscale above 2560 px,
- * WebP variants for srcset), stored under a fresh never-overwritten name in
- * public/uploads and mirrored to R2.
+ * WebP variants for srcset, metadata stripped), stored under a fresh
+ * never-overwritten name in public/uploads and mirrored to R2. An image that
+ * decodes to more than 80 megapixels (all frames) is refused with 413
+ * { code: 'TOO_MANY_PIXELS' }, an unreadable one with 415.
  */
 export default withApi('admin/upload-image', async (req, res) => {
   if (req.method !== 'POST') {
@@ -44,7 +46,13 @@ export default withApi('admin/upload-image', async (req, res) => {
 
   // The stored name always matches UPLOAD_NAME_RE (the rule /uploads/* serves
   // and backups keep) and carries the canonical extension of the type.
-  const stored = await storeUpload(buf, contentType, filename)
+  let stored
+  try {
+    stored = await storeUpload(buf, contentType, filename)
+  } catch (err) {
+    if (err instanceof ImageRejectedError) return res.status(err.status).json({ error: err.message, code: err.code })
+    throw err
+  }
   return res.status(200).json({
     url: stored.url,
     width: stored.width,

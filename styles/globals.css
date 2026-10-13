@@ -340,16 +340,18 @@ html:active-view-transition-type(prev, back)::view-transition-new(root) {
   }
 }
 
-/* Hover-intent lists: the hovered / focused row stays, the others dim. */
-@media (hover: hover) {
+/*
+ * Hover-intent lists: under a pointer, the hovered row stays and the others
+ * dim. Keyboard focus never dims anything: the focus ring marks the row and
+ * every other row keeps its full text contrast (WCAG 1.4.3). Off for users
+ * who ask for more contrast and in forced-colours mode.
+ */
+@media (hover: hover) and (pointer: fine) and (prefers-contrast: no-preference) and (forced-colors: none) {
   .hover-list .hover-item {
     transition: opacity 200ms var(--ease-out-quart);
   }
-  .hover-list:has(.hover-item:hover) .hover-item:not(:hover) {
-    opacity: 0.45;
-  }
-  .hover-list:has(:focus-visible) .hover-item:not(:focus-within) {
-    opacity: 0.45;
+  .hover-list:has(.hover-item:hover) .hover-item:not(:hover):not(:focus-within) {
+    opacity: 0.55;
   }
 }
 
@@ -452,6 +454,12 @@ button:hover .nudge-ne {
   animation: hero-word 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: calc(var(--i, 0) * 55ms + 140ms);
 }
+/* Reduced motion: the whole name is there at once (no staggered pop-in). */
+@media (prefers-reduced-motion: reduce) {
+  .hero-word {
+    animation: none;
+  }
+}
 @keyframes hero-word {
   from {
     opacity: 0;
@@ -551,6 +559,7 @@ button:hover .nudge-ne {
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;

@@ -38,9 +38,9 @@ test('a 3000×2000 PNG is downscaled to a 2560 long edge with 640/1280/1920 WebP
   assert.deepEqual(
     out.variants.map((v) => [v.name, v.width]),
     [
-      ['big.w640.webp', 640],
-      ['big.w1280.webp', 1280],
-      ['big.w1920.webp', 1920],
+      ['big.png.w640.webp', 640],
+      ['big.png.w1280.webp', 1280],
+      ['big.png.w1920.webp', 1920],
     ],
   )
   for (const v of out.variants) {
@@ -51,10 +51,12 @@ test('a 3000×2000 PNG is downscaled to a 2560 long edge with 640/1280/1920 WebP
   }
 })
 
-test('a small image is stored byte-for-byte with only the narrower variants', async () => {
+test('a small image keeps its size and format (re-encoded) with only the narrower variants', async () => {
   const buf = await png(800, 600)
   const out = await processUpload(buf, 'small.png')
-  assert.ok(out.buf.equals(buf))
+  const meta = await sharp(out.buf).metadata()
+  assert.equal(meta.format, 'png')
+  assert.deepEqual([meta.width, meta.height], [800, 600])
   assert.deepEqual([out.width, out.height], [800, 600])
   assert.deepEqual(
     out.variants.map((v) => v.width),
@@ -93,11 +95,11 @@ test('storeUpload writes the original and variants under fresh names; variantSrc
   const buf = await png(2000, 1000)
   const first = await storeUpload(buf, 'image/png', 'My Photo.png')
   assert.equal(first.url, '/uploads/My_Photo.png')
-  assert.deepEqual(first.variants, ['/uploads/My_Photo.w640.webp', '/uploads/My_Photo.w1280.webp', '/uploads/My_Photo.w1920.webp'])
+  assert.deepEqual(first.variants, ['/uploads/My_Photo.png.w640.webp', '/uploads/My_Photo.png.w1280.webp', '/uploads/My_Photo.png.w1920.webp'])
   for (const v of first.variants) assert.ok(fs.existsSync(path.join(tmp, 'public', v)))
   assert.equal(
     variantSrcSet(first.url),
-    '/uploads/My_Photo.w640.webp 640w, /uploads/My_Photo.w1280.webp 1280w, /uploads/My_Photo.w1920.webp 1920w, /uploads/My_Photo.png 2000w',
+    '/uploads/My_Photo.png.w640.webp 640w, /uploads/My_Photo.png.w1280.webp 1280w, /uploads/My_Photo.png.w1920.webp 1920w, /uploads/My_Photo.png 2000w',
   )
   const second = await storeUpload(buf, 'image/png', 'My Photo.png')
   assert.notEqual(second.url, first.url, 'never overwrites')
@@ -106,12 +108,13 @@ test('storeUpload writes the original and variants under fresh names; variantSrc
 })
 
 test('variant helpers', () => {
-  assert.equal(variantName('a.b.jpg', 640), 'a.b.w640.webp')
-  assert.equal(isVariantName('a.w1280.webp'), true)
+  assert.equal(variantName('a.b.jpg', 640), 'a.b.jpg.w640.webp')
+  assert.equal(isVariantName('a.png.w1280.webp'), true)
+  assert.equal(isVariantName('a.w1280.webp'), false, 'no original extension: a (legacy) original')
   assert.equal(isVariantName('a.webp'), false)
   assert.deepEqual(variantWidthsFor(1300), [640, 1280])
   assert.deepEqual([...VARIANT_WIDTHS], [640, 1280, 1920])
-  assert.equal(uploadNameOf('/uploads/a.w640.webp'), null, 'variants are not originals')
+  assert.equal(uploadNameOf('/uploads/a.jpg.w640.webp'), null, 'variants are not originals')
   assert.equal(uploadNameOf('/uploads/../etc'), null)
   assert.equal(uploadNameOf('/uploads/ok.png?v=1'), 'ok.png')
   assert.equal(sniffImageType(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>')), null)

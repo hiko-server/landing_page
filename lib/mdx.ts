@@ -9,6 +9,8 @@ import type { Root as HastRoot } from 'hast'
 import { listItems, getItem, getPage } from './contentStore'
 import { detectContentLang, readingMinutes, type TocEntry } from './toc'
 import remarkStripMdxExpressions from './rehype/stripMdxExpressions'
+import rehypeSafeUrls from './rehype/safeUrls'
+import rehypeLiftBlocks from './rehype/liftBlocks'
 import rehypeHeadings from './rehype/headings'
 import rehypeImages, { type SizeResolver, type SrcSetResolver } from './rehype/images'
 import rehypeLangSpans from './rehype/langSpans'
@@ -33,7 +35,8 @@ import { clampAtBoundary } from './schema'
  * 'unsafe-eval'.
  *
  *   remark-parse → remark-mdx → remark-gfm → strip expressions / map JSX →
- *   remark-rehype → heading ids + TOC → image sizes / srcset / figures →
+ *   remark-rehype → safe URLs (links / media / embeds) → lift blocks out of
+ *   paragraphs → heading ids + TOC → image sizes / srcset / figures →
  *   language-of-parts spans → rehype-pretty-code → drop positions / data
  *
  * Slugs are restricted to [a-z0-9-_]+ before any lookup.
@@ -203,6 +206,8 @@ export async function compileMdx(body: string, opts: CompileOptions = {}): Promi
     .use(remarkGfm)
     .use(remarkStripMdxExpressions)
     .use(remarkRehype)
+    .use(rehypeSafeUrls)
+    .use(rehypeLiftBlocks)
     .use(rehypeHeadings, { onToc: (t: TocItem[]) => (toc = t) })
     .use(rehypeImages, {
       resolveSize: opts.resolveSize || resolveImageSize,

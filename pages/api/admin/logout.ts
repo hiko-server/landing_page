@@ -13,6 +13,8 @@ import { withApi } from '../../../lib/apiHandler'
  * browser's cookie — an anonymous POST must not be able to sign the owner out.
  * Reachable without a session (middleware allow-list) so a stale cookie can
  * always be cleared; cross-site POSTs are refused by the middleware.
+ * Draft Mode is switched off too: its bypass cookie alone makes /blog and
+ * /work render unpublished drafts, so it must not outlive the session.
  */
 export default withApi('admin/logout', (req: NextApiRequest, res: NextApiResponse) => {
   if (req.method !== 'POST') {
@@ -24,5 +26,6 @@ export default withApi('admin/logout', (req: NextApiRequest, res: NextApiRespons
   if (revoked) bumpSessionVersion()
   deleteCookie(ADMIN_COOKIE, { req, res, path: '/' })
   clearAdminHint(req, res)
+  res.setDraftMode({ enable: false })
   return res.status(200).json({ ok: true, revokedAllSessions: revoked })
 })

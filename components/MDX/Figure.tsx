@@ -17,6 +17,12 @@ import { Box, Text } from '@chakra-ui/react'
  *   - `<Figure src alt caption />` in MDX compiles to the same
  *     `figure.article-figure > img + figcaption` shape as a lone markdown
  *     image, so both render through ArticleFigure + MdxImage.
+ *   - Valid inside a paragraph: an image that shares its paragraph with text
+ *     (`![…](…)(Ref: …)`) stays in the <p>, so MdxImage emits phrasing
+ *     content only — span frames (display: block) and, after mount, a
+ *     <button>. <figure>/<figcaption> never sit in a <p>: lone images are
+ *     turned into figures in place of their paragraph (lib/rehype/images.ts)
+ *     and inline `<Figure>` JSX is lifted out (lib/rehype/liftBlocks.ts).
  */
 
 /** Opens the article lightbox on the image with this src. */
@@ -74,8 +80,12 @@ export function MdxImage({ alt, width, height, src, srcSet, sizes, title, classN
 
   // Known size: the frame is as wide as the image (never upscaled) and its
   // height follows from the width/height attributes. Unknown: a 16:10 box.
+  // Spans only (display: block): the image may share a <p> with text, and a
+  // <div> there would make the HTML parser close the paragraph — the server
+  // markup would no longer hydrate.
   const framed = (
     <Box
+      as="span"
       sx={{
         ...frameSx,
         overflow: 'hidden',

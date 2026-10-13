@@ -14,8 +14,9 @@
  *     attributes survive;
  *   - JSX elements are mapped to hast through `data.hName` /
  *     `data.hProperties` with an allow-list:
- *       iframe     only when `src` is an https YouTube (nocookie) / Vimeo
- *                  player URL; attributes reduced to a safe set
+ *       iframe     only when `src` is a YouTube (nocookie) /embed/<id> or
+ *                  Vimeo /video/<id> player URL (rebuilt by embedSrc);
+ *                  attributes reduced to a safe set
  *       YouTube    `<YouTube id="…" title="…" />` → `youtube-embed`, a
  *                  click-to-load facade (components/MDX/YouTube.tsx)
  *       Figure     `<Figure src alt caption />` → the same
@@ -47,8 +48,48 @@ type MdastNode = {
 const EXPRESSION_TYPES = new Set(['mdxFlowExpression', 'mdxTextExpression', 'mdxjsEsm'])
 const JSX_TYPES = new Set(['mdxJsxFlowElement', 'mdxJsxTextElement'])
 
-/** Hosts whose players may be embedded (must match the CSP frame-src). */
-export const EMBED_SRC_RE = /^https:\/\/(www\.)?(youtube-nocookie\.com|youtube\.com|player\.vimeo\.com)\//
+/**
+ * Player URLs that may be embedded: `https://(www.)youtube-nocookie.com/embed/<id>`,
+ * `https://(www.)youtube.com/embed/<id>` and `https://player.vimeo.com/video/<digits>`,
+ * each with an optional query (no quotes, whitespace or fragment). Hosts
+ * must match the CSP frame-src (lib/csp.js); embedSrc() rebuilds the URL.
+ */
+export const EMBED_SRC_RE =
+  /^https:\/\/(?:(?:www\.)?(?:youtube-nocookie\.com|youtube\.com)\/embed\/[A-Za-z0-9_-]{11}|player\.vimeo\.com\/video\/\d{1,12})(?:\?[^\s"'<>#]*)?$/
+
+const YOUTUBE_EMBED_RE = /^https:\/\/(?:www\.)?(youtube-nocookie\.com|youtube\.com)\/embed\/([A-Za-z0-9_-]{11})(?:\?([^\s"'<>#]*))?$/
+const VIMEO_EMBED_RE = /^https:\/\/player\.vimeo\.com\/video\/(\d{1,12})(?:\?([^\s"'<>#]*))?$/
+
+/** Player parameters kept from an embed URL; everything else is dropped. */
+const YOUTUBE_PARAMS = ['start', 'end', 't', 'si', 'autoplay', 'mute', 'loop', 'playlist', 'list', 'controls', 'rel', 'playsinline', 'cc_load_policy', 'cc_lang_pref', 'hl']
+const VIMEO_PARAMS = ['h', 'autoplay', 'muted', 'loop', 'autopause', 'badge', 'byline', 'portrait', 'title', 'color', 'dnt', 'app_id', 'player_id', 'controls', 'texttrack']
+const PARAM_VALUE_RE = /^[A-Za-z0-9_.,:-]{1,64}$/
+
+function keptQuery(query: string | undefined, allowed: readonly string[]): string {
+  if (!query) return ''
+  const params = new URLSearchParams(query)
+  const kept: string[] = []
+  for (const key of allowed) {
+    const value = params.get(key)
+    if (value !== null && PARAM_VALUE_RE.test(value)) kept.push(`${key}=${value}`)
+  }
+  return kept.length ? `?${kept.join('&')}` : ''
+}
+
+/**
+ * The canonical player URL for an allowed embed, or null. The URL is
+ * rebuilt from the parsed video id on the CSP host (`www.` added) plus the
+ * allowed player parameters, so nothing else of the original survives.
+ */
+export function embedSrc(raw: string): string | null {
+  const src = raw.trim()
+  if (!EMBED_SRC_RE.test(src)) return null
+  const yt = YOUTUBE_EMBED_RE.exec(src)
+  if (yt) return `https://www.${yt[1]}/embed/${yt[2]}${keptQuery(yt[3], YOUTUBE_PARAMS)}`
+  const vimeo = VIMEO_EMBED_RE.exec(src)
+  if (vimeo) return `https://player.vimeo.com/video/${vimeo[1]}${keptQuery(vimeo[2], VIMEO_PARAMS)}`
+  return null
+}
 
 /** An 11-character YouTube video id. */
 export const YOUTUBE_ID_RE = /^[A-Za-z0-9_-]{11}$/
@@ -82,8 +123,8 @@ const str = (v: string | true | undefined): string => (typeof v === 'string' ? v
 type Mapped = { hName: string; hProperties: Record<string, unknown>; hChildren?: unknown[] } | null
 
 function mapIframe(attrs: Record<string, string | true>): Mapped {
-  const src = str(attrs.src)
-  if (!EMBED_SRC_RE.test(src)) return null
+  const src = embedSrc(str(attrs.src))
+  if (!src) return null
   const props: Record<string, unknown> = {
     src,
     title: str(attrs.title) || 'Embedded video',

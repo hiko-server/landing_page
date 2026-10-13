@@ -1,7 +1,9 @@
 import { getAnalyticsDb } from './db'
 import {
+  OTHER_KEY,
   VITAL_NAMES,
   dayMinus,
+  isPlausibleHost,
   rateVital,
   utcDay,
   type AnalyticsRange,
@@ -26,6 +28,16 @@ import {
 
 const RANGE_DAYS: Record<AnalyticsRange, number> = { '7d': 7, '30d': 30, '12m': 365 }
 const TOP_N = 10
+/**
+ * The report names up to TOP_N referrer hosts that look like real public
+ * names; implausible hosts (IP literals, single labels, legacy junk) and the
+ * tail beyond TOP_N are summed into one OTHER_KEY row. A one-visitor
+ * referrer is still named: on a personal site most real referrers are one
+ * reader following one link, and hiding them would empty the report. Planted
+ * hosts are bounded at ingest instead (published paths only, per-client and
+ * per-network budgets in lib/analytics/limits).
+ */
+const MIN_REFERRER_VISITORS = 1
 const LIVE_WINDOW_MS = 5 * 60_000
 
 type Db = ReturnType<typeof getAnalyticsDb>
@@ -79,8 +91,8 @@ function kpi(value: number, previous: number, comparable: boolean): Kpi {
   return { value, previous, delta: comparable && previous > 0 ? (value - previous) / previous : null }
 }
 
-/** Merge per-key counts from the rolled and raw parts, sort by visitors (then views), keep the top N. */
-function mergeTop(rows: Array<{ key: string; visitors: number; views?: number }>, withViews: boolean): CountRow[] {
+/** Merge per-key counts from the rolled and raw parts, sorted by visitors (then views, then key). */
+function merge(rows: Array<{ key: string; visitors: number; views?: number }>, withViews: boolean): CountRow[] {
   const acc = new Map<string, CountRow>()
   for (const r of rows) {
     const cur = acc.get(r.key) || (withViews ? { key: r.key, visitors: 0, views: 0 } : { key: r.key, visitors: 0 })
@@ -88,10 +100,13 @@ function mergeTop(rows: Array<{ key: string; visitors: number; views?: number }>
     if (withViews) cur.views = (cur.views || 0) + (r.views || 0)
     acc.set(r.key, cur)
   }
-  return Array.from(acc.values())
-    .sort((a, b) => b.visitors - a.visitors || (b.views || 0) - (a.views || 0) || a.key.localeCompare(b.key))
-    .slice(0, TOP_N)
+  return Array.from(acc.values()).sort(
+    (a, b) => b.visitors - a.visitors || (b.views || 0) - (a.views || 0) || a.key.localeCompare(b.key),
+  )
 }
+
+const mergeTop = (rows: Array<{ key: string; visitors: number; views?: number }>, withViews: boolean): CountRow[] =>
+  merge(rows, withViews).slice(0, TOP_N)
 
 function topPages(db: Db, span: Span, rolled: string | null): CountRow[] {
   const parts = split(span, rolled)
@@ -136,7 +151,13 @@ function topReferrers(db: Db, span: Span, rolled: string | null): CountRow[] {
         .all(parts.raw.from, parts.raw.to) as typeof rows),
     )
   }
-  return mergeTop(rows, false)
+  const named: CountRow[] = []
+  let other = 0
+  for (const r of merge(rows, false)) {
+    if (named.length < TOP_N && r.visitors >= MIN_REFERRER_VISITORS && isPlausibleHost(r.key)) named.push(r)
+    else other += r.visitors
+  }
+  return other > 0 ? [...named, { key: OTHER_KEY, visitors: other }] : named
 }
 
 const DIMENSION_COLUMN = { country: 'country', device: 'device', browser: 'browser' } as const

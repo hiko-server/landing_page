@@ -19,6 +19,8 @@ export const UPLOAD_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif'
 export const UPLOAD_MAX_BYTES = 8 * 1024 * 1024
 
 export function uploadErrorMessage(status: number, body: Record<string, unknown>): string {
+  // Refusals that carry a code (pixel limit, unreadable image, import errors) explain themselves.
+  if (typeof body.code === 'string' && typeof body.error === 'string' && body.error) return body.error
   if (status === 413) return 'Image is too large — the limit is 8 MB.'
   if (status === 401) return 'Session expired — sign in again to upload.'
   if (status === 415) return 'Unsupported image type. Use JPEG, PNG, WebP or GIF.'

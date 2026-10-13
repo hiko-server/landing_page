@@ -4,9 +4,10 @@ import { toHtml } from 'hast-util-to-html'
 import type { Root as HastRoot } from 'hast'
 import { listPosts, listWorkInDisplayOrder, getPost, getWork, type MDXRendered, type PostFrontmatter, type WorkFrontmatter } from './mdx'
 import { classList, element, isElement, type HastElement, type HastNode } from './rehype/hast'
+import { safeLinkHref, safeMediaSrc } from './rehype/safeUrls'
 import { isValidUploadName } from './security/uploadName'
 import { isoDate } from './postDate'
-import { isoWithTz, PERSON_NAME, PERSON_SHORT_NAME } from './schema'
+import { isoWithTz, PERSON_NAME, PERSON_SHORT_NAME, SITE_TZ_OFFSET } from './schema'
 import { cdata, xmlEscape } from './feeds'
 
 /**
@@ -17,8 +18,11 @@ import { cdata, xmlEscape } from './feeds'
  * readers: same-site links and images become absolute, heading self-links
  * are unwrapped, embeds become plain links to the video (readers do not run
  * iframes), and presentation-only attributes (inline styles, data-*,
- * lazy-loading hints, srcset) are dropped. Drafts never appear: every list
- * comes from listPosts()/listWork(), which exclude them.
+ * lazy-loading hints, srcset) are dropped. URLs are checked again with the
+ * compile-time rules (lib/rehype/safeUrls.ts): a refused link is unwrapped
+ * and a refused image dropped, so no javascript: / data: URL can reach a
+ * feed reader even from a tree that skipped the compiler. Drafts never
+ * appear: every list comes from listPosts()/listWork(), which exclude them.
  */
 
 export type FeedSite = {
@@ -28,10 +32,15 @@ export type FeedSite = {
   pageUrl?: string
 }
 
-function absolute(url: string, { site, pageUrl }: FeedSite): string {
-  const u = url.trim()
+/**
+ * Absolute URL of a link (`href`) or image (`src`) for a feed reader; ''
+ * when the URL is refused. Same-site paths and in-page fragments resolve
+ * against the site / article URL.
+ */
+function absolute(url: unknown, { site, pageUrl }: FeedSite, kind: 'href' | 'src'): string {
+  const u = kind === 'href' ? safeLinkHref(url) : safeMediaSrc(url)
+  if (!u) return ''
   if (u.startsWith('#')) return pageUrl ? `${pageUrl}${u}` : u
-  if (u.startsWith('//')) return `https:${u}`
   if (u.startsWith('/')) return `${site}${u}`
   return u
 }
@@ -51,12 +60,18 @@ function videoLink(href: string, label: string): HastElement {
 
 const DROP_PROPS = new Set(['style', 'tabIndex', 'loading', 'decoding', 'srcSet', 'sizes', 'fetchPriority'])
 
-function clean(node: HastElement, ctx: FeedSite): void {
+/** Strip presentation-only attributes and resolve URLs; false when the element must go (refused image). */
+function clean(node: HastElement, ctx: FeedSite): boolean {
   for (const key of Object.keys(node.properties)) {
     if (DROP_PROPS.has(key) || key.startsWith('data')) delete node.properties[key]
   }
-  if (isElement(node, 'a') && typeof node.properties.href === 'string') node.properties.href = absolute(node.properties.href, ctx)
-  if (isElement(node, 'img') && typeof node.properties.src === 'string') node.properties.src = absolute(node.properties.src, ctx)
+  if (isElement(node, 'a') && 'href' in node.properties) node.properties.href = absolute(node.properties.href, ctx, 'href')
+  if (isElement(node, 'img')) {
+    const src = absolute(node.properties.src, ctx, 'src')
+    if (!src) return false
+    node.properties.src = src
+  }
+  return true
 }
 
 function transform(parent: HastNode, ctx: FeedSite): void {
@@ -69,9 +84,9 @@ function transform(parent: HastNode, ctx: FeedSite): void {
       continue
     }
     if (child.tagName === 'iframe') {
-      const src = typeof child.properties.src === 'string' ? child.properties.src : ''
+      const href = safeLinkHref(videoPageUrl(typeof child.properties.src === 'string' ? child.properties.src : ''))
       const title = typeof child.properties.title === 'string' ? child.properties.title : 'the video'
-      if (src) out.push(videoLink(videoPageUrl(src), `Watch ${title}`))
+      if (href) out.push(videoLink(href, `Watch ${title}`))
       continue
     }
     if (child.tagName === 'youtube-embed') {
@@ -88,8 +103,13 @@ function transform(parent: HastNode, ctx: FeedSite): void {
       out.push(...child.children)
       continue
     }
-    clean(child, ctx)
+    if (!clean(child, ctx)) continue
     transform(child, ctx)
+    if (child.tagName === 'a' && child.properties.href === '') {
+      // Refused link: keep its text, drop the link.
+      out.push(...child.children)
+      continue
+    }
     out.push(child)
   }
   parent.children = out
@@ -147,10 +167,26 @@ export type FeedItem = {
   enclosure?: Enclosure | null
 }
 
+/** YYYY-MM-DD with an optional time and zone. */
+const ISO_DATE_TIME_RE = /^(\d{4}-\d{2}-\d{2})(?:T(\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)(Z|[+-]\d{2}:\d{2})?)?$/i
+
+/**
+ * RFC 822 date for RSS. A bare YYYY-MM-DD is midnight in the site's time
+ * zone (isoWithTz, as in the JSON Feed and JSON-LD), so every feed names
+ * the same instant; full timestamps are kept as given.
+ */
 function rfc822(value: unknown): string {
   if (typeof value === 'number') return new Date(value).toUTCString()
+  const raw = typeof value === 'string' ? value.trim() : ''
+  const m = ISO_DATE_TIME_RE.exec(raw)
+  if (m) {
+    // A timestamp without a zone is site time, like a bare day.
+    const exact = new Date(m[2] && !m[3] ? `${m[1]}T${m[2]}${SITE_TZ_OFFSET}` : isoWithTz(raw))
+    if (!Number.isNaN(exact.getTime())) return exact.toUTCString()
+  }
+  // Other date-ish values ("May 1, 2024"): their calendar day, at site midnight.
   const iso = isoDate(value)
-  return iso ? new Date(`${iso}T00:00:00Z`).toUTCString() : ''
+  return iso ? new Date(isoWithTz(iso)).toUTCString() : ''
 }
 
 export type RssChannel = {

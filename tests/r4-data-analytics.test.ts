@@ -14,9 +14,15 @@ const ingestMod = await import('../lib/analytics/ingest')
 const { getAnalyticsDb, closeAnalyticsDb, analyticsDbPath } = await import('../lib/analytics/db')
 const { getAnalyticsReport, p75 } = await import('../lib/analytics/query')
 const fmt = await import('../lib/analytics/format')
+const published = await import('../lib/analytics/published')
+
+// Article paths are only recorded for published slugs (tests/r5-analytics.test.ts);
+// stand in for the content store so no content.db is needed here.
+published.setPublishedSlugSource(() => ({ blog: ['x'], work: [] }))
 
 after(() => {
   closeAnalyticsDb()
+  published.setPublishedSlugSource(null)
   process.chdir(repoRoot)
   fs.rmSync(root, { recursive: true, force: true })
 })

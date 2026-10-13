@@ -59,6 +59,18 @@ const PUBLIC_ADMIN_API_PATHS = new Set<string>([
 // Auth lives under /api/auth/*, never /api/admin/*, so it's not gated here.
 
 /**
+ * True for /api/admin/* requests that must work without a session. Besides
+ * the fixed allow-list, `GET /api/admin/draft?disable=1` (the Draft Mode bar's
+ * Exit link) is public: leaving Draft Mode must keep working after the session
+ * ended (logout, expiry). That branch only clears the bypass cookie and
+ * validates its redirect path; enabling Draft Mode still needs a session.
+ */
+export function isPublicAdminApi(pathname: string, method: string, searchParams: URLSearchParams): boolean {
+  if (PUBLIC_ADMIN_API_PATHS.has(pathname)) return true
+  return pathname === '/api/admin/draft' && method === 'GET' && searchParams.get('disable') === '1'
+}
+
+/**
  * Signature-only check (fast, edge-compatible). Session revocation — the
  * `sv` claim vs data/admin.json — is enforced by every API route through
  * lib/auth.ts, which the edge runtime can't do (no filesystem).
@@ -179,7 +191,7 @@ export async function middleware(req: NextRequest) {
   if (isAdminPage || isAdminApi) {
     const allowed = isAdminPage
       ? PUBLIC_ADMIN_PAGE_PATHS.has(pathname)
-      : PUBLIC_ADMIN_API_PATHS.has(pathname)
+      : isPublicAdminApi(pathname, req.method, req.nextUrl.searchParams)
 
     if (!allowed) {
       const token = req.cookies.get('cv_admin_token')?.value

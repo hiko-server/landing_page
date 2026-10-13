@@ -6,26 +6,39 @@ import { log } from './log'
 import { isR2Configured, r2PutBuffer } from './r2'
 import { uploadR2Key } from './contentStore'
 import { imageSizeFromBytes } from './rehype/imageSize'
-import { sanitizeUploadName, withHashSuffix } from './security/uploadName'
-import { variantName, variantWidthsFor } from './uploadVariants'
+import { isValidUploadName, sanitizeUploadName, withHashSuffix } from './security/uploadName'
+import { allVariantNames, asOriginalName, variantName, variantWidthsFor } from './uploadVariants'
 
 /**
  * Upload-time image processing (sharp) — the replacement for the disabled
  * Next image optimizer. SERVER-ONLY.
  *
- *   - EXIF orientation is applied (the stored pixels are upright).
- *   - An original whose long edge exceeds MAX_EDGE is downscaled to it and
+ *   - storeUpload first measures the image (header only) and refuses one
+ *     that decodes to more than MAX_INPUT_PIXELS (all frames together) or
+ *     cannot be measured at all — ImageRejectedError, HTTP 413 / 415. Such a
+ *     file would crash visitors' (mobile) tabs even though it is small.
+ *   - All metadata (EXIF GPS, camera serials, XMP, IPTC, PNG text) is
+ *     dropped from every original; only the ICC profile is kept. An upright
+ *     JPEG / WebP within MAX_EDGE keeps its compressed data byte for byte
+ *     (stripJpegMetadata / stripWebpMetadata). Anything that needs rotating
+ *     (EXIF orientation) or downscaling to MAX_EDGE, and every PNG, is
  *     re-encoded in its own format (JPEG mozjpeg q82, PNG palette when it has
- *     ≤256 colours else zlib level 9, WebP q82). Otherwise the bytes are kept.
+ *     ≤256 colours else zlib level 9, WebP q82 or lossless when the input was
+ *     lossless).
  *   - WebP q72 variants are made for every VARIANT_WIDTHS entry narrower than
  *     the original (lib/uploadVariants.ts names them).
- *   - GIFs and other animated images are stored untouched, without variants.
- *   - Any processing failure stores the original unchanged: an upload is
- *     never blocked by the optimizer.
+ *   - Animated WebPs and PNGs keep their frames with the metadata chunks
+ *     removed, GIFs are stored untouched; none of them get variants.
+ *   - A re-encode failure of an image under the pixel limit stores the
+ *     original unchanged: an upload is never blocked by the optimizer.
  */
 
 export const MAX_EDGE = 2560
-/** Decompression-bomb guard (pixels). */
+/**
+ * Decompression-bomb guard: the most decoded pixels (width × height × frames)
+ * an upload may have. Enforced by storeUpload before anything is stored, and
+ * the input limit sharp itself is opened with.
+ */
 export const MAX_INPUT_PIXELS = 80e6
 
 export type ImageMime = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif'
@@ -53,10 +66,206 @@ export function sniffImageType(buf: Buffer): ImageMime | null {
   return null
 }
 
+export type ImageRejectCode = 'TOO_MANY_PIXELS' | 'UNREADABLE_IMAGE'
+
+/** An image storeUpload refuses to publish; `status` is the HTTP answer for it. */
+export class ImageRejectedError extends Error {
+  readonly code: ImageRejectCode
+  readonly status: 413 | 415
+  constructor(code: ImageRejectCode, message: string) {
+    super(message)
+    this.name = 'ImageRejectedError'
+    this.code = code
+    this.status = code === 'TOO_MANY_PIXELS' ? 413 : 415
+  }
+}
+
+/** PNG chunk walk: the frame count of an animated PNG (acTL), 0 for anything else. */
+export function apngFrameCount(buf: Buffer): number {
+  if (!IMAGE_TYPES['image/png'].magic(buf)) return 0
+  let o = 8
+  while (o + 12 <= buf.length) {
+    const len = buf.readUInt32BE(o)
+    const type = buf.toString('latin1', o + 4, o + 8)
+    if (type === 'acTL') return len >= 8 ? Math.max(1, buf.readUInt32BE(o + 8)) : 1
+    if (type === 'IDAT' || type === 'IEND') return 0 // acTL must precede the image data
+    o += 12 + len
+  }
+  return 0
+}
+
+const PNG_METADATA_CHUNKS = new Set(['eXIf', 'tEXt', 'zTXt', 'iTXt', 'tIME'])
+
+/** A PNG without its metadata chunks (EXIF, text, time); unchanged when the chunk layout is malformed. */
+function stripPngMetadata(buf: Buffer): Buffer {
+  const keep: Buffer[] = [buf.subarray(0, 8)]
+  let o = 8
+  while (o + 12 <= buf.length) {
+    const end = o + 12 + buf.readUInt32BE(o)
+    if (end > buf.length) return buf
+    const type = buf.toString('latin1', o + 4, o + 8)
+    if (!PNG_METADATA_CHUNKS.has(type)) keep.push(buf.subarray(o, end))
+    o = end
+    if (type === 'IEND') return Buffer.concat(keep)
+  }
+  return buf
+}
+
+const isApp = (marker: number) => marker >= 0xe0 && marker <= 0xef
+const isRst = (marker: number) => marker >= 0xd0 && marker <= 0xd7
+
+/** JPEG segments worth keeping: everything but metadata (APPn other than JFIF / ICC / Adobe, and comments). */
+function keepJpegSegment(marker: number, payload: Buffer): boolean {
+  if (marker === 0xfe) return false // COM
+  if (!isApp(marker)) return true // SOF, DHT, DQT, DRI, SOS, …
+  if (marker === 0xe0 || marker === 0xee) return true // JFIF, Adobe (colour transform)
+  return marker === 0xe2 && payload.toString('latin1', 0, 12) === 'ICC_PROFILE\0'
+}
+
+/**
+ * A JPEG without its metadata, LOSSLESSLY: the compressed image data is
+ * copied byte for byte; EXIF (GPS, camera serials, orientation), XMP, IPTC,
+ * comments and the multi-picture images some phones append after EOI (with
+ * their own EXIF) are dropped; JFIF, the ICC profile and the Adobe segment
+ * stay. Null when the marker layout is malformed (the caller re-encodes).
+ * Only for an upright image: the orientation tag goes with the EXIF.
+ */
+export function stripJpegMetadata(buf: Buffer): Buffer | null {
+  if (buf.length < 4 || buf[0] !== 0xff || buf[1] !== 0xd8) return null
+  const out: Buffer[] = [buf.subarray(0, 2)]
+  let o = 2
+  while (o + 2 <= buf.length) {
+    if (buf[o] !== 0xff) return null
+    let m = o + 1
+    while (m < buf.length && buf[m] === 0xff) m++ // fill bytes
+    if (m >= buf.length) return null
+    const marker = buf[m]
+    if (marker === 0xd9) {
+      out.push(Buffer.from([0xff, 0xd9]))
+      return Buffer.concat(out)
+    }
+    if (marker === 0x01 || isRst(marker)) {
+      out.push(Buffer.from([0xff, marker]))
+      o = m + 1
+      continue
+    }
+    if (m + 3 > buf.length) return null
+    const len = buf.readUInt16BE(m + 1)
+    const end = m + 1 + len
+    if (len < 2 || end > buf.length) return null
+    if (keepJpegSegment(marker, buf.subarray(m + 3, end))) out.push(Buffer.from([0xff, marker]), buf.subarray(m + 1, end))
+    o = end
+    if (marker === 0xda) {
+      // Entropy-coded data runs to the next real marker (not a stuffed 0xFF00, not RSTn).
+      let q = o
+      while (q + 1 < buf.length && !(buf[q] === 0xff && buf[q + 1] !== 0x00 && buf[q + 1] !== 0xff && !isRst(buf[q + 1]))) q++
+      if (q + 1 >= buf.length) return null
+      out.push(buf.subarray(o, q))
+      o = q
+    }
+  }
+  return null
+}
+
+const WEBP_FLAG_EXIF = 0x08
+const WEBP_FLAG_XMP = 0x04
+
+/**
+ * A WebP (still or animated) without its EXIF and XMP chunks, LOSSLESSLY:
+ * every other chunk is copied as is and the VP8X flags and RIFF size are
+ * updated. Null when the chunk layout is malformed (the caller re-encodes).
+ */
+export function stripWebpMetadata(buf: Buffer): Buffer | null {
+  if (!IMAGE_TYPES['image/webp'].magic(buf)) return null
+  const riffEnd = 8 + buf.readUInt32LE(4)
+  if (riffEnd > buf.length) return null
+  const chunks: Buffer[] = []
+  let o = 12
+  while (o + 8 <= riffEnd) {
+    const type = buf.toString('latin1', o, o + 4)
+    const size = buf.readUInt32LE(o + 4)
+    const end = o + 8 + size + (size & 1)
+    if (end > riffEnd) return null
+    if (type !== 'EXIF' && type !== 'XMP ') {
+      const chunk = Buffer.from(buf.subarray(o, end))
+      if (type === 'VP8X' && chunk.length > 8) chunk[8] &= ~(WEBP_FLAG_EXIF | WEBP_FLAG_XMP)
+      chunks.push(chunk)
+    }
+    o = end
+  }
+  if (o !== riffEnd || chunks.length === 0) return null
+  const body = Buffer.concat(chunks)
+  const header = Buffer.alloc(12)
+  header.write('RIFF', 0, 'latin1')
+  header.writeUInt32LE(4 + body.length, 4)
+  header.write('WEBP', 8, 'latin1')
+  return Buffer.concat([header, body])
+}
+
+/** True when a WebP (still or animated) carries a lossless (VP8L) bitstream. */
+function webpIsLossless(buf: Buffer): boolean {
+  const walk = (start: number, end: number): boolean => {
+    let o = start
+    while (o + 8 <= end) {
+      const type = buf.toString('latin1', o, o + 4)
+      const size = buf.readUInt32LE(o + 4)
+      if (type === 'VP8L') return true
+      // ANMF: a 16-byte frame header, then the frame's own chunks.
+      if (type === 'ANMF' && walk(o + 24, Math.min(end, o + 8 + size))) return true
+      o += 8 + size + (size & 1)
+    }
+    return false
+  }
+  return buf.length > 12 && walk(12, buf.length)
+}
+
+export type ImageGeometry = { width: number; height: number; frames: number }
+
+/**
+ * Width, (frame) height and frame count read from the header only — nothing
+ * is decoded, so this is safe on a decompression bomb. Null when neither
+ * sharp nor the header parser can read it.
+ */
+export async function imageGeometry(buf: Buffer): Promise<ImageGeometry | null> {
+  let width = 0
+  let height = 0
+  let frames = 1
+  try {
+    // No pixel limit here: the point is to measure before anything decodes.
+    const meta = await sharp(buf, { limitInputPixels: false, failOn: 'none' }).metadata()
+    width = meta.width ?? 0
+    height = meta.pageHeight ?? meta.height ?? 0
+    frames = Math.max(1, meta.pages ?? 1)
+  } catch {
+    /* fall back to the header parser */
+  }
+  if (!width || !height) {
+    const size = imageSizeFromBytes(buf)
+    width = size?.width ?? 0
+    height = size?.height ?? 0
+  }
+  frames = Math.max(frames, apngFrameCount(buf))
+  return width > 0 && height > 0 ? { width, height, frames } : null
+}
+
+/** Refuse an image that cannot be measured or decodes to more than MAX_INPUT_PIXELS. */
+export async function assertImageWithinLimits(buf: Buffer): Promise<ImageGeometry> {
+  const g = await imageGeometry(buf)
+  if (!g) throw new ImageRejectedError('UNREADABLE_IMAGE', 'The image could not be read (corrupt or unsupported file)')
+  if (g.width * g.height * g.frames > MAX_INPUT_PIXELS) {
+    const frames = g.frames > 1 ? ` × ${g.frames} frames` : ''
+    throw new ImageRejectedError(
+      'TOO_MANY_PIXELS',
+      `Image is too large to publish: ${g.width}×${g.height}${frames} exceeds the ${MAX_INPUT_PIXELS / 1e6} megapixel limit`,
+    )
+  }
+  return g
+}
+
 export type VariantFile = { name: string; width: number; buf: Buffer }
 
 export type ProcessedUpload = {
-  /** Bytes to store as the original (re-encoded only when it had to change). */
+  /** Bytes to store as the original (re-encoded without metadata; unchanged only for GIFs and on failure). */
   buf: Buffer
   width: number | null
   height: number | null
@@ -86,7 +295,8 @@ export async function makeVariants(buf: Buffer, safeName: string, width: number,
   const out: VariantFile[] = []
   for (const w of variantWidthsFor(width)) {
     const name = variantName(safeName, w)
-    if (skip(name)) continue
+    // A legacy original's name can be too long for a variant suffix: no variant then.
+    if (!isValidUploadName(name) || skip(name)) continue
     const data = await open(buf).resize({ width: w, withoutEnlargement: true }).webp({ quality: 72 }).toBuffer()
     out.push({ name, width: w, buf: data })
   }
@@ -100,37 +310,63 @@ function headerSize(buf: Buffer): { width: number | null; height: number | null 
 
 /**
  * Process an upload for storage under `safeName` (already sanitised, with
- * the canonical extension of its validated type). Never throws.
+ * the canonical extension of its validated type). Never throws. Does not
+ * enforce the pixel limit (storeUpload does, before calling it).
  */
 export async function processUpload(buf: Buffer, safeName: string): Promise<ProcessedUpload> {
   try {
+    if (apngFrameCount(buf) > 0) {
+      // sharp would flatten an animated PNG to its first frame: keep the
+      // frames as they are and drop only the metadata chunks.
+      return { buf: stripPngMetadata(buf), ...headerSize(buf), variants: [] }
+    }
     const meta = await open(buf).metadata()
-    const animated = (meta.pages ?? 1) > 1
-    if (meta.format === 'gif' || animated) {
+    if (meta.format === 'gif') {
       return { buf, width: meta.width ?? null, height: meta.pageHeight ?? meta.height ?? null, variants: [] }
     }
-    const oriented = meta.autoOrient ?? { width: meta.width, height: meta.height }
-    let width = oriented.width
-    let height = oriented.height
-    if (!width || !height) return { buf, ...headerSize(buf), variants: [] }
-
-    const needsRotate = !!meta.orientation && meta.orientation !== 1
-    const needsResize = Math.max(width, height) > MAX_EDGE
-    let original = buf
-    if (needsRotate || needsResize) {
-      let img = open(buf).rotate()
-      if (needsResize) img = img.resize({ width: MAX_EDGE, height: MAX_EDGE, fit: 'inside', withoutEnlargement: true })
-      if (meta.format === 'jpeg') img = img.jpeg({ quality: 82, mozjpeg: true })
-      else if (meta.format === 'png') img = (await fitsPalette(img)) ? img.png({ palette: true, compressionLevel: 9 }) : img.png({ compressionLevel: 9 })
-      else if (meta.format === 'webp') img = img.webp({ quality: 82 })
-      else return { buf, width, height, variants: [] }
-      const { data, info } = await img.toBuffer({ resolveWithObject: true })
-      original = data
-      width = info.width
-      height = info.height
+    if ((meta.pages ?? 1) > 1) {
+      if (meta.format !== 'webp') return { buf, width: meta.width ?? null, height: meta.pageHeight ?? meta.height ?? null, variants: [] }
+      // Animated WebP: metadata chunks dropped losslessly; re-encoded frame by
+      // frame (delays and loop kept) only when the chunk layout is malformed.
+      const stripped = stripWebpMetadata(buf)
+      if (stripped) return { buf: stripped, width: meta.width ?? null, height: meta.pageHeight ?? meta.height ?? null, variants: [] }
+      let anim = sharp(buf, { limitInputPixels: MAX_INPUT_PIXELS, failOn: 'error', animated: true })
+      if (meta.hasProfile) anim = anim.keepIccProfile()
+      const { data, info } = await anim.webp(webpIsLossless(buf) ? { lossless: true } : { quality: 82 }).toBuffer({ resolveWithObject: true })
+      return { buf: data, width: info.width, height: info.pageHeight ?? meta.pageHeight ?? meta.height ?? null, variants: [] }
     }
-    const variants = await makeVariants(original, safeName, width)
-    return { buf: original, width, height, variants }
+    const oriented = meta.autoOrient ?? { width: meta.width, height: meta.height }
+    if (!oriented.width || !oriented.height) return { buf, ...headerSize(buf), variants: [] }
+
+    const needsRotate = (meta.orientation ?? 1) !== 1
+    const needsResize = Math.max(oriented.width, oriented.height) > MAX_EDGE
+
+    // Upright and small enough: a JPEG / WebP keeps its exact compressed data
+    // and only loses its metadata (no generation loss from re-encoding).
+    if (!needsRotate && !needsResize && (meta.format === 'jpeg' || meta.format === 'webp')) {
+      const stripped = meta.format === 'jpeg' ? stripJpegMetadata(buf) : stripWebpMetadata(buf)
+      if (stripped) {
+        const variants = await makeVariants(stripped, safeName, oriented.width)
+        return { buf: stripped, width: oriented.width, height: oriented.height, variants }
+      }
+    }
+
+    // Otherwise re-encoded: .rotate() applies the EXIF orientation and,
+    // without withMetadata/keepExif, EXIF (GPS, camera serials), XMP, IPTC and
+    // PNG text chunks are not written. Only the ICC profile is carried over.
+    // PNG is always re-encoded (lossless; usually smaller with a palette).
+    let img = open(buf).rotate()
+    if (meta.hasProfile) img = img.keepIccProfile()
+    if (needsResize) {
+      img = img.resize({ width: MAX_EDGE, height: MAX_EDGE, fit: 'inside', withoutEnlargement: true })
+    }
+    if (meta.format === 'jpeg') img = img.jpeg({ quality: 82, mozjpeg: true })
+    else if (meta.format === 'png') img = (await fitsPalette(img)) ? img.png({ palette: true, compressionLevel: 9 }) : img.png({ compressionLevel: 9 })
+    else if (meta.format === 'webp') img = img.webp(webpIsLossless(buf) ? { lossless: true } : { quality: 82 })
+    else return { buf, width: oriented.width, height: oriented.height, variants: [] }
+    const { data, info } = await img.toBuffer({ resolveWithObject: true })
+    const variants = await makeVariants(data, safeName, info.width)
+    return { buf: data, width: info.width, height: info.height, variants }
   } catch (err) {
     log.warn('image processing failed; storing the original unchanged', { name: safeName, err })
     return { buf, ...headerSize(buf), variants: [] }
@@ -153,7 +389,11 @@ export async function mirrorUpload(name: string, buf: Buffer, contentType: strin
   }
 }
 
-/** Write a variant file unless one already exists (uploads are immutable). */
+/**
+ * Write a variant file unless one already exists (uploads are immutable).
+ * True only when this call wrote it — mirror it to R2 only then, or R2 would
+ * get different bytes than the file public/uploads keeps.
+ */
 export function writeVariantFile(v: VariantFile): boolean {
   const fp = path.join(uploadsDir(), v.name)
   if (fs.existsSync(fp)) return false
@@ -171,30 +411,50 @@ export type StoredUpload = {
   r2Warning?: string
 }
 
+export type StoreUploadOptions = {
+  /** Test seam: the R2 mirror (defaults to mirrorUpload). */
+  mirror?: (name: string, buf: Buffer, contentType: string) => Promise<string | null>
+}
+
+/** True when `name` or any of its variant names is already taken in `dir`. */
+function nameInUse(dir: string, name: string): boolean {
+  return [name, ...allVariantNames(name)].some((n) => fs.existsSync(path.join(dir, n)))
+}
+
 /**
- * Process and store a validated image under a fresh name derived from
- * `requestedName` (never overwriting: a clash gets a content-hash suffix),
- * write its variants and mirror everything to R2.
+ * Check, process and store a validated image under a fresh name derived
+ * from `requestedName` (never overwriting: a clash on the name or on any of
+ * its variant names gets a content-hash suffix; a variant-looking name is
+ * renamed), write its variants and mirror what was written to R2.
+ * Throws ImageRejectedError (nothing stored) for a pixel bomb or an
+ * unreadable image.
  */
-export async function storeUpload(raw: Buffer, mime: ImageMime, requestedName: string): Promise<StoredUpload> {
+export async function storeUpload(raw: Buffer, mime: ImageMime, requestedName: string, opts: StoreUploadOptions = {}): Promise<StoredUpload> {
+  const mirror = opts.mirror ?? mirrorUpload
+  await assertImageWithinLimits(raw)
   const dir = uploadsDir()
   fs.mkdirSync(dir, { recursive: true })
-  let safeName = sanitizeUploadName(requestedName, IMAGE_TYPES[mime].ext)
-  if (fs.existsSync(path.join(dir, safeName))) {
+  let safeName = asOriginalName(sanitizeUploadName(requestedName, IMAGE_TYPES[mime].ext))
+  if (nameInUse(dir, safeName)) {
     safeName = withHashSuffix(safeName, crypto.createHash('sha256').update(raw).digest('hex'))
   }
   const processed = await processUpload(raw, safeName)
   const filePath = path.join(dir, safeName)
-  if (!fs.existsSync(filePath)) fs.writeFileSync(filePath, processed.buf as unknown as Uint8Array, { flag: 'wx' })
   const warnings: string[] = []
-  const mainWarning = await mirrorUpload(safeName, processed.buf, mime)
-  if (mainWarning) warnings.push(mainWarning)
+  // Only files this call wrote are mirrored. An existing one (the same
+  // content uploaded again under its hash-suffixed name) stays as stored.
+  if (!fs.existsSync(filePath)) {
+    fs.writeFileSync(filePath, processed.buf as unknown as Uint8Array, { flag: 'wx' })
+    const w = await mirror(safeName, processed.buf, mime)
+    if (w) warnings.push(w)
+  }
   const variants: string[] = []
   for (const v of processed.variants) {
-    writeVariantFile(v)
+    if (writeVariantFile(v)) {
+      const w = await mirror(v.name, v.buf, 'image/webp')
+      if (w) warnings.push(w)
+    }
     variants.push(`/uploads/${v.name}`)
-    const w = await mirrorUpload(v.name, v.buf, 'image/webp')
-    if (w) warnings.push(w)
   }
   return {
     url: `/uploads/${safeName}`,

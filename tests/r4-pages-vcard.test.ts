@@ -7,6 +7,7 @@ import {
   escapeVcardText,
   foldVcardLine,
   vcardDisplayName,
+  vcardFileName,
 } from '../lib/vcard'
 
 const octets = (s: string) => new TextEncoder().encode(s).length
@@ -182,4 +183,20 @@ test('display name falls back sensibly and photos need https', () => {
       'PHOTO;MEDIATYPE=image/png:'
     )
   )
+})
+
+test('hidden name fields never come back through the FN fallback or the file name', () => {
+  const hidden = { firstName: '', lastName: '', nickName: '', redacted: ['firstName', 'lastName', 'nickName'] }
+  assert.equal(vcardDisplayName(hidden, 'https://example.org'), 'example.org')
+  const card = unfold(buildVcard(hidden, null, { siteUrl: 'https://example.org' }))
+  assert.ok(card.includes('FN:example.org'))
+  assert.ok(!card.some((l) => /Lucian|Yanpei/.test(l)))
+  assert.equal(vcardFileName(hidden), 'contact.vcf')
+  // Only the nickname hidden: the real name stays, without the nickname.
+  assert.equal(vcardDisplayName({ firstName: 'Yanpei', lastName: 'Li', nickName: '', redacted: ['nickName'] }), 'Li Yanpei')
+  // A CV with no name at all still gets the built-in name.
+  assert.equal(vcardDisplayName({ firstName: '', lastName: '' }), 'Li Yanpei (Lucian)')
+  assert.equal(vcardFileName({ firstName: 'Yanpei', lastName: 'Li' }), 'Li-Yanpei.vcf')
+  assert.equal(vcardFileName({ firstName: '彦霈', lastName: '李' }), 'contact.vcf')
+  assert.equal(vcardFileName(null), 'Li-Yanpei.vcf')
 })

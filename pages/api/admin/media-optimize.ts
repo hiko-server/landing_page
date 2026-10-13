@@ -3,18 +3,19 @@ import path from 'path'
 import sharp from 'sharp'
 import { withApi } from '../../../lib/apiHandler'
 import { isAdminRequest } from '../../../lib/auth'
-import { UPLOAD_NAME_RE } from '../../../lib/security/uploadName'
+import { UPLOAD_NAME_RE, isValidUploadName } from '../../../lib/security/uploadName'
 import { isVariantName, variantName, variantWidthsFor } from '../../../lib/uploadVariants'
-import { MAX_INPUT_PIXELS, makeVariants, mirrorUpload, uploadsDir, writeVariantFile } from '../../../lib/imageVariants'
+import { MAX_INPUT_PIXELS, apngFrameCount, makeVariants, mirrorUpload, uploadsDir, writeVariantFile } from '../../../lib/imageVariants'
 
 /**
  * POST /api/admin/media-optimize → { processed, skipped, errors, remaining }
  *
  * Backfills responsive WebP variants for uploads made before the upload
  * pipeline existed: every original in public/uploads wider than the smallest
- * variant width gets the variants it is missing (written locally and
- * mirrored to R2). Originals are never rewritten — they are referenced by
- * content and served `immutable`. GIFs and animated images are skipped.
+ * variant width gets the variants it is missing (written locally and, only
+ * when this run wrote them, mirrored to R2). Originals are never rewritten —
+ * they are referenced by content and served `immutable`. GIFs and animated
+ * images (WebP, APNG) are skipped.
  *
  * One run at a time (409 while busy). A run stops after RUN_BUDGET_MS so the
  * request finishes well inside proxy timeouts; `remaining` > 0 means "call
@@ -62,8 +63,10 @@ export default withApi('admin/media-optimize', async (req, res, ctx) => {
         const buf = fs.readFileSync(path.join(dir, name))
         const meta = await sharp(buf, { limitInputPixels: MAX_INPUT_PIXELS }).metadata()
         const width = meta.autoOrient?.width ?? meta.width ?? 0
-        const missing = variantWidthsFor(width).filter((w) => !existing.has(variantName(name, w)))
-        if ((meta.pages ?? 1) > 1 || !missing.length) {
+        const missing = variantWidthsFor(width)
+          .map((w) => variantName(name, w))
+          .filter((v) => isValidUploadName(v) && !existing.has(v))
+        if ((meta.pages ?? 1) > 1 || apngFrameCount(buf) > 0 || !missing.length) {
           skipped++
           continue
         }
@@ -71,7 +74,9 @@ export default withApi('admin/media-optimize', async (req, res, ctx) => {
         const upright = meta.orientation && meta.orientation !== 1 ? await sharp(buf, { limitInputPixels: MAX_INPUT_PIXELS }).rotate().toBuffer() : buf
         const variants = await makeVariants(upright, name, width, (v) => existing.has(v))
         for (const v of variants) {
-          if (writeVariantFile(v)) existing.add(v.name)
+          // An existing file is left alone, and so is its R2 copy.
+          if (!writeVariantFile(v)) continue
+          existing.add(v.name)
           await mirrorUpload(v.name, v.buf, 'image/webp')
         }
         processed++
