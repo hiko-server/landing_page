@@ -35,8 +35,12 @@ test('a popstate to another page yields that page’s saved position; same page 
 
 test('the Next internals this relies on are still there (guard for a Next upgrade)', () => {
   const router = readFileSync(path.join(ROOT, 'node_modules/next/dist/shared/lib/router/router.js'), 'utf8')
-  assert.ok(router.includes(`"${NEXT_SCROLL_KEY_PREFIX}" + `), 'router stores positions under the same key prefix')
-  assert.match(router, /window\.history\.scrollRestoration = "manual"/)
+  // Quote style differs between Next releases (14: double, 15: single).
+  assert.ok(
+    router.includes(`"${NEXT_SCROLL_KEY_PREFIX}" + `) || router.includes(`'${NEXT_SCROLL_KEY_PREFIX}' + `),
+    'router stores positions under the same key prefix',
+  )
+  assert.match(router, /window\.history\.scrollRestoration = ["']manual["']/)
 })
 
 test('the framer-motion fallback re-applies the position after the page swap', () => {

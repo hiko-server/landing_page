@@ -102,7 +102,9 @@ async function main() {
     await page.evaluateOnNewDocument(() => {
       try {
         localStorage.setItem('chakra-ui-color-mode', 'light')
-      } catch {}
+      } catch {
+        /* storage blocked: the emulated colour scheme still applies */
+      }
     })
     await page.goto(`${BASE}/`, { waitUntil: 'networkidle2', timeout: 60_000 })
     await waitForReady(page, 2000)
