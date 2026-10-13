@@ -6,8 +6,8 @@ import { uploadNamesIn } from './uploadVariants'
 /**
  * On-demand ISR revalidation.
  *
- * /blog, /work, /now, /uses, the posts, case studies and /colophon are
- * statically generated with a revalidate window. Without this, an admin save
+ * /blog, /work, /now, /uses, /contact, the posts, case studies and /colophon
+ * are statically generated with a revalidate window. Without this, an admin save
  * only shows up on the public page after that window elapses *and* someone
  * visits twice. Calling `res.revalidate()` right after a successful write
  * regenerates the affected pages immediately, so "Save" means "live".
@@ -80,10 +80,10 @@ export function pathsReferencingUploads(names: Iterable<string>, sources: readon
 
 /**
  * Every statically generated (ISR) public page whose data lives in the content
- * store. The server-rendered pages (/, /about, /cv, /cv/zh, /contact) are
- * fresh on every request and need no revalidation.
+ * store. The server-rendered pages (/, /about, /cv, /cv/zh) are fresh on
+ * every request and need no revalidation.
  */
-export const STATIC_CONTENT_PATHS = ['/blog', '/work', '/now', '/uses', '/colophon'] as const
+export const STATIC_CONTENT_PATHS = ['/blog', '/work', '/now', '/uses', '/colophon', '/contact'] as const
 
 // ── Edge notifications (Cloudflare purge, IndexNow) ──────────────────────
 

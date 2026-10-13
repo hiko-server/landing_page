@@ -1,5 +1,5 @@
 import React from 'react'
-import type { GetServerSideProps } from 'next'
+import type { GetStaticProps } from 'next'
 import { Box } from '@chakra-ui/react'
 
 import ContactPro from '../../components/Contact/ContactPro'
@@ -8,21 +8,7 @@ import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 import PageHeader from '../../components/General-UI/PageHeader'
 import { absUrl, breadcrumb, ogImageUrl, PERSON_ID } from '../../lib/schema'
-import type { HomeData } from '../../lib/homeShape'
-
-type ContactHome = {
-  hero: { email?: string; phone?: string; brand?: string }
-  socials: { github?: string; gitlab?: string; linkedin?: string; whatsapp?: string }
-  contact: { heading?: string; blurb?: string; eyebrow?: string; reasons?: string[] }
-}
-
-type Props = {
-  home: ContactHome | null
-  availability: NonNullable<HomeData['availability']> | null
-  /** QR code (inline SVG) of the vCard URL; null when it could not be generated. */
-  vcardQr: string | null
-  chromeSocials?: HomeData['socials'] | null
-}
+import type { ContactPageProps } from '../../lib/contactPage'
 
 const FALLBACK_LEDE = 'Questions, roles or collaborations: send a note.'
 const VCARD_PATH = '/api/vcard'
@@ -30,11 +16,15 @@ const VCARD_PATH = '/api/vcard'
 /**
  * /contact — page header, the owner's availability (when set in the Home
  * editor), the reach-me panel (copyable e-mail / phone, vCard download and
- * QR) and the message form. Server-rendered on every request so edits to the
- * home document show immediately; the form's human-check nonce is fetched
- * client side.
+ * QR) and the message form with its privacy notice.
+ *
+ * Statically generated (ISR, lib/contactPage): nothing here depends on the
+ * request, so the page is served from the cache (and the CDN) and
+ * regenerated when the home document changes. Everything per-visitor stays
+ * client side: the form's human-check nonce is fetched when the form comes
+ * into view, drafts live in the visitor's browser.
  */
-const Contact = ({ home, availability, vcardQr }: Props) => {
+const Contact = ({ home, availability, vcardQr, retentionDays }: ContactPageProps) => {
   const lede = (home?.contact?.blurb ?? '').trim() || FALLBACK_LEDE
 
   return (
@@ -70,6 +60,8 @@ const Contact = ({ home, availability, vcardQr }: Props) => {
             home={home || undefined}
             hideBlurb
             vcard={{ href: VCARD_PATH, qrSvg: vcardQr }}
+            availability={availability}
+            retentionDays={retentionDays}
           />
         </Box>
       </HeaderFooter>
@@ -79,44 +71,7 @@ const Contact = ({ home, availability, vcardQr }: Props) => {
 
 export default Contact
 
-/** Strip undefined values (getServerSideProps props must be JSON-serialisable). */
-function defined<T extends Record<string, unknown>>(o: T): T {
-  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T
-}
-
-export const getServerSideProps: GetServerSideProps<Props> = async () => {
-  let home: ContactHome | null = null
-  let availability: Props['availability'] = null
-  let chromeSocials: HomeData['socials'] | null | undefined
-  try {
-    const { readPublicHome } = await import('../../lib/home')
-    const h = readPublicHome()
-    chromeSocials = h?.socials ?? null
-    // Only what the contact page renders — not the whole home document.
-    if (h) {
-      home = {
-        hero: defined({ email: h.hero?.email, phone: h.hero?.phone, brand: h.hero?.brand }),
-        socials: defined({ ...h.socials }),
-        contact: defined({ ...h.contact }),
-      }
-      availability = h.availability?.status ? defined({ ...h.availability }) : null
-    }
-  } catch {
-    /* render with built-in defaults; the chrome loads the public home view itself */
-  }
-  let vcardQr: string | null = null
-  try {
-    const { qrSvg } = await import('../../lib/qr')
-    vcardQr = await qrSvg(absUrl(VCARD_PATH))
-  } catch {
-    /* the panel keeps the .vcf link without the QR code */
-  }
-  return {
-    props: {
-      home,
-      availability,
-      vcardQr,
-      ...(chromeSocials !== undefined ? { chromeSocials } : {}),
-    },
-  }
+export const getStaticProps: GetStaticProps<ContactPageProps> = async () => {
+  const { loadContactPage } = await import('../../lib/contactPage')
+  return loadContactPage()
 }

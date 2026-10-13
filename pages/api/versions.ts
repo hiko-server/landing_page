@@ -65,12 +65,12 @@ const TYPES: readonly VersionType[] = ['cv', 'home', 'blog', 'work', 'page']
 
 /**
  * Statically generated (ISR) pages rendered from each document: /now reads
- * the public CV sections and home.hero.currentlyCoding, so restoring either
- * one must regenerate it instead of leaving the ISR copy live. The pages
- * that read them with getServerSideProps (/, /about, /contact, /cv, /cv/zh)
- * are rendered per request and need no revalidation.
+ * the public CV sections and home.hero.currentlyCoding, /contact the home
+ * document, so restoring either one must regenerate them instead of leaving
+ * the ISR copy live. The pages that read them with getServerSideProps (/,
+ * /about, /cv, /cv/zh) are rendered per request and need no revalidation.
  */
-const STATIC_PATHS: Record<JsonDocType, string[]> = { cv: ['/now'], home: ['/now'] }
+const STATIC_PATHS: Record<JsonDocType, string[]> = { cv: ['/now'], home: ['/now', '/contact'] }
 
 function parseType(value: unknown): VersionType | null {
   if (value === undefined || value === '') return null
