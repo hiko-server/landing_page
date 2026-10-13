@@ -1,10 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { Box, Heading, Text } from '@chakra-ui/react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { Box, Flex, Heading, Text } from '@chakra-ui/react'
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 
 import type { HeroIdentity } from './heroIdentity'
-import { revealSx } from './heroReveal'
+import { headlineWords, heroWordStyle, revealSx } from './heroReveal'
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
+const ROTATE_MS = 2600
+const SWAP = { duration: 0.26, ease: [0.22, 1, 0.36, 1] } as const
 
 /**
  * Hero copy block: brand eyebrow → h1 (person + role) → rotating phrases.
@@ -12,13 +15,14 @@ const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
  *   ● LUCIAN SPHERE
  *   Li Yanpei / 李彦霈                     ← h1, line 1 (from the public CV)
  *   Self-Taught Full-Stack Software Engineer ← h1, line 2 (first tagline phrase)
- *   > Machine Learning▍                     ← remaining phrases, typewriter
+ *   > Machine Learning                      ← remaining phrases, swapped in place
  *
  * The page's only h1 names the person; the brand is a styled eyebrow. The
- * typewriter line reserves the height of its longest phrase, so typing never
- * reflows the CTAs below. Screen readers get every phrase as plain text (the
- * animated copy is aria-hidden); with reduced motion the first phrase is
- * shown statically.
+ * name rises word by word out of a blur (pure CSS, `.hero-word`, so it runs
+ * before hydration; instant under reduced motion). The phrase line reserves
+ * the box of its longest phrase, so swapping never reflows the CTAs below.
+ * Screen readers get every phrase as plain text (the animated copy is
+ * aria-hidden); with reduced motion the first phrase is shown statically.
  */
 export default function HeroHeadline({
   brand,
@@ -26,6 +30,7 @@ export default function HeroHeadline({
   role,
   rotating,
   startStep = 0,
+  avatar,
 }: {
   brand?: string
   identity: HeroIdentity
@@ -33,6 +38,8 @@ export default function HeroHeadline({
   rotating: string[]
   /** Stagger index of the first element (the hero reveals top → bottom). */
   startStep?: number
+  /** Small portrait shown beside the h1 below md (the large card is hidden there). */
+  avatar?: React.ReactNode
 }) {
   // EN name (or nickname) leads; when the owner shows only the 中文 name it leads alone.
   const primary = identity.name || identity.nick
@@ -70,123 +77,164 @@ export default function HeroHeadline({
         </Text>
       )}
 
-      <Heading as="h1" fontWeight="inherit" lineHeight="inherit" letterSpacing="inherit" fontSize="inherit" m={0}>
-        {headline && (
+      <Flex align="flex-start" gap={4}>
+        {avatar && (
+          <Box display={{ base: 'block', md: 'none' }} flexShrink={0} mt="2px">
+            {avatar}
+          </Box>
+        )}
+        <Heading as="h1" flex="1" minW={0} fontWeight="inherit" lineHeight="inherit" letterSpacing="inherit" fontSize="inherit" m={0}>
+          {headline && (
+            <Box
+              as="span"
+              display="block"
+              fontSize={{ base: '40px', sm: '48px', md: '56px', lg: '64px' }}
+              fontWeight={600}
+              lineHeight="1.02"
+              letterSpacing="-0.035em"
+              color="page.fg"
+            >
+              {primary ? (
+                <Words text={primary} />
+              ) : (
+                <span className="hero-word" style={heroWordStyle(0)} lang="zh-Hans">
+                  {identity.nameZh}
+                </span>
+              )}
+              {primary && identity.nameZh && (
+                <>
+                  {' '}
+                  <Box
+                    as="span"
+                    className="hero-word"
+                    style={heroWordStyle(headlineWords(primary).length)}
+                    fontWeight={300}
+                    color="page.fg-secondary"
+                    whiteSpace="nowrap"
+                  >
+                    <Box as="span" aria-hidden>
+                      {'/ '}
+                    </Box>
+                    <span className="sr-only">, </span>
+                    <span lang="zh-Hans">{identity.nameZh}</span>
+                  </Box>
+                </>
+              )}
+              <span className="sr-only">, </span>
+            </Box>
+          )}
           <Box
             as="span"
             display="block"
-            fontSize={{ base: '40px', sm: '48px', md: '56px', lg: '64px' }}
-            fontWeight={600}
-            lineHeight="1.02"
-            letterSpacing="-0.035em"
-            color="page.fg"
-            sx={revealSx(startStep + 1)}
+            mt={headline ? { base: 3, md: 4 } : 0}
+            fontSize={{ base: '18px', md: '22px' }}
+            fontWeight={400}
+            lineHeight="1.35"
+            letterSpacing="-0.012em"
+            color={headline ? 'page.fg-secondary' : 'page.fg'}
+            maxW="42ch"
+            sx={revealSx(startStep + 2)}
           >
-            {primary || <span lang="zh-Hans">{identity.nameZh}</span>}
-            {primary && identity.nameZh && (
-              <Box as="span" fontWeight={300} color="page.fg-secondary" whiteSpace="nowrap">
-                <Box as="span" aria-hidden>
-                  {' / '}
-                </Box>
-                <span className="sr-only">, </span>
-                <span lang="zh-Hans">{identity.nameZh}</span>
-              </Box>
-            )}
-            <span className="sr-only">, </span>
+            {role}
           </Box>
-        )}
-        <Box
-          as="span"
-          display="block"
-          mt={headline ? { base: 3, md: 4 } : 0}
-          fontSize={{ base: '18px', md: '22px' }}
-          fontWeight={400}
-          lineHeight="1.35"
-          letterSpacing="-0.012em"
-          color={headline ? 'page.fg-secondary' : 'page.fg'}
-          maxW="42ch"
-          sx={revealSx(startStep + 2)}
-        >
-          {role}
-        </Box>
-      </Heading>
+        </Heading>
+      </Flex>
 
       {rotating.length > 0 && (
         <Box mt={{ base: 4, md: 5 }} sx={revealSx(startStep + 3)}>
-          <Typewriter phrases={rotating} />
+          <PhraseSwap phrases={rotating} />
         </Box>
       )}
     </Box>
   )
 }
 
-/** Reduced-motion preference, read after mount so SSR and hydration markup match. */
-function usePrefersReducedMotion(): boolean {
-  const [reduce, setReduce] = useState(false)
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)')
-    const sync = () => setReduce(mq.matches)
-    sync()
-    mq.addEventListener('change', sync)
-    return () => mq.removeEventListener('change', sync)
-  }, [])
-  return reduce
+/** The Latin name as `.hero-word` spans with normal spaces between them. */
+function Words({ text }: { text: string }) {
+  const words = headlineWords(text)
+  return (
+    <>
+      {words.map((w, i) => (
+        <React.Fragment key={i}>
+          {i > 0 && ' '}
+          <span className="hero-word" style={heroWordStyle(i)}>
+            {w}
+          </span>
+        </React.Fragment>
+      ))}
+    </>
+  )
 }
 
-function Typewriter({ phrases }: { phrases: string[] }) {
-  const reduce = usePrefersReducedMotion()
+/**
+ * One phrase at a time, swapped every 2.6 s with a short blur rise; paused
+ * while the hero is off-screen or the tab is hidden. Both layers share one
+ * grid cell: the invisible longest phrase sets the box, so nothing below
+ * ever moves (the leaving phrase is popped out of flow).
+ */
+function PhraseSwap({ phrases }: { phrases: string[] }) {
+  const reduce = useReducedMotion()
   const [idx, setIdx] = useState(0)
-  const [text, setText] = useState('')
+  const [onScreen, setOnScreen] = useState(true)
+  const [tabVisible, setTabVisible] = useState(true)
+  const ref = useRef<HTMLDivElement | null>(null)
   const longest = useMemo(() => phrases.reduce((a, b) => (b.length > a.length ? b : a), ''), [phrases])
 
   useEffect(() => {
-    if (reduce || !phrases.length) return
-    const chars = phrases[idx % phrases.length]
-    setText('')
-    let i = 0
-    let pause: ReturnType<typeof setTimeout> | undefined
-    const timer = setInterval(() => {
-      i++
-      setText(chars.slice(0, i))
-      if (i >= chars.length) {
-        clearInterval(timer)
-        pause = setTimeout(() => setIdx((x) => x + 1), 1800)
-      }
-    }, 34)
-    return () => {
-      clearInterval(timer)
-      if (pause) clearTimeout(pause)
-    }
-  }, [idx, phrases, reduce])
+    const el = ref.current
+    if (!el || typeof IntersectionObserver === 'undefined') return
+    const io = new IntersectionObserver((entries) => setOnScreen(entries.some((e) => e.isIntersecting)))
+    io.observe(el)
+    return () => io.disconnect()
+  }, [])
 
-  const lineSx = {
-    fontFamily: monoFont,
-    fontSize: { base: '13px', md: '14px' },
-    lineHeight: '1.6',
-    letterSpacing: '0.01em',
-    color: 'page.fg-secondary',
-    maxW: '640px',
-  }
+  useEffect(() => {
+    const sync = () => setTabVisible(document.visibilityState !== 'hidden')
+    sync()
+    document.addEventListener('visibilitychange', sync)
+    return () => document.removeEventListener('visibilitychange', sync)
+  }, [])
 
-  // Reduced motion: the first phrase, static, in the same reserved box.
-  const shown = reduce ? phrases[0] : text
+  const count = phrases.length
+  useEffect(() => {
+    if (reduce || count < 2 || !onScreen || !tabVisible) return
+    const t = window.setTimeout(() => setIdx((i) => (i + 1) % count), ROTATE_MS)
+    return () => window.clearTimeout(t)
+  }, [idx, count, reduce, onScreen, tabVisible])
+
+  const shown = reduce ? 0 : idx % Math.max(1, count)
 
   return (
-    <Text as="div" sx={lineSx}>
+    <Text
+      as="div"
+      ref={ref}
+      fontFamily={monoFont}
+      fontSize={{ base: '13px', md: '14px' }}
+      lineHeight="1.6"
+      letterSpacing="0.01em"
+      color="page.fg-secondary"
+      maxW="640px"
+    >
       <span className="sr-only">{phrases.join(' · ')}</span>
-      {/* Both layers share one grid cell: the invisible longest phrase sets the height. */}
-      <Box aria-hidden display="grid" sx={{ '& > *': { gridArea: '1 / 1' } }}>
-        <Box as="span" visibility="hidden" pl="1.4em">
-          {longest}▍
+      <Box aria-hidden position="relative" pl="1.4em">
+        <Box as="span" position="absolute" left={0} top={0} color="accent.text">
+          {'>'}
         </Box>
-        <Box as="span" pl="1.4em" position="relative">
-          <Box as="span" position="absolute" left={0} color="accent.text">
-            {'>'}
+        <Box display="grid" position="relative" sx={{ '& > *': { gridArea: '1 / 1' } }}>
+          <Box as="span" visibility="hidden">
+            {longest}
           </Box>
-          {shown}
-          <Box as="span" ml="2px" color="accent.text" className={reduce ? undefined : 'hero-caret'}>
-            ▍
-          </Box>
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.span
+              key={shown}
+              initial={{ opacity: 0, y: '40%', filter: 'blur(4px)' }}
+              animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+              exit={{ opacity: 0, y: '-40%', filter: 'blur(4px)' }}
+              transition={SWAP}
+            >
+              {phrases[shown]}
+            </motion.span>
+          </AnimatePresence>
         </Box>
       </Box>
     </Text>

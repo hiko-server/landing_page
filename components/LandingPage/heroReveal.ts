@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import { keyframes } from '@emotion/react'
 
 /**
@@ -34,4 +35,23 @@ export function settleSx(step: number) {
     animationDelay: `${step * STEP_MS}ms`,
     '@media (prefers-reduced-motion: reduce)': { animation: 'none' },
   }
+}
+
+/**
+ * Words of the headline name for the blur-rise entrance (`.hero-word`,
+ * styles/globals.css: 700ms, staggered 55ms by `--i`, after a 140ms lead).
+ * Latin names split on whitespace; a name in a script written without
+ * spaces (CJK) stays one unit, so it never breaks mid-name.
+ */
+export function headlineWords(name: unknown): string[] {
+  if (typeof name !== 'string') return []
+  const trimmed = name.trim()
+  if (!trimmed) return []
+  if (/[぀-ヿ㐀-鿿가-힯豈-﫿]/.test(trimmed) && !/\s/.test(trimmed)) return [trimmed]
+  return trimmed.split(/\s+/)
+}
+
+/** Inline style carrying a word's stagger index for `.hero-word`. */
+export function heroWordStyle(i: number): CSSProperties {
+  return { '--i': i } as CSSProperties
 }

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react'
-import { Box, Flex, Tooltip } from '@chakra-ui/react'
+import { Box, Flex } from '@chakra-ui/react'
 import { motion, AnimatePresence } from 'framer-motion'
+
+import Hint, { HintGroup } from './Hint'
 
 /**
  * Right-edge section navigator for long pages (desktop only).
@@ -8,7 +10,9 @@ import { motion, AnimatePresence } from 'framer-motion'
  * Sections opt in with `data-nav-label="…"` + an `id`, so the dots always
  * match what is actually rendered (hidden sections simply don't register).
  * The active dot is tracked with an IntersectionObserver — no scroll-handler
- * layout reads on every frame.
+ * layout reads on every frame. A section whose content is still deferred
+ * (components/Common/WhenVisible) is mounted first, via the URL hash, so the
+ * jump lands where the section really ends up.
  */
 type Target = { id: string; label: string }
 
@@ -46,12 +50,24 @@ export default function FloatingNav() {
   const go = (id: string) => {
     const el = document.getElementById(id)
     if (!el) return
-    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
-    // Move keyboard / screen-reader focus with the jump (sections are not
-    // focusable by default).
-    if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1')
-    el.focus({ preventScroll: true })
+    const jump = () => {
+      const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' })
+      // Move keyboard / screen-reader focus with the jump (sections are not
+      // focusable by default).
+      if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1')
+      el.focus({ preventScroll: true })
+    }
+    if (el.querySelector('[data-when-visible="pending"]')) {
+      // Deferred content: point the hash at the section (keeping Next's
+      // history state) so WhenVisible mounts it, then scroll once it has laid out.
+      const oldURL = window.location.href
+      window.history.replaceState(window.history.state, '', `#${encodeURIComponent(id)}`)
+      window.dispatchEvent(new HashChangeEvent('hashchange', { oldURL, newURL: window.location.href }))
+      requestAnimationFrame(() => requestAnimationFrame(jump))
+      return
+    }
+    jump()
   }
 
   return (
@@ -73,54 +89,59 @@ export default function FloatingNav() {
             exit={{ opacity: 0, x: 16 }}
             transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
           >
-            <Flex
-              as="ul"
-              listStyleType="none"
-              direction="column"
-              gap={1}
-              bg="page.float-bg"
-              border="1px solid"
-              borderColor="page.border"
-              borderRadius="full"
-              py={2}
-              px={1}
-              backdropFilter="blur(14px)"
-              boxShadow="0 8px 28px rgba(0,0,0,0.12)"
-              align="center"
-            >
-              {targets.map((t) => {
-                const on = active === t.id
-                return (
-                  <Box as="li" key={t.id}>
-                    <Tooltip label={t.label} placement="left" hasArrow openDelay={150}>
-                      <Box
-                        as="button"
-                        type="button"
-                        aria-label={`Jump to ${t.label}`}
-                        aria-current={on ? 'true' : undefined}
-                        onClick={() => go(t.id)}
-                        display="grid"
-                        placeItems="center"
-                        w="22px"
-                        h="22px"
-                        borderRadius="full"
-                        _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '1px' }}
-                      >
+            <HintGroup>
+              <Flex
+                as="ul"
+                className="glass"
+                listStyleType="none"
+                direction="column"
+                gap={1}
+                bg="page.float-bg"
+                border="1px solid"
+                borderColor="page.border"
+                borderRadius="full"
+                py={2}
+                px={1}
+                backdropFilter="blur(14px)"
+                boxShadow="0 8px 28px rgba(0,0,0,0.12)"
+                align="center"
+              >
+                {targets.map((t) => {
+                  const on = active === t.id
+                  return (
+                    <Box as="li" key={t.id}>
+                      <Hint label={t.label} placement="left">
                         <Box
-                          as="span"
-                          w={on ? '8px' : '6px'}
-                          h={on ? '8px' : '6px'}
+                          as="button"
+                          type="button"
+                          aria-label={`Jump to ${t.label}`}
+                          aria-current={on ? 'true' : undefined}
+                          onClick={() => go(t.id)}
+                          display="grid"
+                          placeItems="center"
+                          w="24px"
+                          h="24px"
                           borderRadius="full"
-                          bg={on ? 'var(--accent)' : 'page.dot-idle'}
-                          boxShadow={on ? '0 0 0 3px var(--accent-soft)' : undefined}
-                          transition="all 200ms var(--ease-out-quart)"
-                        />
-                      </Box>
-                    </Tooltip>
-                  </Box>
-                )
-              })}
-            </Flex>
+                          _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '1px' }}
+                        >
+                          <Box
+                            as="span"
+                            w="8px"
+                            h="8px"
+                            borderRadius="full"
+                            bg={on ? 'var(--accent)' : 'page.dot-idle'}
+                            boxShadow={on ? '0 0 0 3px var(--accent-soft)' : '0 0 0 0 transparent'}
+                            transform={on ? 'scale(1)' : 'scale(0.75)'}
+                            transition="transform 200ms var(--ease-out-quart), box-shadow 200ms var(--ease-out-quart), background-color 200ms"
+                            sx={{ '@media (forced-colors: active)': { bg: on ? 'Highlight' : 'CanvasText' } }}
+                          />
+                        </Box>
+                      </Hint>
+                    </Box>
+                  )
+                })}
+              </Flex>
+            </HintGroup>
           </motion.nav>
         )}
       </AnimatePresence>

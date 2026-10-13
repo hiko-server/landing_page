@@ -1,26 +1,42 @@
 import React from 'react'
 import type { GetServerSideProps } from 'next'
+import Head from 'next/head'
 
 import LandingContent from '../components/LandingPage/LandingContent'
 import HeaderFooter from '../layout/HeaderFooter'
 import CustomHead from '../components/General-UI/CustomHead'
-import { absUrl, websiteNode, personNode, personFactsFromCv, ogImageUrl, type PersonFacts } from '../lib/schema'
+import { HERO_AVIF_SRCSET, HERO_SIZES } from '../components/Background/HeroAmbient'
+import { absUrl, websiteNode, personNode, personFactsFromCv, profilePageNode, ogImageUrl, type PersonFacts } from '../lib/schema'
 import { isSectionVisible, type HomeData, type SectionKey } from '../lib/homeShape'
 import type { CvSectionLike } from '../lib/cvVisibility'
+import { safeHref } from '../lib/cvFormat'
 import { deriveCurrentlyCoding, type CurrentlyCoding } from '../lib/currentlyCoding'
 import { heroIdentity, type HeroIdentity } from '../components/LandingPage/heroIdentity'
-import type { WorkIndexItem } from '../components/LandingPage/projectMatch'
+import { latestWriting, type WorkIndexItem } from '../components/LandingPage/projectMatch'
+import type { AvatarMeta } from '../components/LandingPage/PersonalInfo'
+import type { HomeWriting } from '../components/LandingPage/Content'
+import type { ScrollerImage } from '../components/imageScoller/imageScroller'
+import type { GithubSummary } from '../components/Common/githubEvents'
 import { referenceMonth } from '../lib/clock'
 
 type Props = {
+  /** Public home document (field-note photos travel separately, in `photos`). */
   home: HomeData | null
   /** Only the CV sections the home page renders (EN, website-pruned). */
   cv: { en: CvSectionLike[]; zh: CvSectionLike[] }
   identity: HeroIdentity
   /** CV-derived fallback for the hero's "currently coding" chip. */
   autoCoding: CurrentlyCoding
-  /** /work case-study index, for linking project cards. */
+  /** /work case-study index, for linking project cards and roles. */
   work: WorkIndexItem[]
+  /** Portrait facts: intrinsic size and upload-variant srcset. */
+  avatar: AvatarMeta
+  /** Field-note photos with intrinsic sizes / srcsets. */
+  photos: ScrollerImage[]
+  /** GitHub data rendered into the HTML (null when unavailable in time). */
+  github: GithubSummary | null
+  /** Newest posts + case studies (null when the section is off). */
+  writing: HomeWriting | null
   /** schema.org Person facts from PUBLIC website-visible CV data only. */
   personFacts: PersonFacts
   /** Server reference month ('YYYY-MM', lib/clock.ts) for "Present" / "Expected". */
@@ -29,20 +45,44 @@ type Props = {
   chromeSocials?: HomeData['socials'] | null
 }
 
-const LandingPage = ({ home, cv, identity, autoCoding, work, personFacts }: Props) => {
+const LandingPage = ({ home, cv, identity, autoCoding, work, avatar, photos, github, writing, personFacts }: Props) => {
   return (
     <>
       <CustomHead
-        title="Home"
+        home
         description="Li Yanpei (Lucian) — software engineer in Hong Kong building full-stack web apps, machine-learning / computer-vision, and embedded systems. CV, projects, and contact."
         url={absUrl('/')}
         image={ogImageUrl({ kind: 'home', title: 'Li Yanpei (Lucian)', subtitle: 'Software engineer: full-stack, ML / computer vision, embedded' })}
         type="website"
-        jsonLd={[websiteNode(), personNode(personFacts)]}
+        jsonLd={[websiteNode(), profilePageNode({ path: '/' }), personNode(personFacts)]}
       />
+      <Head>
+        {/* The hero backdrop is the LCP element: fetch it with the HTML. AVIF
+            matches the <source> nearly every browser picks; a browser without
+            AVIF ignores a typed preload and uses the WebP <img>. */}
+        <link
+          key="hero-preload"
+          rel="preload"
+          as="image"
+          type="image/avif"
+          imageSrcSet={HERO_AVIF_SRCSET}
+          imageSizes={HERO_SIZES}
+          {...{ fetchpriority: 'high' }}
+        />
+      </Head>
 
       <HeaderFooter>
-        <LandingContent home={home} cv={cv} identity={identity} autoCoding={autoCoding} work={work} />
+        <LandingContent
+          home={home}
+          cv={cv}
+          identity={identity}
+          autoCoding={autoCoding}
+          work={work}
+          avatar={avatar}
+          photos={photos}
+          github={github}
+          writing={writing}
+        />
       </HeaderFooter>
     </>
   )
@@ -55,8 +95,30 @@ const CV_SECTION_FOR: Array<[SectionKey, string]> = [
   ['projects', 'project'],
   ['experience', 'workExperience'],
   ['certifications', 'certification'],
+  ['tech-stack', 'skill'],
 ]
 
+/** Server budget for GitHub data; past it the widgets fetch in the browser. */
+const GITHUB_BUDGET_MS = 1500
+const WRITING_COUNT = 3
+
+/** Drop undefined values (Next refuses them in props). */
+function defined<T extends Record<string, unknown>>(o: T): T {
+  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T
+}
+
+function timeout<T>(ms: number, value: T): Promise<T> {
+  return new Promise((resolve) => {
+    const t = setTimeout(() => resolve(value), ms)
+    t.unref?.()
+  })
+}
+
+/**
+ * Always rendered on request (never ISR): the Docker image is built without
+ * the content store, so a prerendered copy would be stale after a deploy.
+ * Every read is best effort — a failing store yields an honest, emptier page.
+ */
 export const getServerSideProps: GetServerSideProps<Props> = async () => {
   let home: HomeData | null = null
   let chromeSocials: HomeData['socials'] | null | undefined
@@ -68,7 +130,15 @@ export const getServerSideProps: GetServerSideProps<Props> = async () => {
     /* best effort — render with what we have */
   }
 
-  const rendered = CV_SECTION_FOR.filter(([key]) => isSectionVisible(home, key)).map(([, name]) => name)
+  const show = (key: SectionKey) => isSectionVisible(home, key)
+  const githubWanted = show('open-source') || show('tech-stack') || show('activity')
+  const githubPromise: Promise<GithubSummary | null> = githubWanted
+    ? import('../lib/githubData')
+        .then(({ loadGithubSummary }) => Promise.race([loadGithubSummary(), timeout<GithubSummary | null>(GITHUB_BUDGET_MS, null)]))
+        .catch(() => null)
+    : Promise.resolve(null)
+
+  const rendered = CV_SECTION_FOR.filter(([key]) => show(key)).map(([, name]) => name)
   let en: CvSectionLike[] = []
   let identity = heroIdentity(undefined, undefined)
   let autoCoding: CurrentlyCoding = { label: '', project: '', note: '' }
@@ -98,27 +168,63 @@ export const getServerSideProps: GetServerSideProps<Props> = async () => {
   }
 
   let work: WorkIndexItem[] = []
-  if (isSectionVisible(home, 'projects')) {
+  let writing: HomeWriting | null = null
+  if (show('projects') || show('experience') || show('writing')) {
     try {
-      const { listWork } = await import('../lib/mdx')
-      work = listWork().map(({ slug, frontmatter: fm }) => {
-        const item: WorkIndexItem = { slug, title: String(fm?.title || slug) }
-        if (Array.isArray(fm?.tech)) item.tech = fm.tech.filter((t): t is string => typeof t === 'string')
-        if (typeof fm?.status === 'string') item.status = fm.status
-        return item
-      })
+      const { listPosts, listWork } = await import('../lib/mdx')
+      const works = listWork()
+      if (show('projects') || show('experience')) {
+        work = works.map(({ slug, frontmatter: fm }) => {
+          const item: WorkIndexItem = { slug, title: String(fm?.title || slug) }
+          if (Array.isArray(fm?.tech)) item.tech = fm.tech.filter((t): t is string => typeof t === 'string')
+          if (typeof fm?.status === 'string') item.status = fm.status
+          return item
+        })
+      }
+      if (show('writing')) {
+        const posts = listPosts()
+        writing = { items: latestWriting(posts, works, WRITING_COUNT), hasPosts: posts.length > 0, hasWork: works.length > 0 }
+      }
     } catch {
-      /* best effort — cards simply render without case-study links */
+      /* best effort — cards render without case-study links, no writing row */
     }
   }
 
+  // File facts for the portrait and the field-note photos: intrinsic size
+  // (no layout shift) and the upload variants (responsive srcset).
+  let avatar: AvatarMeta = {}
+  let photos: ScrollerImage[] = []
+  try {
+    const [{ localImageSize }, { variantSrcSet }] = await Promise.all([import('../lib/rehype/imageSize'), import('../lib/uploadVariants')])
+    const facts = (url: string) => {
+      const size = url.startsWith('/') ? localImageSize(url) : null
+      return defined({ width: size?.width, height: size?.height, srcSet: url.startsWith('/') ? variantSrcSet(url) : undefined })
+    }
+    const avatarUrl = safeHref(home?.hero?.avatarUrl)
+    if (avatarUrl) avatar = facts(avatarUrl)
+    photos = (Array.isArray(home?.photos) ? home.photos : [])
+      .filter((p) => p && p.visible !== false && safeHref(p.url))
+      .map((p) => {
+        const url = safeHref(p.url)
+        return defined({ url, describe: p.describe, redirectTo: p.redirectTo, ...facts(url) })
+      })
+  } catch {
+    photos = (Array.isArray(home?.photos) ? home.photos : []).map((p) => defined({ url: p.url, describe: p.describe, redirectTo: p.redirectTo }))
+  }
+
+  const github = await githubPromise
+
   return {
     props: {
-      home,
+      home: home ? { ...home, photos: [] } : null,
       cv: { en, zh: [] },
       identity,
       autoCoding,
       work,
+      avatar,
+      photos,
+      github,
+      writing,
       personFacts,
       clockMonth: referenceMonth(),
       // Omitted when the home document could not be read: the chrome then

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { chipList, matchCaseStudy, normalise, titleKeys } from '../components/LandingPage/projectMatch'
+import { caseStudySlug, chipList, matchCaseStudy, normalise, titleKeys } from '../components/LandingPage/projectMatch'
 
 const works = [
   { slug: 'swcs', title: 'Smart Waste Classification System (SWCS)', tech: ['Edge AI', 'YOLO'] },
@@ -42,4 +42,22 @@ test('chipList trims, de-duplicates and caps', () => {
   assert.deepEqual(chipList([' YOLO ', 'yolo', '', 3, 'Jetson']), ['YOLO', 'Jetson'])
   assert.deepEqual(chipList(['a', 'b', 'c'], 2), ['a', 'b'])
   assert.deepEqual(chipList(undefined), [])
+})
+
+test('an owner-chosen caseStudy slug wins when it exists', () => {
+  // Title alone would match nothing; the slug links it.
+  assert.equal(matchCaseStudy({ title: 'Personal Portfolio & CV Management System', caseStudy: 'raku' }, works)?.slug, 'raku')
+  // The slug beats a title that strictly matches a different case study.
+  assert.equal(matchCaseStudy({ title: 'Carboy', caseStudy: 'swcs' }, works)?.slug, 'swcs')
+  // "/work/<slug>" and stray case / slashes are accepted.
+  assert.equal(matchCaseStudy({ title: '', caseStudy: ' /work/Project-Carboy/ ' }, works)?.slug, 'project-carboy')
+  assert.equal(caseStudySlug('/work/raku/'), 'raku')
+  assert.equal(caseStudySlug(7), '')
+})
+
+test('an unknown caseStudy slug is ignored and the strict title match applies', () => {
+  assert.equal(matchCaseStudy({ title: 'Carboy', caseStudy: 'does-not-exist' }, works)?.slug, 'project-carboy')
+  assert.equal(matchCaseStudy({ title: 'Smart Waste', caseStudy: 'nope' }, works), null)
+  assert.equal(matchCaseStudy({ title: 'Carboy', caseStudy: '' }, works)?.slug, 'project-carboy')
+  assert.equal(matchCaseStudy({ caseStudy: 'raku' }, []), null)
 })

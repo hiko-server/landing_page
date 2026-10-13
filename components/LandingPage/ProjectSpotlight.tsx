@@ -3,9 +3,12 @@ import { Box, Flex, IconButton, Text } from '@chakra-ui/react'
 import NextLink from 'next/link'
 import { GoArrowLeft, GoArrowRight } from 'react-icons/go'
 
+import Collapse from '../General-UI/Collapse'
+import { useSpotlight } from '../General-UI/useSpotlight'
 import { entryRange, field, list } from '../CVViewerPage/fields'
 import type { CvSectionLike } from '../../lib/cvVisibility'
 import { useReferenceMonth } from '../../lib/clock'
+import { labelLang } from '../../lib/toc'
 import { chipList, matchCaseStudy, type WorkIndexItem } from './projectMatch'
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
@@ -33,12 +36,17 @@ const STATUS_LABEL: Record<string, string> = {
  * [05] Selected projects — horizontal, snap-scrolling cards built from the
  * public CV's project section.
  *
- *   - A project that has a /work case study links to it ("Read case study →"),
- *     shows that study's tech as chips and morphs into its page title via a
- *     shared view-transition name.
+ *   - A project that has a /work case study (the owner's `caseStudy` slug,
+ *     else a strict title match) links to it ("Read case study →"), shows
+ *     that study's tech as chips and morphs into its page title via a shared
+ *     view-transition name.
+ *   - The whole card is the hit area of its primary action (a stretched
+ *     link: the case study, else the "More" disclosure); other controls sit
+ *     above it. Cards have cursor-lit borders (useSpotlight + `.spotlight`).
  *   - The scroller is a focusable, labelled region (arrow keys / shift+wheel /
  *     swipe) with prev / next buttons ≥ md and a visible focus ring.
- *   - "More" reveals the project's highlights in place.
+ *   - "More" is a real disclosure: the highlights are always in the DOM,
+ *     inside a <Collapse>, and the button always names its panel.
  */
 export default function ProjectSpotlight({ cvEn, work }: { cvEn?: CvSectionLike[]; work?: WorkIndexItem[] }) {
   const month = useReferenceMonth()
@@ -50,7 +58,7 @@ export default function ProjectSpotlight({ cvEn, work }: { cvEn?: CvSectionLike[
         const title = field(p, 'title')
         const description = field(p, 'description')
         if (!title && !description) return null
-        const study = title ? matchCaseStudy(title, work) : null
+        const study = matchCaseStudy({ title, caseStudy: field(p, 'caseStudy') }, work)
         const morph = !!study && !seen.has(study.slug)
         if (study) seen.add(study.slug)
         return {
@@ -71,8 +79,9 @@ export default function ProjectSpotlight({ cvEn, work }: { cvEn?: CvSectionLike[
       .slice(0, 6)
   }, [cvEn, work, month])
 
-  const scrollerRef = useRef<HTMLDivElement | null>(null)
+  const scrollerRef = useRef<HTMLDivElement>(null)
   const [edges, setEdges] = useState({ start: true, end: false })
+  useSpotlight(scrollerRef)
 
   const syncEdges = useCallback(() => {
     const el = scrollerRef.current
@@ -156,7 +165,7 @@ export default function ProjectSpotlight({ cvEn, work }: { cvEn?: CvSectionLike[
           WebkitMaskImage: edges.end ? 'none' : 'linear-gradient(to right, black calc(100% - 40px), transparent)',
         }}
       >
-        <Flex as="ul" listStyleType="none" gap={4} pb={3} w="max-content" align="stretch">
+        <Flex as="ul" listStyleType="none" gap={4} pb={3} w="max-content" align="flex-start">
           {cards.map((c) => (
             <Box as="li" key={c.key} display="flex">
               <ProjectCard card={c} />
@@ -183,7 +192,9 @@ export default function ProjectSpotlight({ cvEn, work }: { cvEn?: CvSectionLike[
                 _hover={{ borderColor: 'var(--accent)', color: 'accent.text' }}
                 _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
               >
-                All case studies →
+                <span>
+                  All case studies <span className="nudge" aria-hidden>→</span>
+                </span>
               </Flex>
             </Box>
           )}
@@ -198,11 +209,16 @@ function ProjectCard({ card }: { card: Card }) {
   const panelId = useId()
   const href = card.study ? `/work/${card.study.slug}` : ''
   const status = card.study?.status ? STATUS_LABEL[card.study.status] : ''
+  const hasMore = card.features.length > 0
+  // The primary action owns the stretched hit area; everything else sits above it.
+  const moreIsPrimary = !href && hasMore
 
   return (
     <Flex
       as="article"
       data-card
+      data-spotlight
+      className="spotlight"
       direction="column"
       position="relative"
       w={{ base: 'min(82vw, 320px)', sm: '320px', md: '340px' }}
@@ -213,13 +229,13 @@ function ProjectCard({ card }: { card: Card }) {
       bg="page.surface"
       sx={{
         scrollSnapAlign: 'start',
-        transition: 'border-color 220ms var(--ease-out-quart), transform 220ms var(--ease-out-quart)',
+        transition: 'border-color 220ms var(--ease-out-quart)',
         '&:hover': { borderColor: 'page.border-strong' },
-        // Card-wide focus ring when its case-study link is focused.
-        '&:has(a[data-stretched]:focus-visible)': { borderColor: 'var(--accent)', boxShadow: '0 0 0 1px var(--accent)' },
-        '@media (hover: hover) and (prefers-reduced-motion: no-preference)': {
-          '&:has(a[data-stretched]):hover': { transform: 'translateY(-2px)' },
-        },
+        // Card-wide focus ring when its primary action is focused.
+        '&:has(.stretched-link:focus-visible)': { borderColor: 'var(--accent)', boxShadow: '0 0 0 1px var(--accent)' },
+        '& .stretched-link:focus-visible': { outline: 'none' },
+        // The whole card is the link: nudge its "Read case study →" arrow too.
+        '@media (hover: hover)': { '&:has(a.stretched-link):hover .nudge': { transform: 'translateX(3px)' } },
       }}
     >
       <Flex
@@ -232,7 +248,9 @@ function ProjectCard({ card }: { card: Card }) {
         letterSpacing="0.04em"
         color="page.fg-secondary"
       >
-        <Text as="span">{card.period}</Text>
+        <Text as="span" className="tnum">
+          {card.period}
+        </Text>
         {status && (
           <Text as="span" px={1.5} border="1px solid" borderColor="page.border-strong" borderRadius="4px" textTransform="uppercase" fontSize="10px">
             {status}
@@ -240,20 +258,15 @@ function ProjectCard({ card }: { card: Card }) {
         )}
       </Flex>
 
-      <Text as="h3" fontWeight={500} fontSize="17px" lineHeight="1.3" color="page.fg" mb={2} letterSpacing="-0.01em">
+      <Text as="h3" fontWeight={500} fontSize="17px" lineHeight="1.3" color="page.fg" mb={2} letterSpacing="-0.01em" lang={labelLang(card.title)}>
         {href ? (
           <NextLink
             href={href}
-            data-stretched
-            style={{
-              outline: 'none',
-              ...(card.morph && card.study ? { viewTransitionName: `vt-work-${card.study.slug}` } : null),
-            }}
+            className="stretched-link"
+            style={card.morph && card.study ? { viewTransitionName: `vt-work-${card.study.slug}` } : undefined}
           >
             {card.title}
             <span className="sr-only"> — read case study</span>
-            {/* Whole card is the click target; the extra controls sit above it. */}
-            <Box as="span" aria-hidden position="absolute" inset={0} borderRadius="lg" zIndex={0} />
           </NextLink>
         ) : (
           card.title
@@ -261,19 +274,32 @@ function ProjectCard({ card }: { card: Card }) {
       </Text>
 
       {card.description && (
-        <Text fontSize="13px" color="page.fg-secondary" noOfLines={expanded ? undefined : 3} lineHeight="1.65">
+        <Text fontSize="13px" color="page.fg-secondary" noOfLines={3} lineHeight="1.65" lang={labelLang(card.description)}>
           {card.description}
         </Text>
       )}
 
-      {expanded && card.features.length > 0 && (
-        <Box as="ul" id={panelId} listStyleType="none" mt={4} pt={3} borderTop="1px solid" borderColor="page.border">
-          {card.features.slice(0, 4).map((f, i) => (
-            <Text as="li" key={i} fontSize="12px" color="page.fg-secondary" pl={3} borderLeft="2px solid" borderColor="var(--accent)" mb={2} lineHeight="1.55">
-              {f}
-            </Text>
-          ))}
-        </Box>
+      {hasMore && (
+        <Collapse open={expanded} id={panelId}>
+          <Box as="ul" listStyleType="none" mt={4} pt={3} borderTop="1px solid" borderColor="page.border">
+            {card.features.slice(0, 4).map((f, i) => (
+              <Text
+                as="li"
+                key={i}
+                fontSize="12px"
+                color="page.fg-secondary"
+                pl={3}
+                borderLeft="2px solid"
+                borderColor="var(--accent)"
+                mb={2}
+                lineHeight="1.55"
+                lang={labelLang(f)}
+              >
+                {f}
+              </Text>
+            ))}
+          </Box>
+        </Collapse>
       )}
 
       {card.tech.length > 0 && (
@@ -298,28 +324,30 @@ function ProjectCard({ card }: { card: Card }) {
         </Flex>
       )}
 
-      <Box flex="1" />
-
       <Flex align="center" justify="space-between" gap={3} mt={4} pt={3} borderTop="1px solid" borderColor="page.border" fontFamily={monoFont} fontSize="11px" letterSpacing="0.04em">
         {card.location ? (
-          <Text as="span" color="page.fg-secondary" noOfLines={1}>
+          <Text as="span" color="page.fg-secondary" noOfLines={1} lang={labelLang(card.location)}>
             {card.location}
           </Text>
         ) : (
           <span />
         )}
         <Flex align="center" gap={3} flexShrink={0}>
-          {card.features.length > 0 && (
+          {hasMore && (
             <Box
               as="button"
               type="button"
-              position="relative"
-              zIndex={1}
+              className={moreIsPrimary ? 'stretched-link' : undefined}
+              position={moreIsPrimary ? undefined : 'relative'}
+              zIndex={moreIsPrimary ? undefined : 1}
               aria-expanded={expanded}
-              aria-controls={expanded ? panelId : undefined}
+              aria-controls={panelId}
               onClick={() => setExpanded((v) => !v)}
               color="page.fg-secondary"
-              px={1}
+              minH="24px"
+              minW="24px"
+              px={2}
+              py={1.5}
               borderRadius="sm"
               _hover={{ color: 'page.fg' }}
               _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
@@ -330,7 +358,7 @@ function ProjectCard({ card }: { card: Card }) {
           )}
           {href && (
             <Text as="span" aria-hidden color="accent.text">
-              Read case study →
+              Read case study <span className="nudge">→</span>
             </Text>
           )}
         </Flex>

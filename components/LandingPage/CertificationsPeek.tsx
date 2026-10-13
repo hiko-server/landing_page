@@ -5,9 +5,9 @@ import { motion, useReducedMotion } from 'framer-motion'
 import { field, list } from '../CVViewerPage/fields'
 import { safeHref } from '../../lib/cvFormat'
 import type { CvSectionLike } from '../../lib/cvVisibility'
+import { labelLang } from '../../lib/toc'
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
-const MotionBox = motion(Box)
 
 type Org = { key: string; name: string; certs: Array<{ key: string; name: string; href: string }> }
 
@@ -16,7 +16,9 @@ type Org = { key: string; name: string; certs: Array<{ key: string; name: string
  *
  * Built from the public CV; a hidden certificate, URL or org name is simply
  * absent. Credential links go through safeHref, so only http(s) URLs become
- * links — anything else renders as a plain chip.
+ * links — anything else renders as a plain chip. Organisations fade in with
+ * one stagger for the block (instant under reduced motion); names carry
+ * their own `lang`.
  */
 export default function CertificationsPeek({ cvEn }: { cvEn?: CvSectionLike[] }) {
   const reduce = useReducedMotion()
@@ -38,70 +40,66 @@ export default function CertificationsPeek({ cvEn }: { cvEn?: CvSectionLike[] })
 
   if (!orgs.length) return null
 
+  const row = { hidden: { opacity: 0, y: 6 }, show: { opacity: 1, y: 0, transition: reduce ? { duration: 0 } : { duration: 0.3, ease: [0.22, 1, 0.36, 1] } } }
+  const stagger = { hidden: {}, show: { transition: { staggerChildren: reduce ? 0 : 0.03 } } }
+
   return (
     <Box w="100%" maxW="1100px" mx="auto">
-      {orgs.map((org, oi) => (
-        <MotionBox
-          key={org.key}
-          as="section"
-          aria-label={org.name || undefined}
-          mb={6}
-          initial={reduce ? false : { opacity: 0, y: 8 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.3, delay: oi * 0.08, ease: [0.22, 1, 0.36, 1] }}
-        >
-          {org.name && (
-            <Text as="h3" fontFamily={monoFont} fontSize="11px" letterSpacing="0.14em" textTransform="uppercase" color="page.fg-secondary" mb={3}>
-              <Box as="span" aria-hidden mr={1.5}>
-                ▸
-              </Box>
-              {org.name}
-            </Text>
-          )}
-          <Flex as="ul" listStyleType="none" wrap="wrap" gap={2}>
-            {org.certs.map((c) => {
-              const chip = {
-                border: '1px solid',
-                borderColor: 'page.border',
-                borderRadius: 'md',
-                px: 3,
-                py: 1.5,
-                fontSize: '12px',
-                color: 'page.fg',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 1.5,
-                transition: 'border-color 200ms var(--ease-out-quart), color 200ms var(--ease-out-quart)',
-              } as const
-              return (
-                <li key={c.key}>
-                  {c.href ? (
-                    <Link
-                      href={c.href}
-                      isExternal
-                      rel="noopener noreferrer"
-                      {...chip}
-                      _hover={{ textDecoration: 'none', borderColor: 'page.border-strong', color: 'accent.text' }}
-                      _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
-                    >
-                      {c.name}
-                      <Text as="span" fontFamily={monoFont} fontSize="10px" color="page.fg-secondary" aria-hidden>
-                        ↗
-                      </Text>
-                      <span className="sr-only"> (credential, opens in a new tab)</span>
-                    </Link>
-                  ) : (
-                    <Box as="span" {...chip}>
-                      {c.name}
-                    </Box>
-                  )}
-                </li>
-              )
-            })}
-          </Flex>
-        </MotionBox>
-      ))}
+      <motion.div initial="hidden" whileInView="show" viewport={{ once: true, amount: 0.2 }} variants={stagger}>
+        {orgs.map((org) => (
+          <motion.section key={org.key} aria-label={org.name || undefined} variants={row} style={{ marginBottom: 24 }}>
+            {org.name && (
+              <Text as="h3" fontFamily={monoFont} fontSize="11px" letterSpacing="0.14em" textTransform="uppercase" color="page.fg-secondary" mb={3}>
+                <Box as="span" aria-hidden mr={1.5}>
+                  ▸
+                </Box>
+                <span lang={labelLang(org.name)}>{org.name}</span>
+              </Text>
+            )}
+            <Flex as="ul" listStyleType="none" wrap="wrap" gap={2}>
+              {org.certs.map((c) => {
+                const chip = {
+                  border: '1px solid',
+                  borderColor: 'page.border',
+                  borderRadius: 'md',
+                  px: 3,
+                  py: 1.5,
+                  fontSize: '12px',
+                  color: 'page.fg',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 1.5,
+                  transition: 'border-color 200ms var(--ease-out-quart), color 200ms var(--ease-out-quart)',
+                } as const
+                return (
+                  <li key={c.key}>
+                    {c.href ? (
+                      <Link
+                        href={c.href}
+                        isExternal
+                        rel="noopener noreferrer"
+                        {...chip}
+                        _hover={{ textDecoration: 'none', borderColor: 'page.border-strong', color: 'accent.text' }}
+                        _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
+                      >
+                        <span lang={labelLang(c.name)}>{c.name}</span>
+                        <Text as="span" fontFamily={monoFont} fontSize="10px" color="page.fg-secondary" aria-hidden>
+                          ↗
+                        </Text>
+                        <span className="sr-only"> (credential, opens in a new tab)</span>
+                      </Link>
+                    ) : (
+                      <Box as="span" {...chip} lang={labelLang(c.name)}>
+                        {c.name}
+                      </Box>
+                    )}
+                  </li>
+                )
+              })}
+            </Flex>
+          </motion.section>
+        ))}
+      </motion.div>
     </Box>
   )
 }

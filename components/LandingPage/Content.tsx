@@ -1,65 +1,205 @@
 import React from 'react'
-import { Box, Flex } from '@chakra-ui/react'
+import dynamic from 'next/dynamic'
+import { Box } from '@chakra-ui/react'
 
-import ImageScroller from '../imageScoller/imageScroller'
 import type { ScrollerImage } from '../imageScoller/imageScroller'
-
-import ContactPro from '../Contact/ContactPro'
 import TopRepos from '../GitHub/TopRepos'
-import TechCloud from '../TechStack/TechCloud'
 import LanguageBars from '../GitHub/LanguageBars'
 import ActivityFeed from '../GitHub/ActivityFeed'
 import StatsBar from '../GitHub/StatsBar'
+import ContributionGraph from '../GitHub/ContributionGraph'
+import ErrorBoundary, { WidgetFallback } from '../Common/ErrorBoundary'
+import WhenVisible from '../Common/WhenVisible'
+import Skills from './Skills'
 import ProjectSpotlight from './ProjectSpotlight'
+import LatestWriting from './LatestWriting'
 import ExperienceTimeline from './ExperienceTimeline'
 import CertificationsPeek from './CertificationsPeek'
 import SectionReveal from '../General-UI/SectionReveal'
 import SectionLabel from '../General-UI/SectionLabel'
 import FloatingNav from '../General-UI/FloatingNav'
 // Pure shape — must NOT import from lib/home (server-only / better-sqlite3).
-import { isSectionVisible, type HomeData } from '../../lib/homeShape'
+import { isSectionVisible, type HomeData, type SectionKey } from '../../lib/homeShape'
 import type { CvSectionLike } from '../../lib/cvVisibility'
-import type { WorkIndexItem } from './projectMatch'
+import { list } from '../CVViewerPage/fields'
+import type { GithubSummary } from '../Common/githubEvents'
+import type { WorkIndexItem, WritingItem } from './projectMatch'
+
+// Below the fold and interactive-only: their code loads when they are about
+// to scroll into view (WhenVisible), not with the page.
+const ContactPro = dynamic(() => import('../Contact/ContactPro'), { ssr: false })
+const ImageScroller = dynamic(() => import('../imageScoller/imageScroller'), { ssr: false })
+
+export type HomeWriting = { items: WritingItem[]; hasPosts: boolean; hasWork: boolean }
+
+/** Whether the public CV section has any visible entry (an empty section gets no [NN] row). */
+function hasEntries(cvEn: CvSectionLike[] | undefined, sessionName: string, key: string): boolean {
+  const section = Array.isArray(cvEn) ? cvEn.find((s) => s?.sessionName === sessionName) : undefined
+  return list(section, key).length > 0
+}
+
+type SectionDef = {
+  key: SectionKey
+  id: string
+  label: string
+  /** Rows inside run their own stagger: reveal only the [NN] label. */
+  labelOnly?: boolean
+  /** Rendered without the reveal wrapper (deferred / full-width rows). */
+  plain?: boolean
+  body: React.ReactNode
+}
 
 /**
- * v6 home Content.
+ * Home sections [02]…: Open Source, Skills, Recent Activity, Selected
+ * Projects, Writing & case studies, Experience, Certifications, Field Notes
+ * and Contact.
  *
- * Each [NN] section is now gated through `isSectionVisible(home, key)` so
- * the admin can hide whole rows from the Home editor without code
- * changes. Sections default to visible if the key is missing — clean
- * install keeps the full page.
- *
- * Photos + Contact share a single bottom row on desktop; when only one of
- * them is enabled the surviving side stretches to fill the row instead
- * of leaving a ghost column.
+ * - Each section is gated by `isSectionVisible(home, key)` (Home editor) and
+ *   by having something to show (no empty [NN] rows), and numbered by its
+ *   position among the visible ones, so the labels never skip a number.
+ * - Data the server already has (GitHub summary, CV, writing index) is
+ *   rendered into the HTML; ContactPro and the photo strip are code-split
+ *   and mount just before they scroll into view.
+ * - Field Notes and Contact each get a full-width row.
  */
-
 const Content = ({
   photos,
   cvEn,
   home,
   work,
+  github,
+  writing,
 }: {
   photos?: ScrollerImage[]
   /** Website-pruned EN CV, limited to the sections rendered here. */
   cvEn?: CvSectionLike[]
   home?: HomeData | null
-  /** /work case-study index used to link project cards. */
+  /** /work case-study index used to link project cards and roles. */
   work?: WorkIndexItem[]
+  /** GitHub data loaded on the server; a null part makes that widget fetch it. */
+  github?: GithubSummary | null
+  writing?: HomeWriting | null
 }) => {
+  const contributions = github?.contributions
+  const sections: SectionDef[] = [
+    {
+      key: 'open-source',
+      id: 'section-open-source',
+      label: 'Open Source',
+      labelOnly: true,
+      body: (
+        <ErrorBoundary name="home-open-source" fallback={(p) => <WidgetFallback {...p} />}>
+          <StatsBar initialData={github?.stats} />
+          {/* Known-unavailable: no row. Unknown (not ready in the server budget): it fetches. */}
+          {contributions?.available !== false && (
+            <Box mt={8}>
+              <ContributionGraph initialData={contributions} />
+            </Box>
+          )}
+          <Box mt={6}>
+            <TopRepos initialData={github?.topRepos} />
+          </Box>
+        </ErrorBoundary>
+      ),
+    },
+    {
+      key: 'tech-stack',
+      id: 'section-tech-stack',
+      label: 'Skills',
+      labelOnly: true,
+      body: (
+        <>
+          <Skills cvEn={cvEn} />
+          <Box mt={10}>
+            <ErrorBoundary name="home-languages" fallback={(p) => <WidgetFallback {...p} />}>
+              <LanguageBars initialData={github?.languages} />
+            </ErrorBoundary>
+          </Box>
+        </>
+      ),
+    },
+    {
+      key: 'activity',
+      id: 'section-activity',
+      label: 'Recent Activity',
+      labelOnly: true,
+      body: (
+        <ErrorBoundary name="home-activity" fallback={(p) => <WidgetFallback {...p} />}>
+          <ActivityFeed initialData={github?.events} />
+        </ErrorBoundary>
+      ),
+    },
+    ...(hasEntries(cvEn, 'project', 'projectExperience')
+      ? [
+          {
+            key: 'projects' as const,
+            id: 'section-projects',
+            label: 'Selected Projects',
+            body: <ProjectSpotlight cvEn={cvEn} work={work} />,
+          },
+        ]
+      : []),
+    ...(writing && writing.items.length
+      ? [
+          {
+            key: 'writing' as const,
+            id: 'section-writing',
+            label: 'Writing & case studies',
+            body: <LatestWriting items={writing.items} hasPosts={writing.hasPosts} hasWork={writing.hasWork} />,
+          },
+        ]
+      : []),
+    ...(hasEntries(cvEn, 'workExperience', 'experiences')
+      ? [
+          {
+            key: 'experience' as const,
+            id: 'section-experience',
+            label: 'Experience',
+            labelOnly: true,
+            body: <ExperienceTimeline cvEn={cvEn} work={work} />,
+          },
+        ]
+      : []),
+    ...(hasEntries(cvEn, 'certification', 'certifications')
+      ? [
+          {
+            key: 'certifications' as const,
+            id: 'section-certifications',
+            label: 'Certifications',
+            labelOnly: true,
+            body: <CertificationsPeek cvEn={cvEn} />,
+          },
+        ]
+      : []),
+    ...(Array.isArray(photos) && photos.length
+      ? [
+          {
+            key: 'photos' as const,
+            id: 'section-photos',
+            label: 'Field Notes',
+            plain: true,
+            body: (
+              <WhenVisible minHeight={{ base: '300px', md: '360px' }}>
+                <ImageScroller images={photos} />
+              </WhenVisible>
+            ),
+          },
+        ]
+      : []),
+    {
+      key: 'contact',
+      id: 'section-contact',
+      label: 'Get In Touch',
+      plain: true,
+      body: (
+        <WhenVisible minHeight={{ base: '760px', md: '600px' }}>
+          <ContactPro home={home || undefined} formOnly />
+        </WhenVisible>
+      ),
+    },
+  ]
+  const visible = sections.filter((s) => isSectionVisible(home, s.key))
 
-  const show = {
-    openSource: isSectionVisible(home, 'open-source'),
-    techStack: isSectionVisible(home, 'tech-stack'),
-    activity: isSectionVisible(home, 'activity'),
-    projects: isSectionVisible(home, 'projects'),
-    experience: isSectionVisible(home, 'experience'),
-    certifications: isSectionVisible(home, 'certifications'),
-    photos: isSectionVisible(home, 'photos'),
-    contact: isSectionVisible(home, 'contact'),
-  }
-
-  const hasBottomRow = show.photos || show.contact
   // Anchor targets land below the sticky header, and focus (for keyboard
   // users jumping via the section nav) doesn't paint an outline box.
   const sectionSx = { scrollMarginTop: '80px', '&:focus': { outline: 'none' } }
@@ -74,123 +214,30 @@ const Content = ({
       pb={{ base: 12, md: 20 }}
     >
       <FloatingNav />
-      {/* [02] OPEN SOURCE — GitHub stats banner spanning full width */}
-      {show.openSource && (
-        <SectionReveal>
-          <Box mb={{ base: 16, md: 24 }} id="section-open-source" data-nav-label="Open Source" tabIndex={-1} sx={sectionSx}>
-            <SectionLabel n={2} mb={6}>
-              Open Source
+      {visible.map((s, i) => {
+        const section = (
+          <Box
+            as="section"
+            aria-labelledby={`${s.id}-label`}
+            mb={i === visible.length - 1 ? 0 : { base: 16, md: 24 }}
+            id={s.id}
+            data-nav-label={s.label}
+            tabIndex={-1}
+            sx={sectionSx}
+          >
+            <SectionLabel n={i + 2} id={`${s.id}-label`} mb={6}>
+              {s.label}
             </SectionLabel>
-            <StatsBar />
-            <Box mt={6}>
-              <TopRepos />
-            </Box>
+            {s.body}
           </Box>
-        </SectionReveal>
-      )}
-
-      {/* [03] TECH STACK */}
-      {show.techStack && (
-        <SectionReveal>
-          <Box mb={{ base: 16, md: 24 }} id="section-tech-stack" data-nav-label="Tech Stack" tabIndex={-1} sx={sectionSx}>
-            <SectionLabel n={3} mb={6}>
-              Tech Stack
-            </SectionLabel>
-            <TechCloud />
-            <Box mt={10}>
-              <LanguageBars />
-            </Box>
-          </Box>
-        </SectionReveal>
-      )}
-
-      {/* [04] RECENT ACTIVITY */}
-      {show.activity && (
-        <SectionReveal>
-          <Box mb={{ base: 16, md: 24 }} id="section-activity" data-nav-label="Recent Activity" tabIndex={-1} sx={sectionSx}>
-            <SectionLabel n={4} mb={6}>
-              Recent Activity
-            </SectionLabel>
-            <ActivityFeed />
-          </Box>
-        </SectionReveal>
-      )}
-
-      {/* [05] SELECTED PROJECTS — horizontal scroller */}
-      {show.projects && (
-        <SectionReveal>
-          <Box mb={{ base: 16, md: 24 }} id="section-projects" data-nav-label="Selected Projects" tabIndex={-1} sx={sectionSx}>
-            <SectionLabel n={5} mb={6}>
-              Selected Projects
-            </SectionLabel>
-            <ProjectSpotlight cvEn={cvEn} work={work} />
-          </Box>
-        </SectionReveal>
-      )}
-
-      {/* [06] EXPERIENCE TIMELINE */}
-      {show.experience && (
-        <SectionReveal>
-          <Box mb={{ base: 16, md: 24 }} id="section-experience" data-nav-label="Experience" tabIndex={-1} sx={sectionSx}>
-            <SectionLabel n={6} mb={6}>
-              Experience
-            </SectionLabel>
-            <ExperienceTimeline cvEn={cvEn} />
-          </Box>
-        </SectionReveal>
-      )}
-
-      {/* [07] CERTIFICATIONS */}
-      {show.certifications && (
-        <SectionReveal>
-          <Box mb={{ base: 16, md: 24 }} id="section-certifications" data-nav-label="Certifications" tabIndex={-1} sx={sectionSx}>
-            <SectionLabel n={7} mb={6}>
-              Certifications
-            </SectionLabel>
-            <CertificationsPeek cvEn={cvEn} />
-          </Box>
-        </SectionReveal>
-      )}
-
-      {/* Photos + Contact (side by side on desktop, stacked on mobile) */}
-      {hasBottomRow && (
-        <Flex
-          direction={{ base: 'column', md: 'row' }}
-          gap={{ base: 12, md: 8 }}
-          align="flex-start"
-          pt={{ base: 8, md: 12 }}
-          borderTop="1px solid"
-          borderColor="page.border"
-        >
-          {show.photos && (
-            <Box
-              flex={
-                show.contact
-                  ? { base: 'none', md: '0 0 380px' }
-                  : { base: 'none', md: '1' }
-              }
-              w={{ base: '100%', md: show.contact ? '380px' : '100%' }}
-              id="section-photos"
-              data-nav-label="Field Notes"
-              tabIndex={-1}
-              sx={sectionSx}
-            >
-              <SectionLabel n={8} mb={6}>
-                Field Notes
-              </SectionLabel>
-              <ImageScroller images={photos} />
-            </Box>
-          )}
-          {show.contact && (
-            <Box flex="1" minW={0} w="100%" id="section-contact" data-nav-label="Get In Touch" tabIndex={-1} sx={sectionSx}>
-              <SectionLabel n={9} mb={6}>
-                Get In Touch
-              </SectionLabel>
-              <ContactPro home={home || undefined} formOnly />
-            </Box>
-          )}
-        </Flex>
-      )}
+        )
+        if (s.plain) return <React.Fragment key={s.key}>{section}</React.Fragment>
+        return (
+          <SectionReveal key={s.key} labelOnly={s.labelOnly}>
+            {section}
+          </SectionReveal>
+        )
+      })}
     </Box>
   )
 }
