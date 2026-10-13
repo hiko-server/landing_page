@@ -19,7 +19,17 @@ import { withApi } from '../../../lib/apiHandler'
  * Minting is stateless (the JWT carries its issued-at and expiry); the only
  * server state is pages/api/contact.ts's bounded used-nonce list. No external
  * service. Rate-limited so a bot can't churn nonces.
+ *
+ * Caching: `private, no-cache, max-age=0` — never stored by a shared cache,
+ * revalidated on every use, and the client fetches with cache:'no-store'
+ * anyway; a nonce is single-use and HMAC-bound server side, so a copy could
+ * not be replayed. Not `no-store`: a no-store fetch response is one of
+ * Chrome's reasons to keep a page out of the back/forward cache
+ * (JsNetworkRequestReceivedCacheControlNoStoreResource), so the contact
+ * form's challenge would cost every page that shows it its instant Back
+ * (FIX-22).
  */
+export const NONCE_CACHE_CONTROL = 'private, no-cache, max-age=0'
 export default withApi('contact/nonce', (req, res, { log }) => {
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET')
@@ -44,7 +54,7 @@ export default withApi('contact/nonce', (req, res, { log }) => {
       // else signed with the same secret (e.g. an admin session) and vice versa.
       { expiresIn: '30m', audience: 'contact-form', algorithm: 'HS256' },
     )
-    res.setHeader('Cache-Control', 'no-store')
+    res.setHeader('Cache-Control', NONCE_CACHE_CONTROL)
     return res.status(200).json({ token, challenge })
   } catch (err) {
     log.error('contact nonce: mint failed', { err })
