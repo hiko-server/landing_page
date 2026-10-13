@@ -8,6 +8,65 @@ portfolio CMS, no public package). Entries are grouped by release date.
 
 ## [Unreleased]
 
+### reading-work
+
+Writing and case studies (D1–D5, D7, D8, E8).
+
+- **Videos (D3)**: a YouTube or Vimeo link alone in its paragraph becomes a
+  click-to-load player (`<YouTube>` too). Its poster is imported once into
+  `/uploads` through `safeFetch` — when the article is saved, or in the
+  background the first time the running server compiles it — so a page
+  never requests `i.ytimg.com` or `vimeocdn.com` before the reader presses
+  play. Vimeo plays with `dnt=1`; start times are kept; the caption names
+  the player host and links to the video; feeds keep plain links;
+  `/colophon` discloses it. The editor's *Video* command takes both.
+- **Callouts, footnotes, wide figures (D4)**: `> [!NOTE]` / `TIP` /
+  `IMPORTANT` / `WARNING` / `CAUTION` quotes are callouts labelled in the
+  article's language (备注 / 提示 / 重要 / 警告 / 注意) and survive the visual
+  editor; footnotes get mono bracketed references and a highlight on the
+  note jumped to; `<details>` reads as a deep-dive disclosure;
+  `#wide` / `#full` on an image (or `<Figure size>`, or the image bubble)
+  lets it break out of the text column, edge to edge on phones.
+- **Galleries (D5)**: consecutive images form a gallery laid out by aspect
+  ratio — landscapes alone, portraits in pairs, never a lone orphan — with
+  no layout shift; identical captions are shown once; the lightbox keeps
+  every caption; feeds get a flat list. Tall screenshots are capped at 70%
+  of the viewport.
+- **At a glance (D1)**: case studies can carry a one-line outcome, up to four
+  metrics (value, unit, what was measured, source and evidence link), team,
+  publication date and extra links, edited in a new *At a glance* fieldset;
+  the page shows only what is filled in (and JSON-LD gets `abstract` /
+  `datePublished`), the first metric appears on the `/work` card, and the
+  publish checklist asks for a summary and a source per metric. New case
+  studies offer a documented template whose notes are MDX comments that
+  never reach the page; the checklist flags notes left behind and empty
+  sections; the slash menu adds *Case-study outline* and Note / Tip /
+  Warning callouts.
+- **Covers and cards (D2)**: every `/work` card has the same 16:10 cover
+  slot — the cover around an owner-set focal point, a cover narrower than
+  960 px drawn at its own size on a tinted panel instead of stretched, or a
+  CSS typographic cover — with true intrinsic sizes, Live / Archived
+  status pills, and hover lift / press states (motion only when allowed).
+  The cover field reports the image's real size and warns below 960 /
+  1600 px, in the field and in the checklist.
+- **Author card and sharing (D7)**: posts and case studies end with who
+  wrote them (public CV name, the Home tagline's role, the cropped portrait,
+  availability only when set) with *View CV* (`/cv/zh` for Chinese
+  articles) and *Contact*, then *Copy link*, the system share sheet where
+  the browser has one, LinkedIn and a WeChat QR code drawn on the server —
+  nothing third-party loads until the reader acts.
+- **Cross-links and filters (D8)**: a post's new *Case study* field links it
+  and the case study both ways (meta row, *Write-ups*, and first in
+  *Related*); tag and stack chips link to `/blog?tag=…` / `/work?tag=…`;
+  both lists filter by `?tag=` with a shallow URL update inside a view
+  transition, and a shared filtered link is filtered from the first paint
+  by a tiny inline script (no layout shift).
+- **Project archive (E8)**: `/work` ends with *All projects* — every project
+  of the public CV, newest first, as a table (cards on phones) linked to its
+  case study, borrowing role / stack / links from it; CV Studio projects gain
+  optional *Your role* and *Stack* fields (not printed on the CV); a CV save
+  regenerates `/work`.
+
 ## [2.3.0] — 2026-10-13
 
 A research round across eight directions (UI, motion, reading, recruiter
