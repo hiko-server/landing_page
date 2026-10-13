@@ -9,6 +9,7 @@ import CompetitionAwardsSection from '../PersonalInstruction/CompetitionAwards'
 import PatentsSection from '../PersonalInstruction/Patents'
 import ExtraSkillSection from '../PersonalInstruction/ExtraSkill'
 import { isSectionOnWebsite } from '../../lib/cvVisibility'
+import type { WorkIndexItem } from './projectMatch'
 
 /**
  * Renders the CV accordion stack on /about and /cv.
@@ -42,7 +43,14 @@ export const CV_WEBSITE_SECTIONS = [
 
 const RENDERED: readonly string[] = CV_WEBSITE_SECTIONS
 
-const LandingCVSections = ({ en, zh }: { en?: any[]; zh?: any[] }) => {
+type LandingCVSectionsProps = {
+  en?: any[]
+  zh?: any[]
+  /** /work case-study index; CV projects that match one link to it ("Case study →"). */
+  work?: readonly WorkIndexItem[]
+}
+
+const LandingCVSections = ({ en, zh, work }: LandingCVSectionsProps) => {
   const [language, setLanguage] = useState<Lang>('en')
   // Fall back to EN when there is no Chinese CV at all, and hide the toggle.
   const hasZh = Array.isArray(zh) && zh.some((s: any) => RENDERED.includes(s?.sessionName))
@@ -118,7 +126,7 @@ const LandingCVSections = ({ en, zh }: { en?: any[]; zh?: any[] }) => {
               case 'competitionAwards':
                 return <CompetitionAwardsSection key={k} {...props} />
               case 'project':
-                return <ProjectSection key={k} {...props} />
+                return <ProjectSection key={k} {...props} work={work} />
               case 'patents':
                 return <PatentsSection key={k} {...props} />
               case 'extraSkill':

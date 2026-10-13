@@ -6,6 +6,8 @@ import { deleteInbox, isInboxId, listInbox, markInbox } from '../../../lib/inbox
  * Contact inbox for the admin.
  *
  *   GET  /api/admin/inbox                       → { messages, unread, total, truncated, storage }
+ *   GET  /api/admin/inbox?summary=1             → { unread, total }   (badge polling: no
+ *                                                 message bodies, no storage stats)
  *   POST /api/admin/inbox { action, ids }       → { ok, affected, unread, total, storage }
  *        action: 'read' | 'unread' | 'delete'   ids: up to 500 message ids
  *
@@ -20,13 +22,22 @@ import { deleteInbox, isInboxId, listInbox, markInbox } from '../../../lib/inbox
 const ACTIONS = new Set(['read', 'unread', 'delete'])
 const MAX_IDS = 500
 
+/** `?summary=1` (the first value wins if the parameter is repeated). */
+function wantsSummary(value: string | string[] | undefined): boolean {
+  return (Array.isArray(value) ? value[0] : value) === '1'
+}
+
 export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!isAdminRequest(req, res)) return res.status(401).json({ error: 'Unauthorized' })
   res.setHeader('Cache-Control', 'no-store')
 
   if (req.method === 'GET') {
     try {
-      return res.status(200).json(listInbox())
+      const listing = listInbox()
+      if (wantsSummary(req.query.summary)) {
+        return res.status(200).json({ unread: listing.unread, total: listing.total })
+      }
+      return res.status(200).json(listing)
     } catch (err: any) {
       console.error('[inbox] read failed', err)
       return res.status(500).json({ error: 'Could not read the inbox' })

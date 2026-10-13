@@ -31,7 +31,7 @@ type Props = {
   githubUser: string | null
   /** GitHub data rendered into the HTML; null (or a null part) = the widget loads it in the browser. */
   github: GithubSummary | null
-  /** /work case-study index (slug + title) for "Case study →" links on roles. */
+  /** /work case-study index (slug + title) for "Case study →" links on roles and CV projects. */
   work: WorkIndexItem[]
   /** Server reference month ('YYYY-MM', lib/clock.ts) for "Present" / "Expected". */
   clockMonth: string
@@ -125,7 +125,7 @@ const About = ({ hero, identity, cv, githubUser, github, work }: Props) => {
             </Box>
           </SectionReveal>
           <SectionReveal>
-            <LandingCVSections en={cv.en} zh={cv.zh} />
+            <LandingCVSections en={cv.en} zh={cv.zh} work={work} />
           </SectionReveal>
         </Flex>
       </HeaderFooter>
@@ -185,12 +185,18 @@ export const getServerSideProps: GetServerSideProps<Props> = async () => {
     /* best effort — render with what we have */
   }
 
-  if (hasSection(cv.en, 'workExperience', 'experiences')) {
+  // Only read the /work index when something on the page can link to it:
+  // the experience timeline (roles) or the CV accordion's projects (either language).
+  const linksCaseStudies =
+    hasSection(cv.en, 'workExperience', 'experiences') ||
+    hasSection(cv.en, 'project', 'projectExperience') ||
+    hasSection(cv.zh, 'project', 'projectExperience')
+  if (linksCaseStudies) {
     try {
       const { listWork } = await import('../../lib/mdx')
       work = listWork().map(({ slug, frontmatter: fm }) => ({ slug, title: String(fm?.title || slug) }))
     } catch {
-      /* best effort — roles simply render without case-study links */
+      /* best effort — roles and projects simply render without case-study links */
     }
   }
 
