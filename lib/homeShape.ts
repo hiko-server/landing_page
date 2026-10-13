@@ -315,9 +315,10 @@ export function publicHome(home: HomeData | null | undefined): HomeData | null {
           delete rest.visible
           return rest
         }),
-    // The contact copy belongs to the form on /contact; switching off the
-    // home page's contact band must not reset that page to its defaults.
-    contact: home.contact,
+    // The contact copy (kept by the spread above) belongs to the form on
+    // /contact: switching off the home page's contact band must not reset
+    // that page to its defaults. Never set it to `undefined` here — a home
+    // document without a contact block must stay serialisable as page props.
     ...(home.highlights !== undefined ? { highlights: off('highlights') ? [] : visibleHighlights(home.highlights) } : {}),
   }
 }

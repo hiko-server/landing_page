@@ -141,6 +141,13 @@ test('A1: the public view shows only complete highlights, none when the strip is
   assert.deepEqual(publicHome({ ...doc, sections: { highlights: false } })?.highlights, [])
   assert.deepEqual(publicHome(doc)?.contact, { heading: 'Mine', blurb: 'Write any time.' }, '/contact keeps its copy')
   assert.equal('highlights' in (publicHome(home()) as object), false)
+  // A document without a contact block stays serialisable as getStaticProps props (no `contact: undefined`).
+  const bare = { ...home() } as Record<string, unknown>
+  delete bare.contact
+  const view = publicHome(bare as never) as object
+  assert.equal('contact' in view, false)
+  assert.doesNotThrow(() => JSON.parse(JSON.stringify(view)))
+  assert.equal(Object.values(view).includes(undefined), false, 'no undefined top-level value')
   assert.equal(visibleHighlights(Array.from({ length: 6 }, () => ({ value: 'v', label: 'l', href: '/x' }))).length, 4)
 })
 
