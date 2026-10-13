@@ -62,7 +62,7 @@ type Props = {
   canonical?: string
   /**
    * Language versions of this page, e.g. CV_ALTERNATES from lib/schema
-   * (/cv → en, /cv?lang=zh → zh-Hans). Rendered as <link rel="alternate"
+   * (/cv → en, /cv/zh → zh-Hans). Rendered as <link rel="alternate"
    * hreflang>; an x-default entry is added (first alternate) when missing.
    */
   alternates?: readonly Alternate[]
