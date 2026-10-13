@@ -5,6 +5,7 @@ import { PRIMARY_LINKS, SOCIAL_LINKS, type SocialLink } from '../Chrome/chrome'
 import { useBrandHost } from '../Chrome/useBrandHost'
 import { referenceYear, useReferenceMonth } from '../../lib/clock'
 import { FEEDS } from '../../lib/feeds'
+import { ChevronDownIcon } from '../Icons/ui/chrome'
 
 /**
  * v6 Footer — rendered once by components/Chrome/SiteChrome.
@@ -75,8 +76,8 @@ function Subscribe() {
         onClick={() => setOpen((v) => !v)}
       >
         Subscribe
-        <Text as="span" aria-hidden display="inline-block" transition="transform 160ms var(--ease-out-quart)" transform={open ? 'rotate(180deg)' : 'none'}>
-          ▾
+        <Text as="span" aria-hidden display="inline-flex" transition="transform var(--duration-fast) var(--ease-standard)" transform={open ? 'rotate(180deg)' : 'none'}>
+          <ChevronDownIcon size="xs" />
         </Text>
       </chakra.button>
       <Box

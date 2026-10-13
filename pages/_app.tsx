@@ -15,6 +15,8 @@ import { reportWebVital, useAnalytics } from '../lib/analytics/client'
 import { pageKeyOf } from '../lib/viewTransition'
 import SiteChrome from '../components/Chrome/SiteChrome'
 import ThemeColorMeta from '../components/Chrome/ThemeColorMeta'
+import ThemePreferenceSync from '../components/Chrome/ThemePreferenceSync'
+import { themePreferenceManager } from '../lib/themePreference'
 import { RouteTransitionGate, useRouteViewTransitions } from '../components/Chrome/RouteTransitions'
 import { useFocusMainOnPageChange } from '../components/Chrome/routeFocus'
 import { resolveHtmlLang, routeHasChrome } from '../components/Chrome/chrome'
@@ -27,6 +29,7 @@ import { installPrintDetails } from '../lib/print'
 import { installErrorCapture } from '../lib/errors/capture'
 import { RestoreScrollOnMount, useDeferredScrollRestore } from '../components/Common/scrollRestore'
 import { ClockProvider } from '../lib/clock'
+import { motionTransition } from '../theme/tokens'
 
 // v6 typography — Geist (SIL OFL, public/fonts/OFL-Geist.txt), self-hosted
 // variable fonts so the build never depends on a font CDN. Exactly two files
@@ -76,6 +79,11 @@ const mono = localFont({
 // everything Chakra portals to <body> — drawers, the ⌘K palette, menus,
 // tooltips, toasts — resolves the same Geist stacks.
 const FONT_VARIABLES_CSS = `${monoFallbackFontFaces()}:root{--font-geist-sans:${sans.style.fontFamily};--font-geist-sans-italic:${sansItalic.style.fontFamily};--font-geist-mono:${mono.style.fontFamily}}`
+
+// The framer-motion page fade (browsers without view transitions): the
+// standard ease and duration (theme/tokens.ts); MotionConfig below drops the
+// movement under reduced motion.
+const PAGE_TRANSITION = motionTransition('base')
 
 // Every toast: the elevated v6 Alert (theme/chakra.js), bottom centre, short.
 const TOAST_OPTIONS = { defaultOptions: { variant: 'v6', position: 'bottom', duration: 2000, isClosable: true } } as const
@@ -136,7 +144,7 @@ const App = ({ Component, pageProps, router }: AppProps) => {
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
-          transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+          transition={PAGE_TRANSITION}
         >
           {viewTransitions ? null : <RestoreScrollOnMount pageKey={pageKey} />}
           <Component key={pageKey} {...pageProps} />
@@ -146,7 +154,9 @@ const App = ({ Component, pageProps, router }: AppProps) => {
   )
 
   return (
-    <ChakraProvider theme={theme} toastOptions={TOAST_OPTIONS}>
+    // The colour mode follows the visitor's System / Light / Dark preference
+    // (lib/themePreference.ts; applied before first paint by pages/_document).
+    <ChakraProvider theme={theme} toastOptions={TOAST_OPTIONS} colorModeManager={themePreferenceManager}>
       {/* Every framer-motion animation honours prefers-reduced-motion. */}
       <MotionConfig reducedMotion="user">
         <Head>
@@ -157,6 +167,7 @@ const App = ({ Component, pageProps, router }: AppProps) => {
           <style key="font-variables" dangerouslySetInnerHTML={{ __html: FONT_VARIABLES_CSS }} />
         </Head>
         <ThemeColorMeta />
+        <ThemePreferenceSync />
         {/* Server-computed reference month (pageProps.clockMonth) so time-based
             text renders identically on the server and while hydrating. */}
         <ChromeLangContext.Provider value={chromeLang}>

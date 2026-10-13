@@ -9,6 +9,7 @@ import { bullets, entryRange, field, list } from '../CVViewerPage/fields'
 import type { CvSectionLike } from '../../lib/cvVisibility'
 import { revealVariant } from '../../lib/reveal'
 import { labelLang } from '../../lib/toc'
+import { ChevronRightIcon } from '../Icons/ui/content'
 import { chipList, matchCaseStudy, type WorkIndexItem } from './projectMatch'
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
@@ -225,11 +226,11 @@ function TimelineRow({ row: r, first, defaultExpanded }: { row: Row; first: bool
                 <Box
                   as="span"
                   aria-hidden
-                  display="inline-block"
+                  display="inline-flex"
                   transform={open ? 'rotate(90deg)' : 'none'}
-                  transition="transform 200ms var(--ease-out-quart)"
+                  transition="transform var(--duration-fast) var(--ease-standard)"
                 >
-                  ▸
+                  <ChevronRightIcon size="xs" />
                 </Box>
                 {r.highlights.length > 0 ? `Highlights (${r.highlights.length})` : `Skills (${r.skills.length})`}
                 <span className="sr-only"> — {r.title || r.company}</span>

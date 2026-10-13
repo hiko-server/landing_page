@@ -1,28 +1,37 @@
 import { flushSync } from 'react-dom'
 import { isRouteTransitionHolding } from '../components/Chrome/RouteTransitions'
 import { prefersReducedMotion, revealGeometry, supportsViewTransitions } from './viewTransition'
+import { DURATIONS, EASE_STANDARD_CSS } from '../theme/tokens'
 
 /**
- * Theme toggle with a circular reveal: the new colour mode grows out of the
- * toggle button as a clip-path circle over a still snapshot of the old one
- * (View Transitions API). Chakra's setColorMode writes data-theme and the
- * colour-mode class synchronously, and flushSync commits the React side in
- * the same update callback, so the "new" snapshot is the fully re-themed page.
+ * Theme change with a circular reveal: the new colour mode grows out of the
+ * toggle button (or the theme menu's trigger) as a clip-path circle over a
+ * still snapshot of the old one (View Transitions API). Chakra's
+ * setColorMode writes data-theme and the colour-mode class synchronously,
+ * and flushSync commits the React side in the same update callback, so the
+ * "new" snapshot is the fully re-themed page.
  *
  * Falls back to the instant toggle without the API (Firefox), under
  * prefers-reduced-motion, while a route transition is capturing its snapshot,
  * and on any error. Clicks while a reveal is running are ignored.
  */
 
-const REVEAL_MS = 420
-const REVEAL_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
+// The slow token duration on the standard ease (theme/tokens.ts).
+const REVEAL_MS = DURATIONS.slow
+const REVEAL_EASING = EASE_STANDARD_CSS
 
 let inFlight = false
 
 type ThemeViewTransition = { ready: Promise<unknown>; finished: Promise<unknown> }
 type ThemeTransitionDocument = Document & { startViewTransition: (update: () => void) => ThemeViewTransition }
 
-export function toggleThemeWithTransition(toggle: () => void, originEl: HTMLElement | null): void {
+/**
+ * Run `update` (a colour-mode change: a toggle, or applying a System / Light /
+ * Dark preference) behind the circular reveal from `originEl` (the viewport
+ * centre when null).
+ */
+export function revealThemeChange(update: () => void, originEl: HTMLElement | null): void {
+  const toggle = update
   if (inFlight) return
   if (typeof document === 'undefined' || !supportsViewTransitions() || prefersReducedMotion() || isRouteTransitionHolding()) {
     toggle()
@@ -69,3 +78,6 @@ export function toggleThemeWithTransition(toggle: () => void, originEl: HTMLElem
     runToggle()
   }
 }
+
+/** The toggle's name for the same reveal (the header and the mobile drawer call it with Chakra's toggleColorMode). */
+export const toggleThemeWithTransition = revealThemeChange

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Box, Flex, IconButton, Text } from '@chakra-ui/react'
 import NextLink from 'next/link'
-import { GoArrowLeft, GoArrowRight } from 'react-icons/go'
+import { ArrowLeftIcon, ArrowRightIcon } from '../Icons/ui/content'
 
 import Collapse from '../General-UI/Collapse'
 import { useSpotlight } from '../General-UI/useSpotlight'
@@ -118,7 +118,7 @@ export default function ProjectSpotlight({ cvEn, work }: { cvEn?: CvSectionLike[
         <Flex gap={2} display={{ base: 'none', md: 'flex' }}>
           <IconButton
             aria-label="Scroll projects left"
-            icon={<GoArrowLeft />}
+            icon={<ArrowLeftIcon size="sm" />}
             size="sm"
             variant="outline"
             borderColor="page.border-strong"
@@ -129,7 +129,7 @@ export default function ProjectSpotlight({ cvEn, work }: { cvEn?: CvSectionLike[
           />
           <IconButton
             aria-label="Scroll projects right"
-            icon={<GoArrowRight />}
+            icon={<ArrowRightIcon size="sm" />}
             size="sm"
             variant="outline"
             borderColor="page.border-strong"

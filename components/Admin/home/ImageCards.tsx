@@ -219,6 +219,9 @@ export function ImagePreview({ src, alt, variant, scale = 1 }: { src: string; al
           w="100%"
           h="100%"
           objectFit={variant === 'brand' ? 'contain' : 'cover'}
+          // AspectRatio forces `object-fit: cover` on a direct <img> child
+          // (".css-… > img"), which cropped logos; the doubled class wins.
+          sx={variant === 'brand' ? { '&&': { objectFit: 'contain' } } : undefined}
           p={variant === 'brand' ? 4 : 0}
           style={variant === 'brand' ? { transform: `scale(${snapBrandScale(scale)})` } : undefined}
         />

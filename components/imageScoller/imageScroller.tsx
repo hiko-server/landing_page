@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Box, Flex, HStack, IconButton, Link, Text } from '@chakra-ui/react'
 import { LayoutGroup, motion, useReducedMotion } from 'framer-motion'
-import { GoArrowLeft, GoArrowRight } from 'react-icons/go'
-import { FaPause, FaPlay } from 'react-icons/fa'
+import { ArrowLeftIcon, ArrowRightIcon, PauseIcon, PlayIcon } from '../Icons/ui/content'
 
 import Lightbox, { type LightboxItem } from '../Common/Lightbox'
 import { safeHref } from '../../lib/cvFormat'
@@ -364,15 +363,15 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
               <IconButton
                 aria-label={playing ? 'Pause slideshow' : 'Play slideshow'}
                 aria-pressed={!playing}
-                icon={playing ? <FaPause size={10} /> : <FaPlay size={10} />}
+                icon={playing ? <PauseIcon size="xs" /> : <PlayIcon size="xs" />}
                 size="sm"
                 variant="ghost"
                 color="page.fg-secondary"
                 onClick={() => setPlaying((p) => !p)}
                 isDisabled={!!reduce}
               />
-              <IconButton aria-label="Previous photos" icon={<GoArrowLeft />} size="sm" variant="outline" borderColor="page.border-strong" onClick={() => go(-1, true)} />
-              <IconButton aria-label="Next photos" icon={<GoArrowRight />} size="sm" variant="outline" borderColor="page.border-strong" onClick={() => go(1, true)} />
+              <IconButton aria-label="Previous photos" icon={<ArrowLeftIcon size="sm" />} size="sm" variant="outline" borderColor="page.border-strong" onClick={() => go(-1, true)} />
+              <IconButton aria-label="Next photos" icon={<ArrowRightIcon size="sm" />} size="sm" variant="outline" borderColor="page.border-strong" onClick={() => go(1, true)} />
             </HStack>
           </Flex>
         ) : null}

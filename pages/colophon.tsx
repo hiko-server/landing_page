@@ -328,6 +328,13 @@ export default function ColophonPage({ releases, stack, buildSha, builtAt }: Pro
                   faces render the social cards. Chinese text falls back to the system&rsquo;s CJK
                   fonts.
                 </Para>
+                <Para>
+                  Interface icons are <strong>Lucide</strong> outline icons, released under the ISC
+                  licence (the ones derived from Feather under MIT;{' '}
+                  <InlineLink href="/licenses/lucide.txt">licence text</InlineLink>). They are
+                  inlined as SVG, sized on a 4&nbsp;px grid; the brand marks are Font Awesome Free
+                  brands (CC BY 4.0).
+                </Para>
               </Section>
 
               <Section id="hosting" title="Hosting">

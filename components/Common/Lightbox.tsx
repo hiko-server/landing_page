@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Box, Flex, IconButton, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay, Text } from '@chakra-ui/react'
 import { motion, useReducedMotion, type PanInfo } from 'framer-motion'
-import { GoArrowLeft, GoArrowRight } from 'react-icons/go'
+import { ArrowLeftIcon, ArrowRightIcon } from '../Icons/ui/content'
+import { motionTransition } from '../../theme/tokens'
 
 /**
  * Full-screen image viewer shared by the home photo strip and article images.
@@ -32,7 +33,7 @@ export type LightboxItem = {
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 const SPRING = { type: 'spring', stiffness: 300, damping: 30 } as const
-const FADE = { duration: 0.12, ease: [0.22, 1, 0.36, 1] } as const
+const FADE = motionTransition('fast')
 const DRAG_CLOSE_PX = 120
 /** Vertical room kept for the top bar, caption and padding. */
 const CHROME_PX = 168
@@ -230,7 +231,7 @@ export default function Lightbox({
           <>
             <IconButton
               aria-label="Previous image"
-              icon={<GoArrowLeft />}
+              icon={<ArrowLeftIcon size="sm" />}
               onClick={() => step(-1)}
               position="absolute"
               left={{ base: 2, md: 4 }}
@@ -248,7 +249,7 @@ export default function Lightbox({
             />
             <IconButton
               aria-label="Next image"
-              icon={<GoArrowRight />}
+              icon={<ArrowRightIcon size="sm" />}
               onClick={() => step(1)}
               position="absolute"
               right={{ base: 2, md: 4 }}

@@ -1,4 +1,4 @@
-import React from 'react'
+import type React from 'react'
 import { Box, Flex, Grid } from '@chakra-ui/react'
 import { labelLang } from '../../lib/toc'
 
@@ -9,8 +9,8 @@ import { labelLang } from '../../lib/toc'
  *   Main developer  2025 – 2026     [Next.js] [YOLO] …    6 min
  *
  * Two columns on phones (wide items such as the stack span both), one row
- * of auto-sized columns from md. Labels are mono 11px caps in the subtle
- * token; values 14px. Replaces the old dot-joined meta line, which screen
+ * of auto-sized columns from md. Labels use the `label` text style (mono
+ * caps) in the subtle token; values the `small` size (theme/tokens.ts). Replaces the old dot-joined meta line, which screen
  * readers announced as one run-on string.
  */
 
@@ -21,8 +21,6 @@ export type MetaItem = {
   wide?: boolean
 }
 
-const MONO = 'var(--font-geist-mono), monospace'
-
 export function MetaChips({ items, label }: { items: readonly string[]; label: string }) {
   return (
     <Flex as="ul" aria-label={label} listStyleType="none" m={0} p={0} gap={1.5} wrap="wrap">
@@ -31,12 +29,12 @@ export function MetaChips({ items, label }: { items: readonly string[]; label: s
           as="li"
           key={t}
           lang={labelLang(t)}
-          fontFamily={MONO}
-          fontSize="11px"
+          fontFamily="mono"
+          fontSize="label"
           lineHeight="1.4"
           px={2}
           py={0.5}
-          borderRadius="full"
+          borderRadius="pill"
           border="1px solid"
           borderColor="page.border-strong"
           color="page.fg-secondary"
@@ -57,23 +55,15 @@ export default function MetaGrid({ items }: { items: readonly MetaItem[] }) {
       m={0}
       templateColumns={{ base: '1fr 1fr', md: 'repeat(4, auto)' }}
       justifyContent="start"
-      columnGap="32px"
+      columnGap={8}
       rowGap={5}
     >
       {shown.map((it) => (
         <Box key={it.label} gridColumn={it.wide ? { base: '1 / -1', md: 'auto' } : undefined} minW={0}>
-          <Box
-            as="dt"
-            fontFamily={MONO}
-            fontSize="11px"
-            letterSpacing="0.1em"
-            textTransform="uppercase"
-            color="page.fg-subtle"
-            mb={1.5}
-          >
+          <Box as="dt" textStyle="label" color="page.fg-subtle" mb={1.5}>
             {it.label}
           </Box>
-          <Box as="dd" m={0} fontSize="14px" lineHeight="1.5" color="page.fg">
+          <Box as="dd" m={0} fontSize="small" lineHeight="1.5" color="page.fg">
             {it.value}
           </Box>
         </Box>

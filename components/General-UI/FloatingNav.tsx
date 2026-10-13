@@ -3,6 +3,7 @@ import { Box, Flex } from '@chakra-ui/react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 import Hint, { HintGroup } from './Hint'
+import { cssTransition, motionTransition } from '../../theme/tokens'
 
 /**
  * Right-edge section navigator for long pages (desktop only).
@@ -87,7 +88,7 @@ export default function FloatingNav() {
             initial={{ opacity: 0, x: 16 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 16 }}
-            transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+            transition={motionTransition('base')}
           >
             <HintGroup>
               <Flex
@@ -132,7 +133,7 @@ export default function FloatingNav() {
                             bg={on ? 'var(--accent)' : 'page.dot-idle'}
                             boxShadow={on ? '0 0 0 3px var(--accent-soft)' : '0 0 0 0 transparent'}
                             transform={on ? 'scale(1)' : 'scale(0.75)'}
-                            transition="transform 200ms var(--ease-out-quart), box-shadow 200ms var(--ease-out-quart), background-color 200ms"
+                            transition={cssTransition(['transform', 'box-shadow', 'background-color'], 'fast')}
                             sx={{ '@media (forced-colors: active)': { bg: on ? 'Highlight' : 'CanvasText' } }}
                           />
                         </Box>

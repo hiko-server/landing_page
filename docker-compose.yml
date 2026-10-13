@@ -9,6 +9,8 @@ services:
       args:
         NEXT_PUBLIC_SITE_HOST: ${NEXT_PUBLIC_SITE_HOST:-}
         NEXT_PUBLIC_PRODUCT_NAME: ${NEXT_PUBLIC_PRODUCT_NAME:-}
+        # Theme for visitors without a preference: empty = dark, or light / system.
+        NEXT_PUBLIC_DEFAULT_THEME: ${NEXT_PUBLIC_DEFAULT_THEME:-}
         # Short commit of the deployed tree, shown on /colophon. scripts/deploy.sh
         # exports it; a plain `docker compose build` leaves it empty.
         NEXT_PUBLIC_BUILD_SHA: ${NEXT_PUBLIC_BUILD_SHA:-}

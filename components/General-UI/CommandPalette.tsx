@@ -9,7 +9,6 @@ import {
   Text,
   Kbd,
   Spinner,
-  useColorMode,
   usePrefersReducedMotion,
 } from '@chakra-ui/react'
 import { useRouter } from 'next/router'
@@ -30,7 +29,9 @@ import { NAV_SHORTCUTS, adminEditTarget, shortcutLabelFor } from '../Chrome/chro
 import { useChromeLang } from '../Chrome/chromeLang'
 import { useChromeToast } from '../Chrome/useChromeToast'
 import { useShortcutsEnabled } from '../Chrome/useShortcutsEnabled'
-import { toggleThemeWithTransition } from '../../lib/themeTransition'
+import { useThemePreference } from '../Chrome/useThemePreference'
+import { systemPrefersDark, type ThemePreference } from '../../lib/themePreference'
+import { motionTransition } from '../../theme/tokens'
 import { setShortcutsEnabled } from '../../lib/keyboardShortcuts'
 
 /**
@@ -47,7 +48,7 @@ import { setShortcutsEnabled } from '../../lib/keyboardShortcuts'
  *     keyboard-shortcut cheatsheet.
  *   - WAI-ARIA combobox: the input owns a listbox, the active option is
  *     announced via aria-activedescendant, result counts via a live region.
- *   - Opens instantly (a 120ms scale-in, none under reduced motion); the list
+ *   - Opens instantly (a fast scale-in, none under reduced motion); the list
  *     glides between heights as results change.
  *
  * The search index is fetched once per visit (full page load), the first time
@@ -97,6 +98,13 @@ const GROUP_ORDER: Group[] = ['Recent', 'On this page', 'Admin', 'Pages', 'Actio
 const GROUP_BOOST: Record<Item['group'], number> = { Pages: 6, Admin: 5, Actions: 4, 'On this page': 3, Writing: 2, Work: 2, Content: 2 }
 const KIND_LABEL: Record<SearchDocLike['kind'], string> = { post: 'Post', work: 'Case study', page: 'Page', cv: 'CV' }
 const MONO = 'var(--font-geist-mono), monospace'
+
+/** The theme preference actions, in menu order. */
+const THEME_ITEMS: readonly { value: ThemePreference; label: string; hint: string; keywords: string }[] = [
+  { value: 'system', label: 'System theme', hint: 'follow your device', keywords: 'system auto automatic device os follow' },
+  { value: 'light', label: 'Light theme', hint: 'switch to light', keywords: 'light day bright' },
+  { value: 'dark', label: 'Dark theme', hint: 'switch to dark', keywords: 'dark night' },
+]
 
 // ── Search index (one request per visit) ────────────────────────────────
 
@@ -256,7 +264,7 @@ export default function CommandPalette({ isOpen, onClose, isAdmin = false, retur
   // The palette's own text is English; results in another language carry their own lang.
   const chromeLang = useChromeLang()
   const reduceMotion = usePrefersReducedMotion()
-  const { colorMode, toggleColorMode } = useColorMode()
+  const { preference, choose } = useThemePreference()
   const shortcutsOn = useShortcutsEnabled()
   const baseId = useId()
   const listId = `${baseId}-list`
@@ -464,15 +472,18 @@ export default function CommandPalette({ isOpen, onClose, isAdmin = false, retur
       })
     }
     list.push(
-      {
-        id: 'action:theme',
-        group: 'Actions',
-        kind: 'action',
-        label: 'Toggle theme',
-        hint: colorMode === 'dark' ? 'switch to light' : 'switch to dark',
-        run: () => toggleThemeWithTransition(toggleColorMode, null),
-        keywords: 'dark light mode appearance colour color',
-      },
+      // System / Light / Dark (lib/themePreference.ts); the current one says so.
+      ...THEME_ITEMS.map(
+        ({ value, label, hint, keywords }): Item => ({
+          id: `action:theme-${value}`,
+          group: 'Actions',
+          kind: 'action',
+          label,
+          hint: preference === value ? 'current' : value === 'system' ? `${hint} (${systemPrefersDark() ? 'dark' : 'light'} now)` : hint,
+          run: () => choose(value, null),
+          keywords: `theme appearance mode colour color toggle switch ${keywords}`,
+        }),
+      ),
       {
         // WCAG 2.1.4: single-character shortcuts ("/", "G then …", "E", "?")
         // can be turned off; ⌘K / Ctrl+K keeps working either way.
@@ -544,7 +555,7 @@ export default function CommandPalette({ isOpen, onClose, isAdmin = false, retur
       else if (doc.kind === 'work') list.push(docItem(doc, 'Work'))
     }
     return list
-  }, [isAdmin, editTarget, unread, index, colorMode, toggleColorMode, shortcutsOn, isMac, toast, copyAndToast, backUpNow, logOut])
+  }, [isAdmin, editTarget, unread, index, preference, choose, shortcutsOn, isMac, toast, copyAndToast, backUpNow, logOut])
 
   const recentItems: Item[] = useMemo(() => {
     const out: Item[] = []
@@ -799,7 +810,7 @@ export default function CommandPalette({ isOpen, onClose, isAdmin = false, retur
                 initial: { opacity: 0, scale: 0.98, y: -4 },
                 animate: { opacity: 1, scale: 1, y: 0 },
                 exit: { opacity: 0, scale: 0.98 },
-                transition: { duration: 0.12, ease: [0.22, 1, 0.36, 1] },
+                transition: motionTransition('fast'),
               }
         }
         transformOrigin="top center"
@@ -809,7 +820,7 @@ export default function CommandPalette({ isOpen, onClose, isAdmin = false, retur
         borderRadius="xl"
         mt={['8vh', '15vh']}
         mx={4}
-        boxShadow="0 24px 60px rgba(0,0,0,0.35)"
+        boxShadow="elevation.lg"
         overflow="hidden"
       >
         <Flex borderBottom="1px solid" borderColor="page.border" px={4} h="56px" alignItems="center" gap={3}>
@@ -851,7 +862,7 @@ export default function CommandPalette({ isOpen, onClose, isAdmin = false, retur
           p={2}
           sx={{
             height: { base: 'min(var(--list-h), 65vh)', sm: 'min(var(--list-h), 60vh)' },
-            '&[data-ready]': { transition: 'height 120ms var(--ease-out-quart)' },
+            '&[data-ready]': { transition: 'height var(--duration-fast) var(--ease-standard)' },
           }}
         >
           <Box ref={observeContent}>

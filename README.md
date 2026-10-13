@@ -111,6 +111,15 @@ backup, and a hardened admin GUI for non-engineers.
   *Admin* group with a route-aware *Edit this page*. Its *Keyboard
   shortcuts: on/off* action (also in the admin `?` sheet) turns the
   single-key shortcuts (`/`, `G` then a letter) off, per browser.
+- **Theme** — System / Light / Dark: a one-tap toggle in the header plus a
+  menu beside it (and in ⌘K); dark by default (`NEXT_PUBLIC_DEFAULT_THEME`),
+  applied before the first paint so no page ever flashes the wrong mode,
+  following the OS while on System.
+- **Design system** — fluid type scale, text styles, radii, container widths
+  and one motion curve with three durations as tokens (`theme/tokens.ts`),
+  a page grid with breakout lines, status and elevation colour tokens, and one
+  Lucide icon set on the 4 px grid; affiliation logos are measured on save and
+  sized optically.
 - **Motion with restraint** — circular theme reveal, directional route
   transitions with a pinned header; everything is off under
   `prefers-reduced-motion`, and decorative surfaces have `forced-colors`
@@ -314,6 +323,7 @@ All variables are documented in [`.env.example`](./.env.example). Headlines:
 | Admin bootstrap | `ADMIN_EMAIL`, `ADMIN_PASS` | ✅ on first boot, then deletable |
 | Sessions | `JWT_SECRET` (base64, ≥ 32 bytes) | ✅ always |
 | Site identity | `NEXT_PUBLIC_PRODUCT_NAME`, `NEXT_PUBLIC_SITE_HOST`, `SITE_URL` | recommended |
+| Default theme | `NEXT_PUBLIC_DEFAULT_THEME` (`dark` when empty, `light` or `system`; build time) | optional |
 | Mailer | `SMTP_HOST/PORT/USER/PASS`, `FROM_EMAIL`, `NOTIFY_EMAIL` | optional — silently skipped when unset |
 | Contact captcha | none — built-in nonce + math + honeypot | n/a |
 | GitHub | `GITHUB_TOKEN` (fine-grained, public repositories read-only, no permissions) | recommended (raises API limit 60→5000/h) |

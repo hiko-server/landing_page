@@ -58,6 +58,68 @@
                     }
                 ]
             }
+        },
+        {
+            "files": [
+                "components/General-UI/SectionLabel.tsx",
+                "components/General-UI/PageHeader.tsx",
+                "components/General-UI/PageGrid.tsx",
+                "components/Article/MetaGrid.tsx",
+                "components/GitHub/StatsBar.tsx",
+                "components/Icons/**",
+                "components/Header/ThemeControl.tsx",
+                "components/Header/ThemeMenu.tsx",
+                "components/BrandShowcase/BrandShowcase.tsx"
+            ],
+            "rules": {
+                "no-restricted-syntax": [
+                    "error",
+                    {
+                        "selector": "JSXAttribute[name.name=/^(fontSize|letterSpacing|lineHeight)$/] Literal[value=/^-?[0-9.]+(px|em|rem)$/]",
+                        "message": "Design tokens: use a text style or token from theme/tokens.ts (textStyle=\"label\", fontSize=\"small\", letterSpacing=\"caps\") instead of a raw px / em value in a migrated component."
+                    },
+                    {
+                        "selector": "Property[key.name=/^(fontSize|letterSpacing|lineHeight)$/] Literal[value=/^-?[0-9.]+(px|em|rem)$/]",
+                        "message": "Design tokens: use a text style or token from theme/tokens.ts (textStyle=\"label\", fontSize=\"small\", letterSpacing=\"caps\") instead of a raw px / em value in a migrated component."
+                    },
+                    {
+                        "selector": "Literal[value=/cubic-bezier\\(/]",
+                        "message": "Design tokens: use the standard ease (var(--ease-standard), EASE_STANDARD_CSS, cssTransition(), motionTransition()) from theme/tokens.ts instead of a cubic-bezier literal."
+                    },
+                    {
+                        "selector": "TemplateElement[value.raw=/cubic-bezier\\(/]",
+                        "message": "Design tokens: use the standard ease (var(--ease-standard), EASE_STANDARD_CSS, cssTransition(), motionTransition()) from theme/tokens.ts instead of a cubic-bezier literal."
+                    },
+                    {
+                        "selector": "Property[key.name='ease'] > ArrayExpression",
+                        "message": "Design tokens: use motionTransition() from theme/tokens.ts instead of an inline framer-motion ease array."
+                    }
+                ]
+            }
+        },
+        {
+            "files": [
+                "components/**",
+                "pages/**",
+                "layout/**"
+            ],
+            "excludedFiles": [
+                "components/Admin/**",
+                "pages/admin/**"
+            ],
+            "rules": {
+                "no-restricted-imports": [
+                    "error",
+                    {
+                        "patterns": [
+                            {
+                                "group": ["react-icons", "react-icons/*", "@chakra-ui/icons"],
+                                "message": "Public pages use one icon set: the Lucide icons in components/Icons/ui (chrome / theme / content) and the brand marks in components/Icons/brand.tsx. react-icons stays in the admin."
+                            }
+                        ]
+                    }
+                ]
+            }
         }
     ],
     "settings": {

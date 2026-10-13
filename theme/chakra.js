@@ -1,5 +1,7 @@
 import { extendTheme } from '@chakra-ui/react'
 import { printColorVariables, semanticColors } from './color'
+import { serverColorMode } from '../lib/themePreference'
+import { fontSizes, letterSpacings, radii, textStyles } from './tokens'
 
 /**
  * v6 "Indigo Precision" theme.
@@ -17,38 +19,22 @@ import { printColorVariables, semanticColors } from './color'
  *           platform's Chinese UI fonts listed after the variables below.
  *   focus:  one global 2px var(--accent) focus-visible ring; buttons press to
  *           0.97 scale; toasts use the elevated `v6` Alert variant
- *   grid:   8px base, 1100px max content width
- *   easing: cubic-bezier(0.22, 1, 0.36, 1) (use --ease-out-quart from globals.css)
+ *   grid:   8px base, 1100px max content width (PageGrid: content / wide / full lines)
+ *   tokens: fluid type scale, text styles, letter-spacings, radii, container
+ *           widths and motion (one ease, three durations, zero under reduced
+ *           motion) come from theme/tokens.ts — `textStyle="label"`,
+ *           `fontSize="display"`; its CSS custom properties (`var(--ease-
+ *           standard)`, `var(--duration-fast)`, `--container-*`, elevation)
+ *           are mirrored in styles/globals.css (checked by tests)
  *
- * Older brand.* colors are kept for backward compatibility with components
- * that still reference them; new code should use semantic tokens ('page.bg',
- * 'page.fg', 'page.muted', 'page.border', 'page.surface', 'accent.500').
+ * Colours: the semantic tokens ('page.bg', 'page.fg', 'page.muted',
+ * 'page.border', 'page.surface', 'status.*', 'accent.text' …, theme/color.ts)
+ * plus the accent scale below. The legacy `brand.*` and `ink.*` scales are
+ * gone: nothing referenced them, and every unused token still cost bytes in
+ * the shared bundle and a CSS variable on every page.
  */
 
 const colors = {
-  // Legacy (kept so existing components don't break visually mid-refactor)
-  brand: {
-    900: '#1a365d',
-    800: '#153e75',
-    700: '#2a69ac',
-  },
-
-  // v6 ink scale — neutral grayscale tuned for OLED + paper-white extremes
-  ink: {
-    0: '#050505',
-    50: '#0a0a0a',
-    100: '#0e0e0e',
-    200: '#181818',
-    300: '#262626',
-    400: '#404040',
-    500: '#525252',
-    600: '#737373',
-    700: '#a1a1a1',
-    800: '#d4d4d4',
-    900: '#fafafa',
-    1000: '#fdfdfd',
-  },
-
   // v6 single brand accent — Tailwind indigo scale for `accent.500` -> #6366f1
   accent: {
     50: '#eef2ff',
@@ -79,6 +65,14 @@ const fonts = {
 // `outline` shadow (checkbox, switch, tabs, close buttons…) get the accent.
 const shadows = {
   outline: '0 0 0 2px var(--accent)',
+  // Three elevation levels: theme/color.ts semanticShadows, as CSS custom
+  // properties per data-theme in styles/globals.css (static CSS, so the
+  // shared bundle stays lean). `boxShadow="elevation.md"`.
+  elevation: {
+    sm: 'var(--elevation-sm)',
+    md: 'var(--elevation-md)',
+    lg: 'var(--elevation-lg)',
+  },
 }
 
 /** The site-wide keyboard focus ring (also the global *:focus-visible rule below). */
@@ -88,21 +82,21 @@ const FOCUS_RING = {
   boxShadow: 'none',
 }
 
-/** Left status bar of the `v6` Alert (toasts): the accent for good news, warm colours for problems. */
+/** Left status bar of the `v6` Alert (toasts): the accent for good news, the status tokens for problems. */
 const ALERT_BAR = {
   success: 'var(--accent)',
   info: 'var(--accent)',
   loading: 'var(--accent)',
-  warning: 'orange.400',
-  error: 'red.400',
+  warning: 'status.warning',
+  error: 'status.error',
 }
 
 const components = {
   Button: {
     baseStyle: {
       transitionProperty: 'common',
-      transitionDuration: '160ms',
-      transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
+      transitionDuration: 'var(--duration-fast)',
+      transitionTimingFunction: 'var(--ease-standard)',
       // Press feedback (zeroed by the global reduced-motion rule). Drag
       // handles opt out with _active={{ transform: 'none' }}.
       _active: { transform: 'scale(0.97)' },
@@ -145,19 +139,20 @@ const components = {
             borderRadius: 'md',
             borderInlineStartWidth: '3px',
             borderInlineStartColor: bar,
+            boxShadow: 'elevation.md',
           },
           icon: { color: bar },
           spinner: { color: bar },
           title: {
             fontFamily: 'mono',
-            fontSize: '12px',
+            fontSize: 'caption',
             fontWeight: 600,
-            letterSpacing: '0.08em',
+            letterSpacing: 'caps-tight',
             textTransform: 'uppercase',
             lineHeight: '6',
           },
           description: {
-            fontSize: '14px',
+            fontSize: 'small',
             color: 'page.fg',
           },
         }
@@ -181,15 +176,23 @@ const theme = {
   ...extendTheme({
     colors,
     fonts,
+    fontSizes,
+    letterSpacings,
+    radii,
+    textStyles,
     shadows,
     components,
     semanticTokens,
     config: {
-      // Deliberate: v6 is dark-first. A first-time visitor always gets the
-      // brand's dark look (no system-preference switch); an explicit toggle is
-      // remembered (localStorage, applied before first paint by the
-      // ColorModeScript in pages/_document.tsx).
-      initialColorMode: 'dark',
+      // The visitor's System / Light / Dark preference decides the mode
+      // (lib/themePreference.ts: applied before first paint by
+      // pages/_document.tsx, stored by the colorModeManager in pages/_app).
+      // Without a preference the default is NEXT_PUBLIC_DEFAULT_THEME — the
+      // brand's dark look when unset. This is only the mode of the server
+      // render, which nothing visible depends on (everything is CSS
+      // variables keyed off data-theme). Chakra's own system listener stays
+      // off: it would override an explicit Light / Dark choice.
+      initialColorMode: serverColorMode(),
       useSystemColorMode: false,
     },
     styles: {

@@ -34,6 +34,44 @@ mental model:
 - `lib/homeShape.ts` vs `lib/home.ts` — server-only vs client-safe
   split (do NOT collapse them, see the comment block in `home.ts`).
 
+## Design tokens
+
+Typography, radii, container widths and motion are tokens in
+`theme/tokens.ts`; colours (contrast-tested light/dark pairs) and the
+three elevation shadows are in `theme/color.ts`. `theme/chakra.js`
+registers them with Chakra; their CSS custom properties (`--ease-standard`,
+`--duration-*`, `--container-*`, `--page-gutter`, `--elevation-*`) are
+mirrored as static CSS in `styles/globals.css` — tests keep the two
+identical, so change a value in the `.ts` source and in `globals.css`.
+In a Chakra `Heading` (which brings its own responsive sizes) spread
+`{...textStyleProps('title-lg')}` instead of `textStyle="title-lg"`.
+
+- **Type**: a fluid scale (clamp between a 360 px and a 1280 px viewport)
+  with named text styles — `textStyle="label"` (mono caps), `"meta"`,
+  `"small"`, `"lede"`, `"title-sm"` … `"title-xl"`, `"display"`, `"stat"`;
+  or a size alone: `fontSize="caption"`. Tracking: `letterSpacing="caps"`.
+- **Radii**: `control` (buttons, inputs), `card`, `panel`, `pill`.
+- **Layout**: `components/General-UI/PageGrid.tsx` — the page column with
+  named `content` / `wide` / `full` lines (`<Breakout span="wide">`).
+- **Motion**: one ease and three durations — `var(--ease-standard)`,
+  `var(--duration-fast | -base | -slow)` (0ms under
+  `prefers-reduced-motion`), or from TypeScript `cssTransition()` and
+  `motionTransition(duration, reduce)` for framer-motion.
+- **Icons** on public pages: Lucide (ISC) in `components/Icons/ui/`,
+  sized on the 4 px grid with `size="xs" | "sm" | "md" | "lg"`. Import from
+  the group file — `ui/chrome` (shared header / footer, keep it small),
+  `ui/theme` (on-demand theme menu), `ui/content` (page chunks) — never
+  through a barrel. Brand marks are in `components/Icons/brand.tsx`.
+
+**The guard.** Lint runs with `--max-warnings 0`, so the token rule cannot
+be a warning across the whole codebase while older components still use
+raw values. Instead it is an *error* on the components already migrated:
+the `no-restricted-syntax` override in `.eslintrc.json` rejects raw
+px / em `fontSize`, `letterSpacing` and `lineHeight` values,
+`cubic-bezier(…)` literals and inline framer-motion ease arrays there.
+When you migrate a component (no blanket codemods — one component at a
+time, checked in both themes), add its path to that override's `files`.
+
 ## Local checks before pushing
 
 ```bash

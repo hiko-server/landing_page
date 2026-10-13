@@ -1,4 +1,4 @@
-import React from 'react'
+import type React from 'react'
 import { Box, Text } from '@chakra-ui/react'
 
 /**
@@ -41,10 +41,8 @@ export default function SectionLabel({
       id={id}
       className="section-label-rule"
       mb={mb}
-      fontFamily="var(--font-geist-mono), monospace"
-      fontSize="11px"
-      letterSpacing="0.12em"
-      textTransform="uppercase"
+      // The `label` text style (theme/tokens.ts): mono caps, 11→12px fluid.
+      textStyle="label"
       // AA-contrast subtle token (CSS variable): legible at 11px in both modes
       // and correct on the first paint.
       color="page.fg-subtle"

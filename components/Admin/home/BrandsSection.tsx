@@ -2,7 +2,11 @@ import { Box, Button, Flex, Text } from '@chakra-ui/react'
 import { AddIcon } from '@chakra-ui/icons'
 import SortableList from '../shell/SortableList'
 import { outlineButtonProps } from '../shell/ui'
-import { moveItem, newId, type BrandItem } from './homeForm'
+import { moveItem, newId, normalizeUrl, stripTs, type BrandItem } from './homeForm'
+import { useLogoMetrics, type LogoMeasurement } from './useLogoMetrics'
+import { BrandStrip, brandsForDisplay } from '../../BrandShowcase/BrandShowcase'
+import { opticalLogoSize, UNMEASURED_LOGO } from '../../../lib/logoSize'
+import { snapBrandScale } from '../../../lib/homeShape'
 import {
   CardShell,
   ImagePreview,
@@ -21,16 +25,43 @@ const nameFromFile = (file: File) =>
     .replace(/[-_]+/g, ' ')
     .trim()
 
+/** The image URL as it will be saved (no preview cache-buster, leading slash). */
+const cleanImage = (u: string) => normalizeUrl(stripTs(u.trim()))
+
+/** "Optical size 105 × 19 px · content 5.56:1 · ink 23 %" (or why there is none yet). */
+function measurementText(measurement: LogoMeasurement | undefined, image: string, scale: number): string {
+  if (!image) return 'No image yet.'
+  if (measurement === undefined) return 'Measuring…'
+  const m = measurement.metrics
+  if (!m) {
+    return `Not measurable${measurement.reason ? ` (${measurement.reason})` : ''}: shown in the fixed ${UNMEASURED_LOGO.width} × ${UNMEASURED_LOGO.height} px box.`
+  }
+  const { width, height } = opticalLogoSize(m, snapBrandScale(scale))
+  return `Optical size ${width} × ${height} px · content ${m.aspect.toFixed(2)}:1 · ink ${Math.round(m.density * 100)} %`
+}
+
 /**
  * Affiliation logos as sortable cards: checkerboard preview (shows
  * transparency) with the logo scale applied, name, link, image URL and a
  * 0.5–2 scale. Same card, drop zone and Undo as the photos.
+ *
+ * Above the cards, a live preview of the public strip: logos are sized
+ * optically from their measured content box and ink (lib/logoSize.ts — the
+ * same measurement the save stores), and each card says what was measured,
+ * so the scale is only needed for taste.
  */
 export default function BrandsSection({ value, onChange }: SectionProps<BrandItem[]>) {
   const remove = useUndoableRemove(onChange, 'logo')
   const { busy, upload } = useCardUpload()
   const patch = (id: string, change: Partial<BrandItem>) =>
     onChange((prev) => prev.map((b) => (b._id === id ? { ...b, ...change } : b)))
+  const measured = useLogoMetrics(value.map((b) => (b.image ? cleanImage(b.image) : '')))
+  const preview = brandsForDisplay(
+    value.map((b) => {
+      const image = b.image ? cleanImage(b.image) : ''
+      return { name: b.name, href: '', image, scale: b.scale, metrics: measured.get(image)?.metrics ?? undefined }
+    }),
+  )
 
   return (
     <Box>
@@ -41,6 +72,18 @@ export default function BrandsSection({ value, onChange }: SectionProps<BrandIte
           onChange((prev) => [...prev, { _id: newId(), name: nameFromFile(file), href: '', image: url, scale: 1 }])
         }
       />
+      {preview.length > 0 ? (
+        <Box as="section" aria-label="Brand strip preview" mb={4} p={4} border="1px solid" borderColor="page.border" borderRadius="card" bg="page.bg">
+          <Text textStyle="label" color="page.fg-secondary" mb={3}>
+            Preview
+          </Text>
+          <BrandStrip brands={preview} />
+          <Text mt={3} fontSize="xs" color="page.fg-secondary">
+            Each logo is sized from its measured shape and ink, cropped to its content, and re-measured when you save.
+            Logo scale multiplies that size.
+          </Text>
+        </Box>
+      ) : null}
       {value.length === 0 ? (
         <Text fontSize="sm" color="page.fg-secondary" mb={3}>
           No logos yet — the brand strip stays hidden until you add one.
@@ -76,6 +119,9 @@ export default function BrandsSection({ value, onChange }: SectionProps<BrandIte
               <TextField label="Link" value={b.href} onChange={(v) => patch(b._id, { href: v })} placeholder="https://…" invalid={linkError(b.href)} />
               <TextField label="Image URL" value={b.image} onChange={(v) => patch(b._id, { image: v })} placeholder="/images/brand/…" invalid={linkError(b.image)} />
               <ScaleField value={b.scale} onChange={(v) => patch(b._id, { scale: v })} />
+              <Text fontSize="xs" color="page.fg-secondary" className="tnum">
+                {measurementText(b.image ? measured.get(cleanImage(b.image)) : undefined, b.image, b.scale)}
+              </Text>
             </CardShell>
           )}
         />
