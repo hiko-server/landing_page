@@ -8,6 +8,7 @@ import {
   listHomeSnapshots,
   restoreHomeSnapshot,
   readHomeSnapshot,
+  normalizeHomeWrite,
   type HomeData,
 } from '../../lib/home'
 import { attachmentDisposition, ifMatchAllows, kvEtag, restoreErrorStatus, safeSnapshotName, stableStringify } from '../../lib/contentStore'
@@ -16,6 +17,8 @@ import { rateLimit } from '../../lib/rateLimit'
 import { isAdminRequest } from '../../lib/auth'
 import { sendVersionedJson } from '../../lib/http'
 import { revalidatePaths } from '../../lib/revalidate'
+import { withApi } from '../../lib/apiHandler'
+import type { Logger } from '../../lib/log'
 
 const isAuthed = isAdminRequest
 
@@ -26,22 +29,28 @@ const isAuthed = isAdminRequest
  *                          editors load GET /api/admin/home
  *   GET ?snapshots=1       admin: snapshot file list
  *   GET ?download=1[&file] admin: download the full document or a snapshot
- *   PUT                    admin: save the full document; honours If-Match
+ *   PUT                    admin: save the full document; honours If-Match.
+ *                          Availability, open-source picks, the site name
+ *                          and logo scales are validated and normalised
+ *                          (lib/homeShape normalizeHomeWrite): 422
+ *                          {code:'INVALID_HOME', error, errors} on bad input
  *   POST {action}          admin: snapshot / restore
  */
 
 /**
- * Statically generated pages that render home data. /now shows
- * hero.currentlyCoding, so a save or restore must regenerate it right away
- * instead of leaving the ISR copy (possibly with a cleared value) live.
+ * Statically generated (ISR) pages that render home data, regenerated after a
+ * save or restore. Only ISR pages belong here: `/`, `/about` and `/contact`
+ * are server-rendered on every request (getServerSideProps) and are always
+ * fresh. /now shows hero.currentlyCoding.
  */
-const HOME_STATIC_PATHS = ['/now']
+export const HOME_STATIC_PATHS: readonly string[] = ['/now']
 
 /** Regenerate home-backed static pages; never fails the (already stored) write. */
 async function revalidateHomePages(res: NextApiResponse): Promise<{ revalidated: string[]; revalidateFailed?: string[] }> {
-  const failed = await revalidatePaths(res, HOME_STATIC_PATHS)
+  const paths = [...HOME_STATIC_PATHS]
+  const failed = await revalidatePaths(res, paths)
   return {
-    revalidated: HOME_STATIC_PATHS.filter((p) => !failed.includes(p)),
+    revalidated: paths.filter((p) => !failed.includes(p)),
     ...(failed.length ? { revalidateFailed: failed } : {}),
   }
 }
@@ -69,7 +78,7 @@ function isHomePayload(body: unknown): body is HomeData {
   )
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default withApi('home', async (req: NextApiRequest, res: NextApiResponse, ctx) => {
   if (req.method === 'GET') {
     // List home snapshots
     if (req.query.snapshots === '1') {
@@ -107,8 +116,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const rl = rateLimit(req, 30, 10 * 60 * 1000)
     res.setHeader('X-RateLimit-Remaining', String(rl.remaining))
     if (!rl.allowed) return res.status(429).json({ error: 'Too many updates, try later' })
-    const body: unknown = req.body
-    if (!isHomePayload(body)) return res.status(400).json({ error: 'Invalid payload' })
+    const raw: unknown = req.body
+    if (!isHomePayload(raw)) return res.status(400).json({ error: 'Invalid payload' })
+    const checked = normalizeHomeWrite(raw)
+    if (!checked.ok) {
+      return res.status(422).json({
+        code: 'INVALID_HOME',
+        error: checked.errors.map((e) => e.message).join(' '),
+        errors: checked.errors,
+      })
+    }
+    const body = checked.home
 
     const ifMatch = req.headers['if-match']
     const current = readHomeWithVersion()
@@ -120,11 +138,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return sendVersionedJson(res, 200, { ok: true, unchanged: true, etag }, etag)
     }
 
-    try {
-      saveHomeSnapshot()
-    } catch (err) {
-      console.warn('home: snapshot before write failed', err)
-    }
+    snapshotQuietly(ctx.log, 'write')
     // The If-Match check is repeated atomically inside the write transaction.
     const writeResult = await writeHome(body, {
       precondition: (version) => ifMatchAllows(ifMatch, version),
@@ -138,7 +152,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       to: process.env.NOTIFY_EMAIL || process.env.ADMIN_EMAIL || 'hi@lucian-dev.com',
       subject: 'Home updated',
       text: `Home updated at ${new Date().toISOString()}`,
-    }).catch((err) => console.warn('home: notification mail failed', err?.message || err))
+    }).catch((err) => ctx.log.warn('home notification mail failed', { err }))
     const revalidation = await revalidateHomePages(res)
     return sendVersionedJson(res, 200, {
       ok: true,
@@ -158,11 +172,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
     if (action === 'restore') {
       if (!safeSnapshotName(filename)) return res.status(400).json({ error: 'Missing or invalid filename' })
-      try {
-        saveHomeSnapshot()
-      } catch (err) {
-        console.warn('home: snapshot before restore failed', err)
-      }
+      snapshotQuietly(ctx.log, 'restore')
       const result = await restoreHomeSnapshot(filename)
       if (!result.ok) return res.status(restoreErrorStatus(result.error)).json({ error: result.error })
       const etag = kvEtag(result.updatedAt)
@@ -179,4 +189,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   res.setHeader('Allow', 'GET,PUT,POST')
   return res.status(405).json({ error: 'Method not allowed' })
+})
+
+/** Keep the current state recoverable before a write; a failed snapshot never blocks the write. */
+function snapshotQuietly(log: Logger, before: string) {
+  try {
+    saveHomeSnapshot()
+  } catch (err) {
+    log.warn('home snapshot failed', { before, err })
+  }
 }

@@ -1,7 +1,9 @@
 /**
- * VIS-2: every successful CV write (PUT, restore, import, versions restore)
- * and home write (PUT, restore, versions restore) regenerates the ISR /now
- * page and reports it; the version ETag survives untouched.
+ * VIS-2 / S3: every successful CV write (PUT, restore, import, versions
+ * restore) and home write (PUT, restore, versions restore) regenerates the
+ * ISR pages that render that data (CV_STATIC_PATHS / HOME_STATIC_PATHS) and
+ * reports them; the version ETag survives untouched. Server-rendered pages
+ * (/, /about, /contact, /cv, /cv/zh) are always fresh and never listed.
  */
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
@@ -20,6 +22,9 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'r3-cvadmin-'))
 type Handler = (req: any, res: any) => unknown
 let cvdata: Handler, home: Handler, versions: Handler
 let closeDb: () => void
+let CV_PATHS: readonly string[] = []
+let HOME_PATHS: readonly string[] = []
+const SSR_PATHS = ['/', '/about', '/contact', '/cv', '/cv/zh']
 
 type MockRes = { statusCode: number; headers: Record<string, string>; body: any; revalidated: string[] }
 
@@ -69,10 +74,10 @@ const homeDoc = (coding: string) => ({
   brands: [],
 })
 
-function assertRevalidated(r: MockRes, label: string) {
+function assertRevalidated(r: MockRes, label: string, paths: readonly string[]) {
   assert.equal(r.statusCode, 200, label)
-  assert.deepEqual(r.revalidated, ['/now'], `${label}: /now regenerated`)
-  assert.deepEqual(r.body.revalidated, ['/now'], `${label}: reported`)
+  assert.deepEqual([...r.revalidated].sort(), [...paths].sort(), `${label}: ISR pages regenerated`)
+  assert.deepEqual([...r.body.revalidated].sort(), [...paths].sort(), `${label}: reported`)
   assert.equal(r.body.revalidateFailed, undefined, label)
   assert.match(r.body.etag, /^"\d+"$/, label)
   assert.equal(r.headers.etag, r.body.etag, `${label}: version ETag kept`)
@@ -81,8 +86,12 @@ function assertRevalidated(r: MockRes, label: string) {
 before(async () => {
   process.chdir(tmp)
   fs.mkdirSync(path.join(tmp, 'data'), { recursive: true })
-  cvdata = (await import('../pages/api/cvdata')).default
-  home = (await import('../pages/api/home')).default
+  const cvMod = await import('../pages/api/cvdata')
+  const homeMod = await import('../pages/api/home')
+  cvdata = cvMod.default
+  home = homeMod.default
+  CV_PATHS = cvMod.CV_STATIC_PATHS
+  HOME_PATHS = homeMod.HOME_STATIC_PATHS
   versions = (await import('../pages/api/versions')).default
   closeDb = (await import('../lib/db')).closeDb
 })
@@ -93,8 +102,17 @@ after(() => {
   fs.rmSync(tmp, { recursive: true, force: true })
 })
 
-test('CV PUT, import and restore regenerate /now', async () => {
-  assertRevalidated(await call(cvdata, { method: 'PUT', body: cv('First Co') }), 'PUT')
+test('the path lists hold only ISR pages that render CV / home data', () => {
+  assert.ok(CV_PATHS.includes('/now'), 'CV: /now renders public CV sections')
+  assert.ok(HOME_PATHS.includes('/now'), 'home: /now renders hero.currentlyCoding')
+  for (const p of SSR_PATHS) {
+    assert.ok(!CV_PATHS.includes(p), `CV list must not contain the SSR page ${p}`)
+    assert.ok(!HOME_PATHS.includes(p), `home list must not contain the SSR page ${p}`)
+  }
+})
+
+test('CV PUT, import and restore regenerate the CV ISR pages', async () => {
+  assertRevalidated(await call(cvdata, { method: 'PUT', body: cv('First Co') }), 'PUT', CV_PATHS)
 
   const unchanged = await call(cvdata, { method: 'PUT', body: cv('First Co') })
   assert.equal(unchanged.body.unchanged, true)
@@ -102,8 +120,8 @@ test('CV PUT, import and restore regenerate /now', async () => {
 
   const snap = await call(cvdata, { method: 'POST', body: { action: 'snapshot' } })
   assert.equal(snap.statusCode, 200)
-  assertRevalidated(await call(cvdata, { method: 'POST', body: { action: 'import', data: cv('Imported Co') } }), 'import')
-  assertRevalidated(await call(cvdata, { method: 'POST', body: { action: 'restore', filename: snap.body.file } }), 'restore')
+  assertRevalidated(await call(cvdata, { method: 'POST', body: { action: 'import', data: cv('Imported Co') } }), 'import', CV_PATHS)
+  assertRevalidated(await call(cvdata, { method: 'POST', body: { action: 'restore', filename: snap.body.file } }), 'restore', CV_PATHS)
 
   const failedImport = await call(cvdata, { method: 'POST', body: { action: 'import', data: 'not json' } })
   assert.equal(failedImport.statusCode, 400)
@@ -115,25 +133,28 @@ test('a failed revalidation is reported without failing the save', async () => {
   assert.equal(r.statusCode, 200)
   assert.equal(r.body.ok, true)
   assert.deepEqual(r.body.revalidated, [])
-  assert.deepEqual(r.body.revalidateFailed, ['/now'])
+  assert.deepEqual([...r.body.revalidateFailed].sort(), [...CV_PATHS].sort())
   assert.equal(r.headers.etag, r.body.etag)
 })
 
-test('home PUT and restore regenerate /now', async () => {
-  assertRevalidated(await call(home, { method: 'PUT', body: homeDoc('lucian-dev') }), 'home PUT')
+test('home PUT and restore regenerate the home ISR pages', async () => {
+  assertRevalidated(await call(home, { method: 'PUT', body: homeDoc('lucian-dev') }), 'home PUT', HOME_PATHS)
   const snap = await call(home, { method: 'POST', body: { action: 'snapshot' } })
   await call(home, { method: 'PUT', body: homeDoc('') })
-  assertRevalidated(await call(home, { method: 'POST', body: { action: 'restore', filename: snap.body.file } }), 'home restore')
+  assertRevalidated(await call(home, { method: 'POST', body: { action: 'restore', filename: snap.body.file } }), 'home restore', HOME_PATHS)
 })
 
 test('versions restore regenerates /now for CV and home', async () => {
   for (const type of ['cv', 'home'] as const) {
     const snap = await call(versions, { method: 'POST', query: { type }, body: { action: 'snapshot' } })
     assert.equal(snap.statusCode, 200)
-    assertRevalidated(
-      await call(versions, { method: 'POST', query: { type }, body: { action: 'restore', filename: snap.body.file } }),
-      `versions ${type}`,
-    )
+    // pages/api/versions.ts keeps its own list (authoring stream); it must
+    // at least refresh /now and report exactly what it refreshed.
+    const r = await call(versions, { method: 'POST', query: { type }, body: { action: 'restore', filename: snap.body.file } })
+    assert.equal(r.statusCode, 200, `versions ${type}`)
+    assert.ok(r.revalidated.includes('/now'), `versions ${type}: /now regenerated`)
+    assert.deepEqual([...r.body.revalidated].sort(), [...r.revalidated].sort(), `versions ${type}: reported`)
+    assert.equal(r.headers.etag, r.body.etag, `versions ${type}: version ETag kept`)
   }
   const missing = await call(versions, { method: 'POST', query: { type: 'cv' }, body: { action: 'restore', filename: 'cv_2000-01-01_00-00-00-000.json' } })
   assert.notEqual(missing.statusCode, 200)

@@ -1,7 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { getCookie, setCookie } from 'cookies-next'
 import { ensureAdminFromEnv, loginGate, loginLockState, loginPressure, readAdmin, verifyCredentials } from '../../../lib/admin'
-import { ADMIN_COOKIE, ADMIN_SESSION_TTL_S, signAdminToken } from '../../../lib/auth'
+import { ADMIN_COOKIE, ADMIN_SESSION_TTL_S, setAdminHint, signAdminToken } from '../../../lib/auth'
+import { withApi } from '../../../lib/apiHandler'
 import { getJwtSecret, isProd } from '../../../lib/env'
 import { clientKey, rateLimit, rateLimitNetwork } from '../../../lib/rateLimit'
 import { KNOWN_DEVICE_COOKIE, KNOWN_DEVICE_TTL_S, signKnownDevice, verifyKnownDevice } from '../../../lib/security/knownDevice'
@@ -29,7 +30,8 @@ import { DEFAULT_LOGIN_POLICY } from '../../../lib/security/loginThrottle'
  *      compare; unknown email and wrong password take the same path, the
  *      same time and get the same answer.
  *   6. JWT (HS256, 7d, bound to the session version) in an httpOnly +
- *      sameSite=strict + secure cookie.
+ *      sameSite=strict + secure cookie, plus the readable `cv_admin_hint=1`
+ *      companion cookie (lib/auth ADMIN_HINT_COOKIE; grants nothing).
  */
 
 const ALLOWED_BODY_KEYS = new Set(['email', 'password'])
@@ -57,7 +59,7 @@ function throttled(res: NextApiResponse, retryAfterMs: number) {
   return res.status(429).json({ error: THROTTLED })
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default withApi('auth/email-login', async (req: NextApiRequest, res: NextApiResponse, ctx) => {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST')
     return res.status(405).json({ error: 'Method not allowed' })
@@ -101,7 +103,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     outcome = await admission.result
   } catch (err) {
-    console.error('[auth] credential check failed', err)
+    ctx.log.error('credential check failed', { err })
     return res.status(500).json({ error: 'Sign-in is unavailable right now. Please try again.' })
   }
 
@@ -117,5 +119,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Remember this browser (keeping its id when it was already known) so it
   // skips the login queue during a future distributed attack.
   setCookie(KNOWN_DEVICE_COOKIE, signKnownDevice(secret, device?.id), { ...cookieBase, maxAge: KNOWN_DEVICE_TTL_S })
+  setAdminHint(req, res)
   return res.status(200).json({ ok: true })
-}
+})

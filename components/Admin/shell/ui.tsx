@@ -12,15 +12,18 @@ import {
   Kbd,
   Link,
   Text,
+  VisuallyHidden,
   Wrap,
   WrapItem,
   type BoxProps,
   type ButtonProps,
 } from '@chakra-ui/react'
+import { keyframes } from '@emotion/react'
 import HeaderFooter from '../../../layout/HeaderFooter'
 import CustomHead from '../../General-UI/CustomHead'
 import { isSaveShortcut } from './shortcuts'
 import { loginHref } from './http'
+import ShortcutsOverlay from './ShortcutsOverlay'
 
 /**
  * Admin shell primitives — the v6 public look (near-black / paper, 1px
@@ -161,8 +164,66 @@ const SAVE_COPY: Record<SaveState, string> = {
   loading: 'Loading…',
 }
 
-/** Dot + label announcing the editor's save state to screen readers. */
-export function SaveStatus({ state, label }: { state: SaveState; label?: string }) {
+const SAVED_AGO_REFRESH_MS = 15_000
+
+/** "just now", "12 sec. ago", "3 min. ago", … (Intl.RelativeTimeFormat, English UI). */
+export function formatSavedAgo(savedAt: number, now: number): string {
+  const s = Math.max(0, Math.round((now - savedAt) / 1000))
+  if (s < 10) return 'just now'
+  const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto', style: 'short' })
+  if (s < 60) return rtf.format(-s, 'second')
+  if (s < 3600) return rtf.format(-Math.floor(s / 60), 'minute')
+  if (s < 86400) return rtf.format(-Math.floor(s / 3600), 'hour')
+  return rtf.format(-Math.floor(s / 86400), 'day')
+}
+
+/** Current time, re-read every `intervalMs` while `active` (null = paused). */
+function useNow(active: boolean, intervalMs: number): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!active) return
+    setNow(Date.now())
+    const id = window.setInterval(() => setNow(Date.now()), intervalMs)
+    return () => window.clearInterval(id)
+  }, [active, intervalMs])
+  return now
+}
+
+const dotPulse = keyframes`
+  0%, 80%, 100% { opacity: 0.25; }
+  40% { opacity: 1; }
+`
+
+/** Three mono dots blinking in turn; static under reduced motion. */
+function SavingDots() {
+  return (
+    <Box
+      as="span"
+      display="inline-flex"
+      aria-hidden
+      sx={{
+        '& > span': { animation: `${dotPulse} 1.2s ease-in-out infinite` },
+        '& > span:nth-of-type(2)': { animationDelay: '0.2s' },
+        '& > span:nth-of-type(3)': { animationDelay: '0.4s' },
+        '@media (prefers-reduced-motion: reduce)': { '& > span': { animation: 'none', opacity: 1 } },
+      }}
+    >
+      <span>.</span>
+      <span>.</span>
+      <span>.</span>
+    </Box>
+  )
+}
+
+/**
+ * Dot + label for the editor's save state. The polite live region carries
+ * only the state ("Saved", "Unsaved changes", "Saving…"), so screen readers
+ * hear changes, not a ticking clock; the relative "· 12 sec. ago" next to it
+ * is aria-hidden and refreshed every 15 s. Pass `savedAt` (ms) after a save.
+ */
+export function SaveStatus({ state, label, savedAt }: { state: SaveState; label?: string; savedAt?: number }) {
+  const showAgo = state === 'clean' && !label && typeof savedAt === 'number' && savedAt > 0
+  const now = useNow(showAgo, SAVED_AGO_REFRESH_MS)
   const dot =
     state === 'dirty'
       ? 'orange.400'
@@ -171,18 +232,39 @@ export function SaveStatus({ state, label }: { state: SaveState; label?: string 
         : state === 'clean'
           ? 'green.400'
           : 'page.muted'
+  const text = label || (showAgo ? 'Saved' : SAVE_COPY[state])
   return (
-    <HStack
-      spacing={2}
-      fontFamily={MONO}
-      fontSize="11px"
-      color="page.fg-secondary"
-      role="status"
-      aria-live="polite"
-      minW={0}
-    >
-      <Box w="7px" h="7px" borderRadius="full" bg={dot} flexShrink={0} aria-hidden />
-      <Text noOfLines={1}>{label || SAVE_COPY[state]}</Text>
+    <HStack spacing={2} fontFamily={MONO} fontSize="11px" color="page.fg-secondary" minW={0}>
+      <Box
+        w="7px"
+        h="7px"
+        borderRadius="full"
+        bg={dot}
+        flexShrink={0}
+        aria-hidden
+        transition="background-color 180ms var(--ease-out-quart, ease-out)"
+      />
+      <Text as="span" noOfLines={1}>
+        <Box as="span" role="status" aria-live="polite" aria-atomic="true">
+          {state === 'saving' && !label ? (
+            <>
+              <VisuallyHidden>Saving…</VisuallyHidden>
+              <Box as="span" aria-hidden>
+                Saving
+                <SavingDots />
+              </Box>
+            </>
+          ) : (
+            text
+          )}
+        </Box>
+        {showAgo ? (
+          <Box as="span" aria-hidden className="tnum">
+            {' · '}
+            {formatSavedAgo(savedAt as number, Math.max(now, savedAt as number))}
+          </Box>
+        ) : null}
+      </Text>
     </HStack>
   )
 }
@@ -334,7 +416,8 @@ export function SessionExpiredNotice({
 /**
  * Slim sticky title bar that sits right under the site header: eyebrow +
  * title on the left, status and actions on the right, optional second slot
- * (tabs) in the same bar.
+ * (tabs) in the same bar. It also mounts the "?" keyboard-shortcuts overlay,
+ * so every admin page with a title bar has it.
  */
 export function AdminTitleBar({
   eyebrow,
@@ -391,6 +474,7 @@ export function AdminTitleBar({
         <HStack spacing={{ base: 2, md: 3 }} flexShrink={0} flexWrap="wrap" justify="flex-end">
           {status}
           {actions}
+          <ShortcutsOverlay />
         </HStack>
       </Flex>
     </Box>

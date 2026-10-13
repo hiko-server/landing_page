@@ -1,12 +1,12 @@
 /**
  * Dashboard tab ⇆ URL query mapping (pure — unit tested).
  *
- *   ?tab=home | cv | versions | storage | inbox   (legacy alias: history → versions)
+ *   ?tab=home | cv | versions | storage | inbox | analytics   (legacy alias: history → versions)
  *   ?view=raw                             (CV tab only: the raw JSON editor)
  */
 
-// Order = Alt/⌃+1…5 shortcuts; new tabs go at the end so existing ones keep their keys.
-export const DASHBOARD_TABS = ['home', 'cv', 'versions', 'storage', 'inbox'] as const
+// Order = Alt/⌃+1…6 shortcuts; new tabs go at the end so existing ones keep their keys.
+export const DASHBOARD_TABS = ['home', 'cv', 'versions', 'storage', 'inbox', 'analytics'] as const
 export type DashboardTab = (typeof DASHBOARD_TABS)[number]
 
 export const CV_VIEWS = ['studio', 'raw'] as const

@@ -71,11 +71,14 @@ const setCookies = (o: Out): string[] => {
 
 let deviceCookie = ''
 
-test('success sets the session and a long-lived signed known-device cookie', async () => {
+test('success sets the session, the readable admin hint and a long-lived signed known-device cookie', async () => {
   const ok = await login(OWNER, PASS, '203.0.113.10')
   assert.equal(ok.statusCode, 200)
   const cookies = setCookies(ok)
   assert.ok(cookies.some((c) => c.startsWith('cv_admin_token=')))
+  const hint = cookies.find((c) => c.startsWith('cv_admin_hint='))
+  assert.ok(hint, 'admin hint cookie set')
+  assert.doesNotMatch(hint, /HttpOnly/)
   const device = cookies.find((c) => c.startsWith('cv_known_device='))
   assert.ok(device, 'known-device cookie set')
   assert.match(device, /Max-Age=15552000/)

@@ -45,7 +45,9 @@ import {
   type CvPath,
 } from '../../lib/cvVisibility'
 import { syncLanguage } from '../../lib/cvSync'
-import { useDirtyRegistration } from './AdminDirtyContext'
+import { errorFocusPath, validateCvDoc, type CvValidationError } from '../../lib/cvValidate'
+import { useAdminDirty, useDirtyRegistration } from './AdminDirtyContext'
+import { SaveStatus } from './shell/ui'
 import { useCvDocument } from './cvStudio/useCvDocument'
 import {
   addSection,
@@ -221,7 +223,9 @@ export default function CVEditorStudio() {
   const rootRef = useRef<HTMLDivElement | null>(null)
   const cv = useCvDocument()
   const { doc, apply, getDoc, undo, redo, dirty } = cv
-  useDirtyRegistration('cv-studio', dirty)
+  const { confirmDiscard } = useAdminDirty()
+  // Values the registry check rejected on the last save attempt (first few shown with jump links).
+  const [invalid, setInvalid] = useState<CvValidationError[]>([])
 
   const [lang, setLang] = useState<CvLang>('en')
   const [linked, setLinked] = useState(true)
@@ -544,17 +548,32 @@ export default function CVEditorStudio() {
   }, [doc, lang, other])
 
   // ── Save ───────────────────────────────────────────────────────────────
+  /** Save; resolves true only when the server stored the document. */
   const doSave = useCallback(
-    async (force = false) => {
-      if (cv.saving || cv.loadState !== 'ready') return
+    async (force = false): Promise<boolean> => {
+      if (cv.saving || cv.loadState !== 'ready') return false
+      // Same registry check as the server, so a bad value is pointed at before a round trip.
+      const checked = validateCvDoc(getDoc())
+      if (!checked.ok) {
+        setInvalid(checked.errors)
+        toast({
+          status: 'error',
+          title: 'Not saved — fix the highlighted values',
+          description: checked.errors[0]?.message,
+          position: 'bottom-right',
+          isClosable: true,
+        })
+        return false
+      }
       const r = await cv.save(force)
       if (r.kind === 'conflict') {
         conflict.onOpen()
-        return
+        return false
       }
       conflict.onClose()
       if (r.kind === 'ok') {
         setSessionExpired(false)
+        setInvalid([])
         toast({
           status: r.warning ? 'warning' : 'success',
           title: 'CV saved',
@@ -562,14 +581,40 @@ export default function CVEditorStudio() {
           duration: r.warning ? 6000 : 2200,
           position: 'bottom-right',
         })
+        return true
+      }
+      if (r.kind === 'invalid') {
+        setInvalid(r.errors)
+        toast({ status: 'error', title: 'Not saved', description: r.error, position: 'bottom-right', isClosable: true })
       } else if (r.kind === 'unauthorized') {
         setSessionExpired(true)
       } else {
         toast({ status: 'error', title: 'Save failed', description: r.error, position: 'bottom-right', isClosable: true })
       }
+      return false
     },
-    [cv, conflict, toast],
+    [cv, conflict, toast, getDoc],
   )
+  useDirtyRegistration('cv-studio', dirty, () => doSave(false))
+
+  const jumpToError = (e: CvValidationError) => {
+    const target = errorFocusPath(e.path)
+    const name = getDoc()[target.lang][target.sectionIdx]?.sessionName
+    if (!name) return
+    setLang(target.lang)
+    setSelected(name)
+    setMobilePane('edit')
+    setFocus({ lang: target.lang, path: target.path, nonce: Date.now() })
+  }
+
+  const describeError = (e: CvValidationError) => {
+    const target = errorFocusPath(e.path)
+    const section = doc[target.lang][target.sectionIdx]
+    const sdef = section ? SECTION_BY_NAME[section.sessionName] : undefined
+    const where = describeSectionPath(sdef, target.path.slice(1))
+    const sectionLabel = sdef?.label || section?.sessionName || `Section ${target.sectionIdx + 1}`
+    return `${LANG_LABEL[target.lang]} · ${sectionLabel}${where ? ` › ${where}` : ''}`
+  }
 
   // ── Shortcuts ──────────────────────────────────────────────────────────
   const dirtyRef = useRef(dirty)
@@ -581,7 +626,7 @@ export default function CVEditorStudio() {
       if (k === 's') {
         // Always keep the browser's "Save page" dialog away; save only real changes.
         e.preventDefault()
-        if (dirtyRef.current) doSave(false)
+        if (dirtyRef.current) void doSave(false)
       } else if (k === 'z' || k === 'y') {
         // Only the Studio's own document: the command palette, dialogs, the
         // Hidden-items drawer and fields outside the Studio keep native undo.
@@ -788,7 +833,6 @@ export default function CVEditorStudio() {
   )
 
   const preview = <Preview sections={sections} lang={lang} />
-  const statusText = cv.saving ? 'saving…' : dirty ? 'unsaved changes' : cv.savedAt ? `saved ${timeAgo(cv.savedAt)}` : 'up to date'
 
   return (
     <StudioContext.Provider value={api}>
@@ -831,7 +875,7 @@ export default function CVEditorStudio() {
             <Button
               size="sm"
               leftIcon={<FaSave />}
-              onClick={() => doSave(false)}
+              onClick={() => void doSave(false)}
               isLoading={cv.saving}
               loadingText="Saving"
               isDisabled={!dirty}
@@ -952,13 +996,11 @@ export default function CVEditorStudio() {
           </Menu>
 
           <HStack ml="auto" spacing={3}>
-            <HStack spacing={1.5} fontFamily={monoFont} fontSize="11px" color={dim} role="status" aria-live="polite">
-              <Box w="7px" h="7px" borderRadius="full" bg={dirty ? 'orange.400' : 'green.400'} flexShrink={0} aria-hidden />
-              <Text display={{ base: 'none', sm: 'block' }} aria-hidden>
-                {statusText}
-              </Text>
-              <VisuallyHidden>{statusText}</VisuallyHidden>
-            </HStack>
+            <SaveStatus
+              state={cv.saving ? 'saving' : dirty ? 'dirty' : 'clean'}
+              savedAt={cv.savedAt ?? undefined}
+              label={!cv.saving && !dirty && !cv.savedAt ? 'Up to date' : undefined}
+            />
             <Tooltip label={showPreview ? 'Hide preview' : 'Show preview'} hasArrow>
               <IconButton
                 aria-label={showPreview ? 'Hide preview' : 'Show preview'}
@@ -1003,6 +1045,37 @@ export default function CVEditorStudio() {
           </Flex>
         ) : null}
 
+        {invalid.length ? (
+          <Box px={4} py={2.5} bg="rgba(239,68,68,0.08)" borderBottom="1px solid" borderColor={border} fontSize="13px" role="alert">
+            <Flex align="center" justify="space-between" gap={3} wrap="wrap">
+              <Text fontWeight={600}>
+                Not saved: {invalid.length === 1 ? 'one value needs fixing' : `${invalid.length}${invalid.length >= 50 ? '+' : ''} values need fixing`}
+              </Text>
+              <Button size="xs" variant="ghost" onClick={() => setInvalid([])}>
+                Dismiss
+              </Button>
+            </Flex>
+            <Box as="ul" mt={1} pl={0} listStyleType="none">
+              {invalid.slice(0, 5).map((e) => (
+                <Box as="li" key={`${e.path.join('.')}-${e.message}`} mt={1}>
+                  <Button variant="link" size="sm" fontSize="13px" color="accent.text" whiteSpace="normal" textAlign="left" onClick={() => jumpToError(e)}>
+                    {describeError(e)}
+                  </Button>
+                  <Text as="span" color={dim}>
+                    {' — '}
+                    {e.message}
+                  </Text>
+                </Box>
+              ))}
+            </Box>
+            {invalid.length > 5 ? (
+              <Text mt={1} color={dim} fontSize="12px">
+                …and {invalid.length - 5} more. Fix these, then save again.
+              </Text>
+            ) : null}
+          </Box>
+        ) : null}
+
         {cv.basedOnOlderVersion ? (
           <Flex align="center" gap={3} px={4} py={2} bg="rgba(251,146,60,0.10)" borderBottom="1px solid" borderColor={border} wrap="wrap" fontSize="13px">
             <Text flex={1} minW="200px">
@@ -1012,8 +1085,13 @@ export default function CVEditorStudio() {
               size="xs"
               variant="outline"
               borderColor={border}
-              onClick={() => {
-                if (!dirty || window.confirm('Discard your edits here and load the latest saved CV?')) cv.load()
+              onClick={async () => {
+                const ok = await confirmDiscard('Discard your edits here and load the latest saved CV?', {
+                  title: 'Load the latest CV?',
+                  allowSave: false,
+                  discardLabel: 'Discard and load',
+                })
+                if (ok) cv.load()
               }}
             >
               Load latest
@@ -1196,7 +1274,7 @@ export default function CVEditorStudio() {
               >
                 Reload latest
               </Button>
-              <Button size="sm" colorScheme="red" onClick={() => doSave(true)} isLoading={cv.saving}>
+              <Button size="sm" colorScheme="red" onClick={() => void doSave(true)} isLoading={cv.saving}>
                 Overwrite
               </Button>
             </AlertDialogFooter>

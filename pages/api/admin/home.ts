@@ -3,6 +3,7 @@ import { readHomeWithVersion } from '../../../lib/home'
 import { kvEtag } from '../../../lib/contentStore'
 import { isAdminRequest } from '../../../lib/auth'
 import { sendVersionedJson } from '../../../lib/http'
+import { withApi } from '../../../lib/apiHandler'
 
 /**
  * GET /api/admin/home — the FULL home document (hidden photos, switched-off
@@ -13,7 +14,7 @@ import { sendVersionedJson } from '../../../lib/http'
  * back as If-Match on PUT /api/home to detect concurrent edits;
  * X-Home-View: admin; Cache-Control: no-store.
  */
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
+export default withApi('admin/home', (req: NextApiRequest, res: NextApiResponse) => {
   if (!isAdminRequest(req, res)) return res.status(401).json({ error: 'Unauthorized' })
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET')
@@ -23,4 +24,4 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   res.setHeader('Cache-Control', 'no-store')
   res.setHeader('X-Home-View', 'admin')
   return sendVersionedJson(res, 200, home, kvEtag(version))
-}
+})

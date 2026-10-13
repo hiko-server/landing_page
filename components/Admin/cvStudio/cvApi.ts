@@ -8,10 +8,14 @@
  *                           redirect) is treated as an expired session and
  *                           its body is never used.
  *   PUT /api/cvdata         Conditional on `If-Match: <etag>`; 409 means the
- *                           server copy changed and nothing was written.
+ *                           server copy changed and nothing was written;
+ *                           422 {code:'INVALID_CV', errors} means a value
+ *                           failed validation and nothing was written.
  *
  * The interpret* functions are pure so the protocol rules are unit-tested.
  */
+
+import { readCvErrors, type CvValidationError } from '../../../lib/cvValidate'
 
 export const ADMIN_CV_URL = '/api/admin/cvdata'
 export const CV_PUT_URL = '/api/cvdata'
@@ -30,6 +34,7 @@ export type AdminCvRead =
 export type SaveOutcome =
   | { kind: 'ok'; etag: string | null; warning?: string }
   | { kind: 'conflict'; etag: string | null; message?: string }
+  | { kind: 'invalid'; errors: CvValidationError[]; error: string }
   | { kind: 'unauthorized' }
   | { kind: 'error'; error: string }
 
@@ -56,6 +61,9 @@ export function interpretSave(status: number, etagHeader: string | null, body: u
   const etag = typeof b.etag === 'string' && b.etag ? b.etag : etagHeader || null
   if (status === 409) return { kind: 'conflict', etag, message: typeof b.message === 'string' ? b.message : undefined }
   if (status === 401 || status === 403) return { kind: 'unauthorized' }
+  if (status === 422 && b.code === 'INVALID_CV') {
+    return { kind: 'invalid', errors: readCvErrors(b), error: (typeof b.error === 'string' && b.error) || 'The CV has invalid values; nothing was saved.' }
+  }
   if (status < 200 || status >= 300) return { kind: 'error', error: (typeof b.error === 'string' && b.error) || `Save failed (${status})` }
   const warning = typeof b.r2Warning === 'string' ? b.r2Warning : typeof b.warning === 'string' ? b.warning : undefined
   return { kind: 'ok', etag, warning }

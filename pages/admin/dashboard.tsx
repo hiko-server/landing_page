@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import NextLink from 'next/link'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/router'
 import {
   Box,
@@ -10,11 +11,12 @@ import {
   MenuDivider,
   MenuItem,
   MenuList,
+  Spinner,
   Text,
   useToast,
 } from '@chakra-ui/react'
 import { ChevronDownIcon } from '@chakra-ui/icons'
-import { FaHome, FaFileAlt, FaHistory, FaDatabase, FaInbox } from 'react-icons/fa'
+import { FaHome, FaFileAlt, FaHistory, FaDatabase, FaInbox, FaChartLine } from 'react-icons/fa'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 import CVEditor from '../../components/Admin/CVEditor'
@@ -23,6 +25,7 @@ import HomeEditor from '../../components/Admin/HomeEditor'
 import VersionHistory from '../../components/Admin/VersionHistory'
 import StoragePanel from '../../components/Admin/StoragePanel'
 import InboxPanel from '../../components/Admin/InboxPanel'
+import ErrorBoundary, { PanelFallback } from '../../components/Common/ErrorBoundary'
 import { AdminDirtyProvider, useAdminDirty } from '../../components/Admin/AdminDirtyContext'
 import { AdminTitleBar, MONO, SITE_HEADER_H, useIsMac } from '../../components/Admin/shell/ui'
 import SegmentedTabs, {
@@ -43,6 +46,16 @@ import {
   type DashboardTab,
 } from '../../components/Admin/shell/dashboardTabs'
 
+// Loaded only when the tab opens: the charts and tables never weigh on the editors.
+const AnalyticsPanel = dynamic(() => import('../../components/Admin/AnalyticsPanel'), {
+  ssr: false,
+  loading: () => (
+    <Flex h="40vh" align="center" justify="center" role="status" aria-label="Loading analytics">
+      <Spinner color="accent.500" />
+    </Flex>
+  ),
+})
+
 const TAB_META: Record<DashboardTab, { label: string; icon: SegmentedItem<DashboardTab>['icon'] }> =
   {
     home: { label: 'Home', icon: FaHome },
@@ -50,6 +63,7 @@ const TAB_META: Record<DashboardTab, { label: string; icon: SegmentedItem<Dashbo
     versions: { label: 'Versions', icon: FaHistory },
     storage: { label: 'Storage', icon: FaDatabase },
     inbox: { label: 'Inbox', icon: FaInbox },
+    analytics: { label: 'Analytics', icon: FaChartLine },
   }
 
 const CV_VIEW_ITEMS: SegmentedItem<CvView>[] = [
@@ -75,6 +89,13 @@ function Dashboard() {
   const isMac = useIsMac()
   const [tab, setTab] = useState<DashboardTab>('home')
   const [cvView, setCvView] = useState<CvView>('studio')
+  // Latest unsaved Home edits, readable even after the editor crashed, so the
+  // error fallback can offer "Copy unsaved changes".
+  const homeUnsaved = useRef<(() => unknown) | null>(null)
+  const setHomeUnsavedSource = useCallback((get: (() => unknown) | null) => {
+    homeUnsaved.current = get
+  }, [])
+  const getHomeUnsaved = useCallback(() => (homeUnsaved.current ? homeUnsaved.current() : null), [])
   // Unread contact messages, shown on the Inbox tab from any tab.
   const [unread, setUnread] = useState(0)
   useEffect(() => {
@@ -99,10 +120,10 @@ function Dashboard() {
   }, [router.isReady, router.query])
 
   const go = useCallback(
-    (nextTab: DashboardTab, nextView: CvView = 'studio') => {
+    async (nextTab: DashboardTab, nextView: CvView = 'studio'): Promise<boolean> => {
       if (nextTab === tab && (nextTab !== 'cv' || nextView === cvView)) return false
-      // The visible editor unmounts on switch — ask before dropping its edits.
-      if (!confirmDiscard()) return false
+      // The visible editor unmounts on switch — ask (save / discard / stay) first.
+      if (!(await confirmDiscard())) return false
       setTab(nextTab)
       setCvView(nextView)
       router.replace(
@@ -118,7 +139,7 @@ function Dashboard() {
     [tab, cvView, confirmDiscard, router]
   )
 
-  // Alt+1–4 (⌃1–4 on macOS): never ⌘/Ctrl+digit (browser tabs) or ⌘S/⌘Z (editors).
+  // Alt+1–6 (⌃1–6 on macOS): never ⌘/Ctrl+digit (browser tabs) or ⌘S/⌘Z (editors).
   const goRef = useRef(go)
   goRef.current = go
   useEffect(() => {
@@ -130,11 +151,12 @@ function Dashboard() {
       })
       if (idx === null) return
       e.preventDefault()
-      if (goRef.current(DASHBOARD_TABS[idx])) {
+      void goRef.current(DASHBOARD_TABS[idx]).then((moved) => {
+        if (!moved) return
         requestAnimationFrame(() =>
           document.getElementById(`dash-tab-${DASHBOARD_TABS[idx]}`)?.focus()
         )
-      }
+      })
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
@@ -246,7 +268,7 @@ function Dashboard() {
             <SegmentedTabs
               items={tabItems}
               value={tab}
-              onSelect={(k) => go(k)}
+              onSelect={(k) => void go(k)}
               label="Dashboard sections"
               idPrefix="dash"
             />
@@ -254,7 +276,7 @@ function Dashboard() {
               <SegmentedTabs
                 items={CV_VIEW_ITEMS}
                 value={cvView}
-                onSelect={(v) => go('cv', v)}
+                onSelect={(v) => void go('cv', v)}
                 label="CV editor"
                 idPrefix="cvview"
                 size="sm"
@@ -278,27 +300,39 @@ function Dashboard() {
             shortcuts and its own copy of the data, so a hidden one must not
             listen or later overwrite a newer save.
           */}
-          {tab === 'home' ? <HomeEditor /> : null}
-          {tab === 'cv' ? (
-            <Box {...tabPanelProps('cvview', cvView)}>
-              {cvView === 'raw' ? <CVEditor /> : <CVEditorStudio />}
-            </Box>
-          ) : null}
-          {tab === 'versions' ? (
-            <Box maxW="var(--container-content)" mx="auto">
-              <VersionHistory />
-            </Box>
-          ) : null}
-          {tab === 'storage' ? (
-            <Box maxW="var(--container-content)" mx="auto">
-              <StoragePanel />
-            </Box>
-          ) : null}
-          {tab === 'inbox' ? (
-            <Box maxW="var(--container-content)" mx="auto">
-              <InboxPanel onUnreadChange={setUnread} />
-            </Box>
-          ) : null}
+          <ErrorBoundary
+            name={`admin/${tab}`}
+            resetKeys={[tab, cvView]}
+            getUnsaved={tab === 'home' ? getHomeUnsaved : undefined}
+            fallback={(p) => <PanelFallback {...p} />}
+          >
+            {tab === 'home' ? <HomeEditor onUnsavedSource={setHomeUnsavedSource} /> : null}
+            {tab === 'cv' ? (
+              <Box {...tabPanelProps('cvview', cvView)}>
+                {cvView === 'raw' ? <CVEditor /> : <CVEditorStudio />}
+              </Box>
+            ) : null}
+            {tab === 'versions' ? (
+              <Box maxW="var(--container-content)" mx="auto">
+                <VersionHistory />
+              </Box>
+            ) : null}
+            {tab === 'storage' ? (
+              <Box maxW="var(--container-content)" mx="auto">
+                <StoragePanel />
+              </Box>
+            ) : null}
+            {tab === 'inbox' ? (
+              <Box maxW="var(--container-content)" mx="auto">
+                <InboxPanel onUnreadChange={setUnread} />
+              </Box>
+            ) : null}
+            {tab === 'analytics' ? (
+              <Box maxW="var(--container-content)" mx="auto">
+                <AnalyticsPanel />
+              </Box>
+            ) : null}
+          </ErrorBoundary>
         </Box>
       </HeaderFooter>
     </>

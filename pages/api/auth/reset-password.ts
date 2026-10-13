@@ -1,7 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { deleteCookie } from 'cookies-next'
 import { consumeResetToken, ensureAdminFromEnv, readAdmin, updatePassword } from '../../../lib/admin'
-import { ADMIN_COOKIE } from '../../../lib/auth'
+import { ADMIN_COOKIE, clearAdminHint } from '../../../lib/auth'
+import { withApi } from '../../../lib/apiHandler'
 import { rateLimit } from '../../../lib/rateLimit'
 
 /**
@@ -11,7 +12,7 @@ import { rateLimit } from '../../../lib/rateLimit'
  * updatePassword), which signs out every device — including whoever may have
  * been holding a stolen session.
  */
-export default function handler(req: NextApiRequest, res: NextApiResponse) {
+export default withApi('auth/reset-password', (req: NextApiRequest, res: NextApiResponse) => {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST')
     return res.status(405).json({ error: 'Method not allowed' })
@@ -37,5 +38,6 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
   if (!ok) return res.status(400).json({ error: 'Invalid or expired token' })
   updatePassword(password)
   deleteCookie(ADMIN_COOKIE, { req, res, path: '/' })
+  clearAdminHint(req, res)
   return res.status(200).json({ ok: true })
-}
+})
