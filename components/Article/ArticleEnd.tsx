@@ -3,6 +3,9 @@ import NextLink from 'next/link'
 import { Box, Flex, Link, Text } from '@chakra-ui/react'
 import { copyText } from '../MDX/clipboard'
 import { LinkedInIcon } from '../Icons/brand'
+import { CopyIcon, QrCodeIcon, ShareIcon } from '../Icons/ui/content'
+import { CheckIcon } from '../Icons/ui/theme'
+import { cssTransition } from '../../theme/tokens'
 import type { AuthorCardData } from '../../lib/authorCard'
 
 /**
@@ -50,18 +53,12 @@ const chipSx = {
   lineHeight: 1,
   cursor: 'pointer',
   textDecoration: 'none',
-  transition: 'border-color 150ms var(--ease-out-quart), background-color 150ms var(--ease-out-quart)',
+  transition: cssTransition(['border-color', 'background-color'], 'fast'),
   _hover: { borderColor: 'page.fg', bg: 'page.hover', textDecoration: 'none' },
   _active: { bg: 'page.bg-overlay' },
   _focusVisible: { outline: '2px solid var(--accent)', outlineOffset: '2px' },
   '& svg': { flexShrink: 0 },
 } as const
-
-const Glyph = ({ children }: { children: React.ReactNode }) => (
-  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden focusable="false">
-    {children}
-  </svg>
-)
 
 const STATUS_TOKEN = { open: 'status.open', limited: 'status.limited', closed: 'status.closed' } as const
 
@@ -192,24 +189,12 @@ export function ShareBar({ share }: { share: ShareData }) {
           Share
         </Text>
         <Box as="button" type="button" onClick={onCopy} sx={chipSx} aria-describedby={copy === 'failed' ? `${panelId}-status` : undefined}>
-          {copy === 'copied' ? (
-            <Glyph>
-              <path d="M20 6 9 17l-5-5" />
-            </Glyph>
-          ) : (
-            <Glyph>
-              <rect x="9" y="9" width="11" height="11" rx="2" />
-              <path d="M5 15V6a2 2 0 0 1 2-2h9" />
-            </Glyph>
-          )}
+          {copy === 'copied' ? <CheckIcon size="sm" /> : <CopyIcon size="sm" />}
           {copy === 'copied' ? 'Copied' : 'Copy link'}
         </Box>
         {canShare ? (
           <Box as="button" type="button" onClick={onShare} sx={chipSx}>
-            <Glyph>
-              <path d="M12 3v12M7 8l5-5 5 5" />
-              <path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" />
-            </Glyph>
+            <ShareIcon size="sm" />
             Share…
           </Box>
         ) : null}
@@ -222,12 +207,7 @@ export function ShareBar({ share }: { share: ShareData }) {
         </Box>
         {share.qrSvg ? (
           <Box as="button" type="button" onClick={() => setQrOpen((o) => !o)} aria-expanded={qrOpen} aria-controls={`${panelId}-qr`} sx={chipSx}>
-            <Glyph>
-              <rect x="3" y="3" width="7" height="7" rx="1" />
-              <rect x="14" y="3" width="7" height="7" rx="1" />
-              <rect x="3" y="14" width="7" height="7" rx="1" />
-              <path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3" />
-            </Glyph>
+            <QrCodeIcon size="sm" />
             WeChat
           </Box>
         ) : null}

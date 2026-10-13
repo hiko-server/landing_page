@@ -103,3 +103,28 @@ test('(d) every admin write regenerates exactly the pages that render what it ch
   // A CV page change purges its files at the edge.
   assert.deepEqual(sorted(derivedPurgePaths(['/cv/zh'])), ['/cv/zh.json', '/cv/zh.pdf', '/cv/zh.txt'])
 })
+
+// ── (e) tokens-theme + reading-work: one icon set, the token type scale ─────
+
+test('(e) reading-work components draw their icons from the Lucide set, no inline SVG glyphs', () => {
+  const uses: Record<string, RegExp> = {
+    'components/MDX/Callout.tsx': /import \{ InfoIcon, LightbulbIcon, MessageSquareWarningIcon, OctagonAlertIcon, TriangleAlertIcon \} from '\.\.\/Icons\/ui\/content'/,
+    'components/Article/ArticleEnd.tsx': /import \{ CopyIcon, QrCodeIcon, ShareIcon \} from '\.\.\/Icons\/ui\/content'/,
+    'components/MDX/VideoEmbed.tsx': /import \{ PlayIcon \} from '\.\.\/Icons\/ui\/content'/,
+  }
+  for (const [f, re] of Object.entries(uses)) {
+    const code = read(f)
+    assert.match(code, re, f)
+    assert.doesNotMatch(code, /<svg|as="svg"/, `${f}: inline SVG`)
+    assert.doesNotMatch(code, /ease-out-quart|cubic-bezier/, `${f}: motion tokens`)
+  }
+  // The rewritten /work card keeps tokens-theme's type scale, status tokens and star icon.
+  const work = read('pages/work/index.tsx')
+  assert.match(work, /\.\.\.textStyleProps\(featured \? 'title-lg' : 'title-md'\)/)
+  assert.match(work, /<StarIcon size="xs" \/>/)
+  assert.match(work, /textStyle="label"/)
+  assert.match(work, /borderRadius="card"/)
+  assert.match(work, /boxShadow: 'elevation\.md'/)
+  assert.doesNotMatch(work, /fontSize=(\{[^}]*)?["']\d+px/)
+  assert.doesNotMatch(work, /var\(--font-geist-mono\)/)
+})

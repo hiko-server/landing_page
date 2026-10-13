@@ -1,5 +1,6 @@
 import type React from 'react'
 import { Box, Flex } from '@chakra-ui/react'
+import { InfoIcon, LightbulbIcon, MessageSquareWarningIcon, OctagonAlertIcon, TriangleAlertIcon } from '../Icons/ui/content'
 
 /**
  * Callout (`> [!NOTE]` … in an article, compiled to `div.callout` by
@@ -36,42 +37,14 @@ const INK_LIGHT: Record<CalloutType, string> = {
   caution: COLOR.caution,
 }
 
-const ICON: Record<CalloutType, React.ReactNode> = {
-  // info
-  note: (
-    <>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 16v-5M12 8h.01" />
-    </>
-  ),
-  // lightbulb
-  tip: (
-    <>
-      <path d="M9 18h6M10 21h4" />
-      <path d="M12 3a6 6 0 0 0-3.6 10.8c.6.5 1 1.2 1.1 2V16h5v-.2c.1-.8.5-1.5 1.1-2A6 6 0 0 0 12 3z" />
-    </>
-  ),
-  // speech bubble with "!"
-  important: (
-    <>
-      <path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z" />
-      <path d="M12 8v4M12 15.5h.01" />
-    </>
-  ),
-  // triangle
-  warning: (
-    <>
-      <path d="M10.3 3.9 2.4 17.5A2 2 0 0 0 4.1 20.5h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
-      <path d="M12 9v4M12 16.5h.01" />
-    </>
-  ),
-  // octagon
-  caution: (
-    <>
-      <path d="M8.1 2.5h7.8l5.6 5.6v7.8l-5.6 5.6H8.1l-5.6-5.6V8.1z" />
-      <path d="M12 8v4.5M12 16h.01" />
-    </>
-  ),
+// One Lucide icon per type (components/Icons/ui/content): info, lightbulb,
+// speech bubble with "!", triangle, octagon.
+const ICON: Record<CalloutType, typeof InfoIcon> = {
+  note: InfoIcon,
+  tip: LightbulbIcon,
+  important: MessageSquareWarningIcon,
+  warning: TriangleAlertIcon,
+  caution: OctagonAlertIcon,
 }
 
 const isType = (v: unknown): v is CalloutType => typeof v === 'string' && v in COLOR
@@ -84,6 +57,7 @@ export default function Callout({
 }: React.HTMLAttributes<HTMLDivElement> & { 'data-callout'?: string; 'data-callout-label'?: string }) {
   const type: CalloutType = isType(rest['data-callout']) ? rest['data-callout'] : 'note'
   const label = (rest['data-callout-label'] || '').trim() || type
+  const Icon = ICON[type]
   return (
     <Box
       className={className}
@@ -110,22 +84,7 @@ export default function Callout({
       }}
     >
       <Flex className="callout-title" align="center" gap={2} m={0} mb={2} fontWeight={600} fontSize="0.875em" letterSpacing="0.01em" color="var(--callout-ink)">
-        <Box
-          as="svg"
-          viewBox="0 0 24 24"
-          w="1.15em"
-          h="1.15em"
-          flexShrink={0}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden
-          focusable="false"
-        >
-          {ICON[type]}
-        </Box>
+        <Icon size="sm" style={{ flexShrink: 0 }} />
         <span>{label}</span>
       </Flex>
       {children}

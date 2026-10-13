@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Box, Link, Text } from '@chakra-ui/react'
 import { printableLinkUrl } from '../../lib/print'
+import { PlayIcon } from '../Icons/ui/content'
+import { cssTransition } from '../../theme/tokens'
 import { VIDEO_PLAYER_HOST, VIDEO_PROVIDER_LABEL, videoPlayerUrl, videoRefFromProps, videoWatchUrl } from '../../lib/videoUrl'
 
 /**
@@ -122,10 +124,10 @@ export default function VideoEmbed(props: Props) {
             cursor="pointer"
             textAlign="left"
             sx={{
-              '& .video-play': { transition: 'transform 200ms var(--ease-out-quart), background-color 200ms var(--ease-out-quart)' },
+              '& .video-play': { transition: cssTransition(['transform', 'background-color'], 'fast') },
               '@media (hover: hover)': { '&:hover .video-play': { bg: 'accent.solid' } },
               '@media (hover: hover) and (prefers-reduced-motion: no-preference)': {
-                '& .video-poster': { transition: 'transform 400ms var(--ease-out-quart)' },
+                '& .video-poster': { transition: cssTransition('transform', 'slow') },
                 '&:hover .video-poster': { transform: 'scale(1.015)' },
                 '&:hover .video-play': { transform: 'translate(-50%, -50%) scale(1.06)' },
               },
@@ -201,9 +203,7 @@ export default function VideoEmbed(props: Props) {
               color="white"
               sx={{ '@media (forced-colors: active)': { border: '2px solid ButtonText', bg: 'Canvas', color: 'ButtonText' } }}
             >
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" aria-hidden focusable="false">
-                <path d="M6 3.5v13l11-6.5-11-6.5z" />
-              </svg>
+              <PlayIcon size="md" fill="currentColor" />
             </Box>
           </Box>
         )}
