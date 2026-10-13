@@ -65,7 +65,7 @@ export type CvPageProps = {
   chromeSocials?: HomeData['socials'] | null
   /** Chinese name from the public CV ('' when hidden or not set). */
   nameZh: string
-  /** Person facts from the public English CV (lib/schema personFactsFromCv). */
+  /** The site-wide Person facts (lib/personFacts loadPersonFacts) — identical on every page. */
   personFacts: PersonFacts
   /** Print-only QR code (inline SVG) linking to this page; null when it could not be generated. */
   qrSvg: string | null
@@ -192,7 +192,6 @@ export default function CvPageView({
 
   const pageUrl = absUrl(PATHS[language])
   const description = cvDescription(language, { present: publicSeoSections(sections), nameZh })
-  const alternateName = ['Lucian', ...(nameZh ? [nameZh] : [])]
 
   const outlineBtn = {
     size: 'sm',
@@ -236,8 +235,8 @@ export default function CvPageView({
             about: personRef,
             author: personAuthor,
           },
-          // Facts already printed on the CV (the public 'cv' audience).
-          personNode({ ...personFacts, alternateName }),
+          // The one Person entity, with the same facts as on every other page.
+          personNode(personFacts),
           breadcrumb([
             { name: T.home, path: '/' },
             { name: T.title, path: PATHS[language] },

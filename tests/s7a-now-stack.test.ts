@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { publicSections } from '../lib/cvVisibility'
 import { currentRoles, currentlyCodingSignal, hasSignals, latestPost, latestWork, signalsUpdatedOn } from '../lib/nowSignals'
+import { deriveCurrentlyCoding, mergeCurrentlyCoding } from '../lib/currentlyCoding'
 import { buildStack, shortVersion } from '../lib/stack'
 
 // More stack coverage (installed versions, Sentry gating): tests/r6-ops-stack.test.ts
@@ -49,22 +50,36 @@ test('currentRoles lists only running or upcoming entries, respecting visibility
   assert.deepEqual(currentRoles(null, NOW), [])
 })
 
-test('currently-coding: owner text wins; a CV-derived project must be a current role', () => {
+test('currently-coding on /now is the home chip: owner text wins, the CV only names what is current', () => {
   const roles = currentRoles(cv, NOW)
-  // Derived from the CV: Acme is active → used.
-  const auto = currentlyCodingSignal(cv, null, roles)
-  assert.equal(auto?.project, 'Acme')
-  assert.equal(auto?.label, 'currently coding')
-  // Owner override wins per line.
-  const manual = currentlyCodingSignal(cv, { label: 'shipping', project: 'Carboy', note: '' }, roles)
-  assert.deepEqual(manual, { label: 'shipping', project: 'Carboy', note: auto?.note })
-  // Only past jobs → the derived fallback (last job held) is not claimed as current.
+  // Derived from the CV: Acme is running → named, like the first current role in the list.
+  const auto = currentlyCodingSignal(cv, null, NOW)
+  assert.deepEqual(auto, { label: 'currently coding', project: 'Acme', note: 'Engineer' })
+  assert.equal(roles.find((r) => r.status === 'current')?.org, auto?.project)
+  // The home page merges the same way (one shared function).
+  assert.deepEqual(auto, mergeCurrentlyCoding(null, deriveCurrentlyCoding(cv, NOW)))
+  // An owner project takes only the owner's lines (no derived note attached).
+  const manual = currentlyCodingSignal(cv, { label: 'shipping', project: 'Carboy', note: '' }, NOW)
+  assert.deepEqual(manual, { label: 'shipping', project: 'Carboy', note: '' })
+  // Only past jobs, but a current study → the study, as on the home page.
+  const studying = publicSections(
+    [
+      { sessionName: 'workExperience', experiences: [{ jobTitle: 'CTO', companyName: 'Past Co', startDate: '2024-01', endDate: '2026-03' }] },
+      { sessionName: 'education', educationExperience: [{ degree: 'MSc in AI', schoolName: 'Uni', startDate: '2026-09-07', endDate: '2028-12-07' }] },
+    ],
+    'website',
+  )
+  assert.deepEqual(currentlyCodingSignal(studying, null, NOW), { label: 'currently studying', project: 'Uni', note: 'MSc in AI' })
+  // Only past jobs → nothing is claimed as current.
   const past = publicSections(
     [{ sessionName: 'workExperience', experiences: [{ jobTitle: 'CTO', companyName: 'Past Co', startDate: '2024-01', endDate: '2026-03' }] }],
     'website',
   )
-  assert.equal(currentlyCodingSignal(past, { label: '', project: '', note: '' }, currentRoles(past, NOW)), null)
-  assert.equal(currentlyCodingSignal([], null, []), null)
+  assert.equal(currentlyCodingSignal(past, { label: '', project: '', note: '' }, NOW), null)
+  assert.equal(currentlyCodingSignal(past, { label: 'open to work', project: '', note: '' }, NOW), null)
+  assert.equal(currentlyCodingSignal([], null, NOW), null)
+  // The reference month decides: before the MSc starts there is nothing current.
+  assert.equal(currentlyCodingSignal(studying, null, '2026-08'), null)
 })
 
 test('latest post / case study pick the first titled entry and carry their dates', () => {

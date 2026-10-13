@@ -5,7 +5,7 @@ import { Flex, Box, Heading } from '@chakra-ui/react'
 import LandingCVSections, { CV_WEBSITE_SECTIONS } from '../../components/LandingPage/LandingCVSections'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
-import { absUrl, personNode, personFactsFromCv, profilePageNode, breadcrumb, ogImageUrl, PERSON_NAME } from '../../lib/schema'
+import { absUrl, personNode, profilePageNode, breadcrumb, ogImageUrl, PERSON_NAME, type PersonFacts } from '../../lib/schema'
 import ActivityFeed from '../../components/GitHub/ActivityFeed'
 import StatsBar from '../../components/GitHub/StatsBar'
 import ContributionGraph from '../../components/GitHub/ContributionGraph'
@@ -33,6 +33,8 @@ type Props = {
   github: GithubSummary | null
   /** /work case-study index (slug + title) for "Case study →" links on roles and CV projects. */
   work: WorkIndexItem[]
+  /** schema.org Person facts — the site-wide loader (lib/personFacts), identical on every page. */
+  personFacts: PersonFacts
   /** Server reference month ('YYYY-MM', lib/clock.ts) for "Present" / "Expected". */
   clockMonth: string
   /** Public home.socials for the persistent header / footer (null = none set). */
@@ -52,7 +54,7 @@ const githubFallback = (p: { reset?: () => void }) => <WidgetFallback reset={p.r
 
 const sectionHeading = { size: 'md', fontWeight: 500, letterSpacing: '-0.01em' } as const
 
-const About = ({ hero, identity, cv, githubUser, github, work }: Props) => {
+const About = ({ hero, identity, cv, githubUser, github, work, personFacts }: Props) => {
   return (
     <React.Fragment>
       <CustomHead
@@ -62,7 +64,7 @@ const About = ({ hero, identity, cv, githubUser, github, work }: Props) => {
         image={ogImageUrl({ kind: 'page', title: 'About', subtitle: 'Background, skills & projects' })}
         jsonLd={[
           profilePageNode({ path: '/about', name: `About — ${PERSON_NAME}` }),
-          personNode({ ...personFactsFromCv(cv.en), ...(identity.nameZh ? { alternateName: [identity.nameZh] } : {}) }),
+          personNode(personFacts),
           breadcrumb([
             { name: 'Home', path: '/' },
             { name: 'About', path: '/about' },
@@ -158,6 +160,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async () => {
   let githubUser: string | null = null
   let chromeSocials: HomeData['socials'] | null | undefined
   let work: WorkIndexItem[] = []
+  let personFacts: PersonFacts = {}
 
   try {
     // Live CV from the content store, website audience, exactly the sections
@@ -172,6 +175,13 @@ export const getServerSideProps: GetServerSideProps<Props> = async () => {
     identity = heroIdentity(pi.en[0], pi.zh[0], { storedHasPersonalInfo })
   } catch {
     /* best effort — render with what we have */
+  }
+
+  try {
+    // The site-wide Person entity: the same facts the home and CV pages emit.
+    personFacts = (await import('../../lib/personFacts')).loadPersonFacts()
+  } catch {
+    /* best effort — the node keeps its built-in defaults */
   }
 
   try {
@@ -214,6 +224,7 @@ export const getServerSideProps: GetServerSideProps<Props> = async () => {
       githubUser,
       github,
       work,
+      personFacts,
       clockMonth: referenceMonth(),
       // Omitted when the home document could not be read: the chrome then
       // loads the public view itself.

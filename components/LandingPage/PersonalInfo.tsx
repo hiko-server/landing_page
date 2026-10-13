@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react'
 // Type-only import from the pure shape module — never lib/home (server-only).
 import type { AvailabilityStatus, HomeData } from '../../lib/homeShape'
-import type { CurrentlyCoding } from '../../lib/currentlyCoding'
+import { mergeCurrentlyCoding, type CurrentlyCoding } from '../../lib/currentlyCoding'
 import { safeHref } from '../../lib/cvFormat'
 import { Box, Button, Flex, Grid, IconButton, Text } from '@chakra-ui/react'
 import NextLink from 'next/link'
@@ -11,7 +11,7 @@ import HeroAmbient from '../Background/HeroAmbient'
 import SectionLabel from '../General-UI/SectionLabel'
 import Hint, { HintGroup } from '../General-UI/Hint'
 import { GitHubIcon, GitLabIcon, LinkedInIcon, WhatsAppIcon } from '../Icons/brand'
-import { heroCopy, portraitAlt, type HeroIdentity } from './heroIdentity'
+import { heroCopy, portraitAlt, type HeroIdentity, type HeroMeta } from './heroIdentity'
 import { resolveSocialLinks, type SocialName } from '../Chrome/chrome'
 import { revealSx, settleSx } from './heroReveal'
 
@@ -74,12 +74,15 @@ const PersonalInfo = ({
   identity,
   autoCoding,
   avatar,
+  meta,
 }: {
   home?: HomeData
   identity: HeroIdentity
-  /** CV-derived values for any "currently coding" line the admin left blank. */
+  /** CV-derived "currently coding" chip (lib/currentlyCoding), merged with the owner's lines. */
   autoCoding: CurrentlyCoding
   avatar?: AvatarMeta
+  /** Location and languages from the public CV (heroMeta); a blank item is not shown. */
+  meta?: HeroMeta
 }) => {
   // Memoised so the phrase list keeps its identity across re-renders (e.g. a
   // colour-mode toggle) instead of restarting the rotation.
@@ -100,15 +103,12 @@ const PersonalInfo = ({
   const availability = home?.availability
   const availabilityText = availability ? (availability.label || '').trim() || AVAILABILITY_LABEL[availability.status] : ''
 
-  // Admin value per line wins; blank lines fall back to the CV-derived value.
-  const cc = home?.hero?.currentlyCoding
-  const merge = (admin?: string, fallback?: string) => (admin ?? '').trim() || (fallback ?? '').trim()
-  const coding = {
-    label: merge(cc?.label, autoCoding.label),
-    project: merge(cc?.project, autoCoding.project),
-    note: merge(cc?.note, autoCoding.note),
-  }
+  // The owner's lines and the CV-derived chip, combined exactly as /now does.
+  const coding = mergeCurrentlyCoding(home?.hero?.currentlyCoding, autoCoding)
   const hasCoding = Boolean(coding.label || coding.project || coding.note)
+  const location = (meta?.location || '').trim()
+  const languages = (meta?.languages || '').trim()
+  const hasMeta = Boolean(location || languages || (availability && availabilityText))
 
   const portrait = (sizes: string, imgAlt: string) => (
     <Box
@@ -178,40 +178,43 @@ const PersonalInfo = ({
             <Box flex="1" minW={0}>
               <HeroHeadline brand={home?.hero?.brand} identity={identity} role={role} rotating={rotating} startStep={1} avatar={phoneAvatar} />
 
-              <Box overflow="hidden" mt={{ base: 6, md: 8 }} sx={revealSx(5)}>
-                <Flex
-                  as="ul"
-                  listStyleType="none"
-                  wrap="wrap"
-                  align="center"
-                  rowGap={1}
-                  fontFamily={monoFont}
-                  fontSize="12px"
-                  letterSpacing="0.04em"
-                  color="page.fg-secondary"
-                  sx={metaSx}
-                >
-                  <li>Hong Kong</li>
-                  <li>Mandarin · Cantonese · English</li>
-                  {availability && availabilityText && (
-                    <li>
-                      <Box
-                        as="span"
-                        aria-hidden
-                        display="inline-block"
-                        w="6px"
-                        h="6px"
-                        mr={2}
-                        borderRadius="full"
-                        verticalAlign="middle"
-                        bg={`status.${availability.status}`}
-                        sx={{ '@media (forced-colors: active)': { bg: 'CanvasText' } }}
-                      />
-                      {availabilityText}
-                    </li>
-                  )}
-                </Flex>
-              </Box>
+              {hasMeta && (
+                <Box overflow="hidden" mt={{ base: 6, md: 8 }} sx={revealSx(5)}>
+                  <Flex
+                    as="ul"
+                    className="hero-meta"
+                    listStyleType="none"
+                    wrap="wrap"
+                    align="center"
+                    rowGap={1}
+                    fontFamily={monoFont}
+                    fontSize="12px"
+                    letterSpacing="0.04em"
+                    color="page.fg-secondary"
+                    sx={metaSx}
+                  >
+                    {location && <li data-meta="location">{location}</li>}
+                    {languages && <li data-meta="languages">{languages}</li>}
+                    {availability && availabilityText && (
+                      <li>
+                        <Box
+                          as="span"
+                          aria-hidden
+                          display="inline-block"
+                          w="6px"
+                          h="6px"
+                          mr={2}
+                          borderRadius="full"
+                          verticalAlign="middle"
+                          bg={`status.${availability.status}`}
+                          sx={{ '@media (forced-colors: active)': { bg: 'CanvasText' } }}
+                        />
+                        {availabilityText}
+                      </li>
+                    )}
+                  </Flex>
+                </Box>
+              )}
 
               <Flex
                 direction={{ base: 'column', sm: 'row' }}
@@ -317,9 +320,13 @@ const PersonalInfo = ({
 
               {hasCoding && (
                 <Flex
+                  className="hero-currently"
                   direction="column"
                   gap={0.5}
                   minW={0}
+                  // ≥ md the note sits under the portrait: wrap at its width
+                  // instead of widening the column.
+                  maxW={{ md: '220px', lg: '260px' }}
                   fontFamily={monoFont}
                   fontSize="11px"
                   letterSpacing="0.04em"

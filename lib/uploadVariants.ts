@@ -145,3 +145,15 @@ export function variantSrcSet(url: string): string | undefined {
   if (original && original.width > largest) parts.push(`/uploads/${encodeURIComponent(name)} ${original.width}w`)
   return parts.join(', ')
 }
+
+/**
+ * URL of an upload's stored `width`-px WebP variant (`/uploads/a.jpg.w640.webp`),
+ * or `url` itself when that variant does not exist or `url` is not an upload
+ * — e.g. a right-sized portrait for structured data.
+ */
+export function variantUrl(url: string, width: number): string {
+  const name = uploadNameOf(url)
+  if (!name) return url
+  const variant = variantName(name, width)
+  return fs.existsSync(path.join(uploadsDir(), variant)) ? `/uploads/${encodeURIComponent(variant)}` : url
+}

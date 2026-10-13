@@ -15,7 +15,7 @@
 
 import type { CvSectionLike } from './cvVisibility'
 import { formatCvDate, majorAddsInfo, type CvNow } from './cvFormat'
-import { deriveCurrentlyCoding, type CurrentlyCoding } from './currentlyCoding'
+import { deriveCurrentlyCoding, mergeCurrentlyCoding, type CurrentlyCoding } from './currentlyCoding'
 import { formatPostDate, isoDate } from './postDate'
 import { SITE_TIME_ZONE } from './clock'
 import { entryRange, entryStatus, field, graduation, joinParts, list } from '../components/CVViewerPage/fields'
@@ -100,29 +100,19 @@ export function currentRoles(cv: CvSectionLike[] | null | undefined, now: CvNow 
 }
 
 /**
- * The "currently coding" chip as the home page shows it (owner's text wins
- * per line, the CV fills blanks) — with one honesty rule: a CV-derived
- * project line is only used when it names a role that is current right now.
- * (The derivation falls back to the most recent past job, which is fine as a
- * home-page default but would be a false claim on a page called "Now".)
+ * The "currently coding" chip exactly as the home page shows it: the owner's
+ * Home editor lines merged with the CV-derived chip (lib/currentlyCoding.ts),
+ * which only ever names a role or study that is current in `now` — the same
+ * entries the "Currently" list shows. /now needs a project line, so a chip
+ * without one is null.
  */
 export function currentlyCodingSignal(
   cvWebsiteEn: CvSectionLike[] | null | undefined,
   manual: Partial<CurrentlyCoding> | null | undefined,
-  roles: NowRole[],
+  now: CvNow = new Date(),
 ): CurrentlyCoding | null {
-  const auto = deriveCurrentlyCoding(cvWebsiteEn)
-  const own = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
-  const autoProject = auto.project.trim()
-  const autoIsCurrent =
-    !!autoProject && roles.some((r) => r.kind === 'work' && r.status === 'current' && (r.org || r.title) === autoProject)
-  const project = own(manual?.project) || (autoIsCurrent ? autoProject : '')
-  if (!project) return null
-  return {
-    label: own(manual?.label) || auto.label.trim(),
-    project,
-    note: own(manual?.note) || auto.note.trim(),
-  }
+  const chip = mergeCurrentlyCoding(manual, deriveCurrentlyCoding(cvWebsiteEn, now))
+  return chip.project ? chip : null
 }
 
 type PostLike = { permalink: string; frontmatter: { title?: string; description?: string; date?: string } }

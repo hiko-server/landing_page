@@ -6,12 +6,12 @@ import LandingContent from '../components/LandingPage/LandingContent'
 import HeaderFooter from '../layout/HeaderFooter'
 import CustomHead from '../components/General-UI/CustomHead'
 import { HERO_AVIF_SRCSET, HERO_SIZES } from '../components/Background/HeroAmbient'
-import { absUrl, websiteNode, personNode, personFactsFromCv, profilePageNode, ogImageUrl, type PersonFacts } from '../lib/schema'
+import { absUrl, websiteNode, personNode, profilePageNode, ogImageUrl, type PersonFacts } from '../lib/schema'
 import { isSectionVisible, type HomeData, type SectionKey } from '../lib/homeShape'
 import type { CvSectionLike } from '../lib/cvVisibility'
 import { safeHref } from '../lib/cvFormat'
 import { deriveCurrentlyCoding, type CurrentlyCoding } from '../lib/currentlyCoding'
-import { heroIdentity, type HeroIdentity } from '../components/LandingPage/heroIdentity'
+import { heroIdentity, heroMeta, type HeroIdentity, type HeroMeta } from '../components/LandingPage/heroIdentity'
 import { latestWriting, type WorkIndexItem } from '../components/LandingPage/projectMatch'
 import type { AvatarMeta } from '../components/LandingPage/PersonalInfo'
 import type { HomeWriting } from '../components/LandingPage/Content'
@@ -25,8 +25,10 @@ type Props = {
   /** Only the CV sections the home page renders (EN, website-pruned). */
   cv: { en: CvSectionLike[]; zh: CvSectionLike[] }
   identity: HeroIdentity
-  /** CV-derived fallback for the hero's "currently coding" chip. */
+  /** CV-derived "currently coding" chip (only a role or study that is current). */
   autoCoding: CurrentlyCoding
+  /** Hero location / languages from the public CV (only the strings). */
+  meta: HeroMeta
   /** /work case-study index, for linking project cards and roles. */
   work: WorkIndexItem[]
   /** Portrait facts: intrinsic size and upload-variant srcset. */
@@ -37,7 +39,7 @@ type Props = {
   github: GithubSummary | null
   /** Newest posts + case studies (null when the section is off). */
   writing: HomeWriting | null
-  /** schema.org Person facts from PUBLIC website-visible CV data only. */
+  /** schema.org Person facts — the site-wide loader (lib/personFacts), identical on every page. */
   personFacts: PersonFacts
   /** Server reference month ('YYYY-MM', lib/clock.ts) for "Present" / "Expected". */
   clockMonth: string
@@ -45,7 +47,7 @@ type Props = {
   chromeSocials?: HomeData['socials'] | null
 }
 
-const LandingPage = ({ home, cv, identity, autoCoding, work, avatar, photos, github, writing, personFacts }: Props) => {
+const LandingPage = ({ home, cv, identity, autoCoding, meta, work, avatar, photos, github, writing, personFacts }: Props) => {
   return (
     <>
       <CustomHead
@@ -77,6 +79,7 @@ const LandingPage = ({ home, cv, identity, autoCoding, work, avatar, photos, git
           cv={cv}
           identity={identity}
           autoCoding={autoCoding}
+          meta={meta}
           work={work}
           avatar={avatar}
           photos={photos}
@@ -120,6 +123,7 @@ function timeout<T>(ms: number, value: T): Promise<T> {
  * Every read is best effort — a failing store yields an honest, emptier page.
  */
 export const getServerSideProps: GetServerSideProps<Props> = async () => {
+  const clockMonth = referenceMonth()
   let home: HomeData | null = null
   let chromeSocials: HomeData['socials'] | null | undefined
   try {
@@ -142,13 +146,14 @@ export const getServerSideProps: GetServerSideProps<Props> = async () => {
   let en: CvSectionLike[] = []
   let identity = heroIdentity(undefined, undefined)
   let autoCoding: CurrentlyCoding = { label: '', project: '', note: '' }
+  let meta: HeroMeta = { location: '', languages: '' }
   let personFacts: PersonFacts = {}
   try {
     const { readCvData, readPublicCvSections } = await import('../lib/cvdata')
-    // Server-only reads: the name and the "currently coding" fallback are
-    // derived here so personalInformation / education never reach the page
-    // payload — only the strings the hero actually prints do.
-    const derivedFrom = readPublicCvSections('website', ['personalInformation', 'workExperience', 'project', 'education'], ['en', 'zh'])
+    // Server-only reads: the name, the meta line and the "currently coding"
+    // chip are derived here so personalInformation / education never reach
+    // the page payload — only the strings the hero actually prints do.
+    const derivedFrom = readPublicCvSections('website', ['personalInformation', 'workExperience', 'education', 'extraSkill'], ['en', 'zh'])
     const pick = (list: CvSectionLike[], name: string) => list.find((s) => s.sessionName === name)
     // Whether the STORED CV has Personal Info at all (a server-side boolean,
     // nothing of the section is shipped): one switched off the website must
@@ -158,13 +163,17 @@ export const getServerSideProps: GetServerSideProps<Props> = async () => {
     identity = heroIdentity(pick(derivedFrom.en, 'personalInformation'), pick(derivedFrom.zh, 'personalInformation'), {
       storedHasPersonalInfo,
     })
-    autoCoding = deriveCurrentlyCoding(derivedFrom.en)
-    // Structured data: schools and skills the visitor can already see on the
-    // site — never contact details (personalInformation is not passed).
-    personFacts = personFactsFromCv(readPublicCvSections('website', ['education', 'skill'], ['en']).en)
+    autoCoding = deriveCurrentlyCoding(derivedFrom.en, clockMonth)
+    meta = heroMeta(derivedFrom.en)
     en = rendered.length ? readPublicCvSections('website', rendered, ['en']).en : []
   } catch {
     /* best effort — render with what we have */
+  }
+  try {
+    // The site-wide Person entity: the same facts /about and the CV pages emit.
+    personFacts = (await import('../lib/personFacts')).loadPersonFacts()
+  } catch {
+    /* best effort — the node keeps its built-in defaults */
   }
 
   let work: WorkIndexItem[] = []
@@ -220,13 +229,14 @@ export const getServerSideProps: GetServerSideProps<Props> = async () => {
       cv: { en, zh: [] },
       identity,
       autoCoding,
+      meta,
       work,
       avatar,
       photos,
       github,
       writing,
       personFacts,
-      clockMonth: referenceMonth(),
+      clockMonth,
       // Omitted when the home document could not be read: the chrome then
       // loads the public view itself.
       ...(chromeSocials !== undefined ? { chromeSocials } : {}),

@@ -4,7 +4,7 @@ import { SHEET_SECTIONS } from '../../components/CVViewerPage/CVResult'
 import { publicNameZh } from '../../components/CVViewerPage/PersonalInformation'
 import type { HomeData } from '../../lib/homeShape'
 import { referenceMonth } from '../../lib/clock'
-import { absUrl, personFactsFromCv } from '../../lib/schema'
+import { absUrl } from '../../lib/schema'
 
 /**
  * /cv/zh — the Chinese CV: its own URL, <html lang="zh-Hans">, Chinese title,
@@ -14,17 +14,20 @@ import { absUrl, personFactsFromCv } from '../../lib/schema'
 export default CvPageView
 
 export const getServerSideProps: GetServerSideProps<CvPageProps> = async () => {
-  // Same public 'cv' view as /cv. The English CV supplies the person facts
-  // for structured data, which are kept in one (English) form site-wide.
+  // Same public 'cv' view as /cv.
   let sections: any[] = []
-  let personFacts: CvPageProps['personFacts'] = {}
   try {
     const { readPublicCvSections } = await import('../../lib/cvdata')
-    const cv = readPublicCvSections('cv', SHEET_SECTIONS)
-    sections = cv.zh
-    personFacts = personFactsFromCv(cv.en)
+    sections = readPublicCvSections('cv', SHEET_SECTIONS, ['zh']).zh
   } catch {
     /* render the empty state rather than failing the page */
+  }
+  // The site-wide Person entity: the same (English) facts every page emits.
+  let personFacts: CvPageProps['personFacts'] = {}
+  try {
+    personFacts = (await import('../../lib/personFacts')).loadPersonFacts()
+  } catch {
+    /* the node keeps its built-in defaults */
   }
   let chromeSocials: HomeData['socials'] | null | undefined
   try {

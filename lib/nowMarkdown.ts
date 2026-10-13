@@ -55,7 +55,7 @@ export function buildNowSignals(input: {
   const roles = currentRoles(input.cvWebsiteEn, input.now)
   return {
     roles,
-    coding: currentlyCodingSignal(input.cvWebsiteEn, input.manualCoding, roles),
+    coding: currentlyCodingSignal(input.cvWebsiteEn, input.manualCoding, input.now),
     post: latestPost(input.posts),
     work: latestWork(input.work),
   }

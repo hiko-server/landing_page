@@ -185,12 +185,18 @@ test('versions API validates type and file, and restore reports the new ETag', a
   assert.equal(missing.statusCode, 404)
 })
 
-test('cv-derived uses the website view: a hidden end date never makes a past job current', async () => {
+test('cv-derived uses the website view: a hidden end date never makes a past job current, an ended job is never offered', async () => {
   await call(cvdata, { method: 'PUT', admin: true, body: fullCv() })
   const r = await call(derived, { admin: true })
   assert.equal(r.statusCode, 200)
-  assert.equal(r.body.currentlyCoding.project, 'Latest Co')
-  assert.equal(r.body.currentlyCoding.note, 'since 2018')
+  assert.deepEqual(r.body.currentlyCoding, { label: '', project: '', note: '' })
+  // A running role is offered — exactly the chip the home page derives.
+  const running: any = fullCv()
+  running.en[2].experiences.push({ companyName: 'Running Co', jobTitle: 'Engineer', startDate: '2022-01', endDate: 'Present' })
+  await call(cvdata, { method: 'PUT', admin: true, body: running })
+  const r2 = await call(derived, { admin: true })
+  assert.deepEqual(r2.body.currentlyCoding, { label: 'currently coding', project: 'Running Co', note: 'Engineer' })
+  await call(cvdata, { method: 'PUT', admin: true, body: fullCv() })
 })
 
 test('(B)/(C)/(D) home: admin full view with ETag, public pruned view, If-Match conflicts', async () => {

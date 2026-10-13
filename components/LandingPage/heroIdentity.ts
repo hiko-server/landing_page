@@ -22,7 +22,8 @@
  *   - The 中文 name is dropped when it would repeat the EN name.
  */
 
-import { isRedacted } from '../../lib/cvVisibility'
+import { isRedacted, isSectionOnWebsite } from '../../lib/cvVisibility'
+import { bullets, field } from '../CVViewerPage/fields'
 
 export const FALLBACK_NAME = 'Li Yanpei'
 export const FALLBACK_NAME_ZH = '李彦霈'
@@ -115,4 +116,46 @@ export function portraitAlt(id: HeroIdentity): string {
   const base = id.name || id.nick || id.nameZh
   if (!base) return 'Portrait'
   return id.nick && id.name ? `${id.name} (${id.nick})` : base
+}
+
+/**
+ * The hero's meta line, from the public (website) CV — never hard-coded:
+ *
+ *   location   Personal Info `address`, as the owner wrote it
+ *   languages  the language section (`extraSkill.points`, "Languages" in the
+ *              CV editor): the name of each "Mandarin: Native" point, in the
+ *              CV's order, joined with " · "
+ *
+ * Hidden fields, bullets and website-hidden sections contribute nothing; an
+ * empty string means the item is not shown. Only these strings are shipped
+ * to the browser, never the sections themselves.
+ */
+export type HeroMeta = { location: string; languages: string }
+
+/** "Label: detail" / "标签：细节" point → its label. */
+const POINT_LABEL = /^([^:：]{1,40})[:：]\s*\S/
+/** A plain point (no "label: detail") up to this length is a name on its own. */
+const MAX_PLAIN_NAME = 40
+
+/** Language names of the language section's points, in CV order, without repeats. */
+export function languageNames(points: readonly string[]): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const point of points) {
+    const name = (POINT_LABEL.exec(point)?.[1] ?? (point.length <= MAX_PLAIN_NAME ? point : '')).trim()
+    if (!name || seen.has(name.toLowerCase())) continue
+    seen.add(name.toLowerCase())
+    out.push(name)
+  }
+  return out
+}
+
+/** @param enSections public (pruned) EN CV sections — at least personalInformation and extraSkill */
+export function heroMeta(enSections: ReadonlyArray<{ sessionName?: string }> | null | undefined): HeroMeta {
+  const sections = Array.isArray(enSections) ? enSections : []
+  const find = (name: string) => sections.find((s) => s?.sessionName === name && isSectionOnWebsite(s))
+  return {
+    location: field(find('personalInformation'), 'address'),
+    languages: languageNames(bullets(find('extraSkill'), 'points')).join(' · '),
+  }
 }

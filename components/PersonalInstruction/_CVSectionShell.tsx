@@ -140,10 +140,12 @@ export default function CVSectionShell({
                   </Text>
                 )}
 
-                {/* Label */}
+                {/* Label — wraps rather than truncating a long title on phones */}
                 <Text
                   as="span"
                   flex="1"
+                  minW={0}
+                  lineHeight="1.35"
                   textAlign="left"
                   fontWeight={600}
                   fontSize={['14px', '15px']}
@@ -151,7 +153,6 @@ export default function CVSectionShell({
                   textTransform="uppercase"
                   color={isExpanded ? labelExpanded : labelColor}
                   sx={{ transition: 'color 240ms cubic-bezier(0.22,1,0.36,1)' }}
-                  noOfLines={1}
                 >
                   {label}
                 </Text>
