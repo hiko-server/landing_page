@@ -1,11 +1,15 @@
-import type { NextApiRequest, NextApiResponse } from 'next'
+import { withApi } from '../../../lib/apiHandler'
 import { listWorkInDisplayOrder } from '../../../lib/mdx'
 
 /**
- * Public list of project case studies (in /work display order) for the ⌘K
- * palette and index reuse.
+ * Public list of published project case studies (in /work display order)
+ * for index reuse. Drafts are filtered out upstream by lib/mdx.ts:listWork().
  */
-export default function handler(_req: NextApiRequest, res: NextApiResponse) {
+export default withApi('work/list', async (req, res) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.setHeader('Allow', 'GET, HEAD')
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
   const items = listWorkInDisplayOrder().map((w) => ({
     slug: w.slug,
     title: w.frontmatter.title,
@@ -17,5 +21,5 @@ export default function handler(_req: NextApiRequest, res: NextApiResponse) {
     permalink: w.permalink,
   }))
   res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
-  res.status(200).json({ items })
-}
+  return res.status(200).json({ items })
+})

@@ -1,12 +1,16 @@
-import type { NextApiRequest, NextApiResponse } from 'next'
+import { withApi } from '../../../lib/apiHandler'
 import { listPosts } from '../../../lib/mdx'
 
 /**
- * Public, cacheable list of published blog posts — enough for the ⌘K
- * command palette (title, description and tags feed its fuzzy search).
- * Drafts are filtered out upstream by lib/mdx.ts:listPosts().
+ * Public, cacheable list of published blog posts (title, description,
+ * tags, date, reading time) for index reuse. Drafts are filtered out
+ * upstream by lib/mdx.ts:listPosts().
  */
-export default function handler(_req: NextApiRequest, res: NextApiResponse) {
+export default withApi('blog/list', async (req, res) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.setHeader('Allow', 'GET, HEAD')
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
   const items = listPosts().map((p) => ({
     slug: p.slug,
     title: p.frontmatter.title,
@@ -18,5 +22,5 @@ export default function handler(_req: NextApiRequest, res: NextApiResponse) {
     permalink: p.permalink,
   }))
   res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
-  res.status(200).json({ items })
-}
+  return res.status(200).json({ items })
+})

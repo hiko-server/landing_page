@@ -4,13 +4,17 @@ import { VPColor } from '../../theme/color'
 import {
   SITE_HOST,
   absUrl,
+  clampDescription,
+  composeTitle,
   ogImageUrl,
+  ogLangOf,
   ogLocale,
   serializeJsonLd,
   withXDefault,
   PERSON_NAME,
   type Alternate,
 } from '../../lib/schema'
+import { FEEDS } from '../../lib/feeds'
 
 // Brand/site name shown in the browser tab and <title>. We want this to track
 // the domain the deployment is actually served from (e.g. "lucian-dev.com") rather
@@ -22,9 +26,11 @@ import {
 // undefined. We therefore use them only as the SSR/first-paint fallback and
 // let the client correct the value to the real hostname after hydration.
 //
-// IMPORTANT: this client swap drives ONLY the visible <title>/tab text (UX).
-// canonical / og:url / og:image / JSON-LD are pinned to the fixed SITE_URL so
-// crawlers always see one canonical origin (no hiko.dev vs lucian-dev.com split).
+// IMPORTANT: this client swap drives ONLY the tab text of pages without a
+// title (UX). Titled pages read "<title> · Li Yanpei" (zh: "<title> · 李彦霈")
+// and the home page "Li Yanpei (Lucian) — <job title>" (lib/schema
+// composeTitle). canonical / og:url / og:image / JSON-LD are pinned to the
+// fixed SITE_URL so crawlers always see one canonical origin.
 const FALLBACK_SITE_NAME =
   process.env.NEXT_PUBLIC_SITE_HOST || process.env.NEXT_PUBLIC_PRODUCT_NAME || 'lucian-dev.com'
 
@@ -37,7 +43,15 @@ type JsonLd = Record<string, any> | Array<Record<string, any>>
 
 type Props = {
   title?: string
+  /** Home page: the title becomes "Li Yanpei (Lucian) — <jobTitle>" with no suffix. */
+  home?: boolean
+  /** Role in the home title (defaults to the site-wide job title). */
+  jobTitle?: string
+  /** Chinese name from the PUBLIC CV, used as the title suffix on zh pages. */
+  nameZh?: string
   description?: string
+  /** Used instead of `description` when that is shorter than 70 chars (e.g. the first paragraph). */
+  fallbackDescription?: string
   /** Canonical/OG URL. Should be an absolute lucian-dev.com URL (use absUrl()). */
   url?: string
   image?: string
@@ -66,7 +80,11 @@ type Props = {
 
 const CustomHead = ({
   title,
+  home = false,
+  jobTitle,
+  nameZh,
   description,
+  fallbackDescription,
   url,
   image,
   imageAlt,
@@ -91,10 +109,13 @@ const CustomHead = ({
     if (host) setProductName(normalizeHost(host))
   }, [])
 
-  const pageTitle = title ? `${title} | ${productName}` : productName
-  const pageDesc =
+  const pageTitle = composeTitle({ title, home, lang, nameZh, jobTitle, fallback: productName })
+  const pageDesc = clampDescription(
     description ||
-    'Li Yanpei (Lucian) — software engineer building full-stack web apps, machine-learning / computer-vision, and embedded systems.'
+      'Li Yanpei (Lucian) — software engineer building full-stack web apps, machine-learning / computer-vision, and embedded systems.',
+    fallbackDescription,
+  )
+  const zh = (lang || '').toLowerCase().startsWith('zh')
 
   // Canonical + OG URL are PINNED to the fixed origin (never the request host).
   // Only emitted when the page names its own URL: a page without one (404,
@@ -103,7 +124,7 @@ const CustomHead = ({
   const canonicalUrl = explicitUrl ? absUrl(explicitUrl) : ''
   // og:image must be absolute on the canonical origin or crawlers drop it.
   // Pages without an image get a generic social card titled after the page.
-  const ogImage = image ? absUrl(image) : ogImageUrl({ kind: 'page', title: title || SITE_HOST })
+  const ogImage = image ? absUrl(image) : ogImageUrl({ kind: 'page', title: title || SITE_HOST, lang: ogLangOf(lang) })
   const languageLinks = withXDefault(alternates || hreflang)
   const locale = ogLocale(lang)
   const altLocales = Array.from(
@@ -132,6 +153,7 @@ const CustomHead = ({
 
       <title>{pageTitle}</title>
       <meta name="description" content={pageDesc} />
+      {zh && <meta httpEquiv="content-language" content="zh-CN" />}
       <meta
         name="robots"
         content={noindex ? 'noindex, nofollow' : 'index, follow, max-image-preview:large'}
@@ -178,19 +200,15 @@ const CustomHead = ({
         />
       )}
 
-      {/* RSS auto-discovery — readers like NetNewsWire/Feedly look for this */}
-      <link rel="alternate" type="application/rss+xml" title={`${SITE_HOST} — Writing`} href="/feed.xml" />
+      {/* Feed auto-discovery (RSS + JSON Feed) — readers like NetNewsWire/Feedly look for these */}
+      {FEEDS.map((f) => (
+        <link key={f.href} rel="alternate" type={f.type} title={f.title} href={f.href} />
+      ))}
 
       {/* PWA basics */}
       <link rel="manifest" href="/manifest.json" />
       <link rel="icon" href="/images/favicon-32x32.png" />
       <link rel="apple-touch-icon" href="/apple-icon.png" />
-      {/*
-        v6: typography is now driven by next/font/local (Inter Variable +
-        JetBrains Mono Variable, see pages/_app.tsx). No Google Fonts <link>
-        — that triggered Next's no-page-custom-font warning and made the
-        page wait on fonts.googleapis.com.
-      */}
     </Head>
   )
 }

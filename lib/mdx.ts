@@ -1,43 +1,67 @@
-import { serialize } from 'next-mdx-remote/serialize'
-import type { MDXRemoteSerializeResult } from 'next-mdx-remote'
+import crypto from 'crypto'
+import { unified } from 'unified'
+import remarkParse from 'remark-parse'
+import remarkMdx from 'remark-mdx'
+import remarkGfm from 'remark-gfm'
+import remarkRehype from 'remark-rehype'
 import rehypePrettyCode from 'rehype-pretty-code'
+import type { Root as HastRoot } from 'hast'
 import { listItems, getItem, getPage } from './contentStore'
 import { detectContentLang, readingMinutes, type TocEntry } from './toc'
+import remarkStripMdxExpressions from './rehype/stripMdxExpressions'
 import rehypeHeadings from './rehype/headings'
-import rehypeImages from './rehype/images'
-import { localImageSize } from './rehype/imageSize'
-import { isoDate } from './postDate'
+import rehypeImages, { type SizeResolver, type SrcSetResolver } from './rehype/images'
+import rehypeLangSpans from './rehype/langSpans'
+import { resolveImageSize } from './rehype/imageSize'
+import { variantSrcSet } from './uploadVariants'
+import { isElement, textOf, walk, type HastNode } from './rehype/hast'
+import { clampAtBoundary } from './schema'
 
 /**
- * MDX content loader for the v6 site (content store first, content/*.mdx as
- * the seed — see lib/contentStore.ts).
+ * MDX content loader (content store first, content/*.mdx as the seed — see
+ * lib/contentStore.ts).
  *
  *   blog/{slug}   posts (editable via /admin/blog)
  *   work/{slug}   project case studies (editable via /admin/work)
  *   pages now/uses single pages
  *
- * Bodies are serialised with next-mdx-remote. The rehype pipeline adds
- * heading ids + self-links and collects the table of contents
- * (lib/rehype/headings.ts), sizes / lazy-loads / captions images
- * (lib/rehype/images.ts) and highlights code (rehype-pretty-code).
+ * Bodies are compiled on the server into a plain, JSON-serialisable hast
+ * tree that the client renders with hast-util-to-jsx-runtime
+ * (components/MDX/MDXContent.tsx). Nothing is ever evaluated: MDX
+ * expressions / ESM are stripped and JSX is reduced to an allow-list with
+ * literal attributes (lib/rehype/stripMdxExpressions.ts), so the CSP needs no
+ * 'unsafe-eval'.
+ *
+ *   remark-parse → remark-mdx → remark-gfm → strip expressions / map JSX →
+ *   remark-rehype → heading ids + TOC → image sizes / srcset / figures →
+ *   language-of-parts spans → rehype-pretty-code → drop positions / data
  *
  * Slugs are restricted to [a-z0-9-_]+ before any lookup.
  */
 
+export type { HastRoot }
+
+/** One h2/h3 entry of an article outline (alias kept for the shared contract). */
+export type TocItem = TocEntry
+
 export type PostFrontmatter = {
   title: string
+  /** Search-result title when it should differ from the on-page title (≤ 60 chars). */
+  seoTitle?: string
   description?: string
   date: string
   updated?: string
   tags?: string[]
   draft?: boolean
   cover?: string
+  coverAlt?: string
   /** BCP-47 language of the post (e.g. "zh-Hans"); detected when absent. */
   lang?: string
 }
 
 export type WorkFrontmatter = {
   title: string
+  seoTitle?: string
   description?: string
   role?: string
   period?: string
@@ -47,6 +71,9 @@ export type WorkFrontmatter = {
   link?: string
   repo?: string
   cover?: string
+  coverAlt?: string
+  /** Unpublished case study: hidden everywhere except Draft Mode. Default published. */
+  draft?: boolean
   /** BCP-47 language of the case study; detected when absent. */
   lang?: string
 }
@@ -70,97 +97,229 @@ export type MDXIndexEntry<T> = {
 }
 
 export type MDXRendered<T> = MDXIndexEntry<T> & {
-  source: MDXRemoteSerializeResult
+  /** Compiled body: plain hast, rendered by <MDXContent tree /> / <ArticleBody tree toc />. */
+  tree: HastRoot
   /** h2/h3 outline of the body, ids identical to the rendered headings. */
   toc: TocEntry[]
+  /** First paragraph as plain text (≤ 155 chars): the fallback meta description. */
+  excerpt: string
+}
+
+export type GetOptions = {
+  /** Draft Mode: also return unpublished items. */
+  includeDrafts?: boolean
 }
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-_]*$/
 
-type MdxOptions = NonNullable<NonNullable<Parameters<typeof serialize>[1]>['mdxOptions']>
-type RehypePlugins = NonNullable<MdxOptions['rehypePlugins']>
+// ── Compilation ───────────────────────────────────────────────────────────
 
-async function serializeMdx(raw: string): Promise<{ source: MDXRemoteSerializeResult; toc: TocEntry[] }> {
-  let toc: TocEntry[] = []
-  const rehypePlugins = [
-    [rehypeHeadings, { onToc: (t: TocEntry[]) => (toc = t) }],
-    [rehypeImages, { resolveSize: (src: string) => localImageSize(src) }],
-    [
-      rehypePrettyCode,
-      {
-        theme: { dark: 'github-dark-dimmed', light: 'github-light' },
-        keepBackground: false,
-      },
-    ],
-  ] as unknown as RehypePlugins
-  const source = await serialize(raw, {
-    mdxOptions: {
-      // Force the production JSX runtime. Default is `development: true`
-      // which compiles to `_jsxDEV(...)` calls — the client bundle doesn't
-      // expose that symbol, so every MDX page crashed at hydrate with
-      //   TypeError: _jsxDEV is not a function
-      development: false,
-      rehypePlugins,
-    },
-    parseFrontmatter: false,
+/** A body that cannot be compiled; line/column point into the MDX source. */
+export class MdxCompileError extends Error {
+  readonly line?: number
+  readonly column?: number
+  readonly reason: string
+
+  constructor(reason: string, line?: number, column?: number) {
+    super(line ? `${reason} (line ${line}${column ? `, column ${column}` : ''})` : reason)
+    this.name = 'MdxCompileError'
+    this.reason = reason
+    if (line) this.line = line
+    if (column) this.column = column
+  }
+}
+
+type VFileMessageLike = {
+  reason?: unknown
+  message?: unknown
+  line?: unknown
+  column?: unknown
+  place?: { line?: unknown; column?: unknown; start?: { line?: unknown; column?: unknown } } | null
+}
+
+const posInt = (v: unknown): number | undefined => (typeof v === 'number' && Number.isInteger(v) && v > 0 ? v : undefined)
+
+function toCompileError(err: unknown): MdxCompileError {
+  if (err instanceof MdxCompileError) return err
+  const e = (err && typeof err === 'object' ? err : {}) as VFileMessageLike
+  const reason = String(e.reason || e.message || err || 'Could not compile the MDX body').trim()
+  const place = e.place || undefined
+  const line = posInt(e.line) ?? posInt(place?.start?.line) ?? posInt(place?.line)
+  const column = posInt(e.column) ?? posInt(place?.start?.column) ?? posInt(place?.column)
+  return new MdxCompileError(reason, line, column)
+}
+
+export type CompileOptions = {
+  /** Article language: drives the language-of-parts spans. Detected from the body when absent. */
+  lang?: string
+  /** Intrinsic image sizes (default: local files, uploads, R2 and remote headers). */
+  resolveSize?: SizeResolver
+  /** Responsive `srcset` for an image (default: upload variants). */
+  srcSetFor?: SrcSetResolver
+}
+
+/** Remove positional info, plugin data and undefined properties: the tree becomes plain JSON. */
+function toPlainTree(node: HastNode & { position?: unknown; data?: unknown }): void {
+  delete node.position
+  delete node.data
+  if (node.properties) {
+    for (const [k, v] of Object.entries(node.properties)) if (v === undefined || v === null) delete node.properties[k]
+  }
+  for (const child of node.children || []) toPlainTree(child)
+}
+
+/**
+ * Compile an MDX body to a plain hast tree plus its h2/h3 outline.
+ * Throws MdxCompileError (with line/column when known) on invalid MDX.
+ */
+export async function compileMdx(body: string, opts: CompileOptions = {}): Promise<{ tree: HastRoot; toc: TocItem[] }> {
+  let toc: TocItem[] = []
+  const lang = opts.lang || detectContentLang({ body })
+  const processor = unified()
+    .use(remarkParse)
+    .use(remarkMdx)
+    .use(remarkGfm)
+    .use(remarkStripMdxExpressions)
+    .use(remarkRehype)
+    .use(rehypeHeadings, { onToc: (t: TocItem[]) => (toc = t) })
+    .use(rehypeImages, {
+      resolveSize: opts.resolveSize || resolveImageSize,
+      srcSetFor: opts.srcSetFor || variantSrcSet,
+    })
+    .use(rehypeLangSpans, { lang })
+    .use(rehypePrettyCode, { theme: { dark: 'github-dark-dimmed', light: 'github-light' }, keepBackground: false })
+  let tree: HastRoot
+  try {
+    const mdast = processor.parse(String(body ?? ''))
+    tree = (await processor.run(mdast)) as HastRoot
+  } catch (err) {
+    throw toCompileError(err)
+  }
+  toPlainTree(tree as unknown as HastNode)
+  return { tree, toc }
+}
+
+/** Text of a node outside any links (a paragraph that is only a link is not prose). */
+function textOutsideLinks(node: HastNode): string {
+  if (node.type === 'text') return node.value ?? ''
+  if (isElement(node, 'a')) return ''
+  return (node.children || []).map(textOutsideLinks).join('')
+}
+
+/**
+ * Plain text of the first real paragraph — not a caption, quote, list item
+ * or a paragraph that is just a link — clamped to `max` chars at a boundary.
+ */
+export function excerptOf(tree: HastRoot, max = 155): string {
+  let found = ''
+  walk(tree as unknown as HastNode, (node, parent) => {
+    if (found || !isElement(node, 'p')) return
+    if (parent && isElement(parent, ['figure', 'blockquote', 'li', 'td', 'th'])) return
+    const text = textOf(node).replace(/\s+/g, ' ').trim()
+    const own = textOutsideLinks(node).replace(/\s+/g, ' ').trim()
+    if (Array.from(text).length >= 20 && Array.from(own).length >= 10) found = text
   })
-  return { source, toc }
+  return clampAtBoundary(found, max)
+}
+
+const COMPILE_CACHE_MAX = 64
+const compileCache = new Map<string, Promise<{ tree: HastRoot; toc: TocItem[] }>>()
+
+/**
+ * compileMdx memoised by (body, lang) for the public pages, feeds and ISR
+ * revalidations. Returned trees are shared: callers must not mutate them.
+ */
+export function compileMdxCached(body: string, lang: string): Promise<{ tree: HastRoot; toc: TocItem[] }> {
+  const key = crypto.createHash('sha1').update(lang).update('\0').update(body).digest('hex')
+  const hit = compileCache.get(key)
+  if (hit) {
+    compileCache.delete(key)
+    compileCache.set(key, hit)
+    return hit
+  }
+  const pending = compileMdx(body, { lang })
+  compileCache.set(key, pending)
+  pending.catch(() => compileCache.delete(key))
+  while (compileCache.size > COMPILE_CACHE_MAX) compileCache.delete(compileCache.keys().next().value as string)
+  return pending
+}
+
+// ── Frontmatter ───────────────────────────────────────────────────────────
+
+const trimmed = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.replace(/\s+/g, ' ').trim() : undefined)
+
+/** Trim the free-text fields every page prints (titles, descriptions). */
+function cleanFrontmatter<T extends { title: string; description?: string; seoTitle?: string }>(fm: T, slug: string): T {
+  const out = { ...fm, title: trimmed(fm.title) || slug }
+  const description = trimmed(fm.description)
+  if (description) out.description = description
+  else delete out.description
+  const seo = trimmed(fm.seoTitle)
+  if (seo) out.seoTitle = seo.slice(0, 60)
+  else delete out.seoTitle
+  return out
 }
 
 function langOf(frontmatter: { lang?: unknown; title?: unknown }, body: string): string {
   return detectContentLang({ lang: frontmatter.lang, title: frontmatter.title, body })
 }
 
-// ── Posts (blog) ──────────────────────────────────────────────────────────
-export function listPosts(): MDXIndexEntry<PostFrontmatter>[] {
-  return listItems('blog')
-    .map((item) => {
-      const fm = item.frontmatter as PostFrontmatter
-      return {
-        slug: item.slug,
-        permalink: `/blog/${item.slug}`,
-        readingMinutes: readingMinutes(item.body),
-        lang: langOf(fm, item.body),
-        updatedAt: item.updated_at,
-        frontmatter: fm,
-      }
-    })
-    .filter((p) => !p.frontmatter.draft)
-    .sort((a, b) => +new Date(b.frontmatter.date) - +new Date(a.frontmatter.date))
+async function render<T extends { title: string }>(
+  entry: MDXIndexEntry<T>,
+  body: string,
+): Promise<MDXRendered<T>> {
+  const { tree, toc } = await compileMdxCached(body, entry.lang)
+  return { ...entry, tree, toc, excerpt: excerptOf(tree) }
 }
 
-export async function getPost(slug: string): Promise<MDXRendered<PostFrontmatter> | null> {
-  if (!SLUG_RE.test(slug)) return null
-  const item = getItem('blog', slug)
-  if (!item) return null
-  const fm = item.frontmatter as PostFrontmatter
-  if (fm.draft) return null
-  const { source, toc } = await serializeMdx(item.body)
+// ── Posts (blog) ──────────────────────────────────────────────────────────
+function postEntry(item: { slug: string; frontmatter: Record<string, any>; body: string; updated_at: number }): MDXIndexEntry<PostFrontmatter> {
+  const fm = cleanFrontmatter(item.frontmatter as PostFrontmatter, item.slug)
   return {
-    slug,
-    permalink: `/blog/${slug}`,
+    slug: item.slug,
+    permalink: `/blog/${item.slug}`,
     readingMinutes: readingMinutes(item.body),
     lang: langOf(fm, item.body),
     updatedAt: item.updated_at,
     frontmatter: fm,
-    source,
-    toc,
   }
 }
 
+/** Published posts, newest first (drafts never appear). */
+export function listPosts(): MDXIndexEntry<PostFrontmatter>[] {
+  return listItems('blog')
+    .map(postEntry)
+    .filter((p) => !p.frontmatter.draft)
+    .sort((a, b) => +new Date(b.frontmatter.date) - +new Date(a.frontmatter.date))
+}
+
+export async function getPost(slug: string, opts: GetOptions = {}): Promise<MDXRendered<PostFrontmatter> | null> {
+  if (!SLUG_RE.test(slug)) return null
+  const item = getItem('blog', slug)
+  if (!item) return null
+  const entry = postEntry(item)
+  if (entry.frontmatter.draft && !opts.includeDrafts) return null
+  return render(entry, item.body)
+}
+
 // ── Work (case studies) ───────────────────────────────────────────────────
+function workEntry(item: { slug: string; frontmatter: Record<string, any>; body: string; updated_at: number }): MDXIndexEntry<WorkFrontmatter> {
+  const fm = cleanFrontmatter(item.frontmatter as WorkFrontmatter, item.slug)
+  return {
+    slug: item.slug,
+    permalink: `/work/${item.slug}`,
+    readingMinutes: readingMinutes(item.body),
+    lang: langOf(fm, item.body),
+    updatedAt: item.updated_at,
+    frontmatter: fm,
+  }
+}
+
+/** Published case studies in store order (drafts never appear). */
 export function listWork(): MDXIndexEntry<WorkFrontmatter>[] {
-  return listItems('work').map((item) => {
-    const fm = item.frontmatter as WorkFrontmatter
-    return {
-      slug: item.slug,
-      permalink: `/work/${item.slug}`,
-      readingMinutes: readingMinutes(item.body),
-      lang: langOf(fm, item.body),
-      updatedAt: item.updated_at,
-      frontmatter: fm,
-    }
-  })
+  return listItems('work')
+    .map(workEntry)
+    .filter((w) => !w.frontmatter.draft)
 }
 
 /** Work entries in the order /work shows them: featured first, then the rest. */
@@ -169,93 +328,29 @@ export function listWorkInDisplayOrder(): MDXIndexEntry<WorkFrontmatter>[] {
   return [...all.filter((w) => w.frontmatter.featured), ...all.filter((w) => !w.frontmatter.featured)]
 }
 
-export async function getWork(slug: string): Promise<MDXRendered<WorkFrontmatter> | null> {
+export async function getWork(slug: string, opts: GetOptions = {}): Promise<MDXRendered<WorkFrontmatter> | null> {
   if (!SLUG_RE.test(slug)) return null
   const item = getItem('work', slug)
   if (!item) return null
-  const fm = item.frontmatter as WorkFrontmatter
-  const { source, toc } = await serializeMdx(item.body)
-  return {
-    slug,
-    permalink: `/work/${slug}`,
-    readingMinutes: readingMinutes(item.body),
-    lang: langOf(fm, item.body),
-    updatedAt: item.updated_at,
-    frontmatter: fm,
-    source,
-    toc,
-  }
+  const entry = workEntry(item)
+  if (entry.frontmatter.draft && !opts.includeDrafts) return null
+  return render(entry, item.body)
 }
 
 // ── Static pages (now, uses, etc.) ────────────────────────────────────────
 export async function getStaticMdxPage(name: 'now' | 'uses'): Promise<MDXRendered<PageFrontmatter> | null> {
   const page = getPage(name)
   if (!page) return null
-  const fm = page.frontmatter as PageFrontmatter
-  const { source, toc } = await serializeMdx(page.body)
-  return {
-    slug: name,
-    permalink: `/${name}`,
-    readingMinutes: readingMinutes(page.body),
-    lang: langOf(fm, page.body),
-    updatedAt: null,
-    frontmatter: fm,
-    source,
-    toc,
-  }
-}
-
-// ── RSS ───────────────────────────────────────────────────────────────────
-export function xmlEscape(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;')
-}
-
-function rfc822(value: unknown): string {
-  const iso = isoDate(value)
-  return iso ? new Date(`${iso}T00:00:00Z`).toUTCString() : ''
-}
-
-/**
- * RSS 2.0 document for the blog, shared by /feed.xml and /api/rss.xml.
- * `selfUrl` is the absolute URL the feed is served from (atom:link rel=self).
- */
-export function buildRssFeed(site: string, selfUrl: string): string {
-  const posts = listPosts()
-  const items = posts
-    .map((p) => {
-      const fm = p.frontmatter
-      const url = `${site}${p.permalink}`
-      const pub = rfc822(fm.date)
-      return `
-    <item>
-      <title>${xmlEscape(String(fm.title || p.slug))}</title>
-      <link>${xmlEscape(url)}</link>
-      <guid isPermaLink="true">${xmlEscape(url)}</guid>${pub ? `\n      <pubDate>${pub}</pubDate>` : ''}${
-        fm.description ? `\n      <description>${xmlEscape(String(fm.description))}</description>` : ''
-      }${(fm.tags || []).map((t) => `\n      <category>${xmlEscape(String(t))}</category>`).join('')}
-    </item>`
-    })
-    .join('')
-  const newest = posts
-    .map((p) => isoDate(p.frontmatter.updated || p.frontmatter.date))
-    .filter(Boolean)
-    .sort()
-    .pop()
-  const lastBuild = newest ? new Date(`${newest}T00:00:00Z`).toUTCString() : ''
-
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
-  <channel>
-    <title>${xmlEscape(new URL(site).host.toUpperCase())} — Writing</title>
-    <link>${xmlEscape(`${site}/blog`)}</link>
-    <atom:link href="${xmlEscape(selfUrl)}" rel="self" type="application/rss+xml" />
-    <description>Engineering essays, ML notes, and write-ups by Li Yanpei.</description>
-    <language>en</language>${lastBuild ? `\n    <lastBuildDate>${lastBuild}</lastBuildDate>` : ''}${items}
-  </channel>
-</rss>`
+  const fm = cleanFrontmatter(page.frontmatter as PageFrontmatter, name)
+  return render(
+    {
+      slug: name,
+      permalink: `/${name}`,
+      readingMinutes: readingMinutes(page.body),
+      lang: langOf(fm, page.body),
+      updatedAt: null,
+      frontmatter: fm,
+    },
+    page.body,
+  )
 }

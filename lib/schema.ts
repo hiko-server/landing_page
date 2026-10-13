@@ -33,8 +33,38 @@ export const WEBSITE_ID = `${SITE_URL}/#website`
 /** Public display name — kept in one place so it stays consistent everywhere. */
 export const PERSON_NAME = 'Li Yanpei (Lucian)'
 
-/** A reference to the canonical Person node (use as author/publisher/mainEntity). */
+/** Short name used in page titles ("Post · Li Yanpei"). */
+export const PERSON_SHORT_NAME = 'Li Yanpei'
+
+/** A reference to the canonical Person node (use as about/mainEntity). */
 export const personRef = { '@id': PERSON_ID }
+
+/**
+ * Author / publisher of articles: the canonical Person @id plus the name and
+ * URL, so the entity resolves even for consumers that do not join @ids
+ * across the page's JSON-LD blocks.
+ */
+export const personAuthor = {
+  '@type': 'Person',
+  '@id': PERSON_ID,
+  name: PERSON_NAME,
+  url: `${SITE_URL}/about`,
+} as const
+
+/** The site's time zone offset (Hong Kong): bare dates are local days there. */
+export const SITE_TZ_OFFSET = '+08:00'
+
+/**
+ * ISO-8601 with an explicit offset for schema.org dates: a bare YYYY-MM-DD
+ * becomes `YYYY-MM-DDT00:00:00+08:00`; full timestamps and anything else
+ * pass through trimmed; '' for empty input.
+ */
+export function isoWithTz(date: unknown): string {
+  const raw = typeof date === 'string' ? date.trim() : ''
+  if (!raw) return ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return `${raw}T00:00:00${SITE_TZ_OFFSET}`
+  return raw
+}
 
 /** The public profiles linked from the site header and footer on every page. */
 export const DEFAULT_SAME_AS: readonly string[] = [
@@ -59,9 +89,11 @@ export type PersonFacts = {
   knowsAbout?: readonly string[]
   image?: string
   description?: string
+  /** Other names, e.g. the Chinese name from the PUBLIC CV. 'Lucian' is always included. */
+  alternateName?: readonly string[]
 }
 
-const PERSON_FACT_KEYS = new Set(['alumniOf', 'address', 'jobTitle', 'sameAs', 'knowsAbout', 'image', 'description'])
+const PERSON_FACT_KEYS = new Set(['alumniOf', 'address', 'jobTitle', 'sameAs', 'knowsAbout', 'image', 'description', 'alternateName'])
 
 const nonEmpty = (v: unknown): v is string => typeof v === 'string' && v.trim() !== ''
 const uniq = (list: string[]) => Array.from(new Set(list.map((s) => s.trim()).filter(Boolean)))
@@ -96,7 +128,7 @@ export function personNode(data: PersonFacts & Record<string, unknown> = {}) {
     '@type': 'Person',
     '@id': PERSON_ID,
     name: PERSON_NAME,
-    alternateName: 'Lucian',
+    alternateName: uniq(['Lucian', ...(data.alternateName || []).filter(nonEmpty)]),
     url: SITE_URL,
     image: absUrl(data.image || '/images/hikoAvator.png'),
     jobTitle: nonEmpty(data.jobTitle) ? data.jobTitle.trim() : DEFAULT_JOB_TITLE,
@@ -140,17 +172,54 @@ export function personFactsFromCv(sections: readonly CvSectionLike[] | null | un
   return facts
 }
 
-/** The canonical WebSite entity, published by the Person. */
-export function websiteNode(extra: Record<string, unknown> = {}) {
+/**
+ * The canonical WebSite entity, published by the Person. `name` is the
+ * site name from the home settings (home.site?.name) when set, else the
+ * owner's name; undefined values in `extra` never override the defaults.
+ */
+export function websiteNode(extra: Record<string, unknown> & { name?: string } = {}) {
+  const defined = Object.fromEntries(Object.entries(extra).filter(([, v]) => v !== undefined && v !== ''))
   return {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
     '@id': WEBSITE_ID,
-    name: SITE_HOST,
-    url: SITE_URL,
+    name: PERSON_NAME,
+    alternateName: [SITE_HOST],
+    url: `${SITE_URL}/`,
     inLanguage: ['en', 'zh'],
     publisher: personRef,
-    ...extra,
+    ...defined,
+  }
+}
+
+/**
+ * ProfilePage wrapper (/, /about): the page is about, and its main entity
+ * is, the canonical Person.
+ */
+export function profilePageNode({
+  path,
+  name,
+  lang = 'en',
+  dateModified,
+}: {
+  path: string
+  name?: string
+  lang?: string
+  dateModified?: string
+}) {
+  const url = absUrl(path)
+  const modified = isoWithTz(dateModified)
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'ProfilePage',
+    '@id': `${url}#profile`,
+    url,
+    name: name || PERSON_NAME,
+    inLanguage: lang,
+    isPartOf: { '@id': WEBSITE_ID },
+    about: personRef,
+    mainEntity: personRef,
+    ...(modified ? { dateModified: modified } : {}),
   }
 }
 
@@ -182,20 +251,189 @@ export function serializeJsonLd(data: unknown): string {
 /** Social-card kinds understood by /api/og (shown as the card's [kind] label). */
 export type OgKind = 'home' | 'blog' | 'work' | 'cv' | 'page'
 
-/** Absolute /api/og social-card URL (1200×630). Long text is trimmed like the endpoint does. */
-export function ogImageUrl({ kind, title, subtitle }: { kind: OgKind; title: string; subtitle?: string }): string {
-  const params = new URLSearchParams({ kind, title: title.trim().slice(0, 120) })
-  const sub = (subtitle || '').trim()
+export type OgImageOptions = {
+  kind: OgKind
+  title: string
+  subtitle?: string
+  /** Card language: 'zh' switches the static strings (简历 / 文章 / 案例). */
+  lang?: 'en' | 'zh'
+  /** 'square' renders 1200×1200 (schema.org image variants); default 1200×630. */
+  size?: 'square'
+  /** YYYY-MM-DD shown in the meta row. */
+  date?: string
+  /** Reading time in minutes (1–99). */
+  mins?: number
+  /** Up to three tags for the meta row. */
+  tags?: readonly string[]
+  /** Same-site /uploads/<name>.png|jpg cover shown on the right of the card (other formats are skipped). */
+  cover?: string
+  /** Cache-buster: the content's last write (epoch ms). */
+  v?: number | null
+}
+
+/** 'zh' for Chinese page languages ("zh-Hans", "zh-CN"), else 'en'. */
+export function ogLangOf(lang: string | undefined): 'en' | 'zh' {
+  return (lang || '').toLowerCase().startsWith('zh') ? 'zh' : 'en'
+}
+
+/**
+ * Absolute /api/og social-card URL. Long text is trimmed like the endpoint
+ * does; only parameters the endpoint accepts are emitted (see
+ * lib/security/ogParams).
+ */
+export function ogImageUrl(o: OgImageOptions): string {
+  const params = new URLSearchParams({ kind: o.kind, title: o.title.trim().slice(0, 120) })
+  const sub = (o.subtitle || '').trim()
   if (sub) params.set('subtitle', sub.length > 200 ? `${sub.slice(0, 199)}…` : sub)
+  if (o.lang === 'zh') params.set('lang', 'zh')
+  if (o.size === 'square') params.set('size', 'square')
+  const date = (o.date || '').trim().slice(0, 10)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(date)) params.set('date', date)
+  if (typeof o.mins === 'number' && Number.isFinite(o.mins) && o.mins >= 1) params.set('mins', String(Math.min(99, Math.round(o.mins))))
+  const tags = (o.tags || []).map((t) => String(t).trim()).filter(Boolean).slice(0, 3)
+  if (tags.length) params.set('tags', tags.join(','))
+  const cover = (o.cover || '').trim()
+  if (/^\/uploads\/[^/?#]+\.(?:png|jpe?g)$/i.test(cover)) params.set('cover', cover)
+  if (typeof o.v === 'number' && Number.isFinite(o.v) && o.v > 0) params.set('v', String(Math.floor(o.v)))
   return absUrl(`/api/og?${params.toString()}`)
+}
+
+/**
+ * schema.org `image` for an article: the cover (when there is one), the
+ * 1200×630 social card and its 1200×1200 square variant.
+ */
+export function articleImages(card: OgImageOptions, cover?: string): string[] {
+  const out: string[] = []
+  const c = (cover || '').trim()
+  if (c && (/^https:\/\//i.test(c) || c.startsWith('/'))) out.push(absUrl(c))
+  out.push(ogImageUrl({ ...card, size: undefined }), ogImageUrl({ ...card, size: 'square' }))
+  return out
+}
+
+type ArticleNodeInput = {
+  path: string
+  title: string
+  description?: string
+  lang: string
+  images: string[]
+  keywords?: readonly string[]
+  datePublished?: string
+  dateModified?: string
+}
+
+/** BlogPosting for /blog/[slug]. */
+export function blogPostingNode(a: ArticleNodeInput) {
+  const url = absUrl(a.path)
+  const published = isoWithTz(a.datePublished)
+  const modified = isoWithTz(a.dateModified) || published
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BlogPosting',
+    headline: a.title,
+    ...(a.description ? { description: a.description } : {}),
+    image: a.images,
+    inLanguage: a.lang,
+    ...(published ? { datePublished: published } : {}),
+    ...(modified ? { dateModified: modified } : {}),
+    ...(a.keywords && a.keywords.length ? { keywords: a.keywords.join(', ') } : {}),
+    author: personAuthor,
+    publisher: personAuthor,
+    mainEntityOfPage: url,
+    url,
+  }
+}
+
+/** CreativeWork for a /work/[slug] case study. */
+export function caseStudyNode(a: ArticleNodeInput & { sameAs?: readonly string[] }) {
+  const url = absUrl(a.path)
+  const modified = isoWithTz(a.dateModified)
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'CreativeWork',
+    name: a.title,
+    url,
+    mainEntityOfPage: url,
+    image: a.images,
+    inLanguage: a.lang,
+    ...(a.description ? { description: a.description } : {}),
+    ...(modified ? { dateModified: modified } : {}),
+    author: personAuthor,
+    publisher: personAuthor,
+    ...(a.keywords && a.keywords.length ? { keywords: a.keywords.join(', ') } : {}),
+    ...(a.sameAs && a.sameAs.length ? { sameAs: [...a.sameAs] } : {}),
+  }
+}
+
+// ── <title> and meta description ─────────────────────────────────────────
+
+/** Description length search engines show before truncating. */
+export const DESCRIPTION_MAX = 155
+/** Shorter descriptions are replaced by `fallbackDescription` when one is given. */
+export const DESCRIPTION_MIN = 70
+
+const squash = (s: unknown) => (typeof s === 'string' ? s.replace(/\s+/g, ' ').trim() : '')
+
+/**
+ * Document title:
+ *   home            → "Li Yanpei (Lucian) — Software Engineer"
+ *   zh page         → "简历 · 李彦霈" (nameZh, else "Li Yanpei")
+ *   any other page  → "Writing · Li Yanpei"
+ *   no title        → `fallback` (the site name)
+ */
+export function composeTitle({
+  title,
+  home = false,
+  lang,
+  nameZh,
+  jobTitle = DEFAULT_JOB_TITLE,
+  fallback = SITE_HOST,
+}: {
+  title?: string
+  home?: boolean
+  lang?: string
+  nameZh?: string
+  jobTitle?: string
+  fallback?: string
+}): string {
+  if (home) return `${PERSON_NAME} — ${squash(jobTitle) || DEFAULT_JOB_TITLE}`
+  const t = squash(title)
+  if (!t) return fallback
+  const zh = (lang || '').toLowerCase().startsWith('zh')
+  const owner = zh ? squash(nameZh) || PERSON_SHORT_NAME : PERSON_SHORT_NAME
+  return t.endsWith(owner) ? t : `${t} · ${owner}`
+}
+
+/** Clamp to `max` chars at a sentence, else word boundary; adds '…' when cut mid-sentence. */
+export function clampAtBoundary(text: string, max: number): string {
+  const s = squash(text)
+  const chars = Array.from(s)
+  if (chars.length <= max) return s
+  const head = chars.slice(0, max - 1).join('')
+  const sentence = Math.max(...['. ', '! ', '? ', '。', '！', '？'].map((m) => head.lastIndexOf(m)))
+  if (sentence >= head.length * 0.5) return head.slice(0, sentence + 1).trim()
+  const space = head.lastIndexOf(' ')
+  const cut = space >= head.length * 0.5 ? head.slice(0, space) : head
+  return `${cut.replace(/[\s,;:·—-]+$/u, '')}…`
+}
+
+/**
+ * Meta description: whitespace collapsed, clamped to ≤ 155 chars at a
+ * sentence or word boundary. A description under 70 chars is replaced by
+ * a longer `fallback` when one is given (e.g. the article's first paragraph).
+ */
+export function clampDescription(description: string | undefined, fallback?: string): string {
+  const d = squash(description)
+  const f = squash(fallback)
+  const useFallback = Array.from(d).length < DESCRIPTION_MIN && Array.from(f).length > Array.from(d).length
+  return clampAtBoundary(useFallback ? f : d, DESCRIPTION_MAX)
 }
 
 export type Alternate = { hrefLang: string; href: string }
 
-/** hreflang alternates for the bilingual CV (pass to CustomHead `alternates`). */
+/** hreflang alternates for the bilingual CV: /cv (en) and /cv/zh (zh-Hans). */
 export const CV_ALTERNATES: readonly Alternate[] = [
   { hrefLang: 'en', href: absUrl('/cv') },
-  { hrefLang: 'zh-Hans', href: absUrl('/cv?lang=zh') },
+  { hrefLang: 'zh-Hans', href: absUrl('/cv/zh') },
   { hrefLang: 'x-default', href: absUrl('/cv') },
 ]
 

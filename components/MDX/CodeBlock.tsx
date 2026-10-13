@@ -1,53 +1,49 @@
 import React from 'react'
 import { Box } from '@chakra-ui/react'
-import { copyText } from './clipboard'
+import CopyButton from '../General-UI/CopyButton'
 
 /**
  * Fenced code block (pre-highlighted by rehype-pretty-code on the server)
- * with a copy button.
+ * with the shared copy button (components/General-UI/CopyButton, which
+ * announces the result and falls back to a hidden <textarea> where the
+ * Clipboard API is unavailable — ./clipboard).
  *
- * The button is always visible on touch / coarse-pointer devices (there is
- * no hover there) and on hover / keyboard focus elsewhere. The result is
- * announced through a polite live region; copying falls back to a hidden
- * <textarea> where the async Clipboard API is unavailable (./clipboard).
+ * The copied text is derived from the rendered tree (no DOM read), so it is
+ * exactly the code, without the language label. The button is always
+ * visible on touch / coarse-pointer devices (there is no hover there) and on
+ * hover / keyboard focus elsewhere.
  */
 
 const MONO = 'var(--font-geist-mono), monospace'
 
-type Status = 'idle' | 'copied' | 'failed'
+/** Plain text of rendered code (the highlighted spans keep their newlines as text nodes). */
+export function codeText(node: React.ReactNode): string {
+  if (node === null || node === undefined || typeof node === 'boolean') return ''
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(codeText).join('')
+  if (React.isValidElement(node)) return codeText((node.props as { children?: React.ReactNode }).children)
+  return ''
+}
 
 export default function CodeBlock(props: React.HTMLAttributes<HTMLPreElement> & { 'data-language'?: string }) {
-  const ref = React.useRef<HTMLPreElement | null>(null)
-  const timer = React.useRef<number | undefined>(undefined)
-  const [status, setStatus] = React.useState<Status>('idle')
   const language = props['data-language']
-
-  React.useEffect(() => () => window.clearTimeout(timer.current), [])
-
-  const copy = async () => {
-    const ok = await copyText(ref.current?.innerText.replace(/\n$/, '') || '')
-    setStatus(ok ? 'copied' : 'failed')
-    window.clearTimeout(timer.current)
-    timer.current = window.setTimeout(() => setStatus('idle'), 2000)
-  }
-
-  const label = status === 'copied' ? 'Copied' : status === 'failed' ? 'Copy failed' : 'Copy'
+  const value = codeText(props.children).replace(/\n+$/, '')
 
   return (
     <Box
       position="relative"
       my={6}
       sx={{
+        '& .code-copy': { opacity: 0, transition: 'opacity 150ms var(--ease-out-quart)' },
         '&:hover .code-copy, &:focus-within .code-copy': { opacity: 1 },
-        '@media (hover: none), (pointer: coarse)': { '.code-copy': { opacity: 1, minH: '36px', px: 3 } },
+        '@media (hover: none), (pointer: coarse)': { '& .code-copy': { opacity: 1 } },
       }}
     >
       <Box
         as="pre"
-        ref={ref}
         p={4}
         pt={language ? 9 : 4}
-        pr={language ? 4 : 20}
+        pr={language ? 4 : 14}
         bg="page.bg-elevated"
         border="1px solid"
         borderColor="page.border"
@@ -80,36 +76,11 @@ export default function CodeBlock(props: React.HTMLAttributes<HTMLPreElement> & 
           {language}
         </Box>
       )}
-      <Box
-        as="button"
-        type="button"
-        className="code-copy"
-        onClick={copy}
-        aria-label={status === 'idle' ? 'Copy code to clipboard' : label}
-        position="absolute"
-        top={1.5}
-        right={1.5}
-        display="inline-flex"
-        alignItems="center"
-        minH="28px"
-        px={2}
-        fontSize="11px"
-        fontFamily={MONO}
-        borderRadius="md"
-        border="1px solid"
-        borderColor="page.border"
-        bg="page.bg"
-        color={status === 'copied' ? 'accent.text' : 'page.fg-secondary'}
-        opacity={status === 'idle' ? 0 : 1}
-        _hover={{ color: 'page.fg', borderColor: 'page.border-strong' }}
-        _focusVisible={{ opacity: 1, outline: '2px solid var(--accent)', outlineOffset: '1px' }}
-        transition="opacity 150ms var(--ease-out-quart), color 150ms var(--ease-out-quart)"
-      >
-        {status === 'copied' ? 'Copied ✓' : label}
-      </Box>
-      <Box as="span" className="sr-only" role="status" aria-live="polite">
-        {status === 'copied' ? 'Code copied to clipboard' : status === 'failed' ? 'Could not copy the code' : ''}
-      </Box>
+      {value && (
+        <Box className="code-copy no-print" position="absolute" top={1.5} right={1.5}>
+          <CopyButton value={value} label="Copy code" srLabel="Code copied to clipboard" />
+        </Box>
+      )}
     </Box>
   )
 }

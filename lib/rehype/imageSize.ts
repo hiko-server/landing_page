@@ -1,12 +1,24 @@
 import fs from 'fs'
 import path from 'path'
+import { safeFetch } from '../security/safeFetch'
+import { isValidUploadName } from '../security/uploadName'
+import { isR2Configured, r2GetBuffer } from '../r2'
 import type { ImageSize } from './images'
 
 /**
- * Intrinsic size of local images without an image library: reads only the
- * file header (PNG IHDR, GIF logical screen, JPEG SOFn + EXIF orientation,
- * WebP VP8/VP8L/VP8X). Used at build/ISR time so article <img> tags carry
- * width/height and never shift the layout.
+ * Intrinsic image sizes without an image library: only the file header is
+ * read (PNG IHDR, GIF logical screen, JPEG SOFn + EXIF orientation, WebP
+ * VP8/VP8L/VP8X). Used when articles are compiled (build / ISR / preview) so
+ * every <img> carries width/height and never shifts the layout:
+ *
+ *   /uploads/<name>   public/uploads on disk, else the R2 copy
+ *   /images/… etc.    other files under public/
+ *   https://…         a ranged request for the first bytes, through
+ *                     lib/security/safeFetch (no internal addresses, short
+ *                     timeout, byte cap, image/* only)
+ *
+ * Results are kept in a bounded LRU; failures are remembered briefly so a
+ * dead host is not retried on every revalidation.
  */
 
 const u16be = (b: Uint8Array, o: number) => (b[o] << 8) | b[o + 1]
@@ -131,3 +143,152 @@ export function localImageSize(src: string, publicDir = path.join(process.cwd(),
     return null
   }
 }
+
+// ── Uploads, R2 and remote images ──────────────────────────────────────────
+
+const UPLOAD_PREFIX = '/uploads/'
+/** First request: the header of almost every PNG/GIF/WebP and most JPEGs. */
+export const REMOTE_HEAD_BYTES = 64 * 1024
+/** Hard ceiling for one remote image (a JPEG whose SOF sits behind big EXIF/ICC blocks). */
+export const REMOTE_MAX_BYTES = 128 * 1024
+export const REMOTE_TIMEOUT_MS = 3000
+export const SIZE_CACHE_MAX = 500
+const FAILURE_TTL_MS = 10 * 60 * 1000
+
+export type RemoteResponse = { status: number; headers: Record<string, string | string[] | undefined>; body: Uint8Array }
+export type RemoteFetcher = (
+  url: string,
+  init: { headers: Record<string, string>; timeoutMs: number; maxBytes: number },
+) => Promise<RemoteResponse>
+
+export type SizeResolverDeps = {
+  /** Remote GET (defaults to safeFetch). */
+  fetchRemote?: RemoteFetcher
+  /** Header bytes of public/uploads/<name>, null when absent (defaults to disk). */
+  readUpload?: (name: string) => ImageSize | null
+  /** Bytes of the R2 copy of an upload, null when absent (defaults to lib/r2). */
+  readR2?: (name: string) => Promise<Uint8Array | null>
+  /** Same-site files outside /uploads (defaults to localImageSize). */
+  readLocal?: (src: string) => ImageSize | null
+  timeoutMs?: number
+  cacheSize?: number
+  now?: () => number
+}
+
+const defaultFetchRemote: RemoteFetcher = async (url, init) => {
+  const res = await safeFetch(url, { headers: init.headers, timeoutMs: init.timeoutMs, maxBytes: init.maxBytes, maxRedirects: 3 })
+  return { status: res.status, headers: res.headers, body: res.body }
+}
+
+/**
+ * Header bytes of an upload's R2 copy (only used when the file is missing on
+ * disk, e.g. before the boot sync restored it). lib/r2 has no ranged getter,
+ * so the object is fetched whole and sliced; the result is cached.
+ */
+async function defaultReadR2(name: string): Promise<Uint8Array | null> {
+  if (!isR2Configured()) return null
+  const buf = await r2GetBuffer(`uploads/${name}`)
+  return buf ? buf.subarray(0, HEADER_BYTES) : null
+}
+
+function header(headers: RemoteResponse['headers'], name: string): string {
+  const v = headers[name] ?? headers[name.toLowerCase()]
+  return (Array.isArray(v) ? v[0] : v) || ''
+}
+
+/** Upload file name for a same-site `/uploads/<name>` URL; null for anything else. */
+export function uploadNameOf(src: string): string | null {
+  if (!src.startsWith(UPLOAD_PREFIX)) return null
+  let name: string
+  try {
+    name = decodeURIComponent(src.slice(UPLOAD_PREFIX.length).split(/[?#]/)[0])
+  } catch {
+    return null
+  }
+  return isValidUploadName(name) ? name : null
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), ms)
+    promise.then(
+      (v) => {
+        clearTimeout(timer)
+        resolve(v)
+      },
+      () => {
+        clearTimeout(timer)
+        resolve(null)
+      },
+    )
+  })
+}
+
+/**
+ * Size resolver for compileMdx: `(src) => Promise<ImageSize | null>`.
+ * Never throws; unknown or unreachable images resolve to null.
+ */
+export function createImageSizeResolver(deps: SizeResolverDeps = {}): (src: string) => Promise<ImageSize | null> {
+  const fetchRemote = deps.fetchRemote || defaultFetchRemote
+  const readUpload = deps.readUpload || ((name: string) => localImageSize(`${UPLOAD_PREFIX}${name}`))
+  const readR2 = deps.readR2 || defaultReadR2
+  const readLocal = deps.readLocal || ((src: string) => localImageSize(src))
+  const timeoutMs = deps.timeoutMs ?? REMOTE_TIMEOUT_MS
+  const max = deps.cacheSize ?? SIZE_CACHE_MAX
+  const now = deps.now || Date.now
+  const lru = new Map<string, { size: ImageSize | null; expires: number }>()
+
+  const remember = (key: string, size: ImageSize | null) => {
+    lru.delete(key)
+    lru.set(key, { size, expires: size ? Infinity : now() + FAILURE_TTL_MS })
+    while (lru.size > max) lru.delete(lru.keys().next().value as string)
+  }
+
+  const remote = async (url: string): Promise<ImageSize | null> => {
+    for (const bytes of [REMOTE_HEAD_BYTES, REMOTE_MAX_BYTES]) {
+      const res = await withTimeout(
+        fetchRemote(url, { headers: { Range: `bytes=0-${bytes - 1}`, Accept: 'image/*' }, timeoutMs, maxBytes: REMOTE_MAX_BYTES }),
+        timeoutMs,
+      )
+      if (!res || (res.status !== 200 && res.status !== 206)) return null
+      if (!/^image\//i.test(header(res.headers, 'content-type'))) return null
+      const size = imageSizeFromBytes(res.body.subarray(0, REMOTE_MAX_BYTES))
+      if (size) return size
+      // Only a ranged answer can be extended; a full body that did not parse never will.
+      if (res.status !== 206 || res.body.length < bytes) return null
+    }
+    return null
+  }
+
+  return async (src: string) => {
+    const key = src.trim()
+    if (!key) return null
+    const hit = lru.get(key)
+    if (hit && hit.expires > now()) {
+      lru.delete(key)
+      lru.set(key, hit)
+      return hit.size
+    }
+    let size: ImageSize | null = null
+    const upload = uploadNameOf(key)
+    if (upload) {
+      size = readUpload(upload)
+      if (!size) {
+        const bytes = await withTimeout(readR2(upload), timeoutMs * 3)
+        size = bytes ? imageSizeFromBytes(bytes) : null
+      }
+    } else if (/^https:\/\//i.test(key)) {
+      size = await remote(key)
+    } else if (/^\/(?!\/)/.test(key)) {
+      // Same-site files are cheap to re-check: not cached (they can change on deploy).
+      return readLocal(key)
+    } else {
+      return null
+    }
+    remember(key, size)
+    return size
+  }
+}
+
+/** The process-wide resolver used by lib/mdx.ts. */
+export const resolveImageSize = createImageSizeResolver()
