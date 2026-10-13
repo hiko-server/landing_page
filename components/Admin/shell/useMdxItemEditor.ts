@@ -4,6 +4,7 @@ import { useToast } from '@chakra-ui/react'
 import { useDirtyRegistration } from '../AdminDirtyContext'
 import type { RichEditorHandle } from '../RichEditor'
 import type { MdxProblem } from '../editor/EditorNotices'
+import { mergeFrontmatter, modelledKeys, unmodelledFrontmatter, type FrontmatterRecord } from './frontmatterMerge'
 import { loginHref, parseRevalidated, readJsonObject, saveToastCopy } from './http'
 import { slugFromTitle } from './publishChecks'
 import { useLeaveSaver } from './useLeaveSaver'
@@ -24,6 +25,9 @@ import { useSaveShortcut, type SaveState } from './ui'
  *   - publish state: save(), save({ draft: false }) to publish,
  *     save({ draft: true }) to unpublish
  *   - new items derive their slug from the title until the slug is edited
+ *   - frontmatter keys the form does not model (seoTitle, updated, lang, …)
+ *     are kept as loaded and saved with the form's fields (./frontmatterMerge);
+ *     a modelled field the form clears is still removed
  */
 
 export type LoadState = 'loading' | 'ready' | 'error'
@@ -46,6 +50,10 @@ type Options<F extends Record<string, unknown> & { draft: boolean }> = {
   /** Frontmatter key edited through the comma-separated list input. */
   listField: keyof F & string
   fromServer: (frontmatter: Record<string, any>) => F
+  /**
+   * The frontmatter the form writes: every key it models, undefined for an
+   * empty field (the save removes it). Keys it never writes are kept as stored.
+   */
   toServer: (fm: F, list: string[]) => Record<string, unknown>
 }
 
@@ -70,6 +78,9 @@ export function useMdxItemEditor<F extends Record<string, unknown> & { draft: bo
   const [slug, setSlugState] = useState('')
   const [slugTouched, setSlugTouched] = useState(false)
   const [fm, setFm] = useState<F>(empty)
+  // Stored frontmatter keys the form does not model, sent back with every save.
+  const [extra, setExtra] = useState<FrontmatterRecord>({})
+  const modelled = useMemo(() => modelledKeys(empty, toServer(empty, [])), [empty, toServer])
   // Raw text of the comma-separated list, parsed on blur / save, so typing
   // ", " or a multi-word item isn't eaten mid-keystroke.
   const [listText, setListText] = useState('')
@@ -106,6 +117,7 @@ export function useMdxItemEditor<F extends Record<string, unknown> & { draft: bo
       setSlugState('')
       setSlugTouched(false)
       setFm(empty)
+      setExtra({})
       setListText('')
       setBody('')
       setBaseline(null)
@@ -133,11 +145,13 @@ export function useMdxItemEditor<F extends Record<string, unknown> & { draft: bo
           )
         }
         if (!alive) return
-        const next = fromServer((data.frontmatter as Record<string, any>) || {})
+        const stored = (data.frontmatter as Record<string, any>) || {}
+        const next = fromServer(stored)
         const list = next[listField]
         setSlugState(String(data.slug || slugParam))
         setSlugTouched(true)
         setFm(next)
+        setExtra(unmodelledFrontmatter(stored, modelled))
         setListText(Array.isArray(list) ? list.join(', ') : '')
         setBody(typeof data.body === 'string' ? data.body : '')
         setEtag(res.headers.get('ETag'))
@@ -239,7 +253,7 @@ export function useMdxItemEditor<F extends Record<string, unknown> & { draft: bo
               method: 'PUT',
               headers,
               // New items must never silently overwrite an existing slug.
-              body: JSON.stringify({ slug, frontmatter: toServer(nextFm, list), body, create: isNew }),
+              body: JSON.stringify({ slug, frontmatter: mergeFrontmatter(extra, toServer(nextFm, list), modelled), body, create: isNew }),
             })
           } catch {
             res = null
@@ -310,7 +324,7 @@ export function useMdxItemEditor<F extends Record<string, unknown> & { draft: bo
         })(),
       )
     },
-    [loadState, slug, fm, listText, body, snapshotOf, isNew, etag, endpoint, toServer, noun, listField, toast, collection, router, flushDraft, clearDraft, track],
+    [loadState, slug, fm, extra, modelled, listText, body, snapshotOf, isNew, etag, endpoint, toServer, noun, listField, toast, collection, router, flushDraft, clearDraft, track],
   )
 
   // "Save and leave": true only once the edits are stored; a 409 / 422 / 401,
@@ -338,7 +352,10 @@ export function useMdxItemEditor<F extends Record<string, unknown> & { draft: bo
   }, [discardDraft])
 
   /** The frontmatter as it would be saved now (for diffs against snapshots). */
-  const serverFrontmatter = useMemo(() => toServer(fm, parseList(listText)), [toServer, fm, listText])
+  const serverFrontmatter = useMemo(
+    () => mergeFrontmatter(extra, toServer(fm, parseList(listText)), modelled),
+    [extra, toServer, fm, listText, modelled],
+  )
 
   const saveState: SaveState =
     loadState === 'loading' ? 'loading' : loadState === 'error' ? 'error' : saving ? 'saving' : dirty ? 'dirty' : 'clean'

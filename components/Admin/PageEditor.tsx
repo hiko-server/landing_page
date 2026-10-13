@@ -38,6 +38,8 @@ import {
 } from './shell/ui'
 import { loginHref, parseRevalidated, readJsonObject, saveToastCopy } from './shell/http'
 import { useLocalDraft } from './shell/useLocalDraft'
+import { mergeFrontmatter, unmodelledFrontmatter, type FrontmatterRecord } from './shell/frontmatterMerge'
+import { PAGE_MODELLED_KEYS, pageToServer } from './shell/itemFrontmatter'
 import { useLeaveSaver } from './shell/useLeaveSaver'
 import LivePreview from './shell/LivePreview'
 import ItemHistoryDrawer from './shell/ItemHistoryDrawer'
@@ -73,6 +75,9 @@ function toIsoDay(raw: unknown): string {
 
 const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 
+/** The frontmatter the form writes, with the stored keys it does not model (lang, …). */
+const pageFrontmatter = (fm: Frontmatter, extra: FrontmatterRecord) => mergeFrontmatter(extra, pageToServer(fm), PAGE_MODELLED_KEYS)
+
 /** What an owner-written body does to each page (pages/now.tsx, pages/uses.tsx). */
 const AUTO_COPY: Record<PageName, { what: string; replaces: string }> = {
   now: {
@@ -99,6 +104,8 @@ function PageEditorInner({ name }: { name: PageName }) {
   const richRef = useRef<RichEditorHandle>(null)
 
   const [fm, setFm] = useState<Frontmatter>({ title: '', description: '', updated: todayISO() })
+  // Stored frontmatter keys the form does not model, sent back with every save.
+  const [extra, setExtra] = useState<FrontmatterRecord>({})
   const [body, setBody] = useState('')
   const [serverBody, setServerBody] = useState('')
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
@@ -143,6 +150,7 @@ function PageEditorInner({ name }: { name: PageName }) {
           description: String(f.description ?? ''),
           updated: toIsoDay(f.updated),
         })
+        setExtra(unmodelledFrontmatter(f, PAGE_MODELLED_KEYS))
         const text = typeof data.body === 'string' ? data.body : ''
         setBody(text)
         setServerBody(text)
@@ -238,7 +246,7 @@ function PageEditorInner({ name }: { name: PageName }) {
               headers,
               body: JSON.stringify({
                 name,
-                frontmatter: { title: fm.title, description: fm.description || undefined, updated: fm.updated },
+                frontmatter: pageFrontmatter(fm, extra),
                 body: text,
               }),
             })
@@ -304,7 +312,7 @@ function PageEditorInner({ name }: { name: PageName }) {
         })(),
       )
     },
-    [loadState, fm, body, etag, name, toast, flushDraft, clearDraft, track],
+    [loadState, fm, extra, body, etag, name, toast, flushDraft, clearDraft, track],
   )
 
   // "Save and leave": true only once the edits are stored; a 409 / 422 / 401,
@@ -316,10 +324,7 @@ function PageEditorInner({ name }: { name: PageName }) {
   const saveState: SaveState =
     loadState === 'loading' ? 'loading' : loadState === 'error' ? 'error' : saving ? 'saving' : dirty ? 'dirty' : 'clean'
 
-  const historyCurrent = useMemo(
-    () => ({ frontmatter: { title: fm.title, description: fm.description, updated: fm.updated } as Record<string, unknown>, body }),
-    [fm, body],
-  )
+  const historyCurrent = useMemo(() => ({ frontmatter: pageFrontmatter(fm, extra), body }), [fm, extra, body])
   const copy = AUTO_COPY[name]
 
   return (

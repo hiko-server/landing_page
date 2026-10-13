@@ -84,6 +84,43 @@ export function uploadNameOf(url: unknown): string | null {
   return UPLOAD_NAME_RE.test(name) && !isVariantName(name) ? name : null
 }
 
+/** `/uploads/<name>` anywhere in a text: markdown images, JSX / HTML attributes, frontmatter values. */
+const UPLOAD_REF_RE = /\/uploads\/([A-Za-z0-9._%-]+)/g
+
+/**
+ * Original upload names a text references (`/uploads/a.png` in an article
+ * body or a cover), deduplicated, in order of appearance. Variant URLs and
+ * names that are not valid uploads are skipped.
+ */
+export function uploadNamesIn(text: unknown): string[] {
+  if (typeof text !== 'string' || !text) return []
+  const out = new Set<string>()
+  for (const m of text.matchAll(UPLOAD_REF_RE)) {
+    const name = uploadNameOf(`/uploads/${m[1]}`)
+    if (name) out.add(name)
+  }
+  return Array.from(out)
+}
+
+/**
+ * What variantSrcSet sees on disk for the uploads a text references: per
+ * original, whether it is stored and which variant widths exist. A compiled
+ * article embeds its srcsets, so this belongs in any cache key of a
+ * compiled body — variants written later (the media-optimize backfill) then
+ * give a fresh compile instead of the stale, srcset-less tree.
+ */
+export function variantState(text: unknown): string {
+  const names = uploadNamesIn(text)
+  if (!names.length) return ''
+  const dir = uploadsDir()
+  return names
+    .map((name) => {
+      const widths = VARIANT_WIDTHS.filter((w) => fs.existsSync(path.join(dir, variantName(name, w))))
+      return `${name}:${fs.existsSync(path.join(dir, name)) ? 1 : 0}:${widths.join(',')}`
+    })
+    .join('|')
+}
+
 /**
  * `srcset` for an uploaded image: every stored WebP variant
  * (`/uploads/a.jpg.w640.webp 640w, …`) plus the original as the largest

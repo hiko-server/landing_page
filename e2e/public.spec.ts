@@ -169,3 +169,29 @@ test('the image optimizer is disabled', async ({ request }, testInfo) => {
   expect(res.status()).toBe(404)
   expect(res.headers()['content-security-policy'], 'security headers on the 404').toBeTruthy()
 })
+
+test('uploaded images whose WebP variants exist ship a srcset on posts and case studies', async ({ request }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium', 'HTTP-level check: once is enough')
+  const lists = await Promise.all(
+    ['/api/blog/list', '/api/work/list'].map(async (url) => {
+      const res = await request.get(url)
+      if (!res.ok()) return []
+      const body = (await res.json()) as { items?: { slug: string; permalink?: string }[] }
+      return (body.items || []).map((it) => it.permalink || `${url.includes('blog') ? '/blog' : '/work'}/${it.slug}`)
+    }),
+  )
+  const paths = lists.flat().map((p) => new URL(p, 'http://x').pathname)
+  test.skip(paths.length === 0, 'the content store has no published posts or case studies (empty CI store)')
+  const missing: string[] = []
+  for (const path of paths) {
+    const html = await (await request.get(path)).text()
+    for (const tag of html.match(/<img\b[^>]*>/g) || []) {
+      const src = /\ssrc="(\/uploads\/[^"]+)"/.exec(tag)?.[1]
+      if (!src || /\ssrcset="/i.test(tag)) continue
+      // The narrowest variant is stored → the page must offer it (lib/uploadVariants variantSrcSet).
+      const variant = await request.head(`${src}.w640.webp`)
+      if (variant.ok()) missing.push(`${path}: ${src}`)
+    }
+  }
+  expect(missing, 'uploads with a stored w640 WebP but no srcset').toEqual([])
+})

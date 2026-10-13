@@ -176,6 +176,7 @@ export default function CollectionIndex({
     let processed = 0
     let skipped = 0
     let failed = 0
+    const refreshed = new Set<string>()
     try {
       // A run stops after ~45 s; keep going while the server reports more.
       for (let round = 0; round < 20; round++) {
@@ -185,12 +186,15 @@ export default function CollectionIndex({
         processed += Number(data.processed) || 0
         skipped += Number(data.skipped) || 0
         failed += Array.isArray(data.errors) ? data.errors.length : 0
+        parseRevalidated(data).forEach((p) => refreshed.add(p))
         if (!(Number(data.remaining) > 0)) break
       }
       toast({
         status: failed ? 'warning' : 'success',
         title: processed ? `Responsive versions made for ${processed} image${processed === 1 ? '' : 's'}` : 'All images are already optimised',
-        description: `${skipped} already done or too small${failed ? `, ${failed} failed (see the server log)` : ''}.`,
+        description: `${skipped} already done or too small${failed ? `, ${failed} failed (see the server log)` : ''}.${
+          refreshed.size ? ` ${refreshed.size} page${refreshed.size === 1 ? '' : 's'} using them refreshed.` : ''
+        }`,
         position: 'bottom-right',
         duration: 7000,
         isClosable: true,

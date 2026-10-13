@@ -12,10 +12,12 @@ import remarkStripMdxExpressions from './rehype/stripMdxExpressions'
 import rehypeSafeUrls from './rehype/safeUrls'
 import rehypeLiftBlocks from './rehype/liftBlocks'
 import rehypeHeadings from './rehype/headings'
+import { footnoteOptions } from './rehype/footnotes'
+import rehypeCodeThemeAttr from './rehype/codeThemeAttr'
 import rehypeImages, { type SizeResolver, type SrcSetResolver } from './rehype/images'
 import rehypeLangSpans from './rehype/langSpans'
 import { resolveImageSize } from './rehype/imageSize'
-import { variantSrcSet } from './uploadVariants'
+import { variantSrcSet, variantState } from './uploadVariants'
 import { isElement, textOf, walk, type HastNode } from './rehype/hast'
 import { clampAtBoundary } from './schema'
 
@@ -37,7 +39,8 @@ import { clampAtBoundary } from './schema'
  *   remark-parse → remark-mdx → remark-gfm → strip expressions / map JSX →
  *   remark-rehype → safe URLs (links / media / embeds) → lift blocks out of
  *   paragraphs → heading ids + TOC → image sizes / srcset / figures →
- *   language-of-parts spans → rehype-pretty-code → drop positions / data
+ *   language-of-parts spans → rehype-pretty-code (its data-theme attributes
+ *   dropped) → drop positions / data
  *
  * Slugs are restricted to [a-z0-9-_]+ before any lookup.
  */
@@ -183,6 +186,15 @@ export type CompileOptions = {
   srcSetFor?: SrcSetResolver
 }
 
+/**
+ * Syntax themes (rehype-pretty-code emits both as --shiki-light / --shiki-dark
+ * variables, styles/globals.css picks one per colour mode). Every token colour
+ * of both meets 4.5:1 on the code block (page.bg-elevated) and on a
+ * highlighted line; github-light's red, green, orange and comment grey did
+ * not (3.2–4.4:1 on #f5f5f5), its high-contrast variant does.
+ */
+export const CODE_THEMES = { dark: 'github-dark-dimmed', light: 'github-light-high-contrast' } as const
+
 /** Remove positional info, plugin data and undefined properties: the tree becomes plain JSON. */
 function toPlainTree(node: HastNode & { position?: unknown; data?: unknown }): void {
   delete node.position
@@ -205,7 +217,7 @@ export async function compileMdx(body: string, opts: CompileOptions = {}): Promi
     .use(remarkMdx)
     .use(remarkGfm)
     .use(remarkStripMdxExpressions)
-    .use(remarkRehype)
+    .use(remarkRehype, footnoteOptions(lang))
     .use(rehypeSafeUrls)
     .use(rehypeLiftBlocks)
     .use(rehypeHeadings, { onToc: (t: TocItem[]) => (toc = t) })
@@ -214,7 +226,8 @@ export async function compileMdx(body: string, opts: CompileOptions = {}): Promi
       srcSetFor: opts.srcSetFor || variantSrcSet,
     })
     .use(rehypeLangSpans, { lang })
-    .use(rehypePrettyCode, { theme: { dark: 'github-dark-dimmed', light: 'github-light' }, keepBackground: false })
+    .use(rehypePrettyCode, { theme: CODE_THEMES, keepBackground: false })
+    .use(rehypeCodeThemeAttr)
   let tree: HastRoot
   try {
     const mdast = processor.parse(String(body ?? ''))
@@ -253,11 +266,22 @@ const COMPILE_CACHE_MAX = 64
 const compileCache = new Map<string, Promise<{ tree: HastRoot; toc: TocItem[] }>>()
 
 /**
- * compileMdx memoised by (body, lang) for the public pages, feeds and ISR
- * revalidations. Returned trees are shared: callers must not mutate them.
+ * compileMdx memoised for the public pages, feeds and ISR revalidations.
+ * The key is the body, the language and the variant state of the uploads
+ * the body references (lib/uploadVariants variantState): the tree embeds
+ * their srcsets, so variants that appear later (the media-optimize
+ * backfill, a restored backup) give a fresh compile rather than the memoised
+ * srcset-less one. Returned trees are shared: callers must not mutate them.
  */
 export function compileMdxCached(body: string, lang: string): Promise<{ tree: HastRoot; toc: TocItem[] }> {
-  const key = crypto.createHash('sha1').update(lang).update('\0').update(body).digest('hex')
+  const key = crypto
+    .createHash('sha1')
+    .update(lang)
+    .update('\0')
+    .update(body)
+    .update('\0')
+    .update(variantState(body))
+    .digest('hex')
   const hit = compileCache.get(key)
   if (hit) {
     compileCache.delete(key)
