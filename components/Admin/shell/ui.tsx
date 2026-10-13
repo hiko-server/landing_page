@@ -53,6 +53,9 @@ export const outlineButtonProps: ButtonProps = {
   _hover: { bg: 'page.bg-overlay' },
 }
 
+/** Warning text that meets 4.5:1 in both themes (orange.400 does not on white). */
+export const warnTextProps = { color: 'orange.700', _dark: { color: 'orange.300' } } as const
+
 /** Shared input props: indigo focus ring on hairline borders. */
 export const inputProps = {
   focusBorderColor: 'accent.500',

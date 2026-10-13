@@ -17,6 +17,8 @@ export type ArticleLink = {
   /** Language of the title (contract E tag), for the link's lang attribute. */
   lang: string
   tags: string[]
+  /** A post's case study (its `project` frontmatter: a work slug); null / absent otherwise. */
+  project?: string | null
 }
 
 type IndexEntryLike = {
@@ -30,6 +32,7 @@ type IndexEntryLike = {
     period?: unknown
     tags?: unknown
     tech?: unknown
+    project?: unknown
   }
 }
 
@@ -49,6 +52,7 @@ export function toArticleLink(kind: ArticleKind, entry: IndexEntryLike): Article
     meta: kind === 'blog' ? (str(fm.date) ? String(fm.date).slice(0, 10) : null) : str(fm.period),
     lang: entry.lang,
     tags: kind === 'blog' ? strList(fm.tags) : strList(fm.tech),
+    ...(kind === 'blog' && str(fm.project) ? { project: str(fm.project) } : {}),
   }
 }
 
@@ -84,4 +88,33 @@ export function relatedByTags(
     .sort((a, b) => b.score - a.score || a.order - b.order)
     .slice(0, limit)
     .map((x) => x.item)
+}
+
+/**
+ * Explicit links between a post and its case study (D8): for a post, the
+ * case study its `project` names; for a case study, the posts whose
+ * `project` is its slug (pool order, i.e. newest first).
+ */
+export function projectLinks(current: { kind: ArticleKind; slug: string; project?: string | null }, pool: readonly ArticleLink[]): ArticleLink[] {
+  if (current.kind === 'blog') {
+    if (!current.project) return []
+    return pool.filter((x) => x.kind === 'work' && x.slug === current.project)
+  }
+  return pool.filter((x) => x.kind === 'blog' && x.project === current.slug)
+}
+
+/**
+ * "Related" at the end of an article: its explicit post ↔ case-study links
+ * first, then the pieces sharing the most tags, up to `limit` in all
+ * (explicit links are never cut).
+ */
+export function relatedArticles(
+  current: { kind: ArticleKind; slug: string; tags: readonly string[]; project?: string | null },
+  pool: readonly ArticleLink[],
+  limit = 3,
+): ArticleLink[] {
+  const explicit = projectLinks(current, pool)
+  const seen = new Set(explicit.map((x) => `${x.kind}/${x.slug}`))
+  const byTags = relatedByTags(current, pool, pool.length).filter((x) => !seen.has(`${x.kind}/${x.slug}`))
+  return [...explicit, ...byTags.slice(0, Math.max(0, limit - explicit.length))]
 }

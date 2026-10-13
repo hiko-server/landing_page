@@ -1,11 +1,13 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import type { GetStaticProps } from 'next'
-import { Box, Flex, Text, Link, HStack, Button } from '@chakra-ui/react'
+import { Box, Flex, Text, Link } from '@chakra-ui/react'
 import NextLink from 'next/link'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 import PageHeader from '../../components/General-UI/PageHeader'
+import TagFilterBar, { TagPrepaint, useTagFilter } from '../../components/Article/TagFilter'
 import { listPosts, type PostFrontmatter, type MDXIndexEntry } from '../../lib/mdx'
+import { hasTag, tagCounts, tagSlugList } from '../../lib/tagFilter'
 import { formatPostDate, isoDate } from '../../lib/postDate'
 import { absUrl, ogImageUrl, personAuthor, PERSON_NAME, SITE_HOST } from '../../lib/schema'
 
@@ -15,37 +17,16 @@ type Props = {
 
 const MONO = 'var(--font-geist-mono), monospace'
 
+/**
+ * /blog — every published post, newest first, with a shareable tag filter
+ * (`?tag=edge-ai`, components/Article/TagFilter.tsx). ISR (60 s).
+ */
 export default function BlogIndex({ posts }: Props) {
-  const [activeTag, setActiveTag] = useState<string | null>(null)
+  // Tags with counts, alphabetical, so the chip row never reshuffles.
+  const tags = useMemo(() => tagCounts(posts.map((p) => p.frontmatter.tags)), [posts])
+  const { active, select } = useTagFilter(tags)
 
-  // Collect tags with counts; keep deterministic order (alphabetical) so the
-  // chip row doesn't reshuffle between renders.
-  const tags = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const p of posts) {
-      for (const t of p.frontmatter.tags || []) {
-        counts.set(t, (counts.get(t) || 0) + 1)
-      }
-    }
-    return Array.from(counts.entries()).sort(([a], [b]) => a.localeCompare(b))
-  }, [posts])
-
-  const visible = useMemo(
-    () => (activeTag ? posts.filter((p) => (p.frontmatter.tags || []).includes(activeTag)) : posts),
-    [posts, activeTag],
-  )
-
-  const chip = (selected: boolean) => ({
-    size: 'xs' as const,
-    variant: 'outline' as const,
-    bg: selected ? 'page.fg' : 'transparent',
-    color: selected ? 'page.bg' : 'page.fg-secondary',
-    borderColor: selected ? 'page.fg' : 'page.border-strong',
-    fontFamily: MONO,
-    fontWeight: 500,
-    _hover: { borderColor: 'page.fg', bg: selected ? 'page.fg' : 'transparent' },
-    _focusVisible: { outline: '2px solid var(--accent)', outlineOffset: '2px' },
-  })
+  const visible = useMemo(() => (active ? posts.filter((p) => hasTag(p.frontmatter.tags, active)) : posts), [posts, active])
 
   return (
     <>
@@ -83,16 +64,15 @@ export default function BlogIndex({ posts }: Props) {
           />
 
           {tags.length > 0 && (
-            <HStack as="div" role="group" aria-label="Filter posts by tag" mb={8} spacing={2} flexWrap="wrap" rowGap={2}>
-              <Button {...chip(activeTag === null)} aria-pressed={activeTag === null} onClick={() => setActiveTag(null)}>
-                all ({posts.length})
-              </Button>
-              {tags.map(([t, n]) => (
-                <Button key={t} {...chip(activeTag === t)} aria-pressed={activeTag === t} onClick={() => setActiveTag(t)}>
-                  #{t} ({n})
-                </Button>
-              ))}
-            </HStack>
+            <TagFilterBar
+              tags={tags}
+              total={posts.length}
+              active={active}
+              onSelect={select}
+              label="Filter posts by tag"
+              noun={{ one: 'post', many: 'posts' }}
+              matching={visible.length}
+            />
           )}
 
           {visible.length === 0 ? (
@@ -105,70 +85,81 @@ export default function BlogIndex({ posts }: Props) {
               </Text>
             </Box>
           ) : (
-            <Box as="ul" className="hover-list" listStyleType="none" m={0} p={0} borderTop="1px solid" borderColor="page.border">
-              {visible.map((p) => (
-                <Box as="li" key={p.slug} className="hover-item" borderBottom="1px solid" borderColor="page.border">
-                  <Link
-                    as={NextLink}
-                    href={p.permalink}
-                    data-group=""
-                    _hover={{ textDecoration: 'none' }}
-                    _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
-                    display="block"
-                    py={5}
+            <>
+              <TagPrepaint tags={tags} />
+              <Box as="ul" className="hover-list" listStyleType="none" m={0} p={0} borderTop="1px solid" borderColor="page.border">
+                {visible.map((p) => (
+                  <Box
+                    as="li"
+                    key={p.slug}
+                    className="hover-item"
+                    borderBottom="1px solid"
+                    borderColor="page.border"
+                    data-tag-item=""
+                    data-tag-slugs={tagSlugList(p.frontmatter.tags)}
                   >
-                    <Flex direction={['column', 'row']} align={['flex-start', 'baseline']} gap={[1, 6]}>
-                      <Text
-                        as="time"
-                        className="tnum"
-                        dateTime={isoDate(p.frontmatter.date) || undefined}
-                        flexShrink={0}
-                        fontFamily={MONO}
-                        fontSize="12px"
-                        color="page.fg-secondary"
-                        w={['auto', '110px']}
-                      >
-                        {formatPostDate(p.frontmatter.date)}
-                      </Text>
-                      <Box flex={1} minW={0}>
+                    <Link
+                      as={NextLink}
+                      href={p.permalink}
+                      data-group=""
+                      _hover={{ textDecoration: 'none' }}
+                      _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
+                      display="block"
+                      py={5}
+                    >
+                      <Flex direction={['column', 'row']} align={['flex-start', 'baseline']} gap={[1, 6]}>
                         <Text
-                          as="span"
-                          display="block"
-                          color="page.fg"
-                          fontWeight={500}
-                          fontSize="17px"
-                          transition="color 150ms var(--ease-out-quart)"
-                          _groupHover={{ color: 'accent.text' }}
-                          lang={p.lang === 'en' ? undefined : p.lang}
-                          style={{ viewTransitionName: `vt-blog-${p.slug}` }}
+                          as="time"
+                          className="tnum"
+                          dateTime={isoDate(p.frontmatter.date) || undefined}
+                          flexShrink={0}
+                          fontFamily={MONO}
+                          fontSize="12px"
+                          color="page.fg-secondary"
+                          w={['auto', '110px']}
                         >
-                          {p.frontmatter.title}
+                          {formatPostDate(p.frontmatter.date)}
                         </Text>
-                        {p.frontmatter.description && (
+                        <Box flex={1} minW={0}>
                           <Text
                             as="span"
                             display="block"
-                            color="page.fg-secondary"
-                            fontSize="14px"
-                            mt={1}
-                            noOfLines={2}
+                            color="page.fg"
+                            fontWeight={500}
+                            fontSize="17px"
+                            transition="color 150ms var(--ease-out-quart)"
+                            _groupHover={{ color: 'accent.text' }}
                             lang={p.lang === 'en' ? undefined : p.lang}
+                            style={{ viewTransitionName: `vt-blog-${p.slug}` }}
                           >
-                            {p.frontmatter.description}
+                            {p.frontmatter.title}
                           </Text>
-                        )}
-                      </Box>
-                      <Text as="span" flexShrink={0} fontFamily={MONO} fontSize="11px" color="page.fg-secondary" className="tnum">
-                        {p.readingMinutes} min read
-                        <Box as="span" aria-hidden className="nudge" ml={2} color="page.fg-subtle">
-                          →
+                          {p.frontmatter.description && (
+                            <Text
+                              as="span"
+                              display="block"
+                              color="page.fg-secondary"
+                              fontSize="14px"
+                              mt={1}
+                              noOfLines={2}
+                              lang={p.lang === 'en' ? undefined : p.lang}
+                            >
+                              {p.frontmatter.description}
+                            </Text>
+                          )}
                         </Box>
-                      </Text>
-                    </Flex>
-                  </Link>
-                </Box>
-              ))}
-            </Box>
+                        <Text as="span" flexShrink={0} fontFamily={MONO} fontSize="11px" color="page.fg-secondary" className="tnum">
+                          {p.readingMinutes} min read
+                          <Box as="span" aria-hidden className="nudge" ml={2} color="page.fg-subtle">
+                            →
+                          </Box>
+                        </Text>
+                      </Flex>
+                    </Link>
+                  </Box>
+                ))}
+              </Box>
+            </>
           )}
         </Box>
       </HeaderFooter>

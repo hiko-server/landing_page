@@ -6,12 +6,15 @@ import CustomHead from '../../components/General-UI/CustomHead'
 import PageHeader from '../../components/General-UI/PageHeader'
 import ArticleBody from '../../components/Article/ArticleBody'
 import ArticleNav from '../../components/Article/ArticleNav'
+import ArticleEnd, { type ShareData } from '../../components/Article/ArticleEnd'
 import MetaGrid, { MetaChips, type MetaItem } from '../../components/Article/MetaGrid'
 import DraftBar from '../../components/Article/DraftBar'
 import EditPill from '../../components/Article/EditPill'
-import { neighbours, relatedByTags, toArticleLink, type ArticleLink } from '../../components/Article/collectionNav'
+import { neighbours, projectLinks, relatedArticles, toArticleLink, type ArticleLink } from '../../components/Article/collectionNav'
 import { listPosts, listWorkInDisplayOrder, getPost, type HastRoot, type PostFrontmatter } from '../../lib/mdx'
 import { labelLang, type TocEntry } from '../../lib/toc'
+import { tagHref } from '../../lib/tagFilter'
+import type { AuthorCardData } from '../../lib/authorCard'
 import { articleImages, blogPostingNode, breadcrumb, absUrl, ogImageUrl, ogLangOf, PERSON_NAME, type OgImageOptions } from '../../lib/schema'
 import { formatPostDate, isoDate } from '../../lib/postDate'
 
@@ -31,6 +34,12 @@ type Props = {
   newer: ArticleLink | null
   older: ArticleLink | null
   related: ArticleLink[]
+  /** The case study this post is about (its `project` frontmatter, D8); null when none. */
+  project: ArticleLink | null
+  /** End-of-article author card (public CV / home data). */
+  author: AuthorCardData | null
+  /** QR code of the page for WeChat (inline SVG). */
+  shareQr: string | null
   /** Rendered in Draft Mode (the admin preview cookie): drafts are visible. */
   draftMode: boolean
 }
@@ -39,6 +48,8 @@ const MONO = 'var(--font-geist-mono), monospace'
 
 /** English UI text inside a non-English article keeps its own language. */
 const uiLang = (lang: string) => (lang === 'en' || lang.startsWith('en-') ? undefined : 'en')
+
+const blogTag = (t: string) => tagHref('/blog', t)
 
 export default function BlogPost({
   slug,
@@ -52,6 +63,9 @@ export default function BlogPost({
   newer,
   older,
   related,
+  project,
+  author,
+  shareQr,
   draftMode,
 }: Props) {
   const path = `/blog/${slug}`
@@ -72,6 +86,7 @@ export default function BlogPost({
   const image = ogImageUrl(card)
   const titleLang = labelLang(frontmatter.title) || 'en'
   const ui = uiLang(lang)
+  const share: ShareData = { url, title: frontmatter.title, qrSvg: shareQr }
 
   const meta: MetaItem[] = [
     {
@@ -92,7 +107,15 @@ export default function BlogPost({
         ) : null,
     },
     { label: 'Read', value: <span className="tnum">{readingMinutes} min</span> },
-    { label: 'Tags', value: tags.length ? <MetaChips items={tags} label="Tags" /> : null, wide: true },
+    {
+      label: 'Case study',
+      value: project ? (
+        <Link as={NextLink} href={project.permalink} color="accent.text" className="link-underline" lang={project.lang === 'en' ? undefined : project.lang}>
+          {project.title}
+        </Link>
+      ) : null,
+    },
+    { label: 'Tags', value: tags.length ? <MetaChips items={tags} label="Tags" hrefFor={blogTag} /> : null, wide: true },
   ]
 
   return (
@@ -128,7 +151,15 @@ export default function BlogPost({
         ]}
       />
       <HeaderFooter>
-        <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[12, 16]} pb={draftMode ? 24 : undefined}>
+        <Box
+          maxW="var(--container-content)"
+          mx="auto"
+          px={[4, 6, 8]}
+          py={[12, 16]}
+          pb={draftMode ? 24 : undefined}
+          // The page gutter: full-width figures bleed through it on phones.
+          sx={{ '--page-gutter': { base: '1rem', sm: '1.5rem', md: '2rem' } }}
+        >
           <Flex align="center" justify="space-between" gap={4} minH="32px" mb={8} className="no-print">
             <Link as={NextLink} href="/blog" fontFamily={MONO} fontSize="11px" color="page.fg-secondary" className="link-underline">
               ← All posts
@@ -150,6 +181,8 @@ export default function BlogPost({
             </Box>
 
             <ArticleBody tree={tree} toc={toc} />
+
+            <ArticleEnd author={author} share={share} lang={lang} />
 
             <ArticleNav
               before={newer ? { label: 'Newer', item: newer } : null}
@@ -175,10 +208,20 @@ export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
   const post = await getPost(slug, { includeDrafts: draftMode })
   if (!post) return { notFound: true, revalidate: 60 }
 
+  const [{ loadAuthorCard }, { qrSvg }] = await Promise.all([import('../../lib/authorCard'), import('../../lib/qr')])
   const posts = listPosts().map((p) => toArticleLink('blog', p))
   const work = listWorkInDisplayOrder().map((w) => toArticleLink('work', w))
+  const self = toArticleLink('blog', post)
   const { before, after } = neighbours(posts, slug)
-  const related = relatedByTags(toArticleLink('blog', post), [...posts, ...work])
+  const related = relatedArticles(self, [...posts, ...work])
+  const project = projectLinks(self, work)[0] ?? null
+
+  let shareQr: string | null = null
+  try {
+    shareQr = await qrSvg(absUrl(`/blog/${post.slug}`))
+  } catch {
+    /* the share row keeps its other actions */
+  }
 
   return {
     props: {
@@ -193,6 +236,9 @@ export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
       newer: before,
       older: after,
       related,
+      project,
+      author: loadAuthorCard(),
+      shareQr,
       draftMode,
     },
     revalidate: 60,

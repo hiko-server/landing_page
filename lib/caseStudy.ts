@@ -34,6 +34,11 @@ export type WorkOutcome = {
 
 export type WorkLink = { label: string; url: string }
 
+/** A cover narrower than this is drawn at its own size on a panel, never stretched (D2). */
+export const COVER_SHARP_MIN = 960
+/** Covers at least this wide stay sharp on large and high-density screens. */
+export const COVER_RECOMMENDED_MIN = 1600
+
 export const SUMMARY_MAX = 200
 export const OUTCOMES_MAX = 4
 export const LINKS_MAX = 4
@@ -163,4 +168,22 @@ export function primaryOutcome(outcomes: unknown): string {
   // Keep acronyms ("CPU load") and CJK labels as written.
   const shown = /^[A-Z]{2}/.test(first.label) || /[㐀-鿿]/.test(first.label) ? first.label : label
   return `${outcomeText(first)} ${shown}`
+}
+
+/**
+ * The short name a typographic cover shows: an acronym in parentheses
+ * ("Smart Waste Classification System (SWCS)" → "SWCS"), else the title up
+ * to a colon or dash, else the title — at most 28 characters on a word
+ * boundary.
+ */
+export function coverWordmark(title: unknown): string {
+  const t = typeof title === 'string' ? title.replace(/\s+/g, ' ').trim() : ''
+  if (!t) return ''
+  const acronym = /\(([A-Z0-9][A-Z0-9&.+-]{1,11})\)\s*$/.exec(t)
+  if (acronym) return acronym[1]
+  const head = t.split(/\s+[–—-]\s+|[:：]\s*/)[0].trim() || t
+  if (Array.from(head).length <= 28) return head
+  const cut = Array.from(head).slice(0, 28).join('')
+  const space = cut.lastIndexOf(' ')
+  return `${(space > 12 ? cut.slice(0, space) : cut).trim()}…`
 }

@@ -1,4 +1,5 @@
 import React from 'react'
+import NextLink from 'next/link'
 import { Box, Flex, Grid } from '@chakra-ui/react'
 import { labelLang } from '../../lib/toc'
 
@@ -23,27 +24,49 @@ export type MetaItem = {
 
 const MONO = 'var(--font-geist-mono), monospace'
 
-export function MetaChips({ items, label }: { items: readonly string[]; label: string }) {
+const chipStyle = {
+  fontFamily: MONO,
+  fontSize: '11px',
+  lineHeight: '1.4',
+  px: 2,
+  py: 0.5,
+  borderRadius: 'full',
+  border: '1px solid',
+  borderColor: 'page.border-strong',
+  color: 'page.fg-secondary',
+} as const
+
+/**
+ * Tag / stack chips. With `hrefFor`, each chip links to the list filtered by
+ * it (`/blog?tag=…`, `/work?tag=…` — D8), with a 24px hit area.
+ */
+export function MetaChips({ items, label, hrefFor }: { items: readonly string[]; label: string; hrefFor?: (item: string) => string }) {
   return (
     <Flex as="ul" aria-label={label} listStyleType="none" m={0} p={0} gap={1.5} wrap="wrap">
-      {items.map((t) => (
-        <Box
-          as="li"
-          key={t}
-          lang={labelLang(t)}
-          fontFamily={MONO}
-          fontSize="11px"
-          lineHeight="1.4"
-          px={2}
-          py={0.5}
-          borderRadius="full"
-          border="1px solid"
-          borderColor="page.border-strong"
-          color="page.fg-secondary"
-        >
-          {t}
-        </Box>
-      ))}
+      {items.map((t) =>
+        hrefFor ? (
+          <Box as="li" key={t} lang={labelLang(t)} display="flex">
+            <Box
+              as={NextLink}
+              href={hrefFor(t)}
+              {...chipStyle}
+              display="inline-flex"
+              alignItems="center"
+              minH="24px"
+              textDecoration="none"
+              transition="border-color 150ms var(--ease-out-quart), color 150ms var(--ease-out-quart)"
+              _hover={{ borderColor: 'page.fg', color: 'page.fg', textDecoration: 'none' }}
+              _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
+            >
+              {t}
+            </Box>
+          </Box>
+        ) : (
+          <Box as="li" key={t} lang={labelLang(t)} {...chipStyle}>
+            {t}
+          </Box>
+        ),
+      )}
     </Flex>
   )
 }

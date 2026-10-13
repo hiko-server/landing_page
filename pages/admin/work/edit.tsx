@@ -1,10 +1,14 @@
-import { Checkbox, FormControl, FormHelperText, FormLabel, Input, Select, SimpleGrid, Stack } from '@chakra-ui/react'
+import { useMemo, useState } from 'react'
+import { Box, Checkbox, FormControl, FormHelperText, FormLabel, Input, Select, SimpleGrid, Stack, Text } from '@chakra-ui/react'
 import { AdminDirtyProvider } from '../../../components/Admin/AdminDirtyContext'
 import { MONO, inputProps } from '../../../components/Admin/shell/ui'
-import CoverImageField from '../../../components/Admin/shell/CoverImageField'
+import CoverImageField, { type CoverSize } from '../../../components/Admin/shell/CoverImageField'
+import { LinksField, OutcomesField } from '../../../components/Admin/shell/GlanceFields'
 import { useMdxItemEditor } from '../../../components/Admin/shell/useMdxItemEditor'
 import MdxItemEditorFrame from '../../../components/Admin/editor/MdxItemEditorFrame'
+import CaseStudyTemplateCard from '../../../components/Admin/editor/CaseStudyTemplateCard'
 import { DESCRIPTION_MAX, TITLE_MAX } from '../../../components/Admin/shell/publishChecks'
+import { SUMMARY_MAX, TEAM_MAX } from '../../../lib/caseStudy'
 import {
   WORK_EMPTY,
   WORK_STATUSES,
@@ -25,6 +29,11 @@ function WorkEditor() {
     toServer: workToServer,
   })
   const { fm, setFm } = ed
+  const [coverSize, setCoverSize] = useState<CoverSize | null>(null)
+  const publishExtra = useMemo(
+    () => ({ coverWidth: coverSize?.width ?? null, summary: fm.summary, outcomes: fm.outcomes }),
+    [coverSize, fm.summary, fm.outcomes],
+  )
 
   return (
     <MdxItemEditorFrame
@@ -34,6 +43,8 @@ function WorkEditor() {
       backHref="/admin/work"
       backLabel="← All case studies"
       newTitle="New case study"
+      publishExtra={publishExtra}
+      aboveBody={<CaseStudyTemplateCard body={ed.body} onInsert={(template) => ed.setBody(template)} />}
       fields={
         <Stack spacing={4}>
           <FormControl isRequired>
@@ -182,12 +193,63 @@ function WorkEditor() {
             Featured — highlighted in the /work index
           </Checkbox>
 
+          <Box as="fieldset" border="1px solid" borderColor="page.border" borderRadius="lg" p={{ base: 4, md: 5 }} m={0}>
+            <Box as="legend" px={2} fontFamily={MONO} fontSize="11px" letterSpacing="0.12em" textTransform="uppercase" color="page.fg-secondary">
+              At a glance
+            </Box>
+            <Text fontSize="xs" color="page.fg-secondary" mb={4}>
+              Shown under the title of the case study, before the story — only what you fill in. The first metric also appears on the /work card.
+            </Text>
+            <Stack spacing={5}>
+              <FormControl>
+                <FormLabel fontSize="13px" htmlFor="item-summary">
+                  Outcome in one sentence
+                </FormLabel>
+                <Input
+                  {...inputProps}
+                  id="item-summary"
+                  value={fm.summary}
+                  maxLength={SUMMARY_MAX}
+                  onChange={(e) => setFm({ ...fm, summary: e.target.value })}
+                  placeholder="What changed because of the project"
+                />
+                <FormHelperText fontSize="xs" color="page.fg-secondary" className="tnum">
+                  {fm.summary.length}/{SUMMARY_MAX}
+                </FormHelperText>
+              </FormControl>
+              <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                <FormControl>
+                  <FormLabel fontSize="13px" htmlFor="item-team">
+                    Team
+                  </FormLabel>
+                  <Input {...inputProps} id="item-team" value={fm.team} maxLength={TEAM_MAX} onChange={(e) => setFm({ ...fm, team: e.target.value })} placeholder="Solo / Team of 4" />
+                </FormControl>
+                <FormControl>
+                  <FormLabel fontSize="13px" htmlFor="item-published">
+                    Published
+                  </FormLabel>
+                  <Input {...inputProps} id="item-published" type="date" value={fm.published} onChange={(e) => setFm({ ...fm, published: e.target.value })} />
+                  <FormHelperText fontSize="xs" color="page.fg-secondary">
+                    When this case study was first published (shown in the details and search data).
+                  </FormHelperText>
+                </FormControl>
+              </SimpleGrid>
+              <Box id="item-outcomes" tabIndex={-1} _focusVisible={{ outline: 'none' }}>
+                <OutcomesField value={fm.outcomes} onChange={(outcomes) => setFm((f) => ({ ...f, outcomes }))} />
+              </Box>
+              <LinksField value={fm.links} onChange={(links) => setFm((f) => ({ ...f, links }))} />
+            </Stack>
+          </Box>
+
           <CoverImageField
             inputId="item-cover"
             value={fm.cover}
             onChange={(cover) => setFm((f) => ({ ...f, cover }))}
             alt={fm.coverAlt}
             onAltChange={(coverAlt) => setFm((f) => ({ ...f, coverAlt }))}
+            focus={fm.coverFocus}
+            onFocusChange={(coverFocus) => setFm((f) => ({ ...f, coverFocus }))}
+            onMeasure={setCoverSize}
           />
         </Stack>
       }

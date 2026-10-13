@@ -343,9 +343,10 @@ export function blogPostingNode(a: ArticleNodeInput) {
   }
 }
 
-/** CreativeWork for a /work/[slug] case study. */
-export function caseStudyNode(a: ArticleNodeInput & { sameAs?: readonly string[] }) {
+/** CreativeWork for a /work/[slug] case study (`abstract`: the owner's one-line outcome; `datePublished`: its publication date). */
+export function caseStudyNode(a: ArticleNodeInput & { sameAs?: readonly string[]; abstract?: string }) {
   const url = absUrl(a.path)
+  const published = isoWithTz(a.datePublished)
   const modified = isoWithTz(a.dateModified)
   return {
     '@context': 'https://schema.org',
@@ -356,6 +357,8 @@ export function caseStudyNode(a: ArticleNodeInput & { sameAs?: readonly string[]
     image: a.images,
     inLanguage: a.lang,
     ...(a.description ? { description: a.description } : {}),
+    ...(a.abstract ? { abstract: a.abstract } : {}),
+    ...(published ? { datePublished: published, dateCreated: published } : {}),
     ...(modified ? { dateModified: modified } : {}),
     author: personAuthor,
     publisher: personAuthor,

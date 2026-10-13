@@ -33,7 +33,7 @@ import type { useMdxItemEditor } from '../shell/useMdxItemEditor'
 import LivePreview from '../shell/LivePreview'
 import ItemHistoryDrawer from '../shell/ItemHistoryDrawer'
 import PublishSheet from '../shell/PublishSheet'
-import type { CheckField } from '../shell/publishChecks'
+import type { CheckField, PublishCheckInput } from '../shell/publishChecks'
 import { ConflictDialog, DraftBanner, MdxErrorBanner } from './EditorNotices'
 
 // TipTap touches the DOM during init — client-side only.
@@ -63,6 +63,8 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
   backLabel,
   newTitle,
   fields,
+  aboveBody,
+  publishExtra,
 }: {
   ed: Ed<F>
   collection: 'blog' | 'work'
@@ -72,6 +74,10 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
   newTitle: string
   /** Metadata fields rendered above the body (they include the cover field). */
   fields: React.ReactNode
+  /** Rendered between the fields and the body (e.g. the case-study template card). */
+  aboveBody?: React.ReactNode
+  /** More inputs for the publish checklist (measured cover width, At a glance fields). */
+  publishExtra?: Pick<PublishCheckInput, 'coverWidth' | 'summary' | 'outcomes'>
 }) {
   const saveKeys = useSaveKeys()
   const [headingIndex, setHeadingIndex] = useState(-1)
@@ -85,8 +91,8 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
 
   const historyCurrent = useMemo(() => ({ frontmatter: ed.serverFrontmatter, body: ed.body }), [ed.serverFrontmatter, ed.body])
   const publishInput = useMemo(
-    () => ({ title: String(fm.title || ''), description: String(fm.description || ''), body: ed.body, slug: ed.slug, cover: String(fm.cover || '') }),
-    [fm.title, fm.description, fm.cover, ed.body, ed.slug],
+    () => ({ title: String(fm.title || ''), description: String(fm.description || ''), body: ed.body, slug: ed.slug, cover: String(fm.cover || ''), ...publishExtra }),
+    [fm.title, fm.description, fm.cover, ed.body, ed.slug, publishExtra],
   )
 
   const { richRef, setBody, setFm } = ed
@@ -210,6 +216,7 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
         ) : ed.loadState === 'error' ? null : (
           <Stack spacing={4}>
             <Box maxW="var(--container-content)">{fields}</Box>
+            {aboveBody}
             <FormControl>
               <FormLabel fontSize="13px" id={bodyLabelId}>
                 Body

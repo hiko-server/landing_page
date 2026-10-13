@@ -65,9 +65,9 @@ function isSectionArray(v: unknown): v is any[] {
  * the ISR cache. Only ISR pages belong here: `/`, `/about`, `/cv`, `/cv/zh`
  * and `/contact` are server-rendered on every request (getServerSideProps)
  * and are always fresh. /now reads the public workExperience / education /
- * project sections.
+ * project sections; /work lists every public project (its archive).
  */
-export const CV_STATIC_PATHS: readonly string[] = ['/now']
+export const CV_STATIC_PATHS: readonly string[] = ['/now', '/work']
 
 /** Regenerate CV-backed static pages; never fails the (already stored) write. */
 async function revalidateCvPages(res: NextApiResponse): Promise<{ revalidated: string[]; revalidateFailed?: string[] }> {

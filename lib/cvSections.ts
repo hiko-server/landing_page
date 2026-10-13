@@ -168,7 +168,9 @@ export const CV_SECTIONS: SectionDef[] = [
         itemNoun: 'project',
         fields: [
           { key: 'title', label: 'Title', kind: 'text', required: true, span: 2 },
+          { key: 'role', label: 'Your role', kind: 'text', placeholder: 'Lead developer', help: 'Shown in the /work archive. Not printed on the CV.' },
           { key: 'projectLocation', label: 'Location', kind: 'text' },
+          { key: 'relatedSkills', label: 'Stack', kind: 'tags', span: 2, placeholder: 'Type a technology, press Enter', help: 'Shown in the /work archive and its filter. Not printed on the CV.' },
           { key: 'startDate', label: 'Start', kind: 'month' },
           { key: 'endDate', label: 'End', kind: 'endMonth' },
           { key: 'description', label: 'Summary', kind: 'textarea', span: 2 },
