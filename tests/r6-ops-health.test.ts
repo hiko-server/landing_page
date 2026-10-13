@@ -49,7 +49,7 @@ async function call(headers: Record<string, string> = {}) {
   return { ...out, body: JSON.parse(out.raw || 'null') }
 }
 
-const DETAIL_KEYS = ['backup', 'content', 'db', 'r2', 'r2Pending', 'status', 'uptime', 'warnings']
+const DETAIL_KEYS = ['backup', 'content', 'db', 'openErrors', 'r2', 'r2Pending', 'restoreDrill', 'status', 'uptime', 'warnings']
 
 before(async () => {
   for (const k of ['R2_ENDPOINT', 'R2_BUCKET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'HEALTH_TOKEN']) delete process.env[k]

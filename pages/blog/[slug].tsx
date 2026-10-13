@@ -12,7 +12,8 @@ import EditPill from '../../components/Article/EditPill'
 import { neighbours, relatedByTags, toArticleLink, type ArticleLink } from '../../components/Article/collectionNav'
 import { listPosts, listWorkInDisplayOrder, getPost, type HastRoot, type PostFrontmatter } from '../../lib/mdx'
 import { labelLang, type TocEntry } from '../../lib/toc'
-import { articleImages, blogPostingNode, breadcrumb, absUrl, ogImageUrl, ogLangOf, PERSON_NAME, type OgImageOptions } from '../../lib/schema'
+import { articleImageUrls, blogPostingNode, breadcrumb, absUrl, ogLangOf, PERSON_NAME, type ArticleCards, type OgImageOptions } from '../../lib/schema'
+import { signedOgImageUrl } from '../../lib/og/sign'
 import { formatPostDate, isoDate } from '../../lib/postDate'
 
 type Props = {
@@ -27,6 +28,8 @@ type Props = {
   excerpt: string
   /** Content-store write time (og:image cache-buster). */
   updatedAt: number | null
+  /** Signed social-card URLs (1200×630 and square), computed in getStaticProps. */
+  ogImages: ArticleCards
   /** Newer / older post in the collection (index order is newest first). */
   newer: ArticleLink | null
   older: ArticleLink | null
@@ -48,7 +51,7 @@ export default function BlogPost({
   toc,
   lang,
   excerpt,
-  updatedAt,
+  ogImages,
   newer,
   older,
   related,
@@ -59,17 +62,7 @@ export default function BlogPost({
   const published = isoDate(frontmatter.date)
   const modified = isoDate(frontmatter.updated || frontmatter.date)
   const tags = Array.isArray(frontmatter.tags) ? frontmatter.tags : []
-  const card: OgImageOptions = {
-    kind: 'blog',
-    title: frontmatter.title,
-    lang: ogLangOf(lang),
-    date: published || undefined,
-    mins: readingMinutes,
-    tags,
-    cover: frontmatter.cover,
-    v: updatedAt,
-  }
-  const image = ogImageUrl(card)
+  const image = ogImages.card
   const titleLang = labelLang(frontmatter.title) || 'en'
   const ui = uiLang(lang)
 
@@ -115,7 +108,7 @@ export default function BlogPost({
             title: frontmatter.title,
             description: frontmatter.description,
             lang,
-            images: articleImages(card, frontmatter.cover),
+            images: articleImageUrls(ogImages, frontmatter.cover),
             keywords: tags,
             datePublished: published,
             dateModified: modified,
@@ -179,6 +172,16 @@ export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
   const work = listWorkInDisplayOrder().map((w) => toArticleLink('work', w))
   const { before, after } = neighbours(posts, slug)
   const related = relatedByTags(toArticleLink('blog', post), [...posts, ...work])
+  const card: OgImageOptions = {
+    kind: 'blog',
+    title: post.frontmatter.title,
+    lang: ogLangOf(post.lang),
+    date: isoDate(post.frontmatter.date) || undefined,
+    mins: post.readingMinutes,
+    tags: Array.isArray(post.frontmatter.tags) ? post.frontmatter.tags : [],
+    cover: post.frontmatter.cover,
+    v: post.updatedAt,
+  }
 
   return {
     props: {
@@ -190,6 +193,7 @@ export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
       lang: post.lang,
       excerpt: post.excerpt,
       updatedAt: post.updatedAt,
+      ogImages: { card: signedOgImageUrl(card), square: signedOgImageUrl({ ...card, size: 'square' }) },
       newer: before,
       older: after,
       related,

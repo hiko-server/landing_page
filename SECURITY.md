@@ -59,21 +59,56 @@ What the code actually does today, and where its limits are.
   every `/admin/*` page (guests → `302 /admin/login?next=…`) and
   `/api/admin/*` route (guests → JSON `401`). Every API handler then calls
   `lib/auth.ts`, which additionally enforces session revocation.
-- **Session revocation** — `data/admin.json` holds `sessionVersion`; every
-  token carries it as the `sv` claim and is honoured only while the two
-  match. The version is bumped by:
-  - **Log out** (`POST /api/admin/logout`) — this signs out **every**
-    browser and device, not just the current one. An anonymous logout
-    request only clears its own cookie; it cannot revoke the owner's
-    sessions.
-  - **Password reset** — also burns all outstanding reset links.
-
-  Tokens issued before this existed have no `sv` and count as version 0,
-  the value a record without `sessionVersion` has, so an upgrade does not
-  log anyone out. Because the edge middleware cannot read the filesystem,
-  a revoked token can still load an admin page shell until it expires, but
-  every admin API it calls answers `401` and `/api/admin/session` reports
-  `authenticated: false`.
+- **Sessions** (`lib/adminAuth/sessions.ts`, `data/auth.db`) — every sign-in
+  creates a session row; the JWT carries its id (`sid`) and is honoured only
+  while the row exists, is not revoked and has not expired. Admin → Security
+  lists the signed-in browsers (browser · OS, an IPv4 /24 or IPv6 /48 prefix,
+  the Cloudflare country — never a full address or user agent) and signs any
+  of them out. **Log out** (`POST /api/admin/logout`) signs out this browser
+  only; "Sign out everywhere" (Security page) also bumps the session version.
+  An anonymous logout request only clears its own cookies.
+- **Session version** — `data/admin.json` holds `sessionVersion`; every
+  token carries it as `sv` and is honoured only while the two match. It is
+  bumped by "Sign out everywhere" and by a **password reset** (which also
+  burns all outstanding reset links and revokes every session row). A token
+  minted before sessions existed (no `sid`) still needs a matching `sv`; the
+  first page view swaps it for one bound to a new row. Because the edge
+  middleware cannot read the filesystem, a revoked token can still load an
+  admin page shell until it expires, but every admin API it calls answers
+  `401` and `/api/admin/session` reports `authenticated: false`.
+- **Passkeys** (`lib/adminAuth/passkeys.ts`, @simplewebauthn/server) — sign
+  in with a passkey (button, or the e-mail field's autofill) instead of the
+  password. The relying-party id is the configured public host (a request's
+  Host never becomes it) or `localhost` for local work; IP hosts have none.
+  User verification is required, attestation is not requested, challenges
+  are 32 random bytes, single use and expire after 5 minutes (registration
+  and step-up challenges are bound to the session), the signature counter is
+  enforced, and an unknown credential is reported so the browser can forget
+  it. Registration needs a recent verification.
+- **Recovery codes** — ten per set, 80 random bits each (Crockford base32),
+  stored only as SHA-256, each usable once; shown once when created (with
+  the first passkey, or on request).
+- **"Require a passkey"** — once on, the password alone neither signs in nor
+  verifies: it needs a recovery code too. Without a code the sign-in answers
+  `403 PASSKEY_REQUIRED` before any password check; a wrong password and a
+  wrong code get the same `401`, and a wrong code counts for the lockout.
+- **Step-up** (`lib/adminAuth/stepUp.ts`) — restoring a backup, deleting a
+  post or case study, MongoDB restore or target changes, and every passkey,
+  recovery-code, policy or other-browser change require a sign-in or a
+  re-verification on this browser within `ADMIN_RECENT_AUTH_MINUTES`
+  (default 10); otherwise the route answers `403 STEP_UP_REQUIRED` and the
+  admin asks for a passkey or the password (+ code). A token from before
+  sessions existed never counts as recent.
+- **Sign-in history** — sign-ins, failures (time, method, country and a
+  reason code; no address or device) and security changes, the newest 500
+  for at most 180 days.
+- **`data/auth.db` is per server**: it is not in the content snapshots, the
+  R2 mirror or restores (so a restore cannot bring back a removed passkey, a
+  spent code or a revoked session), but `scripts/deploy.sh` backs it up with
+  the other databases. After moving to a new server, sign in with the
+  password (`ADMIN_EMAIL` / `ADMIN_PASS` bootstrap) and register passkeys
+  again. If `auth.db` itself is damaged, the admin fails closed: move it
+  aside, restart, sign in with the password.
 
 ### Login brute-force defence (`lib/security/loginThrottle.ts`, `lib/security/loginGate.ts`)
 
@@ -191,9 +226,23 @@ For `POST` / `PUT` / `PATCH` / `DELETE` to `/api/admin/*`, `/api/auth/*`,
   not resurrect deleted messages. To erase a message from backups too,
   delete it and then let newer snapshots replace the old ones (or remove
   old tarballs).
-- **`/api/og`** — text clamped by code point, per-IP render limit (60/min),
-  `Cache-Control: public, max-age=86400, s-maxage=31536000, immutable` so
-  repeat crawls are served by the CDN.
+- **`/api/og`** (Node runtime) — never renders free text without a valid
+  signature: fixed pages use fixed cards by id (`?card=about`), article
+  cards carry an HMAC-SHA256 signature over their canonical parameters
+  (key derived from `JWT_SECRET` with HKDF, computed in the page loaders,
+  checked in constant time), and anything else gets the generic default
+  card (rendered once per size, cached one day instead of a year). Text is
+  clamped by code point, the cover is a same-site upload only, per-IP render
+  limit (60/min), `Cache-Control: public, max-age=86400, s-maxage=31536000,
+  immutable` for real cards.
+- **`/api/e`** (error reports) — browser error reports and CSP violation
+  reports (`report-uri`, same origin). 8 KB bodies, per-client and
+  per-network minute budgets, 500 fingerprints and 20 000 events a day at
+  most; DNT / GPC, bots and cross-site posts are dropped. Query strings,
+  e-mail and IP addresses, tokens and ID-like numbers are scrubbed before
+  storage; no address, user agent, cookie or body is kept. Always `204`.
+- **`/api/internal/restore-drill`** — loopback peers with the per-process
+  in-memory token only (`lib/internalJobs.ts`); everyone else gets `404`.
 - **`/api/health`** — anonymous callers get only `{"status": …}` (`200`, or
   `503` when the store is unreachable). The operational detail (backup
   times, R2 configuration, pending R2 writes, warnings, uptime) goes only to
@@ -226,6 +275,25 @@ Fast Refresh. Because of `'unsafe-inline'`, XSS defence still rests on
 React escaping and on the link sanitiser (`lib/cvFormat.ts` `safeHref`)
 rather than on the CSP.
 
+### Container runtime (`Dockerfile`, `docker-compose.yml`)
+
+The image runs as the non-root user `nextjs` (uid 1001) under `dumb-init`.
+Compose drops every Linux capability (`cap_drop: [ALL]`), sets
+`no-new-privileges`, and limits the container to 256 processes/threads;
+CI starts the E2E container with the same flags and checks that its
+capability bounding set is empty and `NoNewPrivs` is 1. The root file
+system is writable on purpose: ISR rewrites prerendered pages under
+`/app/.next/server`, which a read-only image would have to move to a
+volume re-seeded on every deploy.
+
+### Backups and restore drills
+
+Snapshot manifests record a SHA-256 per file, the row counts and the schema
+version. A weekly restore drill (`lib/restoreDrill.ts`) opens the newest
+backup — the R2 copy when configured — in a scratch folder and checks the
+archive, checksums, SQLite integrity, migrations, row counts and an article
+render; failures show in Admin → System and the `/api/health` detail.
+
 ## Operator responsibilities
 
 This project ships secrets-free, but a deployment is only as safe as
@@ -237,8 +305,10 @@ its operator. After cloning:
    ```
 2. Set `ADMIN_EMAIL` + `ADMIN_PASS` in `.env`. They're consumed on
    first boot to populate `data/admin.json`, then can be cleared.
-   To revoke every session without changing the password, sign in and
-   use **Log out** (it signs out everywhere).
+   To revoke every session without changing the password, use **Sign out
+   everywhere** in Admin → Security.
+   Then register a passkey on two devices (Admin → Security), store the
+   recovery codes offline, and turn on **Require a passkey**.
 3. **Never commit `.env`.** It's already in `.gitignore`; double-check
    before your first push.
 4. Rotate `GITHUB_TOKEN`, R2 keys, Mongo URI through the providers'

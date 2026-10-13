@@ -27,6 +27,8 @@ import {
   FaHdd,
   FaInbox,
   FaChartLine,
+  FaShieldAlt,
+  FaHeartbeat,
 } from 'react-icons/fa'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
@@ -34,7 +36,7 @@ import { Eyebrow, MONO, outlineButtonProps } from '../../components/Admin/shell/
 import ShortcutsOverlay from '../../components/Admin/shell/ShortcutsOverlay'
 import type { AdminOverview } from '../api/admin/overview'
 
-type CardKey = 'inbox' | 'cv' | 'home' | 'blog' | 'work' | 'now' | 'uses' | 'analytics' | 'versions' | 'storage' | 'mongo'
+type CardKey = 'inbox' | 'cv' | 'home' | 'blog' | 'work' | 'now' | 'uses' | 'analytics' | 'versions' | 'storage' | 'mongo' | 'security' | 'system'
 type Card = { key: CardKey; title: string; desc: string; href: string; icon: IconType }
 
 const GROUPS: Array<{ label: string; cards: Card[] }> = [
@@ -79,6 +81,8 @@ const GROUPS: Array<{ label: string; cards: Card[] }> = [
       { key: 'versions', title: 'Version history', desc: 'Browse, preview and restore CV & Home snapshots.', href: '/admin/dashboard?tab=versions', icon: FaHistory },
       { key: 'storage', title: 'Storage & backups', desc: 'SQLite + R2 mirror, one-click full-site snapshots.', href: '/admin/dashboard?tab=storage', icon: FaHdd },
       { key: 'mongo', title: 'MongoDB backup', desc: 'Optional external backup target and restore.', href: '/admin/db-config', icon: FaDatabase },
+      { key: 'security', title: 'Security', desc: 'Passkeys, recovery codes, signed-in browsers and sign-in history.', href: '/admin/security', icon: FaShieldAlt },
+      { key: 'system', title: 'System', desc: 'Server health, restore drills and errors from the site, without third parties.', href: '/admin/system', icon: FaHeartbeat },
     ],
   },
 ]
@@ -127,6 +131,17 @@ function cardDetail(key: CardKey, o: AdminOverview, now: number): string | null 
       if (!o.backup.lastAt) return o.backup.scheduled ? 'No backup yet · scheduled' : 'No backup yet'
       const next = o.backup.scheduled && o.backup.nextAt ? ` · next ${relTime(o.backup.nextAt, now)}` : ''
       return `Last backup ${relTime(o.backup.lastAt, now)}${o.backup.lastOk === false ? ' (failed)' : ''}${next}`
+    }
+    case 'security':
+      if (!o.security) return null
+      return o.security.passkeys
+        ? `${plural(o.security.passkeys, 'passkey')} · ${o.security.passkeyRequired ? 'passkey required' : 'password allowed'}`
+        : 'No passkey yet'
+    case 'system': {
+      const parts: string[] = []
+      if (o.errors) parts.push(o.errors.open ? plural(o.errors.open, 'open error') : 'No open errors')
+      if (o.restoreDrill) parts.push(`drill ${o.restoreDrill.status} ${relTime(o.restoreDrill.ranAt, now)}`)
+      return parts.length ? parts.join(' · ') : null
     }
     default:
       return null
@@ -230,6 +245,39 @@ export default function AdminIndex() {
         action: (
           <Button as={NextLink} href="/admin/dashboard?tab=storage" size="xs" {...outlineButtonProps}>
             Storage
+          </Button>
+        ),
+      })
+    }
+    if (o.errors && o.errors.new24h > 0) {
+      attention.push({
+        id: 'errors',
+        text: `${plural(o.errors.new24h, 'new error')} in the last 24 hours.`,
+        action: (
+          <Button as={NextLink} href="/admin/system?view=errors" size="xs" {...outlineButtonProps}>
+            Errors
+          </Button>
+        ),
+      })
+    }
+    if (o.restoreDrill?.status === 'failed') {
+      attention.push({
+        id: 'drill',
+        text: 'The last restore drill failed: the newest backup may not restore.',
+        action: (
+          <Button as={NextLink} href="/admin/system" size="xs" {...outlineButtonProps}>
+            System
+          </Button>
+        ),
+      })
+    }
+    if (o.security && o.security.passkeys === 0) {
+      attention.push({
+        id: 'passkey',
+        text: 'Sign-in uses the password only: add a passkey (Face ID, Touch ID, Windows Hello).',
+        action: (
+          <Button as={NextLink} href="/admin/security" size="xs" {...outlineButtonProps}>
+            Security
           </Button>
         ),
       })
@@ -403,7 +451,7 @@ export default function AdminIndex() {
                       <Text color="page.fg-secondary" fontSize="sm" lineHeight="1.55">
                         {c.desc}
                       </Text>
-                      {state === 'loading' && ['inbox', 'blog', 'work', 'now', 'uses', 'storage', 'cv', 'home'].includes(c.key) ? (
+                      {state === 'loading' && ['inbox', 'blog', 'work', 'now', 'uses', 'storage', 'cv', 'home', 'security', 'system'].includes(c.key) ? (
                         <Skeleton h="12px" w="55%" mt={3} />
                       ) : detail ? (
                         <Text mt={3} fontFamily={MONO} fontSize="11px" color="page.fg-secondary" className="tnum">

@@ -1,18 +1,22 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { deleteCookie } from 'cookies-next'
 import { bumpSessionVersion } from '../../../lib/admin'
-import { ADMIN_COOKIE, clearAdminHint, readAdminClaims } from '../../../lib/auth'
+import { clearAdminCookies, readAdminContext, requestOrigin } from '../../../lib/auth'
 import { withApi } from '../../../lib/apiHandler'
+import { revokeSession } from '../../../lib/adminAuth/sessions'
+import { recordAuthEvent } from '../../../lib/adminAuth/store'
 
 /**
- * POST /api/admin/logout — signs out EVERYWHERE.
+ * POST /api/admin/logout — signs THIS browser out.
  *
- * With a valid session, the stored session version is bumped, which revokes
- * every admin token ever issued (other browsers and devices included; their
- * next API call gets 401). Without a valid session it only clears this
- * browser's cookie — an anonymous POST must not be able to sign the owner out.
- * Reachable without a session (middleware allow-list) so a stale cookie can
- * always be cleared; cross-site POSTs are refused by the middleware.
+ * With a valid session, its auth.db row is revoked, so the token is dead
+ * even if a copy of the cookie survives anywhere; other browsers stay signed
+ * in (sign them out from Admin → Security). A token from before sessions
+ * existed cannot be revoked on its own, so for it the stored session version
+ * is bumped instead, which signs out every device (the old behaviour).
+ * Without a valid session it only clears this browser's cookies — an
+ * anonymous POST must not be able to sign the owner out. Reachable without
+ * a session (middleware allow-list) so a stale cookie can always be cleared;
+ * cross-site POSTs are refused by the middleware.
  * Draft Mode is switched off too: its bypass cookie alone makes /blog and
  * /work render unpublished drafts, so it must not outlive the session.
  */
@@ -22,10 +26,20 @@ export default withApi('admin/logout', (req: NextApiRequest, res: NextApiRespons
     return res.status(405).json({ error: 'Method not allowed' })
   }
   res.setHeader('Cache-Control', 'no-store')
-  const revoked = readAdminClaims(req, res) !== null
-  if (revoked) bumpSessionVersion()
-  deleteCookie(ADMIN_COOKIE, { req, res, path: '/' })
-  clearAdminHint(req, res)
+  const ctx = readAdminContext(req, res)
+  let revokedAllSessions = false
+  if (ctx?.session) {
+    revokeSession(ctx.session.id, 'signed out')
+    try {
+      recordAuthEvent({ type: 'signout', sessionId: ctx.session.id, ...requestOrigin(req) })
+    } catch {
+      // History is best effort; the session is revoked either way.
+    }
+  } else if (ctx) {
+    bumpSessionVersion()
+    revokedAllSessions = true
+  }
+  clearAdminCookies(req, res)
   res.setDraftMode({ enable: false })
-  return res.status(200).json({ ok: true, revokedAllSessions: revoked })
+  return res.status(200).json({ ok: true, signedOut: ctx !== null, revokedAllSessions })
 })

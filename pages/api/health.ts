@@ -5,6 +5,9 @@ import { getDb } from '../../lib/db'
 import { isR2Configured } from '../../lib/r2'
 import { backupHealthWarnings, getBackupStatus } from '../../lib/backupSchedule'
 import { bearerMatches } from '../../lib/security/bearer'
+import { listLocalBackups } from '../../lib/backup'
+import { errorTotals } from '../../lib/errors/store'
+import { latestRestoreDrill, restoreDrillSchedule, restoreDrillWarnings } from '../../lib/restoreDrill'
 
 /**
  * Liveness/readiness probe for the Docker HEALTHCHECK, scripts/deploy.sh, CI
@@ -32,9 +35,12 @@ import { bearerMatches } from '../../lib/security/bearer'
  *   content   { home, cvdata, pages, items, ready }
  *   r2        R2 configured
  *   backup    { lastAt, lastOk, ageHours } from lib/backupSchedule
+ *   restoreDrill { lastAt, status } of the newest restore drill (lib/restoreDrill)
+ *   openErrors   open fingerprints in the error monitor (lib/errors/store)
  *   r2Pending number of R2 keys known to be stale (repaired by the boot sync)
  *   warnings  human-readable problems: no backup for > 2× the schedule
- *             interval, a failed last backup, pending R2 repairs
+ *             interval, a failed last backup, pending R2 repairs, a failed
+ *             or overdue restore drill
  *   uptime    seconds since the process started
  * None of it changes the status code.
  */
@@ -84,14 +90,30 @@ export default withApi('health', (req, res, ctx) => {
   if (!mayReadDetail(req, res)) return res.json({ status })
 
   const backup = getBackupStatus()
+  const drill = latestRestoreDrill()
+  const drillSchedule = restoreDrillSchedule()
+  let hasBackups = isR2Configured()
+  try {
+    hasBackups = hasBackups || listLocalBackups().length > 0
+  } catch {
+    // An unreadable backups dir: the backup warnings already cover it.
+  }
+  let openErrors: number | null = null
+  try {
+    openErrors = errorTotals().open
+  } catch {
+    openErrors = null
+  }
   return res.json({
     status,
     db,
     content: content ? { ...content, ready: content.home && content.cvdata } : null,
     r2: isR2Configured(),
     backup: { lastAt: backup.lastAt, lastOk: backup.lastOk, ageHours: backup.ageHours },
+    restoreDrill: drill ? { lastAt: drill.ranAt, status: drill.status } : null,
+    openErrors,
     r2Pending,
-    warnings: backupHealthWarnings(backup, r2Pending),
+    warnings: [...backupHealthWarnings(backup, r2Pending), ...restoreDrillWarnings(drill, drillSchedule, hasBackups)],
     uptime: Math.round(process.uptime()),
   })
 })

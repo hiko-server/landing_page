@@ -481,7 +481,7 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
                   fontSize="13px"
                   _hover={{ color: 'page.fg', bg: 'page.hover' }}
                   onClick={logout}
-                  title="Sign out on every device"
+                  title="Sign out of this browser (other devices: Admin → Security)"
                 >
                   Logout
                 </Button>

@@ -20,6 +20,22 @@ services:
     restart: unless-stopped
     mem_limit: 1g
     cpus: 2
+    # Runtime hardening (OWASP Docker cheat sheet). The server runs as the
+    # image's non-root user on port 3000 and the entrypoint does no chown /
+    # setcap, so it needs no Linux capability at all; no process may gain
+    # privileges through setuid binaries; and the process/thread count is
+    # bounded (Node, libuv's pool, sharp's workers, the boot sync and the ISR
+    # warm-up stay well under 100) so a runaway cannot exhaust the PIDs of a
+    # host shared with other containers. CI starts the image with the same
+    # three restrictions for the E2E run and asserts them on the merged config.
+    # The root file system stays writable: ISR rewrites prerendered pages
+    # under /app/.next/server, which a read-only image would need to move to
+    # a volume that is re-seeded on every deploy (see the README, Docker).
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
     # Rotated container logs: the default json-file driver grows without bound.
     logging:
       driver: local

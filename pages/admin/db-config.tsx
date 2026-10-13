@@ -39,6 +39,8 @@ import {
   outlineButtonProps,
   primaryButtonProps,
 } from '../../components/Admin/shell/ui'
+import { useStepUp } from '../../components/Admin/security/useStepUp'
+import { wasStepUpCancelled } from '../../components/Admin/security/stepUpClient'
 
 type OpType = 'all' | 'cv' | 'home' | 'images' | 'content' | 'snapshots'
 
@@ -69,6 +71,9 @@ function maskMongoUri(uri: string): string {
 
 export default function DbConfigPage() {
   const toast = useToast()
+  // Saving a target, restoring and backing up elsewhere ask for a recent
+  // sign-in or step-up (pages/api/mongo.ts, lib/adminAuth/stepUp.ts).
+  const { fetchWithStepUp, stepUpElement } = useStepUp()
   const [loading, setLoading] = useState(false)
   const [dbConfig, setDbConfig] = useState({
     url: 'mongodb://localhost:27017',
@@ -168,11 +173,16 @@ export default function DbConfigPage() {
     // would reject this anyway), nor an unchanged masked URL.
     if (isEnv || String(cfg?.url || '').includes('••••')) return
     try {
-      await fetch('/api/mongo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'save_config', config: cfg }),
-      })
+      const res = await fetchWithStepUp(
+        '/api/mongo',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'save_config', config: cfg }),
+        },
+        'Saving this database as the backup target lets backups copy the site’s content there.',
+      )
+      if (wasStepUpCancelled(res)) toast({ status: 'info', title: 'Target not saved', description: 'The connection works; it is used for this session only.' })
     } catch (e) {
       console.error('Failed to auto-save config', e)
     }
@@ -243,15 +253,23 @@ export default function DbConfigPage() {
     setBackupStatus('Backing up...')
     try {
       const uri = constructUrl()
-      const res = await fetch('/api/mongo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'backup',
-          type,
-          config: { ...dbConfig, url: uri },
-        }),
-      })
+      const res = await fetchWithStepUp(
+        '/api/mongo',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'backup',
+            type,
+            config: { ...dbConfig, url: uri },
+          }),
+        },
+        'Backing up to a database other than the saved target copies the site’s content there.',
+      )
+      if (wasStepUpCancelled(res)) {
+        setBackupStatus(null)
+        return
+      }
       const result = await res.json()
       if (res.ok && result.ok) {
         toast({ status: 'success', title: 'Backup Complete', description: result.message })
@@ -280,15 +298,23 @@ export default function DbConfigPage() {
     setRestoreStatus('Restoring...')
     try {
       const uri = constructUrl()
-      const res = await fetch('/api/mongo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'restore',
-          type,
-          config: { ...dbConfig, url: uri },
-        }),
-      })
+      const res = await fetchWithStepUp(
+        '/api/mongo',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'restore',
+            type,
+            config: { ...dbConfig, url: uri },
+          }),
+        },
+        'Restoring from MongoDB overwrites the live content.',
+      )
+      if (wasStepUpCancelled(res)) {
+        setRestoreStatus(null)
+        return
+      }
       const result = await res.json()
       if (res.ok && result.ok) {
         toast({ status: 'success', title: 'Restore Complete', description: result.message })
@@ -691,6 +717,7 @@ export default function DbConfigPage() {
           </ModalFooter>
         </ModalContent>
       </Modal>
+      {stepUpElement}
     </AdminPageShell>
   )
 }

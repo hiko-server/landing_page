@@ -7,6 +7,7 @@ import matter from 'gray-matter'
 import { getMongoConfig } from '../../lib/env'
 import { resolveMongoSrvUrl } from '../../lib/srvResolve'
 import { isAdminRequest } from '../../lib/auth'
+import { requireRecentAuth } from '../../lib/adminAuth/stepUp'
 import { readCvData, writeCvData, saveSnapshot } from '../../lib/cvdata'
 import { readHome, writeHome, saveHomeSnapshot } from '../../lib/home'
 import { getPage, listItems, putItem, putPage } from '../../lib/contentStore'
@@ -23,6 +24,8 @@ import { revalidatePaths, collectionPaths, STATIC_CONTENT_PATHS } from '../../li
  *
  * Deliberately never backs up or restores admin credentials: whoever can
  * write to the Mongo database must not be able to set the admin password.
+ * Saving a target, restoring, and backing up to an unsaved target need a
+ * recent sign-in or step-up (lib/adminAuth/stepUp.ts).
  * (The full-site tarball in Admin → Storage covers disaster recovery.)
  */
 
@@ -137,6 +140,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     } catch {
       return res.status(500).json({ ok: false, message: 'Failed to read config' })
     }
+  }
+
+  // Changing the target, restoring from it, or sending a backup anywhere but
+  // the saved target needs a recent sign-in or step-up (403 STEP_UP_REQUIRED):
+  // a stolen session must not be able to copy the full content elsewhere.
+  const toSavedTarget = (() => {
+    if (env.fromEnv) return true
+    const stored = readStoredConfig()
+    return !!stored && !!cfg && cfg.url === stored.url && String(cfg.dbName || '') === stored.dbName
+  })()
+  if ((action === 'save_config' && !env.fromEnv) || action === 'restore' || (action === 'backup' && !toSavedTarget)) {
+    if (!requireRecentAuth(req, res)) return
   }
 
   if (action === 'save_config') {

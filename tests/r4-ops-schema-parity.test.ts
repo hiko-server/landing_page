@@ -9,8 +9,10 @@ import { UPLOAD_NAME_RE } from '../lib/security/uploadName'
 import { SAFE_UPLOAD, openContentDb } from '../scripts/content-helpers.mjs'
 
 // The plain-Node scripts (container boot sync, operator CLI) cannot import
-// lib/*.ts, so the SQLite DDL and the upload-name rule are duplicated in
-// scripts/content-helpers.mjs. These tests fail as soon as the copies drift.
+// lib/*.ts. The SQLite schema is shared through the versioned migrations in
+// scripts/db (both sides apply scripts/db/content/index.mjs); the upload-name
+// rule is duplicated in scripts/content-helpers.mjs. These tests fail as soon
+// as the two sides drift.
 
 type MasterRow = { type: string; name: string; tbl_name: string; sql: string | null }
 
@@ -55,8 +57,10 @@ test('lib/db initSchema and scripts/content-helpers openContentDb create the sam
       initSchema(appDb)
       const app = schemaOf(appDb)
       const script = schemaOf(scriptDb)
-      assert.ok(app.length >= 5, 'expected the four tables plus the index')
+      assert.ok(app.length >= 6, 'expected the four tables, the index and schema_version')
       assert.deepEqual(script, app)
+      const versions = (db: Database.Database) => db.prepare('SELECT version, name FROM schema_version ORDER BY version').all()
+      assert.deepEqual(versions(scriptDb), versions(appDb))
       for (const db of [appDb, scriptDb]) {
         assert.equal(String(db.pragma('journal_mode', { simple: true })).toLowerCase(), 'wal')
       }

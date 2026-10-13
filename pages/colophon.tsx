@@ -12,7 +12,8 @@ import { compileMdx } from '../lib/mdx'
 import { groupMarkdown, parseChangelog } from '../lib/changelog'
 import { readStack, type StackGroup } from '../lib/stack'
 import { log } from '../lib/log'
-import { absUrl, breadcrumb, ogImageUrl, personAuthor } from '../lib/schema'
+import { absUrl, breadcrumb, personAuthor } from '../lib/schema'
+import { ogPresetUrl } from '../lib/og/presets'
 import { clearOfHeader } from '../lib/anchorOffset'
 
 /**
@@ -164,7 +165,7 @@ export default function ColophonPage({ releases, stack, buildSha, builtAt }: Pro
         title="Colophon"
         description="How lucian-dev.com is built and run: stack, type, hosting, what the cookieless analytics stores, and every release."
         url={absUrl('/colophon')}
-        image={ogImageUrl({ kind: 'page', title: 'Colophon', subtitle: 'How this site is made' })}
+        image={ogPresetUrl('colophon')}
         jsonLd={[
           {
             '@context': 'https://schema.org',
@@ -395,6 +396,13 @@ export default function ColophonPage({ releases, stack, buildSha, builtAt }: Pro
                     <>
                       Real-user performance timings (Core Web Vitals: LCP, INP, CLS, FCP, TTFB) are
                       recorded per page with the device class only — no visitor ID.
+                    </>,
+                    <>
+                      When a page fails with a script error, or your browser blocks something under
+                      the content security policy, the site sends itself a report: the error and
+                      where in the code it happened (with query strings, e-mail and IP addresses
+                      and anything ID-like removed), the page path and the browser family — no
+                      visitor ID. Reports are deleted after at most 90 days.
                     </>,
                     <>
                       The data stays in a separate database file on the server, is never part of the

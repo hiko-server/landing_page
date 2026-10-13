@@ -1,10 +1,15 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { getCookie, setCookie } from 'cookies-next'
+import { deleteCookie, getCookie, setCookie } from 'cookies-next'
 import jwt from 'jsonwebtoken'
 import { getJwtSecret, isProd } from './env'
 import { getSessionVersion } from './admin'
 import { isSessionCurrent, SESSION_VERSION_CLAIM } from './security/session'
 import { ADMIN_HINT_COOKIE } from './adminHint'
+import { ipFromReq } from './rateLimit'
+import { KNOWN_DEVICE_COOKIE, KNOWN_DEVICE_TTL_S, signKnownDevice, verifyKnownDevice } from './security/knownDevice'
+import { deviceLabel, ipPrefix } from './adminAuth/describe'
+import { createSession, liveSession, touchSession, type AdminSession, type SessionOrigin } from './adminAuth/sessions'
+import { recordAuthEvent, type AuthMethod } from './adminAuth/store'
 
 /**
  * Single admin-session check for every Node API route.
@@ -12,9 +17,12 @@ import { ADMIN_HINT_COOKIE } from './adminHint'
  * The edge middleware gates /api/admin/* with a fast signature-only check;
  * this is the authoritative copy that every handler calls (it also covers
  * mixed public/admin routes like /api/cvdata and /api/home). On top of the
- * signature it enforces session revocation: the token's `sv` claim must equal
- * data/admin.json's `sessionVersion` (missing on either side = 0), so a
- * logout or password reset invalidates every outstanding token.
+ * signature it enforces revocation twice over:
+ *   - the token's `sv` claim must equal data/admin.json's `sessionVersion`
+ *     (missing on either side = 0), so a password reset or "sign out
+ *     everywhere" invalidates every outstanding token;
+ *   - the token's `sid` must name a live row in auth.db (lib/adminAuth/
+ *     sessions.ts), so one browser can be signed out on its own.
  *
  * The algorithm is pinned so a token can never be verified under anything
  * but the HMAC we sign with.
@@ -70,30 +78,124 @@ export function hasAdminHint(req: NextApiRequest, res: NextApiResponse): boolean
   return readCookie(req, res, ADMIN_HINT_COOKIE) !== undefined
 }
 
-export type AdminClaims = { role?: string; email?: string; sub?: string; sv?: number }
+/**
+ * Claims of an admin token. `sid` names its auth.db session row (every token
+ * minted since passkeys were added carries one); `amr` says how the session
+ * signed in ('pwd', 'passkey', 'recovery'); `auth_time` is that moment
+ * (seconds) — informational, the session row's verified_at decides recency.
+ */
+export type AdminClaims = {
+  role?: string
+  email?: string
+  sub?: string
+  sv?: number
+  sid?: string
+  amr?: string[]
+  auth_time?: number
+  iat?: number
+}
 
-/** The verified, current admin session of the request, or null (absent, undecodable, invalid, expired or revoked token). Never throws. */
-export function readAdminClaims(req: NextApiRequest, res: NextApiResponse): AdminClaims | null {
+/**
+ * The request's verified admin session: the token's claims plus its session
+ * row (null for a token minted before sessions existed — signature, expiry
+ * and session version still apply to it, and /api/admin/session upgrades it
+ * to a row on the next page view).
+ */
+export type AdminContext = { claims: AdminClaims; session: AdminSession | null }
+
+/**
+ * Full check: signature (HS256 only), role, session version, and — for a
+ * token with `sid` — a live session row (not revoked, not expired), whose
+ * last-seen time is refreshed. Null for anything else. Never throws: an
+ * unreadable auth.db fails closed (no session).
+ */
+export function readAdminContext(req: NextApiRequest, res: NextApiResponse): AdminContext | null {
   try {
     const token = readCookie(req, res, ADMIN_COOKIE)
     if (!token) return null
     const claims = jwt.verify(token, getJwtSecret(), { algorithms: ['HS256'] }) as AdminClaims
     if (claims?.role !== 'admin') return null
-    return isSessionCurrent(claims as Record<string, unknown>, getSessionVersion()) ? claims : null
+    if (!isSessionCurrent(claims as Record<string, unknown>, getSessionVersion())) return null
+    if (claims.sid === undefined) return { claims, session: null }
+    if (typeof claims.sid !== 'string') return null
+    const session = liveSession(claims.sid)
+    if (!session) return null
+    touchSession(session)
+    return { claims, session }
   } catch {
     return null
   }
 }
 
-export function isAdminRequest(req: NextApiRequest, res: NextApiResponse): boolean {
-  return readAdminClaims(req, res) !== null
+/** The verified, current admin session's claims, or null (absent, undecodable, invalid, expired or revoked token). Never throws. */
+export function readAdminClaims(req: NextApiRequest, res: NextApiResponse): AdminClaims | null {
+  return readAdminContext(req, res)?.claims ?? null
 }
 
-/** Mint an admin session token bound to the current session version. */
-export function signAdminToken(email: string): string {
-  return jwt.sign(
-    { sub: 'cv-admin', role: 'admin', email, [SESSION_VERSION_CLAIM]: getSessionVersion() },
-    getJwtSecret(),
-    { algorithm: 'HS256', expiresIn: ADMIN_SESSION_TTL_S },
-  )
+export function isAdminRequest(req: NextApiRequest, res: NextApiResponse): boolean {
+  return readAdminContext(req, res) !== null
 }
+
+/** Mint an admin session token bound to the current session version (and to a session row when `sid` is given). */
+export function signAdminToken(email: string, opts: { sid?: string; amr?: string[]; authTime?: number } = {}): string {
+  const payload: Record<string, unknown> = { sub: 'cv-admin', role: 'admin', email, [SESSION_VERSION_CLAIM]: getSessionVersion() }
+  if (opts.sid) payload.sid = opts.sid
+  if (opts.amr?.length) payload.amr = opts.amr
+  if (opts.authTime) payload.auth_time = Math.floor(opts.authTime / 1000)
+  return jwt.sign(payload, getJwtSecret(), { algorithm: 'HS256', expiresIn: ADMIN_SESSION_TTL_S })
+}
+
+const header = (req: NextApiRequest, name: string): string => {
+  const v = req.headers?.[name]
+  return (Array.isArray(v) ? v[0] : v) || ''
+}
+
+/** Coarse origin of a request, for the session list and history (lib/adminAuth/describe.ts). */
+export function requestOrigin(req: NextApiRequest): SessionOrigin {
+  const country = header(req, 'cf-ipcountry').toUpperCase()
+  return {
+    device: deviceLabel(header(req, 'user-agent')),
+    ipPrefix: ipPrefix(ipFromReq(req)),
+    country: /^[A-Z]{2}$/.test(country) && country !== 'XX' && country !== 'T1' ? country : null,
+  }
+}
+
+const AMR: Record<AuthMethod, string[]> = { password: ['pwd'], passkey: ['passkey'], recovery: ['pwd', 'recovery'], legacy: ['pwd'] }
+
+/**
+ * Sign this browser in: create its session row, set the httpOnly session
+ * cookie (SameSite=Strict, Secure in production), the readable hint cookie
+ * and the signed known-device cookie (keeping `knownDeviceId` when the
+ * browser was already known), and record the sign-in.
+ */
+export function startAdminSession(
+  req: NextApiRequest,
+  res: NextApiResponse,
+  opts: { email: string; method: AuthMethod; credentialId?: string | null; knownDeviceId?: string | null; verifiedAt?: number; record?: boolean },
+): AdminSession {
+  const origin = requestOrigin(req)
+  const session = createSession({ method: opts.method, ttlMs: ADMIN_SESSION_TTL_S * 1000, credentialId: opts.credentialId ?? null, verifiedAt: opts.verifiedAt, ...origin })
+  const secret = getJwtSecret()
+  const cookieBase = { req, res, httpOnly: true, sameSite: 'strict' as const, secure: isProd(), path: '/' }
+  const token = signAdminToken(opts.email, { sid: session.id, amr: AMR[opts.method], authTime: session.verifiedAt })
+  setCookie(ADMIN_COOKIE, token, { ...cookieBase, maxAge: ADMIN_SESSION_TTL_S })
+  // Remember this browser so it skips the login queue during a distributed attack.
+  setCookie(KNOWN_DEVICE_COOKIE, signKnownDevice(secret, opts.knownDeviceId || undefined), { ...cookieBase, maxAge: KNOWN_DEVICE_TTL_S })
+  setAdminHint(req, res)
+  if (opts.record !== false) {
+    recordAuthEvent({ type: 'signin', method: opts.method, sessionId: session.id, ...origin, detail: opts.method === 'legacy' ? 'session from before passkeys' : null })
+  }
+  return session
+}
+
+/** The known-device id this browser presents (null when none or forged). */
+export function knownDeviceIdOf(req: NextApiRequest, res: NextApiResponse): string | null {
+  return verifyKnownDevice(getJwtSecret(), readCookie(req, res, KNOWN_DEVICE_COOKIE))?.id ?? null
+}
+
+/** Expire the session and hint cookies of this browser. */
+export function clearAdminCookies(req: NextApiRequest, res: NextApiResponse): void {
+  deleteCookie(ADMIN_COOKIE, { req, res, path: '/' })
+  clearAdminHint(req, res)
+}
+

@@ -41,6 +41,8 @@ import {
   FaArchive,
 } from 'react-icons/fa'
 import { readJsonObject } from './shell/http'
+import { useStepUp } from './security/useStepUp'
+import { wasStepUpCancelled } from './security/stepUpClient'
 import {
   lastRunDetail,
   parseBackupSchedule,
@@ -322,6 +324,8 @@ export default function StoragePanel() {
   const [confirmPull, setConfirmPull] = useState(false)
   const [lastPull, setLastPull] = useState<PullSummary | null>(null)
   const toast = useToast()
+  // Restoring asks for a recent sign-in or step-up (lib/adminAuth/stepUp.ts).
+  const { fetchWithStepUp, stepUpElement } = useStepUp()
   const cancelRef = useRef<HTMLButtonElement>(null)
 
   const load = useCallback(async () => {
@@ -407,11 +411,16 @@ export default function StoragePanel() {
     setConfirmPull(false)
     setPulling(true)
     try {
-      const res = await fetch('/api/admin/storage/pull', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ source: 'r2' }),
-      })
+      const res = await fetchWithStepUp(
+        '/api/admin/storage/pull',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source: 'r2' }),
+        },
+        'Restoring replaces the live site with the backup.',
+      )
+      if (wasStepUpCancelled(res)) return
       const json = await readJsonObject(res)
       if (!res.ok || !json.ok) {
         toast({
@@ -453,7 +462,7 @@ export default function StoragePanel() {
     } finally {
       setPulling(false)
     }
-  }, [load, toast])
+  }, [load, toast, fetchWithStepUp])
 
   const r2Groups = useMemo(() => (data ? groupR2(data.r2.objects) : {}), [data])
   const lastLocalAt = data?.backups?.lastLocalAt ?? null
@@ -913,6 +922,7 @@ export default function StoragePanel() {
           </AlertDialogContent>
         </AlertDialogOverlay>
       </AlertDialog>
+      {stepUpElement}
     </Box>
   )
 }

@@ -4,14 +4,17 @@
  *
  * These scripts run outside Next (container boot, operator shell), so they
  * cannot import lib/*.ts. Everything that must agree with the app — the
- * SQLite schema, the R2 key layout, how MDX/JSON rows are serialised, the
- * R2 timeouts — lives here once instead of being copied into every script.
+ * SQLite schema (the versioned migrations in scripts/db, which lib/db.ts
+ * imports too), the R2 key layout, how MDX/JSON rows are serialised, the R2
+ * timeouts — lives here once instead of being copied into every script.
  * The pure helpers are unit-tested in tests/s3-sync.test.ts.
  */
 import fs from 'node:fs'
 import path from 'node:path'
 import Database from 'better-sqlite3'
 import { S3Client } from '@aws-sdk/client-s3'
+import { backupBeforeMigration, ensureWal, runMigrations } from './db/migrate.mjs'
+import { CONTENT_MIGRATIONS } from './db/content/index.mjs'
 
 /** Names accepted for pages, collection slugs and kv keys mirrored to R2. */
 export const SAFE_NAME = /^[a-z0-9][a-z0-9-_]*$/
@@ -30,34 +33,36 @@ export const SKEW_MS = 5000
 /** Same bounds as lib/r2.ts: connect 5 s, idle socket 10 s, 3 attempts. */
 export const R2_TIMEOUTS = { connectionMs: 5000, requestMs: 10000, maxAttempts: 3 }
 
-// Must match initSchema() in lib/db.ts (this .mjs cannot import TS);
-// tests/r4-ops-schema-parity.test.ts compares the resulting sqlite_master.
-const SCHEMA_SQL = `
-  CREATE TABLE IF NOT EXISTS pages (
-    name TEXT PRIMARY KEY, frontmatter TEXT NOT NULL DEFAULT '{}',
-    body TEXT NOT NULL DEFAULT '', updated_at INTEGER NOT NULL);
-  CREATE TABLE IF NOT EXISTS collection_items (
-    collection TEXT NOT NULL, slug TEXT NOT NULL,
-    frontmatter TEXT NOT NULL DEFAULT '{}', body TEXT NOT NULL DEFAULT '',
-    updated_at INTEGER NOT NULL, PRIMARY KEY (collection, slug));
-  CREATE TABLE IF NOT EXISTS kv (
-    key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at INTEGER NOT NULL);
-  CREATE TABLE IF NOT EXISTS r2_pending (
-    key TEXT PRIMARY KEY, op TEXT NOT NULL CHECK (op IN ('put', 'delete')),
-    updated_at INTEGER NOT NULL);
-  CREATE INDEX IF NOT EXISTS idx_collection_items_updated
-    ON collection_items (collection, updated_at DESC);
-`
-
-/** Open (creating if needed) the content DB with the app's schema. */
+/**
+ * Open (creating if needed) the content DB in WAL mode and bring it to the
+ * newest content migration — the same list lib/db.ts applies
+ * (scripts/db/content/index.mjs; tests/r4-ops-schema-parity.test.ts compares
+ * the resulting sqlite_master). A store that is already versioned is copied
+ * to <db dir>/backups/pre-migration/ before a new migration touches it.
+ */
 export function openContentDb(dbPath) {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true })
   const db = new Database(dbPath, { timeout: 10_000 })
   try {
-    if (String(db.pragma('journal_mode', { simple: true })).toLowerCase() !== 'wal') {
-      db.pragma('journal_mode = WAL')
+    ensureWal(db)
+    const report = runMigrations(db, CONTENT_MIGRATIONS, {
+      label: 'content',
+      beforeMigrate: ({ from }) => {
+        const dir = path.join(path.dirname(dbPath), 'backups', 'pre-migration')
+        const copy = backupBeforeMigration(db, { dir, label: 'content', from })
+        if (copy) console.log(`[content-db] copied the store to ${copy} before migrating`)
+      },
+    })
+    if (report.applied.length) {
+      const names = report.applied.map((m) => `${m.version}-${m.name}`).join(', ')
+      console.log(`[content-db] migrated ${report.from} → ${report.to}: ${names}`)
     }
-    db.exec(SCHEMA_SQL)
+    if (report.ahead) {
+      console.warn(
+        `[content-db] the store is at version ${report.from}, newer than this build (${report.latest}); ` +
+          'running on the additive schema',
+      )
+    }
   } catch (err) {
     db.close()
     throw err

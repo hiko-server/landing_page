@@ -1,12 +1,20 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
-import { setCookie } from 'cookies-next'
-import { ensureAdminFromEnv, loginGate, loginLockState, loginPressure, readAdmin, verifyCredentials } from '../../../lib/admin'
-import { ADMIN_COOKIE, ADMIN_SESSION_TTL_S, readCookie, setAdminHint, signAdminToken } from '../../../lib/auth'
+import {
+  clearLoginFailures,
+  ensureAdminFromEnv,
+  loginGate,
+  loginLockState,
+  loginPressure,
+  readAdmin,
+  recordLoginFailure,
+  verifyCredentials,
+} from '../../../lib/admin'
+import { knownDeviceIdOf, requestOrigin, startAdminSession } from '../../../lib/auth'
 import { withApi } from '../../../lib/apiHandler'
-import { getJwtSecret, isProd } from '../../../lib/env'
 import { clientKey, rateLimit, rateLimitNetwork } from '../../../lib/rateLimit'
-import { KNOWN_DEVICE_COOKIE, KNOWN_DEVICE_TTL_S, signKnownDevice, verifyKnownDevice } from '../../../lib/security/knownDevice'
 import { DEFAULT_LOGIN_POLICY } from '../../../lib/security/loginThrottle'
+import { passkeyCount } from '../../../lib/adminAuth/passkeys'
+import { consumeRecoveryCode, isPasskeyRequired, recordAuthEvent } from '../../../lib/adminAuth/store'
 
 /**
  * POST /api/auth/email-login
@@ -29,27 +37,39 @@ import { DEFAULT_LOGIN_POLICY } from '../../../lib/security/loginThrottle'
  *   5. scrypt-hashed password (async, off the event loop), constant-time
  *      compare; unknown email and wrong password take the same path, the
  *      same time and get the same answer.
- *   6. JWT (HS256, 7d, bound to the session version) in an httpOnly +
- *      sameSite=strict + secure cookie, plus the readable `cv_admin_hint=1`
- *      companion cookie (lib/auth ADMIN_HINT_COOKIE; grants nothing).
+ *   6. "Require a passkey" (lib/adminAuth): once the owner has turned it on,
+ *      a request without a recovery code answers 403 PASSKEY_REQUIRED before
+ *      any password check (so it reveals nothing about the password); the
+ *      password plus one unused recovery code signs in and spends the code.
+ *      A wrong password and a wrong code get the same 401, and a wrong code
+ *      counts as a failure for the lockout above (a right password does not
+ *      wipe that count until the code is right too).
+ *   7. A session row in auth.db and a JWT (HS256, 7d, bound to the session
+ *      version and the row) in an httpOnly + sameSite=strict + secure cookie,
+ *      plus the readable `cv_admin_hint=1` companion cookie (lib/auth
+ *      startAdminSession). Sign-ins and failures go to the sign-in history
+ *      (a failure keeps only the time, method and country).
  */
 
-const ALLOWED_BODY_KEYS = new Set(['email', 'password'])
+const ALLOWED_BODY_KEYS = new Set(['email', 'password', 'recoveryCode'])
 const HOURLY_LIMIT = 30
 /** A /48 holds many /64s (one per LAN); give it a larger, but finite, shared budget. */
 const NETWORK_FACTOR = 3
+/** With "Require a passkey" on, a wrong password and a wrong recovery code get the same answer. */
+const WRONG_SECOND_STEP = { code: 'PASSWORD_OR_RECOVERY_INVALID', error: 'The password or the recovery code is not right (each code works once).' }
 /** One message for every throttle outcome; it never confirms an address. */
 const THROTTLED = 'Too many sign-in attempts. Please wait and try again.'
 
-function sanitizeBody(body: unknown): { email: string; password: string } | null {
+function sanitizeBody(body: unknown): { email: string; password: string; recoveryCode: string | null } | null {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return null
   const keys = Object.keys(body as Record<string, unknown>)
   if (keys.some((k) => !ALLOWED_BODY_KEYS.has(k))) return null
-  const { email, password } = body as { email?: unknown; password?: unknown }
+  const { email, password, recoveryCode } = body as { email?: unknown; password?: unknown; recoveryCode?: unknown }
   if (typeof email !== 'string' || typeof password !== 'string') return null
   if (email.length < 3 || email.length > 254) return null
   if (password.length < 1 || password.length > 1024) return null
-  return { email: email.trim().toLowerCase(), password }
+  if (recoveryCode !== undefined && (typeof recoveryCode !== 'string' || recoveryCode.length > 64)) return null
+  return { email: email.trim().toLowerCase(), password, recoveryCode: typeof recoveryCode === 'string' && recoveryCode.trim() ? recoveryCode : null }
 }
 
 type Hit = { allowed: boolean; resetAt: number; remaining: number }
@@ -92,10 +112,19 @@ export default withApi('auth/email-login', async (req: NextApiRequest, res: Next
   const lock = loginLockState(creds.email, bucket)
   if (lock.locked) return throttled(res, lock.retryAfterMs)
 
-  const secret = getJwtSecret()
-  const device = verifyKnownDevice(secret, readCookie(req, res, KNOWN_DEVICE_COOKIE))
-  const admission = loginGate().admit(() => verifyCredentials(creds.email, creds.password, bucket), {
-    bypass: device !== null,
+  // "Require a passkey" is on: without a recovery code there is nothing to
+  // check (and the answer says nothing about the password).
+  const passkeyOnly = isPasskeyRequired() && passkeyCount() > 0
+  if (passkeyOnly && !creds.recoveryCode) {
+    return res.status(403).json({
+      code: 'PASSKEY_REQUIRED',
+      error: 'This account signs in with a passkey. Use your passkey, or your password together with a recovery code.',
+    })
+  }
+
+  const deviceId = knownDeviceIdOf(req, res)
+  const admission = loginGate().admit(() => verifyCredentials(creds.email, creds.password, bucket, { secondStepFollows: passkeyOnly }), {
+    bypass: deviceId !== null,
   })
   if (!admission.admitted) return throttled(res, admission.retryAfterMs)
 
@@ -109,16 +138,35 @@ export default withApi('auth/email-login', async (req: NextApiRequest, res: Next
 
   if (!outcome.ok) {
     if (outcome.reason === 'locked') return throttled(res, outcome.retryAfterMs)
-    return res.status(401).json({ error: 'Invalid credentials' })
+    recordFailure(req, passkeyOnly ? 'recovery' : 'password')
+    return res.status(401).json(passkeyOnly ? WRONG_SECOND_STEP : { error: 'Invalid credentials' })
+  }
+
+  // "Require a passkey": the password alone is not enough any more.
+  let method: 'password' | 'recovery' = 'password'
+  if (passkeyOnly) {
+    if (!consumeRecoveryCode(creds.recoveryCode)) {
+      const lock = recordLoginFailure(creds.email, bucket)
+      recordFailure(req, 'recovery')
+      if (lock.locked) return throttled(res, lock.retryAfterMs)
+      return res.status(401).json(WRONG_SECOND_STEP)
+    }
+    clearLoginFailures(creds.email, bucket)
+    method = 'recovery'
   }
 
   // Sign with the address exactly as stored on disk.
   const email = readAdmin()?.email || creds.email
-  const cookieBase = { req, res, httpOnly: true, sameSite: 'strict' as const, secure: isProd(), path: '/' }
-  setCookie(ADMIN_COOKIE, signAdminToken(email), { ...cookieBase, maxAge: ADMIN_SESSION_TTL_S })
-  // Remember this browser (keeping its id when it was already known) so it
-  // skips the login queue during a future distributed attack.
-  setCookie(KNOWN_DEVICE_COOKIE, signKnownDevice(secret, device?.id), { ...cookieBase, maxAge: KNOWN_DEVICE_TTL_S })
-  setAdminHint(req, res)
+  const session = startAdminSession(req, res, { email, method, knownDeviceId: deviceId })
+  if (method === 'recovery') recordAuthEvent({ type: 'recovery-code-used', method, sessionId: session.id, ...requestOrigin(req) })
   return res.status(200).json({ ok: true })
 })
+
+/** A failed attempt in the sign-in history: time, method and country only (no address, no device). */
+function recordFailure(req: NextApiRequest, method: 'password' | 'recovery') {
+  try {
+    recordAuthEvent({ type: 'signin-failed', method, country: requestOrigin(req).country })
+  } catch {
+    // History is best effort; the lockout already counted the failure.
+  }
+}

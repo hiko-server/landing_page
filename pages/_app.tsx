@@ -24,6 +24,7 @@ import { HtmlLangContext } from '../components/Common/htmlLang'
 import { ChromeLangContext, chromeLangFor } from '../components/Chrome/chromeLang'
 import { monoFallbackFontFaces } from '../lib/monoFallback'
 import { installPrintDetails } from '../lib/print'
+import { installErrorCapture } from '../lib/errors/capture'
 import { RestoreScrollOnMount, useDeferredScrollRestore } from '../components/Common/scrollRestore'
 import { ClockProvider } from '../lib/clock'
 
@@ -116,6 +117,10 @@ const App = ({ Component, pageProps, router }: AppProps) => {
 
   // Printing: closed <details> are opened for the print, then closed again.
   useEffect(() => installPrintDetails(window), [])
+
+  // First-party error monitor: uncaught errors and unhandled rejections are
+  // reported to /api/e (the reporter loads only once something fails).
+  useEffect(() => installErrorCapture(), [])
 
   // Browsers with the View Transitions API animate route changes natively
   // (see components/Chrome/RouteTransitions.tsx), so the framer-motion wrapper

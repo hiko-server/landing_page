@@ -25,7 +25,9 @@
     "check": "tsc --noEmit && yarn -s lint && node --import ./tests/register.mjs --test tests/*.test.ts",
     "test": "node --import ./tests/register.mjs --test tests/*.test.ts",
     "e2e": "playwright test -c e2e/playwright.config.ts",
-    "audit:deps": "node scripts/check-audit.mjs"
+    "audit:deps": "node scripts/check-audit.mjs",
+    "db:migrate": "node scripts/migrate-db.mjs",
+    "db:status": "node scripts/migrate-db.mjs --status"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1055.0",
@@ -37,6 +39,8 @@
     "@emotion/react": "^11.11.4",
     "@emotion/styled": "^11.11.5",
     "@floating-ui/dom": "1.7.6",
+    "@simplewebauthn/browser": "14.0.0",
+    "@simplewebauthn/server": "14.0.3",
     "@tiptap/core": "3.31.3",
     "@tiptap/extension-image": "3.31.3",
     "@tiptap/extension-link": "3.31.3",
@@ -141,6 +145,19 @@
     "@tiptap/react": "3.31.3",
     "@tiptap/starter-kit": "3.31.3",
     "@tiptap/suggestion": "3.31.3",
-    "**/sharp": "0.35.5"
+    "**/sharp": "0.35.5",
+    "@peculiar/asn1-android": "2.10.0",
+    "@peculiar/asn1-asym-key": "2.10.0",
+    "@peculiar/asn1-cms": "2.10.0",
+    "@peculiar/asn1-csr": "2.10.0",
+    "@peculiar/asn1-ecc": "2.10.0",
+    "@peculiar/asn1-pfx": "2.10.0",
+    "@peculiar/asn1-pkcs8": "2.10.0",
+    "@peculiar/asn1-pkcs9": "2.10.0",
+    "@peculiar/asn1-rsa": "2.10.0",
+    "@peculiar/asn1-schema": "2.10.0",
+    "@peculiar/asn1-x509": "2.10.0",
+    "@peculiar/asn1-x509-attr": "2.10.0",
+    "@peculiar/asn1-x509-post-quantum": "2.10.0"
   }
 }

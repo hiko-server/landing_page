@@ -69,9 +69,37 @@ export function formatJsonLine(level: LogLevel, msg: string, fields: LogFields, 
   return JSON.stringify(line)
 }
 
+/**
+ * Optional process-wide observer of warn / error entries. The server
+ * installs one at startup (lib/errors/server.ts installServerErrorCapture:
+ * the System panel's recent-log ring and the error monitor). It lives on
+ * globalThis because Next bundles routes into separate webpack runtimes, and
+ * this module stays free of server-only imports because client code logs
+ * through it too.
+ */
+export type LogObserver = (level: LogLevel, msg: string, fields: LogFields) => void
+type ObserverGlobal = typeof globalThis & { __logObserver?: LogObserver | null }
+
+export function setLogObserver(observer: LogObserver | null): void {
+  const g = globalThis as ObserverGlobal
+  g.__logObserver = observer
+}
+
+function notifyObserver(level: LogLevel, msg: string, fields: LogFields) {
+  if (level !== 'warn' && level !== 'error') return
+  const observer = (globalThis as ObserverGlobal).__logObserver
+  if (!observer) return
+  try {
+    observer(level, msg, fields)
+  } catch {
+    // An observer must never break logging.
+  }
+}
+
 function write(level: LogLevel, msg: string, base: LogFields, fields?: LogFields) {
   if (ORDER[level] < threshold()) return
   const merged = { ...base, ...(fields || {}) }
+  notifyObserver(level, msg, merged)
   const sink = level === 'error' || level === 'warn' ? console.error : console.log
   if (process.env.NODE_ENV === 'production') {
     sink(formatJsonLine(level, msg, merged))

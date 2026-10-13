@@ -203,6 +203,9 @@ export function AuthError({ children }: { children?: React.ReactNode }) {
     <Box role="alert" aria-live="assertive" aria-atomic="true">
       {children ? (
         <Alert
+          // The wrapper is the live region; a second role="alert" inside it
+          // could make screen readers announce the message twice.
+          role="presentation"
           status="error"
           variant="left-accent"
           borderRadius="md"

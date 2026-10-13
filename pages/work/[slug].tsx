@@ -15,7 +15,8 @@ import { listPosts, listWorkInDisplayOrder, getWork, type HastRoot, type WorkFro
 import { labelLang, type TocEntry } from '../../lib/toc'
 import { safeHref } from '../../lib/cvFormat'
 import { variantSrcSet } from '../../lib/uploadVariants'
-import { articleImages, breadcrumb, absUrl, caseStudyNode, ogImageUrl, ogLangOf, PERSON_NAME, type OgImageOptions } from '../../lib/schema'
+import { articleImageUrls, breadcrumb, absUrl, caseStudyNode, ogLangOf, PERSON_NAME, type ArticleCards, type OgImageOptions } from '../../lib/schema'
+import { signedOgImageUrl } from '../../lib/og/sign'
 
 type Cover = { src: string; alt: string; srcSet: string | null }
 
@@ -31,6 +32,8 @@ type Props = {
   excerpt: string
   /** Content-store write time (og:image cache-buster, schema dateModified). */
   updatedAt: number | null
+  /** Signed social-card URLs (1200×630 and square), computed in getStaticProps. */
+  ogImages: ArticleCards
   /** Frontmatter cover with its responsive variants (resolved on the server). */
   cover: Cover | null
   /** Neighbours in /work display order (featured first). */
@@ -62,6 +65,7 @@ export default function WorkCase({
   lang,
   excerpt,
   updatedAt,
+  ogImages,
   cover,
   prev,
   next,
@@ -73,16 +77,7 @@ export default function WorkCase({
   const tech = Array.isArray(frontmatter.tech) ? frontmatter.tech : []
   const link = safeHref(frontmatter.link)
   const repo = safeHref(frontmatter.repo)
-  const card: OgImageOptions = {
-    kind: 'work',
-    title: frontmatter.title,
-    lang: ogLangOf(lang),
-    mins: readingMinutes,
-    tags: tech,
-    cover: cover?.src,
-    v: updatedAt,
-  }
-  const image = ogImageUrl(card)
+  const image = ogImages.card
   const titleLang = labelLang(frontmatter.title) || 'en'
   const ui = uiLang(lang)
 
@@ -128,7 +123,7 @@ export default function WorkCase({
             title: frontmatter.title,
             description: frontmatter.description,
             lang,
-            images: articleImages(card, cover?.src),
+            images: articleImageUrls(ogImages, cover?.src),
             keywords: tech,
             dateModified: updatedAt ? new Date(updatedAt).toISOString() : undefined,
             sameAs: [link, repo].filter(Boolean),
@@ -236,6 +231,16 @@ export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
     }
   }
 
+  const card: OgImageOptions = {
+    kind: 'work',
+    title: w.frontmatter.title,
+    lang: ogLangOf(w.lang),
+    mins: w.readingMinutes,
+    tags: Array.isArray(w.frontmatter.tech) ? w.frontmatter.tech : [],
+    cover: cover?.src,
+    v: w.updatedAt,
+  }
+
   return {
     props: {
       slug: w.slug,
@@ -246,6 +251,7 @@ export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
       lang: w.lang,
       excerpt: w.excerpt,
       updatedAt: w.updatedAt,
+      ogImages: { card: signedOgImageUrl(card), square: signedOgImageUrl({ ...card, size: 'square' }) },
       cover,
       prev: before,
       next: after,

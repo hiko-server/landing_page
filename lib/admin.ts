@@ -186,6 +186,19 @@ export function loginLockState(email: string, clientBucket: string): LockState {
   return throttle().check(pairKey(normalizeEmail(email), clientBucket))
 }
 
+/** Forget the (email, client) failures once every step of a sign-in succeeded. */
+export function clearLoginFailures(email: string, clientBucket: string): void {
+  throttle().succeed(pairKey(normalizeEmail(email), clientBucket))
+}
+
+/**
+ * Count a failed second step (a wrong recovery code after a right password)
+ * against the same (email, client) lockout as a wrong password.
+ */
+export function recordLoginFailure(email: string, clientBucket: string): LockState {
+  return throttle().fail(pairKey(normalizeEmail(email), clientBucket))
+}
+
 // ── Public verify ──────────────────────────────────────────────────────
 
 export type VerifyOutcome =
@@ -204,7 +217,12 @@ export type VerifyOutcome =
  * because the state may change while a request waits in the login gate)
  * is answered without hashing.
  */
-export async function verifyCredentials(email: string, password: string, clientBucket: string): Promise<VerifyOutcome> {
+export async function verifyCredentials(
+  email: string,
+  password: string,
+  clientBucket: string,
+  opts: { secondStepFollows?: boolean } = {},
+): Promise<VerifyOutcome> {
   const t = throttle()
   const key = pairKey(normalizeEmail(email), clientBucket)
   const lock = t.check(key)
@@ -216,7 +234,9 @@ export async function verifyCredentials(email: string, password: string, clientB
   const passOk = !!data && timingSafeEqualHex(candidate, data.passwordHash)
 
   if (emailOk && passOk) {
-    t.succeed(key)
+    // With a second step still to come (a recovery code), a right password
+    // must not wipe the failures the second step has collected.
+    if (!opts.secondStepFollows) t.succeed(key)
     return { ok: true }
   }
   const after = t.fail(key)

@@ -51,22 +51,17 @@ test('the framer-motion fallback re-applies the position after the page swap', (
 
 // ── /api/og Cache-Control ───────────────────────────────────────────────────
 
-test('/api/og sends exactly one Cache-Control (its key replaces the library default)', () => {
-  const lib = readFileSync(path.join(ROOT, 'node_modules/@vercel/og/dist/index.edge.js'), 'utf8')
-  // The library spreads the caller's headers AFTER its lower-case default…
-  assert.match(lib, /"cache-control":[^\n]*\n\s*\.\.\.options\.headers/)
-  // …so the route must use the identical lower-case key, and only once.
+test('/api/og (Node runtime) sets exactly one Cache-Control on the response it writes', () => {
+  // Since NEXT16-og-node the route copies the PNG bytes into the Node
+  // response itself, so the library's own headers never reach the client:
+  // the route's single res.setHeader('Cache-Control', …) is the only one.
   const src = readFileSync(path.join(ROOT, 'pages/api/og.tsx'), 'utf8')
-  const responseOptions = src
-    .slice(src.indexOf('width: 1200'))
+  const code = src
     .split('\n')
     .filter((line) => !line.trim().startsWith('//'))
     .join('\n')
-  const keys = responseOptions.match(/['"]cache-control['"]\s*:/gi) || []
-  assert.equal(keys.length, 1, 'one cache-control key in the ImageResponse options')
-  assert.match(responseOptions, /'cache-control': CACHE_CONTROL/)
-  // The merge the library performs then yields a single value.
-  const routeHeaders: Record<string, string> = { 'cache-control': 'public, max-age=86400' }
-  const merged = new Headers({ 'cache-control': 'public, immutable, no-transform, max-age=31536000', ...routeHeaders })
-  assert.equal(merged.get('cache-control'), 'public, max-age=86400')
+  assert.doesNotMatch(code, /runtime:\s*['"]edge['"]/)
+  assert.equal((code.match(/setHeader\('Cache-Control'/g) || []).length, 2, 'one in send(), one for the 429')
+  assert.match(code, /res\.setHeader\('Cache-Control', cacheControl\)/)
+  assert.doesNotMatch(code, /['"]cache-control['"]\s*:/i, 'no header map passed to ImageResponse')
 })

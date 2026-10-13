@@ -28,8 +28,12 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'r4-authoring-'))
 type Handler = (req: any, res: any) => unknown
 let posts: Handler, page: Handler, versions: Handler, preview: Handler
 let closeDb: () => void
+let closeAuthDb: () => void
+// A token bound to a fresh session row: signed in just now, so deletes pass the recent-verification check.
+let sessionId = ''
 
-const adminToken = () => jwt.sign({ role: 'admin', email: 'owner@example.test' }, 'r4-authoring-ifmatch-secret', { algorithm: 'HS256' })
+const adminToken = () =>
+  jwt.sign({ role: 'admin', email: 'owner@example.test', sid: sessionId }, 'r4-authoring-ifmatch-secret', { algorithm: 'HS256' })
 
 type MockRes = { statusCode: number; headers: Record<string, string>; body: any; revalidated: string[] }
 
@@ -109,10 +113,14 @@ before(async () => {
   versions = (await import('../pages/api/versions')).default
   preview = (await import('../pages/api/admin/preview')).default
   closeDb = (await import('../lib/db')).closeDb
+  closeAuthDb = (await import('../lib/adminAuth/db')).closeAuthDb
+  const { createSession } = await import('../lib/adminAuth/sessions')
+  sessionId = createSession({ method: 'password', ttlMs: 3_600_000, device: null, ipPrefix: null, country: null }).id
 })
 
 after(() => {
   closeDb()
+  closeAuthDb()
   process.chdir(originalCwd)
   fs.rmSync(tmp, { recursive: true, force: true })
 })

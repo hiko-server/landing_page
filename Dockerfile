@@ -90,6 +90,8 @@ COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
 # Sync scripts + entrypoint pull editorial content from R2 on startup;
 # scripts/warm-isr.mjs then regenerates the prerendered pages, reading the
 # preview id from /app/.next/prerender-manifest.json (shipped by standalone).
+# scripts/db holds the versioned SQLite migrations the boot sync applies (and
+# scripts/migrate-db.mjs, the operator CLI: docker exec … node scripts/migrate-db.mjs --status).
 COPY --from=build --chown=nextjs:nodejs /app/scripts ./scripts
 COPY --chown=nextjs:nodejs docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh \
@@ -97,6 +99,9 @@ RUN chmod +x /app/docker-entrypoint.sh \
  && test -f /app/scripts/warm-isr.mjs \
  && test -f /app/scripts/sync-from-r2.mjs \
  && test -f /app/scripts/content-helpers.mjs \
+ && test -f /app/scripts/db/migrate.mjs \
+ && test -f /app/scripts/migrate-db.mjs \
+ && test -f /app/assets/og/Geist-Regular.ttf \
  && test ! -e /app/data/content.db \
  && node -e "require('better-sqlite3')(':memory:').close(); require('gray-matter'); require('@aws-sdk/client-s3'); require('sharp')"
 

@@ -37,12 +37,15 @@ export const EASE = 'cubic-bezier(0.22, 1, 0.36, 1)'
 /** Height of the site header (layout/HeaderFooter → components/Header). */
 export const SITE_HEADER_H = '56px'
 
-/** Primary (indigo) action button styling. */
+/**
+ * Primary (indigo) action button styling: the contrast-safe filled shade
+ * (accent.solid, white text ≥ 4.5:1 in both modes — accent.500 is 4.47:1).
+ */
 export const primaryButtonProps: ButtonProps = {
-  bg: 'accent.500',
-  color: 'white',
-  _hover: { bg: 'accent.600', _disabled: { bg: 'accent.500' } },
-  _active: { bg: 'accent.700' },
+  bg: 'accent.solid',
+  color: 'accent.fg',
+  _hover: { bg: 'accent.solid-hover', _disabled: { bg: 'accent.solid' } },
+  _active: { bg: 'accent.solid-active' },
 }
 
 /** Hairline-bordered secondary button styling. */
@@ -73,7 +76,7 @@ export function Eyebrow({
       fontSize="10px"
       letterSpacing="0.16em"
       textTransform="uppercase"
-      color={accent ? 'accent.500' : 'page.fg-secondary'}
+      color={accent ? 'accent.text' : 'page.fg-secondary'}
       {...rest}
     >
       {children}
@@ -120,7 +123,7 @@ export function SectionLabel({
             fontFamily={MONO}
             fontSize="11px"
             fontWeight={500}
-            color="accent.500"
+            color="accent.text"
             letterSpacing="0.06em"
           >
             [{String(index).padStart(2, '0')}]

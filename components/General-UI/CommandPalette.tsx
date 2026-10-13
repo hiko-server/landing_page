@@ -406,7 +406,7 @@ export default function CommandPalette({ isOpen, onClose, isAdmin = false, retur
           group: 'Admin',
           kind: 'action',
           label: 'Log out',
-          hint: 'every device',
+          hint: 'this browser',
           run: logOut,
           keywords: 'admin sign out logout',
         },
