@@ -54,7 +54,11 @@ test.describe('social cards', () => {
     request,
   }) => {
     await page.goto('/blog')
-    const href = await page.locator('main a[href^="/blog/"]').first().getAttribute('href')
+    await settle(page)
+    // An empty store (the CI container) has no post: count first, so nothing waits for a link that never comes.
+    const link = page.locator('main a[href^="/blog/"]').first()
+    test.skip((await link.count()) === 0, 'no published post to check')
+    const href = await link.getAttribute('href')
     test.skip(!href, 'no published post to check')
     await page.goto(href as string)
     const og = new URL(
