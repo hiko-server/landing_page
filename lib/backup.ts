@@ -23,6 +23,7 @@ import { isValidUploadName } from './security/uploadName'
 // @ts-expect-error -- tar-stream ships no type declarations (typed below).
 import tarStream from 'tar-stream'
 import { inboxFile, mergeInboxText } from './inbox'
+import { log } from './log'
 
 // A static import (not require) so the standalone tracer bundles the package
 // and the module also loads as native ESM (node --test).
@@ -100,13 +101,16 @@ export const R2_KEEP = 30
 /** Names this module generates; nothing else in data/backups or R2 is pruned. */
 export const SNAPSHOT_FILE_RE = /^snapshot-\d{8}-\d{6}(?:-\d{3}-[0-9a-f]{6})?\.tgz$/
 
+/** Why a snapshot was taken: an admin's Backup now, the safety copy before a restore, or the schedule. */
+export type SnapshotReason = 'manual' | 'pre-restore' | 'scheduled'
+
 export type SnapshotManifest = {
   version: 1
   createdAt: string
   host: string
   nodeVersion: string
   bucket: string | null
-  reason?: 'manual' | 'pre-restore'
+  reason?: SnapshotReason
   files: Array<{ path: string; bytes: number }>
   totals: { files: number; bytes: number }
 }
@@ -262,7 +266,7 @@ async function dumpDbToFile(dest: string): Promise<void> {
 }
 
 /** Build the tar and write a local copy. Returns its absolute path + manifest. */
-async function buildLocalSnapshot(reason: NonNullable<SnapshotManifest['reason']>): Promise<{
+async function buildLocalSnapshot(reason: SnapshotReason): Promise<{
   localPath: string
   manifest: SnapshotManifest
 }> {
@@ -370,10 +374,14 @@ async function pruneR2Backups(warnings: string[]): Promise<string[]> {
  *
  * R2 failures never delete the local snapshot — the operator still has
  * a recoverable artefact on disk.
+ *
+ * `reason` is recorded in the manifest ('manual' by default; the scheduler
+ * passes 'scheduled').
  */
-export function createSnapshot(): Promise<SnapshotResult> {
+export function createSnapshot(opts: { reason?: Exclude<SnapshotReason, 'pre-restore'> } = {}): Promise<SnapshotResult> {
+  const reason = opts.reason || 'manual'
   return exclusive('backup', async () => {
-    const { localPath, manifest } = await buildLocalSnapshot('manual')
+    const { localPath, manifest } = await buildLocalSnapshot(reason)
     const filename = path.basename(localPath)
     const warnings: string[] = []
     const result: SnapshotResult = {
@@ -386,7 +394,11 @@ export function createSnapshot(): Promise<SnapshotResult> {
       warnings,
     }
 
-    if (!isR2Configured()) return result
+    const logFields = { filename, reason, bytes: result.bytes, files: manifest.totals.files }
+    if (!isR2Configured()) {
+      log.info('snapshot created (local only, R2 not configured)', logFields)
+      return finish(result)
+    }
 
     try {
       const body = fs.readFileSync(localPath)
@@ -398,7 +410,8 @@ export function createSnapshot(): Promise<SnapshotResult> {
       result.r2.latestKey = R2_LATEST_KEY
     } catch (err) {
       result.r2.error = errMsg(err)
-      return result
+      log.warn('snapshot saved locally but the R2 push failed', { ...logFields, err })
+      return finish(result)
     }
 
     try {
@@ -406,8 +419,14 @@ export function createSnapshot(): Promise<SnapshotResult> {
     } catch (err) {
       warnings.push(`Could not list R2 backups for pruning: ${errMsg(err)}`)
     }
-    return result
+    log.info('snapshot created and pushed to R2', { ...logFields, key: result.r2.key })
+    return finish(result)
   })
+}
+
+function finish(result: SnapshotResult): SnapshotResult {
+  if (result.warnings.length) log.warn('snapshot finished with warnings', { filename: result.filename, warnings: result.warnings })
+  return result
 }
 
 // ── Restore side ──────────────────────────────────────────────────────────
@@ -831,6 +850,18 @@ async function restoreFromBuffer(buf: Buffer, source: 'r2' | 'local', key: strin
     r2Removed = mirror.removed
   }
 
+  log.info('snapshot restored', {
+    source,
+    key,
+    dbReplaced,
+    files: filesRestored,
+    safetySnapshot,
+    r2Mirrored,
+    r2Removed,
+    warnings: warnings.length,
+  })
+  if (warnings.length) log.warn('restore finished with warnings', { source, key, warnings })
+
   return {
     source,
     key,
@@ -875,6 +906,16 @@ export function restoreLocalSnapshot(filename: string): Promise<RestoreResult> {
 }
 
 // ── Inventory ─────────────────────────────────────────────────────────────
+
+/** Every file a snapshot would take from public/uploads (relative name + size), sorted by name. */
+export function uploadInventory(): Array<{ name: string; bytes: number }> {
+  return listFilesRecursive(UPLOADS_DIR)
+    .flatMap((f) => {
+      const stat = safeStat(f.abs)
+      return stat ? [{ name: f.rel, bytes: stat.size }] : []
+    })
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+}
 
 export type LocalBackupMeta = {
   filename: string

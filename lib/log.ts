@@ -2,9 +2,11 @@
  * Structured server logging.
  *
  * Production: one JSON object per line on stdout/stderr (docker logs, any
- * log shipper can parse it). Development: a compact human-readable line.
- * Secret-looking fields are redacted before anything is written, and Error
- * values are expanded to {name, message, stack}.
+ * log shipper can parse it): {ts, level, msg, ...fields}. Development: a
+ * compact human-readable line. Secret-looking fields (passwords, secrets,
+ * tokens, authorization, cookies, connection URIs, DSNs, API/private keys,
+ * credentials) are redacted before anything is written, and Error values are
+ * expanded to {name, message, stack}.
  *
  *   log.info('backup created', { key, bytes })
  *   log.error('upload failed', { err, requestId })
@@ -15,7 +17,16 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 export type LogFields = Record<string, unknown>
 
 const ORDER: Record<LogLevel, number> = { debug: 10, info: 20, warn: 30, error: 40 }
-const SECRET_KEY = /pass(word)?|secret|token|authorization|cookie|api[-_]?key|private[-_]?key|credential/i
+const SECRET_KEY = /pass(word)?|secret|token|authorization|cookie|api[-_]?key|private[-_]?key|credential|dsn/i
+/** `uri` only as a whole word of the key (mongoUri, MONGODB_URI, uri) — never inside "security". */
+const URI_WORD = /(?:^|_)uri(?:_|$)/
+
+/** Should the value under this key never be written to a log? */
+export function isSecretKey(key: string): boolean {
+  if (SECRET_KEY.test(key)) return true
+  const words = key.replace(/([a-z0-9])([A-Z])/g, '$1_$2').replace(/[-.\s]+/g, '_').toLowerCase()
+  return URI_WORD.test(words)
+}
 
 function threshold(): number {
   const raw = (process.env.LOG_LEVEL || '').toLowerCase() as LogLevel
@@ -44,18 +55,28 @@ export function sanitize(value: unknown, depth = 0, seen = new WeakSet<object>()
   if (Array.isArray(value)) return value.slice(0, 50).map((v) => sanitize(v, depth + 1, seen))
   const out: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-    out[k] = SECRET_KEY.test(k) ? '[redacted]' : sanitize(v, depth + 1, seen)
+    out[k] = isSecretKey(k) ? '[redacted]' : sanitize(v, depth + 1, seen)
   }
   return out
 }
 
+/** The production line for one entry: {ts, level, msg, ...fields}; a field can never overwrite ts/level/msg. */
+export function formatJsonLine(level: LogLevel, msg: string, fields: LogFields, now = new Date()): string {
+  const line: LogFields = { ts: now.toISOString(), level, msg }
+  for (const [k, v] of Object.entries(sanitize(fields) as LogFields)) {
+    if (!(k in line)) line[k] = v
+  }
+  return JSON.stringify(line)
+}
+
 function write(level: LogLevel, msg: string, base: LogFields, fields?: LogFields) {
   if (ORDER[level] < threshold()) return
-  const data = sanitize({ ...base, ...(fields || {}) }) as LogFields
+  const merged = { ...base, ...(fields || {}) }
   const sink = level === 'error' || level === 'warn' ? console.error : console.log
   if (process.env.NODE_ENV === 'production') {
-    sink(JSON.stringify({ t: new Date().toISOString(), level, msg, ...data }))
+    sink(formatJsonLine(level, msg, merged))
   } else {
+    const data = sanitize(merged) as LogFields
     const extra = Object.keys(data).length ? ` ${JSON.stringify(data)}` : ''
     sink(`[${level}] ${msg}${extra}`)
   }
