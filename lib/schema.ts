@@ -91,12 +91,65 @@ export type PersonFacts = {
   description?: string
   /** Other names, e.g. the Chinese name from the PUBLIC CV. 'Lucian' is always included. */
   alternateName?: readonly string[]
+  /** Completed degrees only (lib/personExtras). */
+  hasCredential?: ReadonlyArray<{ name: string; school?: string; date?: string }>
+  /** Competition results / awards. */
+  award?: readonly string[]
+  /** Spoken languages, with a BCP 47 code when known. */
+  knowsLanguage?: ReadonlyArray<{ name: string; code?: string }>
+  /** The employer of a role that is running right now. */
+  worksFor?: { name: string; url?: string }
+  /** Schools of studies that are running right now. */
+  affiliation?: ReadonlyArray<{ name: string }>
+  /**
+   * When these facts last changed (ISO): the later of the CV and home
+   * saves. Not part of the Person node — pages put it on their ProfilePage.
+   */
+  dateModified?: string
 }
 
-const PERSON_FACT_KEYS = new Set(['alumniOf', 'address', 'jobTitle', 'sameAs', 'knowsAbout', 'image', 'description', 'alternateName'])
+const PERSON_FACT_KEYS = new Set([
+  'alumniOf',
+  'address',
+  'jobTitle',
+  'sameAs',
+  'knowsAbout',
+  'image',
+  'description',
+  'alternateName',
+  'hasCredential',
+  'award',
+  'knowsLanguage',
+  'worksFor',
+  'affiliation',
+  'dateModified',
+])
 
 const nonEmpty = (v: unknown): v is string => typeof v === 'string' && v.trim() !== ''
 const uniq = (list: string[]) => Array.from(new Set(list.map((s) => s.trim()).filter(Boolean)))
+
+/** Skill-name key: case-, width- and space-insensitive, without parenthesised notes ("MongoDB (NoSQL)" = "mongodb"). */
+const skillDedupeKey = (s: string) =>
+  s
+    .normalize('NFKC')
+    .replace(/\([^)]*\)/g, ' ')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim()
+
+/** Skills de-duplicated by skillDedupeKey, first spelling kept. */
+export function uniqueSkills(list: readonly string[]): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const raw of list) {
+    const s = typeof raw === 'string' ? raw.trim() : ''
+    const k = skillDedupeKey(s)
+    if (!k || seen.has(k)) continue
+    seen.add(k)
+    out.push(s)
+  }
+  return out
+}
 
 function organization(o: Organization): Record<string, unknown> | null {
   if (typeof o === 'string') return o.trim() ? { '@type': 'EducationalOrganization', name: o.trim() } : null
@@ -114,7 +167,27 @@ export function personNode(data: PersonFacts & Record<string, unknown> = {}) {
   for (const [k, v] of Object.entries(data)) if (!PERSON_FACT_KEYS.has(k) && v !== undefined) extra[k] = v
 
   const alumniOf = (data.alumniOf || []).map(organization).filter((o): o is Record<string, unknown> => !!o)
-  const knowsAbout = uniq([...(data.knowsAbout || [])])
+  const knowsAbout = uniqueSkills([...(data.knowsAbout || [])])
+  const hasCredential = (data.hasCredential || [])
+    .filter((c) => c && nonEmpty(c.name))
+    .map((c) => ({
+      '@type': 'EducationalOccupationalCredential',
+      name: c.name.trim(),
+      credentialCategory: 'degree',
+      ...(nonEmpty(c.school) ? { recognizedBy: { '@type': 'EducationalOrganization', name: c.school.trim() } } : {}),
+      ...(nonEmpty(c.date) ? { dateCreated: c.date.trim() } : {}),
+    }))
+  const award = uniq([...(data.award || [])].filter(nonEmpty))
+  const knowsLanguage = (data.knowsLanguage || [])
+    .filter((l) => l && nonEmpty(l.name))
+    .map((l) => ({ '@type': 'Language', name: l.name.trim(), ...(nonEmpty(l.code) ? { alternateName: l.code.trim() } : {}) }))
+  const worksFor =
+    data.worksFor && nonEmpty(data.worksFor.name)
+      ? { '@type': 'Organization', name: data.worksFor.name.trim(), ...(nonEmpty(data.worksFor.url) ? { url: data.worksFor.url.trim() } : {}) }
+      : undefined
+  const affiliation = (data.affiliation || [])
+    .filter((a) => a && nonEmpty(a.name))
+    .map((a) => ({ '@type': 'EducationalOrganization', name: a.name.trim() }))
   const sameAs = uniq([...(data.sameAs && data.sameAs.length ? data.sameAs : DEFAULT_SAME_AS)])
   const address =
     typeof data.address === 'string'
@@ -135,7 +208,12 @@ export function personNode(data: PersonFacts & Record<string, unknown> = {}) {
     ...(nonEmpty(data.description) ? { description: data.description.trim() } : {}),
     sameAs,
     ...(alumniOf.length ? { alumniOf } : {}),
+    ...(affiliation.length ? { affiliation } : {}),
+    ...(worksFor ? { worksFor } : {}),
+    ...(hasCredential.length ? { hasCredential } : {}),
+    ...(award.length ? { award } : {}),
     ...(address ? { address } : {}),
+    ...(knowsLanguage.length ? { knowsLanguage } : {}),
     ...(knowsAbout.length ? { knowsAbout } : {}),
     ...extra,
   }
@@ -166,7 +244,7 @@ export function personFactsFromCv(sections: readonly CvSectionLike[] | null | un
   if (Array.isArray(skill?.languages)) for (const s of skill.languages) if (nonEmpty(s?.language)) skills.push(s.language)
   if (Array.isArray(skill?.technical))
     for (const g of skill.technical) if (Array.isArray(g?.description)) skills.push(...g.description.filter(nonEmpty))
-  const knowsAbout = uniq(skills).slice(0, 30)
+  const knowsAbout = uniqueSkills(skills).slice(0, 30)
   if (knowsAbout.length) facts.knowsAbout = knowsAbout
 
   return facts

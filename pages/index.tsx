@@ -54,8 +54,8 @@ const LandingPage = ({ home, cv, identity, autoCoding, meta, work, avatar, photo
         description="Li Yanpei (Lucian) — software engineer in Hong Kong building full-stack web apps, machine-learning / computer-vision, and embedded systems. CV, projects, and contact."
         url={absUrl('/')}
         image={ogImageUrl({ kind: 'home', title: 'Li Yanpei (Lucian)', subtitle: 'Software engineer: full-stack, ML / computer vision, embedded' })}
-        type="website"
-        jsonLd={[websiteNode(), profilePageNode({ path: '/' }), personNode(personFacts)]}
+        type="profile"
+        jsonLd={[websiteNode(), profilePageNode({ path: '/', dateModified: personFacts.dateModified }), personNode(personFacts)]}
       />
       <Head>
         {/* The hero backdrop is the LCP element: fetch it with the HTML. AVIF

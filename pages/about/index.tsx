@@ -62,8 +62,9 @@ const About = ({ hero, identity, cv, githubUser, github, work, personFacts }: Pr
         description="About Li Yanpei (Lucian), a software engineer in Hong Kong: background, education, skills, GitHub activity and project case studies."
         url={absUrl('/about')}
         image={ogImageUrl({ kind: 'page', title: 'About', subtitle: 'Background, skills & projects' })}
+        type="profile"
         jsonLd={[
-          profilePageNode({ path: '/about', name: `About — ${PERSON_NAME}` }),
+          profilePageNode({ path: '/about', name: `About — ${PERSON_NAME}`, dateModified: personFacts.dateModified }),
           personNode(personFacts),
           breadcrumb([
             { name: 'Home', path: '/' },
