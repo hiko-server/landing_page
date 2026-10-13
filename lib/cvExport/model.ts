@@ -12,6 +12,12 @@
  *
  * Dates use the page's reference month (lib/clock.ts) for "Present" /
  * "Expected", so a file and the page rendered in the same month agree.
+ *
+ * The header also carries the lines from the owner's PUBLIC availability
+ * (lib/cvLocale cvHeaderExtras: the right-to-work line, and 求职意向 on the
+ * Chinese CV), formatted like the A4 sheet (headerExtrasLines). The optional
+ * PDF photo is not part of the model: it is binary, private to the PDF and
+ * passed to the renderer separately (lib/cvExport/photo).
  */
 
 import type { CvLang, CvSectionLike } from '../cvVisibility'
@@ -33,6 +39,9 @@ import {
   list,
 } from '../../components/CVViewerPage/fields'
 import { composeName } from '../../components/CVViewerPage/cvName'
+import { extrasLines } from '../../components/CVViewerPage/headerExtrasLines'
+import { recommendationCredit, recommendationItems } from '../../components/CVViewerPage/recommendationView'
+import type { CvHeaderExtras } from '../cvLocale'
 import { monthOf, updatedLabel } from './updated'
 
 export { monthLabel, monthOf, updatedLabel } from './updated'
@@ -56,10 +65,28 @@ export type ModelEntry = {
   links: CvLink[]
 }
 
+/** A recommendation as printed: the quote, then "— name, credit". */
+export type ModelQuote = {
+  anchor: string
+  quote: string
+  name: string
+  /** "Engineering manager · managed me · Mar 2026" — whatever is set. */
+  credit: string
+  /** Safe http(s) link to where it was published, or ''. */
+  href: string
+}
+
 export type ModelSection =
   | { kind: 'entries'; id: string; title: string; entries: ModelEntry[] }
   | { kind: 'skills'; id: string; title: string; core: Array<{ name: string; level: string }>; groups: Array<{ name: string; items: string[] }> }
   | { kind: 'points'; id: string; title: string; items: string[] }
+  /** Self-assessment (自我评价): a statement and / or points. */
+  | { kind: 'statement'; id: string; title: string; text: string; items: string[] }
+  /** Recommendations given with permission (public data holds no other). */
+  | { kind: 'quotes'; id: string; title: string; items: ModelQuote[] }
+
+/** A labelled header line from the public availability ("求职意向：…", "Work authorisation: …"). */
+export type ModelHeaderLine = { key: 'jobIntent' | 'workStatus'; label: string; value: string }
 
 export type ModelContacts = {
   website: CvLink | null
@@ -78,6 +105,8 @@ export type CvDocModel = {
   contacts: ModelContacts
   /** Personal Info summary ('' when hidden or empty). */
   summary: string
+  /** Header lines from the owner's public availability ([] when none). */
+  headerLines: ModelHeaderLine[]
   sections: ModelSection[]
   /** 'YYYY-MM' of the CV's last save (Hong Kong time), '' when unknown. */
   updatedMonth: string
@@ -96,6 +125,8 @@ export type ModelOptions = {
   /** Last save of the CV (epoch ms; 0 / undefined when unknown). */
   updatedAt?: number | null
   canonical: string
+  /** Header lines from the public availability (lib/cvLocale cvHeaderExtras for this language). */
+  headerExtras?: CvHeaderExtras | null
 }
 
 function features(node: unknown): ModelBullet[] {
@@ -241,6 +272,21 @@ function sectionOf(section: CvSectionLike, lang: CvLang, now: string): ModelSect
     const items = bullets(section, 'points')
     return items.length ? { kind: 'points', id, title, items } : null
   }
+  if (id === 'selfAssessment') {
+    const text = field(section, 'text')
+    const items = bullets(section, 'points')
+    return text || items.length ? { kind: 'statement', id, title, text, items } : null
+  }
+  if (id === 'recommendations') {
+    const items = recommendationItems(section).map(({ item, index }) => ({
+      anchor: cvEntryAnchor('recommendations', index),
+      quote: item.quote,
+      name: item.name,
+      credit: recommendationCredit(item, lang),
+      href: item.sourceUrl,
+    }))
+    return items.length ? { kind: 'quotes', id, title, items } : null
+  }
   const items = entriesOf(section, lang, now)
   return items.length ? { kind: 'entries', id, title, entries: items } : null
 }
@@ -288,6 +334,7 @@ export function buildCvModel(sections: readonly CvSectionLike[] | null | undefin
     nameAside: aside,
     contacts,
     summary: field(pi, 'introduction'),
+    headerLines: extrasLines(opts.headerExtras, lang),
     sections: out,
     updatedMonth,
     updatedLabel: updatedLabel(updatedMonth, lang),

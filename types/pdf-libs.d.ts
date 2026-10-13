@@ -83,6 +83,8 @@ declare module 'pdfkit' {
     text(text: string, x?: number, y?: number, options?: TextOptions): this
     widthOfString(text: string, options?: TextOptions): number
     link(x: number, y: number, w: number, h: number, url: string, options?: Record<string, unknown>): this
+    rect(x: number, y: number, w: number, h: number): this
+    image(src: Buffer | string, x?: number, y?: number, options?: { width?: number; height?: number; fit?: [number, number]; align?: string; valign?: string }): this
     addPage(options?: DocumentOptions): this
     switchToPage(n: number): this
     bufferedPageRange(): { start: number; count: number }

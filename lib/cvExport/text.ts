@@ -50,6 +50,16 @@ function sectionLines(s: ModelSection, lang: CvLang): string[] {
       if (i) lines.push('')
       lines.push(...entryLines(e, lang))
     })
+  } else if (s.kind === 'statement') {
+    if (s.text) lines.push(s.text)
+    for (const p of s.items) lines.push(`- ${p}`)
+  } else if (s.kind === 'quotes') {
+    s.items.forEach((q, i) => {
+      if (i) lines.push('')
+      lines.push(lang === 'zh' ? `「${q.quote}」` : `“${q.quote}”`)
+      const who = [q.name, q.credit].filter(Boolean).join(', ')
+      lines.push(q.href ? `— ${who} (${q.href})` : `— ${who}`)
+    })
   } else if (s.kind === 'skills') {
     for (const c of s.core) lines.push(c.name && c.level ? `${c.name}${L.sep}${c.level}` : c.name || c.level)
     for (const g of s.groups) {
@@ -73,6 +83,7 @@ export function renderCvText(model: CvDocModel): string {
   if (reach.length) out.push(reach.join(' | '))
   const web = [c.website ? c.website.href || c.website.text : '', ...c.profiles.map((p) => p.href)].filter(Boolean)
   if (web.length) out.push(web.join(' | '))
+  for (const line of model.headerLines) out.push(`${line.label}${L.sep}${line.value}`)
   if (model.summary) {
     if (out.length) out.push('')
     out.push(...heading(L.summary), model.summary)

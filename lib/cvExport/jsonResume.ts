@@ -16,6 +16,8 @@
  *   patents             → publications (one per listed patent)
  *   skill               → skills (core skills with their level, then groups)
  *   extraSkill          → languages ("Mandarin: Native" → language + fluency)
+ *   recommendations     → references (only entries given with permission
+ *                         exist in public data; name + credit, the quote)
  * Dates are ISO 8601 (YYYY / YYYY-MM); an open end ("Present", or a future
  * end on a running project) has no endDate.
  */
@@ -24,6 +26,7 @@ import type { CvLang, CvSectionLike } from '../cvVisibility'
 import { isFuture, isPresent, parseCvDate, safeHref } from '../cvFormat'
 import { profileLinks, projectLinks, webHref } from '../cvLinks'
 import { bullets, entries, entryStatus, field, indexedCertificates, list } from '../../components/CVViewerPage/fields'
+import { recommendationCredit, recommendationItems } from '../../components/CVViewerPage/recommendationView'
 
 export const JSON_RESUME_SCHEMA = 'https://raw.githubusercontent.com/jsonresume/resume-schema/v1.0.0/schema.json'
 
@@ -206,6 +209,11 @@ export function buildJsonResume(input: readonly CvSectionLike[] | null | undefin
 
   const languages = bullets(section(sections, 'extraSkill'), 'points').map((p) => compact(languageOf(p)))
 
+  const references = recommendationItems(section(sections, 'recommendations')).map(({ item }) => {
+    const credit = recommendationCredit(item, opts.lang)
+    return compact({ name: credit ? `${item.name}, ${credit}` : item.name, reference: item.quote })
+  })
+
   const lastModified =
     typeof opts.updatedAt === 'number' && opts.updatedAt > 0 ? new Date(opts.updatedAt).toISOString().replace(/\.\d{3}Z$/, 'Z') : ''
 
@@ -220,6 +228,7 @@ export function buildJsonResume(input: readonly CvSectionLike[] | null | undefin
     skills,
     languages,
     projects,
+    references,
     meta: compact({ canonical: safeHref(opts.canonical), version: 'v1.0.0', lastModified }),
   })
 }

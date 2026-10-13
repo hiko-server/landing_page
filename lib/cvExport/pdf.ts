@@ -13,7 +13,13 @@
  *     footer are marked as artifacts. /Lang, a displayed title and the
  *     metadata (author, subject, keywords, dates) are set.
  *   - Draws ONLY the strings of the document model (lib/cvExport/model) plus
- *     fixed labels, so visibility is decided before this file runs.
+ *     fixed labels, so visibility is decided before this file runs. The
+ *     header carries the availability lines (求职意向, right to work); the
+ *     self-assessment prints as a statement with points and the
+ *     recommendations as quotes with their credit (BlockQuote + P).
+ *   - The optional photo (lib/cvExport/photo — only when the owner switched
+ *     it on for this language's PDF) sits at the top right of the header as
+ *     a tagged Figure with alternative text.
  *   - Deterministic for the same input: the creation date is the CV's last
  *     save, so the bytes (and the ETag derived from the model) are stable.
  */
@@ -24,7 +30,8 @@ import PDFDocument, { type PDFStructureContent, type PDFStructureElement } from 
 import { create as createFont, type Font } from 'fontkit'
 import { cvLabels } from '../cvFormat'
 import { layoutRuns, type FontKey, type Line, type Measurer, type Run } from './pdfLayout'
-import type { CvDocModel, ModelEntry, ModelSection } from './model'
+import type { CvDocModel, ModelEntry, ModelQuote, ModelSection } from './model'
+import type { PdfPhoto } from './photo'
 
 /** Font files, relative to the app root (next.config.js traces them into the standalone build). */
 export const PDF_FONT_FILES: Record<FontKey, string> = {
@@ -89,14 +96,31 @@ export type PdfRenderOptions = {
   updatedAt?: number | null
   /** Called with every string drawn (tests). */
   onText?: (text: string) => void
+  /** The photo the owner switched on for this language's PDF (lib/cvExport/photo); null / absent = none. */
+  photo?: PdfPhoto | null
 }
 
 export type PdfResult = { buffer: Buffer; pages: number; missing: string[] }
 
 const STRINGS = {
-  en: { cv: 'CV', subject: 'Curriculum vitae', skills: 'Skills' },
-  zh: { cv: '简历', subject: '个人简历', skills: '技能' },
+  en: { cv: 'CV', subject: 'Curriculum vitae', skills: 'Skills', photo: (name: string) => (name ? `Photo of ${name}` : 'Photo') },
+  zh: { cv: '简历', subject: '个人简历', skills: '技能', photo: (name: string) => (name ? `${name}的照片` : '照片') },
 } as const
+
+/** Printed size of the header photo (points): a passport-style 2.5 × 3.5 cm box at most. */
+const PHOTO_BOX = { w: 70, h: 92 }
+
+/** Draw size of a photo inside PHOTO_BOX, keeping its aspect ratio. */
+export function photoDrawSize(photo: Pick<PdfPhoto, 'width' | 'height'>): { w: number; h: number } {
+  const ratio = photo.width > 0 && photo.height > 0 ? photo.width / photo.height : PHOTO_BOX.w / PHOTO_BOX.h
+  let h = PHOTO_BOX.h
+  let w = h * ratio
+  if (w > PHOTO_BOX.w) {
+    w = PHOTO_BOX.w
+    h = w / ratio
+  }
+  return { w: Math.round(w * 100) / 100, h: Math.round(h * 100) / 100 }
+}
 
 class Writer {
   readonly doc: PDFDocument
@@ -270,9 +294,12 @@ class Writer {
     if (c.phone && c.email) reach.push({ text: '  |  ', size: SIZE.contact, color: SUBTLE })
     if (c.email) reach.push({ text: `${L.email}${sep}`, size: SIZE.contact, color: MUTED }, { text: c.email, size: SIZE.contact, color: BODY, link: `mailto:${c.email}`, keep: true })
     if (reach.length) right.push(reach)
+    const photo = this.opts.photo || null
+    const photoSize = photo ? photoDrawSize(photo) : null
+    const photoSpace = photoSize ? photoSize.w + 14 : 0
     const rightNatural = Math.max(0, ...right.map((runs) => this.layout(runs, 10_000)[0]?.width || 0))
-    const rightW = Math.min(rightNatural, CW * 0.5)
-    const leftW = rightW ? CW - rightW - 18 : CW
+    const rightW = Math.min(rightNatural, (CW - photoSpace) * 0.5)
+    const leftW = CW - photoSpace - (rightW ? rightW + 18 : 0)
 
     const top = this.y
     if (model.name || model.nameAside) {
@@ -287,6 +314,19 @@ class Writer {
       web.push({ text: link.text, size: SIZE.contact, color: link.href ? this.linkColor : BODY, link: link.href || undefined, keep: true })
     })
     if (web.length) this.para(this.root, 'P', web, { width: leftW, size: SIZE.contact })
+    // The availability lines: right to work, and 求职意向 on the Chinese CV.
+    const lineSep = model.lang === 'zh' ? '：' : ': '
+    model.headerLines.forEach((line, i) => {
+      this.para(
+        this.root,
+        'P',
+        [
+          { text: `${line.label}${lineSep}`, size: SIZE.contact, color: MUTED, bold: true },
+          { text: line.value, size: SIZE.contact, color: BODY },
+        ],
+        { width: leftW, size: SIZE.contact, gapAfter: i === model.headerLines.length - 1 ? 0 : 0.5 },
+      )
+    })
     const leftBottom = this.y
 
     // Right column, top-aligned with the name.
@@ -295,14 +335,35 @@ class Writer {
       const lines = this.layout(runs, rightW)
       if (!lines.length) continue
       const el = this.el(this.root, 'P')
-      ry = this.lines(el, 'P', lines, { x: MARGIN.left + CW - rightW, width: rightW, align: 'right', size: SIZE.contact, atY: ry })
+      ry = this.lines(el, 'P', lines, { x: MARGIN.left + CW - photoSpace - rightW, width: rightW, align: 'right', size: SIZE.contact, atY: ry })
       el.end()
     }
-    this.y = Math.max(leftBottom, ry) + 8
+    let photoBottom = 0
+    if (photo && photoSize) {
+      photoBottom = top + photoSize.h
+      this.figure(photo, MARGIN.left + CW - photoSize.w, top, photoSize)
+    }
+    this.y = Math.max(leftBottom, ry, photoBottom) + 8
     this.rule(this.y, 1.6)
     this.y += 10
 
     if (model.summary) this.para(this.root, 'P', [{ text: model.summary, size: SIZE.body, color: BODY }], { size: SIZE.body, gapAfter: 10 })
+  }
+
+  /** The header photo as a tagged Figure (alternative text: whose photo it is), with a hairline frame. */
+  figure(photo: PdfPhoto, x: number, y: number, size: { w: number; h: number }) {
+    const doc = this.doc
+    const who = this.model.name || this.model.nameAside
+    const fig = doc.struct('Figure', { alt: STRINGS[this.model.lang].photo(who) })
+    this.root.add(fig)
+    const content = doc.markStructureContent('Figure')
+    fig.add(content)
+    doc.image(photo.jpeg, x, y, { width: size.w, height: size.h })
+    doc.endMarkedContent()
+    fig.end()
+    doc.markContent('Artifact', { type: 'Layout' })
+    doc.save().lineWidth(0.5).strokeColor('#d4d4d4').rect(x, y, size.w, size.h).stroke().restore()
+    doc.endMarkedContent()
   }
 
   sectionTitle(sect: PDFStructureElement, title: string, keep: number) {
@@ -399,6 +460,35 @@ class Writer {
     this.y += 7
   }
 
+  /** A recommendation: the quote (BlockQuote) beside an accent bar, then "— name, credit" (the name links its source). */
+  quote(sect: PDFStructureElement, q: ModelQuote) {
+    const doc = this.doc
+    const zh = this.model.lang === 'zh'
+    const indent = 12
+    const div = this.el(sect, 'Div')
+    const lines = this.layout([{ text: zh ? `「${q.quote}」` : `“${q.quote}”`, size: SIZE.body, color: BODY }], CW - indent)
+    const lh = this.lineHeight(SIZE.body)
+    this.ensure(Math.min(lines.length, 3) * lh + this.lineHeight(SIZE.small))
+    const page = doc.bufferedPageRange().count
+    const top = this.y
+    const bq = this.el(div, 'BlockQuote')
+    this.lines(bq, 'BlockQuote', lines, { x: MARGIN.left + indent, width: CW - indent, size: SIZE.body })
+    bq.end()
+    if (doc.bufferedPageRange().count === page) {
+      doc.markContent('Artifact', { type: 'Layout' })
+      doc.save().lineWidth(1.6).strokeColor(this.accentOrMuted()).moveTo(MARGIN.left + 3, top + 2).lineTo(MARGIN.left + 3, this.y - 2).stroke().restore()
+      doc.endMarkedContent()
+    }
+    const credit: Run[] = [
+      { text: '— ', size: SIZE.small, color: MUTED },
+      { text: q.name, size: SIZE.small, bold: true, color: q.href ? this.linkColor : INK, link: q.href || undefined },
+    ]
+    if (q.credit) credit.push({ text: `, ${q.credit}`, size: SIZE.small, color: MUTED })
+    this.para(div, 'P', credit, { x: MARGIN.left + indent, width: CW - indent, size: SIZE.small })
+    div.end()
+    this.y += 7
+  }
+
   skills(sect: PDFStructureElement, s: Extract<ModelSection, { kind: 'skills' }>) {
     const sep = this.model.lang === 'zh' ? '：' : ': '
     if (s.core.length) {
@@ -444,7 +534,12 @@ class Writer {
     this.sectionTitle(sect, s.title, keep)
     if (s.kind === 'entries') for (const e of s.entries) this.entry(sect, e)
     else if (s.kind === 'skills') this.skills(sect, s)
-    else {
+    else if (s.kind === 'quotes') for (const q of s.items) this.quote(sect, q)
+    else if (s.kind === 'statement') {
+      if (s.text) this.para(sect, 'P', [{ text: s.text, size: SIZE.body, color: BODY }], { size: SIZE.body, gapAfter: s.items.length ? 3 : 0 })
+      this.bulletList(sect, s.items.map((text) => ({ text, sub: [] })))
+      this.y += 6
+    } else {
       this.bulletList(sect, s.items.map((text) => ({ text, sub: [] })))
       this.y += 6
     }

@@ -3,7 +3,9 @@
  * build, fingerprint and cache. SERVER-ONLY.
  *
  * A file is a pure function of its inputs — the public CV of the language
- * (lib/cvSource), the reference month, the accent colour and the renderer
+ * (lib/cvSource, with the header lines from the public availability), the
+ * reference month, the accent colour, the optional PDF photo the owner
+ * switched on for that language (lib/cvExport/photo) and the renderer
  * version — so its ETag is a hash of exactly those inputs. Rendered bytes are
  * kept in a small in-memory cache keyed by that hash: saving the CV changes
  * the inputs, so the next request renders the new version (a CV save also
@@ -23,7 +25,7 @@ import { renderCvText } from './text'
 import { buildJsonResume } from './jsonResume'
 
 /** Bump when the output of a renderer changes for the same input. */
-export const EXPORT_VERSION = 1
+export const EXPORT_VERSION = 2
 
 export type CvExport = {
   body: Buffer
@@ -60,6 +62,7 @@ function modelOf(src: CvSource): CvDocModel {
     now: src.now,
     updatedAt: src.updatedAt,
     canonical: absUrl(src.lang === 'zh' ? '/cv/zh' : '/cv'),
+    headerExtras: src.headerExtras,
   })
 }
 
@@ -91,7 +94,9 @@ export async function getCvExport(lang: CvLang, format: ExportFormat, source?: C
   }
 
   const accent = accentOf(src)
-  const key = fingerprint([EXPORT_VERSION, build, 'pdf', model, accent, src.updatedAt])
+  const { loadCvPdfPhoto } = await import('./photo')
+  const photo = await loadCvPdfPhoto(lang)
+  const key = fingerprint([EXPORT_VERSION, build, 'pdf', model, accent, src.updatedAt, photo?.hash ?? null])
   const hit = cache.get(key)
   if (hit) {
     remember(key, hit)
@@ -102,7 +107,7 @@ export async function getCvExport(lang: CvLang, format: ExportFormat, source?: C
     job = (async () => {
       const { loadPdfFonts, renderCvPdf } = await import('./pdf')
       const started = Date.now()
-      const out = await renderCvPdf(model, { fonts: loadPdfFonts(), accent, updatedAt: src.updatedAt })
+      const out = await renderCvPdf(model, { fonts: loadPdfFonts(), accent, updatedAt: src.updatedAt, photo })
       if (out.missing.length) log.warn('cv pdf: characters without a glyph were left out', { lang, chars: out.missing.slice(0, 40).join('') })
       log.info('cv pdf rendered', { lang, pages: out.pages, bytes: out.buffer.length, ms: Date.now() - started })
       const file: CvExport = { body: out.buffer, contentType: EXPORT_CONTENT_TYPES.pdf, filename, etag: `"${key}"`, updatedAt: src.updatedAt, lang, format }
