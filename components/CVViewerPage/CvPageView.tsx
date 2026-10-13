@@ -1,5 +1,5 @@
 import { Box, Button, ButtonGroup, Flex, HStack, Text, useToast } from '@chakra-ui/react'
-import { FaFilePdf, FaLink, FaPrint } from 'react-icons/fa'
+import { FileDownIcon, LinkIcon, PrinterIcon } from '../Icons/ui/content'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import NextLink from 'next/link'
 import { useRouter } from 'next/router'
@@ -348,12 +348,12 @@ export default function CvPageView({
                     </ButtonGroup>
                   </HStack>
                   <HStack spacing={2} display={{ base: 'none', md: 'flex' }}>
-                    <Button {...outlineBtn} leftIcon={<FaLink aria-hidden />} onClick={copyLink}>
+                    <Button {...outlineBtn} leftIcon={<LinkIcon size="sm" />} onClick={copyLink}>
                       {T.copy}
                     </Button>
                     <Button
                       {...outlineBtn}
-                      leftIcon={<FaPrint aria-hidden />}
+                      leftIcon={<PrinterIcon size="sm" />}
                       onClick={() => window.print()}
                     >
                       {T.print}
@@ -441,8 +441,7 @@ export default function CvPageView({
               isDisabled={!sections.length}
             >
               <Box
-                as={FaFilePdf}
-                aria-hidden
+                as={FileDownIcon}
                 display={{ base: 'none', sm: 'inline-block' }}
                 mr={2}
               />
@@ -490,7 +489,7 @@ export default function CvPageView({
               onClick={copyLink}
               aria-label={T.copy}
             >
-              <Box as={FaLink} aria-hidden />
+              <LinkIcon size="sm" />
               <Box as="span" display={{ base: 'none', sm: 'inline' }} ml={2} aria-hidden>
                 {T.copy}
               </Box>

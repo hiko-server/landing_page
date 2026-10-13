@@ -4,7 +4,6 @@ import NextLink from 'next/link'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/router'
 import { motion } from 'framer-motion'
-import { SearchIcon } from '@chakra-ui/icons'
 import CommandPaletteLazy, { preloadCommandPalette } from '../General-UI/CommandPaletteLazy'
 import {
   MOBILE_MENU_DIALOG_ID,
@@ -22,7 +21,7 @@ import { useBrandHost } from '../Chrome/useBrandHost'
 import { useChromeToast } from '../Chrome/useChromeToast'
 import { useShortcutsEnabled } from '../Chrome/useShortcutsEnabled'
 import { useFetchJson } from '../Common/useFetchJson'
-import { MenuIcon } from '../Icons/brand'
+import { MenuIcon, SearchIcon } from '../Icons/ui/chrome'
 import { toggleThemeWithTransition } from '../../lib/themeTransition'
 import { getShortcutsEnabled, isImeComposing } from '../../lib/keyboardShortcuts'
 import { pageKeyOf } from '../../lib/viewTransition'
@@ -414,7 +413,7 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
               fontWeight={500}
               letterSpacing="0.02em"
               _hover={{ borderColor: 'page.border-strong', color: 'page.fg' }}
-              leftIcon={<SearchIcon boxSize="10px" />}
+              leftIcon={<SearchIcon size="xs" />}
               iconSpacing={{ base: 0, md: 2 }}
               onClick={openPalette}
               onPointerEnter={preloadCommandPalette}
@@ -489,7 +488,7 @@ const Header = ({ socials = SOCIAL_LINKS }: { socials?: readonly SocialLink[] })
             )}
 
             <IconButton
-              icon={<MenuIcon />}
+              icon={<MenuIcon size="sm" />}
               onClick={openDrawer}
               onPointerDown={preloadMobileDrawer}
               onFocus={preloadMobileDrawer}

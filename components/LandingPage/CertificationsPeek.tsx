@@ -8,6 +8,7 @@ import { safeHref } from '../../lib/cvFormat'
 import type { CvSectionLike } from '../../lib/cvVisibility'
 import { revealVariant } from '../../lib/reveal'
 import { labelLang } from '../../lib/toc'
+import { ChevronRightIcon } from '../Icons/ui/content'
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
@@ -53,9 +54,9 @@ export default function CertificationsPeek({ cvEn }: { cvEn?: CvSectionLike[] })
         {orgs.map((org) => (
           <motion.section key={org.key} aria-label={org.name || undefined} variants={row} data-reveal-item="" style={{ marginBottom: 24 }}>
             {org.name && (
-              <Text as="h3" fontFamily={monoFont} fontSize="11px" letterSpacing="0.14em" textTransform="uppercase" color="page.fg-secondary" mb={3}>
-                <Box as="span" aria-hidden mr={1.5}>
-                  ▸
+              <Text as="h3" display="flex" alignItems="center" fontFamily={monoFont} fontSize="11px" letterSpacing="0.14em" textTransform="uppercase" color="page.fg-secondary" mb={3}>
+                <Box as="span" display="inline-flex" mr={1.5}>
+                  <ChevronRightIcon size="xs" />
                 </Box>
                 <span lang={labelLang(org.name)}>{org.name}</span>
               </Text>

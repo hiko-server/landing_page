@@ -99,6 +99,13 @@ h3,
   max-width: 68ch;
 }
 
+/* Lucide interface icons (components/Icons/ui): never squeezed by a flex
+   row, and centred on the x-height when they sit in running text. */
+.ui-icon {
+  flex-shrink: 0;
+  vertical-align: -0.125em;
+}
+
 /* Dates, periods, counters: digits of equal width so columns line up. */
 .tnum {
   font-variant-numeric: tabular-nums;

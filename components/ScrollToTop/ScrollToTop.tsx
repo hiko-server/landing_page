@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { IconButton } from '@chakra-ui/react'
-import { ChevronUpIcon } from '@chakra-ui/icons'
+import { ArrowUpIcon } from '../Icons/ui/chrome'
 import { useChromeLang } from '../Chrome/chromeLang'
 
 /** Show the button once the visitor is this far down the page (px). */
@@ -53,7 +53,7 @@ const ScrollToTop: React.FC = () => {
 
   return (
     <IconButton
-      icon={<ChevronUpIcon boxSize={5} />}
+      icon={<ArrowUpIcon size="md" />}
       onClick={scrollToTop}
       position="fixed"
       bottom={BOTTOM}

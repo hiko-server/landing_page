@@ -1,7 +1,8 @@
 import { useCallback, useRef } from 'react'
 import { Box, Grid, Link, Text, Flex, Skeleton } from '@chakra-ui/react'
 import { motion, useReducedMotion, type Variants } from 'framer-motion'
-import { FaStar, FaCodeBranch } from 'react-icons/fa'
+import { GitForkIcon, StarIcon } from '../Icons/ui/content'
+import { motionTransition } from '../../theme/tokens'
 
 import { safeHref } from '../../lib/cvFormat'
 import { revealVariant } from '../../lib/reveal'
@@ -43,7 +44,7 @@ const staggerVariants = (reduce: boolean | null): { list: Variants; item: Varian
   list: { hidden: {}, show: { transition: { staggerChildren: reduce ? 0 : 0.03 } } },
   item: {
     hidden: { opacity: 0, y: 6 },
-    show: { opacity: 1, y: 0, transition: reduce ? { duration: 0 } : { duration: 0.3, ease: [0.22, 1, 0.36, 1] } },
+    show: { opacity: 1, y: 0, transition: motionTransition('base', !!reduce) },
   },
 })
 
@@ -173,14 +174,14 @@ function RepoGrid({ repos, asOf }: { repos: GhRepo[]; asOf?: number }) {
               <Flex align="center" justify="space-between" gap={3} fontFamily={monoFont} fontSize="11px" color="page.fg-secondary">
                 <Flex align="center" gap={3} className="tnum">
                   <Flex align="center" gap={1}>
-                    <FaStar size={10} aria-hidden />
+                    <StarIcon size="xs" />
                     <Text as="span">
                       {r.stargazers_count}
                       <span className="sr-only"> stars</span>
                     </Text>
                   </Flex>
                   <Flex align="center" gap={1}>
-                    <FaCodeBranch size={10} aria-hidden />
+                    <GitForkIcon size="xs" />
                     <Text as="span">
                       {r.forks_count}
                       <span className="sr-only"> forks</span>

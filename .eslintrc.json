@@ -65,7 +65,8 @@
                 "components/General-UI/PageHeader.tsx",
                 "components/General-UI/PageGrid.tsx",
                 "components/Article/MetaGrid.tsx",
-                "components/GitHub/StatsBar.tsx"
+                "components/GitHub/StatsBar.tsx",
+                "components/Icons/**"
             ],
             "rules": {
                 "no-restricted-syntax": [
@@ -89,6 +90,30 @@
                     {
                         "selector": "Property[key.name='ease'] > ArrayExpression",
                         "message": "Design tokens: use motionTransition() from theme/tokens.ts instead of an inline framer-motion ease array."
+                    }
+                ]
+            }
+        },
+        {
+            "files": [
+                "components/**",
+                "pages/**",
+                "layout/**"
+            ],
+            "excludedFiles": [
+                "components/Admin/**",
+                "pages/admin/**"
+            ],
+            "rules": {
+                "no-restricted-imports": [
+                    "error",
+                    {
+                        "patterns": [
+                            {
+                                "group": ["react-icons", "react-icons/*", "@chakra-ui/icons"],
+                                "message": "Public pages use one icon set: the Lucide icons in components/Icons/ui (chrome / theme / content) and the brand marks in components/Icons/brand.tsx. react-icons stays in the admin."
+                            }
+                        ]
                     }
                 ]
             }

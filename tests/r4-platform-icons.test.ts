@@ -43,7 +43,6 @@ const EXPECTED_VIEWBOX: Record<string, string> = {
   GitLabIcon: '0 0 512 512',
   LinkedInIcon: '0 0 448 512',
   WhatsAppIcon: '0 0 448 512',
-  MenuIcon: '0 0 17 17',
 }
 
 test('each brand icon renders a decorative, currentColor SVG with its viewBox', () => {
@@ -93,5 +92,5 @@ test('the CSS drives the icon from data-theme (first paint correct without JS)',
   assert.match(css, /:root\[data-theme='dark'\] \.theme-icon__core\s*\{[^}]*scale\(1\.8\)/)
   assert.match(css, /:root\[data-theme='dark'\] \.theme-icon__cut\s*\{[^}]*translateX/)
   assert.match(css, /:root\[data-theme='dark'\] \.theme-icon__rays\s*\{[^}]*scale\(0\) rotate\(-30deg\)/)
-  assert.match(css, /\.theme-icon__rays\s*\{[^}]*transition:[^}]*300ms var\(--ease-out-quart\)/)
+  assert.match(css, /\.theme-icon__rays\s*\{[^}]*transition:[^}]*var\(--duration-base\) var\(--ease-standard\)/)
 })

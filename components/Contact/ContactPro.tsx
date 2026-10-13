@@ -20,7 +20,9 @@ import {
   chakra,
 } from '@chakra-ui/react'
 import { keyframes } from '@emotion/react'
-import { FaGithub, FaGitlab, FaLinkedin, FaWhatsapp } from 'react-icons/fa'
+import { GitHubIcon, GitLabIcon, LinkedInIcon, WhatsAppIcon } from '../Icons/brand'
+import { CheckIcon } from '../Icons/ui/theme'
+import { ChevronRightIcon } from '../Icons/ui/content'
 import { motion, useReducedMotion } from 'framer-motion'
 
 import { safeHref } from '../../lib/cvFormat'
@@ -64,7 +66,7 @@ const MotionBox = motion(Box)
 // any individual field is blank. Kept in sync with HomeEditor's
 // DEFAULT_CONTACT_REASONS so the admin and renderer agree.
 const DEFAULT_REASONS = ['Project Inquiry', 'Hiring', 'Collaboration', 'Consulting', 'Mentorship', 'Other']
-const DEFAULT_EYEBROW = '▸ Reach me'
+const DEFAULT_EYEBROW = 'Reach me'
 const DEFAULT_BLURB = 'I usually reply within 24 hours.'
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
@@ -147,7 +149,8 @@ export default function ContactPro({
     const list = (home?.contact?.reasons || []).map((r) => (typeof r === 'string' ? r.trim() : '')).filter(Boolean)
     return list.length ? list : DEFAULT_REASONS
   }, [home?.contact?.reasons])
-  const eyebrowText = (home?.contact?.eyebrow ?? '').trim() || DEFAULT_EYEBROW
+  // The marker is an icon now; an owner eyebrow typed with the old ▸ glyph keeps one marker.
+  const eyebrowText = (home?.contact?.eyebrow ?? '').trim().replace(/^▸\s*/, '') || DEFAULT_EYEBROW
   const headingText = (home?.contact?.heading ?? '').trim() || home?.hero?.brand || 'Contact'
   const blurbText = (home?.contact?.blurb ?? '').trim() || DEFAULT_BLURB
   const email = (home?.hero?.email || '').trim()
@@ -370,10 +373,10 @@ export default function ContactPro({
   ].filter((r): r is { label: string; value: string; copyLabel: string; copied: string } => r !== null)
 
   const socials = [
-    { name: 'GitHub', icon: <FaGithub />, href: safeHref(home?.socials?.github) },
-    { name: 'GitLab', icon: <FaGitlab />, href: safeHref(home?.socials?.gitlab) },
-    { name: 'LinkedIn', icon: <FaLinkedin />, href: safeHref(home?.socials?.linkedin) },
-    { name: 'WhatsApp', icon: <FaWhatsapp />, href: safeHref(home?.socials?.whatsapp) },
+    { name: 'GitHub', icon: <GitHubIcon />, href: safeHref(home?.socials?.github) },
+    { name: 'GitLab', icon: <GitLabIcon />, href: safeHref(home?.socials?.gitlab) },
+    { name: 'LinkedIn', icon: <LinkedInIcon />, href: safeHref(home?.socials?.linkedin) },
+    { name: 'WhatsApp', icon: <WhatsAppIcon />, href: safeHref(home?.socials?.whatsapp) },
   ].filter((s) => s.href)
 
   const chars = values.message.length
@@ -398,7 +401,8 @@ export default function ContactPro({
         >
           <VStack align="stretch" spacing={5}>
             <Box>
-              <Text fontFamily={monoFont} fontSize="11px" letterSpacing="0.16em" textTransform="uppercase" color="page.fg-secondary" mb={2}>
+              <Text display="flex" alignItems="center" gap={1.5} fontFamily={monoFont} fontSize="11px" letterSpacing="0.16em" textTransform="uppercase" color="page.fg-secondary" mb={2}>
+                <ChevronRightIcon size="xs" />
                 {eyebrowText}
               </Text>
               <Heading as={headingAs} size="md" fontWeight={500} letterSpacing="-0.015em" color="page.fg">
@@ -481,8 +485,9 @@ export default function ContactPro({
               <>
                 <Divider borderColor="page.border" />
                 <Box>
-                  <Text fontFamily={monoFont} fontSize="11px" letterSpacing="0.16em" textTransform="uppercase" color="page.fg-secondary" mb={3}>
-                    ▸ Elsewhere
+                  <Text display="flex" alignItems="center" gap={1.5} fontFamily={monoFont} fontSize="11px" letterSpacing="0.16em" textTransform="uppercase" color="page.fg-secondary" mb={3}>
+                    <ChevronRightIcon size="xs" />
+                    Elsewhere
                   </Text>
                   <HStack as="ul" listStyleType="none" spacing={2}>
                     {socials.map((s) => (
@@ -561,8 +566,9 @@ export default function ContactPro({
           </Flex>
         ) : (
           <>
-            <Text fontFamily={monoFont} fontSize="11px" letterSpacing="0.16em" textTransform="uppercase" color="page.fg-secondary" mb={5}>
-              ▸ Send a message
+            <Text display="flex" alignItems="center" gap={1.5} fontFamily={monoFont} fontSize="11px" letterSpacing="0.16em" textTransform="uppercase" color="page.fg-secondary" mb={5}>
+              <ChevronRightIcon size="xs" />
+              Send a message
             </Text>
 
             <chakra.form
@@ -673,10 +679,10 @@ export default function ContactPro({
                       {...inputProps}
                     />
                     {!errors.mathAnswer && (
-                      <Text as="span" fontFamily={monoFont} fontSize="11px" color="page.fg-secondary">
-                        <Box as="span" aria-hidden color="var(--accent)">
-                          ✓
-                        </Box>{' '}
+                      <Text as="span" display="inline-flex" alignItems="center" gap={1} fontFamily={monoFont} fontSize="11px" color="page.fg-secondary">
+                        <Box as="span" display="inline-flex" color="var(--accent)">
+                          <CheckIcon size="xs" />
+                        </Box>
                         ok
                       </Text>
                     )}

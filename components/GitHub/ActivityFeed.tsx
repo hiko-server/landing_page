@@ -1,7 +1,9 @@
 import React, { useId, useState } from 'react'
 import { Box, Flex, Link, Skeleton, Text } from '@chakra-ui/react'
 import { motion, useReducedMotion, type Variants } from 'framer-motion'
-import { FaBolt, FaChevronDown, FaCode, FaCodeBranch, FaExclamationCircle, FaPlus } from 'react-icons/fa'
+import { ChevronDownIcon } from '../Icons/ui/chrome'
+import { CircleAlertIcon, CodeIcon, GitBranchIcon, PlusIcon, ZapIcon } from '../Icons/ui/content'
+import { motionTransition } from '../../theme/tokens'
 
 import { revealVariant } from '../../lib/reveal'
 import { useFetchJson, useRenderNow } from '../Common/useFetchJson'
@@ -40,17 +42,17 @@ const staggerVariants = (reduce: boolean | null): { list: Variants; row: Variant
   list: { hidden: {}, show: { transition: { staggerChildren: reduce ? 0 : 0.03 } } },
   row: {
     hidden: { opacity: 0, y: 6 },
-    show: { opacity: 1, y: 0, transition: reduce ? { duration: 0 } : { duration: 0.3, ease: [0.22, 1, 0.36, 1] } },
+    show: { opacity: 1, y: 0, transition: motionTransition('base', !!reduce) },
   },
 })
 
 const ICONS: Record<EventKind, React.ReactElement> = {
-  push: <FaCode size={11} />,
-  pr: <FaCodeBranch size={11} />,
-  issue: <FaExclamationCircle size={11} />,
-  create: <FaPlus size={11} />,
-  repo: <FaCodeBranch size={11} />,
-  other: <FaBolt size={11} />,
+  push: <CodeIcon size="xs" />,
+  pr: <GitBranchIcon size="xs" />,
+  issue: <CircleAlertIcon size="xs" />,
+  create: <PlusIcon size="xs" />,
+  repo: <GitBranchIcon size="xs" />,
+  other: <ZapIcon size="xs" />,
 }
 
 const focusRing = { outline: '2px solid var(--accent)', outlineOffset: '2px', borderRadius: 'sm' }
@@ -193,9 +195,9 @@ function GroupRow({ group, now }: { group: EventGroup; now: number }) {
             flexShrink={0}
             display="inline-flex"
             transform={open ? 'rotate(180deg)' : 'none'}
-            transition="transform 200ms var(--ease-out-quart)"
+            transition="transform var(--duration-fast) var(--ease-standard)"
           >
-            <FaChevronDown size={10} />
+            <ChevronDownIcon size="xs" />
           </Box>
         </Flex>
         <When iso={newest.created_at} now={now} />

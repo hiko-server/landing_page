@@ -11,6 +11,7 @@ import { listWorkInDisplayOrder, type WorkFrontmatter, type MDXIndexEntry } from
 import { variantSrcSet } from '../../lib/uploadVariants'
 import { absUrl, ogImageUrl, PERSON_NAME } from '../../lib/schema'
 import { cssTransition, textStyleProps } from '../../theme/tokens'
+import { StarIcon } from '../../components/Icons/ui/content'
 
 /**
  * /work — case studies, featured first. Cards with a frontmatter cover show
@@ -111,8 +112,9 @@ function WorkCard({ w, featured, first }: { w: WorkItem; featured: boolean; firs
     <Box flex="1" minW={0}>
       <Flex justify="space-between" align="flex-start" gap={3} mb={featured ? 3 : 4}>
         {featured ? (
-          <Text textStyle="label" color={featuredColor} className="tnum">
-            ★ Featured · {fm.period || '—'}
+          <Text textStyle="label" color={featuredColor} className="tnum" display="inline-flex" alignItems="center" gap={1.5}>
+            <StarIcon size="xs" />
+            <span>Featured · {fm.period || '—'}</span>
           </Text>
         ) : (
           <Text fontFamily="mono" fontSize="label" color="page.fg-secondary" className="tnum">
