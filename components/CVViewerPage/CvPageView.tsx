@@ -1,13 +1,20 @@
 import { Box, Button, ButtonGroup, Flex, HStack, Text, useToast } from '@chakra-ui/react'
-import { FaFilePdf, FaLink, FaPrint } from 'react-icons/fa'
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { FaChevronDown, FaEllipsisH, FaLink } from 'react-icons/fa'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Head from 'next/head'
 import NextLink from 'next/link'
 import { useRouter } from 'next/router'
 
 import CVResult from './CVResult'
 import ReadingView from './ReadingView'
 import ScaledSheet from './ScaledSheet'
+import SkillEvidence from './SkillEvidence'
+import { FormatsMenu, PdfIcon, PdfLink } from './CvDownloads'
+import { SkillLinksContext } from './evidence'
 import { cvDescription, publicSeoSections } from './fields'
+import { EXPORT_CONTENT_TYPES, EXPORT_PATHS, cvFileName } from '../../lib/cvExport/files'
+import { monthLabel } from '../../lib/cvExport/updated'
+import type { CvPageData } from '../../lib/cvPage'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../General-UI/CustomHead'
 import PageHeader from '../General-UI/PageHeader'
@@ -22,16 +29,15 @@ import {
   personRef,
   PERSON_NAME,
   SITE_HOST,
-  type PersonFacts,
 } from '../../lib/schema'
 import type { CvLang } from '../../lib/cvVisibility'
-import type { HomeData } from '../../lib/homeShape'
 import { useBottomBarOffset } from '../Common/useBottomBarOffset'
 
 /**
  * The bilingual CV page: /cv (English) and /cv/zh (Chinese) render this with
- * their own language. Both routes are server-rendered from the CV-scoped
- * public view (hidden sections / entries / fields removed on the server).
+ * their own language. Both routes are statically generated (ISR, lib/cvPage)
+ * from the CV-scoped public view (hidden sections / entries / fields removed
+ * on the server) and regenerated on every save that changes them.
  *
  *   ?print=1   opens the print / Save-as-PDF dialog once rendered (client side)
  *
@@ -41,10 +47,18 @@ import { useBottomBarOffset } from '../Common/useBottomBarOffset'
  *
  * Desktop (md+): the A4 sheet is the hero, fitted to the viewport with CSS
  * zoom. Phones: a reflowed Reading view by default (toggle to the scaled A4
- * sheet), with a sticky bottom bar for PDF / language / link. Printing always
- * prints the A4 sheet at true size, with a print-only QR code back to the
- * live CV: the sheet wrapper is a .cv-print-flow element (forced visible in
- * print) and the Reading view and all chrome are .no-print.
+ * sheet), with a sticky bottom bar for PDF / language / formats / link.
+ * Printing always prints the A4 sheet at true size, with a print-only QR
+ * code back to the live CV: the sheet wrapper is a .cv-print-flow element
+ * (forced visible in print) and the Reading view and all chrome are
+ * .no-print.
+ *
+ * Downloads (lib/cvExport): "Download PDF" is the real, server-rendered A4
+ * PDF (/cv.pdf, /cv/zh.pdf) with a dated file name; "More formats" offers
+ * the plain-text CV, the JSON Resume and printing this page. The header
+ * says when the CV was last updated. Below the CV, "Skill evidence" lists
+ * where each skill is used; a role's skills on the sheet and the skills in
+ * the Reading view link to it.
  *
  * Anchors: `#cv-<section>` / `#cv-<section>-<index>` (search results, the
  * command palette). The A4 sheet holds the ids; when it is the hidden view
@@ -53,23 +67,8 @@ import { useBottomBarOffset } from '../Common/useBottomBarOffset'
 
 type View = 'reading' | 'a4'
 
-export type CvPageProps = {
-  /** Public 'cv'-audience sections of this page's language, limited to what the sheet renders. */
-  sections: any[]
-  initialLang: CvLang
-  /** BCP-47 language of the page ('en' / 'zh-Hans'); drives <html lang> in _app. */
-  lang: string
-  /** Server reference month ('YYYY-MM', lib/clock.ts) for "Present" / "Expected". */
-  clockMonth: string
-  /** Public home.socials for the persistent header / footer (null = none set). */
-  chromeSocials?: HomeData['socials'] | null
-  /** Chinese name from the public CV ('' when hidden or not set). */
-  nameZh: string
-  /** The site-wide Person facts (lib/personFacts loadPersonFacts) — identical on every page. */
-  personFacts: PersonFacts
-  /** Print-only QR code (inline SVG) linking to this page; null when it could not be generated. */
-  qrSvg: string | null
-}
+/** Props of /cv and /cv/zh (lib/cvPage loadCvPageProps). */
+export type CvPageProps = CvPageData
 
 const mono = 'var(--font-geist-mono), monospace'
 const PATHS: Record<CvLang, string> = { en: '/cv', zh: '/cv/zh' }
@@ -84,8 +83,10 @@ const COPY = {
     layout: 'layout',
     reading: 'Reading',
     a4: 'A4',
-    print: 'Print / Save as PDF',
     pdf: 'Download PDF',
+    more: 'More formats',
+    updated: 'Updated',
+    downloads: 'Downloads',
     copy: 'Copy link',
     copied: 'Link copied',
     copyFailed: 'Could not copy — the link is',
@@ -102,8 +103,10 @@ const COPY = {
     layout: '版式',
     reading: '阅读',
     a4: 'A4',
-    print: '打印 / 保存 PDF',
     pdf: '下载 PDF',
+    more: '更多格式',
+    updated: '更新于',
+    downloads: '下载',
     copy: '复制链接',
     copied: '链接已复制',
     copyFailed: '无法复制，链接为',
@@ -134,6 +137,11 @@ export default function CvPageView({
   nameZh,
   personFacts,
   qrSvg,
+  updatedMonth,
+  updatedIso,
+  fileBase,
+  skillEvidence,
+  skillLinks,
 }: CvPageProps) {
   const router = useRouter()
   const toast = useToast()
@@ -192,6 +200,19 @@ export default function CvPageView({
 
   const pageUrl = absUrl(PATHS[language])
   const description = cvDescription(language, { present: publicSeoSections(sections), nameZh })
+  const updated = monthLabel(updatedMonth, language)
+  const canDownload = !!fileBase && sections.length > 0
+  const print = useCallback(() => window.print(), [])
+  const skillLinkCtx = useMemo(() => ({ ids: skillLinks || {}, lang: language }), [skillLinks, language])
+  const files = canDownload
+    ? (['pdf', 'txt', 'json'] as const).map((f) => ({
+        '@type': 'MediaObject',
+        name: cvFileName(fileBase, f),
+        contentUrl: absUrl(EXPORT_PATHS[language][f]),
+        encodingFormat: EXPORT_CONTENT_TYPES[f].split(';')[0],
+        inLanguage: HTML_LANG[language],
+      }))
+    : []
 
   const outlineBtn = {
     size: 'sm',
@@ -234,6 +255,8 @@ export default function CvPageView({
             inLanguage: HTML_LANG[language],
             about: personRef,
             author: personAuthor,
+            ...(updatedIso ? { dateModified: updatedIso } : {}),
+            ...(files.length ? { encoding: files } : {}),
           },
           // The one Person entity, with the same facts as on every other page.
           personNode(personFacts),
@@ -243,6 +266,19 @@ export default function CvPageView({
           ]),
         ]}
       />
+
+      {canDownload ? (
+        <Head>
+          <link
+            key="cv-pdf-alternate"
+            rel="alternate"
+            type="application/pdf"
+            hrefLang={HTML_LANG[language]}
+            href={absUrl(EXPORT_PATHS[language].pdf)}
+            title={language === 'zh' ? `${T.title}（PDF）` : `${T.title} (PDF)`}
+          />
+        </Head>
+      ) : null}
 
       <HeaderFooter>
         <Box
@@ -259,6 +295,13 @@ export default function CvPageView({
             <PageHeader
               eyebrow={T.eyebrow}
               title={T.title}
+              lede={
+                updated ? (
+                  <>
+                    {T.updated} <time dateTime={updatedMonth}>{updated}</time>
+                  </>
+                ) : undefined
+              }
               actions={
                 <Flex
                   flex="1 1 100%"
@@ -351,13 +394,48 @@ export default function CvPageView({
                     <Button {...outlineBtn} leftIcon={<FaLink aria-hidden />} onClick={copyLink}>
                       {T.copy}
                     </Button>
-                    <Button
-                      {...outlineBtn}
-                      leftIcon={<FaPrint aria-hidden />}
-                      onClick={() => window.print()}
-                    >
-                      {T.print}
-                    </Button>
+                    {canDownload ? (
+                      <Flex role="group" aria-label={T.downloads}>
+                        <PdfLink
+                          lang={language}
+                          fileBase={fileBase}
+                          size="sm"
+                          h="32px"
+                          px={3}
+                          bg="accent.solid"
+                          color="accent.fg"
+                          fontSize="12px"
+                          fontWeight={600}
+                          borderRightRadius={0}
+                          leftIcon={<PdfIcon />}
+                          _hover={{ bg: 'accent.solid-hover', textDecoration: 'none' }}
+                          _active={{ bg: 'accent.solid-active' }}
+                        />
+                        <FormatsMenu
+                          lang={language}
+                          fileBase={fileBase}
+                          onPrint={print}
+                          trigger={(props) => (
+                            <Button
+                              {...props}
+                              size="sm"
+                              h="32px"
+                              minW="32px"
+                              px={0}
+                              aria-label={T.more}
+                              bg="accent.solid"
+                              color="accent.fg"
+                              borderLeftRadius={0}
+                              borderLeft="1px solid rgba(255, 255, 255, 0.35)"
+                              _hover={{ bg: 'accent.solid-hover' }}
+                              _active={{ bg: 'accent.solid-active' }}
+                            >
+                              <Box as={FaChevronDown} aria-hidden boxSize="10px" />
+                            </Button>
+                          )}
+                        />
+                      </Flex>
+                    ) : null}
                   </HStack>
                 </Flex>
               }
@@ -365,7 +443,7 @@ export default function CvPageView({
           </Box>
 
           {sections.length ? (
-            <>
+            <SkillLinksContext.Provider value={skillLinkCtx}>
               <Box
                 className="no-print"
                 display={{ base: view === 'reading' ? 'block' : 'none', md: 'none' }}
@@ -386,7 +464,8 @@ export default function CvPageView({
                   />
                 </ScaledSheet>
               </Box>
-            </>
+              <SkillEvidence evidence={skillEvidence || []} lang={language} />
+            </SkillLinksContext.Provider>
           ) : (
             <Text
               className="no-print"
@@ -426,28 +505,27 @@ export default function CvPageView({
               },
             }}
           >
-            <Button
-              flex="1"
-              minW={0}
-              h="44px"
-              px={3}
-              onClick={() => window.print()}
-              bg="accent.solid"
-              color="accent.fg"
-              fontSize="13px"
-              fontWeight={600}
-              _hover={{ bg: 'accent.solid-hover' }}
-              _active={{ bg: 'accent.solid-active' }}
-              isDisabled={!sections.length}
-            >
-              <Box
-                as={FaFilePdf}
-                aria-hidden
-                display={{ base: 'none', sm: 'inline-block' }}
-                mr={2}
-              />
-              {T.pdf}
-            </Button>
+            {canDownload ? (
+              <PdfLink
+                lang={language}
+                fileBase={fileBase}
+                flex="1"
+                minW={0}
+                h="44px"
+                px={3}
+                bg="accent.solid"
+                color="accent.fg"
+                fontSize="13px"
+                fontWeight={600}
+                _hover={{ bg: 'accent.solid-hover', textDecoration: 'none' }}
+                _active={{ bg: 'accent.solid-active' }}
+              >
+                <PdfIcon display={{ base: 'none', sm: 'inline-block' }} mr={2} />
+                {T.pdf}
+              </PdfLink>
+            ) : (
+              <Box flex="1" minW={0} />
+            )}
             {/* Its visible text is its name: "EN / 中文" (no aria-label to contradict it). */}
             <Button
               as={NextLink}
@@ -478,6 +556,29 @@ export default function CvPageView({
                 中文
               </Text>
             </Button>
+            {canDownload ? (
+              <FormatsMenu
+                lang={language}
+                fileBase={fileBase}
+                onPrint={print}
+                placement="up"
+                trigger={(props) => (
+                  <Button
+                    {...props}
+                    flexShrink={0}
+                    minW="44px"
+                    h="44px"
+                    px={0}
+                    variant="outline"
+                    borderColor="page.border-strong"
+                    color="page.fg"
+                    aria-label={T.more}
+                  >
+                    <Box as={FaEllipsisH} aria-hidden />
+                  </Button>
+                )}
+              />
+            ) : null}
             <Button
               flexShrink={0}
               minW="44px"

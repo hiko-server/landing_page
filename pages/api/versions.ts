@@ -37,7 +37,8 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { kvEtag, restoreErrorStatus, safeSnapshotName } from '../../lib/contentStore'
 import { isAdminRequest } from '../../lib/auth'
 import { sendVersionedJson } from '../../lib/http'
-import { revalidatePaths } from '../../lib/revalidate'
+import { CV_PAGE_PATHS, revalidatePaths } from '../../lib/revalidate'
+import { warmCvExports } from '../../lib/cvExport/service'
 import { withApi } from '../../lib/apiHandler'
 import { log } from '../../lib/log'
 import {
@@ -65,12 +66,13 @@ const TYPES: readonly VersionType[] = ['cv', 'home', 'blog', 'work', 'page']
 
 /**
  * Statically generated (ISR) pages rendered from each document: /now reads
- * the public CV sections and home.hero.currentlyCoding, so restoring either
- * one must regenerate it instead of leaving the ISR copy live. The pages
- * that read them with getServerSideProps (/, /about, /contact, /cv, /cv/zh)
- * are rendered per request and need no revalidation.
+ * the public CV sections and home.hero.currentlyCoding, /cv and /cv/zh the
+ * CV and the home socials / portrait, so restoring either one must
+ * regenerate them instead of leaving the ISR copy live. The pages that read
+ * them with getServerSideProps (/, /about, /contact) are rendered per request
+ * and need no revalidation.
  */
-const STATIC_PATHS: Record<JsonDocType, string[]> = { cv: ['/now'], home: ['/now'] }
+const STATIC_PATHS: Record<JsonDocType, string[]> = { cv: ['/now', ...CV_PAGE_PATHS], home: ['/now', ...CV_PAGE_PATHS] }
 
 function parseType(value: unknown): VersionType | null {
   if (value === undefined || value === '') return null
@@ -223,7 +225,8 @@ export default withApi('versions', async (req, res) => {
       if (!result.ok) return res.status(restoreErrorStatus(result.error)).json({ error: result.error })
       const etag = kvEtag(result.updatedAt)
       const paths = STATIC_PATHS[type]
-      const failed = await revalidatePaths(res, paths)
+      if (type === 'cv') warmCvExports()
+      const failed = await revalidatePaths(res, paths, { confirm: paths })
       return sendVersionedJson(res, 200, {
         ok: true,
         etag,

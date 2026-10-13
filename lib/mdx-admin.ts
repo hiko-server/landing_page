@@ -8,7 +8,7 @@ import { sendVersionedJson } from './http'
 import type { ApiHandler } from './apiHandler'
 import { isAdminRequest } from './auth'
 import { rateLimit } from './rateLimit'
-import { collectionPaths, revalidatePaths } from './revalidate'
+import { collectionPaths, CV_PAGE_PATHS, revalidatePaths } from './revalidate'
 import {
   getPage,
   putPage as storePutPage,
@@ -381,11 +381,13 @@ export async function mdxProblem(body: string): Promise<MdxProblem | null> {
 
 /**
  * Public pages to regenerate after a write to `slug`: the index, the item and
- * its siblings (prev/next and related links). A failed refresh never fails
- * the write (the ISR window still applies).
+ * its siblings (prev/next and related links), and the CV pages (their skill
+ * evidence cites posts and case studies, and projects link their case
+ * study). A failed refresh never fails the write (the ISR window still
+ * applies).
  */
 export async function refreshCollection(res: NextApiResponse, c: Collection, slug: string) {
-  const paths = collectionPaths(c, slug, listAll(c).map((i) => i.slug))
+  const paths = [...collectionPaths(c, slug, listAll(c).map((i) => i.slug)), ...CV_PAGE_PATHS]
   const failed = await revalidatePaths(res, paths)
   return {
     revalidated: paths.filter((p) => !failed.includes(p)),

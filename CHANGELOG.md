@@ -8,6 +8,64 @@ portfolio CMS, no public package). Entries are grouped by release date.
 
 ## [Unreleased]
 
+### cv-docs
+
+- **Real PDF CVs (E2).** `/cv.pdf` and `/cv/zh.pdf` are rendered on the
+  server with pdfkit — no headless browser: selectable text in one reading
+  order, embedded subset fonts (Geist for Latin, an OFL Noto Sans SC subset
+  for everything Geist lacks, picked per character), Unicode line breaking
+  (Chinese wraps between characters, URLs and skill tags stay whole), a
+  tagged PDF 1.7 (headings, lists, sections, Link elements, artifacts for
+  rules and footers, `/Lang`, displayed title, author / subject / keywords).
+  Dated download names (`Li-Yanpei-CV-2026-10.pdf`, `…-CV-zh-…`), a strong
+  ETag over everything the file is made of, `max-age=0, must-revalidate`,
+  an in-memory cache keyed by that hash and a background re-render on every
+  CV save, so no stale file is ever served. "Download PDF" on /cv and
+  /cv/zh (and the phone action bar) is a real download instead of the print
+  dialog; the palette has *Download CV (PDF)* and *Download CV in 中文 (PDF)*.
+- **"Updated <month year>"** under the CV title (EN / 中文), in every file
+  and in the CV's JSON-LD `dateModified`.
+- **Plain text and JSON Resume (E5).** `/cv.txt`, `/cv/zh.txt` (for
+  paste-in application forms: no hard wraps, full https URLs) and
+  `/cv.json`, `/cv/zh.json` (JSON Resume 1.0.0: ISO dates, open ends
+  omitted, profiles, languages split into language / fluency, patents as
+  publications), offered under *More formats* with printing. Text and JSON
+  are `noindex`; every file points to the HTML CV with `Link: rel=canonical`.
+- **Evidence links (E3).** The CV header (A4 sheet, Reading view, PDF, text,
+  JSON Resume) carries GitHub and LinkedIn — the CV's own value, else the
+  Home → Socials link; hiding the field in CV Studio removes it (WhatsApp
+  never). Projects print their case study (published only — a draft slug no
+  longer reaches the public payload), live site and source code; new CV
+  Studio fields *GitHub*, *LinkedIn*, *Live site*, *Source code*. The vCard
+  adds the profiles as RFC 9554 `SOCIALPROFILE` (plus Apple's
+  `X-SOCIALPROFILE`).
+- **Skill evidence (E7).** Below the CV, every skill that is used somewhere
+  lists the roles, projects, awards and patents on the page and the case
+  studies and posts that use it (strict matching: word boundaries, aliases,
+  case for short terms; no rows without evidence). A role's skills on the
+  sheet and the skills in the Reading view link to their row.
+- **Person / ProfilePage (E6).** The shared Person loader adds completed
+  degrees (`hasCredential`), awards, `knowsLanguage` with BCP 47 codes
+  (Mandarin → cmn, Cantonese → yue), a current role (`worksFor`) or study
+  (`affiliation`) only while it runs, and de-duplicates skills ignoring
+  case and parenthesised notes; `/` and `/about` are `og:type profile` with
+  a `dateModified` ProfilePage.
+- **ISR for /cv and /cv/zh (G1).** Statically generated, regenerated on
+  every write that changes them (CV, home, post and case-study saves,
+  version restores, store and Mongo restores — the Mongo config restore now
+  refreshes /now too) and every minute (the month-dependent "Present" /
+  "Expected", and the longest an edge copy lives without purging); a build-
+  time copy is replaced on the first request. CV and home writes regenerate
+  their pages twice so a render that started before the save can never be
+  the one kept. `expireTime` is one day; a CV page change also purges its
+  files at the edge.
+- A field hidden in CV Studio before it ever had a value now counts as
+  hidden (`redacted`), so no renderer fills it from another source.
+- New dependencies: `pdfkit` 0.20.2 (MIT; pulls `fontkit`, `linebreak`,
+  `png-js`, `fflate`, `@noble/*`), with `fontkit` 2.0.4 and `linebreak` 1.1.0
+  pinned as direct dependencies; all server-only (`serverExternalPackages`),
+  no change to the browser bundle.
+
 ## [2.3.0] — 2026-10-13
 
 A research round across eight directions (UI, motion, reading, recruiter

@@ -61,6 +61,8 @@ test.describe('admin', { tag: '@admin' }, () => {
       expect((await response).status()).toBe(200)
     }
     const publicCv = async () => (await (await request.get('/api/cvdata')).text()) as string
+    // The downloadable CVs (plain text, JSON Resume) follow the same visibility.
+    const publicFiles = async () => `${await (await request.get('/cv.txt')).text()}\n${await (await request.get('/cv.json')).text()}`
 
     const phoneValue = (await (await openStudio()).inputValue()).trim()
     test.skip(!phoneValue, 'the seeded CV has no phone number to hide')
@@ -75,6 +77,8 @@ test.describe('admin', { tag: '@admin' }, () => {
     await expect(eye()).toHaveAttribute('aria-pressed', 'true')
     await save()
     expect(await publicCv()).not.toContain(phoneValue)
+    expect(await publicFiles()).not.toContain(phoneValue)
+    // /cv is ISR: the save regenerated it (no time-based wait).
     await page.goto('/cv')
     await expect(page.locator('main')).not.toContainText(phoneValue)
 
@@ -84,6 +88,7 @@ test.describe('admin', { tag: '@admin' }, () => {
     await expect(eye()).toHaveAttribute('aria-pressed', 'false')
     await save()
     expect(await publicCv()).toContain(phoneValue)
+    expect(await publicFiles()).toContain(phoneValue)
     await page.goto('/cv')
     await expect(page.locator('main')).toContainText(phoneValue)
   })

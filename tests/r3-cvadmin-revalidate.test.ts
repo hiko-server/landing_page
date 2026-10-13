@@ -3,7 +3,8 @@
  * restore) and home write (PUT, restore, versions restore) regenerates the
  * ISR pages that render that data (CV_STATIC_PATHS / HOME_STATIC_PATHS) and
  * reports them; the version ETag survives untouched. Server-rendered pages
- * (/, /about, /contact, /cv, /cv/zh) are always fresh and never listed.
+ * (/, /about, /contact) are always fresh and never listed; /cv and /cv/zh
+ * are ISR (lib/cvPage.ts) and regenerate on CV and home writes (G1).
  */
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
@@ -24,7 +25,8 @@ let cvdata: Handler, home: Handler, versions: Handler
 let closeDb: () => void
 let CV_PATHS: readonly string[] = []
 let HOME_PATHS: readonly string[] = []
-const SSR_PATHS = ['/', '/about', '/contact', '/cv', '/cv/zh']
+const SSR_PATHS = ['/', '/about', '/contact']
+const CV_PAGES = ['/cv', '/cv/zh']
 
 type MockRes = { statusCode: number; headers: Record<string, string>; body: any; revalidated: string[] }
 
@@ -76,7 +78,9 @@ const homeDoc = (coding: string) => ({
 
 function assertRevalidated(r: MockRes, label: string, paths: readonly string[]) {
   assert.equal(r.statusCode, 200, label)
-  assert.deepEqual([...r.revalidated].sort(), [...paths].sort(), `${label}: ISR pages regenerated`)
+  // Each page is regenerated twice (lib/revalidate `confirm`): once, then again after that render finished.
+  assert.deepEqual([...new Set(r.revalidated)].sort(), [...paths].sort(), `${label}: ISR pages regenerated`)
+  for (const p of paths) assert.equal(r.revalidated.filter((x) => x === p).length, 2, `${label}: ${p} confirmed by a second render`)
   assert.deepEqual([...r.body.revalidated].sort(), [...paths].sort(), `${label}: reported`)
   assert.equal(r.body.revalidateFailed, undefined, label)
   assert.match(r.body.etag, /^"\d+"$/, label)
@@ -105,6 +109,10 @@ after(() => {
 test('the path lists hold only ISR pages that render CV / home data', () => {
   assert.ok(CV_PATHS.includes('/now'), 'CV: /now renders public CV sections')
   assert.ok(HOME_PATHS.includes('/now'), 'home: /now renders hero.currentlyCoding')
+  for (const p of CV_PAGES) {
+    assert.ok(CV_PATHS.includes(p), `CV: ${p} renders the CV`)
+    assert.ok(HOME_PATHS.includes(p), `home: ${p} renders the socials and the portrait`)
+  }
   for (const p of SSR_PATHS) {
     assert.ok(!CV_PATHS.includes(p), `CV list must not contain the SSR page ${p}`)
     assert.ok(!HOME_PATHS.includes(p), `home list must not contain the SSR page ${p}`)
@@ -153,7 +161,8 @@ test('versions restore regenerates /now for CV and home', async () => {
     const r = await call(versions, { method: 'POST', query: { type }, body: { action: 'restore', filename: snap.body.file } })
     assert.equal(r.statusCode, 200, `versions ${type}`)
     assert.ok(r.revalidated.includes('/now'), `versions ${type}: /now regenerated`)
-    assert.deepEqual([...r.body.revalidated].sort(), [...r.revalidated].sort(), `versions ${type}: reported`)
+    for (const p of CV_PAGES) assert.ok(r.revalidated.includes(p), `versions ${type}: ${p} regenerated`)
+    assert.deepEqual([...r.body.revalidated].sort(), [...new Set(r.revalidated)].sort(), `versions ${type}: reported`)
     assert.equal(r.headers.etag, r.body.etag, `versions ${type}: version ETag kept`)
   }
   const missing = await call(versions, { method: 'POST', query: { type: 'cv' }, body: { action: 'restore', filename: 'cv_2000-01-01_00-00-00-000.json' } })

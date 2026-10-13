@@ -11,7 +11,7 @@ import { readCvData, writeCvData, saveSnapshot } from '../../lib/cvdata'
 import { readHome, writeHome, saveHomeSnapshot } from '../../lib/home'
 import { getPage, listItems, putItem, putPage } from '../../lib/contentStore'
 import { maskMongoUri, redactMongoSecrets } from '../../lib/security/mongoUri'
-import { revalidatePaths, collectionPaths, STATIC_CONTENT_PATHS } from '../../lib/revalidate'
+import { revalidatePaths, collectionPaths, CV_PAGE_PATHS, STATIC_CONTENT_PATHS } from '../../lib/revalidate'
 
 /**
  * POST /api/mongo — optional MongoDB backup target (admin only).
@@ -350,6 +350,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const restoredPaths: string[] = []
+    // A restored CV or home document changes the ISR pages rendered from it.
+    if (counts.cv || counts.home) restoredPaths.push('/now', ...CV_PAGE_PATHS)
     if (wants('content')) {
       const docs = await db.collection('mdx_content').find({}).toArray()
       let n = 0
