@@ -194,7 +194,8 @@ test('the Docker image carries the runtime assets and libraries the merged code 
   const docker = read('Dockerfile')
   assert.match(docker, /test -f \/app\/assets\/og\/Geist-Regular\.ttf/)
   assert.match(docker, /test -f \/app\/assets\/pdf\/NotoSansSC-Regular\.subset\.ttf/)
-  assert.match(docker, /require\('pdfkit'\); require\('fontkit'\); require\('linebreak'\)/)
+  // The server loads them with import() (the standalone tracer keeps pdfkit's ESM entry only).
+  assert.match(docker, /await import\('pdfkit'\); await import\('fontkit'\); await import\('linebreak'\)/)
   assert.match(docker, /test -f \/app\/scripts\/db\/migrate\.mjs/)
   // assets/ is part of the build context (only runtime data and uploads are ignored).
   assert.doesNotMatch(read('.dockerignore'), /^assets/m)

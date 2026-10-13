@@ -87,7 +87,8 @@ RUN mkdir -p /app/public/uploads && chown nextjs:nodejs /app/public/uploads
 # The standalone output carries server.js plus every node_module the server
 # traced — including better-sqlite3, @aws-sdk/client-s3, gray-matter and sharp,
 # which the plain-Node content scripts below import as well, and the PDF CV
-# renderer (pdfkit, fontkit, linebreak; next.config.js serverExternalPackages)
+# renderer (pdfkit, fontkit, linebreak; next.config.js serverExternalPackages,
+# loaded with import() — the tracer keeps pdfkit's ESM entry, not its CJS one)
 # — and the runtime assets next.config.js outputFileTracingIncludes names:
 # assets/og (social cards, PDF Latin faces) and assets/pdf (the Noto Sans SC
 # subset of the PDF CV). All asserted below.
@@ -111,7 +112,8 @@ RUN chmod +x /app/docker-entrypoint.sh \
  && test -f /app/assets/og/Geist-Regular.ttf \
  && test -f /app/assets/pdf/NotoSansSC-Regular.subset.ttf \
  && test ! -e /app/data/content.db \
- && node -e "require('better-sqlite3')(':memory:').close(); require('gray-matter'); require('@aws-sdk/client-s3'); require('sharp'); require('pdfkit'); require('fontkit'); require('linebreak')"
+ && node -e "require('better-sqlite3')(':memory:').close(); require('gray-matter'); require('@aws-sdk/client-s3'); require('sharp')" \
+ && node --input-type=module -e "await import('pdfkit'); await import('fontkit'); await import('linebreak')"
 
 USER nextjs
 
