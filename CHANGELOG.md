@@ -1012,6 +1012,73 @@ is public until the owner enters an iD; no iD is ever invented.
   page carries ~0.3 KiB more for the Person node's ORCID support; the Studio
   dialog is its own chunk.
 
+### orcid-connect
+
+"Connect your ORCID iD" — the connection half of the owner's request (ORCID连接和
+显示), which ORCID's display guidelines require before the green iD icon may be
+shown.
+
+- **Connect your ORCID iD** next to the iD field in CV Studio → Personal Info:
+  ORCID's sign-in button (the iD icon, white, hairline border) as a plain link
+  to `GET /api/admin/orcid/connect`. It sends a signed-in admin to ORCID's
+  OAuth sign-in — authorization code, scope `/authenticate` only (no access
+  to the record) — with a random `state` bound to that admin session in a
+  signed, single-use, 10-minute, HttpOnly `SameSite=Lax` cookie scoped to the
+  callback. `GET /api/admin/orcid/callback` checks the state against the
+  cookie (once), that the session that started it is still live and current
+  (and the same one, if a session cookie came along), exchanges the code on
+  the server at ORCID's token endpoint (`safeFetch`, now able to POST, one
+  host, never redirected; the secret never reaches the browser), stores the
+  confirmed iD in both languages' Personal Info with the marker
+  `orcidAuthenticated: { id, at }`, regenerates the CV pages, records
+  `orcid.connect` in the activity log (attributed to the session; never a
+  token) and discards the access token. A typed iD that differed is
+  replaced, and the toast says so.
+- **The Strict session cookie**: the admin cookie is `SameSite=Strict`, so the
+  browser does not send it on the way back from orcid.org. The proxy lets
+  only `GET /api/admin/orcid/callback` through without it (the route
+  authorises itself, see above), and the callback answers a small same-origin
+  page (meta refresh, no script, no referrer) instead of a redirect: the
+  navigation it starts is same-site, so the Studio opens signed in.
+- Every outcome returns to the Studio with a toast and focus on the iD field:
+  connected, cancelled on ORCID, an unmatched or reused link, more than 10
+  minutes, a session that ended or changed, ORCID errors, refused code or
+  client credentials, ORCID busy / slow / unreachable / unreadable, no
+  Personal Info, not configured, wrong host, too many attempts.
+- **Disconnect…** (with an inline confirm) removes the marker and keeps the iD,
+  which then shows as unauthenticated; clearing or hiding it stays an ordinary
+  edit. `DELETE /api/admin/orcid/connection` (If-Match against the Studio's
+  copy, which adopts the result without a reload; `orcid.disconnect` in the
+  activity log). `GET` answers whether the server is set up (never a secret).
+- **The marker belongs to the server**: changing the iD in the Studio drops it
+  in the same undo step; a save keeps it only where the CV still carries the
+  stored marker with the same iD, so a hand-edited iD is unauthenticated from
+  then on and a marker typed into the JSON or an import is ignored. Public
+  views carry it only as `{ id }`, only while the iD is public and still the
+  confirmed one (the connection time stays private).
+- **Display**: an authenticated iD keeps the green iD icon; a typed-in one now
+  shows ORCID's unauthenticated iD icon (the outlined iD, redrawn from ORCID's
+  guideline artwork and checked against it pixel by pixel) and
+  "(unauthenticated)" — "（未经认证）", ORCID's own zh-CN wording, on Chinese
+  pages — after the link, on `/cv`, `/cv/zh` (sheet and Reading view), the
+  /about rail, `/publications`, the Studio preview and the import dialog. The
+  PDF, text and JSON CVs, the vCard and the JSON-LD keep the URI alone either
+  way. `/colophon` and `public/licenses/orcid.txt` describe both icons.
+- **Without credentials** the button is disabled, and the line under it says
+  why (`ORCID_CLIENT_ID`, `ORCID_CLIENT_SECRET`) with a link to the set-up
+  guide; a malformed client ID or an unknown `ORCID_ENV` is named.
+  `ORCID_ENV=sandbox` uses sandbox.orcid.org. Documented in `.env.example` and
+  both READMEs (registering a Public API client, the redirect URI
+  `https://lucian-dev.com/api/admin/orcid/callback`).
+- Tests: `tests/orcid-connect.test.ts` (config, authorize URL, state expiry /
+  tampering / replay / mismatch, marker lifecycle and public form, display
+  choice, the Studio's states and messages, the return page, the proxy) and
+  `tests/orcid-connect-route.test.ts` (the routes over a temporary store
+  against a local fake ORCID token endpoint — no network); e2e
+  `e2e/orcid-connect.spec.ts` (@admin: the disabled state, the callback's
+  error paths arriving cross-site); `e2e/orcid.spec.ts` expects the
+  unauthenticated form for a typed iD.
+
 ### Changed
 
 - **No more "[01] INTRODUCTION" labels** (owner request): the public site

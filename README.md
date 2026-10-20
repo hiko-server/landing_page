@@ -77,8 +77,11 @@ backup, and a hardened admin GUI for non-engineers.
   nowhere. **Import from ORCID** in the Publications section lists the
   record's public works (read on the server from ORCID's public API,
   nothing stored), marks the ones already on the CV (same DOI or title)
-  and adds the ticked ones as papers to review before saving. Logic in
-  `lib/orcid/`.
+  and adds the ticked ones as papers to review before saving. **Connect
+  your ORCID iD** (next to the field) proves the iD is the owner's by
+  signing in to ORCID; until then a typed-in iD is shown with ORCID's
+  unauthenticated iD icon and "(unauthenticated)" — see
+  [Connect your ORCID iD](#connect-your-orcid-id). Logic in `lib/orcid/`.
 - **Admin GUI for non-engineers** — visual editors for hero, brands,
   socials, photo strip, blog posts, case studies, the CV (Studio + raw
   JSON), the Now/Uses pages and the About bio.
@@ -463,6 +466,7 @@ All variables are documented in [`.env.example`](./.env.example). Headlines:
 | Admin step-up | `ADMIN_RECENT_AUTH_MINUTES` (1–60, default 10) | optional |
 | Restore drills | `RESTORE_DRILL_INTERVAL_HOURS` (default 168, `0` disables) | optional |
 | Link check | `LINK_CHECK_INTERVAL_HOURS` (default 24, `0` disables the schedule) | optional |
+| ORCID connect | `ORCID_CLIENT_ID`, `ORCID_CLIENT_SECRET`, `ORCID_ENV` (`production` default, or `sandbox`) | optional — without them "Connect your ORCID iD" stays disabled ([how](#connect-your-orcid-id)) |
 
 > The repo never commits a real `.env`. `.env.example` contains placeholders
 > only — copy and fill in for your own deployment.
@@ -611,8 +615,9 @@ word-level (Chinese segmented with `Intl.Segmenter`).
   browser cannot load an admin page shell either. Unauthenticated requests
   are redirected to `/admin/login?next=<original>` for pages, or returned
   as JSON 401 for APIs. Public whitelisted paths: `/admin/{login,forgot,reset}`
-  and `/api/admin/{session,logout}`. Every API route checks the session
-  again itself.
+  and `/api/admin/{session,logout}`, plus `GET /api/admin/orcid/callback`,
+  which authorises itself ([Connect your ORCID iD](#connect-your-orcid-id)).
+  Every API route checks the session again itself.
 - **scrypt** password hashing (N=16384, r=8, p=1, 64-byte key, async) with
   a per-account 16-byte random salt. Comparisons use
   `crypto.timingSafeEqual` on equal-length buffers.
@@ -679,6 +684,61 @@ word-level (Chinese segmented with `Intl.Segmenter`).
 - **SSRF**: every server-side fetch of a URL that comes from content or an
   admin goes through `lib/security/safeFetch.ts` (public addresses only,
   size, redirect and time limits).
+
+### Connect your ORCID iD
+
+ORCID's iD display guidelines show an iD the researcher proved by signing
+in to ORCID with the green iD icon, and one that was only typed in with the
+unauthenticated iD icon followed by "(unauthenticated)" ("（未经认证）" on
+Chinese pages). CV Studio → Personal Info has **Connect your ORCID iD** next
+to the iD field; the site shows the authenticated form once it was used.
+
+1. Sign in at [orcid.org](https://orcid.org) (the record must have a
+   verified e-mail address), open **Developer Tools** from the account menu
+   (<https://orcid.org/developer-tools>), accept the Public API terms and
+   **Register for ORCID Public API credentials** — it is free. Name: the
+   site's name; website: the site's URL; description: what the connection
+   is for (ORCID shows these on its sign-in screen).
+2. Add the redirect URI exactly as the site sends it: `SITE_URL`'s origin +
+   `/api/admin/orcid/callback` — for this site
+   `https://lucian-dev.com/api/admin/orcid/callback` (ORCID accepts only
+   https redirect URIs in production).
+3. Put the **Client ID** (`APP-…`) and **Client secret** in the server's
+   environment as `ORCID_CLIENT_ID` and `ORCID_CLIENT_SECRET` and restart.
+   To try it first, register a client at <https://sandbox.orcid.org/developer-tools>
+   (test records; plain-http redirect URIs such as
+   `http://127.0.0.1:3000/api/admin/orcid/callback` are accepted there, with
+   `SITE_URL` set to that origin) and set `ORCID_ENV=sandbox`.
+
+How it works (`lib/orcid/oauth.ts`, `flow.ts`, `connectRoute.ts`): the
+button is a plain link to `GET /api/admin/orcid/connect`, which sends a
+signed-in admin to ORCID's OAuth sign-in (authorization code, scope
+`/authenticate` only — no access to the record) with a random `state` bound
+to that admin session in a signed, single-use, 10-minute, HttpOnly
+`SameSite=Lax` cookie scoped to the callback. ORCID sends the browser back
+to `GET /api/admin/orcid/callback`; the admin session cookie is
+`SameSite=Strict` and does not come along on that cross-site navigation, so
+the proxy lets this one route through and the route authorises itself: the
+state must match the cookie, be used once and come from a session that is
+still live and current. The server exchanges the code at ORCID's token
+endpoint (the secret never reaches the browser; the request goes through
+`safeFetch` to the one ORCID host, never redirected), stores the confirmed
+iD in both languages' Personal Info with the marker
+`orcidAuthenticated: { id, at }`, records it in the activity log and
+discards the access token. It answers a tiny page that opens the Studio
+(a same-origin step, so the Strict cookie is sent again) with a toast.
+ORCID does not offer PKCE for this flow (its OpenID configuration lists no
+`code_challenge_methods_supported`); the confidential client and the
+session-bound state cover what PKCE would.
+
+The marker belongs to the server: a save keeps it only while the CV still
+carries it with the same iD, so editing the iD by hand makes it
+unauthenticated (Undo in the Studio brings it back before saving), and a
+marker typed into the JSON is ignored. **Disconnect** removes the marker and
+keeps the iD (now shown as unauthenticated); clearing or hiding the field is
+an ordinary edit. Public pages receive the marker only as `{ id }` and only
+while the iD is public; the PDF, text and JSON CVs, the vCard and the
+JSON-LD carry the iD's URI either way.
 
 ### Section visibility
 
