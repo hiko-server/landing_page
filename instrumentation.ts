@@ -110,7 +110,13 @@ export async function onRequestError(error: unknown, request: RequestInfo, conte
     try {
       const { captureServerError } = await import('./lib/errors/server')
       captureServerError(error, {
-        kind: context?.routeType === 'route' ? 'route' : context?.routeType === 'middleware' ? 'middleware' : 'render',
+        // Next 16 reports errors thrown in proxy.ts as routeType 'proxy' ('middleware' before).
+        kind:
+          context?.routeType === 'route'
+            ? 'route'
+            : context?.routeType === 'proxy' || context?.routeType === 'middleware'
+              ? 'proxy'
+              : 'render',
         route: context?.routePath || null,
         path: request?.path || null,
       })

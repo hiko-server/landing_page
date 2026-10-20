@@ -58,8 +58,8 @@ export const THEME_PREPAINT_SCRIPT = themePrepaintScript()
 /**
  * Points the single `<meta name="theme-color">` at the mode the theme
  * script chose (components/Chrome/themeColor.ts keeps it in step after
- * hydration). Inline, synchronous, before first paint (CSP allows inline
- * scripts: lib/csp.js).
+ * hydration). Inline, synchronous, before first paint (the CSP allows it
+ * by its hash: lib/security/inlineScripts.ts).
  */
 export const THEME_COLOR_PREPAINT_SCRIPT =
   `(function(){try{var m=document.querySelector('${THEME_COLOR_SELECTOR}');` +

@@ -3,7 +3,7 @@ import { getIndexNowKey } from '../../lib/env'
 
 /**
  * IndexNow key file, published at the site root as `/<INDEXNOW_KEY>.txt`:
- * middleware.ts rewrites exactly that path (and no other) to this route, and
+ * proxy.ts rewrites exactly that path (and no other) to this route, and
  * lib/revalidate.ts submits changed URLs with `keyLocation:
  * https://<host>/<key>.txt`. The protocol only accepts URLs in the key
  * file's directory and below, so the file must be at the root to cover

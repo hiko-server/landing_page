@@ -10,9 +10,10 @@ import AxeBuilder from '@axe-core/playwright'
  * Every test automatically fails on:
  *   - console.error (React hydration errors #418/#425 land here),
  *   - uncaught page errors,
- *   - Content-Security-Policy violations (a `securitypolicyviolation`
- *     listener installed with addInitScript collects them into window.__csp
- *     and forwards each one to the test, across navigations).
+ *   - Content-Security-Policy violations of the enforced policy (a
+ *     `securitypolicyviolation` listener installed with addInitScript
+ *     collects them into window.__csp and forwards each one to the test,
+ *     across navigations; report-only Trusted Types reports are not failures).
  * Failed loads of third-party resources and of the GitHub proxy routes are
  * ignored: the GitHub API is rate-limited or unreachable in CI, and the site
  * degrades to an honest empty state there.
@@ -54,6 +55,9 @@ export const test = base.extend<Fixtures>({
         const w = window as unknown as { __csp: string[]; __e2eReportCsp?: (line: string) => void }
         w.__csp = []
         document.addEventListener('securitypolicyviolation', (e) => {
+          // The Trusted Types policy is report-only (lib/csp.js): its reports are
+          // the point of it and change nothing on the page.
+          if (e.disposition === 'report') return
           const line = `${e.effectiveDirective} blocked ${e.blockedURI || '(inline)'} at ${e.sourceFile || location.href}:${e.lineNumber}`
           w.__csp.push(line)
           w.__e2eReportCsp?.(line)

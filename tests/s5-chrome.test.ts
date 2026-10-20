@@ -547,8 +547,9 @@ function loadNextConfig(env: Record<string, string>) {
 }
 
 test('next.config is the plain config object: no Sentry wrap (removed), even with a DSN in the environment', () => {
-  // webpack: the hook that silences one known Next-internal edge warning (next.config.js).
-  const expected = { webpack: 'function', output: 'standalone', headers: 'function', sentry: false, scrollRestoration: true }
+  // No webpack hook: the one it had silenced an Edge-runtime warning of the old
+  // middleware.ts; proxy.ts runs on Node.js, and the build has no warning to hide.
+  const expected = { webpack: 'undefined', output: 'standalone', headers: 'function', sentry: false, scrollRestoration: true }
   assert.deepEqual(loadNextConfig({}), expected)
   assert.deepEqual(loadNextConfig({ NEXT_PUBLIC_SENTRY_DSN: 'https://public@o0.ingest.sentry.io/0' }), expected)
 })

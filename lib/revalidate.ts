@@ -289,7 +289,7 @@ async function purgeBatch(fetchFn: FetchFn, zoneId: string, apiToken: string, fi
 
 /**
  * Where search engines verify the key: `/<key>.txt` at the site root (served
- * by the middleware rewrite to /api/indexnow-key). A key file only
+ * by the proxy's rewrite to /api/indexnow-key). A key file only
  * authorises URLs in its own directory and below, so anything deeper than
  * the root would leave /blog/* and /work/* unverified.
  */

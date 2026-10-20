@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-var-requires, @typescript-eslint/no-require-imports -- CommonJS config file */
 const fs = require('fs')
 const path = require('path')
-const { buildCsp } = require('./lib/csp')
+const { STATIC_SECURITY_HEADERS, crossOriginResourcePolicy } = require('./lib/securityHeaders')
 
 /**
  * Installed version of every direct dependency, read from node_modules when
@@ -31,8 +31,7 @@ function installedDependencyVersions() {
 // Bundler: webpack. Next 16 defaults to Turbopack; package.json passes
 // --webpack to `next dev` and `next build` (and so do the Dockerfile and CI,
 // through `yarn build`), keeping the chunking that scripts/perf-budget.mjs
-// measures, the standalone trace this image was verified with and the
-// `webpack` hook below (a plain `next build` would use Turbopack and ignore it).
+// measures and the standalone trace this image was verified with.
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
@@ -77,22 +76,6 @@ const nextConfig = {
     // framer-motion page swap (components/Common/scrollRestore.ts).
     scrollRestoration: true,
   },
-  // Next 16's `next/server` entry (middleware.ts imports NextResponse from it)
-  // re-exports App Router helpers whose module calls process.cwd() on a code
-  // path that never runs in middleware, so the edge compiler warns "A Node.js
-  // API is used (process.cwd …) which is not supported in the Edge Runtime"
-  // (still so in Next 16.4). Silence exactly that warning from exactly that
-  // Next module: any other Node API in edge code still surfaces.
-  webpack(webpackConfig) {
-    webpackConfig.ignoreWarnings = [
-      ...(webpackConfig.ignoreWarnings || []),
-      {
-        module: /[\\/]node_modules[\\/]next[\\/]dist[\\/]esm[\\/]server[\\/]app-render[\\/]dynamic-rendering\.js/,
-        message: /A Node\.js API is used \(process\.cwd /,
-      },
-    ]
-    return webpackConfig
-  },
   // Route every /uploads/* request to the runtime file server BEFORE Next's
   // static handler runs. With `output: 'standalone'`, that static handler only
   // knows about files present in public/ at BUILD time, so runtime-uploaded
@@ -117,21 +100,25 @@ const nextConfig = {
     }
   },
   async headers() {
-    // Single source of truth shared with middleware.ts (see lib/csp.js) so the
-    // two CSP headers can no longer drift into a surprising intersection.
-    const csp = buildCsp()
-
-    const headers = [
-      { key: 'X-Frame-Options', value: 'DENY' },
-      { key: 'X-Content-Type-Options', value: 'nosniff' },
-      { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-      { key: 'Permissions-Policy', value: 'geolocation=(), microphone=(), camera=()' },
-      { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
-      { key: 'Content-Security-Policy', value: csp },
-    ]
-
+    // The page-independent security headers (lib/securityHeaders.js) on
+    // everything: proxy.ts sends the same values plus the hash-based CSP, the
+    // Trusted Types report-only policy and the per-path
+    // Cross-Origin-Resource-Policy on every route it handles. It skips the
+    // fingerprinted /_next/static assets and /favicon.ico (not documents, no
+    // script runs in them), which get their CORP here. No CSP here: it carries
+    // the hashes of the inline scripts, computed from TypeScript constants this
+    // file cannot load (lib/csp.js), and a second, hash-less CSP would be
+    // enforced as an intersection.
     return [
-      { source: '/:path*', headers },
+      { source: '/:path*', headers: STATIC_SECURITY_HEADERS },
+      {
+        source: '/_next/static/:path*',
+        headers: [{ key: 'Cross-Origin-Resource-Policy', value: crossOriginResourcePolicy('/_next/static/') }],
+      },
+      {
+        source: '/favicon.ico',
+        headers: [{ key: 'Cross-Origin-Resource-Policy', value: crossOriginResourcePolicy('/favicon.ico') }],
+      },
       // Static brand imagery rarely changes — cache hard at the browser + CDN.
       // (Not fingerprinted, so 30d + SWR rather than immutable, so an updated
       // image still propagates without forcing a filename change.)

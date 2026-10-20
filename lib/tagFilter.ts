@@ -78,6 +78,6 @@ export const TAG_PREPAINT_SCRIPT =
   '(function(){try{var s=document.currentScript;var p=new URLSearchParams(location.search).get("tag");if(!s||!p)return;' +
   'var k=JSON.parse(s.getAttribute("data-tags")||"[]");' +
   'var g=p.normalize("NFKC").trim().toLowerCase().replace(/[^\\p{L}\\p{N}]+/gu,"-").replace(/^-+|-+$/g,"");' +
-  'if(!g||k.indexOf(g)<0)return;var e=document.createElement("style");e.id="' +
+  'if(!g||k.indexOf(g)===-1)return;var e=document.createElement("style");e.id="' +
   TAG_PREPAINT_STYLE_ID +
   '";e.textContent="[data-tag-item]:not([data-tag-slugs~=\\""+g+"\\"]){display:none!important}";document.head.appendChild(e)}catch(_){}})()'

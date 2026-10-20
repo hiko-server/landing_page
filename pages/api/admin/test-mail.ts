@@ -7,7 +7,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.setHeader('Allow', 'POST')
     return res.status(405).json({ error: 'Method not allowed' })
   }
-  // The middleware only checks the signature; this also enforces revocation.
+  // The proxy gates /api/admin/* too; this is the route's own session check (lib/auth.ts).
   if (!isAdminRequest(req, res)) return res.status(401).json({ error: 'Unauthorized' })
   res.setHeader('Cache-Control', 'no-store')
   try {
