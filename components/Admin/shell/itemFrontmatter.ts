@@ -12,6 +12,8 @@ import { cleanDate, cleanFocus, LINKS_MAX, OUTCOMES_MAX } from '../../../lib/cas
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
+const textOf = (v: unknown) => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '')
+
 // ── Blog posts ───────────────────────────────────────────────────────────
 
 export type BlogFrontmatter = {
@@ -23,6 +25,14 @@ export type BlogFrontmatter = {
   cover: string
   /** Slug of the case study the post is about (linked both ways on the site); '' for none. */
   project: string
+  /** Search-result title when it should differ from the title (H1); '' = the title. */
+  seoTitle: string
+  /** BCP-47 language ('' = detected from the text). */
+  lang: string
+  /** "Mark as updated": the post's dateModified, YYYY-MM-DD ('' = none). */
+  updated: string
+  /** Description of the cover (shown in the social card's alt text). */
+  coverAlt: string
 }
 
 export const BLOG_EMPTY: BlogFrontmatter = {
@@ -33,6 +43,10 @@ export const BLOG_EMPTY: BlogFrontmatter = {
   draft: true,
   cover: '',
   project: '',
+  seoTitle: '',
+  lang: '',
+  updated: '',
+  coverAlt: '',
 }
 
 export const blogFromServer = (f: Record<string, any>): BlogFrontmatter => ({
@@ -43,6 +57,10 @@ export const blogFromServer = (f: Record<string, any>): BlogFrontmatter => ({
   draft: Boolean(f.draft),
   cover: String(f.cover || ''),
   project: typeof f.project === 'string' ? f.project : '',
+  seoTitle: textOf(f.seoTitle),
+  lang: textOf(f.lang),
+  updated: cleanDate(f.updated),
+  coverAlt: textOf(f.coverAlt),
 })
 
 export const blogToServer = (fm: BlogFrontmatter, tags: string[]) => ({
@@ -53,6 +71,10 @@ export const blogToServer = (fm: BlogFrontmatter, tags: string[]) => ({
   draft: fm.draft || undefined,
   cover: fm.cover || undefined,
   project: fm.project.trim() || undefined,
+  seoTitle: fm.seoTitle.trim() || undefined,
+  lang: fm.lang.trim() || undefined,
+  updated: cleanDate(fm.updated) || undefined,
+  coverAlt: (fm.cover && fm.coverAlt.trim()) || undefined,
 })
 
 // ── Case studies ─────────────────────────────────────────────────────────
@@ -91,6 +113,10 @@ export type WorkFrontmatter = {
   published: string
   outcomes: OutcomeForm[]
   links: LinkForm[]
+  /** Search-result title when it should differ from the title (H1); '' = the title. */
+  seoTitle: string
+  /** BCP-47 language ('' = detected from the text). */
+  lang: string
 }
 
 export const WORK_EMPTY: WorkFrontmatter = {
@@ -112,9 +138,9 @@ export const WORK_EMPTY: WorkFrontmatter = {
   published: '',
   outcomes: [],
   links: [],
+  seoTitle: '',
+  lang: '',
 }
-
-const textOf = (v: unknown) => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '')
 
 function outcomesFromServer(raw: unknown): OutcomeForm[] {
   if (!Array.isArray(raw)) return []
@@ -178,6 +204,8 @@ export const workFromServer = (f: Record<string, any>): WorkFrontmatter => ({
   published: cleanDate(f.published),
   outcomes: outcomesFromServer(f.outcomes),
   links: linksFromServer(f.links),
+  seoTitle: textOf(f.seoTitle),
+  lang: textOf(f.lang),
 })
 
 export const workToServer = (fm: WorkFrontmatter, tech: string[]) => ({
@@ -199,6 +227,8 @@ export const workToServer = (fm: WorkFrontmatter, tech: string[]) => ({
   published: cleanDate(fm.published) || undefined,
   outcomes: outcomesToServer(fm.outcomes),
   links: linksToServer(fm.links),
+  seoTitle: fm.seoTitle.trim() || undefined,
+  lang: fm.lang.trim() || undefined,
 })
 
 // ── Single pages (/now, /uses) ───────────────────────────────────────────

@@ -48,6 +48,8 @@ export type UseLocalDraftResult<T> = {
   clear: () => void
   /** Write the current edits now (e.g. before reloading the server copy). */
   flush: () => void
+  /** When the current edits were last copied to this device (ms), null when they are not. */
+  savedLocallyAt: number | null
 }
 
 export const DRAFT_PREFIX = 'draft:v1:'
@@ -112,6 +114,7 @@ export function useLocalDraft<T>({
   equals,
 }: UseLocalDraftOptions<T>): UseLocalDraftResult<T> {
   const [draft, setDraft] = useState<LocalDraft<T> | null>(null)
+  const [savedLocallyAt, setSavedLocallyAt] = useState<number | null>(null)
   const latest = useRef({ key, value, baseEtag, dirty, enabled })
   latest.current = { key, value, baseEtag, dirty, enabled }
   const equalsRef = useRef(equals)
@@ -128,7 +131,10 @@ export function useLocalDraft<T>({
     cancelPending()
     const cur = latest.current
     if (!cur.enabled || !cur.dirty) return
-    writeDraft(cur.key, { at: Date.now(), etag: cur.baseEtag, value: cur.value })
+    const at = Date.now()
+    writeDraft(cur.key, { at, etag: cur.baseEtag, value: cur.value })
+    // Only when storage actually holds it (private windows / blocked storage keep nothing).
+    setSavedLocallyAt(readDraft(cur.key)?.at === at ? at : null)
   }, [cancelPending])
 
   // Offer the draft stored for this key (once per key, after `enabled`).
@@ -158,6 +164,7 @@ export function useLocalDraft<T>({
     if (wasDirty.current && !dirty && enabled) {
       cancelPending()
       removeDraft(key)
+      setSavedLocallyAt(null)
     }
     wasDirty.current = dirty
   }, [dirty, enabled, key, cancelPending])
@@ -188,13 +195,15 @@ export function useLocalDraft<T>({
     cancelPending()
     removeDraft(latest.current.key)
     setDraft(null)
+    setSavedLocallyAt(null)
   }, [cancelPending])
 
   const clear = useCallback(() => {
     cancelPending()
     removeDraft(latest.current.key)
     setDraft(null)
+    setSavedLocallyAt(null)
   }, [cancelPending])
 
-  return { draft, stale: isDraftStale(draft, baseEtag), restore, discard, clear, flush }
+  return { draft, stale: isDraftStale(draft, baseEtag), restore, discard, clear, flush, savedLocallyAt }
 }

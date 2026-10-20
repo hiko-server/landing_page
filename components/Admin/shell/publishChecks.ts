@@ -385,3 +385,12 @@ export function runPublishChecks(input: PublishCheckInput): PublishCheck[] {
 export function canPublish(checks: PublishCheck[]): boolean {
   return !checks.some((c) => c.level === 'error')
 }
+
+/** Why `value` cannot be the new slug of an item now at `current` (H6), or '' when it can. */
+export function renameSlugProblem(value: string, current: string): string {
+  if (!value) return ''
+  if (value.length > SLUG_MAX) return `At most ${SLUG_MAX} characters.`
+  if (!SLUG_RE.test(value)) return 'Start with a–z or 0–9; then only a–z, 0–9, - and _.'
+  if (value === current) return 'That is the current address.'
+  return ''
+}

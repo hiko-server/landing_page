@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   Box,
   Button,
+  Checkbox,
   Drawer,
   DrawerBody,
   DrawerCloseButton,
@@ -18,6 +19,8 @@ import {
 } from '@chakra-ui/react'
 import { readJsonObject } from './http'
 import { canPublish, runPublishChecks, type CheckField, type PublishCheck, type PublishCheckInput } from './publishChecks'
+import { collapseContext, diffLines, documentText } from './textDiff'
+import { DiffView } from './ItemHistoryDrawer'
 import { Eyebrow, MONO, outlineButtonProps, primaryButtonProps } from './ui'
 import { importRemoteImage } from '../editor/upload'
 
@@ -28,22 +31,36 @@ import { importRemoteImage } from '../editor/upload'
  * images hosted elsewhere, and the public pages the publish will refresh.
  * Warnings never block; a compile error (or a missing title / slug) does.
  * Bottom sheet on phones, right-hand drawer from md.
+ *
+ * mode "changes" (H4, a published item with unpublished changes): the
+ * sheet opens with the diff of the live version against what will go
+ * live, and — for posts — "Mark as updated today".
  */
 
 type Compile = { state: 'pending' } | { state: 'ok' } | { state: 'error'; line: number | null; column: number | null; reason: string } | { state: 'unknown'; reason: string }
+
+type Doc = { frontmatter: Record<string, unknown>; body: string }
 
 type Props = {
   isOpen: boolean
   onClose: () => void
   collection: 'blog' | 'work'
   input: { title: string; description: string; body: string; slug: string; cover: string } & Pick<PublishCheckInput, 'coverWidth' | 'summary' | 'outcomes'>
-  /** Save with draft = false; resolves true when it went live. */
+  /** Save with draft = false (or the changes live); resolves true when it went live. */
   onPublish: () => Promise<boolean>
   publishing: boolean
   /** Move focus to a field (and line, for the body). */
   onFocusField: (field: CheckField, line?: number, column?: number) => void
   /** Replace an image URL after importing it (exact string replace). */
   onReplaceUrl: (from: string, to: string, target: 'body' | 'cover') => void
+  /** "publish" a draft (default) or publish the "changes" of a live item. */
+  mode?: 'publish' | 'changes'
+  /** mode "changes": the live version and what will replace it. */
+  diff?: { before: Doc; after: Doc }
+  /** mode "changes", posts: the "Mark as updated today" option. */
+  markUpdated?: { checked: boolean; onChange: (checked: boolean) => void }
+  /** The live version changed after the pending changes were started. */
+  stale?: boolean
 }
 
 const MAX_SIBLING_PAGES = 50
@@ -71,7 +88,25 @@ async function fetchSlugs(endpoint: string): Promise<string[]> {
   return Array.isArray(data.items) ? data.items.map((i: { slug?: unknown }) => String(i.slug || '')).filter(Boolean) : []
 }
 
-export default function PublishSheet({ isOpen, onClose, collection, input, onPublish, publishing, onFocusField, onReplaceUrl }: Props) {
+export default function PublishSheet({
+  isOpen,
+  onClose,
+  collection,
+  input,
+  onPublish,
+  publishing,
+  onFocusField,
+  onReplaceUrl,
+  mode = 'publish',
+  diff,
+  markUpdated,
+  stale = false,
+}: Props) {
+  const changes = mode === 'changes'
+  const textDiff = useMemo(() => {
+    if (!isOpen || !changes || !diff) return null
+    return diffLines(documentText(diff.before.frontmatter, diff.before.body), documentText(diff.after.frontmatter, diff.after.body))
+  }, [isOpen, changes, diff])
   const toast = useToast()
   const placement = useBreakpointValue<'bottom' | 'right'>({ base: 'bottom', md: 'right' }, { ssr: false }) ?? 'right'
   const [known, setKnown] = useState<{ blog: string[]; work: string[] } | null>(null)
@@ -184,13 +219,58 @@ export default function PublishSheet({ isOpen, onClose, collection, input, onPub
       >
         <DrawerCloseButton />
         <DrawerHeader pb={2}>
-          <Eyebrow accent>[publish]</Eyebrow>
+          <Eyebrow accent>{changes ? '[publish changes]' : '[publish]'}</Eyebrow>
           <Text fontSize="md" fontWeight={600} mt={1}>
-            Ready to publish?
+            {changes ? 'Publish these changes?' : 'Ready to publish?'}
           </Text>
         </DrawerHeader>
         <DrawerBody>
           <Stack spacing={5}>
+            {changes ? (
+              <Box>
+                <Eyebrow mb={2}>What changes on the live page</Eyebrow>
+                {stale ? (
+                  <Text fontSize="xs" color="status.warning" mb={2}>
+                    The live version changed after these edits were saved (a restore or a change from another tab). Publishing replaces it with what is shown here.
+                  </Text>
+                ) : null}
+                {!textDiff ? null : textDiff.tooLarge ? (
+                  <Text fontSize="sm" color="page.fg-secondary">
+                    Too long to compare here (over 5,000 lines). Publishing still works.
+                  </Text>
+                ) : textDiff.added === 0 && textDiff.removed === 0 ? (
+                  <Text fontSize="sm" color="page.fg-secondary">
+                    No differences from the live version — publishing just clears the saved copy.
+                  </Text>
+                ) : (
+                  <>
+                    <Text fontFamily={MONO} fontSize="11px" color="page.fg-secondary" mb={1.5}>
+                      +{textDiff.added} / −{textDiff.removed} lines ·{' '}
+                      <Text as="span" fontFamily={MONO}>
+                        − live
+                      </Text>
+                      ,{' '}
+                      <Text as="span" fontFamily={MONO}>
+                        + after publishing
+                      </Text>
+                    </Text>
+                    <Box maxH="320px" overflowY="auto" tabIndex={0} aria-label="Differences from the live version" role="region">
+                      <DiffView rows={collapseContext(textDiff.lines)} />
+                    </Box>
+                  </>
+                )}
+                {markUpdated ? (
+                  <Checkbox mt={3} colorScheme="accent" isChecked={markUpdated.checked} onChange={(e) => markUpdated.onChange(e.target.checked)} alignItems="flex-start">
+                    <Text as="span" fontSize="sm">
+                      Mark as updated today
+                    </Text>
+                    <Text as="span" display="block" fontSize="xs" color="page.fg-secondary">
+                      Shows “Updated” on the post and tells search engines and feeds it changed. Leave off for small fixes.
+                    </Text>
+                  </Checkbox>
+                ) : null}
+              </Box>
+            ) : null}
             <Box>
               <Eyebrow mb={2}>Renders</Eyebrow>
               <Flex align="flex-start" gap={2.5} fontSize="sm" role="status" aria-live="polite">
@@ -328,7 +408,7 @@ export default function PublishSheet({ isOpen, onClose, collection, input, onPub
             Keep editing
           </Button>
           <Button size="sm" {...primaryButtonProps} onClick={() => void publish()} isDisabled={blocked} isLoading={publishing} loadingText="Publishing">
-            Publish now
+            {changes ? 'Publish changes' : 'Publish now'}
           </Button>
         </DrawerFooter>
       </DrawerContent>

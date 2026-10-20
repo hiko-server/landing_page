@@ -8,6 +8,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogOverlay,
+  Badge,
   Box,
   Button,
   Flex,
@@ -46,6 +47,8 @@ export type CollectionRow = {
   slug: string
   frontmatter: Record<string, any>
   mtime: number
+  /** When the item's unpublished changes were last saved (H4), null without any. */
+  pendingAt?: number | null
 }
 
 type DeletedRow = { slug: string; title: string; filename: string; date: string }
@@ -308,6 +311,9 @@ export default function CollectionIndex({
       actions={
         <>
           <BackLink href="/admin">← Admin</BackLink>
+          <Button as={NextLink} href={collection === 'work' ? '/admin/tags?c=work' : '/admin/tags'} size="sm" variant="ghost" color="page.fg-secondary" _hover={{ color: 'page.fg', bg: 'page.bg-overlay' }}>
+            {collection === 'work' ? 'Tech' : 'Tags'} &amp; export
+          </Button>
           <Button
             size="sm"
             {...outlineButtonProps}
@@ -409,6 +415,18 @@ export default function CollectionIndex({
                           fontWeight={400}
                         >
                           {it.slug}
+                          {it.pendingAt ? (
+                            <Badge
+                              ml={2}
+                              colorScheme="purple"
+                              variant="subtle"
+                              fontSize="9px"
+                              fontFamily="body"
+                              title="Saved changes that are not published yet"
+                            >
+                              changes not live
+                            </Badge>
+                          ) : null}
                         </Text>
                       </Td>
                       {columns.map((c) => (

@@ -447,6 +447,58 @@ export async function removeItem(collection: string, slug: string): Promise<Stor
   return { ok: true }
 }
 
+export type RenameItemOptions = {
+  /** More DB writes that commit or roll back with the rename (the redirect rows, the pending revision). */
+  inTransaction?: () => void
+}
+
+export type RenameItemResult =
+  | { ok: true; updatedAt: number; r2Warning?: string }
+  | { ok: false; error: string; code: 'NOT_FOUND' | 'SLUG_EXISTS' | 'DB' }
+
+/**
+ * Move an item to a new slug (H6) in one transaction: the row is re-keyed
+ * with a new version (so an editor holding the old one gets a conflict), the
+ * old slug is tombstoned — a seed file on disk must not bring it back — and
+ * the caller's extra writes (`inTransaction`) land with it. R2 then gets the
+ * new object and loses the old one; an R2 failure is queued in r2_pending
+ * like every other write and reported as `r2Warning`.
+ */
+export async function renameItem(collection: string, from: string, to: string, opts: RenameItemOptions = {}): Promise<RenameItemResult> {
+  // Seed from disk first (outside the transaction), so both lookups see every item.
+  if (!getItem(collection, from)) return { ok: false, error: 'Not found', code: 'NOT_FOUND' }
+  if (getItem(collection, to)) return { ok: false, error: 'An item with this slug already exists', code: 'SLUG_EXISTS' }
+  let updatedAt = 0
+  try {
+    getDb().transaction(() => {
+      const live = getItemFromDb(collection, from)
+      if (!live) throw Object.assign(new Error('Not found'), { code: 'NOT_FOUND' })
+      if (getItemFromDb(collection, to)) throw Object.assign(new Error('An item with this slug already exists'), { code: 'SLUG_EXISTS' })
+      const dead = readTombstoneRow(collection)
+      if (dead.corrupt) throw new Error(`kv row "${tombstoneKey(collection)}" is not valid JSON; fix it before renaming`)
+      updatedAt = Math.max(Date.now(), Math.trunc(live.updated_at) + 1)
+      putItemToDbOnly({ collection, slug: to, frontmatter: live.frontmatter, body: live.body, updated_at: updatedAt })
+      getDb().prepare('DELETE FROM collection_items WHERE collection = ? AND slug = ?').run(collection, from)
+      dead.set.add(from)
+      dead.set.delete(to)
+      writeTombstones(collection, dead.set)
+      opts.inTransaction?.()
+    })()
+  } catch (err: any) {
+    const code = err?.code === 'NOT_FOUND' || err?.code === 'SLUG_EXISTS' ? err.code : 'DB'
+    return { ok: false, error: code === 'DB' ? `DB write failed: ${err?.message || String(err)}` : String(err?.message), code }
+  }
+  const warnings: string[] = []
+  const moved = getItemFromDb(collection, to)
+  if (moved) {
+    const putErr = await pushToR2(itemR2Key(collection, to), matter.stringify(moved.body || '\n', moved.frontmatter), 'text/markdown; charset=utf-8')
+    if (putErr) warnings.push(`R2 sync failed: ${putErr}`)
+  }
+  const delErr = await deleteFromR2(itemR2Key(collection, from))
+  if (delErr) warnings.push(`R2 delete failed: ${delErr}`)
+  return warnings.length ? { ok: true, updatedAt, r2Warning: warnings.join('; ') } : { ok: true, updatedAt }
+}
+
 // ── KV (home.json, cvdata.json, …) ────────────────────────────────────────
 
 const reportedCorrupt = new Set<string>()

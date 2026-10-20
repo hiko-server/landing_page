@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { FormControl, FormHelperText, FormLabel, Input, Select, SimpleGrid, Stack } from '@chakra-ui/react'
 import { AdminDirtyProvider } from '../../../components/Admin/AdminDirtyContext'
-import { MONO, inputProps, warnTextProps } from '../../../components/Admin/shell/ui'
+import { inputProps, warnTextProps } from '../../../components/Admin/shell/ui'
 import CoverImageField, { type CoverSize } from '../../../components/Admin/shell/CoverImageField'
 import { useMdxItemEditor } from '../../../components/Admin/shell/useMdxItemEditor'
 import MdxItemEditorFrame from '../../../components/Admin/editor/MdxItemEditorFrame'
+import SlugField from '../../../components/Admin/editor/SlugField'
 import { DESCRIPTION_MAX, TITLE_MAX } from '../../../components/Admin/shell/publishChecks'
 import { BLOG_EMPTY, blogFromServer, blogToServer, type BlogFrontmatter } from '../../../components/Admin/shell/itemFrontmatter'
 
@@ -68,30 +69,7 @@ function BlogEditor() {
           </FormControl>
 
           <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-            <FormControl isRequired>
-              <FormLabel fontSize="13px" htmlFor="item-slug">
-                Slug
-              </FormLabel>
-              <Input
-                {...inputProps}
-                id="item-slug"
-                value={ed.slug}
-                placeholder="my-first-post"
-                onChange={(e) => ed.setSlug(e.target.value.trim().toLowerCase())}
-                isReadOnly={!ed.isNew}
-                fontFamily={MONO}
-                fontSize="14px"
-                autoComplete="off"
-                spellCheck={false}
-              />
-              <FormHelperText fontSize="xs" color={ed.slugHint ? 'orange.400' : 'page.fg-secondary'}>
-                {ed.slugHint
-                  ? `${ed.slugHint} — the title has no English words to build one from.`
-                  : ed.isNew
-                    ? 'Follows the title until you edit it. a–z, 0–9, - and _; becomes /blog/<slug> and can’t be changed later.'
-                    : `Published at /blog/${ed.slug}`}
-              </FormHelperText>
-            </FormControl>
+            <SlugField ed={ed} collection="blog" placeholder="my-first-post" />
             <FormControl isRequired>
               <FormLabel fontSize="13px" htmlFor="item-date">
                 Date
@@ -150,7 +128,14 @@ function BlogEditor() {
             </FormHelperText>
           </FormControl>
 
-          <CoverImageField inputId="item-cover" value={fm.cover} onChange={(cover) => setFm((f) => ({ ...f, cover }))} onMeasure={setCoverSize} />
+          <CoverImageField
+            inputId="item-cover"
+            value={fm.cover}
+            onChange={(cover) => setFm((f) => ({ ...f, cover }))}
+            alt={fm.coverAlt}
+            onAltChange={(coverAlt) => setFm((f) => ({ ...f, coverAlt }))}
+            onMeasure={setCoverSize}
+          />
         </Stack>
       }
     />

@@ -6,7 +6,8 @@ import remarkGfm from 'remark-gfm'
 import remarkRehype from 'remark-rehype'
 import rehypePrettyCode from 'rehype-pretty-code'
 import type { Root as HastRoot } from 'hast'
-import { listItems, getItem, getPage } from './contentStore'
+import { listItems, getItem, getPage, type ItemRecord } from './contentStore'
+import { getPendingRevision } from './pendingRevisions'
 import { detectContentLang, readingMinutes, type TocEntry } from './toc'
 import remarkStripMdxExpressions from './rehype/stripMdxExpressions'
 import rehypeSafeUrls from './rehype/safeUrls'
@@ -135,6 +136,19 @@ export type MDXRendered<T> = MDXIndexEntry<T> & {
 export type GetOptions = {
   /** Draft Mode: also return unpublished items. */
   includeDrafts?: boolean
+  /**
+   * Draft Mode: render a live item's unpublished changes (its pending
+   * revision, lib/pendingRevisions) instead of the published version (H4).
+   */
+  pending?: boolean
+}
+
+/** The stored item, or — with `pending` — its pending revision when it has one. */
+function itemFor(collection: 'blog' | 'work', slug: string, opts: GetOptions): ItemRecord | null {
+  const item = getItem(collection, slug)
+  if (!item || !opts.pending) return item
+  const rev = getPendingRevision(collection, slug)
+  return rev ? { ...item, frontmatter: rev.frontmatter, body: rev.body, updated_at: rev.updatedAt } : item
 }
 
 const SLUG_RE = /^[a-z0-9][a-z0-9-_]*$/
@@ -387,7 +401,7 @@ export function listPosts(): MDXIndexEntry<PostFrontmatter>[] {
 
 export async function getPost(slug: string, opts: GetOptions = {}): Promise<MDXRendered<PostFrontmatter> | null> {
   if (!SLUG_RE.test(slug)) return null
-  const item = getItem('blog', slug)
+  const item = itemFor('blog', slug, opts)
   if (!item) return null
   const entry = postEntry(item)
   if (entry.frontmatter.draft && !opts.includeDrafts) return null
@@ -422,7 +436,7 @@ export function listWorkInDisplayOrder(): MDXIndexEntry<WorkFrontmatter>[] {
 
 export async function getWork(slug: string, opts: GetOptions = {}): Promise<MDXRendered<WorkFrontmatter> | null> {
   if (!SLUG_RE.test(slug)) return null
-  const item = getItem('work', slug)
+  const item = itemFor('work', slug, opts)
   if (!item) return null
   const entry = workEntry(item)
   if (entry.frontmatter.draft && !opts.includeDrafts) return null
