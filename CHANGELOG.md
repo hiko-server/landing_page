@@ -1003,6 +1003,14 @@ Fixes for defects an adversarial review found in wave 2B before it shipped.
 - **Privacy (PRIV-4)**: the fixture's owner-neutral test no longer names
   organisations; it reads the owner's facts from the local store at test
   time and skips that part without one.
+- **CV Studio preview**: the A4 preview links a project's case study only
+  when /cv does (a published one), so it no longer shows — and prefetches —
+  a link to a case study that does not exist.
+- **Admin lists**: j / k from the page body move through the admin lists
+  again (Content health, posts); the visitor keyboard layer had been taking
+  the keys first.
+- **End-to-end suite**: admin clean-ups now really delete what the tests
+  created when the suite runs over plain http.
 
 ### Changed
 
