@@ -67,6 +67,8 @@ test.describe('one toast policy (CORR-1)', () => {
     const alert = page.locator('#chakra-toast-manager-bottom .chakra-toast [role="alert"]')
     await expect(alert).toBeVisible()
     await expect(alert).toContainText('Copy failed')
+    // Really on screen: the enter animation ran (an `m` element outside LazyMotion stays at opacity 0).
+    await expect(page.locator('.chakra-toast').first()).toHaveCSS('opacity', '1')
     expect(held, 'the host chunk was held back until the toast was raised').toBe(true)
     // Chakra's stock frame dismissed every toast after 5 s; an error stays.
     await page.mouse.move(5, 5)

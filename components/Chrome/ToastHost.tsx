@@ -1,7 +1,8 @@
 import { useSyncExternalStore, type CSSProperties } from 'react'
 import { Portal, toastStore, type ToastOptions } from '@chakra-ui/react'
-import { AnimatePresence } from 'framer-motion'
+import { AnimatePresence, LazyMotion, MotionConfig } from 'framer-motion'
 import UnifiedToast from '../Common/UnifiedToast'
+import { loadMotionFeatures } from '../../lib/motionFeatures'
 import { subscribeToToasts, toastListStyle, type ToastPlacement } from './toastWatch'
 
 /**
@@ -24,6 +25,13 @@ import { subscribeToToasts, toastListStyle, type ToastPlacement } from './toastW
  * before the host has loaded appears once, already in its final frame and
  * with its whole duration (it waits in the store meanwhile, see
  * ./toastWatch.ts), never in a stand-in frame first.
+ *
+ * The host sits beside the page in AppChakraProvider, outside the app's
+ * MotionProvider, so it brings its own LazyMotion (the same feature chunk,
+ * lib/motionFeatures — already loaded by then) and MotionConfig: without
+ * them an `m` element never gets the animation engine and every toast stayed
+ * in its `initial` state — opacity 0, invisible — and reduced motion was not
+ * honoured.
  */
 
 type StoreState = Record<ToastPlacement, ToastOptions[]>
@@ -57,8 +65,12 @@ export function ToastRegions() {
 
 export default function ToastHost() {
   return (
-    <Portal>
-      <ToastRegions />
-    </Portal>
+    <LazyMotion features={loadMotionFeatures}>
+      <MotionConfig reducedMotion="user">
+        <Portal>
+          <ToastRegions />
+        </Portal>
+      </MotionConfig>
+    </LazyMotion>
   )
 }

@@ -89,3 +89,11 @@ test('host and frame load together, outside the first-load JS: _app passes no to
   const provider = fs.readFileSync(path.join(ROOT, 'components/Chrome/AppChakraProvider.tsx'), 'utf8')
   assert.match(provider, /dynamic\(\(\) => import\('\.\/ToastHost'\)/, 'the host stays a chunk of its own')
 })
+
+test('the host animates its toasts: it brings LazyMotion and MotionConfig, since it renders outside the app\'s MotionProvider', () => {
+  const app = fs.readFileSync(path.join(ROOT, 'pages/_app.tsx'), 'utf8')
+  // The host is AppChakraProvider's, and AppChakraProvider wraps MotionProvider — not the other way round.
+  assert.ok(app.indexOf('<AppChakraProvider') < app.indexOf('<MotionProvider>'))
+  const host = fs.readFileSync(path.join(ROOT, 'components/Chrome/ToastHost.tsx'), 'utf8')
+  assert.match(host, /<LazyMotion features=\{loadMotionFeatures\}>\s*<MotionConfig reducedMotion="user">/)
+})
