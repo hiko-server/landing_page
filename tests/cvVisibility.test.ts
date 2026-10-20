@@ -22,7 +22,7 @@ const sample = () => [
     sessionName: 'education',
     headerName: 'EDUCATION',
     educationExperience: [
-      { schoolName: 'HKMU', gpa: '—', hiddenFields: ['gpa'] },
+      { schoolName: 'HKMU', gpa: '3.71 / 4.0', hiddenFields: ['gpa'] },
       { schoolName: 'Hidden College', gpa: '—', isVisible: false },
     ],
   },
@@ -42,7 +42,7 @@ test('hidden fields are blanked (type-preserving) and metadata is stripped', () 
   assert.equal(pi.firstName, 'Yanpei')
   assert.equal('hiddenFields' in pi, false)
   assert.equal(edu.educationExperience[0].gpa, '')
-  assert.equal(JSON.stringify(publicSections(sample())).includes('—'), false)
+  assert.equal(JSON.stringify(publicSections(sample())).includes('3.71'), false)
 })
 
 test('hidden entries and bullets are removed', () => {

@@ -17,8 +17,6 @@ English → [README.md](./README.md)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
-<img src="docs/screenshots/hero-light.png" alt="浅色模式首页" width="900" />
-
 </div>
 
 ---
@@ -68,11 +66,9 @@ English → [README.md](./README.md)
 
 <table>
 <tr>
-<td><img src="docs/screenshots/admin-home.png" alt="后台 Home 编辑器" /></td>
 <td><img src="docs/screenshots/admin-storage.png" alt="存储与备份面板" /></td>
 </tr>
 <tr>
-<td align="center"><sub>后台 → Home：可见性开关 + 内容字段</sub></td>
 <td align="center"><sub>后台 → Storage：本地 SQLite + R2 镜像 + tarball 快照</sub></td>
 </tr>
 </table>
@@ -197,8 +193,8 @@ English → [README.md](./README.md)
 │   └── uses.mdx
 ├── data/                # 运行时状态 — 已 .gitignore
 │   ├── content.db       # SQLite 真源
-│   ├── home.json        # Hero / 社交 / 品牌 / 照片墙的 KV 种子
-│   ├── cvdata.json      # CV en/zh 真源
+│   ├── home.json        # 纳入版本库的示例种子：Hero / 社交 / 品牌 / 照片墙
+│   ├── cvdata.json      # 纳入版本库的示例 CV 种子（en/zh，虚构内容）
 │   ├── admin.json       # 本地管理员记录（hash + salt）
 │   ├── *_snapshots/     # 每类内容的版本历史
 │   └── backups/         # snapshot-<UTC>.tgz
@@ -695,11 +691,6 @@ API 在 `/api/*`；`/api/admin/*` 全部需要鉴权（Middleware 把关）。
 | `/admin/system` | 系统健康（版本、磁盘、数据库、备份、恢复演练、近期警告）与 `?view=errors` 错误监控（自建，不发给第三方） |
 
 在任意后台页面按 `?` 可查看键盘快捷键。
-
-<div align="center">
-  <img src="docs/screenshots/admin-cv-studio.png" alt="CV Studio" width="780" />
-  <br /><sub>后台 → CV → Studio：分屏编辑 + 实时预览</sub>
-</div>
 
 ---
 

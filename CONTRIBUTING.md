@@ -135,9 +135,10 @@ These changes deserve extra scrutiny — call them out in the PR body:
   deployment. If your change requires multiple admins, it's a fork.
 - **No commits to `data/admin.json`, `data/cvdata.json`,
   `data/home.json`** unless you're updating the structure (in which
-  case explain why in the commit body). Those files contain the
-  maintainer's personal content; forks should overwrite them locally,
-  not push to upstream.
+  case explain why in the commit body). The tracked copies are a
+  fictional demo profile; real content lives only in the server's
+  content store. Never commit personal details (names, phone numbers,
+  addresses, photos) into them.
 - **No `.env` commits**, ever. If you accidentally stage one,
   `git restore --staged .env`. If you accidentally *pushed* one,
   rotate every secret in it and e-mail the maintainer privately (the

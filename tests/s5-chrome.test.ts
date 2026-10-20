@@ -52,7 +52,9 @@ test('chrome is rendered on content and admin routes, not on the error screens',
 })
 
 test('profile links follow the public home.socials; built-ins only when there is none', () => {
-  const builtIn = SOCIAL_LINKS.map((s) => s.url)
+  // Channels without a built-in link (WhatsApp: a phone number) never fall back to one.
+  const builtIn = SOCIAL_LINKS.filter((s) => s.url).map((s) => s.url)
+  assert.ok(!builtIn.some((u) => u.includes('wa.me')))
   assert.deepEqual(resolveSocialLinks(undefined).map((s) => s.url), builtIn)
   assert.deepEqual(resolveSocialLinks(null).map((s) => s.url), builtIn)
   assert.deepEqual(resolveSocialLinks([]).map((s) => s.url), builtIn)

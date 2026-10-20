@@ -1,14 +1,14 @@
 {
   "hero": {
     "welcome": "Welcome to",
-    "brand": "HIKO.DEV",
-    "tagline": "Self-Taught Full-Stack Software Engineer | Exploring Innovative Solutions in Computer Science | Machine Learning | Computer Vision | Typescript | React | Next.js | NestJS | Python FastAPI",
-    "avatarUrl": "/uploads/69606c442b9c86ed3a089e5228d7b708.jpg",
-    "phone": "+852 0000 0000",
-    "email": "owner@example.test",
+    "brand": "EXAMPLE.DEV",
+    "tagline": "Full-Stack Software Engineer | TypeScript | React | Next.js | Python",
+    "avatarUrl": "",
+    "phone": "",
+    "email": "hello@example.com",
     "avatarTransform": {
-      "x": 11.830869558279066,
-      "y": 9.091084220181516,
+      "x": 50,
+      "y": 50,
       "scale": 1
     },
     "currentlyCoding": {
@@ -18,72 +18,35 @@
     }
   },
   "socials": {
-    "github": "https://github.com/HikoPLi",
-    "gitlab": "https://gitlab.com/HikoPLi",
-    "linkedin": "https://www.linkedin.com/in/liyanpeihiko/",
-    "whatsapp": "https://wa.me/85200000000"
+    "github": "https://github.com/example",
+    "gitlab": "",
+    "linkedin": "",
+    "whatsapp": ""
   },
   "brands": [
     {
-      "name": "UOWCHK",
-      "href": "https://www.uowchk.edu.hk/",
-      "image": "/images/brand/uowchk-logo-navy.svg"
+      "name": "Example University",
+      "href": "https://example.com/",
+      "image": "/images/brand/example-logo.svg"
     },
     {
-      "name": "HKMU",
-      "href": "https://www.hkmu.edu.hk/",
-      "image": "/images/brand/hkmu.png"
-    },
-    {
-      "name": "HONSENN",
-      "href": "https://honsennaudio.com/",
-      "image": "/images/brand/HONSENN-CEO.svg"
-    },
-    {
-      "name": "WeGreen",
-      "href": "https://wegreen.ltd/",
-      "image": "/images/brand/Wegreen.svg"
+      "name": "Example Labs",
+      "href": "https://example.org/",
+      "image": "/images/brand/example-logo.svg"
     }
   ],
-  "quickAccess": [
-    {
-      "label": "ASA",
-      "url": "https://asa.hiko-prime.com/"
-    },
-    {
-      "label": "Bus Search App",
-      "url": "https://bus-search.hiko.dev/"
-    }
-  ],
+  "quickAccess": [],
   "photos": [
     {
-      "url": "/images/imageScroller/COT.png",
-      "describe": "COT - Start-Up Saturday of HKBU - Wegreen AI",
-      "redirectTo": "https://wegreen.ltd/",
+      "url": "/images/hero/hero-mountains-1080.webp",
+      "describe": "Example photo — replace it in Admin → Home",
+      "redirectTo": "",
       "visible": true
     },
     {
-      "url": "/images/imageScroller/wegreenAI_hkstp.jpeg",
-      "describe": "COT - Youth Vision Breeds Green Action - Wegreen AI",
-      "redirectTo": "https://wegreen.ltd/",
-      "visible": true
-    },
-    {
-      "url": "/images/imageScroller/stuff.png",
-      "describe": "Stuff - Exhibition in HK - Honsenn",
-      "redirectTo": "https://honsennaudio.com/",
-      "visible": true
-    },
-    {
-      "url": "/images/imageScroller/student.png",
-      "describe": "Student - Prensentation of final project - UOWCHK",
-      "redirectTo": "https://www.uowchk.edu.hk/",
-      "visible": true
-    },
-    {
-      "url": "/images/imageScroller/fyp.png",
-      "describe": "Student - Project Test - UOWCHK",
-      "redirectTo": "https://example.com/",
+      "url": "/images/hero/hero-mountains-640.webp",
+      "describe": "Another example photo",
+      "redirectTo": "",
       "visible": true
     }
   ]

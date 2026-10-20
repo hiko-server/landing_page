@@ -82,7 +82,7 @@ type Organization = string | { name: string; [k: string]: unknown }
 export type PersonFacts = {
   /** Schools — plain names or schema.org organisation objects. */
   alumniOf?: Organization[]
-  /** Location: free text ("Kowloon, Hong Kong") or a PostalAddress object. */
+  /** Location: free text ("Example District, Hong Kong") or a PostalAddress object. */
   address?: string | Record<string, unknown>
   jobTitle?: string
   sameAs?: readonly string[]

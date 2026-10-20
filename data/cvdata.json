@@ -3,14 +3,14 @@
     {
       "sessionName": "personalInformation",
       "headerName": "Personal Information",
-      "firstName": "Yanpei",
-      "lastName": "Li",
-      "nickName": "Lucian",
-      "email": "owner@example.test",
+      "firstName": "Alex",
+      "lastName": "Chan",
+      "nickName": "",
+      "email": "hello@example.com",
       "phoneNumber": "+852 0000 0000",
-      "personalWebsite": "lucian-dev.com",
-      "address": "Example Road, Hong Kong",
-      "introduction": "",
+      "personalWebsite": "example.com",
+      "address": "Hong Kong",
+      "introduction": "Example profile shipped with the open-source repository. Replace everything here from Admin → CV.",
       "separatorColor": "#000000"
     },
     {
@@ -18,21 +18,12 @@
       "headerName": "EDUCATION",
       "educationExperience": [
         {
-          "schoolName": "The Chinese University of Hong Kong",
+          "schoolName": "Example University",
           "schoolLocation": "Hong Kong",
-          "degree": "MSc in Artificial Intelligence for Science",
-          "major": "Artificial Intelligence for Science",
-          "startDate": "2026-09-07",
-          "endDate": "2028-12-07",
-          "gpa": ""
-        },
-        {
-          "schoolName": "Hong Kong Metropolitan University",
-          "schoolLocation": "Hong Kong",
-          "degree": "Bachelor of Science with Honours in Computer Engineering",
-          "major": "Computer Engineering",
-          "startDate": "2024-09-01",
-          "endDate": "2026-06-30",
+          "degree": "Bachelor of Science in Computer Science",
+          "major": "Computer Science",
+          "startDate": "2021-09-01",
+          "endDate": "2025-06-30",
           "gpa": ""
         }
       ]
@@ -42,20 +33,13 @@
       "headerName": "PATENTS",
       "patentExperience": [
         {
-          "title": "Co-Inventor, 8 Patent Applications",
-          "organization": "Dongguan Chenxin Electronic Technology Co., Ltd.",
-          "authority": "CNIPA",
+          "title": "Inventor, 1 Patent Application",
+          "organization": "Example Devices Ltd.",
+          "authority": "Example Patent Office",
           "status": "Under Examination",
-          "date": "2026",
+          "date": "2025",
           "patents": [
-            "Dual-Positioning Rotating Cap Structure (Invention Patent)",
-            "Elastic Contact Quick-Release Battery Structure for Earphones (Invention Patent)",
-            "Head-Mounted Earphone with Quick-Detach Cable (Utility Model)",
-            "Dual-Positioning Rotating Cap Structure (Utility Model)",
-            "Wrap-Around Head-Clip Structure for Earphones (Utility Model)",
-            "Earphone with Rotating Cap Structure (Utility Model)",
-            "Quick-Release Battery Connector Structure for Earphones (Utility Model)",
-            "Elastic Contact Quick-Release Battery Structure for Earphones (Utility Model)"
+            "Modular Sensor Mount (Utility Model)"
           ]
         }
       ]
@@ -65,119 +49,31 @@
       "headerName": "PROJECT EXPERIENCE",
       "projectExperience": [
         {
-          "title": "WeGreen AI (wegreen.ltd)",
-          "startDate": "2024-10",
-          "endDate": "2026-03",
+          "title": "Personal Website & CV Manager",
+          "startDate": "2024-01",
+          "endDate": "2025-06",
           "projectLocation": "Hong Kong",
-          "description": "Focused on enhancing waste management efficiency by minimizing classification time. Planned to be finished in 2026.",
+          "description": "A bilingual personal site with an admin dashboard and a CV editor.",
           "features": [
             {
-              "description": "Developed an advanced deep learning model using TensorFlow and PyTorch to optimize waste classification efficiency.",
+              "description": "Built the site with Next.js and TypeScript, with incremental static regeneration.",
               "furtherExplanation": []
             },
             {
-              "description": "Integrated machine vision recognition technology to enhance classification accuracy and operational speed.",
-              "furtherExplanation": []
-            },
-            {
-              "description": "Utilized IoT technology to enable real-time data transmission and intelligent control of devices.",
+              "description": "Stored content in SQLite with an off-site object-storage mirror.",
               "furtherExplanation": []
             }
           ]
         },
         {
-          "title": "Personal Portfolio & CV Management System",
-          "startDate": "2023-01",
-          "endDate": "2026-01",
-          "projectLocation": "Hong Kong",
-          "description": "Developed a high-performance, secure, and fully customizable personal landing page and CV builder.",
-          "features": [
-            {
-              "description": "Engineered a full-stack web application using Next.js 13 and TypeScript, featuring a responsive design with Chakra UI and Material UI.",
-              "furtherExplanation": []
-            },
-            {
-              "description": "Developed a secure Admin Dashboard with comprehensive content management capabilities.",
-              "furtherExplanation": []
-            },
-            {
-              "description": "Designed a scalable backend architecture using MongoDB and Docker for data persistence and deployment.",
-              "furtherExplanation": []
-            },
-            {
-              "description": "Integrated third-party APIs to provide real-time data visualization and enhanced functionality.",
-              "furtherExplanation": []
-            }
-          ]
-        },
-        {
-          "title": "Project RAKU: AI Assistant Job Search System",
+          "title": "Image Classifier Demo",
           "startDate": "2023-03",
-          "endDate": "2023-11",
-          "projectLocation": "Hong Kong",
-          "description": "Created an AI-powered job search chatbot integrating OpenAI's API for natural language queries.",
-          "features": [
-            {
-              "description": "Engineered web scraping tools to extract and consolidate job data from major Hong Kong employment platforms.",
-              "furtherExplanation": []
-            },
-            {
-              "description": "Developed backend services with Python FastAPI and structured the database using MongoDB.",
-              "furtherExplanation": []
-            }
-          ]
-        },
-        {
-          "title": "Project GAIA: Design Data Structure",
-          "startDate": "2022-11",
-          "endDate": "2023-11",
-          "projectLocation": "Hong Kong",
-          "description": "Focused on designing an optimized NoSQL data structure for storing and retrieving non-structural geostatic data.",
-          "features": [
-            {
-              "description": "Designed an optimized MongoDB schema for storing and retrieving non-structural geostatic data.",
-              "furtherExplanation": []
-            },
-            {
-              "description": "Applied hashing techniques for data comparison and historical version management.",
-              "furtherExplanation": []
-            },
-            {
-              "description": "Reformatted and restructured raw dictionary and JSON data using Python for improved data handling efficiency.",
-              "furtherExplanation": []
-            }
-          ]
-        },
-        {
-          "title": "Project EASILY-CV: CV Generator",
-          "startDate": "2023-08",
-          "endDate": "2023-10",
-          "projectLocation": "Hong Kong",
-          "description": "Developed an online CV generator as an open-source project, employing MongoDB Atlas for data storage, Next.js as the full-stack framework, and Docker on Linode for hosting.",
-          "features": [
-            {
-              "description": "Developed a full-stack Next.js app with MongoDB Atlas, deployed via Docker on Linode.",
-              "furtherExplanation": []
-            },
-            {
-              "description": "Enabled real-time CV updates with advanced React state management and added PDF export via CSS print and Playwright.",
-              "furtherExplanation": []
-            }
-          ]
-        },
-        {
-          "title": "Project ASA: Cloud-based Robot Delivery Management System",
-          "startDate": "2023-07",
           "endDate": "2023-08",
           "projectLocation": "Hong Kong",
-          "description": "Developed a client-driven web application that enables users to design and manage delivery routes for both robotic and human couriers.",
+          "description": "A small computer-vision project used as sample content.",
           "features": [
             {
-              "description": "Built a TypeScript and React web app for managing robotic and human courier routes, with advanced state management and list operations.",
-              "furtherExplanation": []
-            },
-            {
-              "description": "Implemented JWT authentication, server-side rendering, and deployment via Docker and NGINX.",
+              "description": "Trained and evaluated a convolutional network with PyTorch.",
               "furtherExplanation": []
             }
           ]
@@ -189,155 +85,27 @@
       "headerName": "WORK / INTERNSHIP EXPERIENCE",
       "experiences": [
         {
-          "companyName": "WeGreen AI",
-          "companyURL": "wegreen.ltd",
-          "jobTitle": "CTO & Co-Founder",
-          "jobDescription": "Led a startup to drive innovation in waste management with AI-powered solutions, making recycling processes smarter, faster, and more efficient for a sustainable future.",
+          "companyName": "Example Labs",
+          "companyURL": "example.com",
+          "jobTitle": "Software Engineering Intern",
+          "jobDescription": "Worked on internal web tools.",
           "features": [
             {
-              "description": "Developed AI-powered smart bin technology to optimize waste sorting and recycling efficiency.",
+              "description": "Built React components for an internal dashboard.",
               "furtherExplanation": []
             },
             {
-              "description": "Secured HK$30,000 funding from HKBU and HKSTP for product development and growth.",
-              "furtherExplanation": []
-            },
-            {
-              "description": "Led product innovation and fostered a collaborative, high-performance team culture.",
-              "furtherExplanation": []
-            },
-            {
-              "description": "Won YDC Best Potential Startup and Innovation Award with HK$15,000, recognized among top tertiary teams in Hong Kong.",
+              "description": "Wrote API endpoints and their tests.",
               "furtherExplanation": []
             }
           ],
           "location": "Hong Kong",
-          "startDate": "2024-11",
-          "endDate": "2026-03",
-          "relatedSkills": [
-            "Product Development",
-            "AI",
-            "Machine Learning",
-            "Waste Classification",
-            "IoT",
-            "Team Leadership"
-          ]
-        },
-        {
-          "companyName": "Honsenn Eco Technology GmbH",
-          "companyURL": "",
-          "jobTitle": "Engineering Intern (On-site)",
-          "jobDescription": "Completed an on-site internship supporting product R&D and test/QA activities, collaborating effectively within a cross-cultural engineering team.",
-          "features": [
-            {
-              "description": "Participated in on-site learning and hands-on engineering practice.",
-              "furtherExplanation": []
-            },
-            {
-              "description": "Supported product R&D and assembly activities.",
-              "furtherExplanation": []
-            },
-            {
-              "description": "Conducted headphone ANC and Bluetooth testing and debugging; leveraged an existing Python-based automated testing script to improve QA repeatability and efficiency.",
-              "furtherExplanation": []
-            },
-            {
-              "description": "Assisted with outbound and shipping procedures and related documentation to improve test consistency and traceability.",
-              "furtherExplanation": []
-            }
-          ],
-          "location": "Germany",
-          "startDate": "2025-10",
-          "endDate": "2025-10",
-          "relatedSkills": [
-            "Python",
-            "Test Automation",
-            "Quality Assurance",
-            "Bluetooth Testing",
-            "ANC Testing",
-            "Debugging",
-            "Documentation",
-            "Product R&D Support",
-            "Assembly",
-            "Shipping Procedures",
-            "Cross-cultural Collaboration"
-          ]
-        },
-        {
-          "companyName": "Honsenn Eco Technology GmbH",
-          "companyURL": "",
-          "jobTitle": "Remote Internship",
-          "jobDescription": "Completed a remote internship involving embedded software debugging, Bluetooth protocol stack development, and Python-based automated testing.",
-          "features": [
-            {
-              "description": "Debugged embedded software for TWS earphones, improving stability and performance.",
-              "furtherExplanation": []
-            },
-            {
-              "description": "Contributed to Bluetooth 5.2 protocol stack development for Android and iOS.",
-              "furtherExplanation": []
-            },
-            {
-              "description": "Built Python automated test scripts, streamlining QA and reducing Bluetooth audio failure rate by 32%.",
-              "furtherExplanation": []
-            },
-            {
-              "description": "Recognized as Top 5% 'Quarterly Technical Innovation Intern'.",
-              "furtherExplanation": []
-            }
-          ],
-          "location": "Germany",
-          "startDate": "2025-06",
-          "endDate": "2025-08",
-          "relatedSkills": [
-            "Embedded Software",
-            "Bluetooth 5.2",
-            "Python",
-            "Automated Testing",
-            "Quality Assurance",
-            "Debugging"
-          ]
-        },
-        {
-          "companyName": "Dongguan Honsenn Electronic Technology Co., Ltd.",
-          "companyURL": "",
-          "jobTitle": "Tech Researcher",
-          "jobDescription": "Contributed to the development of microcontroller functionalities and provided robust support for product development initiatives.",
-          "features": [],
-          "location": "Dongguan",
-          "startDate": "2024-07",
-          "endDate": "2024-09",
-          "relatedSkills": [
-            "Product Development",
-            "Microcontrollers",
-            "Technical Product Development"
-          ]
-        },
-        {
-          "companyName": "GoSmart Everywhere Limited",
-          "companyURL": "",
-          "jobTitle": "Web Development Intern",
-          "jobDescription": "Collaborated closely with senior engineers to contribute to key projects, enhancing advanced software engineering skills in a production environment.",
-          "features": [
-            {
-              "description": "Strengthened proficiency in TypeScript, React.js, and Python through hands-on development and iterative feature implementation.",
-              "furtherExplanation": []
-            },
-            {
-              "description": "Gained practical experience in full-stack web development and scalable web application design, supporting the development of robust and maintainable systems.",
-              "furtherExplanation": []
-            }
-          ],
-          "location": "Hong Kong",
-          "startDate": "2023-08",
-          "endDate": "2024-09",
+          "startDate": "2024-06",
+          "endDate": "2024-08",
           "relatedSkills": [
             "TypeScript",
-            "React.js",
-            "Python",
-            "Full-stack Web Development",
-            "Scalable Web Application Design",
-            "Software Engineering"
+            "React",
+            "Testing"
           ]
         }
       ]
@@ -347,26 +115,13 @@
       "headerName": "COMPETITIONS",
       "awards": [
         {
-          "contestName": "IEEE Xtreme 19.0 – Global Programming Competition",
-          "award": "18th Worldwide / 1st in Hong Kong",
-          "organization": "IEEE",
-          "date": "2025-10",
+          "contestName": "Example Programming Contest",
+          "award": "Finalist",
+          "organization": "Example Society",
+          "date": "2024-10",
           "location": "Hong Kong",
           "description": [
-            "Achieved 18th place worldwide and 1st in Hong Kong among thousands of teams.",
-            "Solved algorithmic challenges using Python and C++, with a final score of 1715.71 and penalty of 1372."
-          ]
-        },
-        {
-          "contestName": "YDC Entrepreneurial Program",
-          "award": "Best Potential Startup & Innovation Award",
-          "organization": "Young Entrepreneurs Development Council",
-          "date": "2024-11",
-          "location": "Hong Kong",
-          "description": [
-            "Awarded Best Potential Startup & Innovation Award by Young Entrepreneurs Development Council.",
-            "Won HK$15,000 with WeGreen AI among top tertiary teams in Hong Kong.",
-            "Recognized for applying AI to accelerate smart recycling and waste sorting."
+            "Solved algorithmic problems in Python and C++."
           ]
         }
       ]
@@ -376,40 +131,16 @@
       "headerName": "TECHNICAL SKILLS",
       "languages": [
         {
-          "language": "Python",
-          "level": "Proficient."
-        },
-        {
           "language": "TypeScript",
           "level": "Proficient."
         },
         {
-          "language": "C++",
+          "language": "Python",
+          "level": "Proficient."
+        },
+        {
+          "language": "SQL",
           "level": "Intermediate."
-        },
-        {
-          "language": "Java",
-          "level": "Familiar."
-        },
-        {
-          "language": "React",
-          "level": "Experienced in React-based frontend and full-stack development."
-        },
-        {
-          "language": "Next.js",
-          "level": "Experienced in Next.js full-stack application development."
-        },
-        {
-          "language": "Node.js",
-          "level": "Experienced in backend development."
-        },
-        {
-          "language": "MongoDB",
-          "level": "Experienced in NoSQL database design and implementation."
-        },
-        {
-          "language": "HTML5/CSS3",
-          "level": "Experienced in responsive frontend development."
         }
       ],
       "technical": [
@@ -417,40 +148,16 @@
           "name": "Frameworks & Libraries",
           "description": [
             "React",
-            "Next.js"
+            "Next.js",
+            "PyTorch"
           ]
         },
         {
-          "name": "Backend & Databases",
+          "name": "Tools",
           "description": [
-            "Node.js",
-            "MongoDB (NoSQL)"
-          ]
-        },
-        {
-          "name": "Tools & Platforms",
-          "description": [
-            "Git",
             "Docker",
-            "NGINX",
-            "Cloudflare"
-          ]
-        },
-        {
-          "name": "Systems & Infrastructure",
-          "description": [
-            "Ubuntu Server/Desktop",
-            "SSH",
-            "Shell Scripting"
-          ]
-        },
-        {
-          "name": "Networking & APIs",
-          "description": [
-            "RESTful APIs",
-            "Authentication including Basic and JWT/Bearer",
-            "OpenAPI/Swagger",
-            "HTTP Headers Management"
+            "Git",
+            "Linux"
           ]
         }
       ]
@@ -459,9 +166,9 @@
       "sessionName": "extraSkill",
       "headerName": "LANGUAGE SKILLS",
       "points": [
-        "Mandarin: Native",
-        "English: Professional Working Proficiency (IELTS 6.0)",
-        "Cantonese: Basic (Conversational)"
+        "English: Fluent",
+        "Cantonese: Native",
+        "Mandarin: Fluent"
       ]
     },
     {
@@ -469,70 +176,15 @@
       "headerName": "CERTIFICATIONS",
       "certifications": [
         {
-          "issuingOrganization": "NVIDIA",
-          "organizationURL": "learn.nvidia.com",
+          "issuingOrganization": "Example Academy",
+          "organizationURL": "example.com",
           "CertificationList": [
             {
-              "certificationName": "Getting Started with AI on Jetson Nano",
+              "certificationName": "Example Cloud Fundamentals",
               "issuedDate": "2024-12",
               "expirationDate": "",
-              "credentialID": "REDACTED",
-              "credentialURL": "https://learn.nvidia.com/certificates?id=REDACTED"
-            },
-            {
-              "certificationName": "Learn OpenUSD: Learning About Stages, Prims and Attributes",
-              "issuedDate": "2024-12",
-              "expirationDate": "",
-              "credentialID": "REDACTED",
-              "credentialURL": "https://learn.nvidia.com/certificates?id=REDACTED"
-            },
-            {
-              "certificationName": "Learn OpenUSD: Traversing Stages",
-              "issuedDate": "2024-12",
-              "expirationDate": "",
-              "credentialID": "REDACTED",
-              "credentialURL": "https://learn.nvidia.com/certificates?id=REDACTED"
-            },
-            {
-              "certificationName": "Learn OpenUSD: Understanding Model Kinds",
-              "issuedDate": "2024-12",
-              "expirationDate": "",
-              "credentialID": "REDACTED",
-              "credentialURL": "https://learn.nvidia.com/certificates?id=REDACTED"
-            },
-            {
-              "certificationName": "Learn OpenUSD: Using Attributes",
-              "issuedDate": "2024-12",
-              "expirationDate": "",
-              "credentialID": "REDACTED",
-              "credentialURL": "https://learn.nvidia.com/certificates?id=REDACTED"
-            },
-            {
-              "certificationName": "使用 Jetson Nano 开发 AI 应用",
-              "issuedDate": "2024-12",
-              "expirationDate": "",
-              "credentialID": "REDACTED",
-              "credentialURL": "https://learn.nvidia.com/certificates?id=REDACTED"
-            },
-            {
-              "certificationName": "基于 Jetson Nano 构建视频 AI 的端侧应用",
-              "issuedDate": "2024-12",
-              "expirationDate": "",
-              "credentialID": "REDACTED",
-              "credentialURL": "https://learn.nvidia.com/certificates?id=REDACTED"
-            }
-          ]
-        },
-        {
-          "issuingOrganization": "Cisco",
-          "organizationURL": "netacad.com",
-          "CertificationList": [
-            {
-              "certificationName": "Python Essentials",
-              "issuedDate": "2024-12",
-              "expirationDate": "",
-              "credentialID": "REDACTED",
-              "credentialURL": "https://www.credly.com/badges/REDACTED/public_url"
+              "credentialID": "EXAMPLE-0001",
+              "credentialURL": "https://example.com/certificates/EXAMPLE-0001"
             }
           ]
         }
@@ -544,14 +196,14 @@
     {
       "sessionName": "personalInformation",
       "headerName": "个人信息",
-      "firstName": "彦霈",
-      "lastName": "李",
-      "nickName": "Lucian",
-      "email": "owner@example.test",
+      "firstName": "小明",
+      "lastName": "陈",
+      "nickName": "Alex",
+      "email": "hello@example.com",
       "phoneNumber": "+852 0000 0000",
-      "personalWebsite": "lucian-dev.com",
-      "address": "Example Road, Hong Kong",
-      "introduction": "",
+      "personalWebsite": "example.com",
+      "address": "中国香港",
+      "introduction": "这是开源仓库自带的示例资料，请在后台 CV 编辑器中替换为你自己的内容。",
       "separatorColor": "#000000"
     },
     {
@@ -559,21 +211,12 @@
       "headerName": "教育经历",
       "educationExperience": [
         {
-          "schoolName": "香港中文大学",
+          "schoolName": "示例大学",
           "schoolLocation": "中国香港",
-          "degree": "人工智能（科学应用） 理学硕士",
-          "major": "人工智能（科学应用）",
-          "startDate": "2026-08-07",
-          "endDate": "2028-12-07",
-          "gpa": ""
-        },
-        {
-          "schoolName": "香港都会大学",
-          "schoolLocation": "中国香港",
-          "degree": "计算机工程荣誉理学士",
-          "major": "计算机工程",
-          "startDate": "2024-09-01",
-          "endDate": "2026-06-30",
+          "degree": "计算机科学 理学学士",
+          "major": "计算机科学",
+          "startDate": "2021-09-01",
+          "endDate": "2025-06-30",
           "gpa": ""
         }
       ]
@@ -583,20 +226,13 @@
       "headerName": "专利",
       "patentExperience": [
         {
-          "title": "共同发明人，8项专利申请",
-          "organization": "东莞辰信电子科技有限公司",
-          "authority": "国家知识产权局",
+          "title": "发明人，1项专利申请",
+          "organization": "示例设备有限公司",
+          "authority": "示例专利局",
           "status": "审查中",
-          "date": "2026",
+          "date": "2025",
           "patents": [
-            "双定位旋转帽结构（发明专利）",
-            "用于耳机的弹性接触快拆电池结构（发明专利）",
-            "带快拆线缆的头戴式耳机（实用新型）",
-            "双定位旋转帽结构（实用新型）",
-            "用于耳机的环绕式头夹结构（实用新型）",
-            "带旋转帽结构的耳机（实用新型）",
-            "用于耳机的快拆电池连接器结构（实用新型）",
-            "用于耳机的弹性接触快拆电池结构（实用新型）"
+            "模块化传感器支架（实用新型）"
           ]
         }
       ]
@@ -606,119 +242,31 @@
       "headerName": "项目经历",
       "projectExperience": [
         {
-          "title": "WeGreen AI (wegreen.ltd)",
-          "startDate": "2024-10",
-          "endDate": "2026-03",
+          "title": "个人网站与 CV 管理系统",
+          "startDate": "2024-01",
+          "endDate": "2025-06",
           "projectLocation": "中国香港",
-          "description": "专注于通过缩短分类时间提升废物管理效率，计划于2026年完成。",
+          "description": "带后台与 CV 编辑器的双语个人网站。",
           "features": [
             {
-              "description": "使用 TensorFlow 和 PyTorch 开发先进深度学习模型，以优化废物分类效率。",
+              "description": "使用 Next.js 与 TypeScript 构建网站，支持增量静态再生成。",
               "furtherExplanation": []
             },
             {
-              "description": "集成机器视觉识别技术，以提升分类准确率和运行速度。",
-              "furtherExplanation": []
-            },
-            {
-              "description": "应用物联网技术，实现实时数据传输和设备智能控制。",
+              "description": "内容存储在 SQLite 中，并镜像到异地对象存储。",
               "furtherExplanation": []
             }
           ]
         },
         {
-          "title": "个人作品集与 CV 管理系统",
-          "startDate": "2023-01",
-          "endDate": "2026-01",
-          "projectLocation": "中国香港",
-          "description": "开发了一个高性能、安全且高度可定制的个人主页与 CV 构建系统。",
-          "features": [
-            {
-              "description": "使用 Next.js 13 和 TypeScript 开发全栈 Web 应用，并通过 Chakra UI 和 Material UI 实现响应式设计。",
-              "furtherExplanation": []
-            },
-            {
-              "description": "开发具备完整内容管理功能的安全 Admin Dashboard。",
-              "furtherExplanation": []
-            },
-            {
-              "description": "使用 MongoDB 和 Docker 设计可扩展后端架构，用于数据持久化和部署。",
-              "furtherExplanation": []
-            },
-            {
-              "description": "集成第三方 API，以提供实时数据可视化和增强功能。",
-              "furtherExplanation": []
-            }
-          ]
-        },
-        {
-          "title": "Project RAKU：AI 求职助手系统",
+          "title": "图像分类演示",
           "startDate": "2023-03",
-          "endDate": "2023-11",
-          "projectLocation": "中国香港",
-          "description": "创建了一个集成 OpenAI API 的 AI 求职查询聊天机器人，支持自然语言查询。",
-          "features": [
-            {
-              "description": "开发网页爬虫工具，从香港主要招聘平台提取并整合职位数据。",
-              "furtherExplanation": []
-            },
-            {
-              "description": "使用 Python FastAPI 开发后端服务，并使用 MongoDB 构建数据库。",
-              "furtherExplanation": []
-            }
-          ]
-        },
-        {
-          "title": "Project GAIA：数据结构设计",
-          "startDate": "2022-11",
-          "endDate": "2023-11",
-          "projectLocation": "中国香港",
-          "description": "专注于设计优化的 NoSQL 数据结构，用于存储和检索非结构化地质静态数据。",
-          "features": [
-            {
-              "description": "设计优化的 MongoDB Schema，用于存储和检索非结构化地质静态数据。",
-              "furtherExplanation": []
-            },
-            {
-              "description": "应用哈希技术进行数据比较和历史版本管理。",
-              "furtherExplanation": []
-            },
-            {
-              "description": "使用 Python 对原始字典和 JSON 数据进行重新格式化和结构化，以提升数据处理效率。",
-              "furtherExplanation": []
-            }
-          ]
-        },
-        {
-          "title": "Project EASILY-CV：CV 生成器",
-          "startDate": "2023-08",
-          "endDate": "2023-10",
-          "projectLocation": "中国香港",
-          "description": "开发了一个开源在线 CV 生成器，使用 MongoDB Atlas 进行数据存储，Next.js 作为全栈框架，并通过 Docker 部署在 Linode 上。",
-          "features": [
-            {
-              "description": "开发基于 Next.js 的全栈应用，使用 MongoDB Atlas，并通过 Docker 部署在 Linode。",
-              "furtherExplanation": []
-            },
-            {
-              "description": "通过高级 React 状态管理实现实时 CV 更新，并使用 CSS Print 和 Playwright 添加 PDF 导出功能。",
-              "furtherExplanation": []
-            }
-          ]
-        },
-        {
-          "title": "Project ASA：云端机器人配送管理系统",
-          "startDate": "2023-07",
           "endDate": "2023-08",
           "projectLocation": "中国香港",
-          "description": "开发了一个客户驱动的 Web 应用，使用户能够为机器人和人工配送员设计与管理配送路线。",
+          "description": "作为示例内容的小型计算机视觉项目。",
           "features": [
             {
-              "description": "构建 TypeScript 和 React Web 应用，用于管理机器人和人工配送路线，并实现高级状态管理和列表操作。",
-              "furtherExplanation": []
-            },
-            {
-              "description": "实现 JWT 身份认证、服务端渲染，并通过 Docker 和 NGINX 部署。",
+              "description": "使用 PyTorch 训练并评估卷积神经网络。",
               "furtherExplanation": []
             }
           ]
@@ -730,155 +278,27 @@
       "headerName": "工作 / 实习经历",
       "experiences": [
         {
-          "companyName": "WeGreen AI",
-          "companyURL": "wegreen.ltd",
-          "jobTitle": "CTO 兼联合创始人",
-          "jobDescription": "带领初创团队通过 AI 解决方案推动废物管理创新，使回收流程更加智能、快速和高效，助力可持续发展。",
+          "companyName": "示例实验室",
+          "companyURL": "example.com",
+          "jobTitle": "软件工程实习生",
+          "jobDescription": "参与内部 Web 工具开发。",
           "features": [
             {
-              "description": "开发 AI 智能垃圾桶技术，以优化废物分类和回收效率。",
+              "description": "为内部仪表盘开发 React 组件。",
               "furtherExplanation": []
             },
             {
-              "description": "获得来自 HKBU 和 HKSTP 的 HK$30,000 资金支持，用于产品开发和成长。",
-              "furtherExplanation": []
-            },
-            {
-              "description": "主导产品创新，并推动协作型、高绩效团队文化建设。",
-              "furtherExplanation": []
-            },
-            {
-              "description": "带领 WeGreen AI 获得 YDC 最具潜力初创及创新奖，并获得 HK$15,000 奖金，在香港高校团队中受到认可。",
+              "description": "编写 API 接口及其测试。",
               "furtherExplanation": []
             }
           ],
           "location": "中国香港",
-          "startDate": "2024-11",
-          "endDate": "2026-03",
-          "relatedSkills": [
-            "产品开发",
-            "人工智能",
-            "机器学习",
-            "废物分类",
-            "物联网",
-            "团队领导"
-          ]
-        },
-        {
-          "companyName": "Honsenn Eco Technology GmbH",
-          "companyURL": "",
-          "jobTitle": "工程实习生（现场）",
-          "jobDescription": "完成现场实习，支持产品研发和测试 / QA 工作，并在跨文化工程团队中有效协作。",
-          "features": [
-            {
-              "description": "参与现场学习和工程实践。",
-              "furtherExplanation": []
-            },
-            {
-              "description": "支持产品研发和组装工作。",
-              "furtherExplanation": []
-            },
-            {
-              "description": "进行耳机 ANC 和蓝牙测试与调试，并利用现有 Python 自动化测试脚本提升 QA 可重复性和效率。",
-              "furtherExplanation": []
-            },
-            {
-              "description": "协助出货 / 运输流程及相关文档工作，以提高测试一致性和可追溯性。",
-              "furtherExplanation": []
-            }
-          ],
-          "location": "德国",
-          "startDate": "2025-10",
-          "endDate": "2025-10",
-          "relatedSkills": [
-            "Python",
-            "自动化测试",
-            "质量保证",
-            "蓝牙测试",
-            "ANC 测试",
-            "调试",
-            "文档编写",
-            "产品研发支持",
-            "组装",
-            "出货流程",
-            "跨文化协作"
-          ]
-        },
-        {
-          "companyName": "Honsenn Eco Technology GmbH",
-          "companyURL": "",
-          "jobTitle": "远程实习生",
-          "jobDescription": "完成远程实习，涉及嵌入式软件调试、蓝牙协议栈开发和 Python 自动化测试。",
-          "features": [
-            {
-              "description": "调试 TWS 耳机嵌入式软件，提升稳定性和性能。",
-              "furtherExplanation": []
-            },
-            {
-              "description": "参与 Android 和 iOS 的 Bluetooth 5.2 协议栈开发。",
-              "furtherExplanation": []
-            },
-            {
-              "description": "构建 Python 自动化测试脚本，优化 QA 流程，并将蓝牙音频故障率降低 32%。",
-              "furtherExplanation": []
-            },
-            {
-              "description": "被评为前 5% 的'季度技术创新实习生'。",
-              "furtherExplanation": []
-            }
-          ],
-          "location": "德国",
-          "startDate": "2025-06",
-          "endDate": "2025-08",
-          "relatedSkills": [
-            "嵌入式软件",
-            "Bluetooth 5.2",
-            "Python",
-            "自动化测试",
-            "质量保证",
-            "调试"
-          ]
-        },
-        {
-          "companyName": "东莞 Honsenn Electronic Technology Co., Ltd.",
-          "companyURL": "",
-          "jobTitle": "技术研究员",
-          "jobDescription": "参与微控制器功能开发，并为产品开发工作提供技术支持。",
-          "features": [],
-          "location": "东莞",
-          "startDate": "2024-07",
-          "endDate": "2024-09",
-          "relatedSkills": [
-            "产品开发",
-            "微控制器",
-            "技术产品开发"
-          ]
-        },
-        {
-          "companyName": "GoSmart Everywhere Limited",
-          "companyURL": "",
-          "jobTitle": "Web 开发实习生",
-          "jobDescription": "与高级工程师紧密合作，参与关键项目，在生产环境中提升高级软件工程能力。",
-          "features": [
-            {
-              "description": "通过实际开发和迭代功能实现，增强 TypeScript、React.js 和 Python 能力。",
-              "furtherExplanation": []
-            },
-            {
-              "description": "获得全栈 Web 开发和可扩展 Web 应用设计实践经验，支持构建稳健且可维护的系统。",
-              "furtherExplanation": []
-            }
-          ],
-          "location": "中国香港",
-          "startDate": "2023-08",
-          "endDate": "2024-09",
+          "startDate": "2024-06",
+          "endDate": "2024-08",
           "relatedSkills": [
             "TypeScript",
-            "React.js",
-            "Python",
-            "全栈 Web 开发",
-            "可扩展 Web 应用设计",
-            "软件工程"
+            "React",
+            "测试"
           ]
         }
       ]
@@ -888,26 +308,13 @@
       "headerName": "比赛经历",
       "awards": [
         {
-          "contestName": "IEEE Xtreme 19.0 全球编程竞赛",
-          "award": "全球第18名 / 香港第1名",
-          "organization": "IEEE",
-          "date": "2025-10",
+          "contestName": "示例编程竞赛",
+          "award": "决赛入围",
+          "organization": "示例学会",
+          "date": "2024-10",
           "location": "中国香港",
           "description": [
-            "在数千支参赛队伍中获得全球第18名及香港第1名。",
-            "使用 Python 和 C++ 解决算法挑战，最终得分为1715.71，罚时为1372。"
-          ]
-        },
-        {
-          "contestName": "YDC 创业计划",
-          "award": "最具潜力初创及创新奖",
-          "organization": "青年创业发展局",
-          "date": "2024-11",
-          "location": "中国香港",
-          "description": [
-            "获得青年创业发展局颁发的最具潜力初创及创新奖。",
-            "凭借 WeGreen AI 在香港高校团队中获得 HK$15,000 奖金。",
-            "因应用 AI 加速智能回收和废物分类而受到认可。"
+            "使用 Python 和 C++ 解决算法问题。"
           ]
         }
       ]
@@ -917,40 +324,16 @@
       "headerName": "技术技能",
       "languages": [
         {
-          "language": "Python",
-          "level": "熟练。"
-        },
-        {
           "language": "TypeScript",
           "level": "熟练。"
         },
         {
-          "language": "C++",
-          "level": "中级。"
+          "language": "Python",
+          "level": "熟练。"
         },
         {
-          "language": "Java",
-          "level": "了解。"
-        },
-        {
-          "language": "React",
-          "level": "具备基于 React 的前端和全栈开发经验。"
-        },
-        {
-          "language": "Next.js",
-          "level": "具备 Next.js 全栈应用开发经验。"
-        },
-        {
-          "language": "Node.js",
-          "level": "具备后端开发经验。"
-        },
-        {
-          "language": "MongoDB",
-          "level": "具备 NoSQL 数据库设计与实现经验。"
-        },
-        {
-          "language": "HTML5/CSS3",
-          "level": "具备响应式前端开发经验。"
+          "language": "SQL",
+          "level": "中等。"
         }
       ],
       "technical": [
@@ -958,40 +341,16 @@
           "name": "框架与库",
           "description": [
             "React",
-            "Next.js"
+            "Next.js",
+            "PyTorch"
           ]
         },
         {
-          "name": "后端与数据库",
+          "name": "工具",
           "description": [
-            "Node.js",
-            "MongoDB（NoSQL）"
-          ]
-        },
-        {
-          "name": "工具与平台",
-          "description": [
-            "Git",
             "Docker",
-            "NGINX",
-            "Cloudflare"
-          ]
-        },
-        {
-          "name": "系统与基础设施",
-          "description": [
-            "Ubuntu Server/Desktop",
-            "SSH",
-            "Shell Scripting"
-          ]
-        },
-        {
-          "name": "网络与 API",
-          "description": [
-            "RESTful APIs",
-            "身份认证，包括 Basic 和 JWT/Bearer",
-            "OpenAPI/Swagger",
-            "HTTP Headers 管理"
+            "Git",
+            "Linux"
           ]
         }
       ]
@@ -1000,80 +359,25 @@
       "sessionName": "extraSkill",
       "headerName": "语言能力",
       "points": [
-        "普通话：母语",
-        "英语：职业工作水平（IELTS 6.0）",
-        "粤语：基础会话"
+        "英语：流利",
+        "粤语：母语",
+        "普通话：流利"
       ]
     },
     {
       "sessionName": "certification",
-      "headerName": "CERTIFICATIONS",
+      "headerName": "证书",
       "certifications": [
         {
-          "issuingOrganization": "NVIDIA",
-          "organizationURL": "learn.nvidia.com",
+          "issuingOrganization": "示例学院",
+          "organizationURL": "example.com",
           "CertificationList": [
             {
-              "certificationName": "Getting Started with AI on Jetson Nano",
+              "certificationName": "示例云计算基础",
               "issuedDate": "2024-12",
               "expirationDate": "",
-              "credentialID": "REDACTED",
-              "credentialURL": "https://learn.nvidia.com/certificates?id=REDACTED"
-            },
-            {
-              "certificationName": "Learn OpenUSD: Learning About Stages, Prims and Attributes",
-              "issuedDate": "2024-12",
-              "expirationDate": "",
-              "credentialID": "REDACTED",
-              "credentialURL": "https://learn.nvidia.com/certificates?id=REDACTED"
-            },
-            {
-              "certificationName": "Learn OpenUSD: Traversing Stages",
-              "issuedDate": "2024-12",
-              "expirationDate": "",
-              "credentialID": "REDACTED",
-              "credentialURL": "https://learn.nvidia.com/certificates?id=REDACTED"
-            },
-            {
-              "certificationName": "Learn OpenUSD: Understanding Model Kinds",
-              "issuedDate": "2024-12",
-              "expirationDate": "",
-              "credentialID": "REDACTED",
-              "credentialURL": "https://learn.nvidia.com/certificates?id=REDACTED"
-            },
-            {
-              "certificationName": "Learn OpenUSD: Using Attributes",
-              "issuedDate": "2024-12",
-              "expirationDate": "",
-              "credentialID": "REDACTED",
-              "credentialURL": "https://learn.nvidia.com/certificates?id=REDACTED"
-            },
-            {
-              "certificationName": "使用 Jetson Nano 开发 AI 应用",
-              "issuedDate": "2024-12",
-              "expirationDate": "",
-              "credentialID": "REDACTED",
-              "credentialURL": "https://learn.nvidia.com/certificates?id=REDACTED"
-            },
-            {
-              "certificationName": "基于 Jetson Nano 构建视频 AI 的端侧应用",
-              "issuedDate": "2024-12",
-              "expirationDate": "",
-              "credentialID": "REDACTED",
-              "credentialURL": "https://learn.nvidia.com/certificates?id=REDACTED"
-            }
-          ]
-        },
-        {
-          "issuingOrganization": "Cisco",
-          "organizationURL": "netacad.com",
-          "CertificationList": [
-            {
-              "certificationName": "Python Essentials",
-              "issuedDate": "2024-12",
-              "expirationDate": "",
-              "credentialID": "REDACTED",
-              "credentialURL": "https://www.credly.com/badges/REDACTED/public_url"
+              "credentialID": "EXAMPLE-0001",
+              "credentialURL": "https://example.com/certificates/EXAMPLE-0001"
             }
           ]
         }

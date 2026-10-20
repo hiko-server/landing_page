@@ -41,7 +41,7 @@ const personalInformation = (extra: Record<string, any> = {}) => ({
   nickName: 'Lucian',
   email: 'owner@example.test',
   phoneNumber: '+852 0000 0000',
-  address: 'Example Road, Hong Kong',
+  address: 'Example District, Hong Kong SAR, China',
   hiddenFields: ['phoneNumber'],
   ...extra,
 })
@@ -54,7 +54,7 @@ const languages = (extra: Record<string, any> = {}) => ({
 
 test('hero meta: location and languages come from the public CV, in the CV’s order', () => {
   const meta = heroMeta(publicSections([personalInformation(), languages()], 'website'))
-  assert.deepEqual(meta, { location: 'Example Road, Hong Kong', languages: 'Mandarin · English · Cantonese' })
+  assert.deepEqual(meta, { location: 'Example District, Hong Kong SAR, China', languages: 'Mandarin · English · Cantonese' })
   // Only the display strings — never contact details.
   assert.ok(!JSON.stringify(meta).includes('example.test') && !JSON.stringify(meta).includes('+852'))
 })
@@ -114,7 +114,7 @@ test('one Person loader: real portrait (640 px variant), the 中文 name, public
       { sessionName: 'skill', languages: [{ language: 'TypeScript' }], technical: [{ name: 'Web', description: ['React'] }] },
       languages(),
     ],
-    zh: [personalInformation({ firstName: '彦霈', lastName: '李', address: 'Example Road, Hong Kong' })],
+    zh: [personalInformation({ firstName: '彦霈', lastName: '李', address: '示例区' })],
   }
   assert.equal((await writeCvData(cv)).ok, true)
   const home = { hero: { welcome: '', brand: 'B', tagline: 't', avatarUrl: '/uploads/face.jpg' }, socials: {}, brands: [], quickAccess: [], photos: [] }
@@ -131,11 +131,11 @@ test('one Person loader: real portrait (640 px variant), the 中文 name, public
   assert.equal(node.image, absUrl('/uploads/face.jpg.w640.webp'))
   assert.ok(/^https:\/\//.test(node.image), 'absolute image URL')
   assert.deepEqual(node.alternateName, ['Lucian', '李彦霈'])
-  assert.equal(node.address, 'Example Road, Hong Kong')
+  assert.equal(node.address, 'Example District, Hong Kong SAR, China')
   assert.deepEqual(node.alumniOf, [{ '@type': 'EducationalOrganization', name: 'Uni One' }])
   assert.deepEqual(node.knowsAbout, ['TypeScript', 'React'])
   const text = JSON.stringify(node)
-  for (const secret of ['owner@example.test', '+852', 'Hidden College', 'Example Road, Hong Kong']) assert.ok(!text.includes(secret), `no ${secret}`)
+  for (const secret of ['owner@example.test', '+852', 'Hidden College', '示例区']) assert.ok(!text.includes(secret), `no ${secret}`)
 
   // Every call gives the same node — the pages share it.
   assert.deepEqual(personNode(loadPersonFacts()), node)

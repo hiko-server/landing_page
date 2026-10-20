@@ -30,7 +30,7 @@ const cv = (lang: 'en' | 'zh' = 'en') =>
           email: 'owner@example.test',
           phoneNumber: '+852 0000 0000',
           personalWebsite: 'example.org',
-          address: 'Kowloon, Hong Kong',
+          address: 'Example District, Hong Kong',
           introduction: 'A hidden summary',
           hiddenFields: ['introduction'],
         },
@@ -183,7 +183,7 @@ test('JSON Resume 1.0.0: basics, profiles, ISO dates, open ends omitted, languag
     email: 'owner@example.test',
     phone: '+852 0000 0000',
     url: 'https://example.org',
-    location: { address: 'Kowloon, Hong Kong' },
+    location: { address: 'Example District, Hong Kong' },
     profiles: [{ network: 'GitHub', username: 'example-owner', url: 'https://github.com/example-owner' }],
   })
   assert.deepEqual(r.work[0], {

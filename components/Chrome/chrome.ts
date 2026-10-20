@@ -63,13 +63,15 @@ export function shortcutTarget(key: string): string | null {
 /**
  * Built-in profile links, keyed like home.socials. They are only the fallback
  * for when the home document has no socials (see resolveSocialLinks); the
- * owner's Home editor values drive the header, footer and hero.
+ * owner's Home editor values drive the header, footer and hero. WhatsApp has
+ * no built-in link: a phone number belongs in the Home editor, never in the
+ * (public) source.
  */
 export const SOCIAL_LINKS = [
   { key: 'github', name: 'GitHub', url: 'https://github.com/HikoPLi' },
   { key: 'gitlab', name: 'GitLab', url: 'https://gitlab.com/HikoPLi' },
   { key: 'linkedin', name: 'LinkedIn', url: 'https://www.linkedin.com/in/liyanpeihiko/' },
-  { key: 'whatsapp', name: 'WhatsApp', url: 'https://wa.me/85200000000' },
+  { key: 'whatsapp', name: 'WhatsApp', url: '' },
 ] as const
 
 export type SocialName = (typeof SOCIAL_LINKS)[number]['name']
@@ -79,17 +81,18 @@ export type SocialLink = { key: SocialKey; name: SocialName; url: string }
 /**
  * Profile links to render from the PUBLIC home.socials object:
  *   - no socials object at all (no home document yet) → the built-in links;
- *   - a channel whose key is missing → its built-in link;
+ *   - a channel whose key is missing → its built-in link, if it has one;
  *   - a channel whose key is present but blank → removed (the owner cleared it);
  *   - otherwise the owner's URL, if it is a safe href (else removed).
  */
 export function resolveSocialLinks(socials: unknown): SocialLink[] {
-  if (!socials || typeof socials !== 'object' || Array.isArray(socials)) return SOCIAL_LINKS.map((s) => ({ ...s }))
+  const builtIn = (s: (typeof SOCIAL_LINKS)[number]): SocialLink[] => (s.url ? [{ ...s }] : [])
+  if (!socials || typeof socials !== 'object' || Array.isArray(socials)) return SOCIAL_LINKS.flatMap(builtIn)
   const own = socials as Record<string, unknown>
   const out: SocialLink[] = []
   for (const s of SOCIAL_LINKS) {
     if (!(s.key in own) || own[s.key] === undefined) {
-      out.push({ ...s })
+      out.push(...builtIn(s))
       continue
     }
     const url = safeHref(own[s.key])

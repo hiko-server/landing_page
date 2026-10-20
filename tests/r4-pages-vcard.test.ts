@@ -21,7 +21,7 @@ const personal = {
   nickName: 'Lucian',
   email: 'hello@lucian-dev.com',
   phoneNumber: '+852 5555 0100',
-  address: 'Kowloon, Hong Kong',
+  address: 'Example District, Hong Kong',
 }
 
 test('TEXT values are escaped per RFC 6350', () => {
@@ -74,7 +74,7 @@ test('a full card: CRLF lines, FN from the public name fields, contact data and 
   assert.ok(lines.includes('URL:https://lucian-dev.com'))
   assert.ok(lines.includes('TITLE:Software Engineer'))
   assert.ok(lines.includes('ORG:Acme\\, Inc.'))
-  assert.ok(lines.includes('ADR:;;Kowloon\\, Hong Kong;;;;'))
+  assert.ok(lines.includes('ADR:;;Example District\\, Hong Kong;;;;'))
   assert.ok(lines.includes('PHOTO;MEDIATYPE=image/jpeg:https://lucian-dev.com/uploads/me.jpg'))
 })
 
