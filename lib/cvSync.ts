@@ -4,6 +4,7 @@
  */
 
 import { CV_SURFACES, ENTRY_UID_KEY, EDITOR_META_KEYS, PRIVATE_SECTION_FIELDS, VISIBILITY_KEYS } from './cvVisibility'
+import { ITEM_POSITION_RE } from './cvItemAudience'
 
 const isPlainObject = (v: unknown): v is Record<string, any> =>
   !!v && typeof v === 'object' && !Array.isArray(v)
@@ -49,6 +50,9 @@ function intersectAudience(a: unknown, b: unknown): string[] | undefined {
  *                               in the synced list (lists follow EN's length)
  *   onlyIn                    → the surfaces both sides allow
  *   fieldsOnlyIn              → per field, the surfaces both sides allow
+ *   itemsOnlyIn               → per field and position, the surfaces both
+ *                               sides allow, for positions that still exist
+ *                               in the synced list
  * Returns undefined when neither side carries the key.
  */
 function mergeVisibility(
@@ -71,6 +75,26 @@ function mergeVisibility(
     for (const field of new Set([...Object.keys(a), ...Object.keys(b)])) {
       const merged = intersectAudience(a[field], b[field])
       if (merged) out[field] = merged
+    }
+    return Object.keys(out).length ? out : undefined
+  }
+  if (key === 'itemsOnlyIn') {
+    if (!isPlainObject(en) && !isPlainObject(zh)) return undefined
+    const a = isPlainObject(en) ? en : {}
+    const b = isPlainObject(zh) ? zh : {}
+    const out: Record<string, Record<string, string[]>> = {}
+    for (const field of new Set([...Object.keys(a), ...Object.keys(b)])) {
+      const list = synced[field]
+      const limit = Array.isArray(list) ? list.length : Infinity
+      const pa = isPlainObject(a[field]) ? a[field] : {}
+      const pb = isPlainObject(b[field]) ? b[field] : {}
+      const perItem: Record<string, string[]> = {}
+      for (const position of new Set([...Object.keys(pa), ...Object.keys(pb)])) {
+        if (!ITEM_POSITION_RE.test(position) || Number(position) >= limit) continue
+        const merged = intersectAudience(pa[position], pb[position])
+        if (merged) perItem[position] = merged
+      }
+      if (Object.keys(perItem).length) out[field] = perItem
     }
     return Object.keys(out).length ? out : undefined
   }

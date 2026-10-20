@@ -27,6 +27,15 @@
  *   Any node
  *     fieldsOnlyIn?: { [field]: CvSurface[] } a field (or a nested list)
  *                                            shown only in these surfaces
+ *     itemsOnlyIn?: { [field]: { [index]: CvSurface[] } }
+ *                                            one item of a string list (a
+ *                                            bullet, a tag, an author) shown
+ *                                            only in these surfaces; keyed by
+ *                                            position like hiddenItems (the
+ *                                            Studio remaps it as the list
+ *                                            changes). Authors keep their
+ *                                            places: off a surface, an author
+ *                                            is HIDDEN_ITEM_MARK there.
  *
  *   Surfaces (CV_SURFACES):
  *     'web'       public pages and what they carry: /cv, /about, home,
@@ -68,7 +77,7 @@ export type CvDoc = { en: CvSectionLike[]; zh: CvSectionLike[] }
 export type CvLang = 'en' | 'zh'
 
 /** Keys that carry visibility metadata rather than content. */
-export const VISIBILITY_KEYS = ['isVisible', 'showOnWebsite', 'hiddenFields', 'hiddenItems', 'onlyIn', 'fieldsOnlyIn'] as const
+export const VISIBILITY_KEYS = ['isVisible', 'showOnWebsite', 'hiddenFields', 'hiddenItems', 'onlyIn', 'fieldsOnlyIn', 'itemsOnlyIn'] as const
 
 /** Where a public view goes (see the module comment). Order = the Studio's order. */
 export const CV_SURFACES = ['web', 'download', 'private'] as const
@@ -78,6 +87,8 @@ export type CvSurface = (typeof CV_SURFACES)[number]
 export const ONLY_IN_KEY = 'onlyIn' as const
 /** Per-field audience lists of a node. */
 export const FIELDS_ONLY_IN_KEY = 'fieldsOnlyIn' as const
+/** Per-item audience lists of a node's string lists (bullets, tags, authors), by position. */
+export const ITEMS_ONLY_IN_KEY = 'itemsOnlyIn' as const
 /** Stable identity of a top-level list entry (lib/cvEntryUid) — editor and variant bookkeeping, never public. */
 export const ENTRY_UID_KEY = 'uid' as const
 
@@ -114,6 +125,26 @@ export function fieldAudience(node: any, field: string): CvSurface[] | null {
 export function fieldShownIn(node: any, field: string, surface: CvSurface): boolean {
   const allowed = fieldAudience(node, field)
   return allowed === null || allowed.includes(surface)
+}
+
+/**
+ * Positions of `field`'s string items (bullets, tags, authors) that their
+ * own audience lists keep off `surface` — hide flags are separate, and an
+ * object entry has its own `onlyIn`. An unreadable map keeps every string
+ * item of the list off (the safe reading).
+ */
+export function itemsOffSurface(node: any, field: string, surface: CvSurface): number[] {
+  const map = node?.[ITEMS_ONLY_IN_KEY]
+  if (map === undefined || map === null) return []
+  const perField = isPlainObject(map) ? map[field] : false
+  if (perField === undefined || perField === null) return []
+  const out: number[] = []
+  ;(Array.isArray(node[field]) ? node[field] : []).forEach((item: unknown, i: number) => {
+    if (isPlainObject(item)) return
+    const allowed = isPlainObject(perField) ? audienceOf(perField[i]) : []
+    if (allowed !== null && !allowed.includes(surface)) out.push(i)
+  })
+  return out
 }
 
 /** Key added by pruning to public nodes; lists the names of hidden fields. */
@@ -233,7 +264,8 @@ function pruneNode(node: any, surface: CvSurface): any {
       continue
     }
     if (Array.isArray(value)) {
-      const skip = new Set(hiddenIndices(node, key))
+      // Hidden items, and items whose own audience leaves this surface out.
+      const skip = new Set([...hiddenIndices(node, key), ...itemsOffSurface(node, key, surface)])
       const kept = !skip.size
         ? value
         : POSITIONAL_ITEM_FIELDS.includes(key)
@@ -530,12 +562,15 @@ export function withFieldAudience<T extends Record<string, any>>(node: T, field:
   return out
 }
 
-/** Every audience restriction inside a node (its own, its fields', its entries' at any depth). */
+/** Every audience restriction inside a node (its own, its fields', its items', its entries' at any depth). */
 export function countAudienceLimits(node: any): number {
   if (Array.isArray(node)) return node.reduce((n, x) => n + countAudienceLimits(x), 0)
   if (!isPlainObject(node)) return 0
   let n = audienceOf(node[ONLY_IN_KEY]) === null ? 0 : 1
   if (isPlainObject(node[FIELDS_ONLY_IN_KEY])) n += Object.keys(node[FIELDS_ONLY_IN_KEY]).length
+  if (isPlainObject(node[ITEMS_ONLY_IN_KEY])) {
+    for (const perField of Object.values(node[ITEMS_ONLY_IN_KEY])) if (isPlainObject(perField)) n += Object.keys(perField).length
+  }
   for (const [k, v] of Object.entries(node)) {
     if ((VISIBILITY_KEYS as readonly string[]).includes(k)) continue
     if (Array.isArray(v) || isPlainObject(v)) n += countAudienceLimits(v)

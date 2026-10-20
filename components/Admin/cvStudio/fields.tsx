@@ -391,6 +391,7 @@ function SortableBulletRow({
   onPaste,
   onRemove,
   onToggleHidden,
+  audience,
   inputRef,
 }: {
   id: string
@@ -407,6 +408,8 @@ function SortableBulletRow({
   onPaste: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void
   onRemove: () => void
   onToggleHidden: () => void
+  /** The bullet's "Shows on" control (AudienceMenu), beside its eye. */
+  audience?: React.ReactNode
   inputRef: (el: HTMLTextAreaElement | null) => void
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
@@ -472,6 +475,11 @@ function SortableBulletRow({
         minH="32px"
         py="6px"
       />
+      {audience ? (
+        <Box pt="4px" flexShrink={0}>
+          {audience}
+        </Box>
+      ) : null}
       <VisibilityToggle
         hidden={hidden}
         onToggle={onToggleHidden}
@@ -510,6 +518,7 @@ export function BulletList({
   onOp,
   onPasteLines,
   onToggleHidden,
+  renderAudience,
 }: {
   /** Prefix for each bullet's unique input id. */
   idBase: string
@@ -525,6 +534,8 @@ export function BulletList({
   onOp: (op: ListOp) => void
   onPasteLines: (index: number, lines: string[]) => void
   onToggleHidden: (index: number) => void
+  /** Each bullet's "Shows on" control (an audience per bullet, E4). */
+  renderAudience?: (index: number, text: string) => React.ReactNode
 }) {
   const refs = useRef<Array<HTMLTextAreaElement | null>>([])
   const [focusIdx, setFocusIdx] = useState<number | null>(null)
@@ -575,6 +586,7 @@ export function BulletList({
                 inputRef={(el) => (refs.current[i] = el)}
                 onChange={(v) => onTextChange(i, v)}
                 onToggleHidden={() => onToggleHidden(i)}
+                audience={renderAudience?.(i, text)}
                 onRemove={() => {
                   onOp({ type: 'remove', index: i })
                   setFocusIdx(Math.max(0, i - 1))

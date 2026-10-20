@@ -29,6 +29,8 @@ export type StudioApi = {
   /** Audiences (E4): where a field / list of `nodePath`, or the section / entry at `path`, shows (null = everywhere). */
   setFieldAudience: (nodePath: CvPath, field: string, list: CvSurface[] | null, label: string) => void
   setNodeAudience: (path: CvPath, list: CvSurface[] | null, label: string) => void
+  /** Where one bullet of the string list `field` of `parentPath` shows (null = everywhere); linked like its eye. */
+  setItemAudience: (parentPath: CvPath, field: string, index: number, list: CvSurface[] | null, label: string) => void
   /** Structural edit of an object list or string list (mirrored when the languages line up). */
   list: (listPath: CvPath, op: ListOp, label?: string) => void
   /** Insert several string items at once (multi-line paste) as one undo step. */

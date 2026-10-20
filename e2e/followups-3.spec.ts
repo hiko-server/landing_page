@@ -4,6 +4,7 @@ import sharp from 'sharp'
 import AxeBuilder from '@axe-core/playwright'
 import type { APIRequestContext, Locator, Page } from '@playwright/test'
 import { test, expect, settle, ADMIN, adminCleanup, loginAsAdmin } from './fixtures'
+import { pdfText, squashSpace } from './pdfText'
 
 /**
  * followups-3 (after the final batch), desktop Chromium.
@@ -11,6 +12,10 @@ import { test, expect, settle, ADMIN, adminCleanup, loginAsAdmin } from './fixtu
  * 1. ⌘K reopened while the last palette is still leaving (public).
  * 2. The media library's picker in the home editor (field-note photos,
  *    logos, the avatar) and CV Studio (the PDF photo) — @admin.
+ * 3. An audience per bullet (E4): a bullet kept to downloads and private
+ *    links is gone from /cv and /api/cvdata but in /cv.txt and the PDF; its
+ *    "Shows on" chip in CV Studio, the A4 preview as /cv and as the PDF, and
+ *    the Hidden items panel — @admin. The CV is restored afterwards.
  *
  * ── 1 ──
  *
@@ -431,6 +436,92 @@ test.describe('the media library in the home editor and CV Studio', { tag: '@adm
       // Not saved: the CV is left as it was.
     } finally {
       await removeUploads(page, created)
+    }
+  })
+})
+
+// ── 3: an audience per bullet (@admin) ─────────────────────────────────────
+
+test.describe('CV: an audience per bullet', { tag: '@admin' }, () => {
+  test.skip(!ADMIN.email || !ADMIN.password, 'ADMIN_EMAIL / ADMIN_PASS not set')
+  test.use({ actionTimeout: 15_000, navigationTimeout: 30_000 })
+
+  test('a bullet kept to downloads and private links: off /cv and the API, in the text and PDF; its chip, the preview and Hidden items in CV Studio @admin', async ({ page, request }) => {
+    test.setTimeout(180_000)
+    page.on('dialog', (d) => void d.accept())
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    await loginAsAdmin(page)
+    const stored = await adminFetch(page, 'GET', '/api/admin/cvdata')
+    expect(stored.status, stored.text).toBe(200)
+    const original = JSON.parse(stored.text) as { en: Array<Record<string, unknown>>; zh: Array<Record<string, unknown>> }
+    const PUBLIC_POINT = `E2E public point ${stamp}`
+    const LIMITED_POINT = `E2E downloads-only point ${stamp}`
+    const withFixture = (lang: 'en' | 'zh') => [
+      ...original[lang].filter((sec) => sec?.sessionName !== 'extraSkill'),
+      {
+        sessionName: 'extraSkill',
+        headerName: lang === 'zh' ? '语言能力' : 'LANGUAGE SKILLS',
+        points: [PUBLIC_POINT, LIMITED_POINT],
+        itemsOnlyIn: { points: { '1': ['download', 'private'] } },
+      },
+    ]
+    const put = await adminFetch(page, 'PUT', '/api/cvdata', { en: withFixture('en'), zh: withFixture('zh') })
+    expect(put.status, put.text).toBe(200)
+    try {
+      // ── The public outputs ──────────────────────────────────────────────
+      const cvHtml = await (await request.get('/cv')).text()
+      expect(cvHtml).toContain(PUBLIC_POINT)
+      expect(cvHtml, '/cv HTML and __NEXT_DATA__').not.toContain(LIMITED_POINT)
+      expect(cvHtml).not.toContain('itemsOnlyIn')
+      const api = await (await request.get('/api/cvdata')).text()
+      expect(api, '/api/cvdata').not.toContain(LIMITED_POINT)
+      expect(api).not.toContain('itemsOnlyIn')
+      expect(await (await request.get('/cv.txt')).text(), '/cv.txt').toContain(LIMITED_POINT)
+      expect(squashSpace(pdfText(await (await request.get('/cv.pdf')).body())), '/cv.pdf').toContain(squashSpace(LIMITED_POINT))
+
+      // ── CV Studio: the bullet's chip and menu ──────────────────────────
+      await page.goto('/admin/dashboard?tab=cv')
+      await page.getByRole('navigation', { name: 'CV sections' }).getByText('Languages', { exact: true }).first().click()
+      const chip = page.getByRole('button', { name: `Where “${LIMITED_POINT}” shows: Files · Links (Downloads + Private links)` })
+      await expect(chip).toBeVisible()
+      await expect(page.getByRole('button', { name: `Where “${PUBLIC_POINT}” shows: everywhere` })).toBeVisible()
+      const preview = page.locator('#A4Paper')
+      const showAs = page.getByRole('group', { name: 'Show the A4 CV as' })
+      await showAs.getByRole('button', { name: '/cv' }).click()
+      await expect(preview).toContainText(PUBLIC_POINT)
+      await expect(preview).not.toContainText(LIMITED_POINT)
+      await showAs.getByRole('button', { name: 'PDF' }).click()
+      await expect(preview).toContainText(LIMITED_POINT)
+      await showAs.getByRole('button', { name: '/cv' }).click()
+
+      // From the keyboard: open the menu, put Public pages back on → everywhere.
+      await chip.focus()
+      await page.keyboard.press('Enter')
+      const pages = page.getByRole('menuitemcheckbox', { name: /Public pages/ })
+      await expect(pages).toHaveAttribute('aria-checked', 'false')
+      await expect(page.getByRole('menuitemcheckbox', { name: /Downloads/ })).toHaveAttribute('aria-checked', 'true')
+      await pages.focus()
+      await page.keyboard.press('Space')
+      await page.keyboard.press('Escape')
+      await expect(page.getByRole('button', { name: `Where “${LIMITED_POINT}” shows: everywhere` })).toBeVisible()
+      await expect(preview).toContainText(LIMITED_POINT)
+      // Undo brings the limit back (one step).
+      await page.keyboard.press('ControlOrMeta+KeyZ')
+      await expect(chip).toBeVisible()
+      await expect(preview).not.toContainText(LIMITED_POINT)
+
+      // ── Hidden items lists it; "Everywhere" resets it ──────────────────
+      await page.getByRole('button', { name: /hidden items$/ }).click()
+      const panel = page.getByRole('dialog').filter({ hasText: 'Hidden items' })
+      await expect(panel).toBeVisible()
+      await expect(panel.getByText(`Only on Downloads + Private links · ${LIMITED_POINT}`).first()).toBeVisible()
+      await panel.getByRole('button', { name: 'Show Points #2 everywhere' }).first().click()
+      await page.keyboard.press('Escape')
+      await expect(page.getByRole('button', { name: `Where “${LIMITED_POINT}” shows: everywhere` })).toBeVisible()
+      // Not saved: the stored CV is restored below either way.
+    } finally {
+      const back = await adminFetch(page, 'PUT', '/api/cvdata', original)
+      expect(back.status, back.text).toBe(200)
     }
   })
 })

@@ -73,6 +73,7 @@ import {
   setFieldHidden,
   setItemHidden,
   setFieldAudience,
+  setItemAudience,
   setNodeAudience,
   setSectionFlag,
   setSharedValue,
@@ -486,6 +487,10 @@ export default function CVEditorStudio() {
         const r = run((d) => setNodeAudience(d, lang, path, list, linked))
         reportVisibility(r, `“${previewText(label, 40)}” ${list ? `only on ${audienceSummary(list)}` : 'shows everywhere'}`, path)
       },
+      setItemAudience: (parentPath: CvPath, field: string, index: number, list: CvSurface[] | null, label: string) => {
+        const r = run((d) => setItemAudience(d, lang, parentPath, field, index, list, linked))
+        reportVisibility(r, `“${previewText(label, 40)}” ${list ? `only on ${audienceSummary(list)}` : 'shows everywhere'}`, parentPath)
+      },
       list: (listPath: CvPath, op: ListOp, label?: string) => {
         if (op.type === 'remove' && linked) {
           // Never delete typed content in the other language silently.
@@ -676,9 +681,11 @@ export default function CVEditorStudio() {
     const r = run((d) => {
       switch (row.kind) {
         case 'limited':
-          return row.field !== undefined
-            ? setFieldAudience(d, row.lang, row.nodePath, String(row.field), null, linked)
-            : setNodeAudience(d, row.lang, row.nodePath, null, linked)
+          return row.index !== undefined
+            ? setItemAudience(d, row.lang, row.nodePath, String(row.field), row.index, null, linked)
+            : row.field !== undefined
+              ? setFieldAudience(d, row.lang, row.nodePath, String(row.field), null, linked)
+              : setNodeAudience(d, row.lang, row.nodePath, null, linked)
         case 'section-cv':
           return setSectionFlag(d, row.lang, row.sectionIdx, 'isVisible', true, linked)
         case 'section-web':

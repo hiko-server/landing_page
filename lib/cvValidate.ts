@@ -13,7 +13,8 @@
  *   - visibility metadata: `isVisible` / `showOnWebsite` booleans,
  *     `hiddenFields` string[], `hiddenItems` { [field]: non-negative int[] },
  *     audiences (E4): `onlyIn` a list of surfaces ('web', 'download',
- *     'private'), `fieldsOnlyIn` { [field]: surfaces[] }
+ *     'private'), `fieldsOnlyIn` { [field]: surfaces[] }, `itemsOnlyIn`
+ *     { [field]: { [position]: surfaces[] } } (positions "0", "1", …)
  *   - entry identity: a top-level list entry's `uid` (lib/cvEntryUid) is a
  *     short [A-Za-z0-9_-] string, unique within its list
  *   - select fields hold one of their options (or nothing); yearMonth fields
@@ -36,8 +37,9 @@ import { isCvImageRef } from './url'
 import { normalizeDoi } from './publications/doi'
 import { PUB_DATE_RE, publicationHref } from './publications/normalize'
 import { ORCID_MESSAGES, orcidIdProblem } from './orcid/id'
-import { CV_SURFACES, ENTRY_UID_KEY, FIELDS_ONLY_IN_KEY, ONLY_IN_KEY, isCvSurface } from './cvVisibility'
+import { CV_SURFACES, ENTRY_UID_KEY, FIELDS_ONLY_IN_KEY, ITEMS_ONLY_IN_KEY, ONLY_IN_KEY, isCvSurface } from './cvVisibility'
 import { isEntryUid } from './cvEntryUid'
+import { ITEM_POSITION_RE } from './cvItemAudience'
 
 export type CvLangKey = 'en' | 'zh'
 export type CvErrorPath = [CvLangKey, number, ...(string | number)[]]
@@ -160,6 +162,23 @@ function checkVisibility(node: Record<string, unknown>, path: Path, out: Collect
       }
     }
   }
+  const io = node[ITEMS_ONLY_IN_KEY]
+  if (!absent(io)) {
+    const shape = `${ITEMS_ONLY_IN_KEY} must map field names to { position: list of ${surfaces} }.`
+    if (!isObject(io)) out.add([...path, ITEMS_ONLY_IN_KEY], shape)
+    else {
+      for (const [field, perItem] of Object.entries(io)) {
+        if (!isObject(perItem)) {
+          out.add([...path, ITEMS_ONLY_IN_KEY, field], shape)
+          continue
+        }
+        for (const [position, list] of Object.entries(perItem)) {
+          if (!ITEM_POSITION_RE.test(position)) out.add([...path, ITEMS_ONLY_IN_KEY, field], `${ITEMS_ONLY_IN_KEY}.${field} must be keyed by item positions (0, 1, 2 …).`)
+          else if (!isSurfaceList(list)) out.add([...path, ITEMS_ONLY_IN_KEY, field, position], `${ITEMS_ONLY_IN_KEY}.${field}.${position} must be a list of: ${surfaces}.`)
+        }
+      }
+    }
+  }
   const hi = node.hiddenItems
   if (absent(hi)) return
   if (!isObject(hi)) {
@@ -254,7 +273,7 @@ export function validateCvDoc(input: unknown): CvValidation {
   return out.errors.length ? { ok: false, errors: out.errors } : { ok: true, doc }
 }
 
-const VISIBILITY_SEGMENTS = new Set(['isVisible', 'showOnWebsite', 'hiddenFields', 'hiddenItems', 'headerName', ONLY_IN_KEY, FIELDS_ONLY_IN_KEY, ENTRY_UID_KEY])
+const VISIBILITY_SEGMENTS = new Set(['isVisible', 'showOnWebsite', 'hiddenFields', 'hiddenItems', 'headerName', ONLY_IN_KEY, FIELDS_ONLY_IN_KEY, ITEMS_ONLY_IN_KEY, ENTRY_UID_KEY])
 
 /**
  * Where an editor should jump for an error: the language, the section index

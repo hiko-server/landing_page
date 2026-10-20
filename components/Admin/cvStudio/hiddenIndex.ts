@@ -4,14 +4,16 @@
  * and agrees with countHidden() / the public pruning in lib/cvVisibility.
  */
 
-import { FIELDS_ONLY_IN_KEY, ONLY_IN_KEY, audienceOf, hiddenIndices, isSectionOnCv, isSectionOnWebsite, type CvLang, type CvPath } from '../../../lib/cvVisibility'
+import { FIELDS_ONLY_IN_KEY, ITEMS_ONLY_IN_KEY, ONLY_IN_KEY, audienceOf, hiddenIndices, isSectionOnCv, isSectionOnWebsite, type CvLang, type CvPath } from '../../../lib/cvVisibility'
+import { itemAudience } from '../../../lib/cvItemAudience'
 import { audienceSummary } from './audience'
 import { SECTION_BY_NAME, type FieldDef, type ListDef } from '../../../lib/cvSections'
 import type { Doc } from './docOps'
 
 /**
- * 'limited' (E4): shown only on some surfaces — a section, an entry, a field
- * or a list with an audience list (lib/cvVisibility onlyIn / fieldsOnlyIn).
+ * 'limited' (E4): shown only on some surfaces — a section, an entry, a field,
+ * a list or one bullet with an audience list (lib/cvVisibility onlyIn /
+ * fieldsOnlyIn / itemsOnlyIn).
  */
 export type HiddenKind = 'section-cv' | 'section-web' | 'entry' | 'field' | 'list' | 'item' | 'limited'
 
@@ -40,7 +42,7 @@ export type HiddenRow = {
 
 const isPlainObject = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v)
 
-const META = new Set(['isVisible', 'showOnWebsite', 'hiddenFields', 'hiddenItems', 'redacted', ONLY_IN_KEY, FIELDS_ONLY_IN_KEY, 'uid'])
+const META = new Set(['isVisible', 'showOnWebsite', 'hiddenFields', 'hiddenItems', 'redacted', ONLY_IN_KEY, FIELDS_ONLY_IN_KEY, ITEMS_ONLY_IN_KEY, 'uid'])
 
 const onlyLine = (list: unknown) => `Only on ${audienceSummary(audienceOf(list))}`
 
@@ -120,6 +122,26 @@ export function collectHidden(doc: Doc): HiddenRow[] {
               label: labelFor(shape, field),
               preview: onlyLine(node[FIELDS_ONLY_IN_KEY][field]),
               targetPath: [...path, field],
+            })
+          }
+        }
+        if (isPlainObject(node[ITEMS_ONLY_IN_KEY])) {
+          for (const field of Object.keys(node[ITEMS_ONLY_IN_KEY])) {
+            const list = Array.isArray(node[field]) ? node[field] : []
+            list.forEach((v: unknown, index: number) => {
+              if (isPlainObject(v)) return
+              const audience = itemAudience(node, field, index)
+              if (audience === null) return
+              push({
+                kind: 'limited',
+                nodePath: path,
+                field,
+                index,
+                crumbs,
+                label: `${labelFor(shape, field)} #${index + 1}`,
+                preview: `${onlyLine(audience)}${typeof v === 'string' && v.trim() ? ` · ${truncate(v, 40)}` : ''}`,
+                targetPath: [...path, field, index],
+              })
             })
           }
         }
