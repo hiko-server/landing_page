@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Box, Flex, HStack, IconButton, Link, Text } from '@chakra-ui/react'
-import { LayoutGroup, motion, useReducedMotion } from 'framer-motion'
+import { LayoutGroup, m, useReducedMotion } from 'framer-motion'
 import { ArrowLeftIcon, ArrowRightIcon, PauseIcon, PlayIcon } from '../Icons/ui/content'
 
-import Lightbox, { type LightboxItem } from '../Common/Lightbox'
+import LazyLightbox, { preloadLightbox } from '../Common/LazyLightbox'
+import type { LightboxItem } from '../Common/Lightbox'
 import { safeHref } from '../../lib/cvFormat'
 
 /**
@@ -197,14 +198,21 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
           // keyboard focus on it is shown on this unmasked parent instead.
           '&:has(> .field-notes-strip:focus-visible)': { outline: '2px solid var(--accent)', outlineOffset: '4px' },
         }}
-        onMouseEnter={() => setHovered(true)}
+        onMouseEnter={() => {
+          setHovered(true)
+          preloadLightbox()
+        }}
         onMouseLeave={() => setHovered(false)}
-        onFocus={() => setFocused(true)}
+        onPointerDown={preloadLightbox}
+        onFocus={() => {
+          setFocused(true)
+          preloadLightbox()
+        }}
         onBlur={(e) => {
           if (!rootRef.current?.contains(e.relatedTarget as Node)) setFocused(false)
         }}
       >
-        <motion.div
+        <m.div
           ref={scrollerRef}
           layoutScroll
           tabIndex={0}
@@ -259,7 +267,7 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
                   cursor="zoom-in"
                   _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
                 >
-                  <motion.div
+                  <m.div
                     layoutId={reduce ? undefined : `${layoutPrefix}-${i}`}
                     transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                     style={{
@@ -271,7 +279,7 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
                       background: 'var(--chakra-colors-page-bg-elevated)',
                     }}
                   >
-                    <motion.img
+                    <m.img
                       layout={reduce ? undefined : true}
                       src={img.url}
                       srcSet={img.srcSet}
@@ -284,7 +292,7 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
                       draggable={false}
                       style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover', maxWidth: 'none' }}
                     />
-                  </motion.div>
+                  </m.div>
                 </Box>
                 {(img.describe || img.redirectTo) && (
                   <Flex as="figcaption" mt={2.5} gap={3} align="baseline" justify="space-between" fontSize="13px" color="page.fg-secondary" lineHeight="1.5">
@@ -319,7 +327,7 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
               </Box>
             )
           })}
-        </motion.div>
+        </m.div>
 
         <Text className="sr-only" aria-live="polite" aria-atomic="true">
           {announce}
@@ -377,7 +385,7 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
         ) : null}
       </Box>
 
-      <Lightbox items={items} index={viewer} onIndexChange={setViewer} layoutIdPrefix={reduce ? undefined : layoutPrefix} />
+      <LazyLightbox items={items} index={viewer} onIndexChange={setViewer} layoutIdPrefix={reduce ? undefined : layoutPrefix} />
     </LayoutGroup>
   )
 }

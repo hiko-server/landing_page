@@ -1,6 +1,6 @@
 import React, { useId, useState } from 'react'
 import { Box, Flex, Link, Skeleton, Text } from '@chakra-ui/react'
-import { motion, useReducedMotion, type Variants } from 'framer-motion'
+import { m, useReducedMotion, type Variants } from 'framer-motion'
 import { ChevronDownIcon } from '../Icons/ui/chrome'
 import { CircleAlertIcon, CodeIcon, GitBranchIcon, PlusIcon, ZapIcon } from '../Icons/ui/content'
 import { motionTransition } from '../../theme/tokens'
@@ -31,8 +31,8 @@ const ROW_H = '44px'
 const MAX_ROWS = 10
 const SKELETON_ROWS = 6
 
-const MotionOl = motion(Flex)
-const MotionLi = motion(Box)
+const MotionOl = m(Flex)
+const MotionLi = m(Box)
 /**
  * One parent stagger, played only when the feed scrolls up from below the
  * fold (lib/reveal.ts): the server, the first frame and a feed already on

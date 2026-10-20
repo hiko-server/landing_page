@@ -6,6 +6,7 @@ import baseline from './001-baseline.mjs'
 import vitalsKey from './002-vitals-key.mjs'
 import errors from './003-errors.mjs'
 import restoreDrills from './004-restore-drills.mjs'
+import vitalsAttribution from './005-vitals-attribution.mjs'
 
 /** @type {readonly import('../migrate.mjs').Migration[]} */
-export const ANALYTICS_MIGRATIONS = Object.freeze([baseline, vitalsKey, errors, restoreDrills])
+export const ANALYTICS_MIGRATIONS = Object.freeze([baseline, vitalsKey, errors, restoreDrills, vitalsAttribution])

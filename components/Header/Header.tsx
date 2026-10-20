@@ -3,7 +3,7 @@ import { Box, Text, Button, useDisclosure, Flex, IconButton, Link, Kbd } from '@
 import NextLink from 'next/link'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/router'
-import { motion } from 'framer-motion'
+import { m } from 'framer-motion'
 import CommandPaletteLazy, { preloadCommandPalette } from '../General-UI/CommandPaletteLazy'
 import {
   MOBILE_MENU_DIALOG_ID,
@@ -418,7 +418,7 @@ const Header = ({
                     // underline glides to the new item on navigation (instant
                     // under prefers-reduced-motion via MotionConfig).
                     <Box
-                      as={motion.span}
+                      as={m.span}
                       layoutId="nav-active"
                       aria-hidden
                       position="absolute"

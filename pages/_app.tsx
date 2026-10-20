@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react'
 import type { AppProps } from 'next/app'
 import Head from 'next/head'
+import dynamic from 'next/dynamic'
 import localFont from 'next/font/local'
-import { ChakraProvider } from '@chakra-ui/react'
-import { AnimatePresence, MotionConfig, motion } from 'framer-motion'
+import { AnimatePresence, m } from 'framer-motion'
 
 // v6 global design layer (CSS variables, dot grid, helper classes,
 // reduced-motion, view transitions, print). Loaded once for the entire app.
 import '../styles/globals.css'
 
 import theme from '../theme/chakra'
-import { useReportWebVitals } from 'next/web-vitals'
-import { reportWebVital, useAnalytics } from '../lib/analytics/client'
+import { installWebVitals, useAnalytics } from '../lib/analytics/client'
+import MotionProvider from '../components/Chrome/MotionProvider'
+import AppChakraProvider from '../components/Chrome/AppChakraProvider'
 import { pageKeyOf } from '../lib/viewTransition'
 import SiteChrome from '../components/Chrome/SiteChrome'
 import ThemeColorMeta from '../components/Chrome/ThemeColorMeta'
@@ -20,8 +21,6 @@ import { themePreferenceManager } from '../lib/themePreference'
 import { RouteTransitionGate, useRouteViewTransitions } from '../components/Chrome/RouteTransitions'
 import { useFocusMainOnPageChange } from '../components/Chrome/routeFocus'
 import { resolveHtmlLang, routeHasChrome } from '../components/Chrome/chrome'
-import ScrollToTop from '../components/ScrollToTop/ScrollToTop'
-import ScrollProgressBar from '../components/General-UI/ScrollProgressBar'
 import { HtmlLangContext } from '../components/Common/htmlLang'
 import { ChromeLangContext, chromeLangFor } from '../components/Chrome/chromeLang'
 import { monoFallbackFontFaces } from '../lib/monoFallback'
@@ -80,6 +79,17 @@ const mono = localFont({
 // tooltips, toasts — resolves the same Geist stacks.
 const FONT_VARIABLES_CSS = `${monoFallbackFontFaces()}:root{--font-geist-sans:${sans.style.fontFamily};--font-geist-sans-italic:${sansItalic.style.fontFamily};--font-geist-mono:${mono.style.fontFamily}}`
 
+// Non-critical chrome: the back-to-top button (hidden until the visitor has
+// scrolled) and the reading-progress hairline are fixed overlays that render
+// nothing on the first frame, so they load after hydration in chunks of
+// their own instead of the shared bundle.
+const ScrollToTop = dynamic(() => import('../components/ScrollToTop/ScrollToTop'), { ssr: false, loading: () => null })
+const ScrollProgressBar = dynamic(() => import('../components/General-UI/ScrollProgressBar'), { ssr: false, loading: () => null })
+
+// /admin routes: the app theme plus the component styles only the admin uses
+// (theme/adminComponents.ts), loaded with the admin pages, never on public ones.
+const AdminThemeScope = dynamic(() => import('../components/Admin/AdminThemeScope'))
+
 // The framer-motion page fade (browsers without view transitions): the
 // standard ease and duration (theme/tokens.ts); MotionConfig below drops the
 // movement under reduced motion.
@@ -104,11 +114,11 @@ const App = ({ Component, pageProps, router }: AppProps) => {
   // instead of staying on the header link (components/Chrome/routeFocus.ts).
   useFocusMainOnPageChange(router.events, pageKey)
 
-  // Cookieless first-party page views and real Core Web Vitals from
-  // visitors' browsers (lib/analytics/client.ts). reportWebVital is defined
-  // at module level, so the web-vitals observers are attached exactly once.
+  // Cookieless first-party page views (lib/analytics/client.ts), and real
+  // Core Web Vitals with their attribution: the web-vitals observers load
+  // after the page's load event, outside the shared bundle, and attach once.
   useAnalytics(router)
-  useReportWebVitals(reportWebVital)
+  useEffect(() => installWebVitals(), [])
 
   // <html lang> follows the page's `lang` prop (contract E): _document sets it
   // on the server, this keeps it right across client-side navigations. It is
@@ -135,11 +145,11 @@ const App = ({ Component, pageProps, router }: AppProps) => {
   // keeps one stable key there and never runs its exit/enter; elsewhere it is
   // keyed per page and provides the fade. The page element itself is keyed per
   // page in both modes, so navigation remounts it exactly as before.
-  const page = (
+  const routed = (
     <>
       <RouteTransitionGate pageKey={pageKey} />
       <AnimatePresence initial={false} mode="wait">
-        <motion.div
+        <m.div
           key={viewTransitions ? 'page' : pageKey}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -148,17 +158,19 @@ const App = ({ Component, pageProps, router }: AppProps) => {
         >
           {viewTransitions ? null : <RestoreScrollOnMount pageKey={pageKey} />}
           <Component key={pageKey} {...pageProps} />
-        </motion.div>
+        </m.div>
       </AnimatePresence>
     </>
   )
+  const page = router.pathname.startsWith('/admin') ? <AdminThemeScope>{routed}</AdminThemeScope> : routed
 
   return (
     // The colour mode follows the visitor's System / Light / Dark preference
     // (lib/themePreference.ts; applied before first paint by pages/_document).
-    <ChakraProvider theme={theme} toastOptions={TOAST_OPTIONS} colorModeManager={themePreferenceManager}>
-      {/* Every framer-motion animation honours prefers-reduced-motion. */}
-      <MotionConfig reducedMotion="user">
+    // AppChakraProvider is ChakraProvider with its toast host loaded on demand.
+    <AppChakraProvider theme={theme} toastOptions={TOAST_OPTIONS} colorModeManager={themePreferenceManager}>
+      {/* framer-motion: `m` elements, features loaded on demand, reduced motion honoured. */}
+      <MotionProvider>
         <Head>
           <meta name="viewport" content="width=device-width, initial-scale=1" />
           {/* The one icon set, site-wide (pages never add their own), all
@@ -190,8 +202,8 @@ const App = ({ Component, pageProps, router }: AppProps) => {
           <ScrollToTop />
           <ScrollProgressBar />
         </ChromeLangContext.Provider>
-      </MotionConfig>
-    </ChakraProvider>
+      </MotionProvider>
+    </AppChakraProvider>
   )
 }
 

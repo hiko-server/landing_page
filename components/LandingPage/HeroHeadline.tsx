@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Box, Flex, Heading, Text } from '@chakra-ui/react'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { AnimatePresence, m, useReducedMotion } from 'framer-motion'
 
 import type { HeroIdentity } from './heroIdentity'
 import { headlineWords, heroWordStyle, revealSx } from './heroReveal'
@@ -225,7 +225,7 @@ function PhraseSwap({ phrases }: { phrases: string[] }) {
             {longest}
           </Box>
           <AnimatePresence mode="popLayout" initial={false}>
-            <motion.span
+            <m.span
               key={shown}
               initial={{ opacity: 0, y: '40%', filter: 'blur(4px)' }}
               animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
@@ -233,7 +233,7 @@ function PhraseSwap({ phrases }: { phrases: string[] }) {
               transition={SWAP}
             >
               {phrases[shown]}
-            </motion.span>
+            </m.span>
           </AnimatePresence>
         </Box>
       </Box>

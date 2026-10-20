@@ -23,7 +23,7 @@ import { keyframes } from '@emotion/react'
 import { GitHubIcon, GitLabIcon, LinkedInIcon, WhatsAppIcon } from '../Icons/brand'
 import { CheckIcon } from '../Icons/ui/theme'
 import { ChevronRightIcon } from '../Icons/ui/content'
-import { motion, useReducedMotion } from 'framer-motion'
+import { m, useReducedMotion } from 'framer-motion'
 
 import { safeHref } from '../../lib/cvFormat'
 import {
@@ -82,7 +82,7 @@ type HomeData = {
 
 type Availability = { status?: string; bookingUrl?: string; workStatus?: string }
 
-const MotionBox = motion(Box)
+const MotionBox = m(Box)
 
 // Built-in defaults — used when home.json's contact block is missing or
 // any individual field is blank. The built-in reasons live in lib/inquiry

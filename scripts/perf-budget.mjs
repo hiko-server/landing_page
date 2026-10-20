@@ -7,6 +7,8 @@
  *   - .next/build-manifest.json → the JS every page loads first: the shared
  *     `/_app` chunks (framework, main, webpack runtime, _app) plus each
  *     public page's own chunks, measured gzip -9 like Next's build summary;
+ *     the app's own `pages/_app` chunk is also held to a budget of its own
+ *     (framework and main are Next's, _app is ours);
  *   - the shared CSS of `/_app`, gzip;
  *   - `<link rel="preload" as="font">` tags in every prerendered page
  *     (.next/server/pages/**.html) and the size of each preloaded file.
@@ -25,14 +27,24 @@ const repoRoot = path.resolve(here, '..')
 
 /**
  * Thresholds in KiB (gzip for JS/CSS, raw bytes for fonts — woff2 is already
- * compressed). Set from a production build of this release (2026-10-13:
- * shared JS 195.8, heaviest public page `/` 242.8, shared CSS 3.5, two
- * preloaded Geist faces 137.7) with ~8% headroom; raise them only with a
- * reason in the commit message.
+ * compressed); raise them only with a reason in the commit message.
+ *
+ * Set after the JavaScript diet (G5, 2026-10-14). Before → after, gzip:
+ *   shared first-load JS   203.7 → 166.3   (pages/_app 115.2 → 77.8)
+ *   /                      251.4 → 214.3
+ *   /work/[slug]           259.0 → 206.4
+ *   /blog/[slug]           257.1 → 204.5
+ * (framer-motion features, the toast host, the image viewer, web-vitals and
+ * the admin-only component styles left the first load), with ~5% headroom;
+ * `_app` keeps the 80 KiB ceiling the research set for it, and the home page
+ * — the landing page of most visits — has a tighter budget than other pages.
  */
 export const BUDGETS = {
-  sharedJsKb: 212,
-  pageFirstLoadJsKb: 262,
+  sharedJsKb: 175,
+  appJsKb: 80,
+  pageFirstLoadJsKb: 225,
+  /** Per-page first-load JS budgets, tighter than pageFirstLoadJsKb. */
+  pageBudgetsKb: { '/': 222 },
   sharedCssKb: 8,
   fontPreloadCount: 2,
   fontPreloadKb: 150,
@@ -84,6 +96,8 @@ export function measure(nextDir = path.join(repoRoot, '.next'), publicDir = path
   const appFiles = manifest.pages?.['/_app'] || []
   const sharedJs = appFiles.filter((f) => f.endsWith('.js'))
   const sharedCss = appFiles.filter((f) => f.endsWith('.css'))
+  // The app's own chunk among the shared ones (pages/_app-<hash>.js).
+  const appJs = sharedJs.filter((f) => /(^|\/)pages\/_app[-.]/.test(f))
 
   /** @type {Record<string, number>} gzip bytes of first-load JS per public page */
   const pages = {}
@@ -107,6 +121,7 @@ export function measure(nextDir = path.join(repoRoot, '.next'), publicDir = path
 
   return {
     sharedJs: { files: sharedJs.map((f) => ({ file: f, gzip: size(f) })), total: sharedJs.reduce((s, f) => s + size(f), 0) },
+    appJs: { files: appJs, total: appJs.reduce((s, f) => s + size(f), 0) },
     sharedCss: { files: sharedCss.map((f) => ({ file: f, gzip: size(f) })), total: sharedCss.reduce((s, f) => s + size(f), 0) },
     pages,
     fonts,
@@ -119,11 +134,15 @@ export function check(m, budgets = BUDGETS) {
   if (kb(m.sharedJs.total) > budgets.sharedJsKb) {
     failures.push(`shared first-load JS ${kb(m.sharedJs.total)} KiB > ${budgets.sharedJsKb} KiB`)
   }
+  if (m.appJs && budgets.appJsKb && kb(m.appJs.total) > budgets.appJsKb) {
+    failures.push(`pages/_app JS ${kb(m.appJs.total)} KiB > ${budgets.appJsKb} KiB`)
+  }
   if (kb(m.sharedCss.total) > budgets.sharedCssKb) {
     failures.push(`shared CSS ${kb(m.sharedCss.total)} KiB > ${budgets.sharedCssKb} KiB`)
   }
   for (const [page, bytes] of Object.entries(m.pages)) {
-    if (kb(bytes) > budgets.pageFirstLoadJsKb) failures.push(`${page}: first-load JS ${kb(bytes)} KiB > ${budgets.pageFirstLoadJsKb} KiB`)
+    const limit = Math.min(budgets.pageFirstLoadJsKb, budgets.pageBudgetsKb?.[page] ?? Infinity)
+    if (kb(bytes) > limit) failures.push(`${page}: first-load JS ${kb(bytes)} KiB > ${limit} KiB`)
   }
   // Every page shares _document's preloads: report each distinct problem once.
   const tooMany = new Map()
@@ -156,6 +175,8 @@ export function main(argv = process.argv.slice(2)) {
   const fontTotal = fontWorst ? fontWorst[1].reduce((s, f) => s + f.bytes, 0) : 0
   const rows = [
     ['shared first-load JS (gzip)', kb(m.sharedJs.total), BUDGETS.sharedJsKb],
+    ['pages/_app JS (gzip)', kb(m.appJs.total), BUDGETS.appJsKb],
+    ...Object.entries(BUDGETS.pageBudgetsKb).map(([page, limit]) => [`${page} first-load JS (gzip)`, kb(m.pages[page] ?? 0), limit]),
     ['heaviest public page JS (gzip)', heaviest.length ? kb(heaviest[0][1]) : 0, BUDGETS.pageFirstLoadJsKb, heaviest[0]?.[0]],
     ['shared CSS (gzip)', kb(m.sharedCss.total), BUDGETS.sharedCssKb],
     ['font preloads (count)', fontWorst ? fontWorst[1].length : 0, BUDGETS.fontPreloadCount, fontWorst?.[0]],

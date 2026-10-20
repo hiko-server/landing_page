@@ -1,4 +1,5 @@
-import { extendTheme } from '@chakra-ui/react'
+import { extendChakraBaseTheme } from './baseTheme'
+import { CHAKRA_COMPONENT_STYLES } from './chakraComponents'
 import { printColorVariables, semanticColors } from './color'
 import { serverColorMode } from '../lib/themePreference'
 import { fontSizes, letterSpacings, radii, textStyles } from './tokens'
@@ -172,8 +173,14 @@ const semanticTokens = {
   ),
 }
 
+// Chakra's base theme (foundations, no component styles) plus the default
+// styles of the components the app renders (theme/chakraComponents.ts —
+// tests/perf-g5-bundle.test.ts keeps that list complete), then the overrides
+// above (theme/baseTheme.ts merges like extendTheme). extendTheme would
+// merge in all ~40 component styles Chakra ships, most of them unused, and
+// they would sit in every page's shared JavaScript.
 const theme = {
-  ...extendTheme({
+  ...extendChakraBaseTheme({ components: CHAKRA_COMPONENT_STYLES }, {
     colors,
     fonts,
     fontSizes,
