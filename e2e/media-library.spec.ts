@@ -245,6 +245,46 @@ test.describe('media library', { tag: '@admin' }, () => {
     }
   })
 
+  test('the visual editor inserts from the library: alt text and caption (as the title), per language @admin', async ({ page }) => {
+    test.setTimeout(120_000)
+    page.on('dialog', (d) => void d.accept())
+    await loginAsAdmin(page)
+    const slug = `e2e-media-visual-${stamp}`
+    const created: string[] = []
+    try {
+      const name = await apiUpload(page, `${Date.now()}-e2e-visual-${stamp}.png`, await png(700, 500, '#0b7285', '#fab005'))
+      created.push(name)
+      const saved = await adminFetch(page, 'POST', '/api/admin/media', { action: 'meta', name, alt: 'A teal and yellow card', altZh: '青黄卡片', caption: 'Teal and yellow', expectedUpdatedAt: 0 })
+      expect(saved.status, saved.text).toBe(200)
+      await createDraft(page, slug, 'A first paragraph.\n')
+      await page.goto(`/admin/blog/edit?slug=${slug}`)
+      await page.locator('.tt-prose').click()
+      await page.keyboard.press('ControlOrMeta+End')
+      await page.getByRole('button', { name: 'Insert from the media library' }).click()
+      const picker = page.getByTestId('media-picker')
+      await picker.getByLabel('Search images').fill(`e2e-visual-${stamp}`)
+      await picker.locator(`[data-testid="media-tile"][data-name="${name}"] button`).first().click()
+      // Chinese texts for a Chinese page, never the English ones.
+      await picker.getByRole('tab', { name: '中文' }).click()
+      await expect(picker.getByLabel('Alt text')).toHaveValue('青黄卡片')
+      await expect(picker.getByLabel('Caption')).toHaveValue('')
+      await picker.getByRole('tab', { name: 'English' }).click()
+      await expect(picker.getByLabel('Alt text')).toHaveValue('A teal and yellow card')
+      await picker.getByLabel('Alt text').fill('A teal and yellow card, edited here')
+      await expect(picker.getByRole('checkbox', { name: /keep as this image’s default/ })).not.toBeChecked()
+      await page.keyboard.press('ControlOrMeta+Enter')
+      await expect(picker).toHaveCount(0)
+      await expect(page.locator(`.tt-prose img[src="/uploads/${name}"]`)).toHaveAttribute('alt', 'A teal and yellow card, edited here')
+      await page.getByRole('tab', { name: 'MDX' }).click()
+      await expect(page.locator('textarea').first()).toHaveValue(new RegExp(`!\\[A teal and yellow card, edited here\\]\\(/uploads/${name.replace(/\./g, '\\.')} "Teal and yellow"\\)`))
+      // Not kept as the default: the library still has the original text.
+      expect((await library(page)).items.find((i) => i.name === name)?.meta?.alt).toBe('A teal and yellow card')
+    } finally {
+      await adminCleanup(page, 'DELETE', `/api/admin/posts?slug=${slug}`)
+      await removeUploads(page, created)
+    }
+  })
+
   test('keyboard, filters in the address, the list view and accessibility @admin', async ({ page }) => {
     test.setTimeout(120_000)
     await loginAsAdmin(page)

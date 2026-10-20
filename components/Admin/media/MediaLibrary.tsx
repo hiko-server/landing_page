@@ -225,7 +225,8 @@ export default function MediaLibrary() {
     [load],
   )
   const queue = useUploadQueue(onUploaded)
-  const { dragging } = useFileDrop((files) => queue.add(files), status === 'ready' && !openName && !confirmTrash)
+  // Dropping images works anywhere on the page, the open drawer included (the overlay sits above it).
+  const { dragging } = useFileDrop((files) => queue.add(files))
 
   // The "just uploaded" ring fades after a while.
   useEffect(() => {
