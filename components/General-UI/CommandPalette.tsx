@@ -1235,10 +1235,17 @@ export default function CommandPalette({
   const mod = isMac ? '⌘' : 'Ctrl'
   const pageShortcuts = NAV_SHORTCUTS.map((s) => items.find((i) => i.id === `page:${s.url}`)).filter((i): i is Item => !!i)
 
+  /**
+   * A group's name in the palette's words (页面, 操作 on a Chinese page) —
+   * the search badges and a recent item's hint, like the headings. A recent
+   * record from storage with an unknown group shows it as it is.
+   */
+  const groupLabel = (group: string) => p.groups[GROUP_KEY[group as Group]] ?? group
+
   const renderRow = (row: Row, idx: number) => {
     const { item, detail } = row
     const selected = idx === active
-    const sideHint = row.group === 'Recent' ? item.group : item.hint
+    const sideHint = row.group === 'Recent' ? groupLabel(item.group) : item.hint
     return (
       <Flex
         key={`${row.group}:${item.id}`}
@@ -1287,7 +1294,7 @@ export default function CommandPalette({
         <Flex alignItems="center" gap={2} flexShrink={0}>
           {searching && !subpage && (
             <Text as="span" fontFamily={MONO} fontSize="10px" letterSpacing="0.08em" textTransform="uppercase" color="page.fg-secondary" lang={item.badge ? item.uiLang : undefined}>
-              {item.badge || item.group}
+              {item.badge || groupLabel(item.group)}
             </Text>
           )}
           {!searching && shortcutsOn && item.shortcut && <Key>{item.shortcut}</Key>}
