@@ -134,6 +134,12 @@ test.describe('public review-r2 fixes', () => {
 
   test('UX-A-3: "Ask Lucian directly" on /contact moves focus to the filled message and says so', async ({ page }, testInfo) => {
     test.skip(chromiumOnly(testInfo.project.name), 'once is enough')
+    // Nothing is sent: a synthetic challenge, so this test spends none of the
+    // server's per-address nonce budget the sending tests need.
+    await page.route(
+      (url) => url.pathname === '/api/contact/nonce',
+      (route) => route.fulfill({ json: { token: 'e2e-synthetic', challenge: { a: 2, b: 3 } } }),
+    )
     await page.goto('/contact')
     const message = page.getByRole('textbox', { name: /^Message/ })
     await expect(message).toBeVisible()
