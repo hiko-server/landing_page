@@ -241,7 +241,7 @@ Admin operations (wave 2B: H8, H9, H11, H13, H14, CORR-3).
 ### perf
 
 Performance, measured (wave 2B: G3, G4, C8, G5, G6, G7 and cross-engine /
-visual CI).
+visual gates).
 
 - **Less JavaScript on every page (G5)** — shared first-load JS 203.8 →
   166.9 KiB gzip (`pages/_app` 115.3 → 78.2), home 251.6 → 215.9, case
@@ -276,12 +276,12 @@ visual CI).
   response, load delay, load time, render delay; input delay, processing,
   presentation). Elements are named by the site's own markup (tag, id,
   classes, at most 120 characters, never text); nothing identifies a visitor.
-- **CI gates on realistic content (G7)** — a synthetic fixture store
+- **Gates on realistic content (G7)** — a synthetic fixture store
   (*Example Person*, generated images, never the live content) is built and
-  served in CI: CLS ≤ 0.05 and TBT ≤ 200 ms on a calibrated mid-range-phone
+  served in the pinned Playwright image by `scripts/check-fixture-gates.sh`: CLS ≤ 0.05 and TBT ≤ 200 ms on a calibrated mid-range-phone
   profile (LCP reported), no horizontal scroll at 375 / 768 / 1440 px, no
   image over 200 KB or decoded far larger than shown, axe on the article.
-- **Safari and Firefox in CI, visual baselines** — the public checks also run
+- **Safari and Firefox, visual baselines** — the public checks also run
   on WebKit (iPhone) and Firefox, and 30 screenshots (home, article, case
   study, CV, contact × light / dark × phone / tablet / desktop) of the
   fixture store are compared pixel by pixel in the pinned Playwright image.
@@ -327,7 +327,8 @@ Security and reliability foundation.
   pages use fixed cards by id, articles use HMAC-signed parameters computed
   on the server; anything else gets the default card.
 - **Container hardening**: no Linux capabilities, `no-new-privileges` and a
-  PID limit in `docker-compose.yml`, asserted and exercised in CI.
+  PID limit in `docker-compose.yml`, asserted and exercised by
+  `scripts/check-container.sh`.
 - Admin primary buttons, eyebrows and section numbers use the contrast-safe
   indigo shades (accent.500 on white was 4.47:1).
 
