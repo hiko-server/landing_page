@@ -456,6 +456,12 @@ export default function ContentHealthPanel() {
                     : `Show only ${SEVERITY_LABEL[s].many.toLowerCase()}`
                 }
                 textAlign="left"
+                // A column from the top (a button centres its content): the
+                // labels share a line with the External links card's.
+                display="flex"
+                flexDirection="column"
+                justifyContent="flex-start"
+                alignItems="stretch"
                 p={{ base: 3, md: 4 }}
                 minH="88px"
                 border="1px solid"
