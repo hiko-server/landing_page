@@ -37,6 +37,8 @@ import {
   type SelectedPublications,
 } from './publications'
 import { PERSON_NAME, SITE_URL, WEBSITE_ID, absUrl, breadcrumb, personAuthor, personRef } from './schema'
+import { orcidAuthenticatedOf, orcidOf } from './orcid/cv'
+import { orcidUrl } from './orcid/id'
 
 export type PublicationsView = {
   /** Language of the list (and of its section heading). */
@@ -44,19 +46,28 @@ export type PublicationsView = {
   publications: Publication[]
   /** The owner's name forms from the same audience's Personal Info. */
   owner: OwnerNames
+  /** The owner's ORCID iD from the same audience's Personal Info (either language); '' when unset or hidden. */
+  orcid: string
+  /** The owner connected that iD through ORCID's sign-in (lib/orcid/cv orcidAuthenticatedOf). */
+  orcidAuthenticated?: boolean
 }
+
+const personalOf = (sections: readonly { sessionName?: string }[]) => sections.find((s) => s?.sessionName === 'personalInformation')
 
 /** The /publications list (website audience). Empty when nothing is public. */
 export function readPublicationsView(): PublicationsView {
   try {
     const cv = readPublicCvSections('website', ['publications', 'personalInformation'], ['en', 'zh'])
     const owner = ownerNamesFromSections(cv.en, cv.zh)
+    const orcidPi = orcidOf(personalOf(cv.en)) ? personalOf(cv.en) : personalOf(cv.zh)
+    const orcid = orcidOf(orcidPi)
+    const orcidAuthenticated = orcidAuthenticatedOf(orcidPi)
     const en = publicPublications(cv.en)
-    if (en.length) return { lang: 'en', publications: en, owner }
+    if (en.length) return { lang: 'en', publications: en, owner, orcid, orcidAuthenticated }
     const zh = publicPublications(cv.zh)
-    return { lang: zh.length ? 'zh' : 'en', publications: zh, owner }
+    return { lang: zh.length ? 'zh' : 'en', publications: zh, owner, orcid, orcidAuthenticated }
   } catch {
-    return { lang: 'en', publications: [], owner: NO_OWNER_NAMES }
+    return { lang: 'en', publications: [], owner: NO_OWNER_NAMES, orcid: '' }
   }
 }
 
@@ -119,13 +130,19 @@ export type PublicationsPageData = {
   description: string
   /** "3 papers: 2 published, 1 under review". */
   summary: string
+  /** The owner's public ORCID iD (bare), shown in the page header with the iD icon; '' when none. */
+  orcid: string
+  /** The owner connected that iD: the authenticated iD icon; else the unauthenticated one and "(unauthenticated)". */
+  orcidAuthenticated: boolean
 }
 
 /**
  * Everything /publications renders, built on the server from the public
- * website view: display parts (English labels), BibTeX and APA, and the
- * JSON-LD (a CollectionPage whose ItemList holds one ScholarlyArticle per
- * paper). null when there is no public paper — the page then answers 404.
+ * website view: display parts (English labels), BibTeX and APA, the owner's
+ * public ORCID iD (the header shows it; each ScholarlyArticle names the
+ * owner by the record's URI), and the JSON-LD (a CollectionPage whose
+ * ItemList holds one ScholarlyArticle per paper). null when there is no
+ * public paper — the page then answers 404.
  */
 export function buildPublicationsPage(view: PublicationsView = readPublicationsView()): PublicationsPageData | null {
   if (!view.publications.length) return null
@@ -140,6 +157,7 @@ export function buildPublicationsPage(view: PublicationsView = readPublicationsV
   const summary = summarizePublications(view.publications)
   const description = publicationsDescription(view.publications, PERSON_NAME)
   const url = absUrl(PUBLICATIONS_PATH)
+  const orcid = orcidUrl(view.orcid)
   const jsonLd: PublicationsPageData['jsonLd'] = [
     {
       '@context': 'https://schema.org',
@@ -161,6 +179,7 @@ export function buildPublicationsPage(view: PublicationsView = readPublicationsV
           item: scholarlyArticleNode(it.pub, {
             id: `${url}#${it.key}`,
             person: personAuthor,
+            ...(orcid ? { orcid } : {}),
             owner: view.owner,
             origin: SITE_URL,
             inLanguage: textLang(it.pub.title, 'en'),
@@ -173,5 +192,5 @@ export function buildPublicationsPage(view: PublicationsView = readPublicationsV
       { name: 'Publications', path: PUBLICATIONS_PATH },
     ]),
   ]
-  return { items, lang: view.lang, jsonLd, description, summary }
+  return { items, lang: view.lang, jsonLd, description, summary, orcid: view.orcid, orcidAuthenticated: !!view.orcid && !!view.orcidAuthenticated }
 }

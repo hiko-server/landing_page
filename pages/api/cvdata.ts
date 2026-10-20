@@ -19,6 +19,8 @@ import { CV_PAGE_PATHS, revalidatePaths } from '../../lib/revalidate'
 import { warmCvExports } from '../../lib/cvExport/service'
 import { trackPublicationsNav } from '../../lib/publicationsNav'
 import { validateCvDoc, type CvValidationError } from '../../lib/cvValidate'
+import { withBareOrcid } from '../../lib/orcid/id'
+import { reconcileOrcidAuth } from '../../lib/orcid/connection'
 import { withApi } from '../../lib/apiHandler'
 import type { Logger } from '../../lib/log'
 
@@ -149,8 +151,9 @@ export default withApi('cvdata', async (req: NextApiRequest, res: NextApiRespons
     if (!rl.allowed) return res.status(429).json({ error: 'Too many updates, try later' })
     const body = req.body && typeof req.body === 'object' ? req.body : {}
     const syncZh = !!body.syncZh
-    const en = parseLoose(body.en)
-    const zh = parseLoose(body.zh)
+    // A pasted ORCID link is stored as the bare iD (lib/orcid/id).
+    const en = withBareOrcid(parseLoose(body.en))
+    const zh = withBareOrcid(parseLoose(body.zh))
     if (en === undefined && zh === undefined) return res.status(400).json({ error: 'Missing payload' })
     if ((en !== undefined && !isSectionArray(en)) || (zh !== undefined && !isSectionArray(zh))) {
       return res.status(400).json({ error: 'Each language must be an array of sections with a string "sessionName"' })
@@ -167,7 +170,9 @@ export default withApi('cvdata', async (req: NextApiRequest, res: NextApiRespons
     const newEn = Array.isArray(en) ? en : current.en
     const baseZh = Array.isArray(zh) ? zh : current.zh
     const newZh = syncZh ? syncLanguage(newEn, baseZh) : baseZh
-    const next = { en: newEn, zh: newZh }
+    // The ORCID "authenticated" marker is the server's: kept only where the
+    // stored one is still sent with the same iD (lib/orcid/connection).
+    const next = reconcileOrcidAuth({ en: newEn, zh: newZh }, current)
 
     // Nothing changed: no snapshot, no write, version (ETag) unchanged.
     if (stableStringify(next) === stableStringify({ en: current.en, zh: current.zh })) {
@@ -244,6 +249,8 @@ export default withApi('cvdata', async (req: NextApiRequest, res: NextApiRespons
       if ((enIn && !isSectionArray(enIn)) || (zhIn && !isSectionArray(zhIn))) {
         return res.status(400).json({ error: 'Each language must be an array of sections with a string "sessionName"' })
       }
+      enIn = withBareOrcid(enIn)
+      zhIn = withBareOrcid(zhIn)
       const checkedImport = validateCvDoc({ en: enIn, zh: zhIn })
       if (!checkedImport.ok) return sendInvalid(res, checkedImport.errors)
       const current = readCvData()
@@ -251,7 +258,7 @@ export default withApi('cvdata', async (req: NextApiRequest, res: NextApiRespons
       const newZh = zhIn ? syncLanguage(newEn, zhIn) : current.zh
       snapshotQuietly(ctx.log, 'import')
       const nav = trackPublicationsNav()
-      const importResult = await writeCvData({ en: newEn, zh: newZh })
+      const importResult = await writeCvData(reconcileOrcidAuth({ en: newEn, zh: newZh }, current))
       if (!importResult.ok) return res.status(500).json({ error: importResult.error })
       const etag = kvEtag(importResult.updatedAt)
       const revalidation = await revalidateCvPages(res, nav)

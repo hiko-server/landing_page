@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import dynamic from 'next/dynamic'
+import { useRouter } from 'next/router'
 import {
   AlertDialog,
   AlertDialogBody,
@@ -56,6 +57,7 @@ import {
   addSection,
   duplicatesHidden,
   hasContent,
+  appendEntries,
   insertMany,
   listOp,
   moveSection,
@@ -96,6 +98,11 @@ import {
   type ReadinessFinding,
 } from '../../lib/cvReadiness'
 import { referenceMonth } from '../../lib/clock'
+import { publishedCaseStudies } from '../../lib/caseStudyLinks'
+import { normalizeOrcidId } from '../../lib/orcid/id'
+import { dropStaleOrcidAuth } from '../../lib/orcid/connection'
+import { orcidAuthMarkerOf } from '../../lib/orcid/marker'
+import { ORCID_RETURN_KEYS, orcidConnectNotice, type OrcidNotice } from '../../lib/orcid/connectUi'
 
 // The readiness drawer only loads when it is first opened.
 const ReadinessPanel = dynamic(() => import('./cvStudio/ReadinessPanel'), { ssr: false })
@@ -423,6 +430,20 @@ export default function CVEditorStudio() {
     [run, lang, linked, unlinkedReason, sectionNameAt, notifyUndoable, scope, announce],
   )
 
+  // The ORCID iD the Publications import reads (this language first; the field is shared, so usually both agree).
+  const [orcid, orcidAuthenticated] = useMemo((): [string, boolean] => {
+    for (const l of [lang, other]) {
+      const pi = doc[l].find((s) => s.sessionName === 'personalInformation')
+      const id = normalizeOrcidId(pi?.orcid)
+      if (id) return [id, orcidAuthMarkerOf(pi)?.id === id]
+    }
+    return ['', false]
+  }, [doc, lang, other])
+
+  // Published case studies, as /cv links them (the readiness context's index; null until it loads).
+  const caseStudies = readyCtx?.caseStudies ?? null
+  const publishedWorks = useMemo(() => publishedCaseStudies(caseStudies), [caseStudies])
+
   // ── Edit API (context for every form control) ──────────────────────────
   const api: StudioApi = useMemo(
     () => ({
@@ -430,8 +451,10 @@ export default function CVEditorStudio() {
       linked,
       focus,
       setValue: (path: CvPath, value: any, opts?: { shared?: boolean }) => {
-        if (opts?.shared && linked) apply((d) => setSharedValue(d, lang, path, value, true).doc, `${lang}:${path.join('.')}`)
-        else apply((d) => setValue(d, lang, path, value), `${lang}:${path.join('.')}`)
+        // Changing the ORCID iD also drops an "authenticated" marker that no
+        // longer confirms it, in the same undo step (lib/orcid/connection).
+        if (opts?.shared && linked) apply((d) => dropStaleOrcidAuth(setSharedValue(d, lang, path, value, true).doc), `${lang}:${path.join('.')}`)
+        else apply((d) => dropStaleOrcidAuth(setValue(d, lang, path, value)), `${lang}:${path.join('.')}`)
       },
       toggleField: (nodePath: CvPath, field: string, label: string) => {
         const r = run((d) => toggleFieldHidden(d, lang, nodePath, field, linked))
@@ -468,6 +491,27 @@ export default function CVEditorStudio() {
           announce(`Pasted into ${LANG_LABEL[lang]} only`, unlinkedReason(sectionNameAt(listPath)))
         }
       },
+      appendEntries: (listPath: CvPath, entries: readonly Record<string, any>[], label: string) => {
+        if (!entries.length) return
+        const r = run((d) => appendEntries(d, lang, listPath, entries, linked))
+        notifyUndoable(`${label}${scope(r.reached)}`, r.doc)
+        if (linked && !r.reached) announce(`Added to ${LANG_LABEL[lang]} only`, unlinkedReason(sectionNameAt(listPath)))
+      },
+      goToField: (sectionName: string, field: string) => {
+        const idx = getDoc()[lang].findIndex((s) => s.sessionName === sectionName)
+        if (idx < 0) {
+          announce(`Add the “${SECTION_BY_NAME[sectionName]?.label || sectionName}” section first`)
+          return
+        }
+        setSelected(sectionName)
+        setMobilePane('edit')
+        setFocus({ lang, path: [idx, field], nonce: Date.now(), control: true })
+      },
+      orcid,
+      orcidAuthenticated,
+      caseStudies,
+      dirty,
+      serverChange: { etag: cv.getBaseEtag, adopt: cv.adoptSaved, current: getDoc },
       twinLength: (listPath: CvPath) => twinListLength(getDoc(), lang, listPath),
       twinValue: (path: CvPath) => {
         const d = getDoc()
@@ -476,8 +520,39 @@ export default function CVEditorStudio() {
         return at < 0 ? undefined : getAt(d[other], [at, ...path.slice(1)])
       },
     }),
-    [apply, run, getDoc, lang, other, linked, focus, reportVisibility, applyListOp, announce, unlinkedReason, sectionNameAt],
+    [apply, run, getDoc, lang, other, linked, focus, orcid, orcidAuthenticated, caseStudies, dirty, cv.getBaseEtag, cv.adoptSaved, reportVisibility, applyListOp, announce, unlinkedReason, sectionNameAt, notifyUndoable, scope],
   )
+
+  // Back from "Connect your ORCID iD" (?orcid=connected | ?orcid=error&reason=…,
+  // lib/orcid/connectUi): the keys leave the address at once (a reload must
+  // not repeat the toast); once the CV is loaded, the toast and the iD field.
+  const router = useRouter()
+  const [orcidNotice, setOrcidNotice] = useState<OrcidNotice | null>(null)
+  useEffect(() => {
+    if (!router.isReady) return
+    const notice = orcidConnectNotice(router.query)
+    if (!notice) return
+    setOrcidNotice(notice)
+    const rest = { ...router.query }
+    for (const key of ORCID_RETURN_KEYS) delete rest[key]
+    router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true, scroll: false }).catch(() => undefined)
+    // Once, when the address is known.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router.isReady])
+  useEffect(() => {
+    if (!orcidNotice || cv.loadState !== 'ready') return
+    setOrcidNotice(null)
+    toast({
+      id: 'orcid-connect',
+      status: orcidNotice.status,
+      title: orcidNotice.title,
+      description: orcidNotice.description,
+      position: 'bottom-right',
+      isClosable: true,
+      duration: orcidNotice.status === 'success' ? 7000 : 12000,
+    })
+    api.goToField('personalInformation', 'orcid')
+  }, [orcidNotice, cv.loadState, toast, api])
 
   const confirmPendingRemove = (both: boolean) => {
     const p = pendingRemove
@@ -616,7 +691,8 @@ export default function CVEditorStudio() {
         return
       }
       const behavior: ScrollBehavior = prefersReducedMotion() ? 'auto' : 'smooth'
-      const target = el.querySelector<HTMLElement>('[data-vis-toggle]') || el.querySelector<HTMLElement>('input, textarea, button')
+      const control = focus.control ? el.querySelector<HTMLElement>('input, textarea, select') : null
+      const target = control || el.querySelector<HTMLElement>('[data-vis-toggle]') || el.querySelector<HTMLElement>('input, textarea, button')
       const reveal = () => {
         el.scrollIntoView({ block: 'center', behavior })
         if (target && !el.contains(document.activeElement)) target.focus({ preventScroll: true })
@@ -650,8 +726,6 @@ export default function CVEditorStudio() {
   // The owner's names from both languages' public Personal Info: author lists
   // in the A4 preview emphasise them exactly like /cv and /cv/zh do.
   const ownerNames = useMemo(() => ownerNamesFromSections(publicSections(doc.en, 'cv'), publicSections(doc.zh, 'cv')), [doc.en, doc.zh])
-  // The published case studies (from the readiness context): the A4 preview links only these, like /cv.
-  const publishedWorks = useMemo(() => (readyCtx?.caseStudies || []).filter((w) => !w.draft).map(({ slug, title }) => ({ slug, title })), [readyCtx])
 
   // ── Save ───────────────────────────────────────────────────────────────
   /** Save; resolves true only when the server stored the document. */

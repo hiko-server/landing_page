@@ -1016,6 +1016,133 @@ Fixes for defects an adversarial review found in wave 2B before it shipped.
 - **End-to-end suite**: admin clean-ups now really delete what the tests
   created when the suite runs over plain http.
 
+### orcid
+
+The owner's ORCID iD (owner request, 2026-10-20: 添加ORCID连接和显示). Nothing
+is public until the owner enters an iD; no iD is ever invented.
+
+- **The iD is CV data**: a new *ORCID iD* field in CV Studio → Personal Info
+  (shared by EN and 中文), checked with ORCID's ISO 7064 MOD 11-2 checksum —
+  a typo in the last character gets its own message, a wrong shape another.
+  A pasted `https://orcid.org/…` link (or the iD without hyphens) is stored
+  as the bare iD, by the editor and again on every save and import
+  (`withBareOrcid`). The usual eye toggle hides it: hidden, it reaches no
+  page, file, feed or structured data (the leak tests cover it).
+- **Shown as ORCID's iD display guidelines ask**: the official green iD icon
+  (inline SVG, 16 px, decorative) followed by the full `https://orcid.org/…`
+  URI as the link text, named "ORCID iD: https://orcid.org/… (opens in a new
+  tab)" for screen readers; in a narrow column the URI breaks after
+  `orcid.org/`, never inside the iD. On `/cv` and `/cv/zh` (A4 sheet and
+  Reading view), `/publications` (under the lede), the /about identity rail.
+  The PDF CVs (EN + 中文) and `/cv.txt` print `ORCID: https://orcid.org/…`
+  as a text link; `/cv.json` lists it in `basics.profiles` (`network:
+  ORCID`, `username`: the iD); the vCard carries `URL;TYPE=orcid` and
+  `X-ORCID`; the Person JSON-LD adds the record to `sameAs` and an ORCID
+  `identifier` (PropertyValue), and each ScholarlyArticle names the owner by
+  the record's URI as `@id`; `/llms.txt` gets one `- ORCID iD:` line.
+- **Readiness**: a low-severity suggestion when a public paper has a DOI but
+  the CV has no ORCID iD (a hidden field is a decision and never reported).
+- **Import from ORCID** (CV Studio → Publications): with an iD set, the
+  dialog lists the record's public works — read on the server by
+  `POST /api/admin/orcid/works` (admin only, 10 reads per browser per 10
+  minutes, every read in the activity log without the iD) from
+  `https://pub.orcid.org/v3.0/<iD>/works` and its bulk details (authors,
+  abstract; 100 per call) through `safeFetch`, one allow-listed host, no
+  redirects. Each work group becomes one candidate from the researcher's
+  preferred version (highest display index): title, venue, ORCID type →
+  venue type and status (preprints stay preprints), year / month, DOI and
+  other identifiers, an https link. Works already on the CV (same DOI, else
+  the same normalised title) and non-paper types (patents, datasets,
+  software …) are left unticked; the ticked ones are added to the unsaved
+  document as one undo step, like papers typed by hand (mirrored into the
+  other language when linked) — nothing is saved until the owner saves.
+  Clear messages for no iD, an unknown record, no public works, ORCID busy
+  (429 / 5xx, with its wait), a timeout, an unreadable answer and an ended
+  session. Unit tests run over synthetic fixtures in ORCID's v3.0 works
+  shape; no browser request ever goes to ORCID (`connect-src` unchanged).
+- `/colophon` and `public/licenses/orcid.txt` state that the iD icon is
+  ORCID's trademark, used as its guidelines allow, outside the site's
+  licence.
+- `lib/orcid/`: `id` (parse, checksum, normalise), `uri` (the light check
+  for code on every page), `cv` (the one reader), `works` (mapping, details,
+  dedupe), `fetch`, `route`, `importClient`. Shared first-load JS unchanged
+  in content (167.0 KiB vs 166.6 at the base, minifier naming); each public
+  page carries ~0.3 KiB more for the Person node's ORCID support; the Studio
+  dialog is its own chunk.
+
+### orcid-connect
+
+"Connect your ORCID iD" — the connection half of the owner's request (ORCID连接和
+显示), which ORCID's display guidelines require before the green iD icon may be
+shown.
+
+- **Connect your ORCID iD** next to the iD field in CV Studio → Personal Info:
+  ORCID's sign-in button (the iD icon, white, hairline border) as a plain link
+  to `GET /api/admin/orcid/connect`. It sends a signed-in admin to ORCID's
+  OAuth sign-in — authorization code, scope `/authenticate` only (no access
+  to the record) — with a random `state` bound to that admin session in a
+  signed, single-use, 10-minute, HttpOnly `SameSite=Lax` cookie scoped to the
+  callback. `GET /api/admin/orcid/callback` checks the state against the
+  cookie (once), that the session that started it is still live and current
+  (and the same one, if a session cookie came along), exchanges the code on
+  the server at ORCID's token endpoint (`safeFetch`, now able to POST, one
+  host, never redirected; the secret never reaches the browser), stores the
+  confirmed iD in both languages' Personal Info with the marker
+  `orcidAuthenticated: { id, at }`, regenerates the CV pages, records
+  `orcid.connect` in the activity log (attributed to the session; never a
+  token) and discards the access token. A typed iD that differed is
+  replaced, and the toast says so.
+- **The Strict session cookie**: the admin cookie is `SameSite=Strict`, so the
+  browser does not send it on the way back from orcid.org. The proxy lets
+  only `GET /api/admin/orcid/callback` through without it (the route
+  authorises itself, see above), and the callback answers a small same-origin
+  page (meta refresh, no script, no referrer) instead of a redirect: the
+  navigation it starts is same-site, so the Studio opens signed in.
+- Every outcome returns to the Studio with a toast and focus on the iD field:
+  connected, cancelled on ORCID, an unmatched or reused link, more than 10
+  minutes, a session that ended or changed, ORCID errors, refused code or
+  client credentials, ORCID busy / slow / unreachable / unreadable, no
+  Personal Info, not configured, wrong host, too many attempts.
+- **Disconnect…** (with an inline confirm) removes the marker and keeps the iD,
+  which then shows as unauthenticated; clearing or hiding it stays an ordinary
+  edit. `DELETE /api/admin/orcid/connection` (If-Match against the Studio's
+  copy, which adopts the result without a reload; `orcid.disconnect` in the
+  activity log). `GET` answers whether the server is set up (never a secret).
+- **The marker belongs to the server**: changing the iD in the Studio drops it
+  in the same undo step; a save keeps it only where the CV still carries the
+  stored marker with the same iD, so a hand-edited iD is unauthenticated from
+  then on and a marker typed into the JSON or an import is ignored. Public
+  views carry it only as `{ id }`, only while the iD is public and still the
+  confirmed one (the connection time stays private).
+- **Display**: an authenticated iD keeps the green iD icon; a typed-in one now
+  shows ORCID's unauthenticated iD icon (the outlined iD, redrawn from ORCID's
+  guideline artwork and checked against it pixel by pixel) and
+  "(unauthenticated)" — "（未经认证）", ORCID's own zh-CN wording, on Chinese
+  pages — after the link, on `/cv`, `/cv/zh` (sheet and Reading view), the
+  /about rail, `/publications`, the Studio preview and the import dialog. The
+  PDF, text and JSON CVs, the vCard and the JSON-LD keep the URI alone either
+  way. `/colophon` and `public/licenses/orcid.txt` describe both icons.
+- **Without credentials** the button is disabled, and the line under it says
+  why (`ORCID_CLIENT_ID`, `ORCID_CLIENT_SECRET`) with a link to the set-up
+  guide; a malformed client ID or an unknown `ORCID_ENV` is named.
+  `ORCID_ENV=sandbox` uses sandbox.orcid.org. Documented in `.env.example` and
+  both READMEs (registering a Public API client, the redirect URI
+  `https://lucian-dev.com/api/admin/orcid/callback`).
+- Tests: `tests/orcid-connect.test.ts` (config, authorize URL, state expiry /
+  tampering / replay / mismatch, marker lifecycle and public form, display
+  choice, the Studio's states and messages, the return page, the proxy) and
+  `tests/orcid-connect-route.test.ts` (the routes over a temporary store
+  against a local fake ORCID token endpoint — no network); e2e
+  `e2e/orcid-connect.spec.ts` (@admin: the disabled state, the callback's
+  error paths arriving cross-site); `e2e/orcid.spec.ts` expects the
+  unauthenticated form for a typed iD.
+- Fixed (CV Studio): the A4 preview linked a project's case-study slug to
+  `/work/<slug>` even when no such case study was published (a 404 link, and
+  a console 404 from its prefetch). It now resolves case-study links as `/cv`
+  does (`withEvidenceLinks`: a published slug, else a strict title match,
+  else none), and the project editor says so under the field: "No published
+  case study at /work/<slug>" (or that it is still a draft).
+
 ### Changed
 
 - **No more "[01] INTRODUCTION" labels** (owner request): the public site

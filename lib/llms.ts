@@ -7,6 +7,8 @@ import { translationGroups } from './translations'
 import { articleMarkdown, buildLlmsFullTxt, buildLlmsTxt, type LlmsEntry, type LlmsInput, type TwinArticle } from './markdownTwin'
 import { log } from './log'
 import { hasPublicationsPage } from './publicationsData'
+import { orcidOf } from './orcid/cv'
+import { orcidUrl } from './orcid/id'
 import type { CvLang } from './cvVisibility'
 
 /**
@@ -14,9 +16,10 @@ import type { CvLang } from './cvVisibility'
  * SERVER-ONLY (content store). Public content only: the published posts and
  * case studies (lib/mdx listPosts / listWork exclude drafts), the fields
  * their pages show, the home page's description, the owner's /now and /uses
- * descriptions and which public pages exist (/publications, the CV in each
- * language). Nothing hidden and no CV data — the CV is linked, never
- * quoted — and no contact details.
+ * descriptions, which public pages exist (/publications, the CV in each
+ * language) and the owner's public ORCID iD (a researcher identifier, not a
+ * contact detail; absent when unset or hidden). Nothing hidden and no CV
+ * data otherwise — the CV is linked, never quoted — and no contact details.
  */
 
 export type Collection = 'blog' | 'work'
@@ -112,6 +115,17 @@ function hasPublications(): boolean {
   }
 }
 
+/** The owner's public ORCID record URI (website audience, either language's Personal Info); '' when unset or hidden. */
+async function publicOrcid(): Promise<string> {
+  try {
+    const { readPublicCvSections } = await import('./cvdata')
+    const pi = readPublicCvSections('website', ['personalInformation'], ['en', 'zh'])
+    return orcidUrl(orcidOf(pi.en[0]) || orcidOf(pi.zh[0]))
+  } catch {
+    return ''
+  }
+}
+
 /** Whether a CV language has anything public to show (the same test as its page's downloads, lib/cvExport). */
 async function cvHasContent(lang: CvLang): Promise<boolean> {
   try {
@@ -139,6 +153,7 @@ async function llmsInput(posts: PostEntry[], work: WorkEntry[]): Promise<LlmsInp
     posts: posts.map((p) => entry(p, isoDate(p.frontmatter.date) || undefined)),
     publications: hasPublications(),
     cv: { en: await cvHasContent('en'), zh: await cvHasContent('zh') },
+    ...(await publicOrcid().then((orcid) => (orcid ? { orcid } : {}))),
     nowDescription: pageDescription('now'),
     usesDescription: pageDescription('uses'),
   }

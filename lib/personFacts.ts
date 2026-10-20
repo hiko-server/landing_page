@@ -9,7 +9,8 @@
  *   - the website view of the CV: location (Personal Info address), schools,
  *     skills, and the 中文 name (via heroIdentity, exactly as the hero shows
  *     it) — contact details never; completed degrees, awards, languages and
- *     a role or study that is running right now (lib/personExtras);
+ *     a role or study that is running right now (lib/personExtras); the
+ *     ORCID iD (sameAs + identifier) from either language's Personal Info;
  *   - the Home editor's portrait, as its 640 px variant when one is stored
  *     (personNode makes it absolute); without one the node keeps the site's
  *     default portrait, the same image the hero falls back to.
@@ -27,6 +28,7 @@ import { safeHref } from './cvFormat'
 import { referenceMonth } from './clock'
 import { personFactsFromCv, type PersonFacts } from './schema'
 import { personExtrasFromCv } from './personExtras'
+import { orcidOf } from './orcid/cv'
 import { variantUrl } from './uploadVariants'
 import { heroIdentity } from '../components/LandingPage/heroIdentity'
 
@@ -52,6 +54,10 @@ export function loadPersonFacts(now: string = referenceMonth()): PersonFacts {
     const info = (list: typeof cv.en) => list.find((s) => s.sessionName === 'personalInformation')
     const { nameZh } = heroIdentity(info(cv.en), info(cv.zh), { storedHasPersonalInfo })
     facts = { ...personFactsFromCv(cv.en), ...personExtrasFromCv(cv.en, now), ...(nameZh ? { alternateName: [nameZh] } : {}) }
+    // The ORCID iD (shared by both CVs; either side's is the owner's), read with the full normaliser.
+    const orcid = orcidOf(info(cv.en)) || orcidOf(info(cv.zh))
+    if (orcid) facts.orcid = orcid
+    else delete facts.orcid
   } catch {
     /* no CV facts — the node keeps its built-in defaults */
   }

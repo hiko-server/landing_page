@@ -95,6 +95,8 @@ export interface PersonalInformation extends CVSection {
   github?: string
   /** LinkedIn profile URL (empty: Home → Socials is used on the CV). */
   linkedin?: string
+  /** ORCID iD, the bare "NNNN-NNNN-NNNN-NNNC" form (lib/orcid/id). No fallback — shown only when set and not hidden. */
+  orcid?: string
   address: string
   introduction: string
   separatorColor?: string

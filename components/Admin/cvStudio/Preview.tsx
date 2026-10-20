@@ -23,9 +23,10 @@ const MODE_KEY = 'cv-studio:preview-mode'
 
 /**
  * Live preview of exactly what visitors get — same pruning, same renderers:
- *   A4 CV   → /cv and the PDF (publicSections 'cv', evidence links resolved
- *             as /cv does — a project links its case study only when that
- *             is published — through CVResult)
+ *   A4 CV   → /cv and the PDF (publicSections 'cv' through CVResult, with
+ *             the evidence links resolved as /cv resolves them: a project's
+ *             case study only when it is PUBLISHED — never a /work/<slug>
+ *             that would 404)
  *   Website → the CV stack on /about (publicSections 'website')
  * Rendering is deferred so typing never waits on the preview.
  */
@@ -34,7 +35,7 @@ export default function Preview({
   lang,
   onPages,
   ownerNames,
-  works,
+  works = null,
 }: {
   sections: Section[]
   lang: CvLang
@@ -42,12 +43,12 @@ export default function Preview({
   onPages?: (lang: CvLang, pages: number) => void
   /** The owner's name forms (bold in publication author lists, as on /cv). */
   ownerNames?: OwnerNames
-  /** The published case studies: a project's "Case study" link points only at one of them, as on /cv. */
-  works?: readonly CvWork[]
+  /** Published case studies (lib/caseStudyLinks); null while unknown — then no case-study links. */
+  works?: readonly CvWork[] | null
 }) {
   const deferred = useDeferredValue(sections)
   const [mode, setMode] = useState<Mode>('cv')
-  const cvData = useMemo(() => (mode === 'cv' ? withEvidenceLinks(publicSections(deferred, 'cv'), { works }) : []), [deferred, mode, works])
+  const cvData = useMemo(() => (mode === 'cv' ? withEvidenceLinks(publicSections(deferred, 'cv'), { works: works ?? [] }) : []), [deferred, mode, works])
   const [zoom, setZoom] = useState<'fit' | number>('fit')
   const [scale, setScale] = useState(1)
   const { border, dim } = useStudioTokens()

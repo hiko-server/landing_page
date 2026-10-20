@@ -244,9 +244,32 @@ export function useCvDocument() {
     [setBaseEtag],
   )
 
+  /**
+   * The server applied a change of its own to the version this editor is
+   * based on (e.g. disconnecting ORCID, sent with If-Match) and answered
+   * `doc`'s new ETag: adopt it as the saved state, without a reload. Only
+   * for an editor with no unsaved changes — history restarts there.
+   */
+  const adoptSaved = useCallback(
+    (doc: Doc, etag: string) => {
+      commit(historyInit(doc))
+      setSavedJson(docJson(doc))
+      setBaseEtag(etag)
+      setServerEtag(etag)
+      setSavedAt(Date.now())
+      clearStoredDraft()
+    },
+    [commit, setBaseEtag],
+  )
+
+  /** ETag the editor content is based on (sent as If-Match). */
+  const getBaseEtag = useCallback(() => baseEtagRef.current, [])
+
   return {
     doc: hist.present,
     getDoc,
+    adoptSaved,
+    getBaseEtag,
     apply,
     undo,
     redo,

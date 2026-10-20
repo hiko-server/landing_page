@@ -4,6 +4,7 @@ import type { CvLang } from '../../lib/cvVisibility'
 import { useReferenceMonth } from '../../lib/clock'
 import { cvLabels, displayUrl, formatCvDate, majorAddsInfo, safeHref } from '../../lib/cvFormat'
 import { profileLinks, projectLinks } from '../../lib/cvLinks'
+import OrcidIdLink from '../Common/OrcidIdLink'
 import EmailText from '../Common/EmailText'
 import dynamic from 'next/dynamic'
 import type { OwnerNames } from '../../lib/publications/names'
@@ -330,7 +331,28 @@ function IdentityCard({ data, lang }: { data: Section; lang: CvLang }) {
   if (website) contacts.push({ label: lang === 'zh' ? '网站' : 'Web', node: <MaybeLink url={website}>{displayUrl(website)}</MaybeLink> })
   if (email) contacts.push({ label: L.email, node: <MaybeLink url={`mailto:${email}`}><EmailText value={email} /></MaybeLink> })
   if (phone) contacts.push({ label: L.phone, node: <MaybeLink url={`tel:${phone.replace(/[^\d+]/g, '')}`}><EmailText value={phone} /></MaybeLink> })
-  for (const p of profileLinks(data)) contacts.push({ label: p.label, node: <MaybeLink url={p.href}>{p.text}</MaybeLink> })
+  for (const p of profileLinks(data)) {
+    contacts.push({
+      label: p.label,
+      node:
+        p.kind === 'orcid' ? (
+          // The iD icon and the full URI, as ORCID's display guidelines ask.
+          <OrcidIdLink
+            id={p.href}
+            authenticated={!!p.authenticated}
+            lang={lang}
+            iconSize={16}
+            color="accent.text"
+            textDecoration="underline"
+            textUnderlineOffset="3px"
+            textDecorationColor="var(--accent-ring)"
+            _hover={{ textDecorationColor: 'accent.text' }}
+          />
+        ) : (
+          <MaybeLink url={p.href}>{p.text}</MaybeLink>
+        ),
+    })
+  }
   if (address) contacts.push({ label: lang === 'zh' ? '地址' : 'Based in', node: address })
   // Owner-entered lines from the availability (求职意向, right-to-work) — /cv pages provide them.
   const extras = useCvHeaderLines(lang)

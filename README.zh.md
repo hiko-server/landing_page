@@ -52,6 +52,18 @@ English → [README.md](./README.md)
   依据公开的个人信息自动加粗；尚未发表的论文始终标明真实状态；被隐藏的合著者显示
   为 “…”，作者顺序保持真实。在出现第一篇公开论文之前，网站上不显示任何相关内容
   （无板块、无导航链接，`/publications` 返回 404）。逻辑位于 `lib/publications/`。
+- **ORCID iD**：CV Studio 的个人信息新增 ORCID iD 字段（按 ORCID 的 MOD 11-2 校验位
+  检查；粘贴 `https://orcid.org/…` 链接会存为纯 iD），同样可用眼睛图标隐藏。填写后按
+  ORCID 的 iD 展示规范显示——绿色 iD 图标加完整的 `https://orcid.org/…` 链接——出现在
+  `/cv`、`/cv/zh`、`/publications` 和 /about 侧栏，PDF 与纯文本简历中为文字链接，
+  JSON Resume 中为一项 profile，并写入 vCard、Person 结构化数据（`sameAs` 与 ORCID
+  `identifier`，论文作者的 `@id`）和 `/llms.txt` 的一行；隐藏后任何地方都不出现。论文板块的
+  **Import from ORCID** 会列出该 ORCID 记录的公开作品（由服务器经 ORCID 公共 API 读取，
+  不保存任何内容），标出 CV 中已有的论文（DOI 或标题相同），勾选的作品作为论文加入，
+  保存前可逐条修改。字段旁的 **Connect your ORCID iD** 通过登录 ORCID 证明该 iD 属于
+  站长；在此之前，手动填写的 iD 按规范显示 ORCID 的“未认证”iD 图标，并在链接后注明
+  “(unauthenticated)”/“（未经认证）”——详见
+  [连接 ORCID iD](#连接-orcid-idconnect-your-orcid-id)。逻辑位于 `lib/orcid/`。
 - **面向非工程师的后台**：可视化编辑 Hero、品牌、社交、照片墙、博客、
   案例研究、CV（Studio + 原始 JSON）、Now/Uses，以及关于页自述。
 - **逐节可见性与排序**：首页所有板块（Open Source / Skills /
@@ -331,6 +343,7 @@ docker compose up -d --build
 | 健康详情 | `HEALTH_TOKEN`（供监控使用的 Bearer 令牌） | 可选 — 未设置时只有已登录的管理员能看到 `/api/health` 详情 |
 | 后台二次验证 | `ADMIN_RECENT_AUTH_MINUTES`（1–60，默认 10） | 可选 |
 | 恢复演练 | `RESTORE_DRILL_INTERVAL_HOURS`（默认 168，`0` 关闭） | 可选 |
+| ORCID 连接 | `ORCID_CLIENT_ID`、`ORCID_CLIENT_SECRET`、`ORCID_ENV`（默认 `production`，或 `sandbox`） | 可选 — 未设置时 “Connect your ORCID iD” 保持禁用（[配置方法](#连接-orcid-idconnect-your-orcid-id)） |
 
 > 仓库里**永远不会**提交真实 `.env`。`.env.example` 仅含占位值 — 拷贝
 > 一份再按自己的部署填即可。
@@ -447,7 +460,8 @@ UA 或 Cookie；在 后台 → 系统 → 错误 中处理（已解决的错误�
   JWT 签名（`jose`，固定 HS256）以及吊销状态——`data/admin.json` 中的会话版本与
   `data/auth.db` 中该浏览器的会话记录，因此已登出或被吊销的浏览器也看不到后台页面
   外壳。未登录访问 → 页面跳到 `/admin/login?next=<原路径>`；接口直接返 JSON 401。
-  公开白名单：`/admin/{login,forgot,reset}` 与 `/api/admin/{session,logout}`。
+  公开白名单：`/admin/{login,forgot,reset}` 与 `/api/admin/{session,logout}`，
+  以及自行鉴权的 `GET /api/admin/orcid/callback`（见“连接 ORCID iD”）。
   每个接口自身仍会再校验一次会话。
 - **scrypt** 密码哈希（N=16384、r=8、p=1、64 字节 key，异步计算），每账户
   独立的 16 字节随机盐。比较一律走 `crypto.timingSafeEqual` 且两侧 buffer 等长。
@@ -499,6 +513,45 @@ UA 或 Cookie；在 后台 → 系统 → 错误 中处理（已解决的错误�
   [SECURITY.md](SECURITY.md)。
 - **SSRF**：服务端抓取任何来自内容或后台的 URL 都经过
   `lib/security/safeFetch.ts`（只允许公网地址，限制大小、跳转次数与时长）。
+
+### 连接 ORCID iD（Connect your ORCID iD）
+
+按 ORCID 的 iD 展示规范：研究者登录 ORCID 证明过的 iD 显示绿色 iD 图标；仅手动填写
+的 iD 显示“未认证”iD 图标，并在链接后注明 “(unauthenticated)”（中文页面为
+“（未经认证）”）。CV Studio → 个人信息的 iD 字段旁有 **Connect your ORCID iD**，
+连接后全站显示为已认证。
+
+1. 登录 [orcid.org](https://orcid.org)（记录需有已验证的邮箱），从账户菜单打开
+   **Developer Tools**（<https://orcid.org/developer-tools>），接受 Public API 条款，
+   点击 **Register for ORCID Public API credentials**（免费）。名称填网站名，网址填
+   网站地址，描述写明用途（ORCID 会在登录页上显示这些信息）。
+2. 按网站实际发送的地址添加 redirect URI：`SITE_URL` 的 origin +
+   `/api/admin/orcid/callback`，本站即 `https://lucian-dev.com/api/admin/orcid/callback`
+   （ORCID 正式环境只接受 https）。
+3. 把 **Client ID**（`APP-…`）和 **Client secret** 写入服务器环境变量
+   `ORCID_CLIENT_ID`、`ORCID_CLIENT_SECRET` 并重启。想先试用，可在
+   <https://sandbox.orcid.org/developer-tools> 注册测试客户端（测试记录；那里接受
+   `http://127.0.0.1:3000/api/admin/orcid/callback` 这类 http 地址，同时把 `SITE_URL`
+   设为该 origin），并设置 `ORCID_ENV=sandbox`。
+
+工作原理（`lib/orcid/oauth.ts`、`flow.ts`、`connectRoute.ts`）：按钮是指向
+`GET /api/admin/orcid/connect` 的普通链接，已登录的管理员被带到 ORCID 的 OAuth 登录页
+（授权码模式，仅 `/authenticate` 权限，不能访问记录内容），附带一个与当前管理员会话绑定
+的随机 `state`，保存在签名、一次性、10 分钟有效、HttpOnly、`SameSite=Lax`、仅限回调路径的
+Cookie 中。ORCID 把浏览器送回 `GET /api/admin/orcid/callback`；管理员会话 Cookie 是
+`SameSite=Strict`，这次跨站跳转不会带上它，因此代理放行这一个接口，由接口自行鉴权：
+`state` 必须与 Cookie 一致、只能用一次、且发起它的会话仍有效。服务器在 ORCID 的 token
+端点用授权码换取结果（secret 从不到达浏览器；请求经 `safeFetch` 只发往 ORCID 一个主机，
+不跟随重定向），把确认的 iD 写入两种语言的个人信息并加上标记
+`orcidAuthenticated: { id, at }`，记入操作日志，access token 直接丢弃。随后返回一个小页面，
+以同源跳转打开 Studio（Strict Cookie 随之恢复）并弹出提示。ORCID 未为该流程提供 PKCE
+（其 OpenID 配置没有 `code_challenge_methods_supported`）；机密客户端加会话绑定的
+`state` 已覆盖 PKCE 的作用。
+
+标记由服务器掌管：保存时只有 CV 仍带着同一 iD 的该标记才会保留，所以手动改 iD 即变为
+未认证（保存前可在 Studio 撤销），在 JSON 里手写的标记会被忽略。**Disconnect** 只移除
+标记、保留 iD（显示为未认证）；清空或隐藏字段是普通编辑。公开页面只收到 `{ id }`，且仅在
+iD 公开时；PDF、纯文本与 JSON 简历、vCard 和 JSON-LD 始终只写 iD 的 URI。
 
 ### 分节可见性
 
