@@ -80,6 +80,17 @@
   scroll-margin-top: calc(var(--header-h) + 16px);
   scroll-margin-bottom: var(--bottom-bar-h, 0px);
 }
+/* The site footer is outside <main>: its links take the same margins, so
+   Tab into the footer never leaves a focused link behind a fixed bottom bar
+   (the review page's "Preview" bar, SC 2.4.11) or under the header — with
+   8px of air below, so the focus ring (2px, offset 2px) clears the bar too. */
+:where(footer)
+  :where([id], a, button, input, select, textarea, summary, [tabindex]):where(
+    :not([data-bottom-bar], [data-bottom-bar] *)
+  ) {
+  scroll-margin-top: calc(var(--header-h) + 16px);
+  scroll-margin-bottom: calc(var(--bottom-bar-h, 0px) + 8px);
+}
 
 [data-theme='dark'],
 .chakra-ui-dark {
