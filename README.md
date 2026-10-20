@@ -220,6 +220,13 @@ backup, and a hardened admin GUI for non-engineers.
   into WebP variants with their dimensions recorded (existing uploads can
   be backfilled), and remote images can be imported in one click through
   the SSRF-safe fetcher.
+- **Media library** (`/admin/media`) — every upload in a grid or list with
+  search and filters (no alt text, unused, missing sizes, large, not in
+  R2), where each one is used, default alt text and captions in English and
+  中文 that the editor's image picker offers on insertion (and can fill in
+  where a page lacks them), *Replace file* (every reference follows; the
+  old address redirects), safe delete into a 30-day trash, bulk responsive
+  sizes, drag-and-drop uploads and an R2 check.
 - **Home editor** — sortable photo / logo / link cards and section order
   (mouse, touch and keyboard), highlights with CV suggestions,
   availability, featured repositories, logo scale, site name.
@@ -1137,6 +1144,7 @@ are gated by the proxy (`proxy.ts`).
 | `/admin/blog`, `/admin/blog/edit?slug=…` | Blog post manager: drafts, unpublished changes of live posts, publish checklist, live preview, history, slug change with redirect, search & sharing previews |
 | `/admin/work`, `/admin/work/edit?slug=…` | Case-study manager (the same tools) |
 | `/admin/tags` | Rename, unify or merge post tags and case-study tech; content export (.zip) |
+| `/admin/media` | Media library: uploads with where they are used, default alt text and captions, replace, the trash (`?view=trash`), R2 check |
 | `/admin/now`, `/admin/uses`, `/admin/about` | One-off page editors (`about` = the bio on /about; empty = no bio section) |
 | `/admin/db-config` | MongoDB connection + manual backup/restore |
 | `/admin/security` | Passkeys, recovery codes, "Require a passkey", signed-in browsers, sign-in history |
@@ -1147,7 +1155,7 @@ admin is keyboard-first: ⌘K / Ctrl+K lists every admin page and the actions
 of the view on screen (an admin view adds its own with `useAdminCommands`,
 `components/Admin/shell/useAdminCommands.ts`); `G` then a letter jumps —
 `D` overview, `I` Inbox, `R` CV Studio, `E` Home editor, `P` posts, `O`
-case studies, `T` analytics, `V` versions, `F` storage, `S` System, `L`
+case studies, `M` media, `T` analytics, `V` versions, `F` storage, `S` System, `L`
 activity, `Q` content health, `X` errors, `K` security (the public `G H/A/W/B/C/N/U`
 work too); lists take `j` / `k`, `Enter`, `x` and their own letters
 (Inbox: `r` reply, `s` star, `e` archive, `u` unread, `#` delete, ⌘Z undo).
