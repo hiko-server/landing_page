@@ -15,7 +15,7 @@
  * divided by that ratio (the same formulas next/font uses).
  */
 
-/** public/fonts/GeistMono-Variable.woff2 (tests/r5fix-theme-a11y.test.ts reads these back from the file). */
+/** assets/fonts/GeistMono-Latin.woff2, the preloaded core of Geist Mono (tests/r5fix-theme-a11y.test.ts reads these back from the file). */
 export const GEIST_MONO_METRICS = {
   unitsPerEm: 1000,
   /** Every glyph's advance width. */

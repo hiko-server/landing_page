@@ -47,7 +47,8 @@ export const BUDGETS = {
   pageBudgetsKb: { '/': 222 },
   sharedCssKb: 8,
   fontPreloadCount: 2,
-  fontPreloadKb: 150,
+  /** The two preloaded Latin cores (G3: 137.7 → 68.4 KiB). */
+  fontPreloadKb: 75,
 }
 
 const SKIP_PAGES = new Set(['/_app', '/_error', '/_document'])

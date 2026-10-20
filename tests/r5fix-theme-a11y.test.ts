@@ -203,7 +203,7 @@ test('closed <details> are opened for printing and closed again afterwards', () 
 test('Geist Mono metrics in lib/monoFallback.ts match the shipped font file', () => {
   const mod = projectRequire('next/dist/compiled/@next/font/dist/fontkit')
   const create = (mod.default?.default || mod.default || mod) as (buf: Buffer) => any
-  const font = create(readFileSync(path.join(ROOT, 'public/fonts/GeistMono-Variable.woff2')))
+  const font = create(readFileSync(path.join(ROOT, 'assets/fonts/GeistMono-Latin.woff2')))
   assert.equal(font.unitsPerEm, GEIST_MONO_METRICS.unitsPerEm)
   assert.equal(font.ascent, GEIST_MONO_METRICS.ascent)
   assert.equal(font.descent, GEIST_MONO_METRICS.descent)
