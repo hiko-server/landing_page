@@ -1,7 +1,7 @@
 import type React from 'react'
 import NextLink from 'next/link'
 import { Box, Flex, Grid } from '@chakra-ui/react'
-import { labelLang } from '../../lib/toc'
+import { labelLang, langWithin } from '../../lib/toc'
 import { cssTransition } from '../../theme/tokens'
 
 /**
@@ -37,14 +37,27 @@ const chipStyle = {
 
 /**
  * Tag / stack chips. With `hrefFor`, each chip links to the list filtered by
- * it (`/blog?tag=…`, `/work?tag=…` — D8), with a 24px hit area.
+ * it (`/blog?tag=…`, `/work?tag=…` — D8), with a 24px hit area. Each chip is
+ * marked with its own language when it differs from the page's (`pageLang`;
+ * English tags on a Chinese post read as English).
  */
-export function MetaChips({ items, label, hrefFor }: { items: readonly string[]; label: string; hrefFor?: (item: string) => string }) {
+export function MetaChips({
+  items,
+  label,
+  hrefFor,
+  pageLang,
+}: {
+  items: readonly string[]
+  label: string
+  hrefFor?: (item: string) => string
+  pageLang?: string
+}) {
+  const chipLang = (t: string) => (pageLang ? langWithin(t, pageLang) : labelLang(t))
   return (
     <Flex as="ul" aria-label={label} listStyleType="none" m={0} p={0} gap={1.5} wrap="wrap">
       {items.map((t) =>
         hrefFor ? (
-          <Box as="li" key={t} lang={labelLang(t)} display="flex">
+          <Box as="li" key={t} lang={chipLang(t)} display="flex">
             <Box
               as={NextLink}
               href={hrefFor(t)}
@@ -61,7 +74,7 @@ export function MetaChips({ items, label, hrefFor }: { items: readonly string[];
             </Box>
           </Box>
         ) : (
-          <Box as="li" key={t} lang={labelLang(t)} {...chipStyle}>
+          <Box as="li" key={t} lang={chipLang(t)} {...chipStyle}>
             {t}
           </Box>
         ),

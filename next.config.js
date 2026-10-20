@@ -113,6 +113,10 @@ const nextConfig = {
         { source: '/uploads/:path*', destination: '/api/uploads/:path*' },
         { source: '/.well-known/security.txt', destination: '/api/security-txt' },
         ...cvFiles,
+        // The Markdown twin of every published post and case study, at its
+        // address plus ".md" (llmstxt.org), served by /api/md (G9).
+        { source: '/blog/:slug.md', destination: '/api/md?collection=blog&slug=:slug' },
+        { source: '/work/:slug.md', destination: '/api/md?collection=work&slug=:slug' },
       ],
     }
   },

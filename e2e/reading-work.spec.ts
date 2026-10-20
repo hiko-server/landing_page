@@ -12,7 +12,7 @@ import { test, expect, ADMIN, loginAsAdmin, settle, seriousA11yViolations } from
  * through the admin API, look at it in Draft Mode and delete it again.
  */
 
-type ListItem = { slug: string; permalink?: string; tags?: string[] }
+type ListItem = { slug: string; permalink?: string; tags?: string[]; listed?: boolean }
 
 async function list(page: Page, kind: 'blog' | 'work'): Promise<ListItem[]> {
   const res = await page.request.get(`/api/${kind}/list`)
@@ -67,7 +67,8 @@ test.describe('reading-work: public pages', () => {
 
     // Every card has a cover slot (image, small image on a panel, or typographic), all 16:10.
     const ratios = await page.locator('article.work-card .work-cover').evaluateAll((els) => els.map((el) => Math.round((el.clientWidth / el.clientHeight) * 100) / 100))
-    expect(ratios.length).toBe(work.length)
+    // A case study published in several languages has one card (F2: `listed`).
+    expect(ratios.length).toBe(work.filter((w) => w.listed !== false).length)
     for (const r of ratios) expect(r).toBeCloseTo(1.6, 1)
 
     const archive = page.locator('section[aria-labelledby="archive-heading"]')

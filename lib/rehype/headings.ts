@@ -1,5 +1,7 @@
 import { createSlugger, type TocEntry } from '../toc'
 import { element, hasDescendant, isElement, textOf, walk, type HastNode } from './hast'
+import { fillUi, uiText } from '../uiStrings'
+import { COMPILE_UI } from '../uiStrings/compile'
 
 /**
  * rehype plugin: stable heading ids, self-links and a table of contents.
@@ -22,6 +24,8 @@ import { element, hasDescendant, isElement, textOf, walk, type HastNode } from '
  */
 export type HeadingsOptions = {
   onToc?: (toc: TocEntry[]) => void
+  /** Article language: names the self-link of a heading that holds a link (lib/uiStrings/compile). */
+  lang?: string
 }
 
 const HEADINGS = ['h2', 'h3', 'h4', 'h5', 'h6'] as const
@@ -53,7 +57,7 @@ export default function rehypeHeadings(options: HeadingsOptions = {}) {
       if (containsLink) {
         node.children.push(
           { type: 'text', value: ' ' },
-          element('a', { className: ['heading-anchor', 'heading-anchor-icon'], href: `#${id}`, ariaLabel: `Link to section: ${text}` }, [
+          element('a', { className: ['heading-anchor', 'heading-anchor-icon'], href: `#${id}`, ariaLabel: fillUi(uiText(COMPILE_UI, options.lang).linkToSection, { heading: text }) }, [
             { type: 'text', value: '#' },
           ]),
         )

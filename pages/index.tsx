@@ -6,6 +6,7 @@ import HeaderFooter from '../layout/HeaderFooter'
 import CustomHead from '../components/General-UI/CustomHead'
 import { HERO_AVIF_SRCSET, HERO_SIZES } from '../components/Background/HeroAmbient'
 import { absUrl, websiteNode, personNode, profilePageNode, type PersonFacts } from '../lib/schema'
+import { HOME_DESCRIPTION } from '../lib/homeDescription'
 import { ogPresetUrl } from '../lib/og/presets'
 import type { HomeData, SectionKey } from '../lib/homeShape'
 import { isSectionVisible } from '../lib/homeSections'
@@ -57,7 +58,7 @@ const LandingPage = ({ home, cv, identity, autoCoding, meta, work, avatar, photo
     <>
       <CustomHead
         home
-        description="Li Yanpei (Lucian) — software engineer in Hong Kong building full-stack web apps, machine-learning / computer-vision, and embedded systems. CV, projects, and contact."
+        description={HOME_DESCRIPTION}
         url={absUrl('/')}
         image={ogPresetUrl('home')}
         type="profile"
@@ -206,7 +207,10 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
       }
       if (show('writing')) {
         const posts = listPosts()
-        writing = { items: latestWriting(posts, works, WRITING_COUNT), hasPosts: posts.length > 0, hasWork: works.length > 0 }
+        // One entry per piece, in English where a translation exists (F2, lib/translations).
+        const { collapseTranslations } = await import('../lib/translations')
+        const once = <T extends Parameters<typeof collapseTranslations>[0][number]>(list: T[]) => collapseTranslations(list, 'en').map((c) => c.entry)
+        writing = { items: latestWriting(once(posts), once(works), WRITING_COUNT), hasPosts: posts.length > 0, hasWork: works.length > 0 }
       }
     } catch {
       /* best effort — cards render without case-study links, no writing row */

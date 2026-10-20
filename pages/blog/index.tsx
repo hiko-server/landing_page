@@ -12,16 +12,25 @@ import { hasTag, tagCounts, tagSlugList } from '../../lib/tagFilter'
 import { formatPostDate, isoDate } from '../../lib/postDate'
 import { absUrl, personAuthor, PERSON_NAME, SITE_HOST } from '../../lib/schema'
 import { ogPresetUrl } from '../../lib/og/presets'
+import { alsoInOf, collapseTranslations, type AlsoIn } from '../../lib/translations'
+import { LIST_UI } from '../../lib/uiStrings/lists'
+
+type IndexPost = MDXIndexEntry<PostFrontmatter> & {
+  /** Languages the post is also published in (F2): one entry per piece, in English where it exists. */
+  alsoIn: AlsoIn[]
+}
 
 type Props = {
-  posts: MDXIndexEntry<PostFrontmatter>[]
+  posts: IndexPost[]
 }
 
 const MONO = 'var(--font-geist-mono), monospace'
 
 /**
  * /blog — every published post, newest first, with a shareable tag filter
- * (`?tag=edge-ai`, components/Article/TagFilter.tsx). ISR (60 s).
+ * (`?tag=edge-ai`, components/Article/TagFilter.tsx). A post published in
+ * several languages is listed once, in English where it exists, marked
+ * "Also in 简体中文" (its page switches language). ISR (60 s).
  */
 export default function BlogIndex({ posts }: Props) {
   // Tags with counts, alphabetical, so the chip row never reshuffles.
@@ -150,6 +159,17 @@ export default function BlogIndex({ posts }: Props) {
                               {p.frontmatter.description}
                             </Text>
                           )}
+                          {p.alsoIn.length > 0 && (
+                            <Text as="span" display="block" mt={1.5} fontFamily={MONO} fontSize="11px" color="page.fg-secondary" data-also-in="">
+                              {LIST_UI.en.alsoIn}{' '}
+                              {p.alsoIn.map((l, i) => (
+                                <span key={l.lang}>
+                                  {i > 0 ? ', ' : ''}
+                                  <span lang={l.lang}>{l.name}</span>
+                                </span>
+                              ))}
+                            </Text>
+                          )}
                         </Box>
                         <Text as="span" flexShrink={0} fontFamily={MONO} fontSize="11px" color="page.fg-secondary" className="tnum">
                           {p.readingMinutes} min read
@@ -173,7 +193,7 @@ export default function BlogIndex({ posts }: Props) {
 export const getStaticProps: GetStaticProps<Props> = async () => {
   return {
     props: {
-      posts: listPosts(),
+      posts: collapseTranslations(listPosts(), 'en').map(({ entry, alsoIn }) => ({ ...entry, alsoIn: alsoInOf(alsoIn) })),
       // Whether /publications exists, for the nav link (lib/publicationsData).
       ...(await import('../../lib/publicationsData')).chromePublicationsProp(),
     },

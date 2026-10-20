@@ -2,6 +2,7 @@ import type { NextApiResponse } from 'next'
 import { getCloudflarePurgeConfig, getIndexNowKey, getPublicHost } from './env'
 import { log } from './log'
 import { uploadNamesIn } from './uploadVariants'
+import { LLMS_INDEX_PATH, LLMS_PATHS, markdownTwinPaths } from './markdownTwinPaths'
 
 /**
  * On-demand ISR revalidation.
@@ -240,8 +241,8 @@ export function chunk<T>(items: readonly T[], size: number): T[][] {
   return out
 }
 
-/** Feeds, sitemap and search index list every post and case study. */
-const COLLECTION_DERIVED_PATHS = ['/feed.xml', '/feed.json', '/work/feed.xml', '/api/rss.xml', '/sitemap.xml', '/api/search-index']
+/** Feeds, sitemap, search index and the llms files (G9) list every post and case study. */
+const COLLECTION_DERIVED_PATHS = ['/feed.xml', '/feed.json', '/work/feed.xml', '/api/rss.xml', '/sitemap.xml', '/api/search-index', ...LLMS_PATHS]
 
 /** The downloadable files of each CV page (lib/cvExport/files.ts EXPORT_PATHS). */
 const CV_FILE_PATHS: Record<string, readonly string[]> = {
@@ -251,18 +252,29 @@ const CV_FILE_PATHS: Record<string, readonly string[]> = {
 
 /**
  * Edge-cached responses derived from the given pages that must be purged with
- * them: a post or case-study change alters the feeds, the sitemap and the
- * search index; the /now, /uses and /about (bio) bodies are part of the
- * search index; a CV page change alters its PDF, plain-text and JSON Resume
- * files; the sitemap lists /publications only while it has public papers.
+ * them:
+ *   - a post or case-study change alters the feeds, the sitemap, the search
+ *     index and the llms files (G9: /llms.txt lists every piece,
+ *     /llms-full.txt holds them), and each post or case study has its
+ *     Markdown twin (/blog/<slug>.md, /work/<slug>.md);
+ *   - the /now, /uses and /about (bio) bodies are part of the search index,
+ *     and /llms.txt quotes the /now and /uses descriptions;
+ *   - a CV page change alters its PDF, plain-text and JSON Resume files, and
+ *     /llms.txt links each CV language only while it has public content;
+ *   - the sitemap and /llms.txt list /publications only while it has public
+ *     papers.
  */
 export function derivedPurgePaths(paths: readonly string[]): string[] {
   const out = new Set<string>()
+  const add = (list: readonly string[]) => list.forEach((d) => out.add(d))
   for (const p of paths) {
-    if (/^\/(blog|work)(\/|$)/.test(p)) COLLECTION_DERIVED_PATHS.forEach((d) => out.add(d))
-    else if (p === '/now' || p === '/uses' || p === '/about') out.add('/api/search-index')
-    else if (CV_FILE_PATHS[p]) CV_FILE_PATHS[p].forEach((d) => out.add(d))
-    else if (p === '/publications') out.add('/sitemap.xml')
+    if (/^\/(blog|work)(\/|$)/.test(p)) {
+      add(COLLECTION_DERIVED_PATHS)
+      add(markdownTwinPaths([p]))
+    } else if (p === '/now' || p === '/uses') add(['/api/search-index', LLMS_INDEX_PATH])
+    else if (p === '/about') add(['/api/search-index'])
+    else if (CV_FILE_PATHS[p]) add([...CV_FILE_PATHS[p], LLMS_INDEX_PATH])
+    else if (p === '/publications') add(['/sitemap.xml', LLMS_INDEX_PATH])
   }
   return Array.from(out)
 }

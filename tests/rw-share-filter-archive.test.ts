@@ -187,9 +187,13 @@ test('D7 author card data: public CV name, tagline role, cropped portrait, avail
 
 test('D7 ArticleEnd: author card with CV and contact links, share row with copy, LinkedIn and a WeChat QR toggle', async () => {
   const { default: ArticleEnd } = await import('../components/Article/ArticleEnd')
+  // The article's words come from its page (i18n-content F1: components/Article/articleUi).
+  const { ArticleLanguage } = await import('../components/Article/articleUi')
+  const { articleUiFor } = await import('../lib/uiStrings/article')
+  const inArticle = (lang: string, el: ReturnType<typeof createElement>) => createElement(ArticleLanguage, { ui: articleUiFor(lang) }, el)
   const author = { name: 'Li Yanpei (Lucian)', role: 'Full-Stack Engineer', avatar: { src: '/uploads/me.jpg', srcSet: null, position: '50% 50%' }, availability: { status: 'open' as const, label: 'Open to backend roles' } }
   const share = { url: 'https://lucian-dev.com/blog/swcs', title: 'SWCS', qrSvg: '<svg aria-hidden="true" viewBox="0 0 1 1"></svg>' }
-  const out = html(createElement(ArticleEnd, { author, share, lang: 'en' }))
+  const out = html(inArticle('en', createElement(ArticleEnd, { author, share })))
   assert.match(out, /<section[^>]*aria-labelledby="author-heading"/)
   assert.match(out, /<a[^>]*href="\/about"[^>]*>Li Yanpei \(Lucian\)<\/a>/)
   assert.match(out, /Full-Stack Engineer/)
@@ -201,8 +205,10 @@ test('D7 ArticleEnd: author card with CV and contact links, share row with copy,
   assert.match(out, new RegExp(`href="https://www\\.linkedin\\.com/sharing/share-offsite/\\?url=${encodeURIComponent(share.url).replace(/[.?]/g, '\\$&')}"`))
   assert.match(out, /<button[^>]*aria-expanded="false"[^>]*>.*WeChat<\/button>/)
   assert.ok(!out.includes('QR code of'), 'the QR panel is closed until asked for')
-  const zh = html(createElement(ArticleEnd, { author: { ...author, avatar: null, availability: null }, share: { ...share, qrSvg: null }, lang: 'zh-Hans' }))
-  assert.match(zh, /href="\/cv\/zh"/)
+  const zh = html(inArticle('zh-Hans', createElement(ArticleEnd, { author: { ...author, avatar: null, availability: null }, share: { ...share, qrSvg: null } })))
+  assert.match(zh, /href="\/cv\/zh"[^>]*>查看简历<\/a>/)
+  assert.match(zh, />作者</)
+  assert.match(zh, /lang="en"[^>]*>Li Yanpei \(Lucian\)</, 'the English name is marked inside the Chinese card')
   assert.ok(!zh.includes('WeChat'), 'no QR toggle without a QR code')
   assert.match(zh, />LY</, 'initials without a portrait')
 })

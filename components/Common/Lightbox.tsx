@@ -3,6 +3,9 @@ import { Box, Flex, IconButton, Modal, ModalBody, ModalCloseButton, ModalContent
 import { motion, useReducedMotion, type PanInfo } from 'framer-motion'
 import { ArrowLeftIcon, ArrowRightIcon } from '../Icons/ui/content'
 import { motionTransition } from '../../theme/tokens'
+import { fillUi } from '../../lib/uiStrings'
+import { CONTENT_UI } from '../../lib/uiStrings/content'
+import { useUiLang } from './uiLang'
 
 /**
  * Full-screen image viewer shared by the home photo strip and article images.
@@ -50,6 +53,8 @@ export default function Lightbox({
   layoutIdPrefix?: string
 }) {
   const reduce = useReducedMotion()
+  // Labels in the surrounding article's language (lib/uiStrings), English elsewhere.
+  const t = CONTENT_UI[useUiLang()]
   const count = items.length
   const isOpen = index !== null && index >= 0 && index < count
   const current = isOpen ? items[index] : null
@@ -99,7 +104,7 @@ export default function Lightbox({
         }}
       >
         <ModalHeader className="sr-only">
-          {current ? `Image ${index! + 1} of ${count}${current.alt ? `: ${current.alt}` : ''}` : 'Image viewer'}
+          {current ? fillUi(current.alt ? t.imageOfAlt : t.imageOf, { i: index! + 1, n: count, alt: current.alt || '' }) : t.imageViewer}
         </ModalHeader>
 
         <Flex
@@ -126,7 +131,7 @@ export default function Lightbox({
           </Text>
         </Flex>
         <ModalCloseButton
-          aria-label="Close image viewer"
+          aria-label={t.closeImageViewer}
           top={2}
           right={{ base: 2, md: 4 }}
           w="40px"
@@ -230,7 +235,7 @@ export default function Lightbox({
         {count > 1 && (
           <>
             <IconButton
-              aria-label="Previous image"
+              aria-label={t.previousImage}
               icon={<ArrowLeftIcon size="sm" />}
               onClick={() => step(-1)}
               position="absolute"
@@ -248,7 +253,7 @@ export default function Lightbox({
               _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
             />
             <IconButton
-              aria-label="Next image"
+              aria-label={t.nextImage}
               icon={<ArrowRightIcon size="sm" />}
               onClick={() => step(1)}
               position="absolute"

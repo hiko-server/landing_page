@@ -7,6 +7,9 @@ import { CopyIcon, QrCodeIcon, ShareIcon } from '../Icons/ui/content'
 import { CheckIcon } from '../Icons/ui/theme'
 import { cssTransition } from '../../theme/tokens'
 import type { AuthorCardData } from '../../lib/authorCard'
+import { langWithin } from '../../lib/toc'
+import { fillUi } from '../../lib/uiStrings'
+import { useArticleUi } from './articleUi'
 
 /**
  * The end of a post or case study (D7): who wrote it, and how to pass it on.
@@ -24,7 +27,9 @@ import type { AuthorCardData } from '../../lib/authorCard'
  * exists, after hydration; LinkedIn is a plain link; WeChat opens a QR code
  * of the page drawn on the server (lib/qr.ts) — black on a white tile in
  * both themes so phones can scan it. Results are announced politely. Hidden
- * in print.
+ * in print. The labels follow the article's language (lib/uiStrings): 作者 /
+ * 查看简历 / 联系我 / 分享 … under a Chinese article; the owner's own words
+ * (name, role, availability) keep the language they are written in.
  */
 
 const MONO = 'var(--font-geist-mono), monospace'
@@ -71,12 +76,16 @@ function initials(name: string): string {
     .toUpperCase()
 }
 
-export function AuthorCard({ author, lang }: { author: AuthorCardData; lang?: string }) {
-  const zh = /^zh(-|$)/i.test(lang || '')
+export function AuthorCard({ author }: { author: AuthorCardData }) {
+  const { lang: ui, t } = useArticleUi()
+  const zh = ui !== 'en'
+  const cardLang = zh ? ui : 'en'
+  // The owner's own words (name, role, availability) keep their language: English ones are marked inside a Chinese card.
+  const own = (text: string) => langWithin(text, cardLang)
   return (
-    <Box as="section" aria-labelledby="author-heading" lang="en">
+    <Box as="section" aria-labelledby="author-heading" lang={cardLang}>
       <Text as="h2" id="author-heading" fontFamily={MONO} fontSize="11px" letterSpacing="0.12em" textTransform="uppercase" color="page.fg-secondary" m={0} mb={4}>
-        Written by
+        {t.writtenBy}
       </Text>
       <Flex
         direction={{ base: 'column', sm: 'row' }}
@@ -110,14 +119,14 @@ export function AuthorCard({ author, lang }: { author: AuthorCardData; lang?: st
             )}
           </Box>
           <Box minW={0}>
-            <Link as={NextLink} href="/about" fontWeight={600} fontSize="16px" color="page.fg" className="link-underline">
+            <Link as={NextLink} href="/about" fontWeight={600} fontSize="16px" color="page.fg" className="link-underline" lang={own(author.name)}>
               {author.name}
             </Link>
-            <Text fontSize="14px" color="page.fg-secondary" mt={0.5} noOfLines={2}>
+            <Text fontSize="14px" color="page.fg-secondary" mt={0.5} noOfLines={2} lang={own(author.role)}>
               {author.role}
             </Text>
             {author.availability ? (
-              <Flex as="p" align="center" gap={2} mt={1.5} fontSize="13px" color="page.fg" m={0} pt={1.5}>
+              <Flex as="p" align="center" gap={2} mt={1.5} fontSize="13px" color="page.fg" m={0} pt={1.5} lang={own(author.availability.label)}>
                 <Box as="span" aria-hidden w="7px" h="7px" borderRadius="full" bg={STATUS_TOKEN[author.availability.status]} flexShrink={0} sx={{ '@media (forced-colors: active)': { bg: 'CanvasText' } }} />
                 {author.availability.label}
               </Flex>
@@ -126,19 +135,10 @@ export function AuthorCard({ author, lang }: { author: AuthorCardData; lang?: st
         </Flex>
         <Flex gap={2} flexShrink={0} wrap="wrap">
           <Box as={NextLink} href={zh ? '/cv/zh' : '/cv'} sx={chipSx}>
-            {zh ? (
-              <>
-                View CV{' '}
-                <Box as="span" lang="zh-Hans" color="page.fg-secondary">
-                  中文
-                </Box>
-              </>
-            ) : (
-              'View CV'
-            )}
+            {t.viewCv}
           </Box>
           <Box as={NextLink} href="/contact" sx={{ ...chipSx, bg: 'page.fg', color: 'page.bg', borderColor: 'page.fg', _hover: { bg: 'page.fg', opacity: 0.88, textDecoration: 'none' } }}>
-            Contact
+            {t.contact}
           </Box>
         </Flex>
       </Flex>
@@ -149,6 +149,7 @@ export function AuthorCard({ author, lang }: { author: AuthorCardData; lang?: st
 type CopyState = 'idle' | 'copied' | 'failed'
 
 export function ShareBar({ share }: { share: ShareData }) {
+  const { lang: ui, t, qrHelpZh } = useArticleUi()
   const panelId = useId()
   const [canShare, setCanShare] = useState(false)
   const [copy, setCopy] = useState<CopyState>('idle')
@@ -167,10 +168,10 @@ export function ShareBar({ share }: { share: ShareData }) {
   const onCopy = useCallback(async () => {
     const ok = await copyText(share.url)
     setCopy(ok ? 'copied' : 'failed')
-    setStatus(ok ? 'Link copied to the clipboard' : 'Could not copy the link')
+    setStatus(ok ? t.linkCopied : t.copyLinkFailed)
     if (timer.current) clearTimeout(timer.current)
     timer.current = setTimeout(() => setCopy('idle'), 2000)
-  }, [share.url])
+  }, [share.url, t])
 
   const onShare = useCallback(async () => {
     try {
@@ -183,32 +184,32 @@ export function ShareBar({ share }: { share: ShareData }) {
   const linkedIn = `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(share.url)}`
 
   return (
-    <Box mt={6} lang="en">
+    <Box mt={6} lang={ui}>
       <Flex role="group" aria-labelledby={`${panelId}-label`} align="center" gap={2} wrap="wrap">
         <Text as="span" id={`${panelId}-label`} fontFamily={MONO} fontSize="11px" letterSpacing="0.12em" textTransform="uppercase" color="page.fg-secondary" mr={2}>
-          Share
+          {t.share}
         </Text>
         <Box as="button" type="button" onClick={onCopy} sx={chipSx} aria-describedby={copy === 'failed' ? `${panelId}-status` : undefined}>
           {copy === 'copied' ? <CheckIcon size="sm" /> : <CopyIcon size="sm" />}
-          {copy === 'copied' ? 'Copied' : 'Copy link'}
+          {copy === 'copied' ? t.copied : t.copyLink}
         </Box>
         {canShare ? (
           <Box as="button" type="button" onClick={onShare} sx={chipSx}>
             <ShareIcon size="sm" />
-            Share…
+            {t.shareSheet}
           </Box>
         ) : null}
         <Box as="a" href={linkedIn} target="_blank" rel="noopener noreferrer" sx={chipSx}>
           <LinkedInIcon size={14} />
           LinkedIn
           <Box as="span" className="sr-only">
-            (opens in a new tab)
+            {t.opensInNewTab}
           </Box>
         </Box>
         {share.qrSvg ? (
           <Box as="button" type="button" onClick={() => setQrOpen((o) => !o)} aria-expanded={qrOpen} aria-controls={`${panelId}-qr`} sx={chipSx}>
             <QrCodeIcon size="sm" />
-            WeChat
+            {t.wechat}
           </Box>
         ) : null}
         <Box as="span" id={`${panelId}-status`} role="status" aria-live="polite" className={copy === 'failed' ? undefined : 'sr-only'} fontSize="12px" color="status.error">
@@ -231,7 +232,7 @@ export function ShareBar({ share }: { share: ShareData }) {
         >
           <Box
             role="img"
-            aria-label={`QR code of ${share.url}`}
+            aria-label={fillUi(t.qrCodeOf, { url: share.url })}
             bg="#ffffff"
             color="#000000"
             p="10px"
@@ -243,10 +244,13 @@ export function ShareBar({ share }: { share: ShareData }) {
             dangerouslySetInnerHTML={{ __html: share.qrSvg }}
           />
           <Box fontSize="13px" lineHeight="1.6" color="page.fg-secondary" maxW="30ch">
-            <Text m={0}>Scan with WeChat to open this page on your phone, then share it from there.</Text>
-            <Text m={0} mt={1} lang="zh-Hans">
-              用微信扫一扫，在手机上打开后即可分享。
-            </Text>
+            <Text m={0}>{t.qrHelp}</Text>
+            {/* WeChat readers are mostly Chinese: an English page adds the Chinese line. */}
+            {qrHelpZh ? (
+              <Text m={0} mt={1} lang="zh-Hans">
+                {qrHelpZh}
+              </Text>
+            ) : null}
           </Box>
         </Flex>
       ) : null}
@@ -255,10 +259,10 @@ export function ShareBar({ share }: { share: ShareData }) {
 }
 
 /** Author card and share row, before the article's prev / next navigation. */
-export default function ArticleEnd({ author, share, lang }: { author: AuthorCardData | null; share: ShareData; lang?: string }) {
+export default function ArticleEnd({ author, share }: { author: AuthorCardData | null; share: ShareData }) {
   return (
     <Box mt={16} pt={10} borderTop="1px solid" borderColor="page.border" className="no-print">
-      {author ? <AuthorCard author={author} lang={lang} /> : null}
+      {author ? <AuthorCard author={author} /> : null}
       <ShareBar share={share} />
     </Box>
   )

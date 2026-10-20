@@ -19,12 +19,14 @@ import { footnoteOptions } from './rehype/footnotes'
 import rehypeCodeThemeAttr from './rehype/codeThemeAttr'
 import rehypeImages, { type SizeResolver, type SrcSetResolver } from './rehype/images'
 import rehypeLangSpans from './rehype/langSpans'
+import rehypeAutospace from './rehype/autospace'
 import { resolveImageSize } from './rehype/imageSize'
 import { variantSrcSet, variantState } from './uploadVariants'
 import { posterForCompile, posterState } from './videoPoster'
 import { classList, isElement, textOf, walk, type HastNode } from './rehype/hast'
 import { clampAtBoundary } from './schema'
 import { cleanGlanceFields, type WorkLink, type WorkOutcome } from './caseStudy'
+import { normalizeTranslationKey } from './translations'
 
 /**
  * MDX content loader (content store first, content/*.mdx as the seed — see
@@ -45,7 +47,8 @@ import { cleanGlanceFields, type WorkLink, type WorkOutcome } from './caseStudy'
  *   remark-rehype → safe URLs (links / media / embeds) → lone video links →
  *   click-to-load players with stored posters → `> [!NOTE]` callouts → lift
  *   blocks out of paragraphs → heading ids + TOC → image sizes / srcset /
- *   figures → figure widths + galleries → language-of-parts spans → rehype-pretty-code (its data-theme attributes
+ *   figures → figure widths + galleries → language-of-parts spans → CJK–Latin
+ *   spacing marks (Chinese / Japanese articles) → rehype-pretty-code (its data-theme attributes
  *   dropped) → drop positions / data
  *
  * Slugs are restricted to [a-z0-9-_]+ before any lookup.
@@ -71,6 +74,8 @@ export type PostFrontmatter = {
   lang?: string
   /** Slug of the case study this post is about (work/<slug>): linked both ways. */
   project?: string
+  /** Shared by the versions of one piece in other languages (lib/translations.ts). */
+  translationKey?: string
 }
 
 export type { WorkLink, WorkOutcome }
@@ -103,6 +108,8 @@ export type WorkFrontmatter = {
   links?: WorkLink[]
   /** Focal point of the cover, "x% y%". */
   coverFocus?: string
+  /** Shared by the versions of one piece in other languages (lib/translations.ts). */
+  translationKey?: string
 }
 
 export type PageFrontmatter = {
@@ -245,13 +252,14 @@ export async function compileMdx(body: string, opts: CompileOptions = {}): Promi
     .use(rehypeAutoEmbed, { posterFor: opts.posterFor || posterForCompile, lang })
     .use(rehypeAlerts, { lang })
     .use(rehypeLiftBlocks)
-    .use(rehypeHeadings, { onToc: (t: TocItem[]) => (toc = t) })
+    .use(rehypeHeadings, { onToc: (t: TocItem[]) => (toc = t), lang })
     .use(rehypeImages, {
       resolveSize: opts.resolveSize || resolveImageSize,
       srcSetFor: opts.srcSetFor || variantSrcSet,
     })
     .use(rehypeGalleries)
     .use(rehypeLangSpans, { lang })
+    .use(rehypeAutospace, { lang })
     .use(rehypePrettyCode, { theme: CODE_THEMES, keepBackground: false })
     .use(rehypeCodeThemeAttr)
   let tree: HastRoot
@@ -331,9 +339,15 @@ export function compileMdxCached(body: string, lang: string): Promise<{ tree: Ha
 
 const trimmed = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v.replace(/\s+/g, ' ').trim() : undefined)
 
-/** Trim the free-text fields every page prints (titles, descriptions). */
-function cleanFrontmatter<T extends { title: string; description?: string; seoTitle?: string }>(fm: T, slug: string): T {
+/**
+ * Trim the free-text fields every page prints (titles, descriptions); keep a
+ * translation key only in its canonical form.
+ */
+function cleanFrontmatter<T extends { title: string; description?: string; seoTitle?: string; translationKey?: string }>(fm: T, slug: string): T {
   const out = { ...fm, title: trimmed(fm.title) || slug }
+  const translationKey = normalizeTranslationKey(fm.translationKey)
+  if (translationKey) out.translationKey = translationKey
+  else delete out.translationKey
   const description = trimmed(fm.description)
   if (description) out.description = description
   else delete out.description
@@ -377,11 +391,11 @@ function postEntry(item: { slug: string; frontmatter: Record<string, any>; body:
   }
 }
 
-/** Published posts, newest first (drafts never appear). */
-export function listPosts(): MDXIndexEntry<PostFrontmatter>[] {
+/** Published posts, newest first (drafts only with `includeDrafts`: Draft Mode). */
+export function listPosts(opts: GetOptions = {}): MDXIndexEntry<PostFrontmatter>[] {
   return listItems('blog')
     .map(postEntry)
-    .filter((p) => !p.frontmatter.draft)
+    .filter((p) => opts.includeDrafts || !p.frontmatter.draft)
     .sort((a, b) => +new Date(b.frontmatter.date) - +new Date(a.frontmatter.date))
 }
 
@@ -407,16 +421,16 @@ function workEntry(item: { slug: string; frontmatter: Record<string, any>; body:
   }
 }
 
-/** Published case studies in store order (drafts never appear). */
-export function listWork(): MDXIndexEntry<WorkFrontmatter>[] {
+/** Published case studies in store order (drafts only with `includeDrafts`: Draft Mode). */
+export function listWork(opts: GetOptions = {}): MDXIndexEntry<WorkFrontmatter>[] {
   return listItems('work')
     .map(workEntry)
-    .filter((w) => !w.frontmatter.draft)
+    .filter((w) => opts.includeDrafts || !w.frontmatter.draft)
 }
 
 /** Work entries in the order /work shows them: featured first, then the rest. */
-export function listWorkInDisplayOrder(): MDXIndexEntry<WorkFrontmatter>[] {
-  const all = listWork()
+export function listWorkInDisplayOrder(opts: GetOptions = {}): MDXIndexEntry<WorkFrontmatter>[] {
+  const all = listWork(opts)
   return [...all.filter((w) => w.frontmatter.featured), ...all.filter((w) => !w.frontmatter.featured)]
 }
 

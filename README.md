@@ -259,6 +259,17 @@ checklist points at any left behind. A post can name its case study
 link to `/blog?tag=…` and `/work?tag=…`; `/work` ends with every public CV
 project (*All projects*), linked to its case study when there is one.
 
+**Chinese and translations.** A post or case study in Chinese (detected,
+or set under *Language & translations* in the editor) gets Chinese
+interface words (日期 / 阅读 / ← 全部文章 …) and Chinese typesetting: a
+34-character measure, 1.85 leading, spacing between Chinese and Latin
+text, emphasis dots. To publish the same piece in English and Chinese,
+give both versions the same **translation key** in that block (or press
+*Create draft* there to copy the saved version into a new draft in the
+other language, then translate it): each page then offers "阅读中文版" /
+"Read in English", search engines get hreflang alternates, and the lists
+show the piece once, in English. Interface words live in `lib/uiStrings/`.
+
 ---
 
 ## Tech stack
@@ -886,7 +897,9 @@ overlay and follow a contact message into the Inbox.
 | `/contact` | Contact page (ISR): structured form with privacy notice, availability, copy buttons, vCard + QR |
 | `/colophon` | How the site is built, privacy, changelog, deployed commit |
 | `/feed.xml`, `/work/feed.xml`, `/feed.json` | Full-content RSS (writing, case studies) and JSON Feed |
-| `/sitemap.xml` | Sitemap with EN / 中 CV alternates |
+| `/sitemap.xml` | Sitemap with EN / 中 alternates for the CV and for translated posts and case studies |
+| `/llms.txt`, `/llms-full.txt` | Index for language models and agents (llmstxt.org) and every published post and case study in full, as Markdown |
+| `/blog/[slug].md`, `/work/[slug].md` | Markdown version of a published post or case study (canonical link to the page, `noindex`) |
 | `/api/search-index` | Public search documents for the command palette |
 | `/api/vcard` | vCard of the public contact details |
 | `/api/health` | Health: `{"status":"ok"\|"empty"\|"degraded"}` for everyone; store, content, backup age, the restore drill, open errors and pending R2 writes only for an admin or `Authorization: Bearer <HEALTH_TOKEN>` |

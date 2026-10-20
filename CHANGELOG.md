@@ -567,6 +567,57 @@ Fixes for defects an adversarial review found in wave 2A before it shipped.
     last week (`scripts/static-archive.mjs`, the `landing-static-archive`
     volume), so open tabs and any edge copy of old HTML keep working.
 
+### i18n-content
+
+Bilingual and machine-readable content (F1, F2, G9).
+
+- **Chinese typesetting** for posts and case studies (W3C clreq): no
+  tracking on Han characters, a 34-character measure, 1.85 leading in the
+  body (1.4 headings, 1.25 title), Han ↔ Latin spacing through
+  `text-autospace` with a 1/8 em fallback mark for browsers without it (the
+  text itself is never changed), emphasis dots (着重号) instead of a fake
+  italic, each platform's Simplified or Traditional Chinese face before
+  `system-ui`, and quotes, dashes, ellipses and the middle dot from the
+  Chinese face (local fonts only, nothing downloaded). Scoped to articles:
+  the CV print layout is untouched.
+- **Chinese interface words** on Chinese posts and case studies — 日期 /
+  阅读 / ← 全部文章 / 本页目录 / 作者 / 分享 / 上一篇 … — with dates as
+  2026年5月30日, Traditional Chinese for zh-Hant pieces, and English
+  names, roles and tags inside marked `lang="en"`. Callout titles,
+  footnotes, heading self-links, the code-copy button, the image viewer and
+  the video facade follow the article too.
+- **`lib/uiStrings/`, the single source of UI strings** (EN, 简体, 繁體): a
+  small typed dictionary, one module per part of the interface (article,
+  content, compile, lists, languages), plain strings with `{placeholders}`;
+  the bilingual site chrome adds its modules there. A post or case study
+  receives only its own language's words with its props, so no page
+  bundles the other languages (shared first-load JS 204.2 → 203.7 kB).
+- **Linked translations** (`translationKey`): versions of a post or case
+  study in different languages that share a key link to each other — a
+  "阅读中文版" / "Read in English" switch on the page, reciprocal hreflang
+  with x-default, `xhtml:link` alternates in the sitemap — and the indexes
+  and the home page list the piece once (in English where it exists, "Also
+  in 简体中文"). Prev / next, related links and a post's case study stay in
+  the article's language. Only reciprocal, published groups link; two
+  versions in one language link nothing. Saving a version regenerates its
+  translations first, including a group it just left.
+- **Editor**: a "Language & translations" block in the post and
+  case-study editors — the language (detected unless set), the key (kept to
+  a–z, 0–9, - and _), the other versions with their language and draft
+  state, a warning when two share a language, and **Create draft**, which
+  copies the saved version into a new draft in another language with the
+  same key (never machine-translated, never published).
+- **`/llms.txt`, `/llms-full.txt` and Markdown twins** (llmstxt.org): every
+  published post and case study is also served as Markdown at its address
+  plus `.md` (`/blog/<slug>.md`), converted from the MDX source without
+  evaluating anything and showing only what the page shows, with
+  `rel="canonical"` and `X-Robots-Tag: noindex`, linked from the page with
+  `<link rel="alternate" type="text/markdown">`. `/llms.txt` lists the
+  profile, the CV in each language that has public content, every case
+  study and post (language and date noted) and the feeds; no contact
+  details, no CV data, never a draft. Edge caches are purged with the
+  pages they derive from; `robots.txt` is unchanged.
+
 ### Changed
 
 - **No more "[01] INTRODUCTION" labels** (owner request): the public site

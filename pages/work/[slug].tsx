@@ -1,5 +1,6 @@
 import React from 'react'
 import type { GetStaticPaths, GetStaticProps } from 'next'
+import Head from 'next/head'
 import { Box, Flex, Link } from '@chakra-ui/react'
 import NextLink from 'next/link'
 import HeaderFooter from '../../layout/HeaderFooter'
@@ -12,15 +13,21 @@ import AtAGlance from '../../components/Article/AtAGlance'
 import MetaGrid, { MetaChips, type MetaItem } from '../../components/Article/MetaGrid'
 import DraftBar from '../../components/Article/DraftBar'
 import EditPill from '../../components/Article/EditPill'
+import LanguageSwitch from '../../components/Article/LanguageSwitch'
 import CoverFrame, { type CoverView } from '../../components/Work/CoverFrame'
 import { neighbours, projectLinks, relatedArticles, toArticleLink, type ArticleLink } from '../../components/Article/collectionNav'
-import { listPosts, listWorkInDisplayOrder, getWork, type HastRoot, type WorkFrontmatter } from '../../lib/mdx'
-import { labelLang, type TocEntry } from '../../lib/toc'
+import { listWorkInDisplayOrder, getWork, type HastRoot, type WorkFrontmatter } from '../../lib/mdx'
+import { labelLang, langWithin, type TocEntry } from '../../lib/toc'
 import { safeHref } from '../../lib/cvFormat'
 import { formatPostDate } from '../../lib/postDate'
+import { fillUi, uiLangAttr } from '../../lib/uiStrings'
+import { articleUiFor, type ArticleUi } from '../../lib/uiStrings/article'
+import { ArticleRoot } from '../../components/Article/articleUi'
+import type { SwitchLink } from '../../lib/translations'
+import { markdownTwinPath } from '../../lib/markdownTwinPaths'
 import { tagHref } from '../../lib/tagFilter'
 import type { AuthorCardData } from '../../lib/authorCard'
-import { articleImageUrls, breadcrumb, absUrl, caseStudyNode, ogLangOf, PERSON_NAME, type ArticleCards, type OgImageOptions } from '../../lib/schema'
+import { articleImageUrls, breadcrumb, absUrl, caseStudyNode, ogLangOf, PERSON_NAME, type Alternate, type ArticleCards, type OgImageOptions } from '../../lib/schema'
 import { signedOgImageUrl } from '../../lib/og/sign'
 
 type Props = {
@@ -51,12 +58,15 @@ type Props = {
   shareQr: string | null
   /** Rendered in Draft Mode (the admin preview cookie): drafts are visible. */
   draftMode: boolean
+  /** The case study in other languages (F2): the language switch. */
+  translations: SwitchLink[]
+  /** The interface words in the case study's language (F1, lib/uiStrings/article). */
+  ui: ArticleUi
+  /** hreflang alternates of the case study and its translations (empty without translations). */
+  alternates: Alternate[]
 }
 
 const MONO = 'var(--font-geist-mono), monospace'
-
-/** English UI text inside a non-English article keeps its own language. */
-const uiLang = (lang: string) => (lang === 'en' || lang.startsWith('en-') ? undefined : 'en')
 
 const workTag = (t: string) => tagHref('/work', t)
 
@@ -78,6 +88,9 @@ export default function WorkCase({
   author,
   shareQr,
   draftMode,
+  translations,
+  alternates,
+  ui: articleUi,
 }: Props) {
   const path = `/work/${slug}`
   const url = absUrl(path)
@@ -87,29 +100,33 @@ export default function WorkCase({
   const extraLinks = Array.isArray(frontmatter.links) ? frontmatter.links : []
   const image = ogImages.card
   const titleLang = labelLang(frontmatter.title) || 'en'
-  const ui = uiLang(lang)
+  // Interface words in the case study's language (lib/uiStrings): 角色 / 技术栈 on a Chinese one.
+  const { t, lang: uiLang } = articleUi
+  const ui = uiLangAttr(lang)
+  // The owner's short values keep their own language (an English role on a Chinese page is marked "en").
+  const own = (text: string | undefined) => (text ? <span lang={langWithin(text, lang)}>{text}</span> : null)
   const share: ShareData = { url, title: frontmatter.title, qrSvg: shareQr }
 
   const meta: MetaItem[] = [
-    { label: 'Role', value: frontmatter.role || null },
-    { label: 'Team', value: frontmatter.team || null },
-    { label: 'Timeline', value: frontmatter.period ? <span className="tnum">{frontmatter.period}</span> : null },
+    { label: t.role, value: own(frontmatter.role) },
+    { label: t.team, value: own(frontmatter.team) },
+    { label: t.timeline, value: frontmatter.period ? <span className="tnum">{frontmatter.period}</span> : null },
     {
-      label: 'Published',
+      label: t.published,
       value: frontmatter.published ? (
         <time dateTime={frontmatter.published} className="tnum">
-          {formatPostDate(frontmatter.published)}
+          {formatPostDate(frontmatter.published, uiLang)}
         </time>
       ) : null,
     },
-    { label: 'Stack', value: tech.length ? <MetaChips items={tech} label="Stack" hrefFor={workTag} /> : null, wide: true },
+    { label: t.stack, value: tech.length ? <MetaChips items={tech} label={t.stack} hrefFor={workTag} pageLang={lang} /> : null, wide: true },
     {
-      label: writeups.length === 1 ? 'Write-up' : 'Write-ups',
+      label: writeups.length === 1 ? t.writeup : t.writeups,
       value: writeups.length ? (
         <Flex as="ul" direction="column" gap={1} listStyleType="none" m={0} p={0}>
           {writeups.map((w) => (
             <Box as="li" key={w.slug}>
-              <Link as={NextLink} href={w.permalink} color="accent.text" className="link-underline" lang={w.lang === 'en' ? undefined : w.lang}>
+              <Link as={NextLink} href={w.permalink} color="accent.text" className="link-underline" lang={w.lang === lang ? undefined : w.lang}>
                 {w.title}
               </Link>
             </Box>
@@ -118,7 +135,7 @@ export default function WorkCase({
       ) : null,
       wide: true,
     },
-    { label: 'Read', value: <span className="tnum">{readingMinutes} min</span> },
+    { label: t.read, value: <span className="tnum">{fillUi(t.minutes, { n: readingMinutes })}</span> },
   ]
 
   const external = (href: string, text: React.ReactNode, key?: string) => (
@@ -129,8 +146,8 @@ export default function WorkCase({
   const actions =
     link || repo || extraLinks.length ? (
       <>
-        {link && external(link, 'Visit site')}
-        {repo && external(repo, 'Source')}
+        {link && external(link, t.visitSite)}
+        {repo && external(repo, t.source)}
         {extraLinks.map((l) =>
           l.url.startsWith('/') ? (
             <Link key={l.url} as={NextLink} href={l.url} color="accent.text" className="link-underline" fontSize="14px">
@@ -155,6 +172,7 @@ export default function WorkCase({
         type="article"
         lang={lang}
         noindex={draftMode}
+        alternates={alternates}
         publishedTime={frontmatter.published || undefined}
         modifiedTime={updatedAt ? new Date(updatedAt).toISOString() : undefined}
         jsonLd={[
@@ -177,6 +195,12 @@ export default function WorkCase({
           ]),
         ]}
       />
+      {/* The Markdown twin of the case study (G9: /work/<slug>.md, for language models and agents). */}
+      {!frontmatter.draft && (
+        <Head>
+          <link key="markdown-twin" rel="alternate" type="text/markdown" href={markdownTwinPath(path)} title={`${frontmatter.title} (Markdown)`} />
+        </Head>
+      )}
       <HeaderFooter>
         <Box
           maxW="var(--container-content)"
@@ -187,16 +211,19 @@ export default function WorkCase({
           // The page gutter: full-width figures bleed through it on phones.
           sx={{ '--page-gutter': { base: '1rem', sm: '1.5rem', md: '2rem' } }}
         >
-          <Flex align="center" justify="space-between" gap={4} minH="32px" mb={8} className="no-print">
-            <Link as={NextLink} href="/work" fontFamily={MONO} fontSize="11px" color="page.fg-secondary" className="link-underline">
-              ← All projects
+          <Flex align="center" justify="space-between" gap={4} rowGap={3} wrap="wrap" minH="32px" mb={8} className="no-print">
+            <Link as={NextLink} href="/work" fontFamily={MONO} fontSize="11px" color="page.fg-secondary" className="link-underline" lang={ui}>
+              {t.allProjects}
             </Link>
-            <EditPill kind="work" slug={slug} />
+            <Flex align="center" gap={2} wrap="wrap" justify="flex-end">
+              <LanguageSwitch translations={translations} label={t.otherLanguages} />
+              <EditPill kind="work" slug={slug} />
+            </Flex>
           </Flex>
 
-          <Box as="article" lang={lang}>
+          <ArticleRoot ui={articleUi} lang={lang}>
             <PageHeader
-              eyebrow={<span lang={ui}>Case study</span>}
+              eyebrow={<span lang={ui}>{t.caseStudy}</span>}
               title={frontmatter.title}
               titleLang={titleLang !== lang ? titleLang : undefined}
               lede={frontmatter.description}
@@ -218,14 +245,14 @@ export default function WorkCase({
 
             <ArticleBody tree={tree} toc={toc} />
 
-            <ArticleEnd author={author} share={share} lang={lang} />
+            <ArticleEnd author={author} share={share} />
 
             <ArticleNav
-              before={prev ? { label: 'Previous', item: prev } : null}
-              after={next ? { label: 'Next', item: next } : null}
+              before={prev ? { label: t.previous, item: prev } : null}
+              after={next ? { label: t.next, item: next } : null}
               related={related}
             />
-          </Box>
+          </ArticleRoot>
         </Box>
         {draftMode && <DraftBar path={path} />}
       </HeaderFooter>
@@ -244,14 +271,15 @@ export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
   const w = await getWork(slug, { includeDrafts: draftMode })
   if (!w) return { notFound: true, revalidate: 60 }
 
-  const [{ resolveCover }, { loadAuthorCard }, { qrSvg }] = await Promise.all([
+  const [{ resolveCover }, { loadAuthorCard }, { qrSvg }, { articleSiblings }] = await Promise.all([
     import('../../lib/coverImage'),
     import('../../lib/authorCard'),
     import('../../lib/qr'),
+    import('../../lib/articleSiblings'),
   ])
 
-  const work = listWorkInDisplayOrder().map((x) => toArticleLink('work', x))
-  const posts = listPosts().map((p) => toArticleLink('blog', p))
+  // One link per piece, in this case study's language (F2); its own translations for the switch.
+  const { posts, work, translations, alternates } = articleSiblings('work', w, { draftMode })
   const self = toArticleLink('work', w)
   const { before, after } = neighbours(work, slug)
   const related = relatedArticles(self, [...work, ...posts])
@@ -294,6 +322,9 @@ export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
       author: loadAuthorCard(),
       shareQr,
       draftMode,
+      translations,
+      alternates,
+      ui: articleUiFor(w.lang),
       // Whether /publications exists, for the nav link (lib/publicationsData).
       ...(await import('../../lib/publicationsData')).chromePublicationsProp(),
     },

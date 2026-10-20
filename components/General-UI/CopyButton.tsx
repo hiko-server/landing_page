@@ -97,6 +97,7 @@ export default function CopyButton({
   value,
   label = 'Copy',
   srLabel = 'Copied',
+  failedLabel = 'Copy failed',
 }: {
   /** The text placed on the clipboard. */
   value: string
@@ -104,6 +105,8 @@ export default function CopyButton({
   label?: string
   /** Announced after a successful copy, e.g. "Email copied". */
   srLabel?: string
+  /** Shown and announced when the clipboard refused (default 'Copy failed'). */
+  failedLabel?: string
 }) {
   const [state, setState] = useState<State>('idle')
   const timer = useRef<number | null>(null)
@@ -180,11 +183,11 @@ export default function CopyButton({
           lineHeight="1.3"
           pointerEvents="none"
         >
-          Copy failed
+          {failedLabel}
         </Box>
       ) : null}
       <span role="status" className="sr-only">
-        {state === 'copied' ? srLabel : state === 'failed' ? 'Copy failed' : ''}
+        {state === 'copied' ? srLabel : state === 'failed' ? failedLabel : ''}
       </span>
     </Box>
   )

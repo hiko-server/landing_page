@@ -1,5 +1,6 @@
 import { modelledKeys } from './frontmatterMerge'
 import { cleanDate, cleanFocus, LINKS_MAX, OUTCOMES_MAX } from '../../../lib/caseStudy'
+import { normalizeTranslationKey } from '../../../lib/translations'
 
 /**
  * The frontmatter forms of the admin editors — posts and case studies
@@ -12,6 +13,31 @@ import { cleanDate, cleanFocus, LINKS_MAX, OUTCOMES_MAX } from '../../../lib/cas
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
+// ── Language and translations (posts and case studies) ───────────────────
+
+/**
+ * The language block of both forms (components/Admin/shell/TranslationField,
+ * lib/translations): the piece's language — '' detects it from the title
+ * and body (lib/toc detectContentLang) — and the key it shares with its
+ * versions in other languages ('' for none).
+ */
+export type TranslationForm = {
+  lang: string
+  translationKey: string
+}
+
+export const TRANSLATION_EMPTY: TranslationForm = { lang: '', translationKey: '' }
+
+export const translationFromServer = (f: Record<string, any>): TranslationForm => ({
+  lang: typeof f.lang === 'string' ? f.lang.trim() : '',
+  translationKey: typeof f.translationKey === 'string' ? f.translationKey.trim() : '',
+})
+
+export const translationToServer = (fm: TranslationForm) => ({
+  lang: fm.lang.trim() || undefined,
+  translationKey: normalizeTranslationKey(fm.translationKey) || undefined,
+})
+
 // ── Blog posts ───────────────────────────────────────────────────────────
 
 export type BlogFrontmatter = {
@@ -23,7 +49,7 @@ export type BlogFrontmatter = {
   cover: string
   /** Slug of the case study the post is about (linked both ways on the site); '' for none. */
   project: string
-}
+} & TranslationForm
 
 export const BLOG_EMPTY: BlogFrontmatter = {
   title: '',
@@ -33,6 +59,7 @@ export const BLOG_EMPTY: BlogFrontmatter = {
   draft: true,
   cover: '',
   project: '',
+  ...TRANSLATION_EMPTY,
 }
 
 export const blogFromServer = (f: Record<string, any>): BlogFrontmatter => ({
@@ -43,6 +70,7 @@ export const blogFromServer = (f: Record<string, any>): BlogFrontmatter => ({
   draft: Boolean(f.draft),
   cover: String(f.cover || ''),
   project: typeof f.project === 'string' ? f.project : '',
+  ...translationFromServer(f),
 })
 
 export const blogToServer = (fm: BlogFrontmatter, tags: string[]) => ({
@@ -53,6 +81,7 @@ export const blogToServer = (fm: BlogFrontmatter, tags: string[]) => ({
   draft: fm.draft || undefined,
   cover: fm.cover || undefined,
   project: fm.project.trim() || undefined,
+  ...translationToServer(fm),
 })
 
 // ── Case studies ─────────────────────────────────────────────────────────
@@ -91,7 +120,7 @@ export type WorkFrontmatter = {
   published: string
   outcomes: OutcomeForm[]
   links: LinkForm[]
-}
+} & TranslationForm
 
 export const WORK_EMPTY: WorkFrontmatter = {
   title: '',
@@ -112,6 +141,7 @@ export const WORK_EMPTY: WorkFrontmatter = {
   published: '',
   outcomes: [],
   links: [],
+  ...TRANSLATION_EMPTY,
 }
 
 const textOf = (v: unknown) => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '')
@@ -178,6 +208,7 @@ export const workFromServer = (f: Record<string, any>): WorkFrontmatter => ({
   published: cleanDate(f.published),
   outcomes: outcomesFromServer(f.outcomes),
   links: linksFromServer(f.links),
+  ...translationFromServer(f),
 })
 
 export const workToServer = (fm: WorkFrontmatter, tech: string[]) => ({
@@ -199,6 +230,7 @@ export const workToServer = (fm: WorkFrontmatter, tech: string[]) => ({
   published: cleanDate(fm.published) || undefined,
   outcomes: outcomesToServer(fm.outcomes),
   links: linksToServer(fm.links),
+  ...translationToServer(fm),
 })
 
 // ── Single pages (/now, /uses) ───────────────────────────────────────────

@@ -103,6 +103,16 @@ English → [README.md](./README.md)
   （`/api/vcard`）及用于保存联系人的二维码。
 - **文章**：GitHub 风格 Markdown、零布局偏移且带 `srcset` 与点按放大的图片、
   YouTube 与 Figure 组件、案例封面、标题锚点和目录。
+- **中文排版与中英互译**：中文文章与案例使用中文界面文字（日期 / 阅读 /
+  ← 全部文章 …）和中文排版——约 34 字行长、1.85 行高、中西文之间自动加间距、
+  用着重号代替伪斜体。同一篇内容的中英文版本在编辑器「Language &
+  translations」里填同一个翻译键（或点「Create draft」复制出另一种语言的草稿
+  再自行翻译），页面就会出现「阅读中文版 / Read in English」切换、hreflang
+  互链和站点地图互链，列表只显示一次（优先英文版）。界面文字统一放在
+  `lib/uiStrings/`。
+- **机器可读内容**：`/llms.txt`（llmstxt.org）、`/llms-full.txt`，以及每篇已发布
+  文章与案例的 Markdown 版本（在地址后加 `.md`，如 `/blog/<slug>.md`）；只含公开
+  内容，草稿与简历数据从不出现，`robots.txt` 不变。
 - **可发现性**：标题带上站长姓名，ProfilePage / Person JSON-LD，品牌字体的
   社交卡片，以及全文订阅源：`/feed.xml`（RSS，逐条标注语言）、
   `/work/feed.xml`、`/feed.json`，列在页脚「This site」一栏，与技术说明和隐私说明并列。
@@ -697,7 +707,9 @@ CI（`.github/workflows/ci.yml`）在每次推送和 Pull Request 时运行：
 | `/contact` | 联系页（ISR）：结构化表单与隐私说明、可用状态、复制按钮、vCard + 二维码 |
 | `/colophon` | 本站如何构建、隐私说明、更新日志、部署的提交 |
 | `/feed.xml`、`/work/feed.xml`、`/feed.json` | 全文 RSS（文章、案例）与 JSON Feed |
-| `/sitemap.xml` | 站点地图（含 EN / 中 CV 互链） |
+| `/sitemap.xml` | 站点地图（CV 及已互译的文章、案例含 EN / 中互链） |
+| `/llms.txt`、`/llms-full.txt` | 面向语言模型与智能体的索引（llmstxt.org），以及全部已发布文章与案例的 Markdown 全文 |
+| `/blog/[slug].md`、`/work/[slug].md` | 已发布文章或案例的 Markdown 版本（规范链接指向网页，`noindex`） |
 | `/api/search-index` | 供命令面板使用的公开搜索文档 |
 | `/api/vcard` | 公开联系方式的 vCard |
 | `/api/health` | 健康状态：所有人只看到 `{"status":"ok"\|"empty"\|"degraded"}`；存储、内容、备份时长、待同步的 R2 写入仅对管理员或携带 `Authorization: Bearer <HEALTH_TOKEN>` 的请求返回 |

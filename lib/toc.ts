@@ -188,3 +188,16 @@ export function labelLang(text: unknown): string | undefined {
   const tag = detectContentLang({ title: text })
   return tag === 'en' ? undefined : tag
 }
+
+/**
+ * `lang` attribute for a short text (a name, a role, a tag) inside a page in
+ * `pageLang`: the text's own language when it differs from the page's
+ * (English words on a Chinese page are marked "en", Chinese words on an
+ * English page "zh-Hans"), else undefined. Chinese scripts count as one
+ * language here — short labels cannot tell Simplified from Traditional.
+ */
+export function langWithin(text: unknown, pageLang: string | undefined | null): string | undefined {
+  const own = detectContentLang({ title: text })
+  const page = normalizeLang(pageLang) || 'en'
+  return own.split('-')[0] === page.split('-')[0].toLowerCase() ? undefined : own
+}

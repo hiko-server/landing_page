@@ -78,7 +78,11 @@ const mono = localFont({
 // The font variables are defined on :root (not on a wrapper element) so that
 // everything Chakra portals to <body> — drawers, the ⌘K palette, menus,
 // tooltips, toasts — resolves the same Geist stacks.
-const FONT_VARIABLES_CSS = `${monoFallbackFontFaces()}:root{--font-geist-sans:${sans.style.fontFamily};--font-geist-sans-italic:${sansItalic.style.fontFamily};--font-geist-mono:${mono.style.fontFamily}}`
+// `--font-geist-sans-face`: Geist and its metric fallback without the
+// platform list (which starts at the `fallback` array's system-ui), so
+// Traditional Chinese text can put the TC faces before the SC ones
+// (styles/globals.css, Chinese typesetting).
+const FONT_VARIABLES_CSS = `${monoFallbackFontFaces()}:root{--font-geist-sans:${sans.style.fontFamily};--font-geist-sans-face:${sans.style.fontFamily.replace(/,\s*system-ui.*$/, '')};--font-geist-sans-italic:${sansItalic.style.fontFamily};--font-geist-mono:${mono.style.fontFamily}}`
 
 // The framer-motion page fade (browsers without view transitions): the
 // standard ease and duration (theme/tokens.ts); MotionConfig below drops the

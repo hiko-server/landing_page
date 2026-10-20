@@ -1,6 +1,7 @@
 import { Box, Grid, Link, Text } from '@chakra-ui/react'
 import NextLink from 'next/link'
 import type { WorkOutcome } from '../../lib/caseStudy'
+import { useArticleUi } from './articleUi'
 
 /**
  * "At a glance" under a case study's title (D1): the owner's one-line
@@ -32,9 +33,9 @@ function Value({ o }: { o: WorkOutcome }) {
   )
 }
 
-function Source({ o }: { o: WorkOutcome }) {
+function Source({ o, fallback }: { o: WorkOutcome; fallback: string }) {
   if (!o.source && !o.sourceUrl) return null
-  const text = o.source || 'Source'
+  const text = o.source || fallback
   if (!o.sourceUrl) return <>{text}</>
   // An in-page #section stays a plain anchor (a router link would prefetch the page itself).
   if (o.sourceUrl.startsWith('#')) {
@@ -72,6 +73,8 @@ export default function AtAGlance({
   /** Language of the UI label ("At a glance"), when it differs from the article's. */
   labelLang?: string
 }) {
+  // The label reads 概览 on a Chinese case study (./articleUi).
+  const { t } = useArticleUi()
   const metrics = outcomes || []
   if (!summary && !metrics.length) return null
   const cols = Math.min(metrics.length, 4)
@@ -89,7 +92,7 @@ export default function AtAGlance({
         m={0}
         mb={4}
       >
-        At a glance
+        {t.atAGlance}
       </Text>
       {summary ? (
         <Text fontSize={{ base: '18px', md: '20px' }} lineHeight="1.45" color="page.fg" maxW="58ch" m={0} mb={metrics.length ? 7 : 0} sx={{ textWrap: 'pretty' }}>
@@ -141,7 +144,7 @@ export default function AtAGlance({
               </Box>
               {o.source || o.sourceUrl ? (
                 <Box as="dd" order={2} m={0} fontFamily={MONO} fontSize="11px" lineHeight="1.5" color="page.fg-subtle">
-                  <Source o={o} />
+                  <Source o={o} fallback={t.metricSource} />
                 </Box>
               ) : null}
             </Box>
