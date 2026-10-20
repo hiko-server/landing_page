@@ -11,10 +11,20 @@ import { utcDay, dayMinus } from '../analytics/shared'
  * already scrubbed (lib/errors/scrub.ts) — nothing personal reaches this
  * module.
  *
- * Bounds:
- *   - at most MAX_FINGERPRINTS rows: a new problem beyond that is counted as
- *     dropped (repeats of known ones still count);
- *   - at most DAILY_EVENTS events per UTC day across all sources;
+ * Bounds. Browser reports (sources 'client' and 'csp', POST /api/e) are
+ * anonymous, so they get budgets of their own that can never crowd out
+ * server errors:
+ *   - at most maxFingerprints rows in all. Browser reports may hold at most
+ *     maxReportedFingerprints of them and add at most newReportedPerHour new
+ *     ones per clock hour (every sender together); the rest of the table is
+ *     reserved for server errors. A new server error that finds the table
+ *     full replaces the least valuable browser-reported row (resolved first,
+ *     then the least recently seen open one; ignored rows last). Repeats of
+ *     known problems always count.
+ *   - per UTC day at most dailyEvents browser-reported events and, as a
+ *     separate budget, serverDailyEvents server events. Only stored events
+ *     use a budget: a report refused by a cap does not.
+ *   - everything refused is counted as dropped (Admin → System → Errors).
  *   - retention: open errors 90 days after they were last seen, resolved or
  *     ignored ones 30 days, daily counts 30 days. Pruned once per UTC day.
  */
@@ -24,13 +34,26 @@ export type ErrorStatus = 'open' | 'resolved' | 'ignored'
 export const ERROR_STATUSES: readonly ErrorStatus[] = ['open', 'resolved', 'ignored']
 
 export const ERROR_LIMITS = {
+  /** Rows in the table, every source together. */
   maxFingerprints: 500,
+  /** Rows browser reports (client + csp) may hold; the other 200 are kept for server errors. */
+  maxReportedFingerprints: 300,
+  /** New browser-reported fingerprints per clock hour, all senders together. */
+  newReportedPerHour: 30,
+  /** Browser-reported events stored per UTC day. */
   dailyEvents: 20_000,
+  /** Server events stored per UTC day (a budget of their own). */
+  serverDailyEvents: 20_000,
   openDays: 90,
   closedDays: 30,
   dailyKeepDays: 30,
   maxBrowsers: 8,
 } as const
+
+/** Sources whose events come from anonymous browser reports (POST /api/e). */
+export function isReportedSource(source: ErrorSource): boolean {
+  return source !== 'server'
+}
 
 export type ErrorEventInput = {
   fingerprint: string
@@ -78,13 +101,35 @@ export type ErrorTotals = {
   droppedToday: number
 }
 
-type StoreGlobal = typeof globalThis & {
-  __errorStore?: { day: string; events: number; prunedDay: string | null }
+type StoreState = {
+  day: string
+  /** Browser-reported events stored on `day`. */
+  events: number
+  /** Server events stored on `day`. */
+  serverEvents: number
+  /** Clock hour (ms since the epoch / 3 600 000) that `newReported` counts. */
+  hour: number
+  /** New browser-reported fingerprints stored in `hour`. */
+  newReported: number
+  prunedDay: string | null
 }
 
-function state() {
+type StoreGlobal = typeof globalThis & { __errorStore?: StoreState }
+
+const freshState = (): StoreState => ({
+  day: '',
+  events: 0,
+  serverEvents: 0,
+  hour: -1,
+  newReported: 0,
+  prunedDay: null,
+})
+
+function state(): StoreState {
   const g = globalThis as StoreGlobal
-  if (!g.__errorStore) g.__errorStore = { day: '', events: 0, prunedDay: null }
+  // A dev server hot-reloaded from an older version may hold the older shape.
+  if (!g.__errorStore || typeof g.__errorStore.serverEvents !== 'number')
+    g.__errorStore = { ...freshState(), ...g.__errorStore, serverEvents: 0 }
   return g.__errorStore
 }
 
@@ -189,6 +234,45 @@ export function pruneErrors(now = Date.now(), force = false): void {
   })()
 }
 
+const HOUR_MS = 3_600_000
+
+/**
+ * Make room for a new server fingerprint in a full table: delete the least
+ * valuable browser-reported row (resolved before open before ignored — an
+ * ignored row is the owner's decision to mute that report — and the least
+ * recently seen first). False when every row is a server error.
+ */
+function evictReportedRow(): boolean {
+  const db = getAnalyticsDb()
+  const victim = db
+    .prepare(
+      `SELECT fingerprint FROM errors WHERE source != 'server'
+       ORDER BY CASE status WHEN 'resolved' THEN 0 WHEN 'open' THEN 1 ELSE 2 END, last_seen ASC
+       LIMIT 1`
+    )
+    .get() as { fingerprint: string } | undefined
+  if (!victim) return false
+  db.prepare('DELETE FROM errors WHERE fingerprint = ?').run(victim.fingerprint)
+  db.prepare('DELETE FROM error_daily WHERE fingerprint = ?').run(victim.fingerprint)
+  return true
+}
+
+/** Why a new fingerprint from `source` may not be stored now, or null when it may. */
+function newFingerprintRefusal(source: ErrorSource, s: StoreState): 'capped' | null {
+  const db = getAnalyticsDb()
+  const total = () => (db.prepare('SELECT count(*) AS n FROM errors').get() as { n: number }).n
+  if (isReportedSource(source)) {
+    if (s.newReported >= ERROR_LIMITS.newReportedPerHour) return 'capped'
+    const reported = (
+      db.prepare(`SELECT count(*) AS n FROM errors WHERE source != 'server'`).get() as { n: number }
+    ).n
+    if (reported >= ERROR_LIMITS.maxReportedFingerprints) return 'capped'
+    return total() >= ERROR_LIMITS.maxFingerprints ? 'capped' : null
+  }
+  if (total() < ERROR_LIMITS.maxFingerprints) return null
+  return evictReportedRow() ? null : 'capped'
+}
+
 /**
  * Store one error event. Never throws for a bad event (the caller already
  * validated it); a database failure does throw — callers catch it.
@@ -199,24 +283,31 @@ export function recordError(e: ErrorEventInput, now = Date.now()): RecordOutcome
   if (s.day !== day) {
     s.day = day
     s.events = 0
+    s.serverEvents = 0
+  }
+  const hour = Math.floor(now / HOUR_MS)
+  if (s.hour !== hour) {
+    s.hour = hour
+    s.newReported = 0
   }
   pruneErrors(now)
-  if (s.events >= ERROR_LIMITS.dailyEvents) {
+  const reported = isReportedSource(e.source)
+  const used = reported ? s.events : s.serverEvents
+  if (used >= (reported ? ERROR_LIMITS.dailyEvents : ERROR_LIMITS.serverDailyEvents)) {
     bumpDropped(day)
     return 'over-daily-limit'
   }
-  s.events++
 
   const db = getAnalyticsDb()
-  return db.transaction((): RecordOutcome => {
+  const outcome = db.transaction((): RecordOutcome => {
     const existing = db
       .prepare('SELECT browsers, status FROM errors WHERE fingerprint = ?')
       .get(e.fingerprint) as { browsers: string; status: ErrorStatus } | undefined
     if (!existing) {
-      const n = (db.prepare('SELECT count(*) AS n FROM errors').get() as { n: number }).n
-      if (n >= ERROR_LIMITS.maxFingerprints) {
+      const refused = newFingerprintRefusal(e.source, s)
+      if (refused) {
         bumpDropped(day)
-        return 'capped'
+        return refused
       }
       db.prepare(
         `INSERT INTO errors (fingerprint, source, kind, name, message, stack, path, route, count,
@@ -275,6 +366,14 @@ export function recordError(e: ErrorEventInput, now = Date.now()): RecordOutcome
     ).run(day, e.fingerprint)
     return existing ? 'recorded' : 'new'
   })()
+  // Only a stored event uses the day's budget (and a new browser-reported
+  // fingerprint the hour's): a refused one already counts as dropped.
+  if (outcome === 'recorded' || outcome === 'new') {
+    if (reported) s.events++
+    else s.serverEvents++
+    if (reported && outcome === 'new') s.newReported++
+  }
+  return outcome
 }
 
 /** Daily counts for the last `days` UTC days (oldest first), per fingerprint. */
@@ -423,5 +522,5 @@ export function deleteResolvedErrors(): number {
 /** Test helper: reset the in-memory counters. */
 export function resetErrorStoreState(): void {
   const g = globalThis as StoreGlobal
-  g.__errorStore = { day: '', events: 0, prunedDay: null }
+  g.__errorStore = freshState()
 }

@@ -464,6 +464,19 @@ The seven streams above, merged and working together.
   (and still fits 160 columns with every section); CV Studio's sidebar says
   the Publications section appears on `/publications`, not on /about.
 
+### wave2a-fixes
+
+Fixes for defects an adversarial review found in wave 2A before it shipped.
+
+- **Error monitor (SECU-1)**: anonymous browser and CSP reports can no
+  longer fill the error monitor and hide real server errors. Browser
+  reports get their own share (300 of the 500 fingerprints, at most 30 new
+  ones an hour across every sender) and their own daily budget; server
+  errors keep the rest of the table and a daily budget of their own, and a
+  new server error replaces the least valuable browser report (resolved
+  first, ignored last) when the table is full. Reports refused by a cap no
+  longer use up the day's budget.
+
 ### Changed
 
 - **No more "[01] INTRODUCTION" labels** (owner request): the public site

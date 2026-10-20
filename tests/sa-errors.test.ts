@@ -344,36 +344,44 @@ test('repeats group under one fingerprint with counts, browsers and releases; a 
   assert.equal(totals.eventsToday, 4)
 })
 
-test('caps: at most 500 fingerprints and 20 000 events a day; the rest is counted as dropped', () => {
+test('caps: at most 500 fingerprints and 20 000 events a day per budget; the rest is counted as dropped', () => {
   store.resetErrorStoreState()
   const db = analyticsDb.getAnalyticsDb()
   db.exec('DELETE FROM errors; DELETE FROM error_daily; DELETE FROM meta')
   const t = Date.UTC(2026, 9, 14, 8)
+  // Server errors may fill the whole table (browser reports have their own,
+  // smaller share — tests/wave2a-fixes-error-budgets.test.ts).
   for (let i = 0; i < store.ERROR_LIMITS.maxFingerprints; i++)
     store.recordError(
-      event({ message: `cap ${i}`, fingerprint: fingerprintOf(['cap', String(i)]) }),
+      event({ source: 'server', message: `cap ${i}`, fingerprint: fingerprintOf(['cap', String(i)]) }),
       t
     )
   assert.equal(
     store.recordError(
-      event({ message: 'one too many', fingerprint: fingerprintOf(['cap', 'x']) }),
+      event({ source: 'server', message: 'one too many', fingerprint: fingerprintOf(['cap', 'x']) }),
       t
     ),
     'capped'
   )
   assert.equal(
-    store.recordError(event({ message: 'cap 0', fingerprint: fingerprintOf(['cap', '0']) }), t),
+    store.recordError(
+      event({ source: 'server', message: 'cap 0', fingerprint: fingerprintOf(['cap', '0']) }),
+      t
+    ),
     'recorded',
     'repeats still count'
   )
   assert.equal(store.errorTotals(t).droppedToday, 1)
 
-  store.resetErrorStoreState()
-  const fp = fingerprintOf(['cap', '1'])
-  let last = ''
-  for (let i = 0; i <= store.ERROR_LIMITS.dailyEvents; i++)
-    last = store.recordError(event({ fingerprint: fp }), t)
-  assert.equal(last, 'over-daily-limit')
+  for (const source of ['client', 'server'] as const) {
+    store.resetErrorStoreState()
+    const fp = fingerprintOf(['cap', '1'])
+    const limit =
+      source === 'server' ? store.ERROR_LIMITS.serverDailyEvents : store.ERROR_LIMITS.dailyEvents
+    let last = ''
+    for (let i = 0; i <= limit; i++) last = store.recordError(event({ source, fingerprint: fp }), t)
+    assert.equal(last, 'over-daily-limit', source)
+  }
 })
 
 test('retention: open errors expire after 90 days unseen, closed ones after 30', () => {

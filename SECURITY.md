@@ -237,8 +237,12 @@ For `POST` / `PUT` / `PATCH` / `DELETE` to `/api/admin/*`, `/api/auth/*`,
   immutable` for real cards.
 - **`/api/e`** (error reports) — browser error reports and CSP violation
   reports (`report-uri`, same origin). 8 KB bodies, per-client and
-  per-network minute budgets, 500 fingerprints and 20 000 events a day at
-  most; DNT / GPC, bots and cross-site posts are dropped. Query strings,
+  per-network minute budgets; browser reports may hold at most 300 of the
+  500 fingerprints, add at most 30 new ones an hour (all senders together)
+  and store 20 000 events a day, while server errors keep their own room
+  and daily budget (a new one replaces the least valuable browser report
+  when the table is full), so anonymous reports can never hide a server
+  error; DNT / GPC, bots and cross-site posts are dropped. Query strings,
   e-mail and IP addresses, tokens and ID-like numbers are scrubbed before
   storage; no address, user agent, cookie or body is kept. Always `204`.
 - **`/api/internal/restore-drill`** — loopback peers with the per-process
