@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type Ref } from 'react'
 import { Box, Button, Flex, Text } from '@chakra-ui/react'
 import { outlineButtonProps } from '../shell/ui'
 import { bothZones, relativeInstant, type ItemScheduleView } from '../shell/itemSchedule'
@@ -16,12 +16,16 @@ export default function ScheduleBanner({
   onChange,
   onClear,
   busy,
+  changeRef,
 }: {
   schedule: ItemScheduleView
   noun: string
   onChange: () => void
+  /** Resolves true once unscheduled (the editor then moves focus: the banner goes away). */
   onClear: () => Promise<boolean>
   busy: boolean
+  /** "Change…", where the schedule dialog hands focus back. */
+  changeRef?: Ref<HTMLButtonElement>
 }) {
   const [now, setNow] = useState(() => Date.now())
   const [confirm, setConfirm] = useState(false)
@@ -104,7 +108,7 @@ export default function ScheduleBanner({
         >
           {confirm ? 'Confirm — unschedule' : 'Unschedule'}
         </Button>
-        <Button size="sm" {...outlineButtonProps} onClick={onChange} isDisabled={busy}>
+        <Button ref={changeRef} size="sm" {...outlineButtonProps} onClick={onChange} isDisabled={busy}>
           Change…
         </Button>
       </Flex>

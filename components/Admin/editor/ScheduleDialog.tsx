@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import {
   Box,
   Button,
@@ -51,6 +51,12 @@ type Props = {
   /** The item's date as shown on the page (posts: date; case studies: published), YYYY-MM-DD or ''. */
   itemDate: string
   setSchedule: (change: ScheduleChange) => Promise<{ ok: true } | { ok: false; error: string; code?: string }>
+  /**
+   * Where focus goes when the dialog closes. The publish sheet's "Schedule…"
+   * is gone by then (the sheet closes as the dialog opens), so the opener
+   * says where instead; without it Chakra returns focus to the opener.
+   */
+  finalFocusRef?: RefObject<HTMLElement>
 }
 
 type Picked = { date: string; time: string }
@@ -68,7 +74,7 @@ function useNow(active: boolean): number {
   return now
 }
 
-export default function ScheduleDialog({ isOpen, onClose, collection, mode, hasChanges, dirty, schedule, itemDate, setSchedule }: Props) {
+export default function ScheduleDialog({ isOpen, onClose, collection, mode, hasChanges, dirty, schedule, itemDate, setSchedule, finalFocusRef }: Props) {
   const ids = useId()
   const now = useNow(isOpen)
   // The first quick pick, or the unpublish switch when there is nothing to publish.
@@ -120,6 +126,11 @@ export default function ScheduleDialog({ isOpen, onClose, collection, mode, hasC
           ? 'Unpublish after it goes live.'
           : null
   const valid = !publishProblem && !unpublishProblem && (canPublish || unpublishOn)
+  // A live item without changes only schedules an unpublish: until it is ticked there is nothing to schedule.
+  const nothingPicked = !canPublish && !unpublishOn ? 'Tick “Unpublish automatically” to pick when.' : null
+  const msgId = (label: string) => `${ids}-${label}-msg`
+  // Why "Schedule" is disabled, for whoever reaches it (the same words as next to the fields).
+  const blockedBy = [publishProblem ? msgId('publish') : '', unpublishProblem ? msgId('unpublish') : '', nothingPicked ? `${ids}-nothing` : ''].filter(Boolean).join(' ')
   const publishDayIso = publishAt !== null ? zonedDay(publishAt) : ''
   const presets = useMemo(() => (canPublish ? schedulePresets(now, zone) : []), [canPublish, now, zone])
   const hasStored = !!schedule && (schedule.publishAt !== null || schedule.unpublishAt !== null)
@@ -166,7 +177,7 @@ export default function ScheduleDialog({ isOpen, onClose, collection, mode, hasC
     if (ms === null) return null
     const z = bothZones(ms, browserZone)
     return (
-      <Text fontSize="sm" mt={2} data-testid={testId} aria-live="polite">
+      <Text fontSize="sm" data-testid={testId}>
         {verb}{' '}
         <Text as="span" fontWeight={600} className="tnum">
           {z.site}
@@ -185,25 +196,48 @@ export default function ScheduleDialog({ isOpen, onClose, collection, mode, hasC
     )
   }
 
-  const pickers = (value: Picked, onChange: (v: Picked) => void, label: string) => (
-    <SimpleGrid columns={2} spacing={3} maxW="360px">
-      <FormControl>
-        <FormLabel fontSize="13px" htmlFor={`${ids}-${label}-date`}>
-          Date
-        </FormLabel>
-        <Input {...inputProps} size="sm" type="date" id={`${ids}-${label}-date`} value={value.date} onChange={(e) => onChange({ ...value, date: e.target.value })} className="tnum" />
-      </FormControl>
-      <FormControl>
-        <FormLabel fontSize="13px" htmlFor={`${ids}-${label}-time`}>
-          Time ({zone === SCHEDULE_TIME_ZONE ? 'HKT' : zoneLabel(now, zone)})
-        </FormLabel>
-        <Input {...inputProps} size="sm" type="time" step={60} id={`${ids}-${label}-time`} value={value.time} onChange={(e) => onChange({ ...value, time: e.target.value })} className="tnum" />
-      </FormControl>
-    </SimpleGrid>
-  )
+  /**
+   * A picker's date and time, and under them ONE message that is always in
+   * the page — what is wrong with the time ("That time has passed…", "Pick a
+   * date and a time.", also for an emptied date) or when it happens — as a
+   * polite live region, so a change of either is announced. While something
+   * is wrong both fields are invalid and described by it.
+   */
+  const pickers = (value: Picked, onChange: (v: Picked) => void, label: string, problem: string | null, when: ReactNode) => {
+    const invalid = problem
+      ? { isInvalid: true, 'aria-describedby': msgId(label), errorBorderColor: 'status.warning' }
+      : {}
+    return (
+      <>
+        <SimpleGrid columns={2} spacing={3} maxW="360px">
+          <FormControl>
+            <FormLabel fontSize="13px" htmlFor={`${ids}-${label}-date`}>
+              Date
+            </FormLabel>
+            <Input {...inputProps} size="sm" type="date" id={`${ids}-${label}-date`} value={value.date} onChange={(e) => onChange({ ...value, date: e.target.value })} className="tnum" {...invalid} />
+          </FormControl>
+          <FormControl>
+            <FormLabel fontSize="13px" htmlFor={`${ids}-${label}-time`}>
+              Time ({zone === SCHEDULE_TIME_ZONE ? 'HKT' : zoneLabel(now, zone)})
+            </FormLabel>
+            <Input {...inputProps} size="sm" type="time" step={60} id={`${ids}-${label}-time`} value={value.time} onChange={(e) => onChange({ ...value, time: e.target.value })} className="tnum" {...invalid} />
+          </FormControl>
+        </SimpleGrid>
+        <Box id={msgId(label)} aria-live="polite" mt={2} data-testid={`schedule-${label}-msg`}>
+          {problem ? (
+            <Text fontSize="xs" {...warnTextProps}>
+              {problem}
+            </Text>
+          ) : (
+            when
+          )}
+        </Box>
+      </>
+    )
+  }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} initialFocusRef={firstRef} size="lg" isCentered scrollBehavior="inside">
+    <Modal isOpen={isOpen} onClose={onClose} initialFocusRef={firstRef} finalFocusRef={finalFocusRef} size="lg" isCentered scrollBehavior="inside">
       <ModalOverlay />
       <ModalContent bg="page.bg-elevated" border="1px solid" borderColor="page.border" mx={4} data-testid="schedule-dialog">
         <ModalHeader fontSize="md" pb={1} pr={12}>
@@ -255,14 +289,7 @@ export default function ScheduleDialog({ isOpen, onClose, collection, mode, hasC
                     })}
                   </Flex>
                 ) : null}
-                {pickers(publish, setPublish, 'publish')}
-                {publishProblem && publish.date ? (
-                  <Text fontSize="xs" mt={2} {...warnTextProps}>
-                    {publishProblem}
-                  </Text>
-                ) : (
-                  whenLine(publishAt, 'Goes live', 'schedule-publish-when')
-                )}
+                {pickers(publish, setPublish, 'publish', publishProblem, whenLine(publishAt, 'Goes live', 'schedule-publish-when'))}
                 {mode === 'draft' && publishDayIso ? (
                   <Checkbox mt={3} colorScheme="accent" isChecked={dateOption} onChange={(e) => setDateOption(e.target.checked)} alignItems="flex-start">
                     <Text as="span" fontSize="sm">
@@ -301,16 +328,14 @@ export default function ScheduleDialog({ isOpen, onClose, collection, mode, hasC
                   Back to draft at that time: the page answers 404 and leaves the lists, feeds and sitemap.
                 </Text>
               </Checkbox>
+              {nothingPicked ? (
+                <Text id={`${ids}-nothing`} fontSize="xs" mt={2} pl={6} {...warnTextProps}>
+                  {nothingPicked}
+                </Text>
+              ) : null}
               <Collapse open={unpublishOn} id={`${ids}-unpublish`}>
                 <Box pt={3} pl={{ base: 0, sm: 6 }}>
-                  {pickers(unpublish, setUnpublish, 'unpublish')}
-                  {unpublishProblem && unpublish.date ? (
-                    <Text fontSize="xs" mt={2} {...warnTextProps}>
-                      {unpublishProblem}
-                    </Text>
-                  ) : (
-                    whenLine(unpublishAt, 'Unpublishes', 'schedule-unpublish-when')
-                  )}
+                  {pickers(unpublish, setUnpublish, 'unpublish', unpublishProblem, whenLine(unpublishAt, 'Unpublishes', 'schedule-unpublish-when'))}
                 </Box>
               </Collapse>
             </Box>
@@ -338,7 +363,15 @@ export default function ScheduleDialog({ isOpen, onClose, collection, mode, hasC
           <Button size="sm" {...outlineButtonProps} onClick={onClose}>
             Cancel
           </Button>
-          <Button size="sm" {...primaryButtonProps} onClick={() => void submit()} isDisabled={!valid || !!busy} isLoading={busy === 'save'} loadingText="Scheduling">
+          <Button
+            size="sm"
+            {...primaryButtonProps}
+            onClick={() => void submit()}
+            isDisabled={!valid || !!busy}
+            isLoading={busy === 'save'}
+            loadingText="Scheduling"
+            aria-describedby={!valid && blockedBy ? blockedBy : undefined}
+          >
             {dirty ? 'Save & schedule' : hasStored ? 'Update schedule' : 'Schedule'}
           </Button>
         </ModalFooter>
