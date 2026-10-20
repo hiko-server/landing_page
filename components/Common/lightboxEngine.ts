@@ -529,11 +529,15 @@ export class LightboxEngine {
     return Math.abs(p.x - cx) <= (b.width * s) / 2 && Math.abs(p.y - cy) <= (b.height * s) / 2
   }
 
+  /** The stage changed size (rotation, a resized window): everything is re-fitted and kept in bounds. */
   private onResize(): void {
+    const { width, height } = this
     this.measure()
-    if (!this.gesture && !this.morph) {
+    if (width === this.width && height === this.height) return
+    if (this.zoomAnim) this.zoomAnim.to = clampView(this.zoomAnim.to, this.base, this.viewBox)
+    else if (!this.gesture && !this.morph) {
+      this.momentum = null
       this.view = isZoomed(this.view) ? clampView(this.view, this.base, this.viewBox) : { ...IDENTITY }
-      this.zoomAnim = this.momentum = null
     }
     this.render()
   }
@@ -549,6 +553,7 @@ export class LightboxEngine {
     for (const [i, els] of this.slides) {
       const offset = slideOffset(i, this.index, this.count, this.side)
       els.slide.style.transform = `translate3d(${offset * unit}px, 0, 0)`
+      els.layer.style.willChange = this.active && i === this.index ? 'transform' : ''
       if (i === this.index) {
         if (morphPoseNow) {
           els.layer.style.transform = transformOf(morphPoseNow.x, morphPoseNow.y, morphPoseNow.scale)
@@ -615,6 +620,7 @@ export class LightboxEngine {
     if (els) els.layer.style.willChange = on ? 'transform' : ''
     const stage = this.host.stage()
     if (stage) stage.dataset.motion = on ? 'active' : 'idle'
+    // (render() keeps the promotion on whichever image is current.)
   }
 
   private schedule(): void {

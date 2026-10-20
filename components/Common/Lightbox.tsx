@@ -120,8 +120,9 @@ export default function Lightbox({ items, index, onIndexChange, originOf }: Ligh
   const closeRef = useRef<HTMLButtonElement>(null)
   /** Where focus goes when the viewer has closed (set as it starts to close). */
   const finalFocus = useRef<HTMLElement | null>(null)
-  /** The image the viewer was opened on. */
+  /** The image the viewer was opened on, and what had the focus then. */
   const openedOn = useRef<number | null>(null)
+  const openedFrom = useRef<HTMLElement | null>(null)
   const announceZoom = useRef(false)
 
   const [zoomed, setZoomed] = useState(false)
@@ -145,7 +146,7 @@ export default function Lightbox({ items, index, onIndexChange, originOf }: Ligh
     const onScreen = originVisible(origin, { width: window.innerWidth, height: window.innerHeight })
     const opened = openedOn.current !== null ? find?.(openedOn.current) : null
     const button = (onScreen ? el : opened ?? el)?.closest<HTMLElement>('button, a[href], [tabindex]') ?? null
-    finalFocus.current = button
+    finalFocus.current = button ?? (openedFrom.current?.isConnected ? openedFrom.current : null)
     engine.close(onScreen ? origin : null)
   }, [])
 
@@ -182,7 +183,11 @@ export default function Lightbox({ items, index, onIndexChange, originOf }: Ligh
     setZoomed(false)
     if (index === null) setAnnouncement('')
   }
-  if (isOpen && openedOn.current === null) openedOn.current = index
+  if (isOpen && openedOn.current === null) {
+    openedOn.current = index
+    const active = typeof document === 'undefined' ? null : document.activeElement
+    openedFrom.current = active instanceof HTMLElement && active !== document.body ? active : null
+  }
   if (!isOpen && openedOn.current !== null && index === null) openedOn.current = null
 
   const learn = useCallback((i: number, ratio: number) => {
@@ -262,7 +267,8 @@ export default function Lightbox({ items, index, onIndexChange, originOf }: Ligh
       finalFocusRef={finalFocus}
       blockScrollOnMount
     >
-      <ModalOverlay ref={overlayRef} bg="rgba(5,5,5,0.92)" />
+      {/* Near-opaque in both themes: a light page must not read through behind the caption. */}
+      <ModalOverlay ref={overlayRef} bg="rgba(5,5,5,0.96)" />
       <ModalContent
         ref={rootRef}
         bg="transparent"
@@ -316,6 +322,7 @@ export default function Lightbox({ items, index, onIndexChange, originOf }: Ligh
             fontSize="12px"
             letterSpacing="0.06em"
             color="whiteAlpha.800"
+            textShadow="0 1px 2px rgba(0,0,0,0.6)"
             sx={{ fontVariantNumeric: 'tabular-nums' }}
             aria-hidden
           >
@@ -374,7 +381,7 @@ export default function Lightbox({ items, index, onIndexChange, originOf }: Ligh
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ ...FADE, delay: reduce ? 0 : 0.12 }}
-              style={{ maxWidth: '72ch', textAlign: 'center', fontSize: 14, lineHeight: 1.5, color: 'rgba(255,255,255,0.86)' }}
+              style={{ maxWidth: '72ch', textAlign: 'center', fontSize: 14, lineHeight: 1.5, color: 'rgba(255,255,255,0.86)', textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}
             >
               {current.caption}
             </m.p>

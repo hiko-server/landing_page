@@ -7,10 +7,11 @@ import type { FeatureBundle } from 'framer-motion'
  * <LazyMotion features={loadMotionFeatures}> (components/Chrome/MotionProvider.tsx,
  * around the whole app), so the shared bundle carries only the renderer
  * core. The features themselves — the
- * animation engine, gestures, drag (the lightbox's swipe-to-close) and
- * layout animations (the header's active-link underline, the photo strip's
- * shared-element zoom) — are `domMax` in a chunk of their own
- * (./motionFeatureBundle.ts).
+ * animation engine, gestures, drag and layout animations (the header's
+ * active-link underline) — are `domMax` in a chunk of their own
+ * (./motionFeatureBundle.ts). The image viewer's gestures and its morph do
+ * not use them: they run on its own pointer engine
+ * (components/Common/lightboxEngine.ts).
  *
  * The request starts as soon as the app's bundle runs in the browser, in
  * parallel with hydration, so the features are normally in place by the

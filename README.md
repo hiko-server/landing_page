@@ -317,6 +317,14 @@ other language, then translate it): each page then offers "阅读中文版" /
 "Read in English", search engines get hreflang alternates, and the lists
 show the piece once, in English. Interface words live in `lib/uiStrings/`.
 
+**Images.** Every image in a post or case study (and every Field Notes
+photo on the home page) opens a full-screen viewer that grows out of the
+picture and flies back into it: swipe between images, pinch or double-tap
+to zoom (the page itself never zooms), drag down to close; with a mouse,
+click to zoom and use the wheel; with the keyboard, arrows, + / − / 0 and
+Esc. The gesture engine is `components/Common/lightboxEngine.ts`, its
+maths `lib/lightboxGestures.ts` and `lib/lightboxPhysics.ts`.
+
 Editing something that is already live never publishes half-done work:
 **Save changes** (⌘S) keeps the edits as *unpublished changes* — visitors
 see the published version — until **Publish changes…** (with a diff); Preview
