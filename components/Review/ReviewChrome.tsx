@@ -85,13 +85,13 @@ function BarBody({ word, note, expires, label, lang }: ReviewChromeProps) {
       bg="page.bg-elevated"
       borderTop="1px solid"
       borderColor="page.border-strong"
-      px={4}
       py={2.5}
       pb="calc(10px + env(safe-area-inset-bottom))"
       className="no-print"
       sx={{ '@media (forced-colors: active)': { borderTop: '2px solid CanvasText' } }}
     >
-      <Flex maxW="var(--container-content)" mx="auto" align={{ base: 'flex-start', sm: 'center' }} direction={{ base: 'column', sm: 'row' }} gap={{ base: 1, sm: 3 }}>
+      {/* The page's gutter (16 / 24 / 32 px, as the header and footer), so its edges line up with theirs. */}
+      <Flex maxW="var(--container-content)" mx="auto" px="var(--page-gutter)" align={{ base: 'flex-start', sm: 'center' }} direction={{ base: 'column', sm: 'row' }} gap={{ base: 1, sm: 3 }}>
         <Text
           as="span"
           flexShrink={0}

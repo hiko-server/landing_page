@@ -320,9 +320,11 @@ test('the feeds drop the spacing marks (they mean nothing without the site CSS)'
 
 test('globals.css: the Chinese typesetting layer', () => {
   const css = read('styles/globals.css')
-  const block = css.slice(css.indexOf('Chinese typesetting'), css.indexOf('Lucide interface icons'))
+  const block = css.slice(css.indexOf('Chinese typesetting'), css.indexOf('Chinese text on every page'))
   assert.ok(block.length > 500, 'the block exists')
-  // Scoped to posts and case studies (the CV print layout is untouched).
+  // The article layer: scoped to posts and case studies. (The page-wide
+  // layer after it — review round 3, VISU-3 — is guarded in
+  // tests/review-r3-visu.test.ts.)
   for (const rule of block.match(/^[^\s@/*:}][^{]*\{/gm) || []) assert.match(rule, /\.article-page/, rule)
   assert.match(block, /\.article-page :lang\(zh\) \{\s*letter-spacing: 0;/)
   assert.match(block, /--measure-zh: 34em;/)

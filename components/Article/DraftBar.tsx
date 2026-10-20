@@ -29,13 +29,13 @@ export default function DraftBar({ path, pending = false }: { path: string; pend
       bg="page.bg-elevated"
       borderTop="1px solid"
       borderColor="page.border-strong"
-      px={4}
       py={2.5}
       pb="calc(10px + env(safe-area-inset-bottom))"
       className="no-print"
       sx={{ '@media (forced-colors: active)': { borderTop: '2px solid CanvasText' } }}
     >
-      <Flex maxW="var(--container-content)" mx="auto" align="center" justify="space-between" gap={4}>
+      {/* The page's gutter (16 / 24 / 32 px, as the header and footer), so its edges line up with theirs. */}
+      <Flex maxW="var(--container-content)" mx="auto" px="var(--page-gutter)" align="center" justify="space-between" gap={4}>
         <Text as="p" m={0} fontFamily="var(--font-geist-mono), monospace" fontSize="12px" color="page.fg-secondary">
           <Box as="span" color="accent.text" fontWeight={600}>
             {pending ? 'Unpublished changes' : 'Draft preview'}

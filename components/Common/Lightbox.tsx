@@ -4,7 +4,7 @@ import { m, useReducedMotion } from 'framer-motion'
 import { ArrowLeftIcon, ArrowRightIcon, ZoomInIcon, ZoomOutIcon } from '../Icons/ui/content'
 import Picture from './Picture'
 import { LightboxEngine, originVisible, snapshotOrigin, FRAME_RADIUS } from './lightboxEngine'
-import { MAX_SCALE, ZOOMED_EPSILON, windowIndices, wrapIndex } from '../../lib/lightboxGestures'
+import { MAX_SCALE, ZOOMED_EPSILON, sourcePixelWidth, windowIndices, wrapIndex } from '../../lib/lightboxGestures'
 import { placeholderStyle } from '../../lib/lqip'
 import { settleWithin } from '../../lib/viewTransition'
 import { motionTransition } from '../../theme/tokens'
@@ -35,6 +35,11 @@ import { useUiLang } from './uiLang'
  * - Mouse and trackpad: click the image to zoom there (and back), drag to
  *   pan; the wheel zooms at the pointer, a trackpad pinch too; a sideways
  *   trackpad swipe pages.
+ * - A click, a double tap and the zoom button zoom only as far as the
+ *   source has pixels (one file pixel per CSS pixel, PhotoSwipe's 1:1). An
+ *   image already shown at its full size offers none of them: no zoom
+ *   button, no zoom-in cursor, a click on it closes. Pinch, the wheel and
+ *   + / − still magnify it on purpose.
  * - Keyboard: ← / → step (wrapping) or pan when zoomed, ↑ / ↓ pan, + / −
  *   zoom, 0 fits, Home / End jump, Esc closes. Focus is trapped while open
  *   and returns to the button of the image on screen (else the opener).
@@ -126,6 +131,8 @@ export default function Lightbox({ items, index, onIndexChange, originOf }: Ligh
   const announceZoom = useRef(false)
 
   const [zoomed, setZoomed] = useState(false)
+  /** The image on screen has more pixels than it is shown with (lightboxEngine zoomableChange). */
+  const [zoomable, setZoomable] = useState(true)
   /** The largest zoom the current image has rested at: its source is chosen for it. */
   const [detail, setDetail] = useState(1)
   const [announcement, setAnnouncement] = useState('')
@@ -170,6 +177,7 @@ export default function Lightbox({ items, index, onIndexChange, originOf }: Ligh
             }
           }
         },
+        zoomableChange: setZoomable,
       },
     )
   }
@@ -329,23 +337,21 @@ export default function Lightbox({ items, index, onIndexChange, originOf }: Ligh
             {current ? `${index! + 1} / ${count}` : ''}
           </Text>
           <HStack spacing={1} pointerEvents="auto">
-            <IconButton
-              aria-label={zoomed ? t.zoomOut : t.zoomIn}
-              icon={zoomed ? <ZoomOutIcon size="sm" /> : <ZoomInIcon size="sm" />}
-              onClick={() => {
-                announceZoom.current = true
-                engine?.toggleZoom()
-              }}
-              variant="ghost"
-              w="40px"
-              h="40px"
-              minW="40px"
-              color="white"
-              borderRadius="full"
-              _hover={{ bg: 'whiteAlpha.200' }}
-              _active={{ bg: 'whiteAlpha.300' }}
-              _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
-            />
+            {/* Only when there is something to zoom to (or back from). */}
+            {zoomable || zoomed ? (
+              <ZoomButton
+                zoomed={zoomed}
+                label={zoomed ? t.zoomOut : t.zoomIn}
+                onClick={() => {
+                  announceZoom.current = true
+                  engine?.toggleZoom()
+                }}
+                // Stepping to an image without zoom (not the viewer closing: its own focus return decides then).
+                onRemoveWhileFocused={() => {
+                  if (latest.current.index !== null) closeRef.current?.focus()
+                }}
+              />
+            ) : null}
             <ModalCloseButton
               ref={closeRef}
               aria-label={t.closeImageViewer}
@@ -408,6 +414,10 @@ export default function Lightbox({ items, index, onIndexChange, originOf }: Ligh
               bg="blackAlpha.600"
               color="white"
               zIndex={2}
+              // Opacity follows the engine frame by frame (--lb-ui), like the
+              // top bar: only the hover colours ease, so the arrows never
+              // flash in at full opacity while the viewer opens.
+              transitionProperty="background-color, color, box-shadow"
               style={{ opacity: 'var(--lb-ui, 1)' }}
               _hover={{ bg: 'blackAlpha.800' }}
               _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
@@ -430,6 +440,10 @@ export default function Lightbox({ items, index, onIndexChange, originOf }: Ligh
               bg="blackAlpha.600"
               color="white"
               zIndex={2}
+              // Opacity follows the engine frame by frame (--lb-ui), like the
+              // top bar: only the hover colours ease, so the arrows never
+              // flash in at full opacity while the viewer opens.
+              transitionProperty="background-color, color, box-shadow"
               style={{ opacity: 'var(--lb-ui, 1)' }}
               _hover={{ bg: 'blackAlpha.800' }}
               _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
@@ -442,6 +456,41 @@ export default function Lightbox({ items, index, onIndexChange, originOf }: Ligh
         </Box>
       </ModalContent>
     </Modal>
+  )
+}
+
+/**
+ * The top bar's zoom toggle. It goes away when the image on screen has
+ * nothing to zoom to; if it had the focus then (stepping with the arrow
+ * keys), the focus moves to Close first rather than dropping out of the
+ * dialog (its cleanup runs before the button leaves the DOM).
+ */
+function ZoomButton({ zoomed, label, onClick, onRemoveWhileFocused }: { zoomed: boolean; label: string; onClick: () => void; onRemoveWhileFocused: () => void }) {
+  const ref = useRef<HTMLButtonElement>(null)
+  const latestRemove = useRef(onRemoveWhileFocused)
+  latestRemove.current = onRemoveWhileFocused
+  useLayoutEffect(() => {
+    const el = ref.current
+    return () => {
+      if (el && document.activeElement === el) latestRemove.current()
+    }
+  }, [])
+  return (
+    <IconButton
+      ref={ref}
+      aria-label={label}
+      icon={zoomed ? <ZoomOutIcon size="sm" /> : <ZoomInIcon size="sm" />}
+      onClick={onClick}
+      variant="ghost"
+      w="40px"
+      h="40px"
+      minW="40px"
+      color="white"
+      borderRadius="full"
+      _hover={{ bg: 'whiteAlpha.200' }}
+      _active={{ bg: 'whiteAlpha.300' }}
+      _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
+    />
   )
 }
 
@@ -518,6 +567,7 @@ function Stage({ engine, index, count, items, reduce, originOf, learned, learn, 
       inset={0}
       overflow="hidden"
       data-zoomed="false"
+      data-zoomable="true"
       data-motion="idle"
       sx={{
         touchAction: 'none',
@@ -525,6 +575,8 @@ function Stage({ engine, index, count, items, reduce, originOf, learned, learn, 
         WebkitUserSelect: 'none',
         overscrollBehavior: 'contain',
         '& .lightbox-frame': { cursor: 'zoom-in' },
+        // Shown at its full size: a click closes, nothing zooms.
+        '&[data-zoomable="false"] .lightbox-frame': { cursor: 'default' },
         '&[data-zoomed="true"] .lightbox-frame': { cursor: 'grab' },
         '&[data-drag="true"], &[data-drag="true"] .lightbox-frame': { cursor: 'grabbing' },
       }}
@@ -593,6 +645,16 @@ function Slide({ i, item, current, engine, reduce, originOf, learnedRatio, learn
     const img = imgRef.current
     if (img?.complete && img.naturalWidth > 0) setReady(true)
   }, [])
+
+  // How far a click or the zoom button may zoom: the widest file the source
+  // offers (its srcset, else its width, else — an <img> without either — the
+  // decoded file's own width; a srcset image's naturalWidth is scaled by
+  // `sizes`, so it never decides).
+  const [decodedWidth, setDecodedWidth] = useState(0)
+  const sourceWidth = sourcePixelWidth(item.width, item.srcSet, item.avifSrcSet) || decodedWidth
+  useLayoutEffect(() => {
+    engine.setSourceWidth(i, sourceWidth)
+  }, [engine, i, sourceWidth])
 
   useEffect(() => {
     if (!ready || !low || lowGone) return
@@ -667,6 +729,7 @@ function Slide({ i, item, current, engine, reduce, originOf, learnedRatio, learn
               onLoad={(e) => {
                 const img = e.currentTarget
                 if (!item.width && img.naturalWidth && img.naturalHeight) learn(i, img.naturalWidth / img.naturalHeight)
+                if (!item.srcSet && img.naturalWidth) setDecodedWidth(img.naturalWidth)
                 // Shown once decoded, so the swap never stalls a frame.
                 void settleWithin(typeof img.decode === 'function' ? img.decode() : Promise.resolve(), 400).then(() => setReady(true))
               }}
