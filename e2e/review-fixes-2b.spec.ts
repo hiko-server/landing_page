@@ -122,18 +122,36 @@ const adminFetch = (page: Page, method: string, url: string, body?: unknown) =>
     [method, url, body] as const,
   )
 
+/**
+ * Clean-up requests outside the page (no console noise when something is
+ * already gone). The page's cookies are passed by hand: the request context
+ * leaves the Secure session cookie out over http://127.0.0.1.
+ */
+async function cleanup(page: Page, method: 'DELETE' | 'POST', url: string, body?: unknown): Promise<number> {
+  const cookie = (await page.context().cookies()).map((c) => `${c.name}=${c.value}`).join('; ')
+  const res = await page.request
+    .fetch(url, { method, headers: { 'Content-Type': 'application/json', cookie }, data: body === undefined ? undefined : JSON.stringify(body) })
+    .catch(() => null)
+  return res ? res.status() : 0
+}
+
 test.describe('renamed Markdown twins (CORR-4)', { tag: '@admin' }, () => {
   test.skip(!ADMIN.email || !ADMIN.password, 'ADMIN_EMAIL / ADMIN_PASS not set')
 
   test('after a slug rename the old .md address answers 308 to the new twin, like the page @admin', async ({ page }) => {
-    await loginAsAdmin(page)
+    // A sign-in of its own: deleting the post afterwards needs a recent one (lib/adminAuth/stepUp).
+    await loginAsAdmin(page, { fresh: true })
     const stamp = Date.now()
     const from = `e2e-twin-${stamp}`
     const to = `e2e-twin-moved-${stamp}`
     const created = await adminFetch(page, 'PUT', '/api/admin/posts', {
       slug: from,
       create: true,
-      frontmatter: { title: 'E2E twin rename', date: new Date().toISOString().slice(0, 10), description: 'Created by the review-fixes-2b end-to-end suite; deleted afterwards.' },
+      frontmatter: {
+        title: 'E2E twin rename',
+        date: new Date().toISOString().slice(0, 10),
+        description: 'Created by the review-fixes-2b end-to-end suite to check that a renamed post keeps its Markdown twin; deleted afterwards.',
+      },
       body: 'The post whose Markdown twin moves.\n',
     })
     expect(created.status, created.text).toBe(200)
@@ -152,9 +170,11 @@ test.describe('renamed Markdown twins (CORR-4)', { tag: '@admin' }, () => {
       expect(followed.status()).toBe(200)
       expect(await followed.text()).toMatch(/^# E2E twin rename/)
     } finally {
-      await page.request.fetch('/api/admin/posts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, data: JSON.stringify({ action: 'remove-redirect', slug: to, from }) }).catch(() => undefined)
-      await page.request.fetch(`/api/admin/posts?slug=${to}`, { method: 'DELETE' }).catch(() => undefined)
-      await page.request.fetch(`/api/admin/posts?slug=${from}`, { method: 'DELETE' }).catch(() => undefined)
+      await cleanup(page, 'POST', '/api/admin/posts', { action: 'remove-redirect', slug: to, from })
+      for (const slug of [to, from]) await cleanup(page, 'DELETE', `/api/admin/posts?slug=${slug}`)
     }
+    // Nothing is left behind (the public pages' checks would list the post).
+    expect((await page.request.get(`/blog/${to}.md`, { maxRedirects: 0 })).status()).toBe(404)
+    expect((await page.request.get(`/blog/${from}.md`, { maxRedirects: 0 })).status()).toBe(404)
   })
 })
