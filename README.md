@@ -246,6 +246,13 @@ backup, and a hardened admin GUI for non-engineers.
   where a page lacks them), *Replace file* (every reference follows; the
   old address redirects), safe delete into a 30-day trash, bulk responsive
   sizes, drag-and-drop uploads and an R2 check.
+- **The library everywhere an image is chosen** — *Library…* beside every
+  upload control: field-note photos and logos (with their English alt text,
+  and the Chinese caption from the image's default), the avatar and CV
+  Studio's PDF photo (JPEG, PNG or WebP); where each one is used follows the
+  save. CV bullets have their own *Shows on* menu (public pages, downloads,
+  private links) next to the eye, and ⌘K reopened while the last palette is
+  still closing always lands in the search field.
 - **Home editor** — sortable photo / logo / link cards and section order
   (mouse, touch and keyboard), highlights with CV suggestions,
   availability, featured repositories, logo scale, site name.

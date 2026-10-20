@@ -8,6 +8,70 @@ portfolio CMS, no public package). Entries are grouped by release date.
 
 ## [Unreleased]
 
+### followups-3
+
+The gaps the final batch left (before release).
+
+- **The media library wherever an image is chosen** (H7): *Library…* beside
+  every upload control — Home → Field notes ("From library…" next to *Add
+  photos*, *Library…* on each card's image URL, *Replace from library…* in
+  its ⋯ menu), Home → Brands (the same for logos), Home → Hero (*Choose from
+  library…* under *Upload avatar*) and CV Studio → Personal Info (*From
+  library…* beside *Upload photo…*, the PDF-only photo). The picker opens on
+  the field's current image (selected and scrolled into view) with the
+  field's own title and button; a photo's description is its English alt
+  text, edited there, and the image's Chinese default fills the Chinese
+  caption — a different image brings its own texts, the same image only
+  fills what is empty or edited; a logo's alt text names a card without a
+  name; the avatar and the PDF photo have no alt text there, and the PDF
+  photo takes still JPEG, PNG or WebP only (`components/Admin/home/libraryPick`,
+  `components/Admin/media/LibraryPicker`). Every caller loads the picker
+  through one lazy entry (`MediaPickerLazy`, a single chunk). Image cards
+  are named groups ("Photo 3") for screen readers.
+- **Where it is used stays right**: the usage index is rebuilt on every home
+  or CV save (their kv rows are in its fingerprint; now tested against a
+  store), home photos and logos report whether they have an alt text (the
+  description, the name), and a logo's stored measurement (`metrics.source`)
+  is no longer listed as a second place (usage rules v2: stored indexes
+  rebuild by themselves).
+- **⌘K reopened while the last palette is still leaving** lands in the
+  search field: after the palette opened a page the route transition holds
+  the leaving dialog hidden, and bringing that one back left focus on the
+  modal container (typing went nowhere); a half-faded panel reopened from
+  the keyboard kept its opacity. Every opening is now a fresh dialog
+  (`components/General-UI/paletteSession`); what the dropped dialog's choice
+  left to run still runs; focus returns where the palette was opened from —
+  or to the new page when it opened one. A palette opened while the next
+  page is still loading stays shown and focused over it. `pages/_app` is
+  unchanged.
+- **An audience per bullet** (E4): `itemsOnlyIn` { field: { position:
+  surfaces } } beside `hiddenItems` — a bullet, tag or author kept to some
+  of public pages / downloads / private links (an author keeps its place as
+  "…"); hidden still wins, and nothing of it reaches a public view. CV
+  Studio has a *Shows on* menu beside each bullet's eye (a chip says where
+  it shows; on phones the tinted icon), linked across EN / 中文 like the
+  eye, one undo step; positions follow their bullets through insert, remove,
+  move and paste, a duplicate keeps its source's audience; validation and
+  the EN → 中文 sync know it; the Hidden items panel lists a limited bullet
+  with *Everywhere*. The editor's helpers are `lib/cvItemAudience`, so the
+  public pages' copy of the visibility model grows by about 0.1 KiB only.
+  A bullet's height now follows its width too (it wraps again when the chip
+  appears or a phone turns).
+- **Visual baselines**: the six `/cv` baselines now show the header's
+  language switch (中文). The other pages differ from their baselines only
+  within the gate's tolerance — the header's hairline is gone at the top of
+  the page (borderless until stuck, as designed), anti-aliasing of
+  re-encoded fixture images and of two card titles — so they were left as
+  they are; the article's table already had its numeric columns
+  right-aligned.
+- Tests: `tests/followups3-palette-session.test.ts`,
+  `tests/followups3-media-fields.test.ts`,
+  `tests/followups3-bullet-audience.test.ts`, the audience leak test over
+  every output now keeps each bullet off by its own audience too;
+  `e2e/followups-3.spec.ts` (the ⌘K reopen cases with CPU throttling 6× —
+  they fail on the previous build —, the pickers and the bullet audience
+  @admin).
+
 ### patch-2b1
 
 Fixes after the wave 2B deploy (the post-deploy end-to-end run against
