@@ -14,6 +14,7 @@ import type { HeroIdentity, HeroMeta } from './heroIdentity'
 import type { WorkIndexItem } from './projectMatch'
 import type { ScrollerImage } from '../imageScoller/imageScroller'
 import type { GithubPageData } from '../Common/githubEvents'
+import type { SelectedPublications } from '../../lib/publications/selected'
 
 /**
  * Home page body: hero → highlights (proof strip) → affiliations strip →
@@ -34,6 +35,7 @@ const LandingContent = ({
   photos,
   github,
   writing,
+  publications,
 }: {
   home?: HomeData | null
   cv?: { en: CvSectionLike[]; zh: CvSectionLike[] } | null
@@ -48,6 +50,8 @@ const LandingContent = ({
   photos?: ScrollerImage[]
   github?: GithubPageData | null
   writing?: HomeWriting | null
+  /** "Selected publications" (server data; null without a public paper). */
+  publications?: SelectedPublications | null
 }) => {
   const highlights = isSectionVisible(home, 'highlights') ? visibleHighlights(home?.highlights) : []
   return (
@@ -69,7 +73,7 @@ const LandingContent = ({
       )}
 
       <Box w="100%" mt={{ base: 2, md: 6 }}>
-        <Content photos={photos} cvEn={cv?.en} home={home || undefined} work={work} github={github} writing={writing} />
+        <Content photos={photos} cvEn={cv?.en} home={home || undefined} work={work} github={github} writing={writing} publications={publications} />
       </Box>
     </Box>
   )

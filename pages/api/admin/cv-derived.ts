@@ -3,7 +3,9 @@ import { deriveCurrentlyCoding } from '../../../lib/currentlyCoding'
 import { readPublicCvSections } from '../../../lib/cvdata'
 import { isAdminRequest } from '../../../lib/auth'
 import { referenceMonth } from '../../../lib/clock'
-import { cvHref, suggestHighlights } from '../../../lib/highlights'
+import { cvHref, suggestHighlights, type HighlightSuggestion } from '../../../lib/highlights'
+import { readPublicationsView } from '../../../lib/publicationsData'
+import { publicationTiles } from '../../../lib/publications/selected'
 
 const isAuthed = isAdminRequest
 
@@ -23,10 +25,13 @@ const HIGHLIGHT_SOURCE_SECTIONS = ['competitionAwards', 'patents', 'education'] 
  *   currentlyCoding       the "currently coding" chip the home page shows
  *                         when the owner's lines are blank
  *   suggestedHighlights   proof-strip tiles built verbatim from the public
- *                         CV's awards, patents and education, each linking
- *                         to its entry on /cv (or /about when the section is
- *                         switched off the CV page). Suggestions only:
- *                         nothing is published until the owner saves them.
+ *                         CV's awards, patents, published papers (title,
+ *                         venue · year — the /publications list) and
+ *                         education, each linking to its entry on /cv (or
+ *                         /about when the section is switched off the CV
+ *                         page; a paper to its /publications anchor).
+ *                         Suggestions only: nothing is published until the
+ *                         owner saves them.
  *
  * Derived from the *website* public view for the site's reference month,
  * exactly what the home page and /now derive, so hidden sections, entries
@@ -47,10 +52,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   let cvEn: any[] = []
   let highlightSource: any[] = []
   let onCvPage = new Set<string>()
+  let papers: HighlightSuggestion[] = []
   try {
     cvEn = readPublicCvSections('website', DERIVED_SOURCE_SECTIONS, ['en']).en
     highlightSource = readPublicCvSections('website', HIGHLIGHT_SOURCE_SECTIONS, ['en']).en
     onCvPage = new Set(readPublicCvSections('cv', HIGHLIGHT_SOURCE_SECTIONS, ['en']).en.map((s) => String(s.sessionName)))
+    papers = publicationTiles(readPublicationsView())
   } catch (err) {
     // Store error — derivation blanks rather than failing the editor.
     console.warn('cv-derived: could not read CV', err instanceof Error ? err.message : err)
@@ -60,6 +67,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     currentlyCoding: deriveCurrentlyCoding(cvEn, referenceMonth()),
     suggestedHighlights: suggestHighlights(highlightSource, {
       hrefFor: (section, index) => (onCvPage.has(section) ? cvHref(section, index) : `/about#about-${section}`),
+      papers,
     }),
   })
 }

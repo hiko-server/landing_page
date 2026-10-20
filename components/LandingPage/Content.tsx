@@ -28,10 +28,14 @@ import { clearOfHeader } from '../../lib/anchorOffset'
 import { list } from '../CVViewerPage/fields'
 import { HOME_REPO_LIMIT, type GithubPageData } from '../Common/githubEvents'
 import type { WorkIndexItem, WritingItem } from './projectMatch'
+import type { SelectedPublications } from '../../lib/publications/selected'
 
 // Below the fold and interactive-only: its code loads when it is about to
 // scroll into view (WhenVisible), not with the page.
 const ImageScroller = dynamic(() => import('../imageScoller/imageScroller'), { ssr: false })
+// Server-rendered, but its code ships only with a page that has public
+// papers (the owner may have none): no JavaScript for an absent section.
+const SelectedPublicationsList = dynamic(() => import('./SelectedPublications'))
 
 export type HomeWriting = { items: WritingItem[]; hasPosts: boolean; hasWork: boolean }
 
@@ -65,8 +69,8 @@ const monoLabel = {
 /**
  * Home sections in the owner's order (home.sectionOrder, completed by
  * resolveSectionOrder): Open Source, Skills, Recent Activity, Selected
- * Projects, Writing & case studies, Experience, Certifications, Field Notes
- * and Get In Touch by default.
+ * Projects, Selected Publications, Writing & case studies, Experience,
+ * Certifications, Field Notes and Get In Touch by default.
  *
  * - Each section is gated by `isSectionVisible(home, key)` (Home editor) and
  *   by having something to show (no empty sections). Each opens with a plain
@@ -84,6 +88,7 @@ const Content = ({
   work,
   github,
   writing,
+  publications,
 }: {
   photos?: ScrollerImage[]
   /** Website-pruned EN CV, limited to the sections rendered here. */
@@ -94,6 +99,8 @@ const Content = ({
   /** GitHub data loaded on the server (trimmed); a null part makes that widget fetch it. */
   github?: GithubPageData | null
   writing?: HomeWriting | null
+  /** The first papers of /publications (null / empty: no section). */
+  publications?: SelectedPublications | null
 }) => {
   const calendarKnownMissing = github?.calendar?.available === false
   const defs: Partial<Record<SortableSectionKey, SectionDef>> = {
@@ -153,6 +160,16 @@ const Content = ({
     },
     ...(hasEntries(cvEn, 'project', 'projectExperience')
       ? { projects: { key: 'projects' as const, id: 'section-projects', label: 'Selected Projects', body: <ProjectSpotlight cvEn={cvEn} work={work} /> } }
+      : {}),
+    ...(publications && publications.items.length
+      ? {
+          publications: {
+            key: 'publications' as const,
+            id: 'section-publications',
+            label: 'Selected Publications',
+            body: <SelectedPublicationsList data={publications} />,
+          },
+        }
       : {}),
     ...(writing && writing.items.length
       ? {

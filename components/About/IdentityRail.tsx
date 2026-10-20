@@ -11,7 +11,7 @@ import type { HeroIdentity } from '../LandingPage/heroIdentity'
 import { clearOfHeader } from '../../lib/anchorOffset'
 import { cvPdfPath } from '../../lib/cvExport/paths'
 import type { CvLang } from '../../lib/cvVisibility'
-import { aboutHeading, type AboutNavEntry } from './aboutNav'
+import { aboutHeading, paperCount, type AboutNavEntry } from './aboutNav'
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
@@ -67,10 +67,11 @@ function useActiveSection(ids: readonly string[]): string | null {
 
 /**
  * /about identity rail — the page header: portrait, names (the h1),
- * availability, the CV, profiles and, from lg up, a nav of the page's
- * sections with the current one marked. Sticky beside the content on large
- * screens (scrolling inside itself if the window is too short), a plain
- * header block above it on smaller ones and in print.
+ * availability, the CV, the publications (a link with the count, once
+ * /publications lists a paper), profiles and, from lg up, a nav of the
+ * page's sections with the current one marked. Sticky beside the content on
+ * large screens (scrolling inside itself if the window is too short), a
+ * plain header block above it on smaller ones and in print.
  */
 export default function IdentityRail({
   brand,
@@ -80,6 +81,7 @@ export default function IdentityRail({
   socials,
   nav,
   cvLang = 'en',
+  publicationCount = 0,
 }: {
   brand?: string
   identity?: HeroIdentity | null
@@ -89,6 +91,8 @@ export default function IdentityRail({
   nav: AboutNavEntry[]
   /** Language the page's CV stack shows: View CV and Download PDF follow it (/cv or /cv/zh, /cv.pdf or /cv/zh.pdf). */
   cvLang?: CvLang
+  /** Papers on /publications; 0 = no page, no link. */
+  publicationCount?: number
 }) {
   const heading = aboutHeading(identity)
   const nick = identity?.name && identity.nick && identity.nick !== heading ? identity.nick : ''
@@ -228,6 +232,51 @@ export default function IdentityRail({
             Download PDF
           </Button>
         </Flex>
+
+        {publicationCount > 0 ? (
+          <Box mt={3} sx={{ '@media print': { display: 'none' } }}>
+            <Flex
+              as={NextLink}
+              href="/publications"
+              // One name for the whole link — "Publications: 3 papers" — that starts with its visible label (WCAG 2.5.3).
+              aria-label={`Publications: ${paperCount(publicationCount)}`}
+              display="inline-flex"
+              align="center"
+              gap={2}
+              minH="32px"
+              fontSize="14px"
+              fontWeight={500}
+              color="page.fg"
+              borderRadius="md"
+              _hover={{ color: 'accent.text', textDecoration: 'none' }}
+              _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '3px' }}
+              sx={{ '&:hover .rail-count': { borderColor: 'var(--accent)', color: 'accent.text' } }}
+            >
+              Publications
+              <Box
+                as="span"
+                className="rail-count tnum"
+                aria-hidden
+                fontFamily={monoFont}
+                fontSize="12px"
+                lineHeight="20px"
+                minW="22px"
+                px={1.5}
+                textAlign="center"
+                borderRadius="full"
+                border="1px solid"
+                borderColor="page.border-strong"
+                color="page.fg-secondary"
+                sx={{ transition: 'border-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard)' }}
+              >
+                {publicationCount}
+              </Box>
+              <span className="nudge" aria-hidden>
+                →
+              </span>
+            </Flex>
+          </Box>
+        ) : null}
 
         {socials.length > 0 ? (
           <HintGroup>

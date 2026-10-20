@@ -33,8 +33,9 @@ const hrefProblem = (href: string) =>
  * Nothing shows on the site until at least one is saved.
  *
  * `suggestions` come from GET /api/admin/cv-derived: tiles built verbatim from
- * the public CV (awards, patents, education) with their CV links. "Add" only
- * copies one into the form; the owner can reword it before saving.
+ * the public CV (awards, patents, published papers, education) with their
+ * links. "Add" only copies one into the form; the owner can reword it
+ * before saving.
  */
 export default function HighlightsSection({
   value,
@@ -124,14 +125,14 @@ export default function HighlightsSection({
           Suggestions from your public CV
         </Text>
         <Text fontSize="xs" color="page.fg-secondary" mt={0.5}>
-          Exact wording from your awards, patents and education, linked to the CV entry. Adding one fills a tile you can still edit; nothing is
-          published until you save.
+          Exact wording from your awards, patents, published papers and education, linked to the entry. Adding one fills a tile you can still
+          edit; nothing is published until you save.
         </Text>
         {suggestions === null ? (
           <Skeleton h="40px" mt={3} borderRadius="md" />
         ) : offered.length === 0 ? (
           <Text fontSize="xs" color="page.fg-secondary" mt={3}>
-            {suggestions.length ? 'All suggestions are in your list.' : 'Nothing to suggest: the public CV has no awards, patents or education entries.'}
+            {suggestions.length ? 'All suggestions are in your list.' : 'Nothing to suggest: the public CV has no awards, patents, published papers or education entries.'}
           </Text>
         ) : (
           <List mt={3} spacing={2} aria-label="Suggested highlights">

@@ -66,8 +66,9 @@ test('A1: a stored order is completed backward-compatibly (unknown and repeated 
   assert.deepEqual(new Set(out), new Set(DEFAULT_SECTION_ORDER), 'every section exactly once')
   assert.equal(out.length, DEFAULT_SECTION_ORDER.length)
   assert.ok(out.indexOf('experience') < out.indexOf('projects'), 'the owner’s relative order wins')
-  // 'writing' follows 'projects' by default, so it is inserted right after it.
-  assert.equal(out[out.indexOf('projects') + 1], 'writing')
+  // 'publications' then 'writing' follow 'projects' by default, so they are inserted right after it.
+  assert.equal(out[out.indexOf('projects') + 1], 'publications')
+  assert.equal(out[out.indexOf('projects') + 2], 'writing')
   // 'open-source' has no default predecessor: it goes first.
   assert.equal(out[0], 'open-source')
   assert.ok(!out.includes('introduction' as never), 'the fixed sections are not sortable')

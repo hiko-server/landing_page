@@ -1,7 +1,8 @@
 /**
  * Publications (论文): the one API every surface uses — the CV pages, the A4
- * sheet, /publications, and (next) the PDF CV, the JSON Resume / text export,
- * the home section and the search index.
+ * sheet, /publications, the PDF CV, the JSON Resume / text export, the home
+ * section, the /about rail, the search index, CV Studio's readiness checks
+ * and the skill evidence.
  *
  *   publicPublications(sections)        render-ready, sorted publications of one
  *                                       language's PUBLIC sections
@@ -10,6 +11,7 @@
  *   scholarlyArticleNode                schema.org JSON-LD
  *   toJsonResume                        JSON Resume `publications`
  *   ownerNamesFromSections              the owner's name forms from public Personal Info
+ *   selectPublications                  the home page's 'Selected publications'
  *
  * Pure functions over plain data (no DOM, no Node APIs, no components), shared
  * by server and client; the server-side readers live in lib/publicationsData.ts.
@@ -25,3 +27,4 @@ export * from './apa'
 export * from './jsonld'
 export * from './jsonResume'
 export * from './summary'
+export * from './selected'
