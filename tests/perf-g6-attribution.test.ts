@@ -188,18 +188,11 @@ test('phase segments, the dominant phase and the LCP kind label (admin view)', (
   assert.equal(lcpKindLabel(undefined), null)
 })
 
-test('installWebVitals loads the attribution build once, after the load event and an idle moment, and not when tracking is off', async () => {
+test('installWebVitals loads the attribution build once, right away (web-vitals must be listening before the tab can be hidden), and not when tracking is off', async () => {
   const g = globalThis as Record<string, unknown>
   const saved = { window: g.window, document: g.document, navigator: Object.getOwnPropertyDescriptor(globalThis, 'navigator') }
-  const listeners: Record<string, Array<() => void>> = {}
-  const idle: Array<() => void> = []
   const doc = { readyState: 'loading', visibilityState: 'visible', referrer: '', documentElement: { lang: 'en' }, addEventListener() {} }
-  g.window = {
-    location: { pathname: '/work/' },
-    addEventListener: (type: string, fn: () => void) => (listeners[type] ||= []).push(fn),
-    requestIdleCallback: (fn: () => void) => (idle.push(fn), 1),
-    setTimeout,
-  }
+  g.window = { location: { pathname: '/work/' }, addEventListener() {}, setTimeout }
   g.document = doc
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { webdriver: false, doNotTrack: null, sendBeacon: () => true } })
   try {
@@ -213,13 +206,8 @@ test('installWebVitals loads the attribution build once, after the load event an
     }
     mod.installWebVitals(fake)
     mod.installWebVitals(fake)
-    assert.equal(loads, 0, 'nothing before the load event')
-    assert.equal(listeners.load?.length, 1)
-    listeners.load[0]()
-    assert.equal(loads, 0, 'waits for an idle moment')
-    idle.shift()?.()
+    assert.equal(loads, 1, 'requested at once, before the load event, and only once')
     await new Promise((r) => setImmediate(r))
-    assert.equal(loads, 1, 'loaded once')
     assert.deepEqual(subscribed, ['LCP', 'INP', 'CLS', 'FCP', 'TTFB'])
   } finally {
     g.window = saved.window
@@ -228,7 +216,7 @@ test('installWebVitals loads the attribution build once, after the load event an
   }
 
   // Do Not Track: nothing is loaded at all.
-  g.window = { location: { pathname: '/' }, addEventListener: () => assert.fail('no listener'), setTimeout }
+  g.window = { location: { pathname: '/' }, addEventListener() {}, setTimeout }
   g.document = { readyState: 'complete', visibilityState: 'visible', referrer: '', documentElement: { lang: 'en' }, addEventListener() {} }
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { webdriver: false, doNotTrack: '1' } })
   try {

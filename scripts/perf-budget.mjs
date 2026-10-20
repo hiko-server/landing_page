@@ -29,11 +29,14 @@ const repoRoot = path.resolve(here, '..')
  * Thresholds in KiB (gzip for JS/CSS, raw bytes for fonts — woff2 is already
  * compressed); raise them only with a reason in the commit message.
  *
- * Set after the JavaScript diet (G5, 2026-10-14). Before → after, gzip:
- *   shared first-load JS   203.7 → 166.3   (pages/_app 115.2 → 77.8)
- *   /                      251.4 → 214.3
- *   /work/[slug]           259.0 → 206.4
- *   /blog/[slug]           257.1 → 204.5
+ * Set after the wave-2B performance work (G5, G3; 2026-10-20). Before →
+ * after, gzip KiB:
+ *   shared first-load JS   203.8 → 166.9   (pages/_app 115.3 → 78.2)
+ *   /                      251.6 → 215.9
+ *   /work/[slug]           259.1 → 208.1
+ *   /blog/[slug]           257.3 → 206.1
+ *   /about                 246.3 → 210.2
+ *   preloaded fonts        137.7 → 68.4    (two Latin cores, G3)
  * (framer-motion features, the toast host, the image viewer, web-vitals and
  * the admin-only component styles left the first load), with ~5% headroom;
  * `_app` keeps the 80 KiB ceiling the research set for it, and the home page

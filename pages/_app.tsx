@@ -183,8 +183,9 @@ const App = ({ Component, pageProps, router }: AppProps) => {
   useFocusMainOnPageChange(router.events, pageKey)
 
   // Cookieless first-party page views (lib/analytics/client.ts), and real
-  // Core Web Vitals with their attribution: the web-vitals observers load
-  // after the page's load event, outside the shared bundle, and attach once.
+  // Core Web Vitals with their attribution: the web-vitals observers load in
+  // a chunk of their own as the app hydrates (not in the shared bundle) and
+  // attach once.
   useAnalytics(router)
   useEffect(() => installWebVitals(), [])
 

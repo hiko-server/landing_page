@@ -117,10 +117,21 @@ function ElementCell({ row }: { row: VitalAttributionRow }) {
   if (row.name === 'INP' && row.type) notes.push(row.type)
   if (row.name !== 'LCP' && row.state) notes.push(LOAD_STATE_LABEL[row.state])
   return (
-    <Td fontSize="xs" maxW={{ base: '200px', md: '320px' }}>
+    <Td fontSize="xs" minW="180px" maxW={{ base: '220px', md: '320px' }}>
       {row.el ? (
-        <Text as="code" display="block" fontFamily={MONO} fontSize="11px" wordBreak="break-all" title={row.el}>
-          {row.el}
+        // Breaks between the selector's parts first (after each ">"), inside a part only when it must.
+        <Text as="code" display="block" fontFamily={MONO} fontSize="11px" sx={{ overflowWrap: 'anywhere' }} title={row.el}>
+          {row.el.split('>').map((part, i) => (
+            <React.Fragment key={i}>
+              {i > 0 ? (
+                <>
+                  {'>'}
+                  <wbr />
+                </>
+              ) : null}
+              {part}
+            </React.Fragment>
+          ))}
         </Text>
       ) : (
         <Text as="span" color="page.fg-secondary">

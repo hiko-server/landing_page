@@ -8,12 +8,13 @@ import { buildAttribution, type VitalAttribution } from './attribution'
  *
  *   useAnalytics(router)          one page view on mount and after every
  *                                 client-side navigation to a new path
- *   installWebVitals()            once, from pages/_app: after the load event
+ *   installWebVitals()            once, from pages/_app, as the app hydrates:
  *                                 the browser fetches web-vitals' attribution
- *                                 build (its own chunk) and reports the
- *                                 landing page's Core Web Vitals, sent
- *                                 whenever the tab is hidden (latest value
- *                                 per metric instance) and on pagehide
+ *                                 build (a chunk of its own, ~4.5 KB) and
+ *                                 reports the landing page's Core Web
+ *                                 Vitals, sent whenever the tab is hidden
+ *                                 (latest value per metric instance) and on
+ *                                 pagehide
  *
  * Nothing is sent from /admin, from automated browsers (navigator.webdriver),
  * or when the browser asks not to be tracked (Do Not Track / Global Privacy
@@ -95,11 +96,15 @@ export function useAnalytics(router: Pick<NextRouter, 'events'>) {
 // with its own User Timing measures (hydration, render), never with LCP, INP
 // or CLS. Real vitals come from the web-vitals library Next bundles, in its
 // attribution build (next/dist/compiled/web-vitals-attribution), which
-// installWebVitals() loads after the page's load event — outside the shared
-// bundle and off the critical path — and subscribes once with the
-// module-level `reportWebVital` below. web-vitals observes with
-// `buffered: true`, so the LCP, CLS, FCP and TTFB of the load and any slow
-// interaction before it are still reported.
+// installWebVitals() requests as soon as the app hydrates — in a chunk of its
+// own, outside the shared bundle, fetched alongside the page's other
+// resources — and subscribes once with the module-level `reportWebVital`
+// below. web-vitals observes with `buffered: true`, so the LCP, CLS and FCP
+// of the load are still reported. It must not wait for the load event or an
+// idle moment: web-vitals discards every measurement from before the first
+// time it sees the tab hidden, so a visitor who switched tabs before a late
+// subscription would never be measured (and the data would lean towards
+// visitors who stay).
 
 /** The fields of a web-vitals `Metric` this module reads. */
 export type WebVitalMetric = { id: string; name: string; value: number; navigationType?: string; attribution?: unknown }
@@ -212,14 +217,6 @@ type WebVitalsModule = Record<'onLCP' | 'onINP' | 'onCLS' | 'onFCP' | 'onTTFB', 
 
 let vitalsInstalled = false
 
-/** Run `fn` once the page has loaded and the main thread is idle (at most 3 s later). */
-function afterLoadAndIdle(fn: () => void) {
-  const w = window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }
-  const idle = () => (w.requestIdleCallback ? w.requestIdleCallback(fn, { timeout: 3000 }) : window.setTimeout(fn, 0))
-  if (document.readyState === 'complete') idle()
-  else window.addEventListener('load', idle, { once: true })
-}
-
 /**
  * Start measuring the landing page's Core Web Vitals (call once, from
  * pages/_app; later calls do nothing). Nothing is loaded when the page is
@@ -230,15 +227,13 @@ export function installWebVitals(load: () => Promise<WebVitalsModule> = loadWebV
   if (typeof window === 'undefined' || vitalsInstalled) return
   vitalsInstalled = true
   if (!trackingAllowed(landingPath) || !normalizeTrackedPath(landingPath)) return
-  afterLoadAndIdle(() => {
-    load()
-      .then((wv) => {
-        for (const on of [wv.onLCP, wv.onINP, wv.onCLS, wv.onFCP, wv.onTTFB]) on(reportWebVital)
-      })
-      .catch(() => {
-        // Analytics must never surface errors to the visitor.
-      })
-  })
+  load()
+    .then((wv) => {
+      for (const on of [wv.onLCP, wv.onINP, wv.onCLS, wv.onFCP, wv.onTTFB]) on(reportWebVital)
+    })
+    .catch(() => {
+      // Analytics must never surface errors to the visitor.
+    })
 }
 
 function loadWebVitals(): Promise<WebVitalsModule> {

@@ -362,7 +362,9 @@ test('hero: the imagery fades into the page, the dots continue the page grid, th
       return (img as HTMLElement).offsetParent !== null && w >= 200 && w <= 300
     })
     if (!card) return null
-    return { after: getComputedStyle(card.parentElement!, '::after').boxShadow, filter: getComputedStyle(card).filter }
+    // The portrait's frame: the <img>'s parent, or the <picture>'s when it has an AVIF source (G4).
+    const frameEl = (card.closest('picture') ?? card).parentElement!
+    return { after: getComputedStyle(frameEl, '::after').boxShadow, filter: getComputedStyle(card).filter }
   })
   await ctx.close()
   expect(frame).not.toBeNull()
