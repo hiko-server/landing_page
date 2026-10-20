@@ -4,6 +4,7 @@ import { Box } from '@chakra-ui/react'
 
 import ContactPro from '../../components/Contact/ContactPro'
 import AvailabilityCard from '../../components/Contact/AvailabilityCard'
+import AskEntry from '../../components/Search/AskEntry'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 import PageHeader from '../../components/General-UI/PageHeader'
@@ -16,8 +17,10 @@ const VCARD_PATH = '/api/vcard'
 
 /**
  * /contact — page header, the owner's availability (when set in the Home
- * editor), the reach-me panel (copyable e-mail / phone, vCard download and
- * QR) and the message form with its privacy notice.
+ * editor), "Ask Lucian" (a question answered with quotes from the site; what
+ * it cannot answer goes into the form below), the reach-me panel (copyable
+ * e-mail / phone, vCard download and QR) and the message form with its
+ * privacy notice.
  *
  * Statically generated (ISR, lib/contactPage): nothing here depends on the
  * request, so the page is served from the cache (and the CDN) and
@@ -53,6 +56,7 @@ const Contact = ({ home, availability, vcardQr, retentionDays }: ContactPageProp
         <Box maxW="var(--container-content)" mx="auto" w="100%" px={[4, 6, 8]} py={[12, 16]}>
           <PageHeader eyebrow="Contact" title="Get in touch" lede={lede} />
           <AvailabilityCard availability={availability} />
+          <AskEntry mb={8} />
           <ContactPro
             home={home || undefined}
             hideBlurb

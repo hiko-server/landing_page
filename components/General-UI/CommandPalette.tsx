@@ -35,6 +35,16 @@ import { systemPrefersDark, type ThemePreference } from '../../lib/themePreferen
 import { motionTransition } from '../../theme/tokens'
 import { HIDE_ON_COARSE_POINTER, isApplePlatform } from '../Chrome/platform'
 import { setShortcutsEnabled } from '../../lib/keyboardShortcuts'
+import { normalizePaletteMode, type PaletteMode } from '../Chrome/paletteEvents'
+import AskView from '../Search/AskView'
+import ModeToggle from '../Search/ModeToggle'
+import { useAsk } from '../Search/useAsk'
+import { openCitation } from '../Search/citation'
+import { askCopyFor, ASK_COPY } from '../../lib/ask/copy'
+import { askStatusText, type AskOption } from '../../lib/ask/view'
+import { looksLikeQuestion } from '../../lib/search/text'
+import { onEmptyResult } from '../../lib/search/emptyResult'
+import { CONTACT_FORM_ID, stashContactQuestion } from '../../lib/contactPrefill'
 
 /**
  * ⌘K command palette (loaded on demand by CommandPaletteLazy).
@@ -53,6 +63,13 @@ import { setShortcutsEnabled } from '../../lib/keyboardShortcuts'
  *   - Opens instantly (a fast scale-in, none under reduced motion); the list
  *     glides between heights as results change.
  *   - `initialQuery` opens it already searching (the 404 page's search field).
+ *   - Two modes: Search (above) and Ask ("Ask Lucian", J1): a question is
+ *     answered only with quotes from the site's public pages, each linked to
+ *     where it appears (components/Search/AskView, lib/ask). A search that
+ *     reads like a question offers "Ask" as its first row; `initialMode`
+ *     opens the palette in Ask mode (the entry on /about and /contact).
+ *   - A settled query that finds nothing is reported once to
+ *     onEmptyResult (lib/search/emptyResult: normalised, no personal data).
  *   - Keyboard hints (shortcut chips, ESC, the cheatsheet) are hidden on
  *     touch-first devices (components/Chrome/platform).
  *
@@ -110,6 +127,8 @@ export type CommandPaletteProps = {
   publications?: boolean
   /** False when the palette closes because the visitor left the page (focus then moves to the new page). */
   returnFocusOnClose?: boolean
+  /** The mode it opens in: 'search' (default) or 'ask'. */
+  initialMode?: PaletteMode
 }
 
 const HIKO_EMAIL = 'hi@lucian-dev.com'
@@ -120,6 +139,11 @@ const BROWSE_LIMIT = 6
 const GROUP_ORDER: Group[] = ['Recent', 'On this page', 'Admin', 'Pages', 'Actions', 'Writing', 'Work', 'Content']
 const GROUP_BOOST: Record<Item['group'], number> = { Pages: 6, Admin: 5, Actions: 4, 'On this page': 3, Writing: 2, Work: 2, Content: 2 }
 const KIND_LABEL: Record<SearchDocLike['kind'], string> = { post: 'Post', work: 'Case study', page: 'Page', cv: 'CV', publication: 'Paper' }
+/** The "Ask: …" row of a search, and the browse view's "Ask Lucian a question" action. */
+const ASK_ROW_ID = 'ask:question'
+const ASK_ACTION_ID = 'action:ask'
+/** A query that finds nothing is reported (onEmptyResult) once it has rested this long. */
+const EMPTY_SETTLE_MS = 1200
 const MONO = 'var(--font-geist-mono), monospace'
 
 /** The theme preference actions, in menu order. */
@@ -299,6 +323,7 @@ export default function CommandPalette({
   initialQuery = '',
   publications = false,
   returnFocusOnClose = true,
+  initialMode = 'search',
 }: CommandPaletteProps) {
   const router = useRouter()
   const toast = useChromeToast()
@@ -312,9 +337,11 @@ export default function CommandPalette({
   const optId = (i: number) => `${baseId}-opt-${i}`
 
   const [query, setQuery] = useState('')
+  const [mode, setMode] = useState<PaletteMode>('search')
   const [activeIdx, setActiveIdx] = useState(0)
   const [index, setIndex] = useState<SearchIndex | null>(null)
   const [loading, setLoading] = useState(false)
+  const [indexFailed, setIndexFailed] = useState(false)
   const [sections, setSections] = useState<Item[]>([])
   const [recent, setRecent] = useState<RecentRecord[]>([])
   const [restoreFocus, setRestoreFocus] = useState(true)
@@ -326,6 +353,8 @@ export default function CommandPalette({
   // Read when the palette opens; a prefilled query is selected on focus so typing replaces it.
   const initialQueryRef = useRef(initialQuery)
   initialQueryRef.current = initialQuery
+  const initialModeRef = useRef<PaletteMode>(initialMode)
+  initialModeRef.current = normalizePaletteMode(initialMode)
   const selectOnFocus = useRef(false)
 
   useEffect(() => {
@@ -336,6 +365,7 @@ export default function CommandPalette({
   useEffect(() => {
     if (!isOpen) return
     setQuery(initialQueryRef.current)
+    setMode(initialModeRef.current)
     selectOnFocus.current = initialQueryRef.current !== ''
     setActiveIdx(0)
     setRestoreFocus(true)
@@ -348,12 +378,14 @@ export default function CommandPalette({
     if (!isOpen || index) return
     let alive = true
     setLoading(true)
+    setIndexFailed(false)
     loadSearchIndex()
       .then((idx) => {
         if (alive) setIndex(idx)
       })
       .catch(() => {
         // Pages and actions still work; the next open retries.
+        if (alive) setIndexFailed(true)
       })
       .finally(() => {
         if (alive) setLoading(false)
@@ -478,6 +510,15 @@ export default function CommandPalette({
       page('Uses', '/uses', 'tools gear setup'),
       page('Contact', '/contact', 'email message hire'),
       page('Colophon', '/colophon', 'about this site fonts stack privacy analytics'),
+      {
+        // Switches to Ask mode (runItem); the question is typed there.
+        id: ASK_ACTION_ID,
+        group: 'Actions',
+        kind: 'action',
+        label: ASK_COPY.en.askAction,
+        hint: ASK_COPY.en.askActionHint,
+        keywords: 'ask question answer quote faq 问问 提问 问题',
+      },
       {
         id: 'action:cv-pdf',
         group: 'Actions',
@@ -652,10 +693,49 @@ export default function CommandPalette({
       })
     }
     ranked.sort((a, b) => b.score - a.score)
-    return { rows: ranked.slice(0, RESULT_LIMIT).map((r) => r.row), total: ranked.length }
+    const found = ranked.filter((r) => r.row.item.id !== ASK_ACTION_ID)
+    const out = found.slice(0, RESULT_LIMIT).map((r) => r.row)
+    // "Ask: …" — first when the query reads like a question, otherwise after the results (or alone).
+    const copy = askCopyFor(q, 'en')
+    const askRow: Row = {
+      item: { id: ASK_ROW_ID, group: 'Actions', kind: 'action', label: copy.askRow(q), hint: copy.askRowHint, badge: copy.modeAsk, lang: /\p{Script=Han}/u.test(q) ? 'zh-Hans' : undefined },
+      group: 'Actions',
+      indices: [],
+    }
+    if (looksLikeQuestion(q)) out.unshift(askRow)
+    else out.push(askRow)
+    return { rows: out, total: found.length }
   }, [query, items, sections, recentItems, recent, index])
 
-  useEffect(() => setActiveIdx(0), [query])
+  // ── Ask mode (J1): answers quoted from the site (components/Search) ─────
+  const ask = useAsk(index, query, isOpen && mode === 'ask', { failed: indexFailed })
+  // The palette's chrome is English; the answer speaks the question's language.
+  const askCopy = askCopyFor(ask.state.question, 'en')
+  const askOpts = ask.options
+  const matchCount = rows.filter((r) => r.item.id !== ASK_ROW_ID).length
+  const optionCount = mode === 'ask' ? askOpts.length : rows.length
+
+  useEffect(() => setActiveIdx(0), [query, mode])
+  useEffect(() => setActiveIdx(0), [askOpts])
+
+  // A settled query that found nothing is reported once per open (lib/search/emptyResult).
+  const reported = useRef(new Set<string>())
+  useEffect(() => {
+    if (isOpen) reported.current = new Set()
+  }, [isOpen])
+  const searchEmpty = mode === 'search' && query.trim() !== '' && !!index && matchCount === 0
+  const askEmpty = mode === 'ask' && ask.state.ready && !ask.pending && ask.state.result.status === 'none'
+  useEffect(() => {
+    if (!isOpen || !(searchEmpty || askEmpty)) return
+    const q = query.trim()
+    const key = `${mode}:${q.toLowerCase()}`
+    const id = window.setTimeout(() => {
+      if (reported.current.has(key)) return
+      reported.current.add(key)
+      onEmptyResult(q, mode)
+    }, EMPTY_SETTLE_MS)
+    return () => window.clearTimeout(id)
+  }, [isOpen, searchEmpty, askEmpty, query, mode])
 
   useEffect(() => {
     if (!isOpen) return
@@ -707,8 +787,16 @@ export default function CommandPalette({
     writeRecent(next)
   }
 
+  const switchMode = (next: PaletteMode) => {
+    setMode(next)
+    setActiveIdx(0)
+    inputRef.current?.focus()
+  }
+
   const runItem = (item: Item | undefined) => {
     if (!item) return
+    // "Ask: …" / "Ask Lucian a question": stay open, in Ask mode.
+    if (item.id === ASK_ROW_ID || item.id === ASK_ACTION_ID) return switchMode('ask')
     remember(item)
     // Navigation and section jumps move focus themselves; actions hand focus
     // back to whatever opened the palette.
@@ -719,6 +807,34 @@ export default function CommandPalette({
         if (item.external) window.open(item.href, '_blank', 'noopener,noreferrer')
         else router.push(item.href)
       }
+    }
+    onClose()
+  }
+
+  /** Run an Ask option (Enter, or a click — a modified click opens a quote's link natively, in a new tab). */
+  const runAsk = (option: AskOption | undefined, e?: React.MouseEvent) => {
+    if (!option) return
+    if (e && (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0)) return
+    e?.preventDefault()
+    if (option.kind === 'suggestion') {
+      setQuery(option.question)
+      inputRef.current?.focus()
+      return
+    }
+    if (option.kind === 'search') return switchMode('search')
+    setRestoreFocus(false)
+    if (option.kind === 'contact') {
+      const question = (ask.state.question || query).trim()
+      pending.current = () => {
+        // Into the contact form's draft (and a mounted form) — never into the URL.
+        stashContactQuestion(question)
+        if (router.pathname === '/contact') {
+          document.getElementById(CONTACT_FORM_ID)?.scrollIntoView({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' })
+        } else router.push(`/contact#${CONTACT_FORM_ID}`)
+      }
+    } else {
+      const { href, passage } = option.quote
+      pending.current = () => openCitation(href, passage.terms)
     }
     onClose()
   }
@@ -734,13 +850,20 @@ export default function CommandPalette({
     if (e.nativeEvent.isComposing) return
     if (e.key === 'ArrowDown') {
       e.preventDefault()
-      setActiveIdx((i) => (rows.length ? (i + 1) % rows.length : 0))
+      setActiveIdx((i) => (optionCount ? (i + 1) % optionCount : 0))
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
-      setActiveIdx((i) => (rows.length ? (i - 1 + rows.length) % rows.length : 0))
+      setActiveIdx((i) => (optionCount ? (i - 1 + optionCount) % optionCount : 0))
     } else if (e.key === 'Enter') {
       e.preventDefault()
-      runItem(rows[activeIdx]?.item)
+      if (mode === 'search') return runItem(rows[activeIdx]?.item)
+      // Still typing: answer the question first (Enter again opens a quote).
+      if (ask.pending) return ask.flush()
+      runAsk(askOpts[activeIdx])
+    } else if (e.key === 'Backspace' && mode === 'ask' && query === '') {
+      // Back to search from an empty question (as in Raycast).
+      e.preventDefault()
+      switchMode('search')
     }
   }
 
@@ -838,11 +961,14 @@ export default function CommandPalette({
     })
   }
 
-  const resultText = searching
-    ? total > rows.length
-      ? `Showing ${rows.length} of ${total} results`
-      : `${total} result${total === 1 ? '' : 's'}`
-    : `${rows.length} command${rows.length === 1 ? '' : 's'}`
+  const resultText =
+    mode === 'ask'
+      ? askStatusText(ask.state, askCopy)
+      : searching
+        ? total > matchCount
+          ? `Showing ${matchCount} of ${total} results`
+          : `${total} result${total === 1 ? '' : 's'}`
+        : `${rows.length} command${rows.length === 1 ? '' : 's'}`
 
   return (
     <Modal
@@ -880,8 +1006,8 @@ export default function CommandPalette({
         overflow="hidden"
       >
         <Flex borderBottom="1px solid" borderColor="page.border" px={4} h="56px" alignItems="center" gap={3}>
-          <Text as="span" aria-hidden color="page.fg-secondary" fontFamily={MONO} fontSize="13px" lineHeight={1}>
-            ›
+          <Text as="span" aria-hidden color={mode === 'ask' ? 'accent.text' : 'page.fg-secondary'} fontFamily={MONO} fontSize="13px" lineHeight={1}>
+            {mode === 'ask' ? '?' : '›'}
           </Text>
           <Input
             ref={inputRef}
@@ -894,15 +1020,15 @@ export default function CommandPalette({
             }}
             onKeyDown={onKey}
             role="combobox"
-            aria-label="Search pages, sections, actions, posts, case studies and the CV"
-            aria-expanded={rows.length > 0}
+            aria-label={mode === 'ask' ? ASK_COPY.en.inputLabel : 'Search pages, sections, actions, posts, case studies and the CV'}
+            aria-expanded={optionCount > 0}
             aria-controls={listId}
             aria-autocomplete="list"
-            aria-activedescendant={rows.length ? optId(activeIdx) : undefined}
+            aria-activedescendant={optionCount ? optId(activeIdx) : undefined}
             autoComplete="off"
             autoCorrect="off"
             spellCheck={false}
-            placeholder="Search or jump to…"
+            placeholder={mode === 'ask' ? ASK_COPY.en.placeholder : 'Search or jump to…'}
             variant="unstyled"
             fontSize="15px"
             color="page.fg"
@@ -913,11 +1039,17 @@ export default function CommandPalette({
             flex={1}
           />
           {loading && <Spinner size="xs" color="page.fg-secondary" label="Loading the search index" />}
+          <ModeToggle mode={mode} onChange={switchMode} labels={{ group: ASK_COPY.en.modes, search: ASK_COPY.en.modeSearch, ask: ASK_COPY.en.modeAsk }} />
           <Key>ESC</Key>
         </Flex>
 
         <Box
           ref={scrollRef}
+          // Long answers scroll: the region is reachable by keyboard too (↑ ↓ in the field scroll it as well).
+          role="region"
+          aria-label={mode === 'ask' ? ASK_COPY.en.name : 'Results'}
+          tabIndex={0}
+          _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '-2px' }}
           maxH={['65vh', '60vh']}
           overflowY="auto"
           p={2}
@@ -927,15 +1059,29 @@ export default function CommandPalette({
           }}
         >
           <Box ref={observeContent}>
-            <Box id={listId} role="listbox" aria-label="Commands">
-              {searching ? rows.map((row, i) => renderRow(row, i)) : renderGrouped()}
-            </Box>
-            {searching && rows.length === 0 && (
-              <Flex direction="column" align="center" justify="center" py={10} color="page.fg-secondary" fontFamily={MONO} fontSize="12px" gap={1}>
+            {mode === 'ask' ? (
+              <AskView
+                state={ask.state}
+                options={askOpts}
+                copy={askCopy}
+                pending={ask.pending}
+                activeIdx={activeIdx}
+                optId={optId}
+                listId={listId}
+                onHover={setActiveIdx}
+                onRun={runAsk}
+              />
+            ) : (
+              <>
+            {searching && matchCount === 0 && (
+              <Flex direction="column" align="center" justify="center" pt={8} pb={4} color="page.fg-secondary" fontFamily={MONO} fontSize="12px" gap={1}>
                 <Text>no matches</Text>
                 <Text>{loading ? 'still loading posts and projects…' : 'try fewer or different letters'}</Text>
               </Flex>
             )}
+            <Box id={listId} role="listbox" aria-label="Commands">
+              {searching ? rows.map((row, i) => renderRow(row, i)) : renderGrouped()}
+            </Box>
             {!searching && (
               <Box
                 as="section"
@@ -996,6 +1142,8 @@ export default function CommandPalette({
                   )}
                 </Box>
               </Box>
+            )}
+              </>
             )}
           </Box>
         </Box>

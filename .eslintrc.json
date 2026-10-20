@@ -69,7 +69,8 @@
                 "components/Icons/**",
                 "components/Header/ThemeControl.tsx",
                 "components/Header/ThemeMenu.tsx",
-                "components/BrandShowcase/BrandShowcase.tsx"
+                "components/BrandShowcase/BrandShowcase.tsx",
+                "components/Search/**"
             ],
             "rules": {
                 "no-restricted-syntax": [

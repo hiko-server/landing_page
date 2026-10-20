@@ -22,7 +22,7 @@ import { useBrandHost } from '../Chrome/useBrandHost'
 import { useChromeToast } from '../Chrome/useChromeToast'
 import { useShortcutsEnabled } from '../Chrome/useShortcutsEnabled'
 import { HIDE_ON_COARSE_POINTER, isApplePlatform, paletteKeyShortcuts, paletteShortcutLabel } from '../Chrome/platform'
-import { OPEN_PALETTE_EVENT, normalizePaletteQuery, type OpenPaletteDetail } from '../Chrome/paletteEvents'
+import { OPEN_PALETTE_EVENT, normalizePaletteMode, normalizePaletteQuery, type OpenPaletteDetail, type PaletteMode } from '../Chrome/paletteEvents'
 import { useFetchJson } from '../Common/useFetchJson'
 import { MenuIcon, SearchIcon } from '../Icons/ui/chrome'
 import { getShortcutsEnabled, isImeComposing } from '../../lib/keyboardShortcuts'
@@ -158,6 +158,8 @@ const Header = ({
   const [paletteRequested, setPaletteRequested] = useState(false)
   // Text the palette opens with (the 404 page's search field); '' otherwise.
   const [paletteQuery, setPaletteQuery] = useState('')
+  // The mode it opens in ('ask' from the "Ask Lucian" entry on /about and /contact).
+  const [paletteMode, setPaletteMode] = useState<PaletteMode>('search')
   const [drawerRequested, setDrawerRequested] = useState(false)
   const brand = useBrandHost()
   const [brandHead, brandTail] = splitBrand(brand)
@@ -168,9 +170,10 @@ const Header = ({
   const [dialogsReturnFocus, setDialogsReturnFocus] = useState(true)
 
   const openPalette = useCallback(
-    (query = '') => {
+    (query = '', mode: PaletteMode = 'search') => {
       setDialogsReturnFocus(true)
       setPaletteQuery(query)
+      setPaletteMode(mode)
       setPaletteRequested(true)
       openCmdk()
     },
@@ -179,7 +182,10 @@ const Header = ({
 
   // Page content can ask for the palette (components/Chrome/paletteEvents).
   useEffect(() => {
-    const onOpen = (e: Event) => openPalette(normalizePaletteQuery((e as CustomEvent<OpenPaletteDetail>).detail?.query))
+    const onOpen = (e: Event) => {
+      const detail = (e as CustomEvent<OpenPaletteDetail>).detail
+      openPalette(normalizePaletteQuery(detail?.query), normalizePaletteMode(detail?.mode))
+    }
     window.addEventListener(OPEN_PALETTE_EVENT, onOpen)
     return () => window.removeEventListener(OPEN_PALETTE_EVENT, onOpen)
   }, [openPalette])
@@ -558,6 +564,7 @@ const Header = ({
           onClose={closeCmdk}
           isAdmin={isAdmin}
           initialQuery={paletteQuery}
+          initialMode={paletteMode}
           publications={publications}
           returnFocusOnClose={dialogsReturnFocus}
         />

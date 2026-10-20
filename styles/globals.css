@@ -293,6 +293,21 @@ a:focus-visible > .link-underline {
   --code-line-highlight: #10101a;
 }
 
+/* A quote "Ask" cites (components/Search/citation.ts): the browser's text
+   fragment highlight (#:~:text=…) on the page it opens, and the same mark
+   drawn with the CSS Custom Highlight API when the quote is on the current
+   page. The accent tint keeps the text's own colour, so contrast is
+   unchanged in both themes. Two rules: a browser that does not know one of
+   the pseudo-elements would drop a shared rule. */
+::target-text {
+  background-color: rgba(99, 102, 241, 0.26);
+  color: inherit;
+}
+::highlight(cited-quote) {
+  background-color: rgba(99, 102, 241, 0.26);
+  color: inherit;
+}
+
 /* ──────────────────────────────────────────────────────────────────────────
  * View transitions — client-side route changes (components/Chrome/
  * RouteTransitions.tsx starts them only when motion is allowed).
