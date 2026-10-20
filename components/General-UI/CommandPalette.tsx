@@ -1173,7 +1173,8 @@ export default function CommandPalette({
       >
         <Box minW={0} flex={1}>
           <Flex alignItems="baseline" gap={2} minW={0}>
-            <Text as="span" fontSize="14px" color="page.fg" noOfLines={1} lang={item.lang}>
+            {/* The label keeps its width; a side hint gives way first. */}
+            <Text as="span" fontSize="14px" color="page.fg" noOfLines={1} lang={item.lang} flexShrink={0} maxW="100%">
               <Highlighted text={item.label} indices={row.indices} />
             </Text>
             {!detail && sideHint && (
@@ -1393,7 +1394,9 @@ export default function CommandPalette({
               display="inline-flex"
               alignItems="center"
               gap={1}
-              flexShrink={0}
+              // On a very narrow window the chip gives way before the field's minimum (its title ends in an ellipsis).
+              flexShrink={1}
+              minW={0}
               minH="26px"
               px={2}
               borderRadius="control"
@@ -1410,7 +1413,9 @@ export default function CommandPalette({
               <Text as="span" aria-hidden color="page.fg-secondary">
                 ‹
               </Text>
-              {PAGE_TITLES[subpage]}
+              <Text as="span" minW={0} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
+                {PAGE_TITLES[subpage]}
+              </Text>
             </Box>
           ) : (
             <Text as="span" aria-hidden color={asking ? 'accent.text' : 'page.fg-secondary'} fontFamily={MONO} fontSize="13px" lineHeight={1}>
@@ -1439,7 +1444,8 @@ export default function CommandPalette({
             autoComplete="off"
             autoCorrect="off"
             spellCheck={false}
-            placeholder={asking ? ASK_COPY.en.placeholder : subpage ? `Search ${PAGE_TITLES[subpage].toLowerCase()}…` : 'Search or jump to…'}
+            // On a nested page the chip names the page: a short placeholder.
+            placeholder={asking ? ASK_COPY.en.placeholder : subpage ? 'Filter…' : 'Search or jump to…'}
             variant="unstyled"
             fontSize="15px"
             color="page.fg"
@@ -1448,10 +1454,16 @@ export default function CommandPalette({
             // a ring inside the header bar would only add noise.
             _focusVisible={{ outline: 'none' }}
             flex={1}
+            // Never squeezed to nothing; a clipped placeholder or query ends in an ellipsis.
+            minW="72px"
+            textOverflow="ellipsis"
           />
           {loading && <Spinner size="xs" color="page.fg-secondary" label="Loading the search index" />}
-          <ModeToggle mode={mode} onChange={switchMode} labels={{ group: ASK_COPY.en.modes, search: ASK_COPY.en.modeSearch, ask: ASK_COPY.en.modeAsk }} />
-          <Key>ESC</Key>
+          {/* Search / Ask belongs to the top level; a nested page has the chip (and ⌫ / Esc) to go back. */}
+          {!subpage && <ModeToggle mode={mode} onChange={switchMode} labels={{ group: ASK_COPY.en.modes, search: ASK_COPY.en.modeSearch, ask: ASK_COPY.en.modeAsk }} />}
+          <Box display={{ base: 'none', sm: 'inline-flex' }} flexShrink={0}>
+            <Key>ESC</Key>
+          </Box>
         </Flex>
 
         <Box
