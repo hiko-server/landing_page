@@ -21,6 +21,7 @@ import type { ErrorListItem, ErrorStatus, ErrorTotals } from '../../../lib/error
 import { MONO, outlineButtonProps } from '../shell/ui'
 import { readJsonObject } from '../shell/http'
 import { NETWORK_ERROR } from '../shell/authMessages'
+import { onJkMoveFocus } from '../shell/useListKeyboard'
 import SegmentedTabs, { tabPanelProps, type SegmentedItem } from '../shell/SegmentedTabs'
 import { absoluteTime, relativeTime } from '../security/securityFormat'
 import { browserTally, kindLabel, seriesTotal, sourceLabel, sparkHeights } from './systemFormat'
@@ -215,6 +216,7 @@ export default function ErrorsPanel() {
           <Accordion
             allowMultiple
             as="ul"
+            onKeyDown={onJkMoveFocus('.chakra-accordion__button')}
             listStyleType="none"
             border="1px solid"
             borderColor="page.border"

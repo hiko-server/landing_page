@@ -1,10 +1,13 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   Box,
   Button,
   Flex,
   Heading,
   HStack,
+  Input,
+  InputGroup,
+  InputLeftElement,
   Kbd,
   Modal,
   ModalBody,
@@ -16,8 +19,10 @@ import {
   Switch,
   Text,
 } from '@chakra-ui/react'
+import { SearchIcon } from '@chakra-ui/icons'
 import { DASHBOARD_TABS } from './dashboardTabs'
-import { adminShortcutGroups, isHelpShortcut, type ShortcutGroup, type ShortcutItem } from './shortcuts'
+import { EDITOR_GROUP_TITLE, adminShortcutGroups, filterShortcutGroups, isHelpShortcut, type ShortcutGroup, type ShortcutItem } from './shortcuts'
+import { useAdminChords, useAdminCommands } from './useAdminCommands'
 import { useShortcutsEnabled } from '../../Chrome/useShortcutsEnabled'
 import { getShortcutsEnabled, isImeComposing, setShortcutsEnabled } from '../../../lib/keyboardShortcuts'
 
@@ -25,12 +30,16 @@ import { getShortcutsEnabled, isImeComposing, setShortcutsEnabled } from '../../
  * "?" keyboard shortcuts overlay for every admin page (mounted by the admin
  * title bar and the /admin index). Lists the bindings the admin really
  * implements (shortcuts.ts adminShortcutGroups plus the authoring group
- * below), with ⌘ / Ctrl labels for the current platform. Chakra Modal: focus
- * is trapped while open and returns to the trigger on close.
+ * below), with ⌘ / Ctrl labels for the current platform, and a search field
+ * (type "archive", "G", "⌘"). Chakra Modal: focus is trapped while open and
+ * returns to the trigger on close.
+ *
+ * Mounted on every admin page, it also runs the admin's "G then <key>"
+ * navigation (useAdminChords) and puts "Keyboard shortcuts" in the ⌘K menu.
  *
  * Its switch turns every single-character shortcut off and on (WCAG 2.1.4,
- * lib/keyboardShortcuts) — "?" itself included; the trigger button and the
- * ⌘K palette still open this sheet and that setting.
+ * lib/keyboardShortcuts) — "?" and the G chords included; the trigger button
+ * and the ⌘K palette still open this sheet and that setting.
  */
 
 /**
@@ -65,15 +74,17 @@ function bindingKey(item: ShortcutItem): string {
 }
 
 /**
- * Every group the overlay shows: the shared admin groups with any authoring
- * binding removed (so it is listed once, with the precise wording above),
- * empty groups dropped, then the authoring group.
+ * Every group the overlay shows: the shared admin groups — with the editor
+ * group's bindings that the authoring group lists again removed (so each is
+ * listed once, with the precise wording above), empty groups dropped — then
+ * the authoring group. (⌘K is both the command menu and, in the Visual
+ * editor, the link form: both are listed, under their own context.)
  */
 export function overlayShortcutGroups(isMac: boolean, tabCount: number): ShortcutGroup[] {
   const authoring = authoringShortcutGroup(isMac)
   const authoringKeys = new Set(authoring.items.map(bindingKey))
   const shared = adminShortcutGroups(isMac, tabCount)
-    .map((g) => ({ ...g, items: g.items.filter((it) => !authoringKeys.has(bindingKey(it))) }))
+    .map((g) => (g.title === EDITOR_GROUP_TITLE ? { ...g, items: g.items.filter((it) => !authoringKeys.has(bindingKey(it))) } : g))
     .filter((g) => g.items.length > 0)
   return [...shared, authoring]
 }
@@ -97,9 +108,17 @@ function usePlatformIsMac(): boolean {
 
 export default function ShortcutsOverlay({ showTrigger = true }: { showTrigger?: boolean }) {
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
   const isMac = usePlatformIsMac()
   const shortcutsOn = useShortcutsEnabled()
   const switchId = useId()
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  useAdminChords()
+  useAdminCommands('shortcuts', [{ id: 'show', label: 'Keyboard shortcuts', hint: 'every key, searchable', shortcut: '?', keywords: 'keys hotkeys help cheat sheet', run: () => setOpen(true) }], 'v1')
+  useEffect(() => {
+    if (!open) setQuery('')
+  }, [open])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -114,7 +133,7 @@ export default function ShortcutsOverlay({ showTrigger = true }: { showTrigger?:
     return () => document.removeEventListener('keydown', onKey)
   }, [open])
 
-  const groups = overlayShortcutGroups(isMac, DASHBOARD_TABS.length)
+  const groups = useMemo(() => filterShortcutGroups(overlayShortcutGroups(isMac, DASHBOARD_TABS.length), query.trim()), [isMac, query])
 
   return (
     <>
@@ -136,7 +155,7 @@ export default function ShortcutsOverlay({ showTrigger = true }: { showTrigger?:
           </Kbd>
         </Button>
       ) : null}
-      <Modal isOpen={open} onClose={() => setOpen(false)} size="2xl" scrollBehavior="inside" isCentered motionPreset="none">
+      <Modal isOpen={open} onClose={() => setOpen(false)} size="2xl" scrollBehavior="inside" isCentered motionPreset="none" initialFocusRef={searchRef}>
         <ModalOverlay />
         <ModalContent bg="page.bg-elevated" border="1px solid" borderColor="page.border" mx={4}>
           <ModalHeader pb={2}>
@@ -155,7 +174,7 @@ export default function ShortcutsOverlay({ showTrigger = true }: { showTrigger?:
                   Single-key shortcuts
                 </Text>
                 <Text id={`${switchId}-hint`} fontSize="xs" color="page.fg-secondary">
-                  ? here, / and G then a letter on the site, E on a post. Keys with {isMac ? '⌘ / ⌃ / ⌥' : 'Ctrl / Alt'} always work.
+                  ? and G then a letter here, list and Inbox letters, / on the site, E on a post. Keys with {isMac ? '⌘ / ⌃ / ⌥' : 'Ctrl / Alt'} always work.
                 </Text>
               </Box>
               <Switch
@@ -166,6 +185,27 @@ export default function ShortcutsOverlay({ showTrigger = true }: { showTrigger?:
                 colorScheme="purple"
               />
             </Flex>
+            <InputGroup size="sm" mb={5}>
+              <InputLeftElement pointerEvents="none">
+                <SearchIcon color="page.fg-secondary" boxSize={3} />
+              </InputLeftElement>
+              <Input
+                ref={searchRef}
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search shortcuts — “archive”, “G”, “reply”"
+                aria-label="Search keyboard shortcuts"
+                focusBorderColor="accent.500"
+                borderColor="page.border-strong"
+                maxLength={60}
+              />
+            </InputGroup>
+            {groups.length === 0 ? (
+              <Text fontSize="sm" color="page.fg-secondary" textAlign="center" py={6} role="status">
+                No shortcut matches “{query.trim()}”.
+              </Text>
+            ) : null}
             <SimpleGrid columns={{ base: 1, md: 2 }} spacingX={8} spacingY={6}>
               {groups.map((g) => (
                 <Box as="section" key={g.title} aria-label={g.title}>

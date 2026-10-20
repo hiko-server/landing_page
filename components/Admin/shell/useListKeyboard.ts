@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FocusEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { getShortcutsEnabled } from '../../../lib/keyboardShortcuts'
+import { getShortcutsEnabled, isImeComposing } from '../../../lib/keyboardShortcuts'
 import { isTextEntryTarget, listKeyAction, type ListKeyAction } from './listKeys'
 
 /**
@@ -129,4 +129,24 @@ export function useListKeyboard(opts: UseListKeyboardOptions) {
   }, [])
 
   return { active, setActive, focusItem, listProps: { onKeyDown, ref: setContainer }, itemProps }
+}
+
+/**
+ * j / k for a widget that already owns its arrow keys (an Accordion's
+ * buttons): move focus to the next / previous element matching `selector`
+ * inside the element the handler is on. Same rules as the lists: the
+ * single-key switch, never in text fields, with a modifier or while composing.
+ */
+export function onJkMoveFocus(selector: string) {
+  return (e: ReactKeyboardEvent<HTMLElement>) => {
+    if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || isImeComposing(e.nativeEvent)) return
+    if (e.key !== 'j' && e.key !== 'k') return
+    if (isTextEntryTarget(e.target) || !getShortcutsEnabled()) return
+    const list = Array.from(e.currentTarget.querySelectorAll<HTMLElement>(selector))
+    if (!list.length) return
+    const at = list.indexOf(document.activeElement as HTMLElement)
+    const next = list[at === -1 ? 0 : Math.min(list.length - 1, Math.max(0, at + (e.key === 'j' ? 1 : -1)))]
+    e.preventDefault()
+    next?.focus()
+  }
 }

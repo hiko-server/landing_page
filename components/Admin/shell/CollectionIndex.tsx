@@ -41,6 +41,7 @@ import { useStepUp } from '../security/useStepUp'
 import { wasStepUpCancelled } from '../security/stepUpClient'
 import { Collapse } from '../../General-UI/Collapse'
 import { relativeTime } from './ItemHistoryDrawer'
+import { useListKeyboard } from './useListKeyboard'
 
 export type CollectionRow = {
   slug: string
@@ -93,6 +94,20 @@ export default function CollectionIndex({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [pendingDelete, setPendingDelete] = useState<CollectionRow | null>(null)
+  // j / k / arrows move through the rows, Enter opens the editor, # or Delete asks to delete (H14).
+  const kb = useListKeyboard({
+    count: items.length,
+    global: true,
+    actions: ['#', 'Delete'],
+    onOpen: (i) => {
+      const it = items[i]
+      if (it) void router.push(`/admin/${collection}/edit?slug=${encodeURIComponent(it.slug)}`)
+    },
+    onAction: (_key, i) => {
+      const it = items[i]
+      if (it) setPendingDelete(it)
+    },
+  })
   const [deleting, setDeleting] = useState(false)
   const [revalidated, setRevalidated] = useState<string[]>([])
   const [deleted, setDeleted] = useState<DeletedRow[]>([])
@@ -371,7 +386,7 @@ export default function CollectionIndex({
                   </Th>
                 </Tr>
               </Thead>
-              <Tbody aria-busy={loading}>
+              <Tbody aria-busy={loading} {...kb.listProps}>
                 {loading ? (
                   [0, 1, 2].map((i) => (
                     <Tr key={i}>
@@ -392,13 +407,14 @@ export default function CollectionIndex({
                     </Td>
                   </Tr>
                 ) : (
-                  items.map((it) => (
+                  items.map((it, i) => (
                     <Tr key={it.slug}>
                       <Td fontWeight={500} whiteSpace="normal" minW="180px">
                         <Link
                           as={NextLink}
                           href={`/admin/${collection}/edit?slug=${encodeURIComponent(it.slug)}`}
                           _hover={{ color: 'accent.500' }}
+                          {...kb.itemProps(i)}
                         >
                           {it.frontmatter.title || it.slug}
                         </Link>
