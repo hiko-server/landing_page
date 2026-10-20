@@ -23,6 +23,14 @@ RUN --mount=type=cache,target=/usr/local/share/.cache/yarn \
 
 COPY . .
 
+# The home page's field-note photos are the owner's and live outside the
+# repository (server-local files that arrive with the build context): their
+# responsive WebP / AVIF variants and blur placeholders are baked here, where
+# the originals are, and never committed (scripts/bake-images.mjs; a missing
+# or empty folder bakes nothing). Before `yarn build`, so the prerendered
+# home page already carries the srcsets.
+RUN node --import ./tests/register.mjs scripts/bake-images.mjs
+
 # NEXT_PUBLIC_* values are inlined into the client bundle at BUILD time, but
 # .env is (correctly) excluded from the build context — pass them as build
 # args instead (docker-compose.yml forwards them from .env; scripts/deploy.sh

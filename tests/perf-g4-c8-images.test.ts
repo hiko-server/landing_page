@@ -9,6 +9,7 @@ import { register } from 'node:module'
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import os from 'node:os'
 import path from 'node:path'
 import sharp from 'sharp'
@@ -223,18 +224,25 @@ test('CoverFrame: AVIF source and placeholder for a large cover; a small cover k
   assert.doesNotMatch(small, /data:image\/svg\+xml/, 'the small cover’s panel is never replaced by a blur')
 })
 
-test('the field-note photos under public/images have their baked variants (scripts/bake-images.mjs)', () => {
-  process.chdir(repoRoot)
-  try {
-    const dir = path.join(repoRoot, 'public', 'images', 'imageScroller')
-    const photos = fs.readdirSync(dir).filter((n) => /\.(png|jpe?g)$/i.test(n))
-    assert.ok(photos.length > 0)
-    for (const name of photos) {
-      const s = imageSources(`/images/imageScroller/${name}`)
-      assert.ok(s.srcSet && s.avifSrcSet && s.placeholder, `${name}: srcset, AVIF and placeholder`)
-      assert.doesNotMatch(s.srcSet, new RegExp(`/${name.replace(/\./g, '\\.')} \\d+w`), `${name}: the same-width WebP replaces the original`)
-    }
-  } finally {
-    process.chdir(tmp)
+test('scripts/bake-images.mjs bakes the variants and placeholder of photos under public/images (synthetic fixture photos)', () => {
+  // The owner's own photos are not in the repository, so the script is exercised on the CI fixture store's images.
+  const notes = path.join(tmp, 'public', 'images', 'notes')
+  fs.mkdirSync(notes, { recursive: true })
+  for (const name of ['field-dusk.jpg', 'field-ridge.jpg']) fs.copyFileSync(path.join(repoRoot, 'e2e', 'fixtures', 'store', 'uploads', name), path.join(notes, name))
+  const run = spawnSync(process.execPath, ['--import', './tests/register.mjs', 'scripts/bake-images.mjs', notes], { cwd: repoRoot, encoding: 'utf8' })
+  assert.equal(run.status, 0, run.stderr)
+  assert.match(run.stdout, /\[bake-images\] .*field-dusk\.jpg/)
+  process.chdir(tmp)
+  for (const name of ['field-dusk.jpg', 'field-ridge.jpg']) {
+    const s = imageSources(`/images/notes/${name}`)
+    assert.ok(s.srcSet && s.avifSrcSet && s.placeholder, `${name}: srcset, AVIF and placeholder`)
+    assert.doesNotMatch(s.srcSet, new RegExp(`/${name.replace(/\./g, '\\.')} \\d+w`), `${name}: the same-width WebP replaces the original`)
   }
+  // Re-running keeps the existing files (`wx`) and reports them up to date.
+  const again = spawnSync(process.execPath, ['--import', './tests/register.mjs', 'scripts/bake-images.mjs', notes], { cwd: repoRoot, encoding: 'utf8' })
+  assert.equal(again.status, 0, again.stderr)
+  assert.match(again.stdout, /up to date/)
+  // A folder that does not exist bakes nothing and is not an error (the Docker build runs the script unconditionally).
+  const none = spawnSync(process.execPath, ['--import', './tests/register.mjs', 'scripts/bake-images.mjs', path.join(tmp, 'absent')], { cwd: repoRoot, encoding: 'utf8' })
+  assert.equal(none.status, 0, none.stderr)
 })

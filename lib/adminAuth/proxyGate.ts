@@ -2,6 +2,7 @@ import { jwtVerify } from 'jose'
 import { getSessionVersion } from '../admin'
 import { isSessionCurrent } from '../security/session'
 import { liveSession, SESSION_ID_RE } from './sessions'
+import { isLegacyTokenEnded } from './store'
 
 /**
  * The admin gate's session check (proxy.ts, before any /admin page or
@@ -34,6 +35,8 @@ export type AdminGateDeps = {
   sessionVersion: () => number
   /** True while the auth.db session row may still be used. */
   isLiveSession: (sid: string) => boolean
+  /** A token WITHOUT a session id (minted before sessions existed) is refused once the owner has signed any browser out (auth_settings legacy_cutoff, lib/adminAuth/store). */
+  legacyEnded: (iat: unknown) => boolean
 }
 
 /** The production dependencies (read at call time, so tests can change the environment). */
@@ -42,6 +45,7 @@ export function adminGateDeps(): AdminGateDeps {
     secret: process.env.JWT_SECRET,
     sessionVersion: () => getSessionVersion(),
     isLiveSession: (sid) => liveSession(sid) !== null,
+    legacyEnded: (iat) => isLegacyTokenEnded(iat),
   }
 }
 
@@ -63,6 +67,8 @@ export async function verifyAdminToken(token: string | undefined, deps: AdminGat
   try {
     if (!isSessionCurrent(payload, deps.sessionVersion())) return 'revoked'
     if (typeof sid === 'string' && !deps.isLiveSession(sid)) return 'revoked'
+    // SECU-3's rule, at the gate too: lib/auth already refuses these on every API.
+    if (sid === undefined && deps.legacyEnded(payload.iat)) return 'revoked'
   } catch {
     return 'unavailable'
   }

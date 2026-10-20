@@ -324,6 +324,7 @@ docker compose up -d --build
 | Cloudflare R2 | `R2_ENDPOINT`、`R2_BUCKET`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_REQUIRED` | 可选 |
 | 定时备份 | `BACKUP_INTERVAL_HOURS`（默认 24，`0` 关闭） | 可选 |
 | 留言保存期限 | `CONTACT_RETENTION_DAYS`（默认 365 天，`0` 表示保留到手动删除；每晚自动清理过期留言，超过期限的全站快照也会被清理） | 可选 |
+| 旧构建的浏览器资源 | `STATIC_ARCHIVE_DAYS`（天数，1–90，默认 7：部署后前几次构建的 `/_next/static` 文件继续提供多久） | 可选 |
 | 日志 | `LOG_LEVEL`（`debug` / `info` / `warn` / `error`） | 可选 |
 | Cloudflare 缓存清除 | `CF_ZONE_ID`、`CF_API_TOKEN` | 可选 — 两者都设置才会发送 |
 | IndexNow | `INDEXNOW_KEY`（8–128 位 `[A-Za-z0-9-]`） | 可选 — 未设置即关闭 |

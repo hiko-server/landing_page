@@ -449,6 +449,7 @@ All variables are documented in [`.env.example`](./.env.example). Headlines:
 | Admin step-up | `ADMIN_RECENT_AUTH_MINUTES` (1–60, default 10) | optional |
 | Restore drills | `RESTORE_DRILL_INTERVAL_HOURS` (default 168, `0` disables) | optional |
 | Link check | `LINK_CHECK_INTERVAL_HOURS` (default 24, `0` disables the schedule) | optional |
+| Earlier builds' assets | `STATIC_ARCHIVE_DAYS` (days, 1–90, default 7) | optional |
 
 > The repo never commits a real `.env`. `.env.example` contains placeholders
 > only — copy and fill in for your own deployment.

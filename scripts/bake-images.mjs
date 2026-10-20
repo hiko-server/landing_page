@@ -3,17 +3,21 @@
  * Bake the responsive variants of the site's own photos (G4, C8).
  *
  * Uploads get their variants when they are uploaded (lib/imageVariants.ts)
- * or from the media-optimize backfill. Photos that live in the repository
- * under public/images — the home page's field notes — are baked once with
- * the same encoder and naming and committed next to the file:
+ * or from the media-optimize backfill. The home page's field-note photos
+ * under public/images are the owner's: they are NOT in the public repository
+ * (public/images/imageScroller/ is gitignored; the server keeps its copies),
+ * so their variants are baked where the originals are — by the Docker build
+ * (Dockerfile, before `next build`) or on a developer's machine — with the
+ * same encoder and naming, next to the file, and never committed:
  *
  *   public/images/imageScroller/fyp.png.w320.webp   …w480, w640, and the
  *   public/images/imageScroller/fyp.png.w320.avif   photo's own width
  *   public/images/imageScroller/fyp.png.w16.webp    the blur placeholder
  *
- * lib/uploadVariants.ts (imageSources) finds them for any /images/… URL.
- * Re-run after adding or replacing a photo (existing variants are kept;
- * delete them first to re-encode):
+ * lib/uploadVariants.ts (imageSources) finds them for any /images/… URL and
+ * falls back to the plain image when they are absent. Re-run after adding or
+ * replacing a photo (existing variants are kept; delete them first to
+ * re-encode); a missing folder bakes nothing:
  *
  *   node --import ./tests/register.mjs scripts/bake-images.mjs [file or dir …]
  */

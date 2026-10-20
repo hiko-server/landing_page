@@ -25,7 +25,8 @@ README.zh.md
 docs
 # Test suites, reports and CI-only material: not needed to build or run the app
 # (and `next build` type-checks every .ts it can see).
-tests
+tests/*
+!tests/register.mjs
 e2e
 playwright-report
 test-results

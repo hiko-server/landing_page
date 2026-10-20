@@ -147,6 +147,7 @@ const deps = (over: Partial<import('../lib/adminAuth/proxyGate').AdminGateDeps> 
   secret: SECRET,
   sessionVersion: () => 3,
   isLiveSession: (sid: string) => sid === 'A'.repeat(22),
+  legacyEnded: () => false,
   ...over,
 })
 const sign = (payload: Record<string, unknown>, opts: jwt.SignOptions = {}) =>
@@ -157,6 +158,8 @@ test('verifyAdminToken: signature, algorithm, expiry, role, sid shape, version a
   const live = { role: 'admin', sv: 3, sid: 'A'.repeat(22) }
   assert.equal(await v(sign(live)), 'ok')
   assert.equal(await v(sign({ role: 'admin', sv: 3 })), 'ok', 'legacy token without sid')
+  assert.equal(await v(sign({ role: 'admin', sv: 3 }), { legacyEnded: () => true }), 'revoked', 'a sid-less token is refused once the owner signed a browser out (legacy_cutoff)')
+  assert.equal(await v(sign(live), { legacyEnded: () => true }), 'ok', 'the cutoff never touches a token with a session row')
   assert.equal(await v(undefined), 'missing')
   assert.equal(await v(''), 'missing')
   assert.equal(await v(sign(live), { secret: undefined }), 'invalid', 'no secret configured')

@@ -265,8 +265,8 @@ visual CI).
   images, covers, the home portrait and field notes, the /about portrait,
   the author card, video posters and the lightbox serve AVIF through
   `<picture>`; a 763 KB screenshot now reaches readers as a 21 KB AVIF. The
-  field-note photos that live in the repository are baked the same way
-  (`scripts/bake-images.mjs`).
+  owner's field-note photos (server-local, never in the repository) are
+  baked the same way by the Docker build (`scripts/bake-images.mjs`).
 - **Blur-up placeholders (C8)** — every upload also gets a 16 px
   placeholder, shown blurred in the image's box from the first paint (no
   JavaScript, no layout shift); a still-loading image fades in over it, a

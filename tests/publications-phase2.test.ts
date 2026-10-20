@@ -378,12 +378,13 @@ test('proof strip: published papers are suggested verbatim (title; venue · year
   const tiles = publicationTiles(view())
   assert.deepEqual(tiles, [{ value: 'Tiny models at the edge', label: 'Journal of Edge Computing · 2025', href: '/publications#doe2025tiny', source: 'CV · Publications' }])
   const cvEn = [
-    { sessionName: 'competitionAwards', headerName: 'COMPETITIONS', awards: [{ contestName: 'IEEE Xtreme', award: '18th Worldwide' }] },
-    { sessionName: 'patents', headerName: 'PATENTS', patentExperience: [{ title: 'Sorting device', authority: 'CNIPA', status: 'Granted' }] },
-    { sessionName: 'education', headerName: 'EDUCATION', educationExperience: [{ degree: 'BSc', schoolName: 'HKMU' }] },
+    // Synthetic CV facts (never the owner's): the order of the suggestions is what this checks.
+    { sessionName: 'competitionAwards', headerName: 'COMPETITIONS', awards: [{ contestName: 'Example Hackathon', award: '2nd place' }] },
+    { sessionName: 'patents', headerName: 'PATENTS', patentExperience: [{ title: 'Example sorting device', authority: 'EPO', status: 'Granted' }] },
+    { sessionName: 'education', headerName: 'EDUCATION', educationExperience: [{ degree: 'BSc', schoolName: 'Example University' }] },
   ]
   const out = suggestHighlights(cvEn, { papers: tiles })
-  assert.deepEqual(out.map((s) => s.value), ['18th Worldwide', 'Sorting device', 'Tiny models at the edge', 'BSc'])
+  assert.deepEqual(out.map((s) => s.value), ['2nd place', 'Example sorting device', 'Tiny models at the edge', 'BSc'])
   assert.equal(suggestHighlights(cvEn, { papers: tiles, max: 2 }).length, 2)
   // A paper with neither venue nor year has no line to show: not offered.
   assert.deepEqual(publicationTiles(view(cvDoc({ papers: [{ title: 'Bare', status: 'published', authors: [] }] }))), [])
