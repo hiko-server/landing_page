@@ -59,6 +59,9 @@ docker-compose.override.yml
 
 # local data (persisted content, credentials)
 data/
+# …except the seeds of the synthetic CI fixture store (test data only:
+# "Example Person", scripts/ci/fixture-store.mjs).
+!/e2e/fixtures/store/data/
 
 # Claude harness state (per-project session config)
 .claude/

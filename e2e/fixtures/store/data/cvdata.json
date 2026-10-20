@@ -1,0 +1,277 @@
+{
+  "en": [
+    {
+      "sessionName": "personalInformation",
+      "headerName": "Personal Information",
+      "firstName": "Person",
+      "lastName": "Example",
+      "nickName": "Sample",
+      "email": "person@example.com",
+      "phoneNumber": "+1 555 0100",
+      "personalWebsite": "example.com",
+      "address": "Example City",
+      "introduction": "",
+      "separatorColor": "#4f46e5",
+      "hiddenFields": [
+        "phoneNumber"
+      ]
+    },
+    {
+      "sessionName": "education",
+      "headerName": "Education",
+      "educationExperience": [
+        {
+          "schoolName": "Example University",
+          "schoolLocation": "Example City",
+          "degree": "Master of Science",
+          "major": "Example Studies",
+          "startDate": "2024-09-01",
+          "endDate": "2025-12-31",
+          "gpa": ""
+        },
+        {
+          "schoolName": "Sample Institute",
+          "schoolLocation": "Sample Town",
+          "degree": "Bachelor of Engineering",
+          "major": "Fixture Engineering",
+          "startDate": "2020-09-01",
+          "endDate": "2024-06-30",
+          "gpa": ""
+        }
+      ]
+    },
+    {
+      "sessionName": "project",
+      "headerName": "Projects",
+      "projectExperience": [
+        {
+          "title": "Example Sorting Station",
+          "startDate": "2025-01",
+          "endDate": "2025-09",
+          "projectLocation": "Example City",
+          "description": "A synthetic case study used by the CI fixture store: a sorting rig with a camera and a conveyor.",
+          "features": [
+            {
+              "description": "Fixture feature one: detection and classification on a single board.",
+              "furtherExplanation": []
+            },
+            {
+              "description": "Fixture feature two: a dashboard with live counts.",
+              "furtherExplanation": []
+            }
+          ]
+        },
+        {
+          "title": "Example Field Atlas",
+          "startDate": "2024-03",
+          "endDate": "2024-12",
+          "projectLocation": "Remote",
+          "description": "A synthetic map-making project for test content.",
+          "features": [
+            {
+              "description": "Fixture feature: tiles rendered offline.",
+              "furtherExplanation": []
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "sessionName": "workExperience",
+      "headerName": "Work Experience",
+      "experiences": [
+        {
+          "companyName": "Example Lab",
+          "companyURL": "example.com",
+          "jobTitle": "Software Engineer",
+          "jobDescription": "Fixture role: builds example tools and writes example notes.",
+          "features": [
+            {
+              "description": "Shipped the example pipeline that sorts sample items.",
+              "furtherExplanation": []
+            },
+            {
+              "description": "Kept the example dashboard under 100 ms.",
+              "furtherExplanation": []
+            }
+          ],
+          "location": "Example City",
+          "startDate": "2025-02",
+          "endDate": "",
+          "relatedSkills": [
+            "TypeScript",
+            "Python"
+          ]
+        },
+        {
+          "companyName": "Sample Institute",
+          "companyURL": "example.org",
+          "jobTitle": "Research Assistant",
+          "jobDescription": "Fixture role at a sample institute.",
+          "features": [
+            {
+              "description": "Ran example experiments on sample data.",
+              "furtherExplanation": []
+            }
+          ],
+          "location": "Sample Town",
+          "startDate": "2023-06",
+          "endDate": "2024-06",
+          "relatedSkills": [
+            "Python"
+          ]
+        }
+      ]
+    },
+    {
+      "sessionName": "competitionAwards",
+      "headerName": "Awards",
+      "awards": [
+        {
+          "contestName": "Example Robotics Challenge",
+          "award": "First place",
+          "organization": "Example League",
+          "date": "2024-05",
+          "location": "Example City",
+          "description": [
+            "A fixture award for test content."
+          ]
+        }
+      ]
+    },
+    {
+      "sessionName": "skill",
+      "headerName": "Skills",
+      "languages": [
+        {
+          "language": "English",
+          "level": "Fluent"
+        },
+        {
+          "language": "Example",
+          "level": "Native"
+        }
+      ],
+      "technical": [
+        {
+          "name": "Languages",
+          "description": [
+            "TypeScript",
+            "Python",
+            "SQL"
+          ]
+        },
+        {
+          "name": "Tools",
+          "description": [
+            "Docker",
+            "Playwright"
+          ]
+        }
+      ]
+    },
+    {
+      "sessionName": "extraSkill",
+      "headerName": "Languages",
+      "points": [
+        "English",
+        "Example Language"
+      ]
+    },
+    {
+      "sessionName": "certification",
+      "headerName": "Certifications",
+      "certifications": [
+        {
+          "issuingOrganization": "Example Cloud",
+          "organizationURL": "example.com",
+          "CertificationList": [
+            {
+              "certificationName": "Example Cloud Practitioner",
+              "issuedDate": "2024-02",
+              "expirationDate": "",
+              "credentialID": "EXAMPLE-0001",
+              "credentialURL": "https://example.com/credential/0001"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "zh": [
+    {
+      "sessionName": "personalInformation",
+      "headerName": "个人信息",
+      "firstName": "人物",
+      "lastName": "示例",
+      "nickName": "Sample",
+      "email": "person@example.com",
+      "phoneNumber": "+1 555 0100",
+      "personalWebsite": "example.com",
+      "address": "示例城市",
+      "introduction": "",
+      "separatorColor": "#4f46e5",
+      "hiddenFields": [
+        "phoneNumber"
+      ]
+    },
+    {
+      "sessionName": "education",
+      "headerName": "教育背景",
+      "educationExperience": [
+        {
+          "schoolName": "示例大学",
+          "schoolLocation": "示例城市",
+          "degree": "理学硕士",
+          "major": "示例研究",
+          "startDate": "2024-09-01",
+          "endDate": "2025-12-31",
+          "gpa": ""
+        }
+      ]
+    },
+    {
+      "sessionName": "workExperience",
+      "headerName": "工作经历",
+      "experiences": [
+        {
+          "companyName": "示例实验室",
+          "companyURL": "example.com",
+          "jobTitle": "软件工程师",
+          "jobDescription": "测试数据：构建示例工具。",
+          "features": [
+            {
+              "description": "交付了示例流水线。",
+              "furtherExplanation": []
+            }
+          ],
+          "location": "示例城市",
+          "startDate": "2025-02",
+          "endDate": "",
+          "relatedSkills": [
+            "TypeScript"
+          ]
+        }
+      ]
+    },
+    {
+      "sessionName": "skill",
+      "headerName": "技能",
+      "languages": [
+        {
+          "language": "英语",
+          "level": "流利"
+        }
+      ],
+      "technical": [
+        {
+          "name": "语言",
+          "description": [
+            "TypeScript",
+            "Python"
+          ]
+        }
+      ]
+    }
+  ]
+}

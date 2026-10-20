@@ -32,12 +32,43 @@ export function isIgnorableConsoleError(text: string, url: string | undefined, o
   }
 }
 
+/**
+ * WebKit applies the CSP's `upgrade-insecure-requests` to a plain-http
+ * loopback origin (Chromium and Firefox treat 127.0.0.1 / localhost as
+ * potentially trustworthy and do not), so against an http test server every
+ * script, stylesheet and font would be upgraded to https and fail. For the
+ * WebKit project on http only, documents are served with that one directive
+ * removed; the rest of the policy is enforced (and violations reported) as
+ * usual, and production is https anyway. Redirects are passed through as
+ * they are, so the browser follows them itself.
+ */
+async function serveWithoutHttpsUpgrade(page: Page, origin: string): Promise<void> {
+  await page.route(
+    (url) => url.origin === origin,
+    async (route) => {
+      if (!route.request().isNavigationRequest()) return route.fallback()
+      const response = await route.fetch({ maxRedirects: 0 })
+      const headers = { ...response.headers() }
+      const csp = headers['content-security-policy']
+      if (csp) {
+        headers['content-security-policy'] = csp
+          .split(';')
+          .map((d) => d.trim())
+          .filter((d) => d && d !== 'upgrade-insecure-requests')
+          .join('; ')
+      }
+      await route.fulfill({ response, headers })
+    },
+  )
+}
+
 type Fixtures = { pageGuard: void }
 
 export const test = base.extend<Fixtures>({
   pageGuard: [
-    async ({ page, baseURL }, run) => {
+    async ({ page, baseURL, browserName }, run) => {
       const origin = new URL(baseURL || 'http://127.0.0.1:3000').origin
+      if (browserName === 'webkit' && origin.startsWith('http:')) await serveWithoutHttpsUpgrade(page, origin)
       const problems: string[] = []
       // Pages a test deliberately opens as 404s: the browser logs the failed
       // document load (and Next's data request for the same path) as console

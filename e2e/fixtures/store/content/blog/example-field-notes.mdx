@@ -1,0 +1,60 @@
+---
+title: "Field notes from an example sorting rig"
+description: "Fixture article for the CI gates: headings, figures, a gallery, code, a table, a callout and footnotes — all synthetic."
+date: "2026-03-14"
+tags: ["Example", "Fixtures", "Testing"]
+project: "example-sorting-station"
+---
+
+This is a **synthetic article** from the CI fixture store. It exists so the performance, layout and visual checks run against a page with real structure: long paragraphs, images of every shape, code and tables. None of it describes a real person or project.
+
+The example rig moves sample items past a camera, decides what each one is and drops it into one of four bins. The interesting part is never the model; it is everything around it.
+
+![A pipeline diagram of the example rig: camera, detector, classifier, actuator (synthetic illustration)](/uploads/post-pipeline.png "The example pipeline, from camera to bin")
+
+## What the rig does
+
+Each item takes the same path. A frame is captured, a detector finds the item, a classifier names the material and an actuator flips the right gate. The numbers below are invented for the fixture and only need to look plausible.
+
+| Stage | Median | p95 |
+| --- | ---: | ---: |
+| Capture | 12 ms | 18 ms |
+| Detect | 31 ms | 44 ms |
+| Classify | 9 ms | 13 ms |
+| Actuate | 650 ms | 910 ms |
+
+> [!NOTE]
+> The actuator dominates the timing. That is the lesson this fixture article pretends to teach.
+
+### A closer look at the bench
+
+![The example bench at golden hour (synthetic landscape)](/uploads/post-bench.jpg)
+
+The bench photo above is a generated landscape, standing in for a real photograph so that image loading, placeholders and the lightbox are exercised.[^1]
+
+## Two views, side by side
+
+![A tall example view (synthetic)](/uploads/gallery-tall.jpg)
+
+![A wide example view (synthetic)](/uploads/gallery-wide.jpg)
+
+## The configuration
+
+```ts
+// Example configuration: every value is made up for the fixture store.
+export const RIG = {
+  camera: { width: 1280, height: 720, fps: 30 },
+  bins: ['paper', 'plastic', 'metal', 'other'] as const,
+  confidence: 0.82,
+}
+```
+
+Changing the confidence threshold trades misses for mistakes; the example settles on 0.82 because a fixture has to pick something.
+
+## What comes next
+
+- Measure the actuator properly.
+- Replace the example bins with sample ones.
+- Keep this article long enough to scroll, so the reading progress and the table of contents have something to track.
+
+[^1]: Every image in this store is drawn by `scripts/ci/fixture-images.mjs`.

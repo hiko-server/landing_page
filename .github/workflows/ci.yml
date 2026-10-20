@@ -211,13 +211,14 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
 
-      # Public pages in four projects (desktop, tablet, phone, reduced motion)
-      # plus the admin and contact flows, all against the exact image above.
+      # Public pages in four Chromium projects (desktop, tablet, phone,
+      # reduced motion), on WebKit (iPhone) and Firefox, plus the admin and
+      # contact flows, all against the exact image above.
       - name: E2E (Playwright + axe)
         env:
           E2E_BASE_URL: http://127.0.0.1:3000
         run: |
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium webkit firefox
           yarn e2e
 
       - name: Upload Playwright report
@@ -244,3 +245,81 @@ jobs:
       - name: Container logs
         if: always()
         run: docker logs lp || true
+
+  # Performance, layout, cross-engine and visual gates on realistic content:
+  # the synthetic fixture store (e2e/fixtures/store — "Example Person",
+  # generated images; never the live store) installed into this checkout,
+  # built and served, then checked in the pinned Playwright image. The
+  # visual baselines (e2e/visual.spec.ts-snapshots) are made in this same
+  # image on linux/arm64, hence the Arm runner: pixels are compared on the
+  # platform they were drawn on.
+  fixture-gates:
+    name: fixture store gates (CLS / TBT, layout, images, cross-engine, visual)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --ipc=host
+    env:
+      # Firefox refuses a HOME owned by another user (the container runs as root).
+      HOME: /root
+      TZ: UTC
+      NEXT_TELEMETRY_DISABLED: '1'
+      # The fixture's absolute links name a placeholder host (visible in the baselines).
+      NEXT_PUBLIC_SITE_HOST: example.com
+      E2E_FIXTURE: '1'
+      E2E_BASE_URL: http://127.0.0.1:3100
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install
+        run: |
+          corepack enable
+          yarn install --frozen-lockfile
+
+      # Replaces this checkout's git seeds with the fixture (CI workspace only).
+      - name: Install the fixture store
+        run: node --import ./tests/register.mjs scripts/ci/fixture-store.mjs
+
+      - name: Build
+        run: yarn build
+
+      - name: Start the fixture site
+        env:
+          JWT_SECRET: ci-fixture-placeholder-not-a-real-secret-32chars
+          ADMIN_EMAIL: ci@example.com
+          ADMIN_PASS: ci-fixture-placeholder-not-a-secret
+          NODE_ENV: production
+        run: |
+          nohup npx next start -p 3100 > "$RUNNER_TEMP/next.log" 2>&1 &
+          for i in $(seq 1 60); do
+            if node -e "fetch('http://127.0.0.1:3100/api/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"; then exit 0; fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/next.log"
+          exit 1
+
+      # Alone (one worker): parallel tests would steal the CPU it measures.
+      - name: Core Web Vitals gate
+        run: npx playwright test -c e2e/playwright.config.ts --project=chromium e2e/gates.spec.ts --grep @cwv --workers=1
+
+      - name: Layout, image, cross-engine and visual gates
+        run: npx playwright test -c e2e/playwright.config.ts --project=chromium --project=webkit --project=firefox --project=visual e2e/gates.spec.ts e2e/visual.spec.ts e2e/perf.spec.ts --grep-invert @cwv
+
+      - name: Upload Playwright report (includes visual diffs)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fixture-gates-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
