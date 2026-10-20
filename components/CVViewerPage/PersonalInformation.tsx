@@ -28,7 +28,8 @@ export { composeName, publicNameZh } from './cvName'
  * the name's line: the page decorates the public section with them (the
  * CV's own value, else Home → Socials; nothing for a hidden field). The
  * ORCID iD, when set, takes the next line as ORCID's display guidelines
- * want it: the iD icon, then the full https://orcid.org/… URI.
+ * want it: the iD icon, then the full https://orcid.org/… URI (followed by
+ * "(unauthenticated)" / "（未经认证）" unless the owner connected it).
  */
 
 const PersonalInformationSection = ({ data, lang = 'en' }: { data: PersonalInformation; lang?: CvLang }) => {
@@ -97,7 +98,7 @@ const PersonalInformationSection = ({ data, lang = 'en' }: { data: PersonalInfor
             ) : null}
             {orcid ? (
               <Text fontSize="12px" mt="3px" lineHeight="1.5">
-                <OrcidIdLink id={orcid.href} iconSize={16} color="var(--cv-separator-color, blue)" verticalAlign="top" />
+                <OrcidIdLink id={orcid.href} authenticated={!!orcid.authenticated} lang={lang} iconSize={16} color="var(--cv-separator-color, blue)" verticalAlign="top" />
               </Text>
             ) : null}
           </Box>

@@ -9,7 +9,10 @@
  *              `orcid` (lib/orcid/id): the CV's own iD, normalised to its
  *              bare form; no fallback anywhere. Printed as its full URI
  *              `https://orcid.org/0000-…` (ORCID's display guidelines), the
- *              ORCID iD icon in front of it on the web surfaces.
+ *              ORCID iD icon in front of it on the web surfaces — the
+ *              authenticated icon once the owner connected it (Personal
+ *              Info `orcidAuthenticated`, kept as `{ id }` only while it
+ *              confirms the iD shown), else the unauthenticated one.
  *   Projects   projectExperience[].caseStudy is normalised to the slug of the
  *              PUBLISHED case study the project refers to (lib matchCaseStudy:
  *              the owner's slug first, else a strict title match) and is ''
@@ -27,7 +30,7 @@ import { absUrl } from './schema'
 import { field, list } from '../components/CVViewerPage/fields'
 import { matchCaseStudy, type WorkIndexItem } from '../components/LandingPage/projectMatch'
 import { orcidUrl } from './orcid/id'
-import { ORCID_FIELD, ORCID_LABEL, orcidOf } from './orcid/cv'
+import { ORCID_AUTH_FIELD, ORCID_FIELD, ORCID_LABEL, orcidAuthenticatedOf, orcidOf } from './orcid/cv'
 
 /** The Home socials a CV may print (never WhatsApp). */
 export type PublicSocials = { github?: unknown; linkedin?: unknown; [k: string]: unknown }
@@ -62,6 +65,9 @@ function decorateProfiles(pi: Record<string, any>, socials: PublicSocials | null
   }
   // The public payload carries the bare iD (a pasted link is normalised); '' when empty, invalid or hidden.
   out[ORCID_FIELD] = orcidOf(pi)
+  // …and the "authenticated" marker only while it confirms that iD.
+  if (orcidAuthenticatedOf(pi)) out[ORCID_AUTH_FIELD] = { id: out[ORCID_FIELD] }
+  else delete out[ORCID_AUTH_FIELD]
   return out
 }
 
@@ -108,6 +114,8 @@ export type CvLink = {
   path?: string
   /** Display text without the protocol ("github.com/HikoPLi") — except the ORCID iD, shown as its full URI. */
   text: string
+  /** ORCID only: the owner connected the iD (shown with the authenticated iD icon). */
+  authenticated?: boolean
 }
 
 /**
@@ -122,7 +130,7 @@ export function profileLinks(pi: unknown): CvLink[] {
     if (href) out.push({ kind: key, label: PROFILE_LABEL[key], href, text: displayUrl(href).replace(/^www\./i, '') })
   }
   const orcid = orcidUrl(orcidOf(pi))
-  if (orcid) out.push({ kind: 'orcid', label: ORCID_LABEL, href: orcid, text: orcid })
+  if (orcid) out.push({ kind: 'orcid', label: ORCID_LABEL, href: orcid, text: orcid, authenticated: orcidAuthenticatedOf(pi) })
   return out
 }
 

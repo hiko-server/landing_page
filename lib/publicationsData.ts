@@ -37,7 +37,7 @@ import {
   type SelectedPublications,
 } from './publications'
 import { PERSON_NAME, SITE_URL, WEBSITE_ID, absUrl, breadcrumb, personAuthor, personRef } from './schema'
-import { orcidOf } from './orcid/cv'
+import { orcidAuthenticatedOf, orcidOf } from './orcid/cv'
 import { orcidUrl } from './orcid/id'
 
 export type PublicationsView = {
@@ -48,6 +48,8 @@ export type PublicationsView = {
   owner: OwnerNames
   /** The owner's ORCID iD from the same audience's Personal Info (either language); '' when unset or hidden. */
   orcid: string
+  /** The owner connected that iD through ORCID's sign-in (lib/orcid/cv orcidAuthenticatedOf). */
+  orcidAuthenticated?: boolean
 }
 
 const personalOf = (sections: readonly { sessionName?: string }[]) => sections.find((s) => s?.sessionName === 'personalInformation')
@@ -57,11 +59,13 @@ export function readPublicationsView(): PublicationsView {
   try {
     const cv = readPublicCvSections('website', ['publications', 'personalInformation'], ['en', 'zh'])
     const owner = ownerNamesFromSections(cv.en, cv.zh)
-    const orcid = orcidOf(personalOf(cv.en)) || orcidOf(personalOf(cv.zh))
+    const orcidPi = orcidOf(personalOf(cv.en)) ? personalOf(cv.en) : personalOf(cv.zh)
+    const orcid = orcidOf(orcidPi)
+    const orcidAuthenticated = orcidAuthenticatedOf(orcidPi)
     const en = publicPublications(cv.en)
-    if (en.length) return { lang: 'en', publications: en, owner, orcid }
+    if (en.length) return { lang: 'en', publications: en, owner, orcid, orcidAuthenticated }
     const zh = publicPublications(cv.zh)
-    return { lang: zh.length ? 'zh' : 'en', publications: zh, owner, orcid }
+    return { lang: zh.length ? 'zh' : 'en', publications: zh, owner, orcid, orcidAuthenticated }
   } catch {
     return { lang: 'en', publications: [], owner: NO_OWNER_NAMES, orcid: '' }
   }
@@ -128,6 +132,8 @@ export type PublicationsPageData = {
   summary: string
   /** The owner's public ORCID iD (bare), shown in the page header with the iD icon; '' when none. */
   orcid: string
+  /** The owner connected that iD: the authenticated iD icon; else the unauthenticated one and "(unauthenticated)". */
+  orcidAuthenticated: boolean
 }
 
 /**
@@ -186,5 +192,5 @@ export function buildPublicationsPage(view: PublicationsView = readPublicationsV
       { name: 'Publications', path: PUBLICATIONS_PATH },
     ]),
   ]
-  return { items, lang: view.lang, jsonLd, description, summary, orcid: view.orcid }
+  return { items, lang: view.lang, jsonLd, description, summary, orcid: view.orcid, orcidAuthenticated: !!view.orcid && !!view.orcidAuthenticated }
 }

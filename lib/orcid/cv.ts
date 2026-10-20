@@ -8,6 +8,9 @@
 
 import { isRedacted } from '../cvVisibility'
 import { normalizeOrcidId } from './id'
+import { orcidAuthMarkerOf } from './marker'
+
+export { ORCID_AUTH_FIELD } from './marker'
 
 /** The Personal Info field that holds the owner's ORCID iD. */
 export const ORCID_FIELD = 'orcid'
@@ -20,4 +23,15 @@ export const ORCID_LABEL = 'ORCID'
 export function orcidOf(pi: unknown): string {
   if (!pi || typeof pi !== 'object' || Array.isArray(pi) || isRedacted(pi, ORCID_FIELD)) return ''
   return normalizeOrcidId((pi as Record<string, unknown>)[ORCID_FIELD])
+}
+
+/**
+ * True when the owner's iD (as `orcidOf` reads it: set, valid, not hidden)
+ * is the one ORCID confirmed through "Connect your ORCID iD" (the marker,
+ * lib/orcid/marker). False for an iD that was typed in — it is shown with
+ * ORCID's unauthenticated iD icon and "(unauthenticated)".
+ */
+export function orcidAuthenticatedOf(pi: unknown): boolean {
+  const id = orcidOf(pi)
+  return !!id && orcidAuthMarkerOf(pi)?.id === id
 }

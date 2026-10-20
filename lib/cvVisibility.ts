@@ -31,6 +31,8 @@
  * must not print "No Expiry". Only key names are exposed, never values.
  */
 
+import { ORCID_AUTH_FIELD, publicOrcidAuth } from './orcid/marker'
+
 export type CvSectionLike = { sessionName?: string; [k: string]: any }
 export type CvDoc = { en: CvSectionLike[]; zh: CvSectionLike[] }
 export type CvLang = 'en' | 'zh'
@@ -55,7 +57,10 @@ export const EDITOR_META_KEYS = ['readinessDismissed'] as const
  *     the full document through lib/cvLocale pdfPhoto);
  *   - consent lists: entries of a list are public only when their consent
  *     flag is exactly `true` (recommendations need the person's
- *     permission); the flag itself is dropped from the output.
+ *     permission); the flag itself is dropped from the output;
+ *   - the ORCID "authenticated" marker (Personal Info `orcidAuthenticated`,
+ *     lib/orcid/marker) is public as `{ id }` only while the iD is public
+ *     and still the one ORCID confirmed.
  */
 export const PRIVATE_SECTION_FIELDS: Readonly<Record<string, readonly string[]>> = {
   personalInformation: ['photo', 'photoOnPdf'],
@@ -186,6 +191,19 @@ function pruneSection(section: CvSectionLike): CvSectionLike {
     delete body[key]
     if (Array.isArray(body[REDACTED_KEY])) {
       body[REDACTED_KEY] = body[REDACTED_KEY].filter((k: string) => k !== key)
+      if (!body[REDACTED_KEY].length) delete body[REDACTED_KEY]
+    }
+  }
+  // The ORCID "authenticated" marker (lib/orcid/marker): public as { id }
+  // only while the iD itself is public and still the confirmed one; the
+  // connection time never leaves the editor.
+  if (name === 'personalInformation' && ORCID_AUTH_FIELD in body) {
+    const hidden = isFieldHidden(section, 'orcid') || isFieldHidden(section, ORCID_AUTH_FIELD)
+    const marker = publicOrcidAuth(section, hidden)
+    if (marker) body[ORCID_AUTH_FIELD] = marker
+    else delete body[ORCID_AUTH_FIELD]
+    if (Array.isArray(body[REDACTED_KEY])) {
+      body[REDACTED_KEY] = body[REDACTED_KEY].filter((k: string) => k !== ORCID_AUTH_FIELD)
       if (!body[REDACTED_KEY].length) delete body[REDACTED_KEY]
     }
   }

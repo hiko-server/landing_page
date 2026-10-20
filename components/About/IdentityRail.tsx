@@ -87,6 +87,7 @@ export default function IdentityRail({
   cvLang = 'en',
   publicationCount = 0,
   orcid = '',
+  orcidAuthenticated = false,
 }: {
   brand?: string
   identity?: HeroIdentity | null
@@ -100,6 +101,8 @@ export default function IdentityRail({
   publicationCount?: number
   /** The owner's public ORCID iD (bare, lib/cvLinks orcidOf); '' = no link. */
   orcid?: string
+  /** The owner connected the iD (lib/orcid/cv orcidAuthenticatedOf): the authenticated iD icon; else the unauthenticated one. */
+  orcidAuthenticated?: boolean
 }) {
   const heading = aboutHeading(identity)
   const nick = identity?.name && identity.nick && identity.nick !== heading ? identity.nick : ''
@@ -291,6 +294,8 @@ export default function IdentityRail({
           <Box mt={publicationCount > 0 ? 1 : 3} sx={{ '@media print': { display: 'none' } }}>
             <OrcidIdLink
               id={orcid}
+              authenticated={orcidAuthenticated}
+              lang={cvLang}
               iconSize={16}
               minH="32px"
               fontSize="14px"

@@ -520,11 +520,13 @@ export default function ColophonPage({ releases, stack, buildSha, builtAt }: Pro
                   brands (CC BY 4.0).
                 </Para>
                 <Para>
-                  The green <strong>ORCID iD icon</strong> that may appear next to an ORCID iD on the
-                  CV, publications and about pages is a trademark of ORCID, Inc., drawn exactly as
-                  ORCID provides it and used only as its iD display guidelines allow — in front of
-                  the full https://orcid.org/… address, linking to that record (
-                  <InlineLink href="/licenses/orcid.txt">trademark note</InlineLink>). It is not part
+                  The <strong>ORCID iD icons</strong> that may appear next to an ORCID iD on the CV,
+                  publications and about pages are trademarks of ORCID, Inc., drawn exactly as ORCID
+                  provides them and used only as its iD display guidelines allow — in front of the full
+                  https://orcid.org/… address, linking to that record: the green iD for an iD the owner
+                  confirmed by signing in to ORCID, the outlined iD followed by
+                  &ldquo;(unauthenticated)&rdquo; for one that was typed in (
+                  <InlineLink href="/licenses/orcid.txt">trademark note</InlineLink>). They are not part
                   of this site&rsquo;s open-source licence.
                 </Para>
               </Section>

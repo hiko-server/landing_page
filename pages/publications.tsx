@@ -62,7 +62,7 @@ const chip = (selected: boolean) => ({
   _focusVisible: { outline: '2px solid var(--accent)', outlineOffset: '2px' },
 })
 
-export default function PublicationsPage({ items, lang, jsonLd, description, summary, orcid }: Props) {
+export default function PublicationsPage({ items, lang, jsonLd, description, summary, orcid, orcidAuthenticated }: Props) {
   const toast = useChromeToast()
   const [filter, setFilter] = useState<PublicationFilter>({ year: null, status: null })
   const filterable = items.length >= FILTER_THRESHOLD
@@ -174,6 +174,7 @@ export default function PublicationsPage({ items, lang, jsonLd, description, sum
                   <Box as="span" display="block" mt={3} fontSize="14px" lineHeight="1.6">
                     <OrcidIdLink
                       id={orcid}
+                      authenticated={!!orcidAuthenticated}
                       iconSize={16}
                       color="page.fg"
                       _hover={{ color: 'accent.text', textDecoration: 'none' }}

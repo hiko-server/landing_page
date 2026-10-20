@@ -339,6 +339,8 @@ function IdentityCard({ data, lang }: { data: Section; lang: CvLang }) {
           // The iD icon and the full URI, as ORCID's display guidelines ask.
           <OrcidIdLink
             id={p.href}
+            authenticated={!!p.authenticated}
+            lang={lang}
             iconSize={16}
             color="accent.text"
             textDecoration="underline"
