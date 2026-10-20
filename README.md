@@ -17,6 +17,8 @@ backup, and a hardened admin GUI for non-engineers.
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
+<img src="docs/screenshots/hero-light.png" alt="Home page in light mode" width="900" />
+
 </div>
 
 ---
@@ -84,9 +86,11 @@ backup, and a hardened admin GUI for non-engineers.
 
 <table>
 <tr>
+<td><img src="docs/screenshots/admin-home.png" alt="Admin Home editor" /></td>
 <td><img src="docs/screenshots/admin-storage.png" alt="Storage + backup panel" /></td>
 </tr>
 <tr>
+<td align="center"><sub>Admin → Home: visibility toggles + content fields</sub></td>
 <td align="center"><sub>Admin → Storage: local SQLite + R2 mirror + tarball snapshots</sub></td>
 </tr>
 </table>
@@ -870,6 +874,11 @@ are gated by the middleware.
 | `/admin/system` | Health (build, disk, databases, backups, restore drill, recent warnings) and `?view=errors` |
 
 Press `?` on any admin page for the keyboard shortcuts.
+
+<div align="center">
+  <img src="docs/screenshots/admin-cv-studio.png" alt="CV Editor Studio" width="780" />
+  <br /><sub>Admin → CV → Studio: split-pane editor with live preview</sub>
+</div>
 
 ---
 
