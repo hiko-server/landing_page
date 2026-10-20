@@ -5,6 +5,7 @@ import { copyText } from '../MDX/clipboard'
 import { LinkedInIcon } from '../Icons/brand'
 import { CopyIcon, QrCodeIcon, ShareIcon } from '../Icons/ui/content'
 import { CheckIcon } from '../Icons/ui/theme'
+import QrSvg from '../Common/QrSvg'
 import { cssTransition } from '../../theme/tokens'
 import type { AuthorCardData } from '../../lib/authorCard'
 import { langWithin } from '../../lib/toc'
@@ -241,8 +242,9 @@ export function ShareBar({ share }: { share: ShareData }) {
             h="148px"
             flexShrink={0}
             sx={{ '& svg': { display: 'block', width: '100%', height: '100%' } }}
-            dangerouslySetInnerHTML={{ __html: share.qrSvg }}
-          />
+          >
+            <QrSvg svg={share.qrSvg} />
+          </Box>
           <Box fontSize="13px" lineHeight="1.6" color="page.fg-secondary" maxW="30ch">
             <Text m={0}>{t.qrHelp}</Text>
             {/* WeChat readers are mostly Chinese: an English page adds the Chinese line. */}

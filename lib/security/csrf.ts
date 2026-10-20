@@ -1,7 +1,7 @@
 /**
  * Cross-site request forgery policy for the state-changing JSON endpoints.
  *
- * Pure (no Node APIs) — evaluated by the edge middleware before any API route
+ * Pure (no Node APIs) — evaluated by the proxy (proxy.ts) before any API route
  * runs, and reused by handlers that want the same answer.
  *
  * A request to a protected path with an unsafe method is accepted when:

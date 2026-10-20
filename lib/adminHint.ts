@@ -5,7 +5,7 @@
  * (and the analytics ingester to skip the owner); it grants nothing. The
  * session itself lives in the httpOnly cookie checked by lib/auth.ts.
  *
- * Dependency-free so client components, the edge middleware and Node API
+ * Dependency-free so client components, the proxy (proxy.ts) and Node API
  * routes can all import the same constant.
  */
 export const ADMIN_HINT_COOKIE = 'cv_admin_hint'

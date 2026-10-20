@@ -19,7 +19,7 @@ import { consumeRecoveryCode, isPasskeyRequired, recordAuthEvent } from '../../.
 /**
  * POST /api/auth/email-login
  *
- *   1. CSRF: the edge middleware rejects cross-site POSTs and non-JSON
+ *   1. CSRF: the proxy (proxy.ts) rejects cross-site POSTs and non-JSON
  *      bodies before this runs (lib/security/csrf.ts).
  *   2. Per-IP limits: 10 attempts / 5 min (4 while the site is under a
  *      distributed attack) and 30 / hour; IPv6 clients additionally share a

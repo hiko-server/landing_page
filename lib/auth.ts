@@ -14,8 +14,8 @@ import { isLegacyTokenEnded, recordAuthEvent, type AuthMethod } from './adminAut
 /**
  * Single admin-session check for every Node API route.
  *
- * The edge middleware gates /api/admin/* with a fast signature-only check;
- * this is the authoritative copy that every handler calls (it also covers
+ * The proxy (proxy.ts, lib/adminAuth/proxyGate.ts) gates /api/admin/* with a
+ * read-only session check; this is the authoritative copy that every handler calls (it also covers
  * mixed public/admin routes like /api/cvdata and /api/home). On top of the
  * signature it enforces revocation twice over:
  *   - the token's `sv` claim must equal data/admin.json's `sessionVersion`

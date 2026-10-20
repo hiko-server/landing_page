@@ -4,8 +4,8 @@ import { register } from 'node:module'
 import { getPublicHost, hostnameOf, isLocalHostname } from '../lib/env'
 
 // `next` has no package "exports", so Node's ESM resolver cannot find the
-// extensionless `next/server` that middleware.ts imports (webpack can). Map
-// it to the real file before loading the middleware.
+// extensionless `next/server` that proxy.ts imports (webpack can). Map
+// it to the real file before loading the proxy.
 register(
   'data:text/javascript,' +
     encodeURIComponent(`
@@ -17,7 +17,7 @@ register(
   import.meta.url,
 )
 const { NextRequest } = await import('next/server.js')
-const { edgeRedirect, forwardedScheme, isIndexNowKeyPath, isPublicAdminApi, middleware } = await import('../middleware')
+const { edgeRedirect, forwardedScheme, isIndexNowKeyPath, isPublicAdminApi, proxy } = await import('../proxy')
 
 const HOST = 'lucian-dev.com'
 
@@ -79,11 +79,11 @@ test('legacy /cv?lang=zh|cn → 308 /cv/zh keeping the other parameters', () => 
   assert.equal(edgeRedirect(req('https://lucian-dev.com/cv/zh?lang=zh'), HOST), null)
 })
 
-test('middleware() applies the security headers to redirects', async () => {
+test('proxy() applies the security headers to redirects', async () => {
   const prev = process.env.SITE_URL
   process.env.SITE_URL = 'https://lucian-dev.com'
   try {
-    const res = await middleware(req('http://lucian-dev.com/cv?lang=zh&print=1', { 'x-forwarded-proto': 'http' }))
+    const res = await proxy(req('http://lucian-dev.com/cv?lang=zh&print=1', { 'x-forwarded-proto': 'http' }))
     assert.equal(res.status, 308)
     // https first; the /cv?lang hop follows on the https request.
     assert.equal(res.headers.get('location'), 'https://lucian-dev.com/cv?lang=zh&print=1')
@@ -91,7 +91,7 @@ test('middleware() applies the security headers to redirects', async () => {
     assert.equal(res.headers.get('x-frame-options'), 'DENY')
     assert.equal(res.headers.get('x-robots-tag'), null)
 
-    const next = await middleware(req('https://lucian-dev.com/about', { 'x-forwarded-proto': 'https' }))
+    const next = await proxy(req('https://lucian-dev.com/about', { 'x-forwarded-proto': 'https' }))
     assert.equal(next.headers.get('location'), null)
     assert.ok(next.headers.get('strict-transport-security'))
   } finally {
@@ -134,9 +134,9 @@ test('leaving Draft Mode works without a session; entering it does not', async (
   const prev = process.env.JWT_SECRET
   process.env.JWT_SECRET = 'test-secret-for-draft-exit'
   try {
-    const exit = await middleware(req('https://lucian-dev.com/api/admin/draft?disable=1&path=/blog/x'))
+    const exit = await proxy(req('https://lucian-dev.com/api/admin/draft?disable=1&path=/blog/x'))
     assert.notEqual(exit.status, 401)
-    const enter = await middleware(req('https://lucian-dev.com/api/admin/draft?path=/blog/x'))
+    const enter = await proxy(req('https://lucian-dev.com/api/admin/draft?path=/blog/x'))
     assert.equal(enter.status, 401)
   } finally {
     if (prev === undefined) delete process.env.JWT_SECRET
@@ -155,16 +155,16 @@ test('the IndexNow key file is served at the site root, for the configured key o
   const prev = process.env.INDEXNOW_KEY
   try {
     process.env.INDEXNOW_KEY = KEY
-    const res = await middleware(req(`https://lucian-dev.com/${KEY}.txt?x=1`))
+    const res = await proxy(req(`https://lucian-dev.com/${KEY}.txt?x=1`))
     // NextResponse.rewrite: the internal route answers under the root URL.
     const target = new URL(res.headers.get('x-middleware-rewrite') || '', 'http://placeholder.invalid')
     assert.equal(target.pathname + target.search, '/api/indexnow-key')
     assert.ok(res.headers.get('content-security-policy'), 'security headers on the rewrite')
-    const other = await middleware(req('https://lucian-dev.com/wrongkey0123456.txt'))
+    const other = await proxy(req('https://lucian-dev.com/wrongkey0123456.txt'))
     assert.equal(other.headers.get('x-middleware-rewrite'), null)
 
     delete process.env.INDEXNOW_KEY
-    const off = await middleware(req(`https://lucian-dev.com/${KEY}.txt`))
+    const off = await proxy(req(`https://lucian-dev.com/${KEY}.txt`))
     assert.equal(off.headers.get('x-middleware-rewrite'), null, 'no key configured: nothing is rewritten')
   } finally {
     if (prev === undefined) delete process.env.INDEXNOW_KEY

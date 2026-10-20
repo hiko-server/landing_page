@@ -18,8 +18,8 @@ import { endLegacyTokens, recordAuthEvent } from '../../../lib/adminAuth/store'
  * every device (the old behaviour).
  * Without a valid session it only clears this browser's cookies — an
  * anonymous POST must not be able to sign the owner out. Reachable without
- * a session (middleware allow-list) so a stale cookie can always be cleared;
- * cross-site POSTs are refused by the middleware.
+ * a session (proxy allow-list) so a stale cookie can always be cleared;
+ * cross-site POSTs are refused by the proxy.
  * Draft Mode is switched off too: its bypass cookie alone makes /blog and
  * /work render unpublished drafts, so it must not outlive the session.
  */

@@ -1,8 +1,8 @@
 /**
  * Client-IP parsing for rate limits and login throttling.
  *
- * Pure and runtime-neutral (no `net`, no Buffer) so the edge routes
- * (middleware, /api/og) and the Node API routes share one implementation.
+ * Pure and runtime-neutral (no `net`, no Buffer) so the proxy, /api/og and
+ * the other API routes share one implementation.
  *
  *   - parseIp / formatIp     IPv4 + IPv6 (incl. "::", zone ids, embedded v4),
  *                            IPv4-mapped IPv6 ("::ffff:1.2.3.4") folds to v4.

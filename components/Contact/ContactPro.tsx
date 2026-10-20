@@ -40,6 +40,7 @@ import {
 } from '../../lib/inquiry'
 import CopyButton from '../General-UI/CopyButton'
 import EmailText from '../Common/EmailText'
+import QrSvg from '../Common/QrSvg'
 import {
   EMPTY_INQUIRY,
   MESSAGE_MAX,
@@ -605,8 +606,9 @@ export default function ContactPro({
                   bg="white"
                   color="#0a0a0a"
                   sx={{ '& svg': { display: 'block', width: '100%', height: '100%' } }}
-                  dangerouslySetInnerHTML={{ __html: vcard.qrSvg }}
-                />
+                >
+                  <QrSvg svg={vcard.qrSvg} />
+                </Box>
                 <Text fontFamily={monoFont} fontSize="11px" letterSpacing="0.04em" color="page.fg-secondary">
                   Scan to save contact
                 </Text>

@@ -2,6 +2,7 @@ import Document, { Head, Html, Main, NextScript } from 'next/document'
 import { resolveHtmlLang } from '../components/Chrome/chrome'
 import { serverColorMode } from '../lib/themePreference'
 import { THEME_COLOR_PREPAINT_SCRIPT, THEME_PREPAINT_SCRIPT } from '../lib/themePrepaint'
+import { TRUSTED_TYPES_DEFAULT_POLICY_SCRIPT } from '../lib/trustedTypesDefault'
 import { themeColorFor } from '../theme/color'
 
 /**
@@ -24,6 +25,11 @@ import { themeColorFor } from '../theme/color'
  * default mode and corrected to the visitor's mode by an inline script right
  * after the theme script, before first paint (lib/themePrepaint.ts,
  * components/Chrome/themeColor.ts).
+ *
+ * Inline scripts: these three are the only ones the CSP lets run, by their
+ * SHA-256 (lib/security/inlineScripts.ts — add any new one there). The
+ * Trusted Types default policy (lib/trustedTypesDefault.ts) comes first, so
+ * it exists before any Next.js script writes to a DOM sink.
  */
 class MyDocument extends Document {
   render() {
@@ -35,6 +41,7 @@ class MyDocument extends Document {
           <meta name="theme-color" content={themeColorFor(initialColorMode)} />
         </Head>
         <body>
+          <script dangerouslySetInnerHTML={{ __html: TRUSTED_TYPES_DEFAULT_POLICY_SCRIPT }} />
           <script dangerouslySetInnerHTML={{ __html: THEME_PREPAINT_SCRIPT }} />
           <script dangerouslySetInnerHTML={{ __html: THEME_COLOR_PREPAINT_SCRIPT }} />
           <Main />

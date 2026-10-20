@@ -49,8 +49,10 @@ const KIND: Record<string, string> = {
   render: 'page render',
   route: 'route handler',
   middleware: 'middleware',
+  proxy: 'proxy (request gate)',
   log: 'logged error',
   csp: 'policy violation',
+  'trusted-types': 'Trusted Types (report-only)',
 }
 
 export function kindLabel(kind: string): string {

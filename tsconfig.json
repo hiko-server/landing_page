@@ -32,6 +32,7 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    "lib/csp.js"
+    "lib/csp.js",
+    "lib/securityHeaders.js"
   ]
 }

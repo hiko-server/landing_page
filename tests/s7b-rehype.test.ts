@@ -158,7 +158,8 @@ test('the production CSP has no unsafe-eval; development keeps it for React Refr
   const { buildCsp } = createRequire(import.meta.url)('../lib/csp.js') as { buildCsp: (env?: string) => string }
   const prod = buildCsp('production')
   assert.ok(!prod.includes("'unsafe-eval'"), prod)
-  assert.match(prod, /script-src 'self' 'unsafe-inline'/)
+  // Hash-based strict scripts (security-b): no 'unsafe-inline' for scripts.
+  assert.match(prod, /(^|; )script-src 'self'; /)
   assert.match(prod, /frame-src https:\/\/www\.youtube-nocookie\.com/)
   // Same origin only: GitHub data comes through /api/github/*, reports go to /api/e (the optional
   // Sentry hosts went with the integration).

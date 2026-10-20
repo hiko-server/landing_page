@@ -147,7 +147,8 @@ test('(h) the CSP allows what the merged code needs and nothing more', () => {
   assert.deepEqual(CSP_DIRECTIVES['frame-src'], ['https://www.youtube-nocookie.com', 'https://www.youtube.com', 'https://player.vimeo.com'])
   assert.match(read('lib/videoPoster.ts'), /\/uploads\//)
   // No third-party script, analytics or monitoring host.
-  assert.deepEqual(CSP_DIRECTIVES['script-src'], ["'self'", "'unsafe-inline'"])
+  // security-b: scripts by hash only (the proxy adds the inline-script hashes).
+  assert.deepEqual(CSP_DIRECTIVES['script-src'], ["'self'"])
   assert.ok(!/sentry|cloudflareinsights|googletagmanager|hcaptcha/i.test(csp))
 })
 

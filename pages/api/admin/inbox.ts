@@ -18,7 +18,7 @@ import { getRetentionStatus } from '../../../lib/inboxRetention'
  * and streams it otherwise), so a large log can't exhaust memory. Deleting
  * remembers the ids, so restoring an older backup won't bring them back.
  *
- * The middleware already gates /api/admin/* and refuses cross-site or
+ * The proxy already gates /api/admin/* and refuses cross-site or
  * non-JSON writes; the session check here is the defence-in-depth copy that
  * also enforces session revocation.
  */

@@ -589,8 +589,8 @@ export default function ColophonPage({ releases, stack, buildSha, builtAt }: Pro
                       recorded per page with the device class only — no visitor ID.
                     </>,
                     <>
-                      When a page fails with a script error, or your browser blocks something under
-                      the content security policy, the site sends itself a report: the error and
+                      When a page fails with a script error, or your browser blocks or flags something
+                      under the content security policy, the site sends itself a report: the error and
                       where in the code it happened (with query strings, e-mail and IP addresses
                       and anything ID-like removed), the page path and the browser family — no
                       visitor ID. Reports are deleted after at most 90 days.

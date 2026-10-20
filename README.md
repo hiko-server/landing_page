@@ -86,9 +86,10 @@ backup, and a hardened admin GUI for non-engineers.
   codes, per-browser sessions, sign-in history and step-up re-verification
   for dangerous actions; scrypt with 16-byte salt; per-(email, IP)
   lockout with a site-wide throughput cap under attack; httpOnly
-  + sameSite=Strict + Secure cookies; JWT via `jose` in edge middleware
-  so unauth visitors never see admin UI for a frame; HSTS / CSP / X-Frame
-  / X-Robots applied via `middleware.ts`.
+  + sameSite=Strict + Secure cookies; the Next.js proxy (`proxy.ts`)
+  checks the session — signature and revocation — so signed-out visitors
+  never see admin UI for a frame; a strict, hash-based CSP, HSTS, COOP /
+  CORP, Permissions-Policy and X-Robots on every response.
 
 <table>
 <tr>
@@ -195,11 +196,12 @@ backup, and a hardened admin GUI for non-engineers.
 **Security and delivery**
 
 - Next.js 16.3 (built with webpack); the image optimizer is disabled
-  (`/_next/image` answers 404 — GHSA-2xp9-vwfh-vxw4); the production CSP has
-  no `'unsafe-eval'` and no third-party origin besides the GitHub API.
+  (`/_next/image` answers 404 — GHSA-2xp9-vwfh-vxw4); the production CSP
+  runs scripts by hash only (no `'unsafe-inline'`, no `'unsafe-eval'`) and
+  allows no third-party script host.
 - HTTP → HTTPS (308) for the public host and the legacy CV redirect in the
-  middleware; server-side fetches of admin- or content-supplied URLs go
-  through `lib/security/safeFetch.ts`.
+  proxy (`proxy.ts`); server-side fetches of admin- or content-supplied URLs
+  go through `lib/security/safeFetch.ts`.
 - The server's compose override is no longer tracked (loopback-only
   example), container logs rotate, the base image is pinned by digest and
   the release image carries only the traced runtime.
@@ -291,7 +293,7 @@ all items and downloads everything as a .zip of Markdown and JSON.
 
 | Layer | Choice | Why |
 |---|---|---|
-| Framework | **Next.js 16 (Pages router, webpack build)** + **React 18** | Mature SSR/ISR, file-routed APIs, edge middleware |
+| Framework | **Next.js 16 (Pages router, webpack build)** + **React 18** | Mature SSR/ISR, file-routed APIs, a Node.js request proxy |
 | UI | **Chakra UI 2** | Composable primitives, dark-mode out of the box |
 | Animations | **Framer Motion** | Hero entry, section reveal |
 | Content store | **better-sqlite3** + **Cloudflare R2** | Local-first, cheap off-site replica |
@@ -348,7 +350,7 @@ all items and downloads everything as a .zip of Markdown and JSON.
 ├── e2e/                 # Playwright + axe end-to-end suites
 ├── security/            # audit-allowlist.json (reviewed, expiring exceptions)
 ├── tests/               # node:test unit tests
-├── middleware.ts        # Edge redirects, security headers, CSRF, admin gate
+├── proxy.ts             # Redirects, security headers, CSRF, admin gate (Node.js)
 └── public/              # Static assets
 ```
 
@@ -516,8 +518,11 @@ warning.
 
 First-party only, nothing leaves the server: uncaught browser errors,
 unhandled rejections and error-boundary catches (the reporter loads only
-when something fails), Content-Security-Policy violations (`report-uri
-/api/e`), and server errors (API routes, page renders, any logged
+when something fails), Content-Security-Policy violations and Trusted
+Types reports (`report-to` / `report-uri` → `/api/e`; the report-only
+Trusted Types groups are sampled, at most 50 events a group a day, and keep
+the sink name, never the sample text), and server errors (API routes, page
+renders, the proxy, any logged
 exception) are grouped by fingerprint in `data/analytics.db` — scrubbed of
 query strings, e-mail / IP addresses, tokens and ID-like numbers, with no
 address, user agent or cookie — and listed in Admin → System → Errors
@@ -532,11 +537,16 @@ drill and the recent warn / error log entries.
 
 ### Admin security
 
-- **Edge middleware** (`middleware.ts`) verifies the `cv_admin_token` JWT
-  with `jose` before any `/admin/*` page or `/api/admin/*` route renders.
-  Unauthenticated requests are redirected to `/admin/login?next=<original>`
-  for pages, or returned as JSON 401 for APIs. Public whitelisted paths:
-  `/admin/{login,forgot,reset}` and `/api/admin/{session,logout}`.
+- **Proxy gate** (`proxy.ts`, Next.js 16's proxy on the Node.js runtime)
+  checks the `cv_admin_token` session before any `/admin/*` page or
+  `/api/admin/*` route renders: the JWT signature (`jose`, HS256 pinned),
+  and revocation — the session version in `data/admin.json` and the
+  browser's session row in `data/auth.db` — so a signed-out or revoked
+  browser cannot load an admin page shell either. Unauthenticated requests
+  are redirected to `/admin/login?next=<original>` for pages, or returned
+  as JSON 401 for APIs. Public whitelisted paths: `/admin/{login,forgot,reset}`
+  and `/api/admin/{session,logout}`. Every API route checks the session
+  again itself.
 - **scrypt** password hashing (N=16384, r=8, p=1, 64-byte key, async) with
   a per-account 16-byte random salt. Comparisons use
   `crypto.timingSafeEqual` on equal-length buffers.
@@ -549,7 +559,7 @@ drill and the recent warn / error log entries.
   Client-IP headers (`cf-connecting-ip`) are trusted only from loopback and
   the container's default gateway — how the Cloudflare Tunnel reaches the
   app through the Docker port mapping — unless `TRUSTED_PROXY_IPS` is set.
-- **CSRF**: the middleware refuses cross-site (`Origin` / `Sec-Fetch-Site`)
+- **CSRF**: the proxy refuses cross-site (`Origin` / `Sec-Fetch-Site`)
   and non-JSON writes to every admin and content API, on top of
   `SameSite=Strict`.
 - **Passkeys** (WebAuthn, `@simplewebauthn/server`): sign in with Face ID /
@@ -580,7 +590,7 @@ drill and the recent warn / error log entries.
   compare, pruned on every read.
 - **Admin pages**: `X-Robots-Tag: noindex, nofollow, noarchive` and
   `Cache-Control: no-store` to keep them out of search and caches.
-- **Edge redirects** (middleware, GET/HEAD, 308): plain-HTTP requests for
+- **Redirects** (proxy, GET/HEAD, 308): plain-HTTP requests for
   the configured public host (`SITE_URL` / `NEXT_PUBLIC_SITE_HOST`, never a
   loopback name) go to HTTPS — the visitor's scheme comes from Cloudflare's
   `cf-visitor`, else `X-Forwarded-Proto`; `/api/health` is exempt. The
@@ -588,8 +598,18 @@ drill and the recent warn / error log entries.
 - **No image optimizer**: `images.unoptimized` — `/_next/image` answers
   404, so no request ever reaches sharp/libheif (GHSA-2xp9-vwfh-vxw4).
   Images are resized once, at upload time.
-- **CSP** without `'unsafe-eval'` in production (MDX renders from a
-  server-built tree).
+- **Strict CSP**: scripts only from this origin and the four inline
+  scripts the pages render, allowed by their SHA-256 (computed from the
+  same constants, so they cannot drift); no `'unsafe-inline'` or
+  `'unsafe-eval'` for scripts (MDX renders from a server-built tree), no
+  inline event handlers, same-origin connections, fonts and media.
+  Violations go to the site's own Errors panel (`report-to` /
+  `report-uri` → `/api/e`). Trusted Types run report-only, with a narrow
+  default policy, to map the DOM sinks left before they can be enforced.
+  `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Resource-Policy`
+  (same-origin, except images and icons other sites may show) and a
+  Permissions-Policy that switches off every powerful feature the site does
+  not use. Details and the documented exceptions: [SECURITY.md](SECURITY.md).
 - **SSRF**: every server-side fetch of a URL that comes from content or an
   admin goes through `lib/security/safeFetch.ts` (public addresses only,
   size, redirect and time limits).
@@ -857,7 +877,7 @@ only) every on-demand revalidation purges the refreshed URLs — plus the
 feeds, sitemap and search index when posts or case studies change — in
 batches of 30; with `INDEXNOW_KEY` the page URLs are submitted to IndexNow
 (the key file is served at the site root as `/<INDEXNOW_KEY>.txt`, because a
-key file only covers URLs in its own directory and below; the middleware
+key file only covers URLs in its own directory and below; the proxy
 rewrites exactly that path to `/api/indexnow-key`). Both are fire-and-forget with a
 3 s timeout, logged, and never fail a save; without the env nothing is
 sent. The same credentials purge the whole zone after every deploy
@@ -922,7 +942,7 @@ overlay and follow a contact message into the Inbox.
 | `/.well-known/security.txt` | RFC 9116 security contact (public CV e-mail, rolling 180-day expiry; 404 while the e-mail is hidden) |
 
 API surface lives under `/api/*`; admin-only endpoints under `/api/admin/*`
-are gated by the middleware.
+are gated by the proxy (`proxy.ts`).
 
 ---
 

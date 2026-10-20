@@ -11,7 +11,7 @@ import { compileForAdmin } from '../../../lib/mdx-admin'
  *   422 { code:'MDX_INVALID', line, column, reason, error }
  *
  * Used by the editors' live preview (debounced) and as the dry run behind
- * the Publish checklist. Nothing is stored. Admin-only (middleware gate plus
+ * the Publish checklist. Nothing is stored. Admin-only (proxy gate plus
  * the session check here), rate-limited per client.
  */
 export default withApi('admin/preview', async (req, res) => {

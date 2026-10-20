@@ -1,16 +1,17 @@
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
-import { jwtVerify } from 'jose'
-import { buildCsp } from './lib/csp.js'
+import { verifyAdminToken } from './lib/adminAuth/proxyGate'
 import { getConfiguredSiteValues, getIndexNowKey, getPublicHost, hostnameOf } from './lib/env'
 import { checkCsrf, isCsrfProtectedPath, isFormLikeContentType, isUnsafeMethod, siteHostsFrom } from './lib/security/csrf'
+import { applySecurityHeaders } from './lib/security/responseHeaders'
 
 /**
- * Root middleware.
+ * Root proxy (Next 16's name for middleware; it runs on the Node.js runtime,
+ * in the server process, before any page or API route).
  *
  * Four responsibilities:
  *
- * 0.  **Edge redirects** (GET/HEAD only, 308 so the method and body survive):
+ * 0.  **Redirects** (GET/HEAD only, 308 so the method and body survive):
  *     - plain-HTTP requests for the configured public host (SITE_URL /
  *       NEXT_PUBLIC_SITE_HOST, never a loopback name) go to the same URL on
  *       https. The scheme the visitor used comes from Cloudflare's
@@ -21,8 +22,11 @@ import { checkCsrf, isCsrfProtectedPath, isFormLikeContentType, isUnsafeMethod, 
  *     The IndexNow key file `/<INDEXNOW_KEY>.txt` is rewritten (not
  *     redirected) to /api/indexnow-key; only the configured key matches.
  *
- * 1.  **Security headers** for every response (frame deny, HSTS, CSP, etc).
- *     These are applied unconditionally.
+ * 1.  **Security headers** for every response (lib/security/responseHeaders.ts):
+ *     the hash-based CSP, the Trusted Types report-only policy, the
+ *     Reporting API endpoint, COOP / CORP, Permissions-Policy, HSTS, frame
+ *     and sniffing protection. Applied unconditionally, redirects and
+ *     refusals included.
  *
  * 2.  **CSRF guard** for state-changing requests (POST/PUT/PATCH/DELETE) to
  *     /api/admin/*, /api/auth/*, /api/cvdata, /api/home, /api/versions and
@@ -30,17 +34,13 @@ import { checkCsrf, isCsrfProtectedPath, isFormLikeContentType, isUnsafeMethod, 
  *     form-encoded, multipart and text/plain bodies get 415 — every real
  *     client of these endpoints sends JSON (or no body).
  *
- * 3.  **Admin gate** for `/admin/*` and `/api/admin/*`. The cookie is
- *     httpOnly so we cannot read it from JavaScript on the page — and
- *     getServerSideProps was missing on most admin pages, which meant the
- *     UI shell rendered for unauthenticated visitors (the APIs still
- *     returned 401, so no data leak, but the screen still appeared and
- *     felt like a breach).
- *
- *     Edge middleware runs **before** any page or API route, verifies the
- *     JWT signature with `jose` (edge-compatible — `jsonwebtoken` is not),
- *     and redirects guests to `/admin/login?next=<original>`. Admin
- *     pages without auth never render even for a frame.
+ * 3.  **Admin gate** for `/admin/*` and `/api/admin/*`: guests are
+ *     redirected to `/admin/login?next=<original>` (pages) or answered JSON
+ *     401 (APIs) before anything renders. The session check
+ *     (lib/adminAuth/proxyGate.ts) verifies the JWT signature AND
+ *     revocation — the session version in data/admin.json and the auth.db
+ *     session row — so a signed-out browser cannot load an admin page shell
+ *     either. Every API route still checks the session itself (lib/auth.ts).
  *
  *     Whitelisted public admin routes (login, forgot, reset) stay
  *     reachable. The session/check endpoint stays public so the login
@@ -70,46 +70,6 @@ const PUBLIC_ADMIN_API_PATHS = new Set<string>([
 export function isPublicAdminApi(pathname: string, method: string, searchParams: URLSearchParams): boolean {
   if (PUBLIC_ADMIN_API_PATHS.has(pathname)) return true
   return pathname === '/api/admin/draft' && method === 'GET' && searchParams.get('disable') === '1'
-}
-
-/**
- * Signature-only check (fast, edge-compatible). Session revocation — the
- * `sv` claim vs data/admin.json — is enforced by every API route through
- * lib/auth.ts, which the edge runtime can't do (no filesystem).
- */
-async function verifyAdminJwt(token: string | undefined): Promise<boolean> {
-  if (!token) return false
-  const secret = process.env.JWT_SECRET
-  if (!secret || secret === 'change-me') return false
-  try {
-    const { payload } = await jwtVerify(token, new TextEncoder().encode(secret), {
-      algorithms: ['HS256'],
-    })
-    return (payload as { role?: string })?.role === 'admin'
-  } catch {
-    return false
-  }
-}
-
-function applySecurityHeaders(res: NextResponse, opts: { adminContext: boolean }) {
-  res.headers.set('X-Frame-Options', 'DENY')
-  res.headers.set('X-Content-Type-Options', 'nosniff')
-  res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
-  res.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
-  res.headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload')
-
-  // CSP — single source of truth shared with next.config.js (see lib/csp.js),
-  // so the two headers can no longer drift into a surprising intersection.
-  res.headers.set('Content-Security-Policy', buildCsp())
-
-  // Keep admin pages out of search indexes (defence-in-depth — even with
-  // the gate, we don't want googlebot caching the login page).
-  if (opts.adminContext) {
-    res.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive')
-    // Caches between us and the user shouldn't store admin responses.
-    res.headers.set('Cache-Control', 'no-store, max-age=0, must-revalidate')
-  }
-  return res
 }
 
 /** 403 / 415 for unsafe requests that fail the CSRF policy, else null. */
@@ -190,58 +150,52 @@ export function isIndexNowKeyPath(pathname: string, key: string | null = getInde
   return key !== null && pathname === `/${key}.txt`
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl
 
   const redirect = edgeRedirect(req)
-  if (redirect) return applySecurityHeaders(redirect, { adminContext: false })
+  if (redirect) return applySecurityHeaders(redirect, { pathname, adminContext: false })
 
   if (isIndexNowKeyPath(pathname)) {
     const target = req.nextUrl.clone()
     target.pathname = '/api/indexnow-key'
     target.search = ''
-    return applySecurityHeaders(NextResponse.rewrite(target), { adminContext: false })
+    return applySecurityHeaders(NextResponse.rewrite(target), { pathname, adminContext: false })
   }
 
   const isAdminPage = pathname === '/admin' || pathname.startsWith('/admin/')
   const isAdminApi = pathname.startsWith('/api/admin/')
 
   const rejected = csrfRejection(req, pathname)
-  if (rejected) return applySecurityHeaders(rejected, { adminContext: true })
+  if (rejected) return applySecurityHeaders(rejected, { pathname, adminContext: true })
 
   if (isAdminPage || isAdminApi) {
     const allowed = isAdminPage
       ? PUBLIC_ADMIN_PAGE_PATHS.has(pathname)
       : isPublicAdminApi(pathname, req.method, req.nextUrl.searchParams)
 
-    if (!allowed) {
-      const token = req.cookies.get('cv_admin_token')?.value
-      const ok = await verifyAdminJwt(token)
-      if (!ok) {
-        if (isAdminApi) {
-          // APIs: return JSON 401 instead of redirecting (clients expect that).
-          const res = NextResponse.json(
-            { error: 'Unauthorized', code: 'NO_SESSION' },
-            { status: 401 },
-          )
-          return applySecurityHeaders(res, { adminContext: true })
-        }
-        // Pages: redirect to login, preserve where they meant to go.
-        const url = req.nextUrl.clone()
-        url.pathname = '/admin/login'
-        url.search = ''
-        url.searchParams.set('next', pathname + (req.nextUrl.search || ''))
-        const res = NextResponse.redirect(url)
-        return applySecurityHeaders(res, { adminContext: true })
+    if (!allowed && (await verifyAdminToken(req.cookies.get('cv_admin_token')?.value)) !== 'ok') {
+      if (isAdminApi) {
+        // APIs: return JSON 401 instead of redirecting (clients expect that).
+        const res = NextResponse.json({ error: 'Unauthorized', code: 'NO_SESSION' }, { status: 401 })
+        return applySecurityHeaders(res, { pathname, adminContext: true })
       }
+      // Pages: redirect to login, preserve where they meant to go.
+      const url = req.nextUrl.clone()
+      url.pathname = '/admin/login'
+      url.search = ''
+      url.searchParams.set('next', pathname + (req.nextUrl.search || ''))
+      return applySecurityHeaders(NextResponse.redirect(url), { pathname, adminContext: true })
     }
   }
 
-  return applySecurityHeaders(NextResponse.next(), { adminContext: isAdminPage || isAdminApi })
+  return applySecurityHeaders(NextResponse.next(), { pathname, adminContext: isAdminPage || isAdminApi })
 }
 
 export const config = {
   // /_next/image is not excluded: the optimizer is disabled (images.unoptimized)
   // and answers 404, which gets the security headers like everything else.
+  // The two exclusions are not documents and run no script; next.config.js
+  // gives them the page-independent headers (lib/securityHeaders.js).
   matcher: ['/((?!_next/static|favicon.ico).*)'],
 }

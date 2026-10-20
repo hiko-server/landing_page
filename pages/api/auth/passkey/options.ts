@@ -6,7 +6,7 @@ import { authenticationOptions, relyingPartyFor } from '../../../../lib/adminAut
  * POST /api/auth/passkey/options → { options } — a single-use sign-in
  * challenge (5 minutes) for a passkey, with no allow-list so the browser can
  * offer the site's passkeys, including through autofill on /admin/login.
- * Public; cross-site and non-JSON posts are refused by the middleware.
+ * Public; cross-site and non-JSON posts are refused by the proxy.
  * 400 PASSKEY_UNAVAILABLE when the host the browser uses cannot have a
  * relying-party id (an IP address).
  */

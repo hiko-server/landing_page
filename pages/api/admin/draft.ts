@@ -12,7 +12,7 @@ import { isAdminRequest } from '../../../lib/auth'
  *       → clears Draft Mode and 307s back to the page (or "/").
  *
  * Only these two path shapes are accepted (no open redirect). Admin-only:
- * the middleware gates /api/admin/*, and the session is checked here too.
+ * the proxy gates /api/admin/*, and the session is checked here too.
  */
 
 export const DRAFT_PATH_RE = /^\/(blog|work)\/[a-z0-9][a-z0-9-_]*$/

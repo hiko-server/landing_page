@@ -33,7 +33,7 @@ import { recordError } from './store'
  */
 
 export type ServerErrorContext = {
-  /** 'api' | 'render' | 'log' | 'middleware' … (short slug). */
+  /** 'api' | 'render' | 'log' | 'proxy' … (short slug). */
   kind: string
   route?: string | null
   path?: string | null

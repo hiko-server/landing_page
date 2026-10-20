@@ -30,7 +30,9 @@ mental model:
 - `lib/contentStore.ts` — local-first SQLite + R2 dual-write.
 - `lib/backup.ts` — whole-site tarball snapshots.
 - `lib/admin.ts` — scrypt hashing + per-account lockout policy.
-- `middleware.ts` — admin route gate + security headers.
+- `proxy.ts` — redirects, CSRF, admin route gate + security headers
+  (the CSP lives in `lib/csp.js`; every inline script must be listed in
+  `lib/security/inlineScripts.ts`, which hashes it for the CSP).
 - `lib/homeShape.ts` vs `lib/home.ts` — server-only vs client-safe
   split (do NOT collapse them, see the comment block in `home.ts`).
 
@@ -112,7 +114,7 @@ Before opening a PR:
 - [ ] You ran the relevant pages in `yarn dev` and they render.
 - [ ] You did NOT commit `.env`, `data/admin.json`, or any other file
       gitignored under `data/`.
-- [ ] If your change touches the admin UI, you confirmed the middleware
+- [ ] If your change touches the admin UI, you confirmed the proxy
       still blocks unauth visitors from the page you added.
 - [ ] If your change is user-visible, the README (or `README.zh.md`) is
       updated to match.
@@ -122,7 +124,7 @@ Before opening a PR:
 These changes deserve extra scrutiny — call them out in the PR body:
 
 - New endpoints under `/api/admin/*` or `/api/auth/*`.
-- Any change to `middleware.ts`, `lib/admin.ts`, or
+- Any change to `proxy.ts`, `lib/csp.js`, `lib/admin.ts`, or
   `pages/api/auth/email-login.ts`.
 - New ambient cookies, headers, or env-var requirements.
 - New runtime dependencies (especially anything with native bindings

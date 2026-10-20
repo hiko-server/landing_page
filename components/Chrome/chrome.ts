@@ -155,7 +155,7 @@ export function hasAdminHint(cookie: string): boolean {
 /**
  * The header probes /api/admin/session only when it can be signed in: the
  * hint cookie is present, or the visitor is inside the admin area (which the
- * middleware only serves to a valid session; this also heals a session that
+ * proxy only serves to a valid session; this also heals a session that
  * predates the hint cookie).
  */
 export function shouldProbeSession(cookie: string, pathname: string): boolean {
