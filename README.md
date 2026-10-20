@@ -838,6 +838,22 @@ third-party script and no cookie.
   at most 90 days.
 - `/colophon` states the same facts publicly.
 
+**Exploring the numbers** (Admin → Analytics): pick a period (presets, a
+custom range, ‹ › to step back and forth) and *Compare* to draw the period
+before it; filter by page, referrer, country, device, browser or page
+language from the Filter picker or by clicking any row — every card, the
+goals, the conversion, the *Paths to a goal* and the Web Vitals (page and
+device only) follow, and the URL keeps the view. Filters read the raw rows,
+so a filtered view covers the last 35 days at most and says so; without
+filters the whole period comes from the daily totals. Filtering to one page
+adds its detail (read to the end, e-mail and outbound clicks, its Web
+Vitals); the post editor's ⋯ menu links to it. *Export* downloads the view
+as CSV (one table, or all of them in a .zip — never the search texts), and
+the *Weekly digest* e-mails last week's totals to `NOTIFY_EMAIL` every Monday
+(01:00 UTC) once switched on — it needs SMTP, and the card says how to set
+it up. Nothing new is stored about visitors; analytics migration 7 only adds
+two indexes and a daily page-language total.
+
 ### Contact messages
 
 - The form says what is kept and for how long, next to the Send button.

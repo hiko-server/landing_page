@@ -670,8 +670,9 @@ test('the admin goals endpoint: admin only, never cached', async () => {
 // ── 5. Migrations ──────────────────────────────────────────────────────────
 
 test('analytics migrations: versions 1…6 (5 = vitals attribution, 6 = events); a fresh store gets the events tables', () => {
+  // Later versions are appended (7 = explore, H10); the first six never change.
   assert.deepEqual(
-    ANALYTICS_MIGRATIONS.map((m) => [m.version, m.name]),
+    ANALYTICS_MIGRATIONS.slice(0, 6).map((m) => [m.version, m.name]),
     [
       [1, 'baseline'],
       [2, 'vitals-key'],
@@ -684,7 +685,7 @@ test('analytics migrations: versions 1…6 (5 = vitals attribution, 6 = events);
   const mem = new Database(':memory:')
   try {
     const report = runMigrations(mem, ANALYTICS_MIGRATIONS, { label: 'analytics' })
-    assert.equal(report.to, 6)
+    assert.equal(report.to, ANALYTICS_MIGRATIONS.length)
     const cols = (t: string) => (mem.prepare(`PRAGMA table_info(${t})`).all() as Array<{ name: string }>).map((c) => c.name)
     assert.deepEqual(cols('events'), ['ts', 'day', 'name', 'prop', 'visitor'])
     assert.deepEqual(cols('events_daily'), ['day', 'name', 'events', 'visitors'])

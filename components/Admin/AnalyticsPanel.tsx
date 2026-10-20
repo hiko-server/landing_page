@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useId, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/router'
 import {
   Alert,
   AlertDescription,
@@ -6,7 +7,6 @@ import {
   Box,
   Button,
   Flex,
-  HStack,
   Icon,
   SimpleGrid,
   Skeleton,
@@ -18,374 +18,130 @@ import {
   Th,
   Thead,
   Tr,
+  HStack,
 } from '@chakra-ui/react'
-import { FaSync } from 'react-icons/fa'
-import { readJsonObject } from './shell/http'
+import { FaInfoCircle } from 'react-icons/fa'
 import VitalsAttribution from './VitalsAttribution'
+import { readJsonObject } from './shell/http'
 import { Eyebrow, MONO, Panel } from './shell/ui'
 import { SCROLL_REGION_FOCUS, useScrollRegion } from './shell/scrollRegion'
+import { useAdminCommands } from './shell/useAdminCommands'
 import {
-  ANALYTICS_RANGES,
   VITAL_NAMES,
-  type AnalyticsRange,
-  type AnalyticsReport,
-  type CountRow,
   type Kpi,
-  type SeriesPoint,
   type VitalName,
   type VitalP75,
   type VitalRating,
 } from '../../lib/analytics/shared'
+import { countryName, formatBucket, formatCount, formatDelta, formatVital, ratingLabel } from '../../lib/analytics/format'
 import {
-  countryName,
-  formatBucket,
-  formatCompact,
-  formatCount,
-  formatDelta,
-  formatVital,
-  niceMax,
-  ratingLabel,
-} from '../../lib/analytics/format'
+  DIMENSION_LABEL,
+  EXPLORE_PARAM_KEYS,
+  EXPLORE_RAW_DAYS,
+  exploreParams,
+  exploreSearch,
+  parseExploreQuery,
+  withFilter,
+  type ExploreDimension,
+  type ExploreQuery,
+} from '../../lib/analytics/exploreShared'
+import { formatSpanWithYear, languageName, periodLabel, previousPhrase } from '../../lib/analytics/exploreFormat'
+import type { ExploreReport } from '../../lib/analytics/explore'
+import type { GoalName } from '../../lib/analytics/eventsShared'
 import GoalsSections from './analytics/GoalsSections'
+import ExploreBar from './analytics/ExploreBar'
+import TrendChart, { type ChartMetric } from './analytics/TrendChart'
+import RankCard from './analytics/RankCard'
+import PageDetailCard from './analytics/PageDetailCard'
+import DigestCard from './analytics/DigestCard'
 
 /**
- * Admin → Analytics: first-party, cookieless page views and real-user Core
- * Web Vitals (GET /api/admin/analytics), and the goal events — Goals,
- * Conversion, Searches with no results — in components/Admin/analytics
- * (GET /api/admin/goals). Mounted by the dashboard shell with no props.
+ * Admin → Analytics (H10 explore): first-party, cookieless page views,
+ * real-user Core Web Vitals (GET /api/admin/analytics) and the goal events
+ * — Goals, Conversion, Paths to a goal, Searches with no results — in
+ * components/Admin/analytics (GET /api/admin/goals), for one view: a
+ * period, an optional comparison with the period before, and filters that
+ * every number on the page follows. The view lives in the URL
+ * (lib/analytics/exploreShared), so it survives a reload, can be
+ * bookmarked and is exported (CSV) exactly as shown. Mounted by the
+ * dashboard shell with no props.
  */
-
-const RANGE_LABEL: Record<AnalyticsRange, string> = { '7d': '7 days', '30d': '30 days', '12m': '12 months' }
-const PERIOD_LABEL: Record<AnalyticsRange, string> = {
-  '7d': 'the previous 7 days',
-  '30d': 'the previous 30 days',
-  '12m': 'the previous 12 months',
-}
 
 const errText = (e: unknown) =>
   e instanceof Error ? (e.message === 'Failed to fetch' ? 'Network error' : e.message) : String(e)
 
-function isReport(v: Record<string, unknown>): v is AnalyticsReport & Record<string, unknown> {
-  return Array.isArray(v.series) && !!v.kpis && typeof v.kpis === 'object' && !!v.vitals && typeof v.vitals === 'object'
+function isReport(v: Record<string, unknown>): v is ExploreReport & Record<string, unknown> {
+  return Array.isArray(v.series) && !!v.kpis && typeof v.kpis === 'object' && !!v.vitals && typeof v.vitals === 'object' && !!v.window && typeof v.window === 'object'
 }
 
 // ── Small pieces ──────────────────────────────────────────────────────────
 
-function ToggleGroup<K extends string>({
+function MetricTab({
   label,
-  options,
   value,
-  onChange,
+  kpi,
+  previous,
+  selected,
+  onSelect,
+  comparable,
 }: {
   label: string
-  options: Array<{ key: K; label: string }>
-  value: K
-  onChange: (key: K) => void
+  value: number
+  kpi: Kpi
+  previous: string
+  selected: boolean
+  onSelect: () => void
+  comparable: boolean
 }) {
+  const delta = formatDelta(kpi.delta)
   return (
-    <HStack
-      role="group"
-      aria-label={label}
-      spacing={0.5}
-      p={0.5}
-      border="1px solid"
-      borderColor="page.border"
+    <Box
+      as="button"
+      type="button"
+      aria-pressed={selected}
+      onClick={onSelect}
+      textAlign="left"
+      minW={0}
+      py={2}
+      px={3}
+      mx={-3}
       borderRadius="lg"
-      bg="page.bg-elevated"
+      position="relative"
+      transition="background var(--duration-fast) var(--ease-standard)"
+      _hover={{ bg: 'page.hover' }}
+      _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
+      _after={{
+        content: '""',
+        position: 'absolute',
+        left: 3,
+        right: 3,
+        bottom: 0,
+        h: '2px',
+        borderRadius: 'full',
+        bg: selected ? 'var(--accent)' : 'transparent',
+      }}
     >
-      {options.map((o) => {
-        const active = o.key === value
-        return (
-          <Button
-            key={o.key}
-            size="xs"
-            minH="28px"
-            px={2.5}
-            variant="ghost"
-            aria-pressed={active}
-            onClick={() => onChange(o.key)}
-            fontFamily={MONO}
-            fontWeight={active ? 600 : 400}
-            fontSize="11px"
-            bg={active ? 'page.bg' : 'transparent'}
-            color={active ? 'page.fg' : 'page.fg-secondary'}
-            boxShadow={active ? '0 0 0 1px var(--chakra-colors-page-border)' : 'none'}
-            _hover={{ color: 'page.fg', bg: active ? 'page.bg' : 'page.hover' }}
-          >
-            {o.label}
-          </Button>
-        )
-      })}
-    </HStack>
-  )
-}
-
-function KpiCell({ label, value, kpi, period }: { label: string; value: string; kpi?: Kpi; period?: string }) {
-  const delta = kpi ? formatDelta(kpi.delta) : null
-  return (
-    <Box minW={0} py={1}>
-      <Eyebrow>{label}</Eyebrow>
+      <Eyebrow color={selected ? 'accent.text' : undefined}>{label}</Eyebrow>
       <Text className="tnum" fontSize={{ base: '2xl', md: '3xl' }} fontWeight={600} letterSpacing="-0.03em" lineHeight={1.15} mt={1}>
-        {value}
+        {formatCount(value)}
       </Text>
-      {kpi ? (
-        <Text className="tnum" fontSize="xs" color="page.fg-secondary" mt={0.5}>
-          {delta ? (
-            <>
-              <Box as="span" aria-hidden mr={1}>
-                {kpi.delta !== null && kpi.delta > 0 ? '↑' : kpi.delta !== null && kpi.delta < 0 ? '↓' : '→'}
-              </Box>
-              {delta} vs {period}
-            </>
-          ) : (
-            `No data for ${period} to compare`
-          )}
-        </Text>
-      ) : null}
+      <Text className="tnum" fontSize="xs" color="page.fg-secondary" mt={0.5}>
+        {delta && kpi.delta !== null ? (
+          <>
+            <Box as="span" aria-hidden mr={1}>
+              {kpi.delta > 0 ? '↑' : kpi.delta < 0 ? '↓' : '→'}
+            </Box>
+            {delta} vs {previous}
+          </>
+        ) : comparable && kpi.previous === 0 && value > 0 ? (
+          `New — none in ${previous}`
+        ) : (
+          `No data for ${previous} to compare`
+        )}
+      </Text>
     </Box>
   )
 }
-
-function useElementWidth<T extends HTMLElement>(): [React.RefObject<T>, number] {
-  const ref = useRef<T>(null)
-  const [width, setWidth] = useState(0)
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    setWidth(el.clientWidth)
-    if (typeof ResizeObserver === 'undefined') return
-    const ro = new ResizeObserver((entries) => setWidth(Math.floor(entries[0].contentRect.width)))
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
-  return [ref, width]
-}
-
-// ── Area chart ────────────────────────────────────────────────────────────
-
-const CHART_H = 220
-const PAD = { top: 14, right: 12, bottom: 26, left: 40 }
-
-function AreaChart({ series, bucket }: { series: SeriesPoint[]; bucket: 'day' | 'month' }) {
-  const [wrapRef, width] = useElementWidth<HTMLDivElement>()
-  const [active, setActive] = useState<number | null>(null)
-  const [focusIndex, setFocusIndex] = useState(series.length - 1)
-  const pointRefs = useRef<Array<SVGGElement | null>>([])
-  const titleId = useId()
-
-  useEffect(() => {
-    setActive(null)
-    setFocusIndex(series.length - 1)
-  }, [series])
-
-  const innerW = Math.max(0, width - PAD.left - PAD.right)
-  const innerH = CHART_H - PAD.top - PAD.bottom
-  const max = niceMax(Math.max(0, ...series.map((p) => Math.max(p.views, p.visitors))))
-  const n = series.length
-  const x = (i: number) => PAD.left + (n <= 1 ? innerW / 2 : (i / (n - 1)) * innerW)
-  const y = (v: number) => PAD.top + innerH - (v / max) * innerH
-  const baseline = PAD.top + innerH
-
-  const line = (key: 'views' | 'visitors') => series.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p[key]).toFixed(1)}`).join('')
-  const viewsLine = line('views')
-  const area = n ? `${viewsLine}L${x(n - 1).toFixed(1)},${baseline}L${x(0).toFixed(1)},${baseline}Z` : ''
-  const ticks = [0, max / 2, max]
-  const labelEvery = Math.max(1, Math.ceil(n / Math.max(2, Math.floor(innerW / 64))))
-
-  const describe = (p: SeriesPoint) =>
-    `${formatBucket(p.key)}: ${formatCount(p.views)} view${p.views === 1 ? '' : 's'}, ${formatCount(p.visitors)} visitor${p.visitors === 1 ? '' : 's'}`
-
-  const onPointerMove = (e: React.PointerEvent<SVGRectElement>) => {
-    if (!n || innerW <= 0) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    const rel = (e.clientX - rect.left) / Math.max(1, rect.width)
-    setActive(Math.min(n - 1, Math.max(0, Math.round(rel * (n - 1)))))
-  }
-
-  const onPointKeyDown = (e: React.KeyboardEvent, i: number) => {
-    let next = -1
-    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') next = Math.min(n - 1, i + 1)
-    else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') next = Math.max(0, i - 1)
-    else if (e.key === 'Home') next = 0
-    else if (e.key === 'End') next = n - 1
-    if (next < 0) return
-    e.preventDefault()
-    setFocusIndex(next)
-    setActive(next)
-    pointRefs.current[next]?.focus()
-  }
-
-  const shown = active !== null ? series[active] : null
-  const tooltipLeft = active !== null ? Math.min(Math.max(x(active), 80), Math.max(80, width - 80)) : 0
-
-  return (
-    <Box as="figure" m={0} aria-labelledby={titleId}>
-      <Text as="figcaption" id={titleId} srOnly>
-        Views and visitors per {bucket}. Use the arrow keys on a point to move between {bucket}s.
-      </Text>
-      <Box
-        ref={wrapRef}
-        position="relative"
-        h={`${CHART_H}px`}
-        sx={{
-          '@media (forced-colors: active)': {
-            '.chart-area': { fill: 'none' },
-            '.chart-views, .chart-crosshair': { stroke: 'CanvasText' },
-            '.chart-visitors': { stroke: 'GrayText' },
-            '.chart-dot': { fill: 'CanvasText', stroke: 'Canvas' },
-          },
-        }}
-      >
-        {width > 0 ? (
-          <svg width={width} height={CHART_H} role="group" aria-label={`Views and visitors per ${bucket}`}>
-            {ticks.map((t) => (
-              <g key={t} aria-hidden>
-                <line
-                  x1={PAD.left}
-                  x2={width - PAD.right}
-                  y1={y(t)}
-                  y2={y(t)}
-                  stroke="var(--chakra-colors-page-border)"
-                  strokeDasharray={t === 0 ? undefined : '2 4'}
-                />
-                <text
-                  x={PAD.left - 8}
-                  y={y(t)}
-                  dy="0.32em"
-                  textAnchor="end"
-                  fontSize="10"
-                  fontFamily={MONO}
-                  fill="var(--chakra-colors-page-fg-secondary)"
-                  className="tnum"
-                >
-                  {formatCompact(t)}
-                </text>
-              </g>
-            ))}
-            {series.map((p, i) =>
-              i % labelEvery === 0 || i === n - 1 ? (
-                <text
-                  key={p.key}
-                  aria-hidden
-                  x={x(i)}
-                  y={CHART_H - 8}
-                  textAnchor={i === 0 && n > 1 ? 'start' : i === n - 1 && n > 1 ? 'end' : 'middle'}
-                  fontSize="10"
-                  fontFamily={MONO}
-                  fill="var(--chakra-colors-page-fg-secondary)"
-                >
-                  {formatBucket(p.key)}
-                </text>
-              ) : null,
-            )}
-            <path className="chart-area" d={area} fill="var(--accent-soft)" aria-hidden />
-            <path
-              className="chart-visitors"
-              d={line('visitors')}
-              fill="none"
-              stroke="var(--chakra-colors-page-fg-secondary)"
-              strokeWidth={1.25}
-              strokeDasharray="4 3"
-              aria-hidden
-            />
-            <path className="chart-views" d={viewsLine} fill="none" stroke="var(--accent)" strokeWidth={2} strokeLinejoin="round" aria-hidden />
-            {active !== null ? (
-              <line
-                className="chart-crosshair"
-                x1={x(active)}
-                x2={x(active)}
-                y1={PAD.top}
-                y2={baseline}
-                stroke="var(--chakra-colors-page-border-strong)"
-                aria-hidden
-              />
-            ) : null}
-            <rect
-              x={PAD.left}
-              y={PAD.top}
-              width={innerW}
-              height={innerH}
-              fill="transparent"
-              onPointerMove={onPointerMove}
-              onPointerLeave={() => setActive(null)}
-              aria-hidden
-            />
-            {series.map((p, i) => (
-              <g
-                key={p.key}
-                ref={(el) => {
-                  pointRefs.current[i] = el
-                }}
-                tabIndex={i === focusIndex ? 0 : -1}
-                role="img"
-                aria-label={describe(p)}
-                onFocus={() => {
-                  setFocusIndex(i)
-                  setActive(i)
-                }}
-                onBlur={() => setActive(null)}
-                onKeyDown={(e) => onPointKeyDown(e, i)}
-                style={{ outline: 'none' }}
-              >
-                <circle cx={x(i)} cy={y(p.views)} r={10} fill="transparent" />
-                <circle
-                  className="chart-dot"
-                  cx={x(i)}
-                  cy={y(p.views)}
-                  r={active === i ? 4 : n <= 31 ? 2.5 : 0}
-                  fill="var(--accent)"
-                  stroke="var(--chakra-colors-page-bg)"
-                  strokeWidth={1.5}
-                />
-                {active === i ? (
-                  <circle className="chart-crosshair" cx={x(i)} cy={y(p.views)} r={7} fill="none" stroke="var(--accent)" strokeWidth={2} />
-                ) : null}
-              </g>
-            ))}
-          </svg>
-        ) : null}
-        {shown ? (
-          <Box
-            aria-hidden
-            position="absolute"
-            top={0}
-            left={`${tooltipLeft}px`}
-            transform="translateX(-50%)"
-            pointerEvents="none"
-            px={2.5}
-            py={1.5}
-            borderRadius="md"
-            border="1px solid"
-            borderColor="page.border"
-            bg="page.bg-elevated"
-            boxShadow="sm"
-            whiteSpace="nowrap"
-            className="tnum"
-          >
-            <Text fontFamily={MONO} fontSize="10px" color="page.fg-secondary">
-              {formatBucket(shown.key)}
-            </Text>
-            <Text fontSize="xs" fontWeight={600}>
-              {formatCount(shown.views)} views · {formatCount(shown.visitors)} visitors
-            </Text>
-          </Box>
-        ) : null}
-      </Box>
-      <HStack spacing={4} mt={2} fontSize="xs" color="page.fg-secondary" aria-hidden>
-        <HStack spacing={1.5}>
-          <Box w="14px" h="2px" bg="var(--accent)" />
-          <Text>Views</Text>
-        </HStack>
-        <HStack spacing={1.5}>
-          <Box w="14px" h="0" borderTop="1.5px dashed" borderColor="page.fg-secondary" />
-          <Text>Visitors</Text>
-        </HStack>
-      </HStack>
-    </Box>
-  )
-}
-
-// ── Tables ────────────────────────────────────────────────────────────────
 
 function HairlineTable({ caption, children }: { caption: string; children: React.ReactNode }) {
   const [ref, region] = useScrollRegion(caption)
@@ -405,61 +161,6 @@ function HairlineTable({ caption, children }: { caption: string; children: React
         {children}
       </Table>
     </TableContainer>
-  )
-}
-
-function RankCard({
-  title,
-  keyLabel,
-  rows,
-  showViews,
-  renderKey,
-  empty,
-}: {
-  title: string
-  keyLabel: string
-  rows: CountRow[]
-  showViews?: boolean
-  renderKey?: (key: string) => React.ReactNode
-  empty: string
-}) {
-  const total = rows.reduce((n, r) => n + r.visitors, 0)
-  return (
-    <Panel minW={0}>
-      <Text as="h3" fontSize="sm" fontWeight={600} mb={3}>
-        {title}
-      </Text>
-      {rows.length ? (
-        <HairlineTable caption={title}>
-          <Thead>
-            <Tr>
-              <Th>{keyLabel}</Th>
-              <Th isNumeric>Visitors</Th>
-              {showViews ? <Th isNumeric>Views</Th> : <Th isNumeric>Share</Th>}
-            </Tr>
-          </Thead>
-          <Tbody>
-            {rows.map((r) => (
-              <Tr key={r.key}>
-                <Td fontSize="xs" maxW={{ base: '160px', md: '260px' }} overflow="hidden" textOverflow="ellipsis" title={r.key}>
-                  {renderKey ? renderKey(r.key) : r.key}
-                </Td>
-                <Td isNumeric fontSize="xs">
-                  {formatCount(r.visitors)}
-                </Td>
-                <Td isNumeric fontSize="xs" color={showViews ? undefined : 'page.fg-secondary'}>
-                  {showViews ? formatCount(r.views || 0) : total ? `${Math.round((r.visitors / total) * 100)}%` : '—'}
-                </Td>
-              </Tr>
-            ))}
-          </Tbody>
-        </HairlineTable>
-      ) : (
-        <Text fontSize="sm" color="page.fg-secondary">
-          {empty}
-        </Text>
-      )}
-    </Panel>
   )
 }
 
@@ -533,27 +234,93 @@ function VitalsTable({ entries }: { entries: VitalP75[] }) {
   )
 }
 
+function WindowToggle({ value, onChange }: { value: '7d' | '28d'; onChange: (v: '7d' | '28d') => void }) {
+  return (
+    <HStack role="group" aria-label="Web Vitals window" spacing={0.5} p={0.5} border="1px solid" borderColor="page.border" borderRadius="lg" bg="page.bg-elevated">
+      {(['7d', '28d'] as const).map((k) => {
+        const active = k === value
+        return (
+          <Button
+            key={k}
+            size="xs"
+            minH="28px"
+            px={2.5}
+            variant="ghost"
+            aria-pressed={active}
+            onClick={() => onChange(k)}
+            fontFamily={MONO}
+            fontWeight={active ? 600 : 400}
+            fontSize="11px"
+            bg={active ? 'page.bg' : 'transparent'}
+            color={active ? 'page.fg' : 'page.fg-secondary'}
+            boxShadow={active ? '0 0 0 1px var(--chakra-colors-page-border)' : 'none'}
+            _hover={{ color: 'page.fg', bg: active ? 'page.bg' : 'page.hover' }}
+          >
+            {k === '7d' ? '7 days' : '28 days'}
+          </Button>
+        )
+      })}
+    </HStack>
+  )
+}
+
+function Note({ children }: { children: React.ReactNode }) {
+  return (
+    <Flex gap={2} align="flex-start" fontSize="sm" color="page.fg-secondary" mb={4} px={3} py={2.5} borderRadius="md" border="1px solid" borderColor="page.border" bg="page.bg-elevated" role="status" data-explore-note="">
+      <Icon as={FaInfoCircle} aria-hidden mt="3px" flexShrink={0} color="accent.text" />
+      <Box>{children}</Box>
+    </Flex>
+  )
+}
+
 const capitalize = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s)
 
 // ── Panel ─────────────────────────────────────────────────────────────────
 
 export default function AnalyticsPanel() {
-  const [range, setRange] = useState<AnalyticsRange>('30d')
+  const router = useRouter()
+  const urlQuery = useMemo(() => parseExploreQuery(router.query), [router.query])
+  // The view just chosen, until the URL has caught up (a shallow replace is
+  // not synchronous): controls answer at once, and Back / Forward still win.
+  const [pending, setPending] = useState<ExploreQuery | null>(null)
+  useEffect(() => setPending(null), [router.query])
+  const query = pending ?? urlQuery
+  const search = exploreSearch(query)
+  const [metric, setMetric] = useState<ChartMetric>('visitors')
   const [vitalsWindow, setVitalsWindow] = useState<'7d' | '28d'>('28d')
-  const [report, setReport] = useState<AnalyticsReport | null>(null)
+  const [source, setSource] = useState('')
+  const [goal, setGoal] = useState<GoalName>('cv_download')
+  const [report, setReport] = useState<ExploreReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [refreshToken, setRefreshToken] = useState(0)
   const requestRef = useRef<AbortController | null>(null)
 
-  const load = useCallback(async (which: AnalyticsRange) => {
+  const setQuery = useCallback(
+    (next: ExploreQuery) => {
+      const rest: Record<string, string | string[]> = {}
+      for (const [k, v] of Object.entries(router.query)) {
+        if (v !== undefined && !(EXPLORE_PARAM_KEYS as readonly string[]).includes(k)) rest[k] = v
+      }
+      const own: Record<string, string | string[]> = {}
+      for (const [k, v] of exploreParams(next)) {
+        const cur = own[k]
+        own[k] = cur === undefined ? v : Array.isArray(cur) ? [...cur, v] : [cur, v]
+      }
+      setPending(next)
+      void router.replace({ pathname: router.pathname, query: { ...rest, ...own } }, undefined, { shallow: true, scroll: false })
+    },
+    [router],
+  )
+
+  const load = useCallback(async (qs: string) => {
     requestRef.current?.abort()
     const controller = new AbortController()
     requestRef.current = controller
     setLoading(true)
     setErr(null)
     try {
-      const res = await fetch(`/api/admin/analytics?range=${which}`, { cache: 'no-store', signal: controller.signal })
+      const res = await fetch(`/api/admin/analytics?${qs}`, { cache: 'no-store', signal: controller.signal })
       const json = await readJsonObject(res)
       if (res.status === 401) throw new Error('Session expired — sign in again.')
       if (!res.ok) throw new Error(typeof json.error === 'string' ? json.error : `HTTP ${res.status}`)
@@ -571,19 +338,46 @@ export default function AnalyticsPanel() {
   }, [])
 
   useEffect(() => {
-    void load(range)
-  }, [load, range])
+    if (!router.isReady) return
+    void load(search)
+  }, [load, search, refreshToken, router.isReady])
 
   useEffect(() => () => requestRef.current?.abort(), [])
 
-  const period = PERIOD_LABEL[range]
-  const hasViews = !!report && report.kpis.views.value > 0
-  const vitals = report ? report.vitals[vitalsWindow] : []
+  const addFilter = useCallback((dim: ExploreDimension, value: string) => setQuery({ ...query, filters: withFilter(query.filters, { dim, op: 'is', value }) }), [query, setQuery])
+  const refresh = useCallback(() => setRefreshToken((n) => n + 1), [])
+
+  // ⌘K: this view's actions.
+  useAdminCommands(
+    'analytics',
+    [
+      { id: 'compare', label: query.compare ? 'Analytics: stop comparing' : 'Analytics: compare with the previous period', keywords: 'compare previous period chart', run: () => setQuery({ ...query, compare: !query.compare }) },
+      ...(query.filters.length ? [{ id: 'clear', label: 'Analytics: clear the filters', hint: `${query.filters.length} active`, keywords: 'filter reset remove', run: () => setQuery({ ...query, filters: [] }) }] : []),
+      {
+        id: 'export',
+        label: 'Analytics: export this view (.zip of CSV)',
+        keywords: 'csv download export spreadsheet',
+        run: () => {
+          window.location.assign(`/api/admin/analytics/export?${exploreSearch(query, [...(source ? ([['source', source]] as Array<[string, string]>) : []), ['goal', goal], ['table', 'all']])}`)
+        },
+      },
+    ],
+    `${search}|${source}|${goal}`,
+  )
+
+  const exportExtra = useMemo<Array<[string, string]>>(() => [...(source ? ([['source', source]] as Array<[string, string]>) : []), ['goal', goal]], [source, goal])
+  const active = (dim: ExploreDimension) => query.filters.find((f) => f.dim === dim)
+  const r = report
+  const previous = r && r.mode === 'raw' && r.window.clipped ? `the previous ${r.window.days} days` : previousPhrase(query)
+  const vitals = r ? r.vitals[vitalsWindow] : []
+  const hasData = !!r && r.series.some((p) => p.views > 0)
+  const ignoredByVitals = r ? query.filters.filter((f) => !r.vitalsScope.includes(f.dim)).map((f) => DIMENSION_LABEL[f.dim].toLowerCase()) : []
+  const windowText = r && !r.window.empty ? formatSpanWithYear(r.window) : ''
 
   return (
     <Box>
       <Flex justify="space-between" align={{ base: 'stretch', md: 'flex-end' }} mb={5} flexWrap="wrap" gap={4}>
-        <Box maxW="62ch">
+        <Box maxW="66ch">
           <Eyebrow accent color="accent.text">
             [analytics]
           </Eyebrow>
@@ -591,34 +385,13 @@ export default function AnalyticsPanel() {
             Analytics
           </Text>
           <Text fontSize="sm" color="page.fg-secondary" mt={1}>
-            First-party and cookieless. IP addresses and user agents are never stored; visitors are counted
-            with a hash that changes every day. Do Not Track, Global Privacy Control, bots and your own
-            visits are not recorded.
+            First-party and cookieless. IP addresses and user agents are never stored; visitors are counted with a hash that changes every day. Do Not Track,
+            Global Privacy Control, bots and your own visits are not recorded. Click any name in a table to filter the whole page by it.
           </Text>
         </Box>
-        <HStack spacing={2} flexWrap="wrap">
-          <ToggleGroup
-            label="Period"
-            options={ANALYTICS_RANGES.map((r) => ({ key: r, label: RANGE_LABEL[r] }))}
-            value={range}
-            onChange={setRange}
-          />
-          <Button
-            size="sm"
-            leftIcon={<Icon as={FaSync} aria-hidden />}
-            onClick={() => {
-              void load(range)
-              setRefreshToken((n) => n + 1)
-            }}
-            isLoading={loading}
-            loadingText="Loading"
-            variant="ghost"
-            color="page.fg-secondary"
-          >
-            Refresh
-          </Button>
-        </HStack>
       </Flex>
+
+      <ExploreBar query={query} onChange={setQuery} onRefresh={refresh} loading={loading} exportExtra={exportExtra} />
 
       {err ? (
         <Alert status="error" variant="left-accent" borderRadius="md" mb={4} bg="page.bg-elevated" role="alert">
@@ -627,97 +400,146 @@ export default function AnalyticsPanel() {
         </Alert>
       ) : null}
 
-      {!report && loading ? (
+      {r && r.mode === 'raw' && r.window.empty ? (
+        <Note>
+          This period ended before the detailed records begin ({formatBucket(r.rawFrom)}): filters need them, and they are kept {EXPLORE_RAW_DAYS} days. Remove the
+          filters to see the period&rsquo;s daily totals.
+        </Note>
+      ) : r && r.mode === 'raw' && r.window.clipped ? (
+        <Note>
+          Filtered views use the detailed records, kept {EXPLORE_RAW_DAYS} days: showing <strong>{windowText}</strong> of {periodLabel(query, r.period).toLowerCase()}.
+          Without filters, the whole period comes from the daily totals.
+        </Note>
+      ) : null}
+
+      {!r && loading ? (
         <Box aria-busy="true" aria-label="Loading analytics">
           <Skeleton h="96px" borderRadius="xl" mb={4} />
           <Skeleton h="280px" borderRadius="xl" />
         </Box>
       ) : null}
 
-      {report ? (
-        <Box aria-busy={loading} opacity={loading ? 0.7 : 1}>
+      {r ? (
+        <Box aria-busy={loading} opacity={loading ? 0.7 : 1} transition="opacity var(--duration-fast)">
+          {r.page ? <PageDetailCard page={r.page} visitors={r.kpis.visitors} vitals={r.vitals['28d']} windowLabel={windowText || formatSpanWithYear(r.period)} /> : null}
+
           <Panel mb={4}>
-            <SimpleGrid columns={{ base: 1, sm: 3 }} spacing={{ base: 3, md: 6 }} mb={5}>
-              <KpiCell label="Views" value={formatCount(report.kpis.views.value)} kpi={report.kpis.views} period={period} />
-              <KpiCell label="Visitors" value={formatCount(report.kpis.visitors.value)} kpi={report.kpis.visitors} period={period} />
-              <Box minW={0} py={1}>
+            <SimpleGrid role="group" aria-label="Chart metric" columns={{ base: 2, sm: 3 }} spacingX={{ base: 6, md: 6 }} spacingY={2} mb={5}>
+              <MetricTab label="Visitors" value={r.kpis.visitors.value} kpi={r.kpis.visitors} previous={previous} selected={metric === 'visitors'} onSelect={() => setMetric('visitors')} comparable={r.previous.available} />
+              <MetricTab label="Views" value={r.kpis.views.value} kpi={r.kpis.views} previous={previous} selected={metric === 'views'} onSelect={() => setMetric('views')} comparable={r.previous.available} />
+              <Box minW={0} py={2}>
                 <Eyebrow>Live</Eyebrow>
                 <Text className="tnum" fontSize={{ base: '2xl', md: '3xl' }} fontWeight={600} letterSpacing="-0.03em" lineHeight={1.15} mt={1}>
-                  {formatCount(report.live)}
+                  {formatCount(r.live)}
                 </Text>
                 <Text fontSize="xs" color="page.fg-secondary" mt={0.5}>
-                  visitor{report.live === 1 ? '' : 's'} in the last 5 minutes
+                  visitor{r.live === 1 ? '' : 's'} in the last 5 minutes
                 </Text>
               </Box>
             </SimpleGrid>
-            {hasViews ? (
-              <AreaChart series={report.series} bucket={report.bucket} />
+            {hasData ? (
+              <TrendChart series={r.series} previous={r.previousSeries} bucket={r.bucket} metric={metric} annotations={r.annotations} />
             ) : (
               <Text fontSize="sm" color="page.fg-secondary" py={6} textAlign="center">
-                No page views recorded in the last {RANGE_LABEL[range]} yet.
+                {r.window.empty ? 'No detailed records for this period.' : `No page views ${query.filters.length ? 'match the filters' : 'recorded'} ${windowText ? `from ${windowText}` : 'in this period'}.`}
               </Text>
             )}
+            {query.compare && !r.previous.available && hasData ? (
+              <Text fontSize="xs" color="page.fg-secondary" mt={2}>
+                Nothing to compare with: {r.mode === 'raw' ? `the detailed records do not reach back to ${formatBucket(r.previous.from)}` : `no data for ${formatSpanWithYear(r.previous)} yet`}.
+              </Text>
+            ) : null}
           </Panel>
 
-          <GoalsSections range={range} refreshToken={refreshToken} />
+          <GoalsSections query={query} source={source} goal={goal} onSource={setSource} onGoal={setGoal} refreshToken={refreshToken} />
 
           <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4} mb={4}>
-            <RankCard title="Top pages" keyLabel="Page" rows={report.topPages} showViews empty="No page views in this period." />
             <RankCard
-              title="Referrers"
-              keyLabel="Site"
-              rows={report.referrers}
-              empty="No visits from other sites in this period."
+              title="Top pages"
+              dim="page"
+              keyLabel="Page"
+              rows={r.topPages}
+              showViews
+              active={active('page')}
+              onFilter={addFilter}
+              renderKey={(path) =>
+                r.titles[path] ? (
+                  <>
+                    <Box as="span">{r.titles[path]}</Box>
+                    <Box as="span" fontFamily={MONO} color="page.fg-secondary" ml={1.5} fontSize="11px">
+                      {path}
+                    </Box>
+                  </>
+                ) : (
+                  path
+                )
+              }
+              empty="No page views in this period."
             />
+            <RankCard title="Referrers" dim="source" keyLabel="Site" rows={r.referrers} active={active('source')} onFilter={addFilter} empty="No visits from other sites in this period." />
             <RankCard
               title="Countries"
+              dim="country"
               keyLabel="Country"
-              rows={report.countries}
+              rows={r.countries}
+              showViews
+              active={active('country')}
+              onFilter={addFilter}
               renderKey={(code) => `${countryName(code)} (${code})`}
               empty="No country information in this period."
             />
+            <RankCard title="Devices" dim="device" keyLabel="Device" rows={r.devices} showViews active={active('device')} onFilter={addFilter} renderKey={capitalize} empty="No visits in this period." />
+            <RankCard title="Browsers" dim="browser" keyLabel="Browser" rows={r.browsers} showViews active={active('browser')} onFilter={addFilter} empty="No visits in this period." />
             <RankCard
-              title="Devices"
-              keyLabel="Device"
-              rows={report.devices}
-              renderKey={capitalize}
-              empty="No visits in this period."
+              title="Page languages"
+              dim="lang"
+              keyLabel="Language"
+              rows={r.languages}
+              showViews
+              active={active('lang')}
+              onFilter={addFilter}
+              renderKey={(tag) => {
+                const name = languageName(tag)
+                return name === tag ? tag : `${name} (${tag})`
+              }}
+              empty="No page languages in this period."
+              note={
+                <>
+                  The language of the page read, not of the visitor.
+                  {r.mode === 'rollup' && r.langsSince && r.period.from < r.langsSince ? ` Counted from ${formatBucket(r.langsSince)}, ${r.langsSince.slice(0, 4)}.` : ''}
+                </>
+              }
             />
-            <RankCard title="Browsers" keyLabel="Browser" rows={report.browsers} empty="No visits in this period." />
           </SimpleGrid>
 
-          <Panel>
+          <Panel id="vitals" scrollMarginTop="96px">
             <Flex align={{ base: 'flex-start', sm: 'center' }} justify="space-between" gap={3} flexWrap="wrap" mb={3}>
               <Box>
                 <Text as="h3" fontSize="sm" fontWeight={600}>
                   Web Vitals (real users)
                 </Text>
-                <Text fontSize="xs" color="page.fg-secondary" mt={0.5} maxW="60ch">
-                  75th percentile of what visitors experienced, rated with the web.dev thresholds (LCP 2.5 s / 4 s,
-                  INP 200 ms / 500 ms, CLS 0.1 / 0.25).
+                <Text fontSize="xs" color="page.fg-secondary" mt={0.5} maxW="62ch">
+                  75th percentile of what visitors experienced, rated with the web.dev thresholds (LCP 2.5 s / 4 s, INP 200 ms / 500 ms, CLS 0.1 / 0.25).
+                  {ignoredByVitals.length
+                    ? ` Filtered by ${r.vitalsScope.length ? r.vitalsScope.map((d) => DIMENSION_LABEL[d].toLowerCase()).join(' and ') : 'nothing'} only: measurements carry the page and device class, no ${ignoredByVitals.join(', ')}.`
+                    : ''}
                 </Text>
               </Box>
-              <ToggleGroup
-                label="Web Vitals window"
-                options={[
-                  { key: '7d' as const, label: '7 days' },
-                  { key: '28d' as const, label: '28 days' },
-                ]}
-                value={vitalsWindow}
-                onChange={setVitalsWindow}
-              />
+              <WindowToggle value={vitalsWindow} onChange={setVitalsWindow} />
             </Flex>
             {vitals.length ? (
               <VitalsTable entries={vitals} />
             ) : (
               <Text fontSize="sm" color="page.fg-secondary">
-                No Web Vitals measured in the last {vitalsWindow === '7d' ? '7' : '28'} days yet.
+                No Web Vitals measured in the last {vitalsWindow === '7d' ? '7' : '28'} days{r.vitalsScope.length ? ' for these filters' : ''} yet.
               </Text>
             )}
-            {vitals.length && report.attribution ? (
-              <VitalsAttribution rows={report.attribution[vitalsWindow]} windowLabel={vitalsWindow === '7d' ? '7 days' : '28 days'} />
+            {vitals.length && r.attribution ? (
+              <VitalsAttribution rows={r.attribution[vitalsWindow]} windowLabel={vitalsWindow === '7d' ? '7 days' : '28 days'} />
             ) : null}
           </Panel>
+
+          <DigestCard />
         </Box>
       ) : null}
     </Box>

@@ -439,10 +439,13 @@ export function flushNow(now: number = Date.now()) {
   }
 }
 
+/** The page-view rollups: per path, per referrer host, per site / country / device / browser, per page language (analytics migration 7). */
+const ROLLUP_TABLES = ['daily', 'refs_daily', 'dims_daily', 'langs_daily'] as const
+
 /**
  * Fold every finished UTC day not rolled up yet into daily / refs_daily /
- * dims_daily (idempotent: a day's rollup rows are rebuilt from its raw rows),
- * then prune raw rows and old rollups. One transaction.
+ * dims_daily / langs_daily (idempotent: a day's rollup rows are rebuilt from
+ * its raw rows), then prune raw rows and old rollups. One transaction.
  */
 export function rollup(today: string) {
   const db = getAnalyticsDb()
@@ -456,7 +459,7 @@ export function rollup(today: string) {
 
   db.transaction(() => {
     for (const day of days) {
-      for (const table of ['daily', 'refs_daily', 'dims_daily']) db.prepare(`DELETE FROM ${table} WHERE day = ?`).run(day)
+      for (const table of ROLLUP_TABLES) db.prepare(`DELETE FROM ${table} WHERE day = ?`).run(day)
       db.prepare(
         `INSERT INTO daily (day, path, views, visitors)
          SELECT day, path, count(*), count(DISTINCT visitor) FROM hits WHERE day = ? GROUP BY path`,
@@ -476,6 +479,10 @@ export function rollup(today: string) {
            WHERE day = ? AND ${kind} IS NOT NULL GROUP BY ${kind}`,
         ).run(day)
       }
+      db.prepare(
+        `INSERT INTO langs_daily (day, lang, views, visitors)
+         SELECT day, lang, count(*), count(DISTINCT visitor) FROM hits WHERE day = ? AND lang IS NOT NULL GROUP BY lang`,
+      ).run(day)
     }
     if (!rolled || yesterday > rolled) {
       db.prepare(
@@ -485,7 +492,7 @@ export function rollup(today: string) {
     }
     db.prepare('DELETE FROM hits WHERE day < ?').run(dayMinus(today, RAW_HITS_DAYS))
     db.prepare('DELETE FROM vitals WHERE day < ?').run(dayMinus(today, RAW_VITALS_DAYS))
-    for (const table of ['daily', 'refs_daily', 'dims_daily']) {
+    for (const table of ROLLUP_TABLES) {
       db.prepare(`DELETE FROM ${table} WHERE day < ?`).run(dayMinus(today, ROLLUP_DAYS))
     }
   })()

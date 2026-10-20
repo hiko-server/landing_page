@@ -231,6 +231,37 @@ export type GoalsFunnel = {
 
 export type EmptySearchRow = { query: string; visitors: number; events: number; lastSeen: string }
 
+/** The goals a conversion path can end in (search_empty is not a goal anyone reaches). */
+export const PATH_GOALS: readonly GoalName[] = GOAL_TABLE_ORDER
+
+/** Where a visitor-day came from before its first page view: no referrer (typed, bookmarked, an app that sends none). */
+export const NO_REFERRER = '(none)'
+
+export type ConversionPath = {
+  /** Referrer host of the day's first page view, or NO_REFERRER. */
+  source: string
+  /** Pages viewed before the goal, in order, repeats merged; '…' stands for the middle of a long path. */
+  pages: string[]
+  /** Visitor-days that took this path to the goal. */
+  visitors: number
+}
+
+export type ConversionPaths = {
+  goal: GoalName
+  /** Raw window used (≤ 35 days, like the conversion). */
+  from: string
+  to: string
+  days: number
+  /** Visitor-days that reached the goal in the window. */
+  total: number
+  /** The most common paths (at most 10). */
+  paths: ConversionPath[]
+  /** Visitor-days on other, rarer paths. */
+  other: number
+  /** Visitor-days that reached the goal without any page view before it that day (a direct link to a CV file, a vCard). */
+  noPageView: number
+}
+
 export type GoalsReport = {
   range: string
   from: string
@@ -244,5 +275,10 @@ export type GoalsReport = {
   goals: GoalRow[]
   funnel: GoalsFunnel
   searches: { from: string; to: string; days: number; rows: EmptySearchRow[] }
+  /** How visitors reached one goal (GET /api/admin/goals?goal=…; cv_download by default). */
+  paths?: ConversionPaths
+  /** 'raw' when filters apply: every number comes from the detailed records of `window` (lib/analytics/explore). */
+  mode?: 'rollup' | 'raw'
+  window?: { from: string; to: string; days: number; clipped: boolean }
   generatedAt: number
 }

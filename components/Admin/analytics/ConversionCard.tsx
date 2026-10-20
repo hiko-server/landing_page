@@ -17,10 +17,13 @@ export default function ConversionCard({
   rangeDays,
   onSource,
   busy,
+  filtered = false,
 }: {
   funnel: GoalsFunnel
   /** Days of the selected period (the window is shorter when the period reaches past the raw data). */
   rangeDays: number
+  /** The view is filtered: only the visitor-days with a matching page view count. */
+  filtered?: boolean
   onSource: (source: string) => void
   busy: boolean
 }) {
@@ -54,6 +57,7 @@ export default function ConversionCard({
       >
         Per visitor-day, in order: arrived, then opened /cv or /cv/zh, then downloaded a CV file. {formatSpan(funnel.from, funnel.to)}
         {clipped ? ` — the last ${funnel.days} days only: linking the steps needs the daily visitor hash, which is kept with the raw data for 35 days.` : '.'}
+        {filtered ? ' Filtered: only visitor-days with a page view matching the filters.' : ''}
       </SectionHead>
 
       {!first || first.visitors === 0 ? (

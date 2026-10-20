@@ -22,7 +22,9 @@ import { logMigrationReport } from '../dbMigrations'
  *   daily      per day × path: views, unique visitors     ┐ rolled up from the
  *   refs_daily per day × referrer host: unique visitors   │ raw rows once a UTC
  *   dims_daily per day × (site | country | device |       │ day is over; kept
- *              browser) value: views, unique visitors     ┘ 400 days
+ *              browser) value: views, unique visitors     │ 400 days
+ *   langs_daily per day × page language: views, unique    │ (analytics
+ *              visitors                                   ┘ migration 7)
  *   events     raw goal events, kept 35 days (lib/analytics/events): an
  *              allow-listed name, at most one bounded property, the same
  *              daily visitor hash as `hits`

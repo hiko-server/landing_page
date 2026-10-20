@@ -4,48 +4,60 @@ import { readJsonObject } from '../shell/http'
 import { Panel } from '../shell/ui'
 import { formatCount } from '../../../lib/analytics/format'
 import { isGoalsReport } from '../../../lib/analytics/goalsFormat'
-import type { AnalyticsRange } from '../../../lib/analytics/shared'
-import type { GoalsReport } from '../../../lib/analytics/eventsShared'
+import { utcDay } from '../../../lib/analytics/shared'
+import { exploreSearch, resolvePeriod, spanDays, type ExploreQuery } from '../../../lib/analytics/exploreShared'
+import { periodPhrase, previousPhrase } from '../../../lib/analytics/exploreFormat'
+import type { GoalName, GoalsReport } from '../../../lib/analytics/eventsShared'
 import GoalsTable from './GoalsTable'
 import ConversionCard from './ConversionCard'
+import PathsCard from './PathsCard'
 import EmptySearchesCard from './EmptySearchesCard'
 import { SectionHead } from './ui'
 
 /**
- * Admin → Analytics → goal events (H9, GET /api/admin/goals): the Goals
- * table, the Source → CV → Download conversion and the ⌘K searches that
- * found nothing. Follows the panel's period; `refreshToken` changes when the
+ * Admin → Analytics → goal events (H9, H10; GET /api/admin/goals): the
+ * Goals table, the Source → CV → Download conversion, the paths to a goal
+ * and the ⌘K searches that found nothing — for the panel's view (period,
+ * comparison, filters). The conversion's source and the paths' goal are the
+ * panel's state (the export uses them too); `refreshToken` changes when the
  * panel's Refresh button is pressed.
  */
-
-const RANGE_LABEL: Record<AnalyticsRange, string> = { '7d': '7 days', '30d': '30 days', '12m': '12 months' }
-const RANGE_DAYS: Record<AnalyticsRange, number> = { '7d': 7, '30d': 30, '12m': 365 }
-const PERIOD_LABEL: Record<AnalyticsRange, string> = {
-  '7d': 'the previous 7 days',
-  '30d': 'the previous 30 days',
-  '12m': 'the previous 12 months',
-}
 
 const errText = (e: unknown) =>
   e instanceof Error ? (e.message === 'Failed to fetch' ? 'Network error' : e.message) : String(e)
 
-export default function GoalsSections({ range, refreshToken }: { range: AnalyticsRange; refreshToken: number }) {
-  const [source, setSource] = useState('')
+export default function GoalsSections({
+  query,
+  source,
+  goal,
+  onSource,
+  onGoal,
+  refreshToken,
+}: {
+  query: ExploreQuery
+  source: string
+  goal: GoalName
+  onSource: (source: string) => void
+  onGoal: (goal: GoalName) => void
+  refreshToken: number
+}) {
   const [report, setReport] = useState<GoalsReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const requestRef = useRef<AbortController | null>(null)
   const headingId = useId()
+  const search = exploreSearch(query, [
+    ...(source ? ([['source', source]] as Array<[string, string]>) : []),
+    ['goal', goal],
+  ])
 
-  const load = useCallback(async (which: AnalyticsRange, from: string) => {
+  const load = useCallback(async (qs: string) => {
     requestRef.current?.abort()
     const controller = new AbortController()
     requestRef.current = controller
     setLoading(true)
     setErr(null)
     try {
-      const qs = new URLSearchParams({ range: which })
-      if (from) qs.set('source', from)
       const res = await fetch(`/api/admin/goals?${qs}`, { cache: 'no-store', signal: controller.signal })
       const json = await readJsonObject(res)
       if (res.status === 401) throw new Error('Session expired — sign in again.')
@@ -64,8 +76,8 @@ export default function GoalsSections({ range, refreshToken }: { range: Analytic
   }, [])
 
   useEffect(() => {
-    void load(range, source)
-  }, [load, range, source, refreshToken])
+    void load(search)
+  }, [load, search, refreshToken])
 
   useEffect(() => () => requestRef.current?.abort(), [])
 
@@ -90,8 +102,13 @@ export default function GoalsSections({ range, refreshToken }: { range: Analytic
     )
   }
 
+  const filtered = report.mode === 'raw'
+  const span = report.window ?? { from: report.from, to: report.to, days: 0, clipped: false }
+  const when = periodPhrase(query, span, !!report.window?.clipped)
+  const periodDays = spanDays(resolvePeriod(query, utcDay(report.generatedAt)))
+
   return (
-    <Box aria-busy={loading} opacity={loading ? 0.7 : 1} mb={4} data-goals="">
+    <Box aria-busy={loading} opacity={loading ? 0.7 : 1} transition="opacity var(--duration-fast)" mb={4} data-goals="">
       {err ? (
         <Alert status="error" variant="left-accent" borderRadius="md" mb={4} bg="page.bg-elevated" role="alert">
           <AlertIcon />
@@ -104,19 +121,43 @@ export default function GoalsSections({ range, refreshToken }: { range: Analytic
           title="Goals"
           aside={
             <Text fontSize="xs" color="page.fg-secondary" className="tnum" alignSelf={{ sm: 'flex-end' }}>
-              Site: {formatCount(report.siteVisitors)} visitor-day{report.siteVisitors === 1 ? '' : 's'}
+              {filtered ? 'Matching' : 'Site'}: {formatCount(report.siteVisitors)} visitor-day{report.siteVisitors === 1 ? '' : 's'}
             </Text>
           }
         >
           Counted without cookies or identifiers. A visitor-day is one visitor on one UTC day — the visitor hash changes daily, so
-          someone who comes back on another day counts again. Conversion rate: a goal&rsquo;s visitor-days ÷ the site&rsquo;s.
+          someone who comes back on another day counts again. Conversion rate: a goal&rsquo;s visitor-days ÷ the {filtered ? 'matching' : 'site’s'}
+          {filtered ? ' visitor-days (those with a page view that matches the filters)' : ''}.
         </SectionHead>
-        <GoalsTable goals={report.goals} comparable={report.comparable} period={PERIOD_LABEL[range]} rangeLabel={RANGE_LABEL[range]} since={report.since} />
+        <GoalsTable
+          goals={report.goals}
+          comparable={report.comparable}
+          period={report.window?.clipped ? `the previous ${report.window.days} days` : previousPhrase(query)}
+          when={when}
+          since={report.since}
+        />
       </Panel>
-      <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4} alignItems="start">
-        <ConversionCard funnel={report.funnel} rangeDays={RANGE_DAYS[range]} onSource={setSource} busy={loading} />
-        <EmptySearchesCard searches={report.searches} />
-      </SimpleGrid>
+      {/* Two columns from lg: the conversion with the searches under it, the paths beside both. */}
+      <Box
+        display="grid"
+        gap={4}
+        alignItems="start"
+        gridTemplateColumns={{ base: 'minmax(0, 1fr)', lg: 'repeat(2, minmax(0, 1fr))' }}
+        gridTemplateRows={{ lg: 'auto 1fr' }}
+        gridTemplateAreas={{ base: '"conversion" "paths" "searches"', lg: '"conversion paths" "searches paths"' }}
+      >
+        <Box gridArea="conversion" minW={0}>
+          <ConversionCard funnel={report.funnel} rangeDays={periodDays} onSource={onSource} busy={loading} filtered={filtered} />
+        </Box>
+        {report.paths ? (
+          <Box gridArea="paths" minW={0}>
+            <PathsCard paths={report.paths} onGoal={onGoal} busy={loading} />
+          </Box>
+        ) : null}
+        <Box gridArea="searches" minW={0}>
+          <EmptySearchesCard searches={report.searches} />
+        </Box>
+      </Box>
     </Box>
   )
 }

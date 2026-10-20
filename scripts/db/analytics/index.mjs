@@ -8,6 +8,7 @@ import errors from './003-errors.mjs'
 import restoreDrills from './004-restore-drills.mjs'
 import vitalsAttribution from './005-vitals-attribution.mjs'
 import events from './006-events.mjs'
+import explore from './007-explore.mjs'
 
 /** @type {readonly import('../migrate.mjs').Migration[]} */
-export const ANALYTICS_MIGRATIONS = Object.freeze([baseline, vitalsKey, errors, restoreDrills, vitalsAttribution, events])
+export const ANALYTICS_MIGRATIONS = Object.freeze([baseline, vitalsKey, errors, restoreDrills, vitalsAttribution, events, explore])
