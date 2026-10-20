@@ -140,8 +140,21 @@ async function shoot(page: Page, name: string) {
   await page.screenshot({ path: `${SHOTS}/${name}-${SHOT_THEME}.png`, fullPage: false })
 }
 
+/**
+ * Each test is its own client (a TEST-NET-1 address in cf-connecting-ip,
+ * believed from a loopback peer like Cloudflare's): saves are limited per
+ * client (30 per 10 minutes, lib/mdx-admin.ts), and these drafts would
+ * otherwise spend the budget the rest of the admin suite writes with.
+ */
+let clients = 0
+const clientHeaders = () => ({ 'cf-connecting-ip': `192.0.2.${(clients++ % 250) + 1}` })
+
 test.describe('editor-parity', { tag: '@admin' }, () => {
   test.skip(!ADMIN.email || !ADMIN.password, 'ADMIN_EMAIL / ADMIN_PASS not set')
+
+  test.beforeEach(async ({ page }) => {
+    await page.setExtraHTTPHeaders(clientHeaders())
+  })
 
   test('the visual editor shows tables, callouts, figures, videos and MDX blocks, and saves the body back unchanged @admin', async ({ page }) => {
     await loginAsAdmin(page)
@@ -273,6 +286,37 @@ test.describe('editor-parity', { tag: '@admin' }, () => {
       await page.keyboard.type('Mains voltage.')
       await expect(prose.locator('.tt-callout[data-callout="caution"]')).toContainText('Mains voltage.')
       expect(await mdxText(page)).toBe('An example note.\n\n> [!CAUTION]\n> Mains voltage.')
+
+      // Keyboard only: from the callout's text, Tab reaches its type menu; arrows and Enter choose.
+      await caretAfter(page, 'Mains')
+      await page.keyboard.press('Tab')
+      const typeButton = prose.getByRole('button', { name: 'Caution callout — change the type' })
+      await expect(typeButton).toBeFocused()
+      await page.keyboard.press('Enter')
+      await expect(page.getByRole('menuitemradio', { name: 'Caution' })).toBeFocused()
+      await page.keyboard.press('Home')
+      await expect(page.getByRole('menuitemradio', { name: 'Note' })).toBeFocused()
+      await page.keyboard.press('ArrowDown')
+      await page.keyboard.press('Enter')
+      await expect(prose.locator('.tt-callout[data-callout="tip"]')).toContainText('Mains voltage.')
+      await expect(prose).toBeFocused()
+      expect(await mdxText(page)).toBe('An example note.\n\n> [!TIP]\n> Mains voltage.')
+    } finally {
+      await adminCleanup(page, 'DELETE', `/api/admin/posts?slug=${slug}`)
+    }
+  })
+
+  test('typing [!WARNING] at the start of a quote makes it a callout, as the page reads it @admin', async ({ page }) => {
+    await loginAsAdmin(page)
+    const slug = `e2e-parity-quote-${Date.now()}`
+    await createDraft(page, slug, 'Intro.')
+    try {
+      const prose = await openEditor(page, slug)
+      await caretAfter(page, 'Intro.')
+      await page.keyboard.press('Enter')
+      await page.keyboard.type('> [!WARNING] Hot surface')
+      await expect(prose.locator('.tt-callout[data-callout="warning"]')).toContainText('Hot surface')
+      expect(await mdxText(page)).toBe('Intro.\n\n> [!WARNING]\n> Hot surface')
     } finally {
       await adminCleanup(page, 'DELETE', `/api/admin/posts?slug=${slug}`)
     }
@@ -299,6 +343,18 @@ test.describe('editor-parity', { tag: '@admin' }, () => {
       await expect(prose.locator('[data-figure-width="full"]')).toHaveCount(1)
       await shoot(page, 'figure-selected')
       expect(await mdxText(page)).toBe('Above.\n\n![Mountain ridges at dusk](/images/hero/hero-mountains-1600.webp#full "An example landscape")')
+
+      // Keyboard only: ↓ from the line above selects the figure, Tab reaches its toolbar.
+      await caretAfter(page, 'Above.')
+      await page.keyboard.press('ArrowDown')
+      await expect(tools).toHaveAttribute('data-visible', 'true')
+      await page.keyboard.press('Tab')
+      await expect(tools.getByRole('button', { name: 'Text' })).toBeFocused()
+      await page.keyboard.press('Tab')
+      await expect(tools.getByRole('button', { name: 'Wide' })).toBeFocused()
+      await page.keyboard.press('Enter')
+      await expect(tools.getByRole('button', { name: 'Wide' })).toHaveAttribute('aria-pressed', 'true')
+      expect(await mdxText(page)).toBe('Above.\n\n![Mountain ridges at dusk](/images/hero/hero-mountains-1600.webp#wide "An example landscape")')
     } finally {
       await adminCleanup(page, 'DELETE', `/api/admin/posts?slug=${slug}`)
     }

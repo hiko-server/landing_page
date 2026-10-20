@@ -25,7 +25,7 @@ export const CALLOUT_LABEL: Record<CalloutType, string> = {
 
 const MENU_VARS = { '--callout-violet': '#6d28d9', '.chakra-ui-dark &, [data-theme="dark"] &': { '--callout-violet': '#c4b5fd' } }
 
-export default function CalloutView({ node, editor, getPos, updateAttributes, selected }: NodeViewProps) {
+export default function CalloutView({ node, editor, getPos, updateAttributes, selected, selectionInside }: NodeViewProps & { selectionInside?: boolean }) {
   const ui = useEditorUi()
   const type: CalloutType = isCalloutType(node.attrs.type) ? node.attrs.type : 'note'
   const Icon = ICON[type]
@@ -94,7 +94,8 @@ export default function CalloutView({ node, editor, getPos, updateAttributes, se
               leftIcon={<Icon size="sm" />}
               rightIcon={<TbChevronDown aria-hidden size={12} />}
               aria-label={`${CALLOUT_LABEL[type]} callout — change the type`}
-              tabIndex={tabStop(selected)}
+              // Reachable with Tab while writing in the callout (or with it selected).
+              tabIndex={tabStop(selected || !!selectionInside)}
             >
               {CALLOUT_LABEL[type]}
             </Button>
