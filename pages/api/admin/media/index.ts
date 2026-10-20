@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { withApi, type ApiContext } from '../../../../lib/apiHandler'
 import { isAdminRequest } from '../../../../lib/auth'
+import { requireRecentAuth } from '../../../../lib/adminAuth/stepUp'
 import { rateLimit } from '../../../../lib/rateLimit'
 import { revalidatePaths } from '../../../../lib/revalidate'
 import { recordAdminAudit } from '../../../../lib/audit/record'
@@ -30,7 +31,8 @@ import { runInAuditScope, type AuditScope } from '../../../../lib/audit/context'
  *               documents left unchanged because they would not render
  *     delete    { names } → moved to the 30-day trash; a used upload is
  *               refused (`blocked`, with where it is used)
- *     restore   { names } · purge { names } (delete for good, from the trash)
+ *     restore   { names } · purge { names } (delete for good, from the trash;
+ *               needs a recent sign-in or step-up — 403 STEP_UP_REQUIRED)
  *     optimize  { names } → responsive versions for those uploads
  *               (lib/mediaOptimize; `remaining` > 0: call again) and the
  *               pages that show them regenerated
@@ -110,6 +112,9 @@ async function post(req: NextApiRequest, res: NextApiResponse, ctx: ApiContext) 
   if (action === 'delete' || action === 'restore' || action === 'purge') {
     const list = names(body)
     if (!list) return res.status(400).json({ error: `Send 1–${MAX_BATCH} upload names` })
+    // Deleting for good removes the last copy on the server (R2's went with the move to the
+    // trash): like deleting a post, it needs a recent sign-in or step-up (403 STEP_UP_REQUIRED).
+    if (action === 'purge' && !requireRecentAuth(req, res)) return
     const done: string[] = []
     const failed: Array<{ name: string; code: string; error: string; usage?: unknown }> = []
     const warnings: string[] = []

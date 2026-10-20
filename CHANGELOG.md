@@ -40,6 +40,15 @@ Fixes for defects the final review found in the final batch before it shipped.
 - **Edge cache for the Chinese pages (OPS-3)**: the versioned Cloudflare
   cache rule lists the five Chinese pages by exact path, like their English
   pairs (apply with `scripts/cloudflare-config.mjs`).
+- **Review links follow their item's lifecycle (SECU-1)**: deleting a post
+  or case study turns off its review links (old slugs included), and an
+  address that changes hands — a new or restored item there, another item
+  renamed onto it, an old address dropped — turns off the links left there,
+  so a link can never show an item that was not shared.
+- **Deleting media for good asks to confirm it's you (SECU-2)**: "Delete
+  now" in the media trash needs a recent sign-in, like deleting a post; the
+  library opens the "Confirm it's you" dialog first, and closing it deletes
+  nothing.
 - **Container gate (OPS-1)**: every end-to-end test is its own client (a
   TEST-NET address in cf-connecting-ip), so the full suite against one
   server no longer runs out of per-client budgets (post saves, contact

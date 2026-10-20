@@ -456,9 +456,9 @@ function mockRes(out: Out) {
   return res
 }
 
-async function call(route: string, method: string, body?: unknown, admin = true, query: Record<string, string> = {}): Promise<Out> {
+async function call(route: string, method: string, body?: unknown, admin = true, query: Record<string, string> = {}, sid?: string): Promise<Out> {
   const handler = (await import(route)).default as (req: unknown, res: unknown) => Promise<unknown>
-  const token = jwt.sign({ role: 'admin', email: 'owner@example.com' }, process.env.JWT_SECRET as string, { algorithm: 'HS256' })
+  const token = jwt.sign({ role: 'admin', email: 'owner@example.com', ...(sid ? { sid } : {}) }, process.env.JWT_SECRET as string, { algorithm: 'HS256' })
   const out: Out = { statusCode: 200, body: undefined, headers: {} }
   await handler(
     {
@@ -511,7 +511,10 @@ test('H7 API: admin only; the listing; texts and deletes answer clearly and land
   assert.equal((await call('../pages/api/admin/media/preview', 'GET', undefined, false, { name: target.name })).statusCode, 401)
   assert.equal((await call('../pages/api/admin/media/preview', 'GET', undefined, true, { name: used.name })).statusCode, 404)
 
-  const purge = await call('../pages/api/admin/media/index', 'POST', { action: 'purge', names: [target.name] })
+  // Deleting for good needs a recent sign-in (SECU-2): a session verified just now.
+  const { createSession } = await import('../lib/adminAuth/sessions')
+  const recent = createSession({ method: 'password', ttlMs: 3_600_000, device: null, ipPrefix: null, country: null }).id
+  const purge = await call('../pages/api/admin/media/index', 'POST', { action: 'purge', names: [target.name] }, true, {}, recent)
   assert.deepEqual(purge.body.done, [target.name])
   assert.equal((await call('../pages/api/admin/media/index', 'POST', { action: 'delete', names: [] })).statusCode, 400)
   assert.equal((await call('../pages/api/admin/media/index', 'POST', { action: 'delete', names: ['a.png.w640.webp'] })).statusCode, 400)
@@ -523,6 +526,29 @@ test('H7 API: admin only; the listing; texts and deletes answer clearly and land
   assert.ok(summaries.includes(`Updated the default alt text and caption of image “${target.name}”`))
   assert.ok(summaries.includes(`Moved image “${target.name}” to the trash`))
   assert.ok(summaries.includes(`Deleted image “${target.name}” for good`))
+})
+
+test('SECU-2 API: deleting from the trash for good needs a recent sign-in (403 STEP_UP_REQUIRED); the trash itself does not', async () => {
+  const img = await upload('purge-step-up.png', 200, 150)
+  const { createSession } = await import('../lib/adminAuth/sessions')
+  const origin = { device: null, ipPrefix: null, country: null }
+  const stale = createSession({ method: 'password', ttlMs: 3_600_000, verifiedAt: Date.now() - 30 * 60_000, ...origin }).id
+  const fresh = createSession({ method: 'password', ttlMs: 3_600_000, ...origin }).id
+  const route = '../pages/api/admin/media/index'
+  const trashed = await call(route, 'POST', { action: 'delete', names: [img.name] }, true, {}, stale)
+  assert.equal(trashed.statusCode, 200, 'moving to the trash can be undone for 30 days')
+  assert.deepEqual(trashed.body.done, [img.name])
+  for (const sid of [stale, undefined]) {
+    const blocked = await call(route, 'POST', { action: 'purge', names: [img.name] }, true, {}, sid)
+    assert.equal(blocked.statusCode, 403)
+    assert.equal(blocked.body.code, 'STEP_UP_REQUIRED')
+    assert.ok(blocked.body.methods.includes('password'))
+    assert.ok(list.listLibrary().trash.some((t) => t.name === img.name), 'still in the trash')
+  }
+  const purged = await call(route, 'POST', { action: 'purge', names: [img.name] }, true, {}, fresh)
+  assert.equal(purged.statusCode, 200, JSON.stringify(purged.body))
+  assert.deepEqual(purged.body.done, [img.name])
+  assert.ok(!list.listLibrary().trash.some((t) => t.name === img.name), 'gone for good')
 })
 
 test('H7 API: replace checks the body like an upload and reports what changed', async () => {

@@ -105,7 +105,8 @@ What the code actually does today, and where its limits are.
   `403 PASSKEY_REQUIRED` before any password check; a wrong password and a
   wrong code get the same `401`, and a wrong code counts for the lockout.
 - **Step-up** (`lib/adminAuth/stepUp.ts`) — restoring a backup, deleting a
-  post or case study, MongoDB restore or target changes, and every passkey,
+  post or case study, deleting an image from the media trash for good,
+  MongoDB restore or target changes, and every passkey,
   recovery-code, policy or other-browser change require a sign-in or a
   re-verification on this browser within `ADMIN_RECENT_AUTH_MINUTES`
   (default 10); otherwise the route answers `403 STEP_UP_REQUIRED` and the
