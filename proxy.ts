@@ -19,6 +19,13 @@ import { applySecurityHeaders } from './lib/security/responseHeaders'
  *       redirected (probes talk plain HTTP to the container).
  *     - the legacy `/cv?lang=zh|cn` goes to `/cv/zh`, keeping the other
  *       query parameters (e.g. `print=1`).
+ *     - a trailing slash goes (`/about/` → `/about`, any method, query kept;
+ *       trailingSlashRedirect). Next's own redirect for it is off
+ *       (next.config.js skipTrailingSlashRedirect): it answered before this
+ *       proxy and Next drops every collected header on a redirect, so the
+ *       slash form of a share or review link (/cv/r/<token>/,
+ *       /review/<token>/) went out without its private / no-store, noindex
+ *       and no-referrer headers, and every slash redirect without the CSP.
  *     The IndexNow key file `/<INDEXNOW_KEY>.txt` is rewritten (not
  *     redirected) to /api/indexnow-key; only the configured key matches.
  *
@@ -150,6 +157,25 @@ export function edgeRedirect(req: NextRequest, publicHost: string | null = getPu
 }
 
 /**
+ * 308 from `/path/` to `/path` (the query kept), or null: the redirect Next
+ * makes itself unless `skipTrailingSlashRedirect` is set (it is — see the
+ * module comment), done here so it carries the security headers. Every
+ * path but `/`, every method (308 keeps the method and body). Next's data
+ * requests (client-side navigation, `x-nextjs-data`) and its own `/_next/`
+ * files are left to Next. Repeated slashes collapse, so the Location can
+ * never read as a protocol-relative `//host` address.
+ */
+export function trailingSlashRedirect(req: NextRequest): NextResponse | null {
+  const { pathname } = req.nextUrl
+  if (pathname === '/' || !pathname.endsWith('/')) return null
+  if (req.headers.has('x-nextjs-data') || pathname.startsWith('/_next/')) return null
+  // A plain URL: a NextURL remembers the trailing slash it was parsed with and would put it back.
+  const url = new URL(req.nextUrl.href)
+  url.pathname = pathname.replace(/\/{2,}/g, '/').replace(/\/+$/, '') || '/'
+  return NextResponse.redirect(url, 308)
+}
+
+/**
  * True for the IndexNow key file: exactly `/<key>.txt` for the configured,
  * well-formed INDEXNOW_KEY (read at runtime). The file must sit at the site
  * root because a key file only authorises URLs in its own directory and
@@ -163,7 +189,7 @@ export function isIndexNowKeyPath(pathname: string, key: string | null = getInde
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  const redirect = edgeRedirect(req)
+  const redirect = edgeRedirect(req) ?? trailingSlashRedirect(req)
   if (redirect) return applySecurityHeaders(redirect, { pathname, adminContext: false })
 
   if (isIndexNowKeyPath(pathname)) {

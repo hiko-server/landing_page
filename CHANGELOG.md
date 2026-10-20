@@ -49,6 +49,11 @@ Fixes for defects the final review found in the final batch before it shipped.
   now" in the media trash needs a recent sign-in, like deleting a post; the
   library opens the "Confirm it's you" dialog first, and closing it deletes
   nothing.
+- **Trailing-slash redirects carry the security headers (SECU-3)**:
+  `/path/` → `/path` (308, query kept) now happens in the proxy instead of
+  Next's router, which answered first and dropped every header — so the
+  slash form of a CV share link or review link is private, uncached,
+  unindexed and sends no Referer, and every slash redirect has the CSP.
 - **Container gate (OPS-1)**: every end-to-end test is its own client (a
   TEST-NET address in cf-connecting-ip), so the full suite against one
   server no longer runs out of per-client budgets (post saves, contact

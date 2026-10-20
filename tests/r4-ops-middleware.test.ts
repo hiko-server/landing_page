@@ -17,7 +17,7 @@ register(
   import.meta.url,
 )
 const { NextRequest } = await import('next/server.js')
-const { edgeRedirect, forwardedScheme, isIndexNowKeyPath, isPublicAdminApi, proxy } = await import('../proxy')
+const { edgeRedirect, forwardedScheme, isIndexNowKeyPath, isPublicAdminApi, proxy, trailingSlashRedirect } = await import('../proxy')
 
 const HOST = 'lucian-dev.com'
 
@@ -98,6 +98,49 @@ test('proxy() applies the security headers to redirects', async () => {
     if (prev === undefined) delete process.env.SITE_URL
     else process.env.SITE_URL = prev
   }
+})
+
+test('SECU-3: a trailing slash is redirected here, with the security headers — private ones on share and review links', async () => {
+  const token = 'AbCdEfGhIjKlMnOpQrStUv'
+  for (const [from, to] of [
+    ['/about/', '/about'],
+    ['/blog/a-post/?ref=x', '/blog/a-post?ref=x'],
+    ['/cv/r/' + token + '/', '/cv/r/' + token],
+    ['/cv/r/' + token + '/en.pdf/', '/cv/r/' + token + '/en.pdf'],
+    ['/review/' + token + '/', '/review/' + token],
+    ['/uploads/a.png/', '/uploads/a.png'],
+    ['/api/health/', '/api/health'],
+    ['/blog///', '/blog'],
+  ]) {
+    const res = trailingSlashRedirect(req(`https://lucian-dev.com${from}`))
+    assert.equal(res?.status, 308, from)
+    const loc = location(res)
+    assert.equal(loc.pathname + loc.search, to, from)
+  }
+  // POST keeps its method through a 308, like Next's own redirect did.
+  assert.equal(trailingSlashRedirect(req('https://lucian-dev.com/api/contact/', {}, 'POST'))?.status, 308)
+  for (const path of ['/', '/about', '/cv/r/' + token]) assert.equal(trailingSlashRedirect(req(`https://lucian-dev.com${path}`)), null, path)
+  // Next's data requests and its own files are left to Next.
+  assert.equal(trailingSlashRedirect(req('https://lucian-dev.com/about/', { 'x-nextjs-data': '1' })), null)
+  assert.equal(trailingSlashRedirect(req('https://lucian-dev.com/_next/data/b1/review/x.json/')), null)
+  // Never a protocol-relative Location (Next relativizes a same-host Location to its path).
+  const sneaky = location(trailingSlashRedirect(req('https://lucian-dev.com//evil.example/')))
+  assert.equal(sneaky.host, 'lucian-dev.com')
+  assert.equal(sneaky.pathname, '/evil.example')
+
+  // Through the proxy: the share and review links' slash form is private, uncached, unindexed, refererless.
+  for (const path of [`/cv/r/${token}/`, `/cv/r/${token}/zh/`, `/review/${token}/`]) {
+    const res = await proxy(req(`https://lucian-dev.com${path}`, { 'x-forwarded-proto': 'https' }))
+    assert.equal(res.status, 308, path)
+    assert.equal(res.headers.get('cache-control'), 'private, no-store, max-age=0', path)
+    assert.match(res.headers.get('x-robots-tag') || '', /noindex/, path)
+    assert.equal(res.headers.get('referrer-policy'), 'no-referrer', path)
+    assert.ok(res.headers.get('content-security-policy'), path)
+  }
+  const plain = await proxy(req('https://lucian-dev.com/about/', { 'x-forwarded-proto': 'https' }))
+  assert.equal(plain.status, 308)
+  assert.ok(plain.headers.get('content-security-policy'))
+  assert.ok(plain.headers.get('strict-transport-security'))
 })
 
 test('getPublicHost never returns a loopback name', () => {
