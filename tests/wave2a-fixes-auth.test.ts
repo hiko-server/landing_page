@@ -5,6 +5,9 @@
  *           method and country in a table of their own, so they can never
  *           push a sign-in or a security change out of the history; the
  *           Security page lists the newest real events plus a summary.
+ *   SECU-3  tokens minted before sessions existed (no `sid`) end as soon as
+ *           the owner signs any browser out (Log out, one browser, the
+ *           others), without ever signing the owner out.
  *
  * Runs the real API handlers in a throw-away working directory.
  */
@@ -14,6 +17,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import Database from 'better-sqlite3'
+import jwt from 'jsonwebtoken'
 
 const OWNER = 'owner@example.test'
 const PASS = 'wave2a fixes passphrase 0123'
@@ -36,6 +40,8 @@ let store: typeof import('../lib/adminAuth/store')
 let overview: typeof import('../lib/adminAuth/overview')
 let authDb: typeof import('../lib/adminAuth/db')
 let format: typeof import('../components/Admin/security/securityFormat')
+let auth: typeof import('../lib/auth')
+let admin: typeof import('../lib/admin')
 
 before(async () => {
   process.chdir(tmp)
@@ -44,10 +50,16 @@ before(async () => {
   }
   await load('pkVerify', '../pages/api/auth/passkey/verify')
   await load('security', '../pages/api/admin/security/index')
+  await load('login', '../pages/api/auth/email-login')
+  await load('logout', '../pages/api/admin/logout')
+  await load('sessions', '../pages/api/admin/security/sessions')
+  await load('session', '../pages/api/admin/session')
   store = await import('../lib/adminAuth/store')
   overview = await import('../lib/adminAuth/overview')
   authDb = await import('../lib/adminAuth/db')
   format = await import('../components/Admin/security/securityFormat')
+  auth = await import('../lib/auth')
+  admin = await import('../lib/admin')
 })
 after(() => {
   authDb.closeAuthDb()
@@ -331,5 +343,180 @@ test('SECU-2: Security page labels for the failed-attempts summary', () => {
       { country: null, count: 5 },
     ]),
     'Germany 25 · United States 10 · unknown 5'
+  )
+})
+
+// ── SECU-3 ────────────────────────────────────────────────────────────────
+
+let ipSeq = 0
+const nextIp = () => `192.0.2.${(ipSeq++ % 250) + 1}`
+
+const setCookies = (o: Out): string[] => {
+  const v = o.headers['set-cookie']
+  return Array.isArray(v) ? v : v ? [v] : []
+}
+const sessionCookieOf = (o: Out) =>
+  (setCookies(o).find((c) => c.startsWith('cv_admin_token=') && !/Max-Age=0/.test(c)) || '').split(
+    ';'
+  )[0]
+const claimsOf = (cookie: string) =>
+  jwt.decode(decodeURIComponent(cookie.split('=')[1])) as Record<string, any>
+
+/** A token exactly as the build before sessions minted it: no `sid`. */
+const legacyCookie = () =>
+  `cv_admin_token=${jwt.sign(
+    { sub: 'cv-admin', role: 'admin', email: OWNER, sv: admin.getSessionVersion() },
+    process.env.JWT_SECRET as string,
+    { algorithm: 'HS256', expiresIn: 7 * 24 * 3600 }
+  )}`
+
+/** lib/auth readAdminContext for a request carrying `cookie`. */
+function readCtx(cookie: string) {
+  const [name, ...rest] = cookie.split('=')
+  const req = { headers: { cookie }, cookies: { [name]: decodeURIComponent(rest.join('=')) } }
+  return auth.readAdminContext(
+    req as any,
+    { getHeader: () => undefined, setHeader: () => {} } as any
+  )
+}
+
+async function ownerSignIn(): Promise<string> {
+  const out = await call(H.login, {
+    method: 'POST',
+    body: { email: OWNER, password: PASS },
+    ip: nextIp(),
+  })
+  assert.equal(out.statusCode, 200)
+  return sessionCookieOf(out)
+}
+
+/** Forget any cutoff, as on the day of the deploy. */
+const freshDeploy = () =>
+  authDb.getAuthDb().prepare(`DELETE FROM auth_settings WHERE key = 'legacy_cutoff'`).run()
+
+const securityView = (now = Date.now()) =>
+  overview.securityOverview(
+    { headers: { host: HOST } } as any,
+    { claims: { role: 'admin' }, session: null },
+    now
+  )
+
+test('SECU-3: "Sign out other browsers" ends a stolen pre-session token the list never showed', async () => {
+  freshDeploy()
+  const stolen = legacyCookie()
+  const owner = await ownerSignIn()
+  assert.ok(readCtx(stolen), 'accepted until the owner signs a browser out')
+  assert.equal(securityView().legacySessions, true, 'the page says such browsers may exist')
+
+  const out = await call(H.sessions, {
+    method: 'DELETE',
+    body: { others: true },
+    cookie: owner,
+    ip: nextIp(),
+  })
+  assert.equal(out.statusCode, 200)
+  assert.equal(readCtx(stolen), null, 'the pre-session token is refused')
+  assert.ok(readCtx(owner)?.session, 'the owner stays signed in')
+  assert.equal(securityView().legacySessions, false)
+  // …and it can no longer be upgraded to a session either.
+  const upgrade = await call(H.session, { method: 'GET', cookie: stolen, ip: nextIp() })
+  assert.deepEqual(upgrade.body, { authenticated: false })
+  assert.equal(sessionCookieOf(upgrade), '')
+})
+
+test('SECU-3: revoking the session a stolen copy was upgraded to also ends the original token', async () => {
+  freshDeploy()
+  const stolen = legacyCookie()
+  const owner = await ownerSignIn()
+  // The thief's copy upgrades itself to a session row of its own.
+  const upgraded = await call(H.session, { method: 'GET', cookie: stolen, ip: nextIp() })
+  const thief = sessionCookieOf(upgraded)
+  const thiefSid = claimsOf(thief).sid as string
+  assert.ok(readCtx(thief)?.session)
+
+  const out = await call(H.sessions, {
+    method: 'DELETE',
+    body: { id: thiefSid },
+    cookie: owner,
+    ip: nextIp(),
+  })
+  assert.equal(out.statusCode, 200)
+  assert.equal(readCtx(thief), null, 'the upgraded token is revoked')
+  assert.equal(readCtx(stolen), null, 'and the original cannot upgrade again')
+  assert.ok(readCtx(owner)?.session)
+})
+
+test('SECU-3: the owner logging out ends pre-session tokens too, as before sessions existed', async () => {
+  freshDeploy()
+  const stolen = legacyCookie()
+  const other = await ownerSignIn()
+  const owner = await ownerSignIn()
+  const out = await call(H.logout, { method: 'POST', cookie: owner, ip: nextIp() })
+  assert.deepEqual(out.body, { ok: true, signedOut: true, revokedAllSessions: false })
+  assert.equal(readCtx(owner), null)
+  assert.equal(readCtx(stolen), null, 'the pre-session token is refused')
+  assert.ok(readCtx(other)?.session, 'browsers with a session stay signed in')
+
+  // Signing this browser out from its own row in the list does the same.
+  freshDeploy()
+  const stolen2 = legacyCookie()
+  const own = await ownerSignIn()
+  const sid = claimsOf(own).sid as string
+  const self = await call(H.sessions, {
+    method: 'DELETE',
+    body: { id: sid },
+    cookie: own,
+    ip: nextIp(),
+  })
+  assert.equal(self.statusCode, 200)
+  assert.equal(readCtx(stolen2), null)
+})
+
+test('SECU-3: an anonymous logout or a refused request never ends anything', async () => {
+  freshDeploy()
+  const stolen = legacyCookie()
+  const anon = await call(H.logout, { method: 'POST', ip: nextIp() })
+  assert.equal(anon.body.signedOut, false)
+  const owner = await ownerSignIn()
+  // Signing out another browser without a recent verification is refused first.
+  authDb
+    .getAuthDb()
+    .prepare('UPDATE auth_sessions SET verified_at = verified_at - ? WHERE id = ?')
+    .run(60 * 60_000, claimsOf(owner).sid)
+  const refused = await call(H.sessions, {
+    method: 'DELETE',
+    body: { others: true },
+    cookie: owner,
+    ip: nextIp(),
+  })
+  assert.equal(refused.statusCode, 403)
+  assert.ok(readCtx(stolen), 'nothing was ended')
+  assert.equal(store.legacyCutoff(), null)
+})
+
+test('SECU-3: the cutoff compares issue times and only moves forward; the page flag ends after a week', () => {
+  freshDeploy()
+  assert.equal(store.isLegacyTokenEnded(Math.floor(Date.now() / 1000)), false, 'no cutoff yet')
+  const cutoff = Date.UTC(2026, 9, 20, 12)
+  store.endLegacyTokens(cutoff)
+  assert.equal(store.isLegacyTokenEnded(cutoff / 1000 - 3600), true)
+  assert.equal(store.isLegacyTokenEnded(cutoff / 1000), true, 'issued at the cutoff')
+  assert.equal(store.isLegacyTokenEnded(cutoff / 1000 + 1), false)
+  assert.equal(store.isLegacyTokenEnded(undefined), true, 'a token without iat')
+  store.endLegacyTokens(cutoff - 60_000)
+  assert.equal(store.legacyCutoff(), cutoff, 'never moves back')
+
+  freshDeploy()
+  const created = (
+    authDb.getAuthDb().prepare('SELECT applied_at FROM schema_version WHERE version = 1').get() as {
+      applied_at: number
+    }
+  ).applied_at
+  const week = 7 * DAY
+  assert.equal(store.legacyTokensMayBeValid(week, created + week - 1), true)
+  assert.equal(
+    store.legacyTokensMayBeValid(week, created + week),
+    false,
+    'every pre-session token has expired a week after auth.db was created'
   )
 })

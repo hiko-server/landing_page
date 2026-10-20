@@ -110,6 +110,7 @@ type Overview = {
   policy: { passkeyRequired: boolean }
   sessions: Session[]
   current: { sessionId: string | null; verifiedAt: number | null; recentUntil: number | null }
+  legacySessions: boolean
   events: AuthEventRow[]
   failures: FailureSummary
   stepUp: { windowMinutes: number }
@@ -809,13 +810,21 @@ export default function SecurityPanel() {
         index={4}
         title="Signed-in browsers"
         id="security-sessions"
-        hint="Every browser signed in to the admin. Signing one out ends its session on its next request."
+        hint={
+          data.legacySessions
+            ? 'Every browser signed in to the admin. Signing one out ends its session on its next request. Browsers signed in before the passkey update appear here only after their next page view — signing out any browser, this one included, also ends every one of those.'
+            : 'Every browser signed in to the admin. Signing one out ends its session on its next request.'
+        }
         action={
           <Flex gap={2} flexWrap="wrap">
             <Button
               size="sm"
               {...outlineButtonProps}
-              isDisabled={data.sessions.filter((s) => !s.current).length === 0}
+              // While a browser from before the passkey update may still be
+              // signed in (it is never listed), there is always something to end.
+              isDisabled={
+                !data.legacySessions && data.sessions.filter((s) => !s.current).length === 0
+              }
               isLoading={busy === 'others'}
               onClick={() =>
                 void signOut(

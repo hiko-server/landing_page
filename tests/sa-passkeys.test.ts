@@ -634,6 +634,9 @@ test('sessions: sign one browser out, the others, and everywhere', async () => {
 })
 
 test('a token from before sessions keeps working, is upgraded once, and never counts as recent', async () => {
+  // The sessions test above signed browsers out, which ends such tokens
+  // (tests/wave2a-fixes-auth.test.ts): start from the day of the deploy.
+  authDb.getAuthDb().prepare(`DELETE FROM auth_settings WHERE key = 'legacy_cutoff'`).run()
   const legacy = `cv_admin_token=${auth.signAdminToken(OWNER)}`
   const ctx = readCtx(legacy)
   assert.ok(ctx)

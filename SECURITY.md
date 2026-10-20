@@ -72,7 +72,11 @@ What the code actually does today, and where its limits are.
   bumped by "Sign out everywhere" and by a **password reset** (which also
   burns all outstanding reset links and revokes every session row). A token
   minted before sessions existed (no `sid`) still needs a matching `sv`; the
-  first page view swaps it for one bound to a new row. Because the edge
+  first page view swaps it for one bound to a new row. Such a token cannot
+  be listed or revoked on its own, so the first time the owner signs any
+  browser out (Log out, one browser, the other browsers) a cutoff is stored
+  in `auth.db` and every `sid`-less token issued until then is refused;
+  a week after `auth.db` was created none can be valid anyway. Because the edge
   middleware cannot read the filesystem, a revoked token can still load an
   admin page shell until it expires, but every admin API it calls answers
   `401` and `/api/admin/session` reports `authenticated: false`.

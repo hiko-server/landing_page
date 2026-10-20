@@ -484,6 +484,14 @@ Fixes for defects an adversarial review found in wave 2A before it shipped.
   lists the newest 40 sign-ins and security changes and, above them, a
   "Failed attempts" summary for the last 24 hours, 7 and 30 days by method
   and country.
+- **Browsers signed in before the update (SECU-3)**: an admin token issued
+  before sessions existed has no session id, so "Sign out other browsers",
+  signing out one browser and Log out could not end it (only "Sign out
+  everywhere" or a password reset did), and it never appeared in the list.
+  Now the first of those actions ends every such token as well — the
+  owner's own session is never affected — and the Security page says so,
+  keeping "Sign out other browsers" available while such a browser may
+  still exist (at most a week after the update).
 
 ### Changed
 

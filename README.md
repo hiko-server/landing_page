@@ -530,7 +530,10 @@ drill and the recent warn / error log entries.
 - **Sessions**: one row per signed-in browser in `data/auth.db` (the JWT
   carries its id); Log out ends this browser only, Admin → Security lists
   the browsers (coarse device, network prefix, country) and signs any of
-  them out, or everywhere. A password reset revokes every session.
+  them out, or everywhere. A password reset revokes every session. A
+  browser still signed in from before the passkey update has no session
+  row: it is listed after its next page view, and signing out any browser
+  (this one included) ends every such browser at once.
 - **Step-up**: restoring a backup, deleting a post or case study, MongoDB
   restore / target changes and every passkey, code, policy or other-browser
   change need a sign-in or a re-check within `ADMIN_RECENT_AUTH_MINUTES`

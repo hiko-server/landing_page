@@ -46,6 +46,49 @@ export function setPasskeyRequired(on: boolean): void {
   setSetting('passkey_required', on ? '1' : '0')
 }
 
+// ── Tokens from before sessions existed ───────────────────────────────────
+//
+// Admin tokens minted before auth.db existed carry no session id (`sid`), so
+// no session row can be revoked for them (wave 2A review, SECU-3). The first
+// time the owner signs any browser out — Log out, a single browser, "Sign out
+// other browsers" — `legacy_cutoff` is set, and from then on lib/auth refuses
+// every token without a `sid` issued at or before it. The owner's own
+// browser is never affected: those actions need a session row (and so a
+// token with a `sid`). Nothing mints a token without a `sid` any more.
+
+const LEGACY_CUTOFF = 'legacy_cutoff'
+
+/** When tokens without a session id stopped being accepted (ms), or null while they still are. */
+export function legacyCutoff(): number | null {
+  const v = Number(getSetting(LEGACY_CUTOFF))
+  return Number.isFinite(v) && v > 0 ? v : null
+}
+
+/** Refuse every token without a session id issued until now (the cutoff only moves forward). */
+export function endLegacyTokens(now = Date.now()): void {
+  setSetting(LEGACY_CUTOFF, String(Math.max(now, legacyCutoff() ?? 0)), now)
+}
+
+/** True when a token without a session id, issued at `iat` (seconds), must be refused. */
+export function isLegacyTokenEnded(iat: unknown): boolean {
+  const cutoff = legacyCutoff()
+  if (cutoff === null) return false
+  return typeof iat !== 'number' || !Number.isFinite(iat) || iat * 1000 <= cutoff
+}
+
+/**
+ * Could a token without a session id still be valid? Only while no cutoff is
+ * set and within one session lifetime (`ttlMs`) of auth.db's creation: every
+ * such token was minted before that moment.
+ */
+export function legacyTokensMayBeValid(ttlMs: number, now = Date.now()): boolean {
+  if (legacyCutoff() !== null) return false
+  const row = getAuthDb()
+    .prepare('SELECT applied_at FROM schema_version WHERE version = 1')
+    .get() as { applied_at: number } | undefined
+  return !row || now < Number(row.applied_at) + ttlMs
+}
+
 // ── History ───────────────────────────────────────────────────────────────
 //
 // Two classes, kept apart so anonymous traffic can never erase the record
