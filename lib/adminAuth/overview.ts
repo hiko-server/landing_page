@@ -5,11 +5,13 @@ import { listPasskeys, relyingPartyFor, type StoredPasskey } from './passkeys'
 import { listLiveSessions } from './sessions'
 import { recentAuthWindowMs, stepUpMethods, type StepUpMethods } from './stepUp'
 import {
+  authFailureSummary,
   isPasskeyRequired,
   listAuthEvents,
   recoveryStatus,
   webauthnUserId,
   type AuthEvent,
+  type AuthFailureSummary,
   type AuthMethod,
   type RecoveryStatus,
 } from './store'
@@ -34,7 +36,10 @@ export type SecurityOverview = {
     country: string | null
   }>
   current: { sessionId: string | null; verifiedAt: number | null; recentUntil: number | null }
+  /** The newest sign-ins and security changes; failed attempts are only in `failures`. */
   events: AuthEvent[]
+  /** Failed sign-ins and identity checks, summed per window (they never crowd out `events`). */
+  failures: AuthFailureSummary
   stepUp: StepUpMethods & { windowMinutes: number }
 }
 
@@ -72,6 +77,7 @@ export function securityOverview(
         verifiedAt !== null && now - verifiedAt <= windowMs ? verifiedAt + windowMs : null,
     },
     events: listAuthEvents(40),
+    failures: authFailureSummary(now),
     stepUp: { ...stepUpMethods(), windowMinutes: windowMs / 60_000 },
   }
 }

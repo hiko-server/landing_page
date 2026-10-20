@@ -41,6 +41,46 @@ export function isWarningEvent(type: string): boolean {
   return type === 'signin-failed' || type === 'step-up-failed'
 }
 
+const FAILURE_METHOD: Record<string, string> = {
+  password: 'password',
+  passkey: 'passkey',
+  recovery: 'password + recovery code',
+  legacy: 'password',
+}
+
+/** "30 passkey sign-ins", "1 password identity check" — one part of the failed-attempts breakdown. */
+export function failureKindLabel(type: string, method: string | null, count: number): string {
+  const noun =
+    type === 'step-up-failed'
+      ? count === 1
+        ? 'identity check'
+        : 'identity checks'
+      : count === 1
+        ? 'sign-in'
+        : 'sign-ins'
+  const how = (method && FAILURE_METHOD[method]) || ''
+  return [count.toLocaleString('en'), how, noun].filter(Boolean).join(' ')
+}
+
+/** "Hong Kong 25 · United States 10 · unknown 5" (Cloudflare country codes; null = unknown). */
+export function failureCountriesLabel(
+  countries: ReadonlyArray<{ country: string | null; count: number }>
+): string {
+  return countries
+    .map(({ country, count }) => {
+      let place = 'unknown'
+      if (country) {
+        try {
+          place = new Intl.DisplayNames(['en'], { type: 'region' }).of(country) || country
+        } catch {
+          place = country
+        }
+      }
+      return `${place} ${count.toLocaleString('en')}`
+    })
+    .join(' · ')
+}
+
 /** "Synced" for passkeys a provider backs up across devices, else "This device only". */
 export function passkeySyncLabel(p: { backedUp: boolean; deviceType: string }): string {
   return p.backedUp || p.deviceType === 'multiDevice' ? 'Synced' : 'This device only'

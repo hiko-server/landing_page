@@ -476,6 +476,14 @@ Fixes for defects an adversarial review found in wave 2A before it shipped.
   new server error replaces the least valuable browser report (resolved
   first, ignored last) when the table is full. Reports refused by a cap no
   longer use up the day's budget.
+- **Sign-in history (SECU-2)**: failed sign-ins and failed identity checks
+  no longer push real sign-ins and security changes out of the 500-entry
+  history (about 50 junk requests could erase a foreign sign-in). Failures
+  are now counted per hour, method, country and reason code in a table of
+  their own (auth.db migration 2 moves the existing ones); Admin → Security
+  lists the newest 40 sign-ins and security changes and, above them, a
+  "Failed attempts" summary for the last 24 hours, 7 and 30 days by method
+  and country.
 
 ### Changed
 

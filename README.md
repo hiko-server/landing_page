@@ -536,8 +536,11 @@ drill and the recent warn / error log entries.
   change need a sign-in or a re-check within `ADMIN_RECENT_AUTH_MINUTES`
   (default 10) — a "Confirm it's you" dialog asks for a passkey or the
   password (+ code) and the action continues.
-- **Sign-in history**: sign-ins, failures (time, method, country and a reason
-  code; no address or device) and security changes.
+- **Sign-in history**: sign-ins and security changes (the newest 40 are
+  listed). Failed attempts, which anyone can cause, are only counted — per
+  hour, method, country and reason code, no address or device — in a table
+  of their own and summarised above the list (24 hours, 7 and 30 days), so
+  a flood of them can never push a sign-in out of the history.
 - **JWT** is HS256 (pinned), 7d expiry, signed with `JWT_SECRET`.
 - **Cookies**: `httpOnly`, `sameSite: 'strict'`, `secure` in prod, `path: /`.
 - **Reset tokens**: 24 random bytes, 30 min TTL, single-use, constant-time

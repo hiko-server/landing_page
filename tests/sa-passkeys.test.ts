@@ -419,7 +419,12 @@ test('a cloned authenticator (stale counter), a foreign passkey and a wrong orig
   const ip = await call(H.pkOptions, { method: 'POST', body: {}, host: '127.0.0.1:3407' })
   assert.equal(ip.statusCode, 400)
   assert.equal(ip.body.code, 'PASSKEY_UNAVAILABLE')
-  assert.equal(store.listAuthEvents(5).filter((e) => e.type === 'signin-failed').length >= 3, true)
+  // Failures are counted (per hour, method, country, reason), never listed.
+  const failed = store.authFailureSummary()
+  const passkey = failed.byMethod.find((m) => m.type === 'signin-failed' && m.method === 'passkey')
+  assert.ok(passkey && passkey.count >= 3)
+  assert.ok(failed.byCountry.some((c) => c.country === 'HK'))
+  assert.ok(!store.listAuthEvents(50).some((e) => e.type === 'signin-failed'))
 })
 
 test('dangerous actions need a recent verification: 403 STEP_UP_REQUIRED, then a passkey step-up', async () => {
@@ -490,7 +495,11 @@ test('a password step-up works too, and a wrong password is refused and recorded
   assert.ok(fresh.body.recentUntil > Date.now())
   assert.equal((await call(H.recent, { method: 'GET' })).statusCode, 401)
   const types = store.listAuthEvents(4).map((e) => e.type)
-  assert.ok(types.includes('step-up') && types.includes('step-up-failed'), types.join(','))
+  assert.ok(types.includes('step-up'), types.join(','))
+  const failedCheck = store
+    .authFailureSummary()
+    .byMethod.find((m) => m.type === 'step-up-failed' && m.method === 'password')
+  assert.equal(failedCheck?.count, 1)
 })
 
 test('"Require a passkey": the password alone stops working; password + a recovery code (once) signs in', async () => {
