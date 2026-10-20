@@ -472,6 +472,7 @@ All variables are documented in [`.env.example`](./.env.example). Headlines:
 | Restore drills | `RESTORE_DRILL_INTERVAL_HOURS` (default 168, `0` disables) | optional |
 | Link check | `LINK_CHECK_INTERVAL_HOURS` (default 24, `0` disables the schedule) | optional |
 | Earlier builds' assets | `STATIC_ARCHIVE_DAYS` (days, 1–90, default 7) | optional |
+| Image encoding | `IMAGE_JOB_CONCURRENCY` (images encoded at once, 1–4, default 1), `IMAGE_JOB_QUEUE_MAX` (uploads that may wait, 0–64, default 8; beyond that 503 "busy"), `SHARP_CONCURRENCY` (libvips threads per image, 1–4, default the CPUs, at most 2) | optional — the defaults keep concurrent uploads inside the 1 GiB container |
 | ORCID connect | `ORCID_CLIENT_ID`, `ORCID_CLIENT_SECRET`, `ORCID_ENV` (`production` default, or `sandbox`) | optional — without them "Connect your ORCID iD" stays disabled ([how](#connect-your-orcid-id)) |
 
 > The repo never commits a real `.env`. `.env.example` contains placeholders
