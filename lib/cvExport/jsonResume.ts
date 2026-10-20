@@ -13,7 +13,12 @@
  *   project             → projects (live / case study / repository URLs)
  *   competitionAwards   → awards
  *   certification       → certificates
- *   patents             → publications (one per listed patent)
+ *   publications        → publications (papers first, through lib/publications
+ *                         toJsonResume: name, publisher, releaseDate, url,
+ *                         summary; unpublished work names its status in
+ *                         `publisher` and has no releaseDate unless it is a
+ *                         released preprint)
+ *   patents             → publications (one per listed patent, after the papers)
  *   skill               → skills (core skills with their level, then groups)
  *   extraSkill          → languages ("Mandarin: Native" → language + fluency)
  *   recommendations     → references (only entries given with permission
@@ -27,6 +32,8 @@ import { isFuture, isPresent, parseCvDate, safeHref } from '../cvFormat'
 import { profileLinks, projectLinks, webHref } from '../cvLinks'
 import { bullets, entries, entryStatus, field, indexedCertificates, list } from '../../components/CVViewerPage/fields'
 import { recommendationCredit, recommendationItems } from '../../components/CVViewerPage/recommendationView'
+import { publicPublications } from '../publications/normalize'
+import { toJsonResume } from '../publications/jsonResume'
 
 export const JSON_RESUME_SCHEMA = 'https://raw.githubusercontent.com/jsonresume/resume-schema/v1.0.0/schema.json'
 
@@ -68,6 +75,16 @@ function highlights(node: unknown): string[] {
 export function languageOf(point: string): { language: string; fluency?: string } {
   const m = /^([^:：]{1,40})[:：]\s*(.+)$/.exec(point.trim())
   return m ? { language: m[1].trim(), fluency: m[2].trim() } : { language: point.trim() }
+}
+
+/** Origin of an absolute http(s) URL ('' otherwise): same-site paper links (/uploads/…) become absolute with it. */
+function originOf(url: string): string {
+  try {
+    const u = new URL(url)
+    return /^https?:$/.test(u.protocol) ? u.origin : ''
+  } catch {
+    return ''
+  }
 }
 
 function username(url: string): string {
@@ -188,7 +205,9 @@ export function buildJsonResume(input: readonly CvSectionLike[] | null | undefin
       }),
     )
 
-  const publications = list(section(sections, 'patents'), 'patentExperience').flatMap((g) => {
+  // Papers (sorted like every other view), then patents.
+  const papers = toJsonResume(publicPublications(sections), { origin: originOf(opts.canonical) })
+  const patents = list(section(sections, 'patents'), 'patentExperience').flatMap((g) => {
     const items = bullets(g, 'patents')
     const status = field(g, 'status')
     const summary = [field(g, 'title'), field(g, 'organization'), status].filter(Boolean).join(' · ')
@@ -196,6 +215,7 @@ export function buildJsonResume(input: readonly CvSectionLike[] | null | undefin
     if (!items.length) return field(g, 'title') ? [compact({ name: field(g, 'title'), ...base, summary: [field(g, 'organization'), status].filter(Boolean).join(' · ') })] : []
     return items.map((name) => compact({ name, ...base, summary }))
   })
+  const publications = [...papers, ...patents]
 
   const skillSection = section(sections, 'skill')
   const skills = [

@@ -3,14 +3,18 @@
  * portals that only take pasted text. No hard wrapping (form fields reflow),
  * "- " bullets, full https:// URLs so pasted links stay clickable, one blank
  * line between entries. Pure; prints only model strings plus fixed labels.
+ *
+ * A paper prints as a citation in lines: title, authors (a hidden co-author
+ * as "…"), venue line, date, "Status: …" for anything not yet published,
+ * award, then the DOI as its https://doi.org/ URL and the other links.
  */
 
 import type { CvLang } from '../cvVisibility'
-import type { CvDocModel, ModelEntry, ModelSection } from './model'
+import type { CvDocModel, ModelEntry, ModelPublication, ModelSection } from './model'
 
-const LABELS: Record<CvLang, { phone: string; email: string; skills: string; summary: string; sep: string; listSep: string }> = {
-  en: { phone: 'Phone', email: 'Email', skills: 'Skills', summary: 'SUMMARY', sep: ': ', listSep: ', ' },
-  zh: { phone: '电话', email: '邮箱', skills: '技能', summary: '简介', sep: '：', listSep: '、' },
+const LABELS: Record<CvLang, { phone: string; email: string; skills: string; summary: string; status: string; sep: string; listSep: string }> = {
+  en: { phone: 'Phone', email: 'Email', skills: 'Skills', summary: 'SUMMARY', status: 'Status', sep: ': ', listSep: ', ' },
+  zh: { phone: '电话', email: '邮箱', skills: '技能', summary: '简介', status: '状态', sep: '：', listSep: '、' },
 }
 
 /** Display columns of a string (CJK and full-width forms count 2). */
@@ -42,6 +46,19 @@ function entryLines(e: ModelEntry, lang: CvLang): string[] {
   return lines
 }
 
+function publicationLines(p: ModelPublication, lang: CvLang): string[] {
+  const L = LABELS[lang]
+  const lines: string[] = [p.title]
+  if (p.authors.length) lines.push(p.authors.map((a) => a.name).join(', '))
+  const tail = [p.details, p.publisher].filter(Boolean).join('. ')
+  if (p.venue || tail) lines.push(p.venue && tail ? `${p.venue}${p.details ? ', ' : '. '}${tail}` : p.venue || tail)
+  if (p.date) lines.push(p.date)
+  if (p.status) lines.push(`${L.status}${L.sep}${p.status}`)
+  if (p.award) lines.push(p.award)
+  for (const link of p.links) lines.push(link.key === 'doi' ? link.href : `${link.label}${L.sep}${link.href}`)
+  return lines
+}
+
 function sectionLines(s: ModelSection, lang: CvLang): string[] {
   const L = LABELS[lang]
   const lines = heading(s.title)
@@ -49,6 +66,11 @@ function sectionLines(s: ModelSection, lang: CvLang): string[] {
     s.entries.forEach((e, i) => {
       if (i) lines.push('')
       lines.push(...entryLines(e, lang))
+    })
+  } else if (s.kind === 'publications') {
+    s.items.forEach((p, i) => {
+      if (i) lines.push('')
+      lines.push(...publicationLines(p, lang))
     })
   } else if (s.kind === 'statement') {
     if (s.text) lines.push(s.text)

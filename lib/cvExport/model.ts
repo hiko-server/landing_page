@@ -18,6 +18,13 @@
  * Chinese CV), formatted like the A4 sheet (headerExtrasLines). The optional
  * PDF photo is not part of the model: it is binary, private to the PDF and
  * passed to the renderer separately (lib/cvExport/photo).
+ *
+ * Publications (论文) come through lib/publications, exactly as the A4 sheet
+ * renders them: only papers with a title and a real status, sorted (published
+ * → in press → accepted → under review → preprint, newest first), a hidden
+ * co-author kept in place as "…", no venue for a paper under review, the
+ * status label on anything not yet published, the owner's own name flagged
+ * for emphasis and the DOI as its https://doi.org/ link.
  */
 
 import type { CvLang, CvSectionLike } from '../cvVisibility'
@@ -42,6 +49,11 @@ import { composeName } from '../../components/CVViewerPage/cvName'
 import { extrasLines } from '../../components/CVViewerPage/headerExtrasLines'
 import { recommendationCredit, recommendationItems } from '../../components/CVViewerPage/recommendationView'
 import type { CvHeaderExtras } from '../cvLocale'
+import { HIDDEN_ITEM_MARK } from '../cvVisibility'
+import { formatCitationParts } from '../publications/citation'
+import { ownerNamesFromSections, type OwnerNames } from '../publications/names'
+import { publicPublications } from '../publications/normalize'
+import { LINK_LABELS, PUBLICATIONS_SECTION, type Publication } from '../publications/types'
 import { monthOf, updatedLabel } from './updated'
 
 export { monthLabel, monthOf, updatedLabel } from './updated'
@@ -76,8 +88,35 @@ export type ModelQuote = {
   href: string
 }
 
+/** An author of a paper as printed: the owner is emphasised; a hidden co-author keeps its place as "…". */
+export type ModelAuthor = { name: string; self: boolean; hidden: boolean }
+
+/** A link of a paper: the DOI (printed as its https://doi.org/ URL), PDF, code, slides, paper page. */
+export type ModelPubLink = { key: 'doi' | 'pdf' | 'code' | 'slides' | 'url'; label: string; href: string; text: string }
+
+/** A paper in citation style (lib/publications formatCitationParts). */
+export type ModelPublication = {
+  /** Stable anchor of the paper on /cv (`cv-publications-<index>`). */
+  anchor: string
+  title: string
+  authors: ModelAuthor[]
+  /** Journal / proceedings / repository ('' for a paper under review). */
+  venue: string
+  /** "12(3), 45–67". */
+  details: string
+  publisher: string
+  /** "Mar 2025" / "2025.03" ('' when none). */
+  date: string
+  /** Status label for anything not yet published ("Accepted", "审稿中"); '' when published. */
+  status: string
+  award: string
+  links: ModelPubLink[]
+}
+
 export type ModelSection =
   | { kind: 'entries'; id: string; title: string; entries: ModelEntry[] }
+  /** Publications in citation style. */
+  | { kind: 'publications'; id: string; title: string; items: ModelPublication[] }
   | { kind: 'skills'; id: string; title: string; core: Array<{ name: string; level: string }>; groups: Array<{ name: string; items: string[] }> }
   | { kind: 'points'; id: string; title: string; items: string[] }
   /** Self-assessment (自我评价): a statement and / or points. */
@@ -127,6 +166,11 @@ export type ModelOptions = {
   canonical: string
   /** Header lines from the public availability (lib/cvLocale cvHeaderExtras for this language). */
   headerExtras?: CvHeaderExtras | null
+  /**
+   * The owner's name forms (public CV Personal Info of both languages), for
+   * the emphasis in author lists. Default: this language's own Personal Info.
+   */
+  owner?: OwnerNames | null
 }
 
 function features(node: unknown): ModelBullet[] {
@@ -256,9 +300,64 @@ function entriesOf(section: CvSectionLike, lang: CvLang, now: string): ModelEntr
   }
 }
 
-function sectionOf(section: CvSectionLike, lang: CvLang, now: string): ModelSection | null {
+/** Origin of an absolute URL ('' when it is not one). */
+function originOf(url: string): string {
+  try {
+    const u = new URL(url)
+    return /^https?:$/.test(u.protocol) ? u.origin : ''
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * A paper's links as a file prints them: absolute URLs only (a same-site
+ * path such as /uploads/paper.pdf gets the site's origin, and is left out
+ * when the origin is unknown). The DOI comes first and reads as its URL.
+ */
+function publicationLinks(p: Publication, doiUrl: string, lang: CvLang, origin: string): ModelPubLink[] {
+  const out: ModelPubLink[] = []
+  if (doiUrl) out.push({ key: 'doi', label: LINK_LABELS.doi[lang], href: doiUrl, text: doiUrl })
+  for (const [key, value] of [
+    ['pdf', p.pdfUrl],
+    ['code', p.codeUrl],
+    ['slides', p.slidesUrl],
+    ['url', p.url],
+  ] as const) {
+    const href = value.startsWith('/') ? (origin ? `${origin}${value}` : '') : value
+    if (href) out.push({ key, label: LINK_LABELS[key][lang], href, text: displayUrl(href) })
+  }
+  return out
+}
+
+function publicationsOf(section: CvSectionLike, lang: CvLang, owner: OwnerNames, origin: string): ModelPublication[] {
+  return publicPublications([section]).map((p) => {
+    const c = formatCitationParts(p, lang, owner)
+    return {
+      anchor: cvEntryAnchor(PUBLICATIONS_SECTION, p.index),
+      title: c.title,
+      authors: c.authors.map((a) => (a.hidden ? { name: HIDDEN_ITEM_MARK, self: false, hidden: true } : { name: a.name, self: a.self, hidden: false })),
+      venue: c.venue,
+      details: c.details,
+      publisher: c.publisher,
+      date: p.date ? formatCvDate(p.date, lang) : '',
+      status: c.status,
+      award: c.award,
+      links: publicationLinks(p, c.doiUrl, lang, origin),
+    }
+  })
+}
+
+type SectionContext = { now: string; owner: OwnerNames; origin: string }
+
+function sectionOf(section: CvSectionLike, lang: CvLang, ctx: SectionContext): ModelSection | null {
+  const { now } = ctx
   const id = String(section.sessionName || '')
   const title = sectionTitle(section, lang)
+  if (id === PUBLICATIONS_SECTION) {
+    const items = publicationsOf(section, lang, ctx.owner, ctx.origin)
+    return items.length ? { kind: 'publications', id, title, items } : null
+  }
   if (id === 'skill') {
     const core = list(section, 'languages')
       .map((l) => ({ name: field(l, 'language'), level: field(l, 'level') }))
@@ -319,10 +418,11 @@ export function buildCvModel(sections: readonly CvSectionLike[] | null | undefin
     location: field(pi, 'address'),
     profiles: profileLinks(pi),
   }
+  const ctx: SectionContext = { now: opts.now, owner: opts.owner || ownerNamesFromSections(visible), origin: originOf(opts.canonical) }
   const out: ModelSection[] = []
   for (const s of visible) {
     if (s.sessionName === 'personalInformation') continue
-    const m = sectionOf(s, lang, opts.now)
+    const m = sectionOf(s, lang, ctx)
     if (m) out.push(m)
   }
   const skills = out.find((s): s is Extract<ModelSection, { kind: 'skills' }> => s.kind === 'skills')

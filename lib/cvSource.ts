@@ -17,6 +17,7 @@ import type { CvLang, CvSectionLike } from './cvVisibility'
 import { referenceMonth } from './clock'
 import { cvHeaderExtras, type CvHeaderExtras } from './cvLocale'
 import { withEvidenceLinks, type CvWork, type PublicSocials } from './cvLinks'
+import { NO_OWNER_NAMES, ownerNamesFromSections, type OwnerNames } from './publications/names'
 import { SHEET_SECTIONS } from '../components/CVViewerPage/fields'
 
 export type CvSource = {
@@ -35,6 +36,13 @@ export type CvSource = {
   socials: PublicSocials | null | undefined
   /** Header lines from the public availability (right-to-work line; 求职意向 in Chinese); null = none. */
   headerExtras: CvHeaderExtras | null
+  /**
+   * The owner's name forms from the public CV Personal Info of BOTH
+   * languages (lib/publications/names): emphasised in publication author
+   * lists, so "李彦霈" is recognised on the English CV and "Yanpei Li" on
+   * the Chinese one.
+   */
+  ownerNames: OwnerNames
 }
 
 function safe<T>(fn: () => T, fallback: T): T {
@@ -73,6 +81,7 @@ export async function loadCvSource(lang: CvLang, now: string = referenceMonth())
   const langs: CvLang[] = lang === 'en' ? ['en'] : ['en', 'zh']
   const cv = safe(() => readPublicCvSections('cv', SHEET_SECTIONS, langs), { en: [], zh: [] })
   const raw = lang === 'en' ? cv.en : cv.zh
+  const names = safe(() => readPublicCvSections('cv', ['personalInformation'], ['en', 'zh']), { en: [], zh: [] })
   return {
     lang,
     sections: withEvidenceLinks(raw, { works, socials }),
@@ -82,5 +91,6 @@ export async function loadCvSource(lang: CvLang, now: string = referenceMonth())
     works,
     socials,
     headerExtras,
+    ownerNames: safe(() => ownerNamesFromSections(names.en, names.zh), NO_OWNER_NAMES),
   }
 }

@@ -148,6 +148,24 @@ test('an empty or fully hidden CV has nothing to download', () => {
   assert.equal(hasContent(m), false)
 })
 
+test('a CV whose only public content besides the name is papers still has its downloads (CORR-1)', () => {
+  const papersOnly = (papers: unknown[]) =>
+    buildCvModel(
+      publicSections(
+        [
+          { sessionName: 'personalInformation', firstName: 'A', lastName: 'B' },
+          { sessionName: 'publications', headerName: 'Publications', papers },
+        ],
+        'cv',
+      ),
+      { lang: 'en', now: NOW, canonical: '' },
+    )
+  assert.equal(hasContent(papersOnly([{ title: 'A paper', status: 'published', venue: 'J', date: '2025' }])), true)
+  assert.equal(hasContent(papersOnly([{ title: 'Under review', status: 'under-review' }])), true, 'any status counts')
+  // Papers that do not render (hidden, no status, no title) are not content.
+  assert.equal(hasContent(papersOnly([{ title: 'Hidden', status: 'published', isVisible: false }, { title: 'No status', status: '' }, { title: '', status: 'published' }])), false)
+})
+
 test('plain text: headings with rules, "- " bullets, full https URLs, footer with the update and the live CV', () => {
   const text = renderCvText(buildCvModel(cv(), { lang: 'en', now: NOW, updatedAt: SAVED, canonical: 'https://lucian-dev.com/cv' }))
   const lines = text.split('\n')
