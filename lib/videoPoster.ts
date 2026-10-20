@@ -4,7 +4,7 @@ import { log } from './log'
 import { safeFetch } from './security/safeFetch'
 import type { RemoteImage } from './remoteImage'
 import type { StoredUpload } from './imageVariants'
-import { variantSrcSet } from './uploadVariants'
+import { VARIANT_WIDTHS, placeholderName, variantAvifSrcSet, variantName, variantSrcSet } from './uploadVariants'
 import { imageSizeFromBytes } from './rehype/imageSize'
 import type { ImageSize } from './rehype/images'
 import { parseVideoUrl, type VideoRef } from './videoUrl'
@@ -32,7 +32,7 @@ import { parseVideoUrl, type VideoRef } from './videoUrl'
  *   Vimeo    the thumbnail_url of vimeo.com/api/oembed.json (i.vimeocdn.com)
  */
 
-export type VideoPoster = { src: string; srcSet?: string; width: number; height: number }
+export type VideoPoster = { src: string; srcSet?: string; avifSrcSet?: string; width: number; height: number }
 
 export type PosterDeps = {
   /** Download an image (defaults to lib/remoteImage fetchRemoteImage). */
@@ -93,7 +93,8 @@ export function findPoster(v: VideoRef, dir: string = uploadsDir()): VideoPoster
     const size = fileImageSize(file)
     if (!size) continue
     const srcSet = dir === uploadsDir() ? variantSrcSet(src) : undefined
-    return { src, ...(srcSet ? { srcSet } : {}), width: size.width, height: size.height }
+    const avifSrcSet = srcSet ? variantAvifSrcSet(src) : undefined
+    return { src, ...(srcSet ? { srcSet } : {}), ...(avifSrcSet ? { avifSrcSet } : {}), width: size.width, height: size.height }
   }
   return null
 }
@@ -244,8 +245,16 @@ export async function ensurePosters(body: unknown, opts: { budgetMs?: number; de
  */
 export function posterState(body: unknown, dir: string = uploadsDir()): string {
   // Existence only (no file reads): this runs on every cached compile lookup.
+  // Per poster: stored at all, and whether its AVIF variants and placeholder
+  // exist yet (the media-optimize backfill writes them later).
   return videosIn(body)
-    .map((v) => `${posterStem(v)}:${POSTER_EXTS.some((ext) => fs.existsSync(path.join(dir, `${posterStem(v)}${ext}`))) ? 1 : 0}`)
+    .map((v) => {
+      const name = POSTER_EXTS.map((ext) => `${posterStem(v)}${ext}`).find((n) => fs.existsSync(path.join(dir, n)))
+      if (!name) return `${posterStem(v)}:0`
+      const avif = fs.existsSync(path.join(dir, variantName(name, VARIANT_WIDTHS[0], 'avif'))) ? 1 : 0
+      const lqip = fs.existsSync(path.join(dir, placeholderName(name))) ? 1 : 0
+      return `${posterStem(v)}:1:${avif}${lqip}`
+    })
     .join('|')
 }
 

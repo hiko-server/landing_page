@@ -1,6 +1,8 @@
 /**
  * Upload pipeline (E6): sharp downscale + WebP variants, EXIF rotation,
  * GIF passthrough, never-blocking failure, variant naming and srcset.
+ * Since G4 / C8: AVIF next to every WebP, 320 / 480 px variants, a
+ * same-width variant and the 16 px blur placeholder.
  */
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
@@ -28,27 +30,27 @@ const png = (width: number, height: number) =>
     .png()
     .toBuffer()
 
-test('a 3000×2000 PNG is downscaled to a 2560 long edge with 640/1280/1920 WebP variants', async () => {
+test('a 3000×2000 PNG is downscaled to a 2560 long edge with WebP + AVIF variants at 320…1920 and 2560, plus the placeholder', async () => {
   const out = await processUpload(await png(3000, 2000), 'big.png')
   assert.equal(out.width, MAX_EDGE)
   assert.equal(out.height, Math.round((2000 * MAX_EDGE) / 3000))
   const meta = await sharp(out.buf).metadata()
   assert.equal(meta.format, 'png')
   assert.equal(Math.max(meta.width!, meta.height!), 2560)
+  const widths = [320, 480, 640, 1280, 1920, 2560]
   assert.deepEqual(
     out.variants.map((v) => [v.name, v.width]),
-    [
-      ['big.png.w640.webp', 640],
-      ['big.png.w1280.webp', 1280],
-      ['big.png.w1920.webp', 1920],
-    ],
+    [...widths.flatMap((w) => [[`big.png.w${w}.webp`, w], [`big.png.w${w}.avif`, w]]), ['big.png.w16.webp', 16]],
   )
   for (const v of out.variants) {
     const vm = await sharp(v.buf).metadata()
-    assert.equal(vm.format, 'webp')
+    assert.equal(vm.format, v.format === 'avif' ? 'heif' : 'webp')
+    assert.equal(v.contentType, `image/${v.format}`)
     assert.equal(vm.width, v.width)
     assert.ok(UPLOAD_NAME_RE.test(v.name))
   }
+  assert.equal(out.variants.filter((v) => v.placeholder).length, 1)
+  assert.ok(out.variants.find((v) => v.placeholder)!.buf.length < 2048, 'the placeholder is tiny')
 })
 
 test('a small image keeps its size and format (re-encoded) with only the narrower variants', async () => {
@@ -59,8 +61,8 @@ test('a small image keeps its size and format (re-encoded) with only the narrowe
   assert.deepEqual([meta.width, meta.height], [800, 600])
   assert.deepEqual([out.width, out.height], [800, 600])
   assert.deepEqual(
-    out.variants.map((v) => v.width),
-    [640],
+    out.variants.map((v) => `${v.width}.${v.format}`),
+    ['320.webp', '320.avif', '480.webp', '480.avif', '640.webp', '640.avif', '800.webp', '800.avif', '16.webp'],
   )
 })
 
@@ -95,12 +97,12 @@ test('storeUpload writes the original and variants under fresh names; variantSrc
   const buf = await png(2000, 1000)
   const first = await storeUpload(buf, 'image/png', 'My Photo.png')
   assert.equal(first.url, '/uploads/My_Photo.png')
-  assert.deepEqual(first.variants, ['/uploads/My_Photo.png.w640.webp', '/uploads/My_Photo.png.w1280.webp', '/uploads/My_Photo.png.w1920.webp'])
-  for (const v of first.variants) assert.ok(fs.existsSync(path.join(tmp, 'public', v)))
-  assert.equal(
-    variantSrcSet(first.url),
-    '/uploads/My_Photo.png.w640.webp 640w, /uploads/My_Photo.png.w1280.webp 1280w, /uploads/My_Photo.png.w1920.webp 1920w, /uploads/My_Photo.png 2000w',
-  )
+  const widths = [320, 480, 640, 1280, 1920, 2000]
+  assert.deepEqual(first.variants, widths.map((w) => `/uploads/My_Photo.png.w${w}.webp`))
+  assert.deepEqual(first.avifVariants, widths.map((w) => `/uploads/My_Photo.png.w${w}.avif`))
+  for (const v of [...first.variants, ...(first.avifVariants || [])]) assert.ok(fs.existsSync(path.join(tmp, 'public', v)))
+  // The same-width WebP replaces the PNG as the largest candidate.
+  assert.equal(variantSrcSet(first.url), widths.map((w) => `/uploads/My_Photo.png.w${w}.webp ${w}w`).join(', '))
   const second = await storeUpload(buf, 'image/png', 'My Photo.png')
   assert.notEqual(second.url, first.url, 'never overwrites')
   assert.equal(variantSrcSet('/uploads/missing.png'), undefined)
@@ -112,8 +114,13 @@ test('variant helpers', () => {
   assert.equal(isVariantName('a.png.w1280.webp'), true)
   assert.equal(isVariantName('a.w1280.webp'), false, 'no original extension: a (legacy) original')
   assert.equal(isVariantName('a.webp'), false)
-  assert.deepEqual(variantWidthsFor(1300), [640, 1280])
-  assert.deepEqual([...VARIANT_WIDTHS], [640, 1280, 1920])
+  assert.deepEqual(variantWidthsFor(1300), [320, 480, 640, 1280, 1300])
+  assert.deepEqual(variantWidthsFor(4000), [320, 480, 640, 1280, 1920, 2560], 'capped at the 2560 edge')
+  assert.deepEqual(variantWidthsFor(200), [200])
+  assert.deepEqual(variantWidthsFor(16), [], 'no variants for an icon-sized image')
+  assert.deepEqual([...VARIANT_WIDTHS], [320, 480, 640, 1280, 1920])
+  assert.equal(variantName('a.png', 640, 'avif'), 'a.png.w640.avif')
+  assert.equal(isVariantName('a.png.w640.avif'), true)
   assert.equal(uploadNameOf('/uploads/a.jpg.w640.webp'), null, 'variants are not originals')
   assert.equal(uploadNameOf('/uploads/../etc'), null)
   assert.equal(uploadNameOf('/uploads/ok.png?v=1'), 'ok.png')

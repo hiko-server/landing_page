@@ -14,6 +14,7 @@ import { parseVideoUrl, videoRefFromProps, type VideoRef } from '../videoUrl'
  *   - Every facade element (auto-embedded or from `<YouTube>`) gets its
  *     poster from `posterFor` (lib/videoPoster: a copy stored in /uploads,
  *     never a third-party thumbnail URL) as `data-poster`, `data-poster-srcset`,
+ *     `data-poster-avif-srcset` (G4),
  *     `data-poster-width` / `-height`, and the article language as
  *     `data-ui-lang` for its short notes.
  *
@@ -21,7 +22,7 @@ import { parseVideoUrl, videoRefFromProps, type VideoRef } from '../videoUrl'
  * The feeds turn the elements back into plain links (lib/feedHtml.ts).
  */
 
-export type EmbedPoster = { src: string; srcSet?: string; width: number; height: number }
+export type EmbedPoster = { src: string; srcSet?: string; avifSrcSet?: string; width: number; height: number }
 export type PosterResolver = (v: VideoRef) => EmbedPoster | null | undefined | Promise<EmbedPoster | null | undefined>
 
 export type AutoEmbedOptions = {
@@ -80,6 +81,8 @@ export default function rehypeAutoEmbed(options: AutoEmbedOptions = {}) {
     await Promise.all(
       embeds.map(async (el) => {
         el.properties.dataUiLang = uiLang
+        // Set only from the stored poster below, never by the author.
+        delete el.properties.dataPosterAvifSrcset
         const v = videoRefFromProps(el.properties)
         if (!v || !options.posterFor) return
         // A lookup that fails only costs the poster, never the article.
@@ -87,6 +90,7 @@ export default function rehypeAutoEmbed(options: AutoEmbedOptions = {}) {
         if (!poster || !poster.src.startsWith('/') || poster.src.startsWith('//')) return
         el.properties.dataPoster = poster.src
         if (poster.srcSet) el.properties.dataPosterSrcset = poster.srcSet
+        if (poster.srcSet && poster.avifSrcSet) el.properties.dataPosterAvifSrcset = poster.avifSrcSet
         if (poster.width > 0 && poster.height > 0) {
           el.properties.dataPosterWidth = poster.width
           el.properties.dataPosterHeight = poster.height

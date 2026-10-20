@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { Box, Text } from '@chakra-ui/react'
+import Picture from '../Common/Picture'
+import { useImageReveal } from '../Common/useImageReveal'
 
 /**
  * Article images and figures (rendered from the compiled hast tree).
@@ -8,7 +10,10 @@ import { Box, Text } from '@chakra-ui/react'
  *     browser reserves the box from the attributes); when the size is
  *     unknown the image sits in a 16:10 box with `object-fit: contain`, so
  *     the caption below never jumps when the file arrives.
- *   - Responsive: uploads ship `srcSet` + `sizes` (lib/rehype/images.ts).
+ *   - Responsive: uploads ship `srcSet` + `sizes` (lib/rehype/images.ts),
+ *     and an AVIF <source> once their AVIF variants exist (G4).
+ *   - Blur-up: an upload's placeholder (`data-lqip`, C8) is the frame's
+ *     background until the image has loaded (components/Common/useImageReveal).
  *   - Tap to zoom: inside an article (ArticleImagesContext from
  *     components/Article/ArticleBody.tsx) each image becomes a button that
  *     opens the shared Lightbox. The button is a progressive wrapper added
@@ -67,7 +72,9 @@ const frameSx = {
   bg: 'page.bg-elevated',
 } as const
 
-export function MdxImage({ alt, width, height, src, srcSet, sizes, title, className }: React.ImgHTMLAttributes<HTMLImageElement>) {
+type MdxImageProps = React.ImgHTMLAttributes<HTMLImageElement> & { 'data-avif-srcset'?: string; 'data-lqip'?: string }
+
+export function MdxImage({ alt, width, height, src, srcSet, sizes, title, className, 'data-avif-srcset': avifSrcSet, 'data-lqip': lqip }: MdxImageProps) {
   const zoom = useContext(ArticleImagesContext)
   const inLink = useContext(InsideLinkContext)
   const inCell = useContext(GalleryCellContext)
@@ -76,24 +83,30 @@ export function MdxImage({ alt, width, height, src, srcSet, sizes, title, classN
   const h = toNumber(height)
   const altText = typeof alt === 'string' ? alt : ''
   const known = !!(w && h)
+  const reveal = useImageReveal(known ? lqip : null, { width: w, height: h })
+  const sizesValue = srcSet ? sizes || '(min-width: 768px) 720px, 100vw' : undefined
 
   // A plain <img>: Chakra would read width/height as style props and drop
   // the intrinsic-size attributes the browser needs to reserve the box.
   const img = (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={src}
-      srcSet={srcSet}
-      sizes={srcSet ? sizes || '(min-width: 768px) 720px, 100vw' : undefined}
-      alt={altText}
-      title={title}
-      className={className}
-      width={w}
-      height={h}
-      loading="lazy"
-      decoding="async"
-      style={known ? { display: 'block', width: '100%', height: 'auto' } : { display: 'block', width: '100%', height: '100%', objectFit: 'contain' }}
-    />
+    <Picture avifSrcSet={srcSet ? avifSrcSet : null} sizes={sizesValue}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        ref={reveal.ref}
+        {...reveal.imgProps}
+        src={src}
+        srcSet={srcSet}
+        sizes={sizesValue}
+        alt={altText}
+        title={title}
+        className={className}
+        width={w}
+        height={h}
+        loading="lazy"
+        decoding="async"
+        style={known ? { display: 'block', width: '100%', height: 'auto' } : { display: 'block', width: '100%', height: '100%', objectFit: 'contain' }}
+      />
+    </Picture>
   )
 
   // Known size: the frame is as wide as the image (never upscaled) and its
@@ -119,6 +132,7 @@ export function MdxImage({ alt, width, height, src, srcSet, sizes, title, classN
         width: '100%',
         ...sizing,
       }}
+      style={reveal.boxStyle}
     >
       {img}
     </Box>

@@ -655,6 +655,20 @@ button:hover .nudge-ne {
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
+ * Blur-up images (C8, components/Common/useImageReveal.ts). The box behind
+ * the image shows its blurred placeholder from the first paint; an image
+ * still loading after hydration waits invisible over it and fades in once it
+ * has loaded (instant under reduced motion: the duration token is 0).
+ * ──────────────────────────────────────────────────────────────────────── */
+img[data-lqip='pending'] {
+  opacity: 0;
+}
+img[data-lqip='reveal'] {
+  opacity: 1;
+  transition: opacity var(--duration-base) var(--ease-standard);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
  * Reduced motion — respect user preference everywhere.
  * ──────────────────────────────────────────────────────────────────────── */
 /* The reduced-motion zero of the duration tokens (theme/tokens.ts). */
@@ -775,6 +789,10 @@ button:hover .nudge-ne {
 }
 
 @media print {
+  /* A blur-up image still loading prints as itself, never invisible (C8). */
+  img[data-lqip] {
+    opacity: 1 !important;
+  }
   html,
   body {
     height: auto !important;

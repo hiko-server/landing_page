@@ -1,5 +1,6 @@
 import { element, isElement, walk, type HastElement, type HastNode } from './hast'
 import { safeSrcSet } from './safeUrls'
+import { isPlaceholder } from '../lqip'
 
 /**
  * rehype plugin: well-behaved article images (zero layout shift).
@@ -10,7 +11,12 @@ import { safeSrcSet } from './safeUrls'
  *     reserves the box before the file arrives;
  *   - `srcSet` + `sizes` for uploads that have responsive variants
  *     (`srcSetFor`, backed by lib/uploadVariants), entries filtered by the
- *     media URL rule of ./safeUrls;
+ *     media URL rule of ./safeUrls; the AVIF variants as `data-avif-srcset`
+ *     (`avifSrcSetFor`, G4 — MdxImage turns it into a <picture> source);
+ *   - `data-lqip`: the blur placeholder, a small inline WebP data: URL
+ *     (`placeholderFor`, C8). Set here, AFTER ./safeUrls, which strips
+ *     data: URLs from author content; an author-written data-lqip or
+ *     data-avif-srcset is always removed first;
  *   - an image that is alone in its paragraph becomes
  *     `<figure class="article-figure"><img><figcaption>` — the caption is the
  *     markdown title (`![alt](src "title")`), else a meaningful alt text
@@ -27,9 +33,15 @@ export type ImageSize = { width: number; height: number }
 export type SizeResolver = (src: string) => ImageSize | null | Promise<ImageSize | null>
 export type SrcSetResolver = (src: string) => string | null | undefined | Promise<string | null | undefined>
 
+export type PlaceholderResolver = (src: string) => string | null | undefined | Promise<string | null | undefined>
+
 export type ImagesOptions = {
   resolveSize?: SizeResolver
   srcSetFor?: SrcSetResolver
+  /** AVIF srcset of an upload (only when its AVIF set is complete). */
+  avifSrcSetFor?: SrcSetResolver
+  /** Blur placeholder data: URL of an upload. */
+  placeholderFor?: PlaceholderResolver
 }
 
 /** `sizes` for article images: the prose column is ~720px wide from md up. */
@@ -54,14 +66,21 @@ async function enhance(img: HastElement, options: ImagesOptions): Promise<void> 
   const p = img.properties
   p.loading = 'lazy'
   p.decoding = 'async'
+  // Only this plugin sets these, from the stored variants (see the header).
+  delete p.dataAvifSrcset
+  delete p.dataLqip
   const src = typeof p.src === 'string' ? p.src : ''
   if (!src) return
   const hasSize = p.width !== undefined && p.height !== undefined
-  const { resolveSize, srcSetFor } = options
+  const ownSrcSet = p.srcSet !== undefined
+  const { resolveSize, srcSetFor, avifSrcSetFor, placeholderFor } = options
   // A lookup that throws (sync or async) only costs the attribute, never the article.
-  const [size, srcSet] = await Promise.all([
+  const [size, srcSet, avifSrcSet, placeholder] = await Promise.all([
     !hasSize && resolveSize ? (async () => resolveSize(src))().catch(() => null) : null,
-    p.srcSet === undefined && srcSetFor ? (async () => srcSetFor(src))().catch(() => null) : null,
+    !ownSrcSet && srcSetFor ? (async () => srcSetFor(src))().catch(() => null) : null,
+    // An author's own srcset is never overridden by an AVIF source.
+    !ownSrcSet && avifSrcSetFor ? (async () => avifSrcSetFor(src))().catch(() => null) : null,
+    placeholderFor ? (async () => placeholderFor(src))().catch(() => null) : null,
   ])
   if (size) {
     p.width = size.width
@@ -72,7 +91,10 @@ async function enhance(img: HastElement, options: ImagesOptions): Promise<void> 
   if (safe) {
     p.srcSet = safe
     p.sizes = ARTICLE_IMAGE_SIZES
+    const safeAvif = safeSrcSet(avifSrcSet)
+    if (safeAvif) p.dataAvifSrcset = safeAvif
   }
+  if (isPlaceholder(placeholder)) p.dataLqip = placeholder
 }
 
 export default function rehypeImages(options: ImagesOptions = {}) {

@@ -210,14 +210,16 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
   }
 
   // File facts for the portrait and the field-note photos: intrinsic size
-  // (no layout shift) and the upload variants (responsive srcset).
+  // (no layout shift), the variants (WebP / AVIF srcsets) and the blur
+  // placeholder (lib/uploadVariants imageSources).
   let avatar: AvatarMeta = {}
   let photos: ScrollerImage[] = []
   try {
-    const [{ localImageSize }, { variantSrcSet }] = await Promise.all([import('../lib/rehype/imageSize'), import('../lib/uploadVariants')])
+    const [{ localImageSize }, { imageSources }] = await Promise.all([import('../lib/rehype/imageSize'), import('../lib/uploadVariants')])
     const facts = (url: string) => {
-      const size = url.startsWith('/') ? localImageSize(url) : null
-      return defined({ width: size?.width, height: size?.height, srcSet: url.startsWith('/') ? variantSrcSet(url) : undefined })
+      const local = url.startsWith('/')
+      const size = local ? localImageSize(url) : null
+      return defined({ width: size?.width, height: size?.height, ...(local ? imageSources(url) : {}) })
     }
     const avatarUrl = safeHref(home?.hero?.avatarUrl)
     if (avatarUrl) avatar = facts(avatarUrl)

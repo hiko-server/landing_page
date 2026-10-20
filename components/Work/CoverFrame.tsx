@@ -1,5 +1,7 @@
 import type React from 'react'
 import { Box, Text } from '@chakra-ui/react'
+import Picture from '../Common/Picture'
+import { useImageReveal } from '../Common/useImageReveal'
 
 /**
  * Case-study covers on /work and on the case-study page, one 16:10 box for
@@ -16,13 +18,17 @@ import { Box, Text } from '@chakra-ui/react'
  *     CSS only, decorative (the title follows as text).
  *
  * The box is reserved by aspect-ratio before any file loads (no layout
- * shift). `vtName` names the image for the shared-element morph between the
+ * shift). Uploads come as WebP with an AVIF <source> (G4), over their
+ * blurred placeholder until they have loaded (C8; the likely LCP cover —
+ * `eager` — paints over it as it arrives instead of fading in). `vtName` names the image for the shared-element morph between the
  * /work card and the case-study page.
  */
 
 export type CoverView = {
   src: string
   srcSet: string | null
+  avifSrcSet?: string | null
+  placeholder?: string | null
   alt: string
   width: number | null
   height: number | null
@@ -63,6 +69,14 @@ export default function CoverFrame({
   decorative?: boolean
   radius?: string
 }) {
+  // Large covers only: a small one sits on its tinted panel at its own size.
+  const reveal = useImageReveal(cover && !cover.small ? cover.placeholder : null, {
+    fade: !eager,
+    width: cover?.width,
+    height: cover?.height,
+    fit: 'cover',
+    position: cover?.focus,
+  })
   const frame = {
     className: 'work-cover',
     position: 'relative' as const,
@@ -123,39 +137,43 @@ export default function CoverFrame({
   }
 
   const img = (
-    // A plain <img> with the upload variants' srcset: the site never uses the Next image optimizer.
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={cover.src}
-      srcSet={cover.srcSet || undefined}
-      sizes={cover.srcSet ? sizes : undefined}
-      alt={decorative ? '' : cover.alt}
-      width={cover.width ?? 1600}
-      height={cover.height ?? 1000}
-      loading={eager ? 'eager' : 'lazy'}
-      decoding="async"
-      {...(eager ? { fetchpriority: 'high' } : {})}
-      style={
-        cover.small
-          ? ({
-              display: 'block',
-              width: 'auto',
-              height: 'auto',
-              maxWidth: '100%',
-              maxHeight: '100%',
-              borderRadius: '4px',
-              ...(vtName ? { viewTransitionName: vtName } : null),
-            } as React.CSSProperties)
-          : ({
-              display: 'block',
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              objectPosition: cover.focus,
-              ...(vtName ? { viewTransitionName: vtName } : null),
-            } as React.CSSProperties)
-      }
-    />
+    // A plain <img> with the upload variants' srcsets: the site never uses the Next image optimizer.
+    <Picture avifSrcSet={cover.srcSet ? cover.avifSrcSet : null} sizes={sizes}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        ref={reveal.ref}
+        {...reveal.imgProps}
+        src={cover.src}
+        srcSet={cover.srcSet || undefined}
+        sizes={cover.srcSet ? sizes : undefined}
+        alt={decorative ? '' : cover.alt}
+        width={cover.width ?? 1600}
+        height={cover.height ?? 1000}
+        loading={eager ? 'eager' : 'lazy'}
+        decoding="async"
+        {...(eager ? { fetchpriority: 'high' } : {})}
+        style={
+          cover.small
+            ? ({
+                display: 'block',
+                width: 'auto',
+                height: 'auto',
+                maxWidth: '100%',
+                maxHeight: '100%',
+                borderRadius: '4px',
+                ...(vtName ? { viewTransitionName: vtName } : null),
+              } as React.CSSProperties)
+            : ({
+                display: 'block',
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                objectPosition: cover.focus,
+                ...(vtName ? { viewTransitionName: vtName } : null),
+              } as React.CSSProperties)
+        }
+      />
+    </Picture>
   )
 
   if (cover.small) {
@@ -166,7 +184,7 @@ export default function CoverFrame({
     )
   }
   return (
-    <Box {...frame} data-cover="image">
+    <Box {...frame} data-cover="image" style={reveal.boxStyle}>
       {img}
     </Box>
   )

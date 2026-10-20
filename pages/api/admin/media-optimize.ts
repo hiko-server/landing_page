@@ -8,21 +8,24 @@ import { readPublicHome } from '../../../lib/home'
 import { PAGE_NAMES } from '../../../lib/mdx-admin'
 import { pathsReferencingUploads, revalidatePaths, type ContentSource } from '../../../lib/revalidate'
 import { UPLOAD_NAME_RE, isValidUploadName } from '../../../lib/security/uploadName'
-import { isVariantName, variantName, variantWidthsFor } from '../../../lib/uploadVariants'
+import { expectedVariantNames, isVariantName } from '../../../lib/uploadVariants'
 import { MAX_INPUT_PIXELS, apngFrameCount, makeVariants, mirrorUpload, uploadsDir, writeVariantFile } from '../../../lib/imageVariants'
 
 /**
  * POST /api/admin/media-optimize
  *   → { processed, skipped, errors, remaining, revalidated, revalidateFailed? }
  *
- * Backfills responsive WebP variants for uploads made before the upload
- * pipeline existed: every original in public/uploads wider than the smallest
- * variant width gets the variants it is missing (written locally and, only
- * when this run wrote them, mirrored to R2). Originals are never rewritten —
- * they are referenced by content and served `immutable`. GIFs and animated
- * images (WebP, APNG) are skipped.
+ * Backfills the responsive variants of uploads made before the current
+ * pipeline (lib/uploadVariants expectedVariantNames): the WebP and AVIF
+ * variants at every width the original should have (320 / 480 / 640 / 1280 /
+ * 1920 and its own width) and the blur placeholder — only the files it is
+ * missing, written locally and, only when this run wrote them, mirrored to
+ * R2. Originals are never rewritten — they are referenced by content and
+ * served `immutable`. GIFs and animated images (WebP, APNG) are skipped.
+ * AVIF encoding is the slow part on a one-vCPU server: the run budget below
+ * keeps each request short and the client calls again.
  *
- * Published pages embed an upload's srcset when they are generated, so every
+ * Published pages embed an upload's srcsets and placeholder when they are generated, so every
  * page whose content references an image that got new variants is
  * regenerated right away (`revalidated`); the compile memo in lib/mdx.ts is
  * keyed on the variant state, so the new tree carries the srcset.
@@ -104,9 +107,7 @@ export default withApi('admin/media-optimize', async (req, res, ctx) => {
         const buf = fs.readFileSync(path.join(dir, name))
         const meta = await sharp(buf, { limitInputPixels: MAX_INPUT_PIXELS }).metadata()
         const width = meta.autoOrient?.width ?? meta.width ?? 0
-        const missing = variantWidthsFor(width)
-          .map((w) => variantName(name, w))
-          .filter((v) => isValidUploadName(v) && !existing.has(v))
+        const missing = expectedVariantNames(name, width).filter((v) => isValidUploadName(v) && !existing.has(v))
         if ((meta.pages ?? 1) > 1 || apngFrameCount(buf) > 0 || !missing.length) {
           skipped++
           continue
@@ -119,7 +120,7 @@ export default withApi('admin/media-optimize', async (req, res, ctx) => {
           if (!writeVariantFile(v)) continue
           existing.add(v.name)
           optimized.add(name)
-          await mirrorUpload(v.name, v.buf, 'image/webp')
+          await mirrorUpload(v.name, v.buf, v.contentType)
         }
         processed++
       } catch (err) {

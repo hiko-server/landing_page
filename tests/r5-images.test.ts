@@ -139,11 +139,13 @@ test('photo.jpg then photo.png: disjoint variant sets, each srcset shows its own
   const png = await storeUpload(blue, 'image/png', 'photo.png')
   assert.equal(jpg.name, 'photo.jpg')
   assert.equal(png.name, 'photo.png', 'different extension: no clash, no suffix')
-  assert.deepEqual(jpg.variants, ['/uploads/photo.jpg.w640.webp', '/uploads/photo.jpg.w1280.webp'])
-  assert.deepEqual(png.variants, ['/uploads/photo.png.w640.webp', '/uploads/photo.png.w1280.webp'])
+  const widths = [320, 480, 640, 1280, 1400]
+  assert.deepEqual(jpg.variants, widths.map((w) => `/uploads/photo.jpg.w${w}.webp`))
+  assert.deepEqual(png.variants, widths.map((w) => `/uploads/photo.png.w${w}.webp`))
+  assert.deepEqual(png.avifVariants, widths.map((w) => `/uploads/photo.png.w${w}.avif`))
   assert.equal(jpg.variants.filter((v) => png.variants.includes(v)).length, 0)
-  assert.equal(variantSrcSet(jpg.url), '/uploads/photo.jpg.w640.webp 640w, /uploads/photo.jpg.w1280.webp 1280w, /uploads/photo.jpg 1400w')
-  assert.equal(variantSrcSet(png.url), '/uploads/photo.png.w640.webp 640w, /uploads/photo.png.w1280.webp 1280w, /uploads/photo.png 1400w')
+  assert.equal(variantSrcSet(jpg.url), widths.map((w) => `/uploads/photo.jpg.w${w}.webp ${w}w`).join(', '))
+  assert.equal(variantSrcSet(png.url), widths.map((w) => `/uploads/photo.png.w${w}.webp ${w}w`).join(', '))
   const [r] = await meanRgb(path.join(uploads, 'photo.jpg.w640.webp'))
   const [, , b] = await meanRgb(path.join(uploads, 'photo.png.w640.webp'))
   assert.ok(r > 180, 'the jpg variant is red')
@@ -157,7 +159,7 @@ test('a clash on a variant name alone triggers the hash suffix', async () => {
   const raw = await solid(900, 600, '#20a020').png().toBuffer()
   const stored = await storeUpload(raw, 'image/png', 'clash.png')
   assert.equal(stored.name, `clash-${sha10(raw)}.png`)
-  assert.deepEqual(stored.variants, [`/uploads/clash-${sha10(raw)}.png.w640.webp`])
+  assert.deepEqual(stored.variants, [320, 480, 640, 900].map((w) => `/uploads/clash-${sha10(raw)}.png.w${w}.webp`))
   assert.ok(fs.readFileSync(path.join(uploads, 'clash.png.w640.webp')).equals(squatter), 'the existing file is untouched')
   assert.equal(fs.existsSync(path.join(uploads, 'clash.png')), false)
 })
@@ -177,7 +179,10 @@ test('only files this call wrote are mirrored to R2', async () => {
   }
   const stored = await storeUpload(raw, 'image/png', 'mirror.png', { mirror })
   assert.equal(stored.name, hashed)
-  assert.deepEqual(mirrored, [hashed, variantName(hashed, 1280)], 'the 640 variant was not written, so not mirrored')
+  const written = [320, 480, 640, 1280, 1500]
+    .flatMap((w) => [variantName(hashed, w), variantName(hashed, w, 'avif')])
+    .filter((n) => n !== variantName(hashed, 640))
+  assert.deepEqual(mirrored, [hashed, ...written, `${hashed}.w16.webp`], 'the 640 WebP was not written, so not mirrored')
   assert.ok(fs.readFileSync(path.join(uploads, variantName(hashed, 640))).equals(sentinel))
 
   // The same image again: everything already exists → nothing is written or mirrored.
@@ -191,10 +196,12 @@ test('an upload named like a variant is stored under a renamed, optimisable name
   const webp = await solid(800, 400, '#406080').webp().toBuffer()
   const squat = await storeUpload(webp, 'image/webp', 'hero.jpg.w640.webp')
   assert.equal(squat.name, 'hero.jpg-w640.webp')
-  assert.deepEqual(squat.variants, ['/uploads/hero.jpg-w640.webp.w640.webp'])
+  // A WebP original has no same-width WebP (it is one): 320 / 480 / 640 only.
+  assert.deepEqual(squat.variants, [320, 480, 640].map((w) => `/uploads/hero.jpg-w640.webp.w${w}.webp`))
+  assert.deepEqual(squat.avifVariants, [320, 480, 640, 800].map((w) => `/uploads/hero.jpg-w640.webp.w${w}.avif`))
   const jpg = await storeUpload(await solid(800, 400, '#804060').jpeg().toBuffer(), 'image/jpeg', 'hero.jpg')
   assert.equal(jpg.name, 'hero.jpg', 'its slot was not squatted')
-  assert.deepEqual(jpg.variants, ['/uploads/hero.jpg.w640.webp'])
+  assert.deepEqual(jpg.variants, [320, 480, 640, 800].map((w) => `/uploads/hero.jpg.w${w}.webp`))
 })
 
 // ── Decompression-bomb guard ────────────────────────────────────────────────

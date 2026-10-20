@@ -7,7 +7,17 @@ import { isR2Configured, r2PutBuffer } from './r2'
 import { uploadR2Key } from './contentStore'
 import { imageSizeFromBytes } from './rehype/imageSize'
 import { isValidUploadName, sanitizeUploadName, withHashSuffix } from './security/uploadName'
-import { allVariantNames, asOriginalName, variantName, variantWidthsFor } from './uploadVariants'
+import {
+  MAX_VARIANT_WIDTH,
+  PLACEHOLDER_WIDTH,
+  asOriginalName,
+  placeholderName,
+  variantFilesOf,
+  variantFormatsAt,
+  variantName,
+  variantWidthsFor,
+  type VariantFormat,
+} from './uploadVariants'
 
 /**
  * Upload-time image processing (sharp) — the replacement for the disabled
@@ -25,15 +35,19 @@ import { allVariantNames, asOriginalName, variantName, variantWidthsFor } from '
  *     re-encoded in its own format (JPEG mozjpeg q82, PNG palette when it has
  *     ≤256 colours else zlib level 9, WebP q82 or lossless when the input was
  *     lossless).
- *   - WebP q72 variants are made for every VARIANT_WIDTHS entry narrower than
- *     the original (lib/uploadVariants.ts names them).
+ *   - Variants (lib/uploadVariants.ts names them): for every VARIANT_WIDTHS
+ *     entry narrower than the original and for the original's own width, a
+ *     WebP (q72) and an AVIF (q50, effort 2 — cheap enough for the one-vCPU
+ *     server, within ~1% of effort 4's size), plus a 16 px WebP blur
+ *     placeholder (C8). Made here, at upload, or by the media-optimize
+ *     backfill — never while a page renders.
  *   - Animated WebPs and PNGs keep their frames with the metadata chunks
  *     removed, GIFs are stored untouched; none of them get variants.
  *   - A re-encode failure of an image under the pixel limit stores the
  *     original unchanged: an upload is never blocked by the optimizer.
  */
 
-export const MAX_EDGE = 2560
+export const MAX_EDGE = MAX_VARIANT_WIDTH
 /**
  * Decompression-bomb guard: the most decoded pixels (width × height × frames)
  * an upload may have. Enforced by storeUpload before anything is stored, and
@@ -262,7 +276,7 @@ export async function assertImageWithinLimits(buf: Buffer): Promise<ImageGeometr
   return g
 }
 
-export type VariantFile = { name: string; width: number; buf: Buffer }
+export type VariantFile = { name: string; width: number; format: VariantFormat; buf: Buffer; contentType: string; placeholder?: true }
 
 export type ProcessedUpload = {
   /** Bytes to store as the original (re-encoded without metadata; unchanged only for GIFs and on failure). */
@@ -290,15 +304,35 @@ async function fitsPalette(img: Sharp, max = 256): Promise<boolean> {
   return true
 }
 
-/** WebP variants of an (upright) image `width` px wide, for the stored name `safeName`. */
+/** Encoder settings per variant format (G4). */
+const ENCODERS: Record<VariantFormat, (img: Sharp) => Sharp> = {
+  webp: (img) => img.webp({ quality: 72 }),
+  avif: (img) => img.avif({ quality: 50, effort: 2 }),
+}
+
+/**
+ * The variants of an (upright) image `width` px wide, for the stored name
+ * `safeName`: WebP and AVIF at every width variantWidthsFor() lists, and the
+ * blur placeholder. `skip(name)` leaves out files that exist already.
+ */
 export async function makeVariants(buf: Buffer, safeName: string, width: number, skip: (name: string) => boolean = () => false): Promise<VariantFile[]> {
   const out: VariantFile[] = []
-  for (const w of variantWidthsFor(width)) {
-    const name = variantName(safeName, w)
-    // A legacy original's name can be too long for a variant suffix: no variant then.
-    if (!isValidUploadName(name) || skip(name)) continue
-    const data = await open(buf).resize({ width: w, withoutEnlargement: true }).webp({ quality: 72 }).toBuffer()
-    out.push({ name, width: w, buf: data })
+  const widths = variantWidthsFor(width)
+  for (const w of widths) {
+    for (const format of variantFormatsAt(safeName, w, width)) {
+      const name = variantName(safeName, w, format)
+      // A legacy original's name can be too long for a variant suffix: no variant then.
+      if (!isValidUploadName(name) || skip(name)) continue
+      const data = await ENCODERS[format](open(buf).resize({ width: w, withoutEnlargement: true })).toBuffer()
+      out.push({ name, width: w, format, buf: data, contentType: `image/${format}` })
+    }
+  }
+  // C8: a 16 px WebP of the whole image, inlined by the pages as a blurred
+  // placeholder while the real file loads (alpha kept for transparent PNGs).
+  const lqip = placeholderName(safeName)
+  if (widths.length && isValidUploadName(lqip) && !skip(lqip)) {
+    const data = await open(buf).resize({ width: PLACEHOLDER_WIDTH }).webp({ quality: 50, effort: 6 }).toBuffer()
+    out.push({ name: lqip, width: PLACEHOLDER_WIDTH, format: 'webp', buf: data, contentType: 'image/webp', placeholder: true })
   }
   return out
 }
@@ -408,6 +442,8 @@ export type StoredUpload = {
   height: number | null
   /** URLs of the stored WebP variants, narrowest first. */
   variants: string[]
+  /** URLs of the stored AVIF variants, narrowest first. */
+  avifVariants?: string[]
   r2Warning?: string
 }
 
@@ -416,9 +452,9 @@ export type StoreUploadOptions = {
   mirror?: (name: string, buf: Buffer, contentType: string) => Promise<string | null>
 }
 
-/** True when `name` or any of its variant names is already taken in `dir`. */
+/** True when `name` is taken in `dir`, or any variant file of that name exists (a stale one would be served for the new image). */
 function nameInUse(dir: string, name: string): boolean {
-  return [name, ...allVariantNames(name)].some((n) => fs.existsSync(path.join(dir, n)))
+  return fs.existsSync(path.join(dir, name)) || variantFilesOf(dir, name).length > 0
 }
 
 /**
@@ -449,12 +485,14 @@ export async function storeUpload(raw: Buffer, mime: ImageMime, requestedName: s
     if (w) warnings.push(w)
   }
   const variants: string[] = []
+  const avifVariants: string[] = []
   for (const v of processed.variants) {
     if (writeVariantFile(v)) {
-      const w = await mirror(v.name, v.buf, 'image/webp')
+      const w = await mirror(v.name, v.buf, v.contentType)
       if (w) warnings.push(w)
     }
-    variants.push(`/uploads/${v.name}`)
+    if (v.placeholder) continue
+    ;(v.format === 'avif' ? avifVariants : variants).push(`/uploads/${v.name}`)
   }
   return {
     url: `/uploads/${safeName}`,
@@ -462,6 +500,7 @@ export async function storeUpload(raw: Buffer, mime: ImageMime, requestedName: s
     width: processed.width,
     height: processed.height,
     variants,
+    avifVariants,
     ...(warnings.length ? { r2Warning: `R2 upload failed: ${warnings[0]}` } : {}),
   }
 }

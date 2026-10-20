@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Box, Flex, IconButton, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay, Text } from '@chakra-ui/react'
 import { m, useReducedMotion, type PanInfo } from 'framer-motion'
 import { ArrowLeftIcon, ArrowRightIcon } from '../Icons/ui/content'
+import Picture from './Picture'
 import { motionTransition } from '../../theme/tokens'
 
 /**
@@ -25,6 +26,8 @@ import { motionTransition } from '../../theme/tokens'
 export type LightboxItem = {
   src: string
   srcSet?: string
+  /** AVIF variants, offered in a <picture> source (G4). */
+  avifSrcSet?: string
   alt: string
   caption?: string
   width?: number
@@ -185,29 +188,31 @@ export default function Lightbox({
                     : null),
                 }}
               >
-                <m.img
-                  layout={shared ? true : undefined}
-                  src={current.src}
-                  srcSet={current.srcSet}
-                  sizes="100vw"
-                  alt={current.alt}
-                  width={current.width}
-                  height={current.height}
-                  decoding="async"
-                  draggable={false}
-                  style={
-                    ratio
-                      ? { display: 'block', width: '100%', height: '100%', objectFit: 'cover', maxWidth: 'none' }
-                      : {
-                          display: 'block',
-                          width: 'auto',
-                          height: 'auto',
-                          maxWidth: '100%',
-                          maxHeight: `calc(100dvh - ${CHROME_PX}px)`,
-                          objectFit: 'contain',
-                        }
-                  }
-                />
+                <Picture avifSrcSet={current.srcSet ? current.avifSrcSet : null} sizes="100vw">
+                  <m.img
+                    layout={shared ? true : undefined}
+                    src={current.src}
+                    srcSet={current.srcSet}
+                    sizes="100vw"
+                    alt={current.alt}
+                    width={current.width}
+                    height={current.height}
+                    decoding="async"
+                    draggable={false}
+                    style={
+                      ratio
+                        ? { display: 'block', width: '100%', height: '100%', objectFit: 'cover', maxWidth: 'none' }
+                        : {
+                            display: 'block',
+                            width: 'auto',
+                            height: 'auto',
+                            maxWidth: '100%',
+                            maxHeight: `calc(100dvh - ${CHROME_PX}px)`,
+                            objectFit: 'contain',
+                          }
+                    }
+                  />
+                </Picture>
               </m.div>
 
               <Box minH="1.5em" mt={4} maxW="72ch" textAlign="center" aria-live="polite">

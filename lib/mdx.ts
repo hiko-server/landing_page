@@ -17,10 +17,10 @@ import rehypeLiftBlocks from './rehype/liftBlocks'
 import rehypeHeadings from './rehype/headings'
 import { footnoteOptions } from './rehype/footnotes'
 import rehypeCodeThemeAttr from './rehype/codeThemeAttr'
-import rehypeImages, { type SizeResolver, type SrcSetResolver } from './rehype/images'
+import rehypeImages, { type PlaceholderResolver, type SizeResolver, type SrcSetResolver } from './rehype/images'
 import rehypeLangSpans from './rehype/langSpans'
 import { resolveImageSize } from './rehype/imageSize'
-import { variantSrcSet, variantState } from './uploadVariants'
+import { placeholderDataUrl, variantAvifSrcSet, variantSrcSet, variantState } from './uploadVariants'
 import { posterForCompile, posterState } from './videoPoster'
 import { classList, isElement, textOf, walk, type HastNode } from './rehype/hast'
 import { clampAtBoundary } from './schema'
@@ -205,6 +205,10 @@ export type CompileOptions = {
   resolveSize?: SizeResolver
   /** Responsive `srcset` for an image (default: upload variants). */
   srcSetFor?: SrcSetResolver
+  /** AVIF `srcset` for an image (default: upload variants, when complete). */
+  avifSrcSetFor?: SrcSetResolver
+  /** Blur placeholder of an image (default: the upload's stored placeholder). */
+  placeholderFor?: PlaceholderResolver
   /** Stored poster of a video facade (default: lib/videoPoster, imported once into /uploads). */
   posterFor?: PosterResolver
 }
@@ -249,6 +253,8 @@ export async function compileMdx(body: string, opts: CompileOptions = {}): Promi
     .use(rehypeImages, {
       resolveSize: opts.resolveSize || resolveImageSize,
       srcSetFor: opts.srcSetFor || variantSrcSet,
+      avifSrcSetFor: opts.avifSrcSetFor || variantAvifSrcSet,
+      placeholderFor: opts.placeholderFor || placeholderDataUrl,
     })
     .use(rehypeGalleries)
     .use(rehypeLangSpans, { lang })

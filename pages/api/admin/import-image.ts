@@ -54,6 +54,7 @@ export default withApi('admin/import-image', async (req, res, ctx) => {
     width: stored.width,
     height: stored.height,
     variants: stored.variants,
+    avifVariants: stored.avifVariants ?? [],
     ...(stored.r2Warning ? { r2Warning: stored.r2Warning } : {}),
   })
 })

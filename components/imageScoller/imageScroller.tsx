@@ -5,11 +5,14 @@ import { ArrowLeftIcon, ArrowRightIcon, PauseIcon, PlayIcon } from '../Icons/ui/
 
 import LazyLightbox, { preloadLightbox } from '../Common/LazyLightbox'
 import type { LightboxItem } from '../Common/Lightbox'
+import Picture from '../Common/Picture'
+import { useImageReveal } from '../Common/useImageReveal'
 import { safeHref } from '../../lib/cvFormat'
 
 /**
- * A home "Field notes" photo. `width` / `height` / `srcSet` are attached on
- * the server (intrinsic size of the local file and its upload variants).
+ * A home "Field notes" photo. `width` / `height` / `srcSet` / `avifSrcSet` /
+ * `placeholder` are attached on the server (intrinsic size of the local file,
+ * its variants and its blur placeholder — lib/uploadVariants imageSources).
  */
 export type ScrollerImage = {
   url: string
@@ -19,6 +22,8 @@ export type ScrollerImage = {
   width?: number
   height?: number
   srcSet?: string
+  avifSrcSet?: string
+  placeholder?: string
 }
 
 const AUTOPLAY_MS = 6000
@@ -29,6 +34,51 @@ const TILE_SIZES = '(min-width: 62em) 340px, (min-width: 48em) 46vw, 80vw'
 const EDGE_MASK = 'linear-gradient(to right, transparent, #000 24px, #000 calc(100% - 24px), transparent)'
 
 const validSize = (n: unknown): number | undefined => (typeof n === 'number' && Number.isFinite(n) && n > 0 ? Math.round(n) : undefined)
+
+type TileImage = { url: string; width?: number; height?: number; srcSet?: string; avifSrcSet?: string; placeholder?: string }
+
+/**
+ * One photo's 4:3 tile: WebP / AVIF candidates over the blurred placeholder
+ * until the photo has loaded (components/Common/useImageReveal). The tile is
+ * the shared element the Lightbox morphs out of (`layoutId`; none under
+ * reduced motion).
+ */
+function FieldNoteTile({ img, layoutId }: { img: TileImage; layoutId?: string }) {
+  const reveal = useImageReveal(img.placeholder, { width: img.width, height: img.height, fit: 'cover' })
+  return (
+    <m.div
+      layoutId={layoutId}
+      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+      style={{
+        position: 'relative',
+        aspectRatio: '4 / 3',
+        overflow: 'hidden',
+        borderRadius: 8,
+        border: '1px solid var(--chakra-colors-page-border)',
+        background: 'var(--chakra-colors-page-bg-elevated)',
+        ...reveal.boxStyle,
+      }}
+    >
+      <Picture avifSrcSet={img.avifSrcSet} sizes={TILE_SIZES}>
+        <m.img
+          ref={reveal.ref}
+          {...reveal.imgProps}
+          layout={layoutId ? true : undefined}
+          src={img.url}
+          srcSet={img.srcSet}
+          sizes={img.srcSet ? TILE_SIZES : undefined}
+          alt=""
+          width={img.width}
+          height={img.height}
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+          style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover', maxWidth: 'none' }}
+        />
+      </Picture>
+    </m.div>
+  )
+}
 
 /**
  * "Field notes" — a full-width, horizontally scroll-snapping photo strip.
@@ -57,6 +107,8 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
           width: validSize(i.width),
           height: validSize(i.height),
           srcSet: typeof i.srcSet === 'string' && i.srcSet ? i.srcSet : undefined,
+          avifSrcSet: typeof i.srcSet === 'string' && i.srcSet && typeof i.avifSrcSet === 'string' && i.avifSrcSet ? i.avifSrcSet : undefined,
+          placeholder: typeof i.placeholder === 'string' && i.placeholder ? i.placeholder : undefined,
         }))
         .filter((i) => i.url),
     [images],
@@ -178,6 +230,7 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
   const items: LightboxItem[] = data.map((img, i) => ({
     src: img.url,
     srcSet: img.srcSet,
+    avifSrcSet: img.avifSrcSet,
     alt: img.describe || `Photo ${i + 1} of ${count}`,
     caption: img.describe || undefined,
     width: img.width,
@@ -267,32 +320,7 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
                   cursor="zoom-in"
                   _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
                 >
-                  <m.div
-                    layoutId={reduce ? undefined : `${layoutPrefix}-${i}`}
-                    transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                    style={{
-                      position: 'relative',
-                      aspectRatio: '4 / 3',
-                      overflow: 'hidden',
-                      borderRadius: 8,
-                      border: '1px solid var(--chakra-colors-page-border)',
-                      background: 'var(--chakra-colors-page-bg-elevated)',
-                    }}
-                  >
-                    <m.img
-                      layout={reduce ? undefined : true}
-                      src={img.url}
-                      srcSet={img.srcSet}
-                      sizes={img.srcSet ? TILE_SIZES : undefined}
-                      alt=""
-                      width={img.width}
-                      height={img.height}
-                      loading="lazy"
-                      decoding="async"
-                      draggable={false}
-                      style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover', maxWidth: 'none' }}
-                    />
-                  </m.div>
+                  <FieldNoteTile img={img} layoutId={reduce ? undefined : `${layoutPrefix}-${i}`} />
                 </Box>
                 {(img.describe || img.redirectTo) && (
                   <Flex as="figcaption" mt={2.5} gap={3} align="baseline" justify="space-between" fontSize="13px" color="page.fg-secondary" lineHeight="1.5">

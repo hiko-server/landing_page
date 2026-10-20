@@ -14,6 +14,8 @@ import { heroCopy, portraitAlt, type HeroIdentity, type HeroMeta } from './heroI
 import { resolveSocialLinks, type SocialName } from '../Chrome/chrome'
 import { revealSx, settleSx } from './heroReveal'
 import { portraitFrameSx } from './portraitFrame'
+import Picture from '../Common/Picture'
+import { useImageReveal } from '../Common/useImageReveal'
 
 /**
  * The home hero.
@@ -45,8 +47,53 @@ const AVAILABILITY_LABEL: Record<AvailabilityStatus, string> = {
   closed: 'Not taking new work',
 }
 
-/** Server-side facts about the portrait file (intrinsic size, upload variants). */
-export type AvatarMeta = { srcSet?: string; width?: number; height?: number }
+/** Server-side facts about the portrait file (intrinsic size, variants, blur placeholder — lib/uploadVariants imageSources). */
+export type AvatarMeta = { srcSet?: string; avifSrcSet?: string; placeholder?: string; width?: number; height?: number }
+
+/**
+ * The portrait, cropped and scaled as the owner set it in the Home editor.
+ * WebP / AVIF candidates; the blurred placeholder is the image's own
+ * background (so the owner's scale and focal point apply to it too) until the
+ * file has loaded — no fade: the portrait is in the first viewport.
+ */
+function Portrait({ src, avatar, sizes, alt, posX, posY, scale }: { src: string; avatar?: AvatarMeta; sizes: string; alt: string; posX: number; posY: number; scale: number }) {
+  const position = `${posX}% ${posY}%`
+  const reveal = useImageReveal(avatar?.placeholder, { fade: false, width: avatar?.width, height: avatar?.height, fit: 'cover', position })
+  return (
+    <Picture avifSrcSet={avatar?.srcSet ? avatar.avifSrcSet : null} sizes={sizes}>
+      <Box
+        as="img"
+        ref={reveal.ref}
+        {...reveal.imgProps}
+        src={src}
+        srcSet={avatar?.srcSet}
+        sizes={avatar?.srcSet ? sizes : undefined}
+        width={avatar?.width}
+        height={avatar?.height}
+        alt={alt}
+        // Lazy: each copy is display:none at the other widths, and a lazy image
+        // that is not rendered is never fetched. Both sit in the first viewport
+        // where they show, so they load right after layout.
+        loading="lazy"
+        decoding="async"
+        draggable={false}
+        position="absolute"
+        inset={0}
+        w="100%"
+        h="100%"
+        maxW="none"
+        style={{
+          objectFit: 'cover',
+          objectPosition: position,
+          transform: `scale(${scale})`,
+          transformOrigin: position,
+          pointerEvents: 'none',
+          ...reveal.boxStyle,
+        }}
+      />
+    </Picture>
+  )
+}
 
 /** Separator width of the meta list (see the `metaSx` comment). */
 const META_GAP = '1.6em'
@@ -111,33 +158,7 @@ const PersonalInfo = ({
   const hasMeta = Boolean(location || languages || (availability && availabilityText))
 
   const portrait = (sizes: string, imgAlt: string) => (
-    <Box
-      as="img"
-      src={avatarSrc}
-      srcSet={avatar?.srcSet}
-      sizes={avatar?.srcSet ? sizes : undefined}
-      width={avatar?.width}
-      height={avatar?.height}
-      alt={imgAlt}
-      // Lazy: each copy is display:none at the other widths, and a lazy image
-      // that is not rendered is never fetched. Both sit in the first viewport
-      // where they show, so they load right after layout.
-      loading="lazy"
-      decoding="async"
-      draggable={false}
-      position="absolute"
-      inset={0}
-      w="100%"
-      h="100%"
-      maxW="none"
-      style={{
-        objectFit: 'cover',
-        objectPosition: `${posX}% ${posY}%`,
-        transform: `scale(${scale})`,
-        transformOrigin: `${posX}% ${posY}%`,
-        pointerEvents: 'none',
-      }}
-    />
+    <Portrait src={avatarSrc} avatar={avatar} sizes={sizes} alt={imgAlt} posX={posX} posY={posY} scale={scale} />
   )
 
   // The phone avatar repeats the portrait beside the h1; the card (≥ md)
