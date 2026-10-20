@@ -26,7 +26,8 @@ import { runInAuditScope, type AuditScope } from '../../../../lib/audit/context'
  *               → { ok, meta } · 409 { current } when the texts changed elsewhere
  *     apply-alt { name } → the default alt text filled in wherever a post,
  *               case study or page shows the image without one (a history
- *               snapshot each; lib/media/applyAltServer)
+ *               snapshot each; lib/media/applyAltServer); `skipped` lists
+ *               documents left unchanged because they would not render
  *     delete    { names } → moved to the 30-day trash; a used upload is
  *               refused (`blocked`, with where it is used)
  *     restore   { names } · purge { names } (delete for good, from the trash)
@@ -101,6 +102,7 @@ async function post(req: NextApiRequest, res: NextApiResponse, ctx: ApiContext) 
       revalidated: out.paths.filter((p) => !failed.includes(p)),
       ...(failed.length ? { revalidateFailed: failed } : {}),
       ...(out.warnings.length ? { warnings: out.warnings } : {}),
+      ...(out.skipped.length ? { skipped: out.skipped } : {}),
       library: listLibrary(),
     })
   }

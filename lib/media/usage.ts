@@ -1,4 +1,5 @@
 import { isMeaninglessAlt } from '../contentHealth/analyze'
+import { isPageName, pageAdminPath, pagePublicPath } from '../pageNames'
 import type { BodyScan } from '../contentHealth/mdxScan'
 import { isValidUploadName } from '../security/uploadName'
 import { variantOriginalName } from '../uploadVariants'
@@ -203,7 +204,12 @@ function itemDoc(item: UsageItem, pending: boolean): DocInfo {
   }
 }
 
-const PAGE_TITLE: Record<string, string> = { now: '/now', uses: '/uses', about: 'About bio' }
+const PAGE_TITLE: Record<string, string> = { now: '/now', uses: '/uses', about: 'About bio', 'about-zh': 'About bio (中文)' }
+
+/** How the media library names a single page (the bios by what they are, the others by their address). */
+export function pageDocTitle(name: string): string {
+  return PAGE_TITLE[name] || (isPageName(name) ? pagePublicPath(name) : `/${name}`)
+}
 
 // ── Home and CV ───────────────────────────────────────────────────────────
 
@@ -258,13 +264,15 @@ export function scanUsage(src: UsageSources, opts: UsageOptions = {}): MediaUsag
   for (const item of src.items) scanMdx(c, itemDoc(item, false), item.frontmatter || {}, item.body || '', opts)
   for (const item of src.pending) scanMdx(c, itemDoc(item, true), item.frontmatter || {}, item.body || '', opts)
   for (const page of src.pages) {
+    const known = isPageName(page.name) ? page.name : null
     const doc: DocInfo = {
       doc: `page/${page.name}`,
       docKind: 'page',
-      docTitle: PAGE_TITLE[page.name] || `/${page.name}`,
+      docTitle: pageDocTitle(page.name),
       docState: 'live',
-      editHref: `/admin/${page.name}`,
-      publicHref: `/${page.name}`,
+      // The Chinese bio is edited beside the English one and public at /zh/about (lib/pageNames).
+      editHref: known ? pageAdminPath(known) : null,
+      publicHref: known ? pagePublicPath(known) : null,
     }
     scanMdx(c, doc, page.frontmatter || {}, page.body || '', opts)
   }

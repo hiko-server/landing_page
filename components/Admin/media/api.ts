@@ -46,13 +46,17 @@ export type BatchBody = {
 }
 
 export type MetaBody = { ok: true; meta: MediaMeta | null; r2Warning?: string }
+export type RewrittenDocBody = { kind: string; ref: string; title: string; references: number }
+/** A document the server left unchanged because its new text would not render (lib/media/docRewrite). */
+export type SkippedDocBody = RewrittenDocBody & { reason: string }
 export type ApplyAltBody = {
   ok: true
   places: number
-  rewrites: Array<{ kind: string; ref: string; title: string; references: number }>
+  rewrites: RewrittenDocBody[]
   revalidated: string[]
   revalidateFailed?: string[]
   warnings?: string[]
+  skipped?: SkippedDocBody[]
   library: MediaLibraryResponse
 }
 export type OptimizeBody = { ok: true; processed: number; skipped: number; errors: Array<{ name: string; error: string }>; remaining: number; revalidated: string[]; library?: MediaLibraryResponse }
@@ -133,10 +137,11 @@ export type ReplaceBody = {
   from: string
   name: string
   url: string
-  rewrites: Array<{ kind: string; ref: string; title: string; references: number }>
+  rewrites: RewrittenDocBody[]
   revalidated: string[]
   revalidateFailed?: string[]
   warnings?: string[]
+  skipped?: SkippedDocBody[]
   library: MediaLibraryResponse
 }
 

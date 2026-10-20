@@ -212,9 +212,57 @@ export function filterToQuery(filter: MediaFilter, sort: MediaSort): Record<stri
 
 export const isFiltered = (f: MediaFilter) => !!f.q.trim() || f.type !== 'all' || f.orientation !== 'all' || f.flags.length > 0
 
-/** Markdown for an image: `![alt](url "caption")` (quotes in the caption escaped). */
+/**
+ * Every character that means something in a Markdown / MDX line here:
+ * brackets and backslash (the image syntax itself), `<` `>` `{` `}` (JSX
+ * and expressions — an unescaped `x<y` or `{draft` stops the body from
+ * compiling, `{a}` would silently drop the braces), emphasis and code marks
+ * `*` `_` `` ` `` and GFM's `~` `|`, `&` (character references) and `!`.
+ * A backslash before ASCII punctuation is always a literal in CommonMark, so
+ * the alt text comes out exactly as written.
+ */
+const MARKDOWN_SIGNIFICANT = /[[\]\\<>{}*_`&!~|]/g
+
+/** Markdown alt text: one line, every Markdown / MDX-significant character escaped. */
+export function markdownAlt(alt: string): string {
+  return alt.replace(/\s+/g, ' ').trim().replace(MARKDOWN_SIGNIFICANT, '\\$&')
+}
+
+/** Markdown for an image: `![alt](url "caption")` (the alt escaped, quotes in the caption escaped). */
 export function imageMarkdown(url: string, alt: string, caption = ''): string {
-  const a = alt.replace(/[[\]\\]/g, '\\$&').replace(/\s+/g, ' ').trim()
+  const a = markdownAlt(alt)
   const c = caption.replace(/\s+/g, ' ').trim().replace(/\\/g, '\\\\').replace(/"/g, '\\"')
   return `![${a}](${url}${c ? ` "${c}"` : ''})`
+}
+
+/** Places in posts, case studies and pages that show the image without a real alt text. */
+export function altGapsIn(usage: readonly MediaUsage[]): MediaUsage[] {
+  return usage.filter((u) => (u.alt === 'missing' || u.alt === 'meaningless') && (u.docKind === 'post' || u.docKind === 'work' || u.docKind === 'page'))
+}
+
+/** A document a media change left unchanged (lib/media/docRewrite `skipped`). */
+export type SkippedDocRef = { kind: string; ref: string; title: string }
+
+const SKIPPED_DOC_PREFIX: Record<string, string> = { post: 'blog', work: 'work', page: 'page' }
+
+/** Whether a usage entry belongs to one of the skipped documents (live version or unpublished changes). */
+export function inSkippedDoc(u: Pick<MediaUsage, 'doc'>, skipped: readonly SkippedDocRef[]): boolean {
+  const doc = u.doc.replace(/#pending$/, '')
+  return skipped.some((d) => SKIPPED_DOC_PREFIX[d.kind] !== undefined && doc === `${SKIPPED_DOC_PREFIX[d.kind]}/${d.ref}`)
+}
+
+/**
+ * The toast sentence for documents a media change left unchanged because
+ * their new text would not render ('' when there are none).
+ */
+export function skippedDocsText(skipped: readonly SkippedDocRef[] | undefined): string {
+  if (!skipped?.length) return ''
+  const names = skipped.map((d) => `“${d.title}”`).join(', ')
+  return `Left ${names} unchanged: with this change ${skipped.length === 1 ? 'its' : 'their'} text would no longer render — edit ${skipped.length === 1 ? 'it' : 'them'} in the editor.`
+}
+
+/** The toast sentence for pages that could not be regenerated ('' when every one was). */
+export function refreshFailedText(paths: readonly string[] | undefined): string {
+  if (!paths?.length) return ''
+  return `Could not refresh ${paths.join(', ')} — ${paths.length === 1 ? 'it shows' : 'they show'} the change after the next regeneration.`
 }

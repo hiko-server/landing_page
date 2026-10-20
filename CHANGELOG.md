@@ -8,6 +8,26 @@ portfolio CMS, no public package). Entries are grouped by release date.
 
 ## [Unreleased]
 
+### Review fixes
+
+Fixes for defects the final review found in the final batch before it shipped.
+
+- **Media library alt text (CORR-1)**: "Use the default alt text" escapes
+  every Markdown / MDX character, so an alt such as `x<y`, `<Award>` or
+  `{draft` stays literal instead of breaking the post, the RSS feed and the
+  Markdown twin. Replace and fill-in now compile every rewritten body first;
+  a document that would not render is left unchanged and named in the
+  toast, which also lists pages that could not be refreshed. "Copy
+  Markdown" and the editor's image insert use the same escaping.
+- **Chinese bio in the media library (CORR-5)**: "Used in" links to
+  /admin/about?lang=zh and /zh/about (not dead /about-zh links), replace and
+  fill-in refresh /zh/about, and the Chinese bio gets the Chinese default
+  alt even when its text is mostly English.
+- **Container gate (OPS-1)**: every end-to-end test is its own client (a
+  TEST-NET address in cf-connecting-ip), so the full suite against one
+  server no longer runs out of per-client budgets (post saves, contact
+  nonces) and fails with 429s.
+
 ### patch-2b1
 
 Fixes after the wave 2B deploy (the post-deploy end-to-end run against

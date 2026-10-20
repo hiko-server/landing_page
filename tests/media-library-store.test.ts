@@ -327,6 +327,83 @@ test('H7 fill in alt: English and Chinese documents get their own default; snaps
   assert.ok(lib.usageOf(img.name).filter((u) => u.doc.startsWith('blog/')).every((u) => u.alt === 'ok'))
 })
 
+test('CORR-1 media rewrites: a document whose new text would not compile is left unchanged and reported', async () => {
+  const img = await upload('compile-check.png', 400, 300)
+  // The default alt itself is escaped, so filling it in keeps the body compiling.
+  await metaStore.saveMediaMeta(img.name, { alt: 'The <Award> certificate, x<3 and {draft' })
+  const { applyDefaultAlt } = await import('../lib/media/applyAltServer')
+  const { mdxProblem } = await import('../lib/mdx-admin')
+  await store.putItem('blog', 'compile-ok', { title: 'Compiles' }, `Intro.\n\n![](${img.url})\n`)
+  const filled = await applyDefaultAlt(img.name)
+  assert.ok(filled.ok)
+  assert.deepEqual(filled.skipped, [])
+  assert.equal(await mdxProblem(store.getItem('blog', 'compile-ok')?.body ?? ''), null, 'the rewritten body compiles')
+  assert.ok(store.getItem('blog', 'compile-ok')?.body.includes('![The \\<Award\\> certificate, x\\<3 and \\{draft]('))
+
+  // Whatever a transform produces, a body that would not compile is never stored:
+  // live versions, unpublished changes and pages alike.
+  const { rewriteDocuments } = await import('../lib/media/docRewrite')
+  const { putPendingRevision, getPendingRevision } = await import('../lib/pendingRevisions')
+  const live = store.getItem('blog', 'compile-ok')
+  putPendingRevision('blog', 'compile-ok', { title: 'Compiles v2' }, `Pending ![x](${img.url})`, Math.trunc(live?.updated_at ?? 0))
+  await store.putPage('uses', {}, `Gear ![x](${img.url})\n`)
+  const before = { live: store.getItem('blog', 'compile-ok')?.body, pending: getPendingRevision('blog', 'compile-ok')?.body, page: store.getPage('uses')?.body }
+  const run = await rewriteDocuments((doc) =>
+    doc.body.includes(img.url) ? { value: { ...doc, body: doc.body.replace(img.url, `${img.url}) <Broken`) }, count: 1 } : { value: doc, count: 0 },
+  )
+  assert.deepEqual(run.rewrites, [])
+  assert.deepEqual(run.paths, [])
+  assert.deepEqual(run.skipped.map((d) => `${d.kind}:${d.ref}`).sort(), ['page:uses', 'post:compile-ok'])
+  assert.ok(run.skipped.every((d) => /^Line \d+/.test(d.reason)), 'with the first error, for the owner')
+  assert.equal(store.getItem('blog', 'compile-ok')?.body, before.live)
+  assert.equal(getPendingRevision('blog', 'compile-ok')?.body, before.pending)
+  assert.equal(store.getPage('uses')?.body, before.page)
+
+  // A good live version with broken unpublished changes: the whole document waits for the owner.
+  const half = await rewriteDocuments((doc) =>
+    !doc.body.includes(img.url)
+      ? { value: doc, count: 0 }
+      : { value: doc.body.startsWith('Pending') ? { ...doc, body: `${doc.body} {unclosed` } : doc, count: 1 },
+  )
+  assert.deepEqual(half.skipped.map((d) => d.ref), ['compile-ok'])
+  assert.equal(store.getItem('blog', 'compile-ok')?.body, before.live)
+
+  // "Replace file" goes through the same check: a body stored before the editors checked
+  // it (an import, an old version) keeps the old address, which redirects.
+  const broken = `Intro <Unclosed\n\n![](${img.url})\n`
+  await store.putItem('blog', 'compile-broken', { title: 'Broken body' }, broken)
+  const replaced = await replace.replaceUpload(
+    { name: img.name, raw: await gradient(420, 300).png().toBuffer(), mime: 'image/png', filename: '1790000000002-compile-new.png' },
+    { r2: fakeR2(new Set()).ops, purge: noPurge },
+  )
+  assert.ok(replaced.ok)
+  assert.deepEqual(replaced.skipped.map((d) => `${d.kind}:${d.ref}:${d.title}`), ['post:compile-broken:Broken body'])
+  assert.equal(store.getItem('blog', 'compile-broken')?.body, broken)
+  assert.ok(store.getItem('blog', 'compile-ok')?.body.includes(`/uploads/${replaced.upload.name}`))
+  assert.ok(!replaced.paths.includes('/blog/compile-broken'))
+  await store.removeItem('blog', 'compile-ok')
+  await store.removeItem('blog', 'compile-broken')
+  await store.putPage('uses', {}, '')
+})
+
+test('CORR-5 the Chinese bio: named, linked and refreshed at /zh/about; its Chinese default even when its text is mostly English', async () => {
+  const img = await upload('bio-zh.png', 400, 300)
+  await metaStore.saveMediaMeta(img.name, { alt: 'A desk', altZh: '一张书桌' })
+  await store.putPage('about-zh', {}, `I build ML systems with PyTorch, CUDA and Kubernetes on edge GPUs.\n\n![](${img.url})\n`)
+  const usage = lib.usageOf(img.name, { fresh: true }).find((u) => u.doc === 'page/about-zh')
+  assert.ok(usage, 'listed under the Chinese bio')
+  assert.equal(usage?.docTitle, 'About bio (中文)')
+  assert.equal(usage?.editHref, '/admin/about?lang=zh')
+  assert.equal(usage?.publicHref, '/zh/about')
+  const { applyDefaultAlt } = await import('../lib/media/applyAltServer')
+  const out = await applyDefaultAlt(img.name)
+  assert.ok(out.ok)
+  assert.deepEqual(out.rewrites.map((r) => `${r.kind}:${r.ref}:${r.title}`), ['page:about-zh:About bio (中文)'])
+  assert.ok(out.paths.includes('/zh/about'))
+  assert.ok(!out.paths.includes('/about-zh'))
+  assert.ok(store.getPage('about-zh')?.body.includes(`![一张书桌](${img.url})`), 'the Chinese default, by the page name')
+})
+
 test('H7 a new upload never takes the name of one in the trash; the content export carries the texts', async () => {
   const first = await upload('same-name.png', 300, 200)
   await metaStore.saveMediaMeta(first.name, { alt: 'Exported alt' })

@@ -14,8 +14,12 @@ import {
   filterToQuery,
   flagCounts,
   formatBytes,
+  altGapsIn,
   imageMarkdown,
+  inSkippedDoc,
   matchesQuery,
+  refreshFailedText,
+  skippedDocsText,
   orientationOf,
   sortItems,
   tileLabel,
@@ -125,6 +129,37 @@ test('H7 usage: posts, drafts, unpublished changes, pages, home, CV and other do
   assert.equal(by('zh.png')[0].label, '中文 · 项目 › Items › 1 › Link')
   assert.equal(by('sig.png')[0].doc, 'kv/inbox-templates')
   assert.deepEqual(scanUsage(empty), [])
+})
+
+test('CORR-5 usage: the Chinese bio is named and linked where it really lives', () => {
+  const usage = scanUsage(
+    { ...empty, pages: [{ name: 'about-zh', frontmatter: {}, body: '![](/uploads/zh-bio.png)' }, { name: 'about', frontmatter: {}, body: '![](/uploads/en-bio.png)' }] },
+    { scanBody },
+  )
+  const zh = usage.find((u) => u.name === 'zh-bio.png')
+  assert.equal(zh?.docTitle, 'About bio (中文)')
+  assert.equal(zh?.editHref, '/admin/about?lang=zh')
+  assert.equal(zh?.publicHref, '/zh/about')
+  const en = usage.find((u) => u.name === 'en-bio.png')
+  assert.deepEqual([en?.docTitle, en?.editHref, en?.publicHref], ['About bio', '/admin/about', '/about'])
+})
+
+test('CORR-1 drawer toasts: documents left unchanged are named; what is left is counted apart from them', () => {
+  const gaps = altGapsIn([
+    { doc: 'blog/a', docKind: 'post', alt: 'missing' },
+    { doc: 'blog/a#pending', docKind: 'post', alt: 'meaningless' },
+    { doc: 'page/now', docKind: 'page', alt: 'missing' },
+    { doc: 'home', docKind: 'home', alt: 'missing' },
+    { doc: 'work/b', docKind: 'work', alt: 'ok' },
+  ] as unknown as MediaUsage[])
+  assert.deepEqual(gaps.map((u) => u.doc), ['blog/a', 'blog/a#pending', 'page/now'])
+  const skipped = [{ kind: 'post', ref: 'a', title: 'Post A' }]
+  assert.deepEqual(gaps.filter((u) => !inSkippedDoc(u, skipped)).map((u) => u.doc), ['page/now'])
+  assert.equal(skippedDocsText([]), '')
+  assert.match(skippedDocsText(skipped), /^Left “Post A” unchanged: with this change its text would no longer render/)
+  assert.match(skippedDocsText([...skipped, { kind: 'page', ref: 'now', title: '/now' }]), /“Post A”, “\/now” unchanged: .* their text/)
+  assert.equal(refreshFailedText(undefined), '')
+  assert.match(refreshFailedText(['/blog/a']), /^Could not refresh \/blog\/a — it shows/)
 })
 
 test('H7 usage: home labels for unknown paths read as words', () => {
@@ -309,6 +344,45 @@ test('H7 fill in alt: Markdown and JSX images of that upload only; decorative an
   assert.equal(markdownAlt(' a\\b '), 'a\\\\b')
   assert.equal(jsxAltAttribute('He said "hi"'), "alt='He said \"hi\"'")
   assert.equal(jsxAltAttribute(`"it's"`), null)
+})
+
+test('CORR-1 fill in alt: an alt text with MDX characters still compiles and renders exactly as written', async () => {
+  const { compileMdx } = await import('../lib/mdx')
+  const noSizes = { resolveSize: async () => null, srcSetFor: () => undefined, avifSrcSetFor: () => undefined, placeholderFor: () => undefined, posterFor: async () => null }
+  const altOf = (node: any): string | null => {
+    if (node?.type === 'element' && node.tagName === 'img') return String(node.properties?.alt ?? '')
+    for (const child of node?.children ?? []) {
+      const found = altOf(child)
+      if (found !== null) return found
+    }
+    return null
+  }
+  const alts = [
+    'The <Award> certificate on the desk',
+    'Ratio x<y on the chart',
+    'lr<1e-3, x<3 and a > b',
+    'A <br> break',
+    '<b>bold</b> text',
+    'Draft {unfinished',
+    'Set {a} = {b}',
+    'The *best* day and the _only_ one',
+    'Use `code` here',
+    'Fish &amp; chips & more',
+    'Wow! ~~struck~~ a|b',
+    'C:\\path\\to [x] (y)',
+    'https://example.com/a_b*c',
+  ]
+  for (const alt of alts) {
+    for (const body of ['Intro.\n\n![](/uploads/desk.jpg)\n', 'Intro.\n\n![IMG_2041.jpg](/uploads/desk.jpg)\n']) {
+      const out = fillBodyAlt(body, scanBody(body), 'desk.jpg', alt)
+      assert.equal(out.changed, 1, alt)
+      const { tree } = await compileMdx(out.body, noSizes as any)
+      assert.equal(altOf(tree), alt, `the rendered alt of ${JSON.stringify(alt)}`)
+    }
+    // "Copy Markdown" and the editor's image insert use the same escaping.
+    const { tree } = await compileMdx(imageMarkdown('/uploads/desk.jpg', alt, 'A caption'), noSizes as any)
+    assert.equal(altOf(tree), alt, `imageMarkdown of ${JSON.stringify(alt)}`)
+  }
 })
 
 test('H7 fill in alt: covers without a real alt; the language picks the text', () => {

@@ -31,7 +31,19 @@ import {
 } from '@chakra-ui/react'
 import type { MediaItem, MediaLibraryResponse, MediaMeta, MediaUsage } from '../../../lib/media/types'
 import { ALT_MAX, CAPTION_MAX } from '../../../lib/media/meta'
-import { formatBytes, formatDims, formatLabel, imageMarkdown, orientationOf, relativeTime, usedInCount } from '../../../lib/media/view'
+import {
+  altGapsIn,
+  formatBytes,
+  formatDims,
+  formatLabel,
+  imageMarkdown,
+  inSkippedDoc,
+  orientationOf,
+  refreshFailedText,
+  relativeTime,
+  skippedDocsText,
+  usedInCount,
+} from '../../../lib/media/view'
 import { copyText } from '../../MDX/clipboard'
 import SegmentedTabs, { tabPanelProps, type SegmentedItem } from '../shell/SegmentedTabs'
 import { Eyebrow, MONO, inputProps, outlineButtonProps, primaryButtonProps, useSaveKeys, useSaveShortcut, warnTextProps } from '../shell/ui'
@@ -193,10 +205,7 @@ export default function MediaDrawer({ item, isOpen, onClose, now, r2Configured, 
   const usage = useMemo(() => groupUsage(item?.usage ?? []), [item])
   const used = item ? usedInCount(item) : 0
   // Places in posts, case studies and pages that show it without a real alt text.
-  const altGaps = useMemo(
-    () => (item?.usage ?? []).filter((u) => (u.alt === 'missing' || u.alt === 'meaningless') && (u.docKind === 'post' || u.docKind === 'work' || u.docKind === 'page')),
-    [item],
-  )
+  const altGaps = useMemo(() => altGapsIn(item?.usage ?? []), [item])
 
   if (!item) return null
   const orientation = orientationOf(item.width, item.height)
@@ -273,10 +282,19 @@ export default function MediaDrawer({ item, isOpen, onClose, now, r2Configured, 
     }
     const places = out.body.rewrites.reduce((n, r) => n + r.references, 0)
     const warnings = out.body.warnings ?? []
+    const skipped = out.body.skipped ?? []
     toast({
-      status: warnings.length || out.body.revalidateFailed?.length ? 'warning' : 'success',
+      status: warnings.length || skipped.length || out.body.revalidateFailed?.length ? 'warning' : 'success',
       title: places ? `Replaced — ${places} reference${places === 1 ? '' : 's'} updated` : 'Replaced',
-      description: [warnings.join(' · '), out.body.revalidated.length ? `Refreshed ${out.body.revalidated.join(', ')}` : ''].filter(Boolean).join(' — ') || 'The old address now opens the new file.',
+      description:
+        [
+          skippedDocsText(skipped),
+          warnings.join(' · '),
+          refreshFailedText(out.body.revalidateFailed),
+          out.body.revalidated.length ? `Refreshed ${out.body.revalidated.join(', ')}` : '',
+        ]
+          .filter(Boolean)
+          .join(' — ') || 'The old address now opens the new file.',
       position: 'bottom-right',
       duration: 6000,
       isClosable: true,
@@ -293,12 +311,21 @@ export default function MediaDrawer({ item, isOpen, onClose, now, r2Configured, 
       toast({ status: 'error', title: 'Alt text not filled in', description: out.error, position: 'bottom-right' })
       return
     }
-    const left = altGaps.length - out.body.places
+    const skipped = out.body.skipped ?? []
+    // What still lacks an alt text afterwards, apart from the documents left unchanged: no default in their language.
+    const fresh = out.body.library?.items.find((i) => i.name === item.name)
+    const left = fresh ? altGapsIn(fresh.usage).filter((u) => !inSkippedDoc(u, skipped)).length : Math.max(0, altGaps.length - out.body.places)
     toast({
-      status: out.body.warnings?.length || left > 0 ? 'warning' : 'success',
-      title: out.body.places ? `Alt text filled in ${out.body.places} place${out.body.places === 1 ? '' : 's'}` : 'Nothing to fill in',
+      status: out.body.warnings?.length || skipped.length || left > 0 || out.body.revalidateFailed?.length ? 'warning' : 'success',
+      title: out.body.places ? `Alt text filled in ${out.body.places} place${out.body.places === 1 ? '' : 's'}` : skipped.length ? 'Alt text not filled in' : 'Nothing to fill in',
       description:
-        [out.body.warnings?.join(' · '), left > 0 ? `${left} left: their language has no default text yet.` : '', out.body.revalidated.length ? `Refreshed ${out.body.revalidated.join(', ')}` : '']
+        [
+          skippedDocsText(skipped),
+          out.body.warnings?.join(' · '),
+          left > 0 ? `${left} left: their language has no default text yet.` : '',
+          refreshFailedText(out.body.revalidateFailed),
+          out.body.revalidated.length ? `Refreshed ${out.body.revalidated.join(', ')}` : '',
+        ]
           .filter(Boolean)
           .join(' ') || undefined,
       position: 'bottom-right',

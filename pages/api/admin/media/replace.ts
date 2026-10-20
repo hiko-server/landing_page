@@ -19,7 +19,9 @@ import { listLibrary } from '../../../../lib/media/list'
  * the trash, and the pages that show it are regenerated.
  *
  *   → { ok, from, url, name, width, height, rewrites, revalidated,
- *       revalidateFailed?, warnings?, library }
+ *       revalidateFailed?, warnings?, skipped?, library } — `skipped`: the
+ *       documents left on the old address (it redirects) because their
+ *       new text would not render
  *
  * The body is checked like an upload (lib/media/uploadBody) and shares the
  * upload rate limit. Admin only.
@@ -79,6 +81,7 @@ export default withApi('admin/media/replace', async (req, res) => {
     revalidated: out.paths.filter((p) => !failed.includes(p)),
     ...(failed.length ? { revalidateFailed: failed } : {}),
     ...(out.warnings.length ? { warnings: out.warnings } : {}),
+    ...(out.skipped.length ? { skipped: out.skipped } : {}),
     library: listLibrary(),
   })
 })
