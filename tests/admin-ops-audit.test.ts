@@ -282,6 +282,7 @@ const NOT_ADMIN_WRITES: Record<string, string> = {
   'auth/passkey/verify': 'sign-in — the sign-in history records it; Activity shows it',
   'auth/reset-password': 'password reset — the sign-in history records it; Activity shows it',
   'admin/preview': 'compiles an unsaved draft — stores nothing',
+  'admin/og-preview': 'renders a social-card preview for the editor — stores nothing',
   'admin/security/confirm': 'step-up check — changes nothing',
   'admin/security/verify': 'step-up check — changes nothing',
   'internal/restore-drill': 'the server’s own scheduled job (loopback only)',

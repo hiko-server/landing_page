@@ -1,60 +1,47 @@
 import { normalizeSearchQuery } from './eventsShared'
 import { sendGoal } from './goalBeacon'
+import { SEARCH_EMPTY_EVENT, type EmptyResultDetail } from '../search/emptyResult'
 
 /**
  * search_empty (critic correction to H9): what visitors look for in the ⌘K
  * palette and do not find. Imported by the palette chunk only.
  *
- * The palette reports every change of its query and result count:
+ * The palette decides WHEN a search or an "Ask" question has found nothing
+ * (lib/search/emptyResult onEmptyResult: once the query rested, once per
+ * query while the palette is open, mode-aware) and dispatches
+ * SEARCH_EMPTY_EVENT on window with the already normalised text. This module
+ * is the one listener that turns it into the goal event:
  *
- *   noteSearchResults(query, results, active)
+ *   const stop = listenSearchEmpty()   // in the palette, while mounted
  *
- * `active` is false while the palette is closed or its content index has not
- * loaded (a search without the index is not a real "no results"). A query
- * with zero results is sent only once the visitor stopped typing for
- * SETTLE_MS, or at once when the palette closes on it; typing on, clearing
- * the field or finding results cancels it. The text is normalised and
- * filtered first (lib/analytics/eventsShared normalizeSearchQuery:
- * lowercased, ≤ 40 characters, nothing with an '@' or six or more digits),
- * and each text is sent at most once per page view.
+ * The text passes normalizeSearchQuery once more (lib/analytics/eventsShared:
+ * NFKC, lowercased, ≤ 40 characters, nothing with an '@' or six or more
+ * digits) and each text is sent at most once per page view, whichever mode
+ * it came from.
  */
 
-export const SETTLE_MS = 1500
-
-let pending: string | null = null
-let timer: ReturnType<typeof setTimeout> | null = null
 let sentFor = ''
 const sent = new Set<string>()
 
-function cancel() {
-  if (timer) clearTimeout(timer)
-  timer = null
-  pending = null
-}
-
-function flush() {
-  const query = pending
-  cancel()
-  if (query === null) return
+/** Report one empty search or question (the event's detail); returns whether a goal was sent. */
+export function reportSearchEmpty(detail: EmptyResultDetail | null | undefined): boolean {
+  if (typeof window === 'undefined' || !detail) return false
+  const query = normalizeSearchQuery(detail.query)
+  if (query === null) return false
   if (sentFor !== location.pathname) {
     sentFor = location.pathname
     sent.clear()
   }
-  if (sent.has(query)) return
+  if (sent.has(query)) return false
   sent.add(query)
   sendGoal('search_empty', query)
+  return true
 }
 
-export function noteSearchResults(query: string, results: number, active: boolean): void {
-  if (typeof window === 'undefined') return
-  if (!active) {
-    // Closed with a pending no-result search: that search is final.
-    if (pending !== null) flush()
-    return
-  }
-  const normalized = results === 0 ? normalizeSearchQuery(query) : null
-  if (normalized === null) return cancel()
-  if (timer) clearTimeout(timer)
-  pending = normalized
-  timer = setTimeout(flush, SETTLE_MS)
+/** Listen for the palette's empty-result events; returns the unsubscribe. */
+export function listenSearchEmpty(): () => void {
+  if (typeof window === 'undefined') return () => undefined
+  const onEmpty = (e: Event) => reportSearchEmpty((e as CustomEvent<EmptyResultDetail>).detail)
+  window.addEventListener(SEARCH_EMPTY_EVENT, onEmpty)
+  return () => window.removeEventListener(SEARCH_EMPTY_EVENT, onEmpty)
 }

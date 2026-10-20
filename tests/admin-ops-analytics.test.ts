@@ -786,36 +786,35 @@ test('browser: link clicks and searches send {n, p, v?} only — nothing under D
     stop()
     assert.equal(listeners.size, 0)
 
-    // search_empty: settled for 1.5 s, sent at once on close, once per text per page view.
+    // search_empty: the palette's empty-result events (lib/search/emptyResult) become goals, once per text per page view.
     const search = await import('../lib/analytics/searchEmpty')
-    search.noteSearchResults('Kubernetes', 0, true)
-    mock.timers.tick(search.SETTLE_MS - 1)
-    assert.deepEqual(sent, [])
-    mock.timers.tick(1)
+    const { SEARCH_EMPTY_EVENT } = await import('../lib/search/emptyResult')
+    // The palette dispatches on window; Node's globalThis is no EventTarget, so stand one in.
+    const target = new EventTarget()
+    g.window = target
+    const stopSearch = search.listenSearchEmpty()
+    const empty = (query: string, mode: 'search' | 'ask' = 'search') => target.dispatchEvent(new CustomEvent(SEARCH_EMPTY_EVENT, { detail: { query, mode } }))
+    empty('Kubernetes')
     assert.deepEqual(sent, [{ n: 'search_empty', p: '/', v: 'kubernetes' }])
-    search.noteSearchResults('kubernetes ', 0, true)
-    mock.timers.tick(search.SETTLE_MS)
-    assert.equal(sent.length, 1, 'the same text is sent once per page view')
-    search.noteSearchResults('ru', 0, true)
-    search.noteSearchResults('rust', 0, true)
-    search.noteSearchResults('rust', 0, false)
-    assert.deepEqual(sent[1], { n: 'search_empty', p: '/', v: 'rust' }, 'closing the palette on it sends it at once (the last text only)')
-    search.noteSearchResults('python', 0, true)
-    search.noteSearchResults('python', 3, true)
-    search.noteSearchResults('someone@example.com', 0, true)
-    search.noteSearchResults('call 555 123 456', 0, true)
-    search.noteSearchResults('', 12, true)
-    mock.timers.tick(search.SETTLE_MS * 2)
-    search.noteSearchResults('', 12, false)
-    assert.equal(sent.length, 2, 'results found, an address, six digits, a cleared field: nothing more')
+    empty('kubernetes ', 'ask')
+    assert.equal(sent.length, 1, 'the same text is sent once per page view, whichever mode asked')
+    empty('rust', 'ask')
+    assert.deepEqual(sent[1], { n: 'search_empty', p: '/', v: 'rust' }, 'an unanswered question counts too')
+    empty('someone@example.com')
+    empty('call 555 123 456')
+    empty('')
+    assert.equal(sent.length, 2, 'an address, six digits, an empty text: nothing more')
     g.location = { pathname: '/about', host: HOST }
-    search.noteSearchResults('Kubernetes', 0, true)
-    mock.timers.tick(search.SETTLE_MS)
+    empty('Kubernetes')
     assert.deepEqual(sent[2], { n: 'search_empty', p: '/about', v: 'kubernetes' }, 'a new page view may send it again')
     nav.globalPrivacyControl = true
-    search.noteSearchResults('golang', 0, true)
-    mock.timers.tick(search.SETTLE_MS)
+    empty('golang')
     assert.equal(sent.length, 3, 'GPC: nothing')
+    delete nav.globalPrivacyControl
+    stopSearch()
+    empty('haskell')
+    assert.equal(sent.length, 3, 'unsubscribed: nothing')
+    g.window = globalThis
   } finally {
     mock.timers.reset()
     g.window = saved.window

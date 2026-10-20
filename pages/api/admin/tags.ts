@@ -3,6 +3,7 @@ import { isAdminRequest } from '../../../lib/auth'
 import { rateLimit } from '../../../lib/rateLimit'
 import { revalidatePaths } from '../../../lib/revalidate'
 import { emitEditorialEvent } from '../../../lib/editorialEvents'
+import { recordAdminAudit } from '../../../lib/audit/record'
 import { applyTagChange, planTagChange, readTagInventory, type TagChangeRequest } from '../../../lib/tagAdminServer'
 
 /**
@@ -46,10 +47,15 @@ export default withApi('admin/tags', async (req, res) => {
     const out = await applyTagChange(request)
     if (!out.ok) return res.status(out.status).json({ error: out.error })
     if (out.items.length) {
-      emitEditorialEvent(
-        { action: request.from.length > 1 ? 'tag-merge' : 'tag-rename', collection: request.collection, from: request.from, to: request.to.trim(), items: out.items.length },
-        { req },
-      )
+      const merge = request.from.length > 1
+      emitEditorialEvent({ action: merge ? 'tag-merge' : 'tag-rename', collection: request.collection, from: request.from, to: request.to.trim(), items: out.items.length }, { req })
+      // The activity log (H13): the tag names and the number of items touched — never content.
+      recordAdminAudit(req, res, {
+        action: merge ? 'tag.merge' : 'tag.rename',
+        area: request.collection === 'work' ? 'work' : 'post',
+        target: request.to.trim(),
+        summary: `${merge ? 'Merged' : 'Renamed'} ${request.from.join(', ')} → ${request.to.trim()} on ${out.items.length} ${request.collection === 'work' ? 'case stud' + (out.items.length === 1 ? 'y' : 'ies') : 'post' + (out.items.length === 1 ? '' : 's')}`,
+      })
     }
     const failed = out.paths.length ? await revalidatePaths(res, out.paths) : []
     return res.status(200).json({
