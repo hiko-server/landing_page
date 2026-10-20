@@ -84,6 +84,18 @@ backup, and a hardened admin GUI for non-engineers.
   signing in to ORCID; until then a typed-in iD is shown with ORCID's
   unauthenticated iD icon and "(unauthenticated)" — see
   [Connect your ORCID iD](#connect-your-orcid-id). Logic in `lib/orcid/`.
+- **Audiences, tailored CV variants and private links** — besides the eye,
+  every field, entry, list and section has **Shows on**: public pages,
+  downloads (PDF / text / JSON Resume / vCard) and private links, so a
+  phone number can stay off `/cv` and `/api/cvdata` but be in the PDF;
+  hidden always wins. Under Dashboard → CV → *Variants & links* the owner
+  names variants ("Machine learning", "Embedded") that pick and order
+  sections and entries, with a page target measured on the real PDF, and
+  shares one through a signed, expiring, revocable private link
+  (`/cv/r/<token>`, stored as a hash, noindex / no-store / no-referrer)
+  with its PDF; each link shows only an open count and the day of the
+  last open. Logic in `lib/cvVisibility.ts`, `lib/cvVariants.ts`,
+  `lib/cvShare/`.
 - **Admin GUI for non-engineers** — visual editors for hero, brands,
   socials, photo strip, blog posts, case studies, the CV (Studio + raw
   JSON), the Now/Uses pages and the About bio.

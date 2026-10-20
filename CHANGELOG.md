@@ -257,6 +257,74 @@ The media library (wave 3: H7) — Admin → Media (`/admin/media`, `G` then `M`
   `tests/media-library-store.test.ts`, `tests/media-library-sync.test.ts`,
   `e2e/media-library.spec.ts`.
 
+### cv-variants
+
+Tailored CV variants, private share links and audiences per field (E4, with
+the critic's field-level correction).
+
+- **Audiences ("Shows on")** — every field, nested list, entry and section
+  of the CV can be limited to some of three surfaces: **public pages**
+  (/cv, /about, home, /publications, /work, `/api/cvdata`, search and Ask,
+  JSON-LD, llms.txt), **downloads** (`/cv.pdf`, `/cv.txt`, `/cv.json`, their
+  中文 twins, the vCard) and **private links**. A phone number can now stay
+  off the public HTML, `__NEXT_DATA__` and `/api/cvdata` while the PDF and a
+  private link keep it. Stored as `onlyIn` (sections, entries) and
+  `fieldsOnlyIn` (fields, lists); absent = everywhere, as before; an empty or
+  unreadable list = nowhere; a surface added later is never implied. Hidden
+  always wins: no audience brings back a hidden field, entry, bullet or
+  section, and the CV / Website switches keep choosing /cv vs /about + home.
+  A field kept off a surface counts as hidden there (`redacted`), so nothing
+  refills it (GitHub from Home → Socials, the ORCID marker…).
+- **CV Studio** — a "Shows on" menu beside every eye (Public pages /
+  Downloads / Private links as checkboxes; the last one stays — hiding is the
+  eye's job); restricted, it is a chip ("Files · Links"). Linked across EN /
+  中文 like hides, one undo step, the toast says where it landed. The Hidden
+  items panel lists "limited" rows (Everywhere resets one; the jump focuses
+  its control). The A4 preview shows the sheet as /cv, the PDF or a private
+  link shows it.
+- **Stable entry uids** — every top-level entry (degree, role, project,
+  paper, skill group …) carries a `uid`: deterministic for a CV stored
+  without them (the same on every read until a save stores it), kept once
+  saved, shared by EN / 中文 twins (linked insert, duplicate, ORCID import,
+  "Sync 中 ← EN"), repaired when an import repeats one, never public.
+- **Variants** (Dashboard → CV → *Variants & links*) — named selections over
+  the one CV ("Machine learning", "Embedded", "Full-stack"): which sections
+  and entries print and in what order (drag handles, keyboard too), a page
+  target measured against the variant's real server-rendered PDF in both
+  languages ("3 pages · 1.8 pages over"), a live A4 preview as a private
+  link shows it and the saved variant's PDF. Publications (papers) and the
+  ORCID iD are part of it like every other section and field. Anything the
+  CV keeps from private links is listed with the reason and cannot be
+  picked. Stored in the content store (kv `cvvariants`: R2 mirror, backups,
+  the content export), saved with If-Match; deleting a variant revokes its
+  links.
+- **Private links** — `/cv/r/<token>` (and `/en`, `/zh`) with the variant's
+  web CV (sheet, Reading view, skill evidence) and its PDF
+  (`/cv/r/<token>/<lang>.pdf`). Tokens are 43 characters, HMAC-signed
+  (HKDF of `JWT_SECRET`; a forged token never reaches the store), stored as
+  SHA-256 only and shown to the owner once; links expire (7–365 days),
+  can be revoked, extended or removed when ended, and carry an owner-only
+  note. Every response under /cv/r/ — a 404 included — is `private,
+  no-store`, `noindex` and `Referrer-Policy: no-referrer`; no canonical, no
+  JSON-LD, no social card or QR code; analytics never records the page and
+  the error monitor redacts the token. Every failure is the same neutral
+  "not available" 404. Making or extending a link asks for a recent
+  sign-in; every change is in the activity log (never the token or note).
+- **Opens** — a count and the UTC day of the last open, nothing else: one
+  beacon after the page has been visible for 2.5 s in a browser that runs
+  scripts (link previews and mail scanners do not count), never under DNT /
+  GPC, from bots or the signed-in owner. The page and /colophon say so.
+- **auth.db migration 3** (`cv_share_links`): links live beside sessions so a
+  content restore can never bring a revoked link back. Expand-only.
+- `lib/cvVisibility` (surfaces), `lib/cvEntryUid`, `lib/cvVariants`,
+  `lib/cvVariantsStore`, `lib/cvShare/` (token, store, page, beacon);
+  `/api/admin/cv-variants`, `/api/admin/cv-share-links`, `/api/cv/share`.
+  The PDF renderer reports how full its last page is (`lastPageFill`).
+- Tests: the audience leak test over every output per surface (pages, API,
+  JSON-LD, search, Ask, files, vCard, share page, real PDFs; 3 000+ cases),
+  audiences / uids / sync / validation, variants and links over a throw-away
+  store, the editor model; e2e `cv-variants.spec.ts`.
+
 ### admin-editorial
 
 Editorial tools in the post and case-study editors (wave 2B: H1, H3, H4, H6, H16).

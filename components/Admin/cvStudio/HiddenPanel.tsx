@@ -26,6 +26,7 @@ const KIND_LABEL: Record<HiddenKind, string> = {
   field: 'field',
   list: 'list',
   item: 'item',
+  limited: 'limited',
 }
 
 function groupBySection(rows: HiddenRow[]): Array<{ sectionIdx: number; title: string; rows: HiddenRow[] }> {
@@ -100,7 +101,8 @@ export default function HiddenPanel({
             </Text>
           </HStack>
           <Text fontSize="12px" fontWeight={400} color={dim} mt={1}>
-            Left out of the CV, the PDF and the website. Select a row to jump to it.
+            Left out of the CV, the PDF and the website — or, marked “limited”, shown on some of them only (public pages,
+            downloads, private links). Select a row to jump to it.
           </Text>
         </DrawerHeader>
         <DrawerBody px={{ base: 3, md: 5 }} py={4} ref={listRef}>
@@ -169,9 +171,9 @@ export default function HiddenPanel({
                                     fontSize="9px"
                                     letterSpacing="0.1em"
                                     textTransform="uppercase"
-                                    color={hiddenFg}
+                                    color={row.kind === 'limited' ? 'accent.text' : hiddenFg}
                                     border="1px solid"
-                                    borderColor={hiddenBorder}
+                                    borderColor={row.kind === 'limited' ? 'var(--accent)' : hiddenBorder}
                                     borderRadius="3px"
                                     px="4px"
                                     lineHeight="14px"
@@ -201,14 +203,14 @@ export default function HiddenPanel({
                                   variant="outline"
                                   borderColor={border}
                                   leftIcon={<ViewIcon />}
-                                  aria-label={`Show ${row.label}`}
+                                  aria-label={row.kind === 'limited' ? `Show ${row.label} everywhere` : `Show ${row.label}`}
                                   _hover={{ color: 'var(--accent)', borderColor: 'var(--accent)', bg: 'var(--accent-soft)' }}
                                   onClick={() => {
                                     refocusAt.current = myIndex
                                     onShow(row)
                                   }}
                                 >
-                                  Show
+                                  {row.kind === 'limited' ? 'Everywhere' : 'Show'}
                                 </Button>
                               </Flex>
                             </Flex>

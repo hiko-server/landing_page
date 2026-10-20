@@ -11,19 +11,25 @@ import {
   type KvPutOptions,
   type KvPutResult,
 } from './contentStore'
-import { publicCvDoc, withPublishedCaseStudies, type CvAudience, type CvDoc, type CvLang } from './cvVisibility'
+import { publicCvDoc, withPublishedCaseStudies, type CvAudience, type CvDoc, type CvLang, type CvSurface } from './cvVisibility'
 import { pdfPhoto } from './cvLocale'
+import { withEntryUids } from './cvEntryUid'
 
 const snapshotDir = path.join(process.cwd(), 'data', 'cv_snapshots')
 
 export type FullCvDoc = { en: any[]; zh: any[] }
 
-/** Accept the stored `{ en, zh }` shape and the legacy bare EN array. */
+/**
+ * Accept the stored `{ en, zh }` shape and the legacy bare EN array. Every
+ * top-level entry has its stable uid (lib/cvEntryUid): an entry stored
+ * without one gets the same deterministic uid on every read until a save
+ * stores it, so CV variants can point at it from the start.
+ */
 function normalizeCv(json: any): FullCvDoc {
   if (!json) return { en: [], zh: [] }
   const en = Array.isArray(json.en) ? json.en : Array.isArray(json) ? json : []
   const zh = Array.isArray(json.zh) ? json.zh : []
-  return { en, zh }
+  return withEntryUids({ en, zh })
 }
 
 /** FULL document with visibility metadata — admin editors only, never public output. */
@@ -41,12 +47,23 @@ export function readCvDataWithVersion(): FullCvDoc & { version: number } {
 }
 
 /**
- * The CV as visitors may see it: hidden sections / entries / fields / bullets
- * removed (see lib/cvVisibility.ts). Use this for every public page and the
- * unauthenticated API — never ship readCvData() output to the browser.
+ * A selection over the FULL document applied before pruning — a CV variant
+ * (lib/cvVariants applyVariantDoc) picks and orders sections and entries by
+ * uid, which the public views no longer carry.
  */
-export function readPublicCvData(audience: CvAudience = 'any'): CvDoc {
-  const doc = publicCvDoc(readCvData(), audience)
+export type CvSelect = (full: FullCvDoc) => FullCvDoc
+
+/**
+ * The CV as visitors may see it: hidden sections / entries / fields / bullets
+ * removed (see lib/cvVisibility.ts), and whatever the surface's audience
+ * leaves out — 'web' (default: pages, /api/cvdata, search, JSON-LD),
+ * 'download' (the files and the vCard) or 'private' (share links). Use this
+ * for every public page and the unauthenticated API — never ship
+ * readCvData() output to the browser.
+ */
+export function readPublicCvData(audience: CvAudience = 'any', surface: CvSurface = 'web', select?: CvSelect): CvDoc {
+  const full = readCvData()
+  const doc = publicCvDoc(select ? select(full) : full, audience, surface)
   // A project's case study only when it is published (lib/cvVisibility): no
   // draft's or deleted case study's slug in any public payload. A store that
   // cannot list the case studies links none.
@@ -69,9 +86,11 @@ export function readPublicCvSections(
   audience: CvAudience,
   sessionNames: readonly string[],
   langs: readonly CvLang[] = ['en', 'zh'],
+  surface: CvSurface = 'web',
+  select?: CvSelect,
 ): CvDoc {
   const wanted = new Set(sessionNames)
-  const doc = readPublicCvData(audience)
+  const doc = readPublicCvData(audience, surface, select)
   const pick = (lang: CvLang) =>
     langs.includes(lang) ? doc[lang].filter((s) => wanted.has(String(s.sessionName))) : []
   return { en: pick('en'), zh: pick('zh') }
@@ -87,9 +106,9 @@ export function readCvPdfPhoto(lang: CvLang): string | null {
   return pdfPhoto(readCvData()[lang])
 }
 
-/** Write the full document. Pass `precondition` for an atomic If-Match check. */
+/** Write the full document (every top-level entry with its uid). Pass `precondition` for an atomic If-Match check. */
 export async function writeCvData(data: FullCvDoc, opts: KvPutOptions = {}): Promise<KvPutResult> {
-  return await putKv('cvdata', data, opts)
+  return await putKv('cvdata', withEntryUids(data), opts)
 }
 
 // Re-exported for existing importers; implementation is pure (lib/cvSync.ts).

@@ -3,7 +3,7 @@
  * the Studio (where it is an undoable edit you can review before saving).
  */
 
-import { EDITOR_META_KEYS, PRIVATE_SECTION_FIELDS, VISIBILITY_KEYS } from './cvVisibility'
+import { CV_SURFACES, ENTRY_UID_KEY, EDITOR_META_KEYS, PRIVATE_SECTION_FIELDS, VISIBILITY_KEYS } from './cvVisibility'
 
 const isPlainObject = (v: unknown): v is Record<string, any> =>
   !!v && typeof v === 'object' && !Array.isArray(v)
@@ -25,12 +25,30 @@ function indexList(v: unknown): number[] {
   return Array.isArray(v) ? v.filter((n): n is number => Number.isInteger(n) && n >= 0) : []
 }
 
+/** An audience list's surfaces (null = unrestricted; anything malformed = none). */
+function surfaces(v: unknown): string[] | null {
+  if (v === undefined || v === null) return null
+  return Array.isArray(v) ? CV_SURFACES.filter((s) => v.includes(s)) : []
+}
+
+/** Two audience restrictions combined: what both allow (an absent side restricts nothing). */
+function intersectAudience(a: unknown, b: unknown): string[] | undefined {
+  const x = surfaces(a)
+  const y = surfaces(b)
+  if (x === null && y === null) return undefined
+  if (x === null) return y as string[]
+  if (y === null) return x
+  return x.filter((s) => y.includes(s))
+}
+
 /**
  * Merge one visibility key of a node. A hide set on *either* side survives:
  *   isVisible / showOnWebsite → false when either language says false
  *   hiddenFields              → union of both lists
  *   hiddenItems               → per-field union of indices that still exist
  *                               in the synced list (lists follow EN's length)
+ *   onlyIn                    → the surfaces both sides allow
+ *   fieldsOnlyIn              → per field, the surfaces both sides allow
  * Returns undefined when neither side carries the key.
  */
 function mergeVisibility(
@@ -43,6 +61,18 @@ function mergeVisibility(
     if (en === false || zh === false) return false
     if (en !== undefined) return en
     return zh
+  }
+  if (key === 'onlyIn') return intersectAudience(en, zh)
+  if (key === 'fieldsOnlyIn') {
+    if (!isPlainObject(en) && !isPlainObject(zh)) return undefined
+    const out: Record<string, string[]> = {}
+    const a = isPlainObject(en) ? en : {}
+    const b = isPlainObject(zh) ? zh : {}
+    for (const field of new Set([...Object.keys(a), ...Object.keys(b)])) {
+      const merged = intersectAudience(a[field], b[field])
+      if (merged) out[field] = merged
+    }
+    return Object.keys(out).length ? out : undefined
   }
   if (key === 'hiddenFields') {
     if (en === undefined && zh === undefined) return undefined
@@ -82,6 +112,11 @@ export function syncStructure(template: any, target: any): any {
     const tObj = isPlainObject(target) ? target : {}
     for (const key of Object.keys(template)) {
       if (isVisibilityKey(key) || PER_LANGUAGE_KEYS.has(key)) continue
+      // An entry's uid is structure, not text: the twin takes EN's, so one CV variant selects both.
+      if (key === ENTRY_UID_KEY && typeof template[key] === 'string') {
+        result[key] = template[key]
+        continue
+      }
       result[key] = syncStructure(template[key], tObj[key])
     }
     for (const key of PER_LANGUAGE_KEYS) if (key in tObj) result[key] = clone(tObj[key])

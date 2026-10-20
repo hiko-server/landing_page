@@ -13,16 +13,24 @@
  */
 
 import {
+  ENTRY_UID_KEY,
   VISIBILITY_KEYS,
   getAt,
   hiddenIndices,
   remapHiddenItems,
   setAt,
+  withFieldAudience,
   withFieldHidden,
   withItemHidden,
+  withNodeAudience,
   type CvLang,
   type CvPath,
+  type CvSurface,
 } from '../../../lib/cvVisibility'
+import { newEntryUid, uidListKeys } from '../../../lib/cvEntryUid'
+
+/** Keys that are bookkeeping, not typed content: visibility, audiences and the entry uid. */
+const isMetaKey = (k: string) => k === ENTRY_UID_KEY || (VISIBILITY_KEYS as readonly string[]).includes(k)
 
 export type Section = { sessionName: string; [k: string]: any }
 export type Doc = { en: Section[]; zh: Section[] }
@@ -176,7 +184,7 @@ export function hasContent(v: unknown): boolean {
   if (typeof v === 'number' || typeof v === 'boolean') return true
   if (Array.isArray(v)) return v.some(hasContent)
   if (isPlainObject(v)) {
-    return Object.keys(v).some((k) => !(VISIBILITY_KEYS as readonly string[]).includes(k) && hasContent(v[k]))
+    return Object.keys(v).some((k) => !isMetaKey(k) && hasContent(v[k]))
   }
   return false
 }
@@ -344,6 +352,25 @@ export function setSectionFlag(
   )
 }
 
+// ── Audiences (E4) ────────────────────────────────────────────────────────
+
+/** Set the audience of `field` on the node at `nodePath` (null = every surface); linked like a hide. */
+export function setFieldAudience(
+  doc: Doc,
+  lang: CvLang,
+  nodePath: CvPath,
+  field: string,
+  list: readonly CvSurface[] | null,
+  linked: boolean,
+): LinkedResult {
+  return updateNode(doc, lang, nodePath, (n) => withFieldAudience(n || {}, field, list), linked)
+}
+
+/** Set the audience of the section or entry at `path` (null = every surface); linked like a hide. */
+export function setNodeAudience(doc: Doc, lang: CvLang, path: CvPath, list: readonly CvSurface[] | null, linked: boolean): LinkedResult {
+  return updateNode(doc, lang, path, (n) => withNodeAudience(n || {}, list), linked)
+}
+
 // ── Lists (object entries and string bullets) ─────────────────────────────
 
 export type ListOp =
@@ -383,9 +410,12 @@ function applyToList(list: any[], op: ListOp, forTwin: boolean): any[] {
       if (op.index < 0 || op.index >= next.length) return next
       // JSON clone drops the in-memory key, so the copy gets a fresh one. It
       // keeps every hide of its source — isVisible:false on the entry as well
-      // as hiddenFields / hiddenItems — so duplicating never publishes
-      // anything the owner hid.
-      next.splice(op.index + 1, 0, clone(next[op.index]))
+      // as hiddenFields / hiddenItems — and its audiences, so duplicating
+      // never publishes anything the owner hid. In a top-level list the copy
+      // gets its own uid (withCreatedUids).
+      const copy = clone(next[op.index])
+      const copyUid = (op as { copyUid?: string }).copyUid
+      next.splice(op.index + 1, 0, copyUid && isPlainObject(copy) ? { ...copy, [ENTRY_UID_KEY]: copyUid } : copy)
       return next
     }
     case 'remove':
@@ -430,10 +460,40 @@ export function duplicatesHidden(doc: Doc, lang: CvLang, listPath: CvPath, index
 }
 
 /**
+ * True when `listPath` is a section's top-level registry list ([section,
+ * key]) — whose entries carry a stable uid (lib/cvEntryUid).
+ */
+export function isUidList(sections: Section[], listPath: CvPath): boolean {
+  if (listPath.length !== 2 || typeof listPath[0] !== 'number' || typeof listPath[1] !== 'string') return false
+  return uidListKeys(sections[listPath[0]]?.sessionName).includes(listPath[1])
+}
+
+/**
+ * The op with fresh uids for the entries it creates in a top-level list: an
+ * inserted entry, and the copy a duplicate makes (a copy is a new entry, not
+ * the old one twice). One uid per created entry, given to both languages, so
+ * a CV variant selects the EN entry and its 中文 twin together.
+ */
+function withCreatedUids(sections: Section[], listPath: CvPath, op: ListOp): ListOp & { copyUid?: string } {
+  if (!isUidList(sections, listPath)) return op
+  if (op.type === 'insert' && isPlainObject(op.item)) {
+    const uid = newEntryUid()
+    return {
+      ...op,
+      item: { ...op.item, [ENTRY_UID_KEY]: uid },
+      ...(isPlainObject(op.twinItem) ? { twinItem: { ...op.twinItem, [ENTRY_UID_KEY]: uid } } : {}),
+    }
+  }
+  if (op.type === 'duplicate') return { ...op, copyUid: newEntryUid() }
+  return op
+}
+
+/**
  * Structural list edit. Mirrored to the other language only when the twin
  * list is unambiguous (see listTwin); otherwise `reached` is false.
  */
-export function listOp(doc: Doc, lang: CvLang, listPath: CvPath, op: ListOp, linked: boolean): LinkedResult {
+export function listOp(doc: Doc, lang: CvLang, listPath: CvPath, rawOp: ListOp, linked: boolean): LinkedResult {
+  const op = withCreatedUids(doc[lang], listPath, rawOp)
   let next: Doc = { ...doc, [lang]: listOpOnSections(doc[lang], listPath, op, false) }
   let reached = false
   if (linked) {
@@ -566,7 +626,7 @@ export function previewText(v: unknown, max = 80): string {
     }
     if (isPlainObject(x)) {
       for (const k of Object.keys(x)) {
-        if ((VISIBILITY_KEYS as readonly string[]).includes(k)) continue
+        if (isMetaKey(k)) continue
         const t = find(x[k])
         if (t) return t
       }

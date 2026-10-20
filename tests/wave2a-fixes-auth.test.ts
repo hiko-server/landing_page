@@ -646,7 +646,7 @@ test('SECU-4: the migration CLI keeps an auth.db it migrates owner-only (sidecar
   const out = execFileSync(process.execPath, [cli, '--db', 'auth', '--file', file], {
     encoding: 'utf8',
   })
-  // To the newest auth migration (v3 since review links, H5).
+  // To the newest auth migration (v3 review links, H5; v4 CV share links, E4).
   assert.match(out, new RegExp(`auth: migrated v1 → v${AUTH_MIGRATIONS.length}\\b`))
   for (const p of sidecars(file)) if (fs.existsSync(p)) assert.equal(modeOf(p), 0o600, p)
   const copies = fs.readdirSync(path.join(dir, 'backups', 'pre-migration'))

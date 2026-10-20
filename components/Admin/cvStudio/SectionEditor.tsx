@@ -25,7 +25,7 @@ import { FaEllipsisH, FaGripVertical } from 'react-icons/fa'
 import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { countHidden, hiddenIndices, isFieldHidden, type CvPath } from '../../../lib/cvVisibility'
+import { audienceOf, countHidden, fieldAudience, hiddenIndices, isFieldHidden, type CvPath } from '../../../lib/cvVisibility'
 import { cvLabels } from '../../../lib/cvFormat'
 import { defaultSpan, isFieldHideable, type FieldDef, type ListDef, type SectionDef } from '../../../lib/cvSections'
 import { normalizeDoi } from '../../../lib/publications/doi'
@@ -46,6 +46,7 @@ import {
 } from './fields'
 import { cvPathAttr, pathStartsWith, useStudio } from './StudioContext'
 import PhotoField from './PhotoField'
+import AudienceMenu from './AudienceMenu'
 import OrcidImport from './OrcidImport'
 import OrcidConnect from './OrcidConnect'
 import { caseStudyFieldNote } from '../../../lib/caseStudyLinks'
@@ -206,6 +207,11 @@ function FieldRenderer({ def, node, nodePath }: { def: FieldDef; node: any; node
       gridColumn={gridColumn}
       group={def.kind === 'bullets' || def.kind === 'image' || def.kind === 'switch'}
       cvPath={cvPath}
+      audience={
+        isFieldHideable(def) ? (
+          <AudienceMenu value={fieldAudience(node, def.key)} onChange={(l) => api.setFieldAudience(nodePath, def.key, l, def.label)} label={def.label} />
+        ) : null
+      }
     >
       {control}
     </FieldShell>
@@ -283,6 +289,7 @@ function EntryCard({
 
   const actions = (
     <HStack spacing={0.5} flexShrink={0}>
+      <AudienceMenu value={audienceOf(item?.onlyIn)} onChange={(l) => api.setNodeAudience(path, l, name)} label={name} />
       <VisibilityToggle hidden={hidden} onToggle={() => api.toggleEntry(path, name)} label={name} />
       <Menu isLazy placement="bottom-end">
         <MenuButton
@@ -554,7 +561,10 @@ export function EntryList({ def, parent, parentPath, depth = 0 }: { def: ListDef
             </Button>
           ) : null}
           {def.hideable ? (
-            <VisibilityToggle hidden={listHidden} onToggle={() => api.toggleField(parentPath, def.key, def.label)} label={def.label} />
+            <>
+              <AudienceMenu value={fieldAudience(parent, def.key)} onChange={(l) => api.setFieldAudience(parentPath, def.key, l, def.label)} label={def.label} />
+              <VisibilityToggle hidden={listHidden} onToggle={() => api.toggleField(parentPath, def.key, def.label)} label={def.label} />
+            </>
           ) : null}
         </HStack>
       </Flex>

@@ -11,8 +11,9 @@ import { recordServerGoal } from '../../lib/analytics/events'
  * GET /api/vcard → "Li-Yanpei.vcf" (vCard 4.0, lib/vcard.ts; the file name
  * follows the visible name and is neutral when the owner hides it).
  *
- * Built from the public, CV-scoped personal information (hidden e-mail /
- * phone / address never appear), the current role from work experience, the
+ * Built from the public, CV-scoped personal information of the 'download'
+ * surface (hidden e-mail / phone / address never appear; one the owner keeps
+ * to the pages or private links neither), the current role from work experience, the
  * public GitHub / LinkedIn profiles the CV prints (lib/cvLinks) and the
  * public home avatar.
  *
@@ -30,7 +31,8 @@ export default withApi('vcard', async (req, res) => {
   }
 
   const now = referenceMonth()
-  const { sections } = await loadCvSource('en', now)
+  // The vCard is a download: the 'download' surface's audiences apply (lib/cvVisibility).
+  const { sections } = await loadCvSource('en', now, { surface: 'download' })
   const personal = sections.find((s) => s.sessionName === 'personalInformation') ?? null
   const work = sections.find((s) => s.sessionName === 'workExperience') ?? null
   const avatar = (readPublicHome()?.hero?.avatarUrl || '').trim()

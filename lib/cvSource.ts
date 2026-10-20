@@ -4,7 +4,10 @@
  * vCard. SERVER-ONLY (content store).
  *
  * Reads the PUBLIC, CV-audience sections (lib/cvdata readPublicCvSections —
- * hidden sections, entries, fields and bullets are already removed),
+ * hidden sections, entries, fields and bullets are already removed, and
+ * whatever the surface's audience leaves out: 'web' for the pages,
+ * 'download' for the files and the vCard, 'private' with a CV variant's
+ * selection for a share link),
  * resolves the evidence links (lib/cvLinks: profiles from Home → Socials,
  * published case studies only), the header lines from the owner's public
  * availability (lib/cvLocale cvHeaderExtras: the right-to-work line, and
@@ -13,7 +16,8 @@
  * the file.
  */
 
-import type { CvLang, CvSectionLike } from './cvVisibility'
+import type { CvLang, CvSectionLike, CvSurface } from './cvVisibility'
+import type { CvSelect } from './cvdata'
 import { referenceMonth } from './clock'
 import { cvHeaderExtras, type CvHeaderExtras } from './cvLocale'
 import { withEvidenceLinks, type CvWork, type PublicSocials } from './cvLinks'
@@ -70,7 +74,15 @@ export async function publishedWorks(): Promise<CvWork[]> {
   }
 }
 
-export async function loadCvSource(lang: CvLang, now: string = referenceMonth()): Promise<CvSource> {
+export type CvSourceOptions = {
+  /** Where the result goes (lib/cvVisibility CvSurface); default 'web'. */
+  surface?: CvSurface
+  /** A selection over the full document (a CV variant), applied before pruning. */
+  select?: CvSelect
+}
+
+export async function loadCvSource(lang: CvLang, now: string = referenceMonth(), opts: CvSourceOptions = {}): Promise<CvSource> {
+  const surface = opts.surface ?? 'web'
   const { readPublicCvSections } = await import('./cvdata')
   const { getKvMeta } = await import('./contentStore')
   const { readPublicHome } = await import('./home')
@@ -79,9 +91,10 @@ export async function loadCvSource(lang: CvLang, now: string = referenceMonth())
   const socials: PublicSocials | null | undefined = home === undefined ? undefined : ((home?.socials as PublicSocials | undefined) ?? null)
   const headerExtras = safe(() => cvHeaderExtras(home?.availability, lang), null)
   const langs: CvLang[] = lang === 'en' ? ['en'] : ['en', 'zh']
-  const cv = safe(() => readPublicCvSections('cv', SHEET_SECTIONS, langs), { en: [], zh: [] })
+  const cv = safe(() => readPublicCvSections('cv', SHEET_SECTIONS, langs, surface, opts.select), { en: [], zh: [] })
   const raw = lang === 'en' ? cv.en : cv.zh
-  const names = safe(() => readPublicCvSections('cv', ['personalInformation'], ['en', 'zh']), { en: [], zh: [] })
+  // Name forms for author lists: the surface's Personal Info, whether or not a variant prints it.
+  const names = safe(() => readPublicCvSections('cv', ['personalInformation'], ['en', 'zh'], surface), { en: [], zh: [] })
   return {
     lang,
     sections: withEvidenceLinks(raw, { works, socials }),

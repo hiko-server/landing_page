@@ -187,3 +187,9 @@ export const LanguagesIcon = /*#__PURE__*/ makeUiIcon('LanguagesIcon', [
   ['path', { d: 'm22 22-5-10-5 10' }],
   ['path', { d: 'M14 18h6' }],
 ])
+
+/** Lucide "lock": a privately shared CV (/cv/r/…, E4). */
+export const LockIcon = /*#__PURE__*/ makeUiIcon('LockIcon', [
+  ['rect', { x: '3', y: '11', width: '18', height: '11', rx: '2', ry: '2' }],
+  ['path', { d: 'M7 11V7a5 5 0 0 1 10 0v4' }],
+])

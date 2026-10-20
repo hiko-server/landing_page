@@ -36,6 +36,7 @@ import { FaRedo, FaUndo, FaSave, FaFileExport, FaFileImport, FaLink, FaUnlink, F
 import { FiCheckCircle, FiFileText, FiGlobe, FiColumns, FiLayout } from 'react-icons/fi'
 import { SECTION_BY_NAME, blankSection, type ListDef, type SectionDef } from '../../lib/cvSections'
 import {
+  audienceOf,
   countHidden,
   getAt,
   hiddenIndices,
@@ -46,7 +47,9 @@ import {
   revealAll,
   type CvLang,
   type CvPath,
+  type CvSurface,
 } from '../../lib/cvVisibility'
+import { withSectionUids } from '../../lib/cvEntryUid'
 import { syncLanguage } from '../../lib/cvSync'
 import { ownerNamesFromSections } from '../../lib/publications/names'
 import { errorFocusPath, validateCvDoc, type CvValidationError } from '../../lib/cvValidate'
@@ -69,6 +72,8 @@ import {
   studioOwnsUndo,
   setFieldHidden,
   setItemHidden,
+  setFieldAudience,
+  setNodeAudience,
   setSectionFlag,
   setSharedValue,
   setValue,
@@ -89,6 +94,8 @@ import { SectionEditor } from './cvStudio/SectionEditor'
 import Sidebar, { type SectionAlignment } from './cvStudio/Sidebar'
 import Preview from './cvStudio/Preview'
 import HiddenPanel from './cvStudio/HiddenPanel'
+import AudienceMenu from './cvStudio/AudienceMenu'
+import { audienceSummary } from './cvStudio/audience'
 import { monoFont, useStudioTokens } from './cvStudio/fields'
 import {
   partitionFindings,
@@ -471,6 +478,14 @@ export default function CVEditorStudio() {
         const nowHidden = hiddenIndices(getAt(r.doc[lang], parentPath), field).includes(index)
         reportVisibility(r, `${nowHidden ? 'Hidden' : 'Showing'} “${previewText(label, 40)}”`, parentPath)
       },
+      setFieldAudience: (nodePath: CvPath, field: string, list: CvSurface[] | null, label: string) => {
+        const r = run((d) => setFieldAudience(d, lang, nodePath, field, list, linked))
+        reportVisibility(r, `“${previewText(label, 40)}” ${list ? `only on ${audienceSummary(list)}` : 'shows everywhere'}`, nodePath)
+      },
+      setNodeAudience: (path: CvPath, list: CvSurface[] | null, label: string) => {
+        const r = run((d) => setNodeAudience(d, lang, path, list, linked))
+        reportVisibility(r, `“${previewText(label, 40)}” ${list ? `only on ${audienceSummary(list)}` : 'shows everywhere'}`, path)
+      },
       list: (listPath: CvPath, op: ListOp, label?: string) => {
         if (op.type === 'remove' && linked) {
           // Never delete typed content in the other language silently.
@@ -654,12 +669,16 @@ export default function CVEditorStudio() {
     setLang(row.lang)
     setSelected(row.sectionName)
     setMobilePane('edit')
-    setFocus({ lang: row.lang, path: row.targetPath, nonce: Date.now() })
+    setFocus({ lang: row.lang, path: row.targetPath, nonce: Date.now(), ...(row.kind === 'limited' ? { toggle: 'audience' as const } : {}) })
   }
 
   const showRow = (row: HiddenRow) => {
     const r = run((d) => {
       switch (row.kind) {
+        case 'limited':
+          return row.field !== undefined
+            ? setFieldAudience(d, row.lang, row.nodePath, String(row.field), null, linked)
+            : setNodeAudience(d, row.lang, row.nodePath, null, linked)
         case 'section-cv':
           return setSectionFlag(d, row.lang, row.sectionIdx, 'isVisible', true, linked)
         case 'section-web':
@@ -673,7 +692,7 @@ export default function CVEditorStudio() {
       }
     })
     const where = r.reached ? ` (${LANG_LABEL.en} + 中)` : ` (${LANG_LABEL[row.lang]} only)`
-    announce(`Showing “${previewText(row.label, 40)}”${where}`)
+    announce(`${row.kind === 'limited' ? 'Everywhere now:' : 'Showing'} “${previewText(row.label, 40)}”${where}`)
   }
 
   // Jump: once the target is rendered (entries expand first), scroll to it,
@@ -692,7 +711,8 @@ export default function CVEditorStudio() {
       }
       const behavior: ScrollBehavior = prefersReducedMotion() ? 'auto' : 'smooth'
       const control = focus.control ? el.querySelector<HTMLElement>('input, textarea, select') : null
-      const target = control || el.querySelector<HTMLElement>('[data-vis-toggle]') || el.querySelector<HTMLElement>('input, textarea, button')
+      const audience = focus.toggle === 'audience' ? el.querySelector<HTMLElement>('[data-audience-toggle]') : null
+      const target = control || audience || el.querySelector<HTMLElement>('[data-vis-toggle]') || el.querySelector<HTMLElement>('input, textarea, button')
       const reveal = () => {
         el.scrollIntoView({ block: 'center', behavior })
         if (target && !el.contains(document.activeElement)) target.focus({ preventScroll: true })
@@ -839,9 +859,10 @@ export default function CVEditorStudio() {
       let after: Doc
       if (Array.isArray(j)) {
         if (!valid(j)) throw new Error('Every section needs a "sessionName"')
-        after = apply((d) => ({ ...d, [lang]: j }))
+        // Every entry gets its stable uid (lib/cvEntryUid), duplicates repaired.
+        after = apply((d) => ({ ...d, [lang]: withSectionUids(j) }))
       } else if (j && (valid(j.en) || valid(j.zh))) {
-        after = apply((d) => ({ en: valid(j.en) ? j.en : d.en, zh: valid(j.zh) ? j.zh : d.zh }))
+        after = apply((d) => ({ en: valid(j.en) ? withSectionUids(j.en) : d.en, zh: valid(j.zh) ? withSectionUids(j.zh) : d.zh }))
       } else {
         throw new Error('Expected { en: [...], zh: [...] } or an array of sections')
       }
@@ -973,6 +994,13 @@ export default function CVEditorStudio() {
               aria-label="Show this section on the website"
             />
           </HStack>
+          <Box data-cvpath={cvPathAttr(lang, [selectedIdx, 'audience'])} borderRadius="md">
+            <AudienceMenu
+              value={audienceOf(selectedSection.onlyIn)}
+              onChange={(l) => api.setNodeAudience([selectedIdx], l, def?.label || selectedSection.sessionName)}
+              label={`the ${def?.label || selectedSection.sessionName} section`}
+            />
+          </Box>
           <Menu isLazy placement="bottom-end">
             <MenuButton as={IconButton} aria-label="Section actions" icon={<ChevronDownIcon />} size="sm" variant="ghost" />
             <MenuList fontSize="13px">
@@ -1125,7 +1153,7 @@ export default function CVEditorStudio() {
             </Button>
           </Tooltip>
 
-          <Tooltip label="Everything hidden from the CV & website (EN + 中)" hasArrow>
+          <Tooltip label="Everything hidden from the CV & website, or limited to some places (EN + 中)" hasArrow>
             <Button
               size="sm"
               variant="outline"
@@ -1441,7 +1469,11 @@ export default function CVEditorStudio() {
             <Badge variant="outline" fontSize="9px" mr={1}>
               eye
             </Badge>
-            hides a field, entry or bullet from the CV and website
+            hides a field, entry or bullet everywhere ·
+            <Badge variant="outline" fontSize="9px" mx={1}>
+              shows on
+            </Badge>
+            limits it to pages, downloads or private links
           </Text>
         </Flex>
       </Flex>

@@ -1,13 +1,14 @@
 import { createContext, useContext } from 'react'
-import type { CvLang, CvPath } from '../../../lib/cvVisibility'
+import type { CvLang, CvPath, CvSurface } from '../../../lib/cvVisibility'
 import type { ListOp } from './docOps'
 
 /**
  * A request to reveal and focus one element of the editor (from the Hidden
  * items panel, a readiness finding, a save error). `control`: focus the
- * field's input instead of its eye toggle (to type a value into it).
+ * field's input instead of its eye toggle (to type a value into it);
+ * `toggle: 'audience'`: focus its "Shows on" control (a limited row).
  */
-export type FocusTarget = { lang: CvLang; path: CvPath; nonce: number; control?: boolean }
+export type FocusTarget = { lang: CvLang; path: CvPath; nonce: number; control?: boolean; toggle?: 'audience' }
 
 /**
  * Edit API handed to every form control in the Studio. Paths are relative to
@@ -25,6 +26,9 @@ export type StudioApi = {
   toggleField: (nodePath: CvPath, field: string, label: string) => void
   toggleEntry: (entryPath: CvPath, label: string) => void
   toggleItem: (parentPath: CvPath, field: string, index: number, label: string) => void
+  /** Audiences (E4): where a field / list of `nodePath`, or the section / entry at `path`, shows (null = everywhere). */
+  setFieldAudience: (nodePath: CvPath, field: string, list: CvSurface[] | null, label: string) => void
+  setNodeAudience: (path: CvPath, list: CvSurface[] | null, label: string) => void
   /** Structural edit of an object list or string list (mirrored when the languages line up). */
   list: (listPath: CvPath, op: ListOp, label?: string) => void
   /** Insert several string items at once (multi-line paste) as one undo step. */

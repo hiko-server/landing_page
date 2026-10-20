@@ -37,6 +37,9 @@ export type CvExport = {
   updatedAt: number
   lang: CvLang
   format: ExportFormat
+  /** PDF only: the page count and how much of the last page is filled (0–1) — a CV variant's page target (E4). */
+  pages?: number
+  lastPageFill?: number
 }
 
 export type CvExportResult = { ok: true; file: CvExport } | { ok: false; status: 404; error: string }
@@ -76,7 +79,9 @@ function accentOf(src: CvSource): string {
 
 /** Build (or reuse) one downloadable CV. 404 when the language has nothing public to print. */
 export async function getCvExport(lang: CvLang, format: ExportFormat, source?: CvSource): Promise<CvExportResult> {
-  const src = source ?? (await loadCvSource(lang))
+  // The files are the 'download' surface: a field the owner keeps to the
+  // pages or to private links never reaches them (lib/cvVisibility).
+  const src = source ?? (await loadCvSource(lang, undefined, { surface: 'download' }))
   const model = modelOf(src)
   if (!hasContent(model)) return { ok: false, status: 404, error: lang === 'zh' ? '中文简历暂未发布。' : 'The CV has not been published yet.' }
 
@@ -96,7 +101,9 @@ export async function getCvExport(lang: CvLang, format: ExportFormat, source?: C
 
   const accent = accentOf(src)
   const { loadCvPdfPhoto } = await import('./photo')
-  const photo = await loadCvPdfPhoto(lang)
+  // The photo belongs to the header: only a file that prints Personal Info
+  // (after the surface's audiences and a CV variant's selection) carries it.
+  const photo = src.sections.some((s) => s.sessionName === 'personalInformation') ? await loadCvPdfPhoto(lang) : null
   const key = fingerprint([EXPORT_VERSION, build, 'pdf', model, accent, src.updatedAt, photo?.hash ?? null])
   const hit = cache.get(key)
   if (hit) {
@@ -111,7 +118,7 @@ export async function getCvExport(lang: CvLang, format: ExportFormat, source?: C
       const out = await renderCvPdf(model, { fonts: loadPdfFonts(), accent, updatedAt: src.updatedAt, photo })
       if (out.missing.length) log.warn('cv pdf: characters without a glyph were left out', { lang, chars: out.missing.slice(0, 40).join('') })
       log.info('cv pdf rendered', { lang, pages: out.pages, bytes: out.buffer.length, ms: Date.now() - started })
-      const file: CvExport = { body: out.buffer, contentType: EXPORT_CONTENT_TYPES.pdf, filename, etag: `"${key}"`, updatedAt: src.updatedAt, lang, format }
+      const file: CvExport = { body: out.buffer, contentType: EXPORT_CONTENT_TYPES.pdf, filename, etag: `"${key}"`, updatedAt: src.updatedAt, lang, format, pages: out.pages, lastPageFill: out.lastPageFill }
       remember(key, file)
       return file
     })()

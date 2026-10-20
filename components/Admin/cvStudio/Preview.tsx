@@ -4,7 +4,8 @@ import { ExternalLinkIcon } from '@chakra-ui/icons'
 import { FaFilePdf } from 'react-icons/fa'
 import CVResult from '../../CVViewerPage/CVResult'
 import ScaledSheet from '../../CVViewerPage/ScaledSheet'
-import { publicSections, type CvLang } from '../../../lib/cvVisibility'
+import { CV_SURFACES, publicSections, type CvLang, type CvSurface } from '../../../lib/cvVisibility'
+import { SURFACE_LABEL } from './audience'
 import { withEvidenceLinks, type CvWork } from '../../../lib/cvLinks'
 import { cvPdfPath } from '../../../lib/cvExport/paths'
 import type { OwnerNames } from '../../../lib/publications/names'
@@ -20,13 +21,17 @@ const ZOOMS: Array<{ label: string; value: 'fit' | number }> = [
 
 type Mode = 'cv' | 'web'
 const MODE_KEY = 'cv-studio:preview-mode'
+const SURFACE_KEY = 'cv-studio:preview-surface'
+/** The A4 sheet as each audience gets it (E4): /cv, the downloads, a private link. */
+const SHEET_AS: Record<CvSurface, string> = { web: '/cv', download: 'PDF', private: 'Link' }
 
 /**
  * Live preview of exactly what visitors get — same pruning, same renderers:
- *   A4 CV   → /cv and the PDF (publicSections 'cv' through CVResult, with
- *             the evidence links resolved as /cv resolves them: a project's
- *             case study only when it is PUBLISHED — never a /work/<slug>
- *             that would 404)
+ *   A4 CV   → /cv, the PDF or a private link — the audience picked in the
+ *             toolbar (publicSections 'cv' for that surface, E4) — through
+ *             CVResult, with the evidence links resolved as /cv resolves
+ *             them: a project's case study only when it is PUBLISHED — never
+ *             a /work/<slug> that would 404)
  *   Website → the CV stack on /about (publicSections 'website')
  * Rendering is deferred so typing never waits on the preview.
  */
@@ -48,21 +53,37 @@ export default function Preview({
 }) {
   const deferred = useDeferredValue(sections)
   const [mode, setMode] = useState<Mode>('cv')
-  const cvData = useMemo(() => (mode === 'cv' ? withEvidenceLinks(publicSections(deferred, 'cv'), { works: works ?? [] }) : []), [deferred, mode, works])
+  const [surface, setSurface] = useState<CvSurface>('web')
+  const cvData = useMemo(
+    () => (mode === 'cv' ? withEvidenceLinks(publicSections(deferred, 'cv', surface), { works: works ?? [] }) : []),
+    [deferred, mode, works, surface],
+  )
   const [zoom, setZoom] = useState<'fit' | number>('fit')
   const [scale, setScale] = useState(1)
   const { border, dim } = useStudioTokens()
   const canvas = useColorModeValue('gray.100', 'blackAlpha.600')
   const stale = deferred !== sections
-  const reportPages = useCallback((n: number) => onPages?.(lang, n), [onPages, lang])
+  // The readiness page check is about the public CV: a private link's sheet is not reported.
+  const reportPages = useCallback((n: number) => (surface === 'private' ? undefined : onPages?.(lang, n)), [onPages, lang, surface])
 
   useEffect(() => {
     try {
       if (localStorage.getItem(MODE_KEY) === 'web') setMode('web')
+      const as = localStorage.getItem(SURFACE_KEY)
+      if (as === 'download' || as === 'private') setSurface(as)
     } catch {
-      /* storage unavailable — default to the A4 sheet */
+      /* storage unavailable — default to the A4 sheet as /cv shows it */
     }
   }, [])
+
+  const pickSurface = (s: CvSurface) => {
+    setSurface(s)
+    try {
+      localStorage.setItem(SURFACE_KEY, s)
+    } catch {
+      /* ignore */
+    }
+  }
 
   const pick = (m: Mode) => {
     setMode(m)
@@ -105,6 +126,17 @@ export default function Preview({
               Website
             </Button>
           </ButtonGroup>
+          {mode === 'cv' ? (
+            <ButtonGroup size="xs" isAttached variant="outline" role="group" aria-label="Show the A4 CV as">
+              {CV_SURFACES.map((s) => (
+                <Tooltip key={s} label={`As ${SURFACE_LABEL[s].toLowerCase()} show it`} hasArrow openDelay={300}>
+                  <Button onClick={() => pickSurface(s)} aria-pressed={surface === s} {...segBtn(surface === s)}>
+                    {SHEET_AS[s]}
+                  </Button>
+                </Tooltip>
+              ))}
+            </ButtonGroup>
+          ) : null}
           <Text fontFamily={monoFont} fontSize="10px" color={dim} aria-live="polite">
             {mode === 'cv' ? `${Math.round(scale * 100)}%` : ''}
             {stale ? ' · updating' : ''}

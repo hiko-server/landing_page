@@ -66,6 +66,14 @@ English → [README.md](./README.md)
   站长；在此之前，手动填写的 iD 按规范显示 ORCID 的“未认证”iD 图标，并在链接后注明
   “(unauthenticated)”/“（未经认证）”——详见
   [连接 ORCID iD](#连接-orcid-idconnect-your-orcid-id)。逻辑位于 `lib/orcid/`。
+- **受众、定制简历版本与私密链接**：除眼睛图标外，每个字段、条目、列表和板块都有
+  **Shows on（显示于）**：公开页面、下载文件（PDF / 纯文本 / JSON Resume / vCard）与私密
+  链接——例如电话号码可以不出现在 `/cv` 和 `/api/cvdata`，却保留在 PDF 中；隐藏始终优先。
+  在 Dashboard → CV → *Variants & links* 中可建立“机器学习”“嵌入式”等版本，挑选并排序板块
+  与条目，并按真实 PDF 衡量页数目标；版本可通过带签名、会过期、可随时撤销的私密链接
+  （`/cv/r/<token>`，只保存哈希；noindex、no-store、不发送 Referer）连同其 PDF 分享，每条链接
+  只记录打开次数与最近一次打开的日期。逻辑位于 `lib/cvVisibility.ts`、`lib/cvVariants.ts`、
+  `lib/cvShare/`。
 - **面向非工程师的后台**：可视化编辑 Hero、品牌、社交、照片墙、博客、
   案例研究、CV（Studio + 原始 JSON）、Now/Uses，以及关于页自述。
 - **逐节可见性与排序**：首页所有板块（Open Source / Skills /

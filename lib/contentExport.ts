@@ -160,6 +160,9 @@ unpublished-changes/  Saved changes of live posts / case studies that are not
 pages/                The /now, /uses and /about pages that have content.
 cv.json               The CV in English and Chinese, every entry with its
                       visibility settings, as CV Studio edits it.
+cv-variants.json      The tailored CV variants (sections and entries by uid,
+                      page targets), when there are any. Their private links
+                      are not exported: they live on the server only.
 home.json             The home page document.
 redirects.json        Old addresses of renamed posts and case studies and
                       where they lead now.
@@ -220,6 +223,9 @@ export async function buildContentExport(now = new Date()): Promise<ContentExpor
   }
   const cv = readCvData()
   add('cv.json', `${JSON.stringify({ en: cv.en, zh: cv.zh }, null, 2)}\n`, imageRefsInValue(cv))
+  const { readVariants } = await import('./cvVariantsStore')
+  const { variants } = readVariants()
+  if (variants.length) add('cv-variants.json', `${JSON.stringify({ variants }, null, 2)}\n`)
   const home = readHome()
   if (home) add('home.json', `${JSON.stringify(home, null, 2)}\n`, imageRefsInValue(home))
   const redirects = listRedirects().map((r) => ({

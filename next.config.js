@@ -60,6 +60,9 @@ const nextConfig = {
   outputFileTracingIncludes: {
     '/api/og': ['./assets/og/*.ttf'],
     '/api/cv/export': ['./assets/og/Geist-Regular.ttf', './assets/og/Geist-SemiBold.ttf', './assets/pdf/**/*'],
+    // The PDF of a shared CV variant and the admin's page-count measurement use the same fonts.
+    '/api/cv/share': ['./assets/og/Geist-Regular.ttf', './assets/og/Geist-SemiBold.ttf', './assets/pdf/**/*'],
+    '/api/admin/cv-variants': ['./assets/og/Geist-Regular.ttf', './assets/og/Geist-SemiBold.ttf', './assets/pdf/**/*'],
   },
   // Don't publish full client source (incl. the admin UI) as .map files.
   productionBrowserSourceMaps: false,
@@ -96,6 +99,10 @@ const nextConfig = {
         { source: '/uploads/:path*', destination: '/api/uploads/:path*' },
         { source: '/.well-known/security.txt', destination: '/api/security-txt' },
         ...cvFiles,
+        // The PDF of a CV variant opened from a private share link (E4,
+        // lib/cvShare): /cv/r/<token>/en.pdf, /cv/r/<token>/zh.pdf.
+        { source: '/cv/r/:token/en.pdf', destination: '/api/cv/share?token=:token&lang=en' },
+        { source: '/cv/r/:token/zh.pdf', destination: '/api/cv/share?token=:token&lang=zh' },
         // The Markdown twin of every published post and case study, at its
         // address plus ".md" (llmstxt.org), served by /api/md (G9).
         { source: '/blog/:slug.md', destination: '/api/md?collection=blog&slug=:slug' },
