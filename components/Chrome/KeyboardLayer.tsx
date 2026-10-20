@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { getShortcutsEnabled } from '../../lib/keyboardShortcuts'
 import { layerKeyOf } from '../../lib/keyboardLayer'
 import { openCommandPalette } from './paletteEvents'
+import { noteKeyboardUse } from './platform'
 
 /** An open modal dialog (the palette, the menu, the lightbox) owns the keyboard. */
 const OPEN_MODAL = '[aria-modal="true"]'
@@ -28,6 +29,8 @@ export function preloadKeyboardLayer(): void {
 export default function KeyboardLayer() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // A tablet with a keyboard case: the keyboard hints come back (components/Chrome/platform).
+      noteKeyboardUse(e)
       const key = layerKeyOf(e)
       if (!key || !getShortcutsEnabled() || document.querySelector(OPEN_MODAL)) return
       if (key === '/' || key === '?') {

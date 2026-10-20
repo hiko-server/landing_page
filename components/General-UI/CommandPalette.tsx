@@ -35,7 +35,7 @@ import { useShortcutsEnabled } from '../Chrome/useShortcutsEnabled'
 import { useThemePreference } from '../Chrome/useThemePreference'
 import { systemPrefersDark, type ThemePreference } from '../../lib/themePreference'
 import { motionTransition } from '../../theme/tokens'
-import { COARSE_POINTER_QUERY, HIDE_ON_COARSE_POINTER, isApplePlatform } from '../Chrome/platform'
+import { COARSE_POINTER_QUERY, HIDE_ON_COARSE_POINTER, isApplePlatform, keyboardSeen } from '../Chrome/platform'
 import { setShortcutsEnabled } from '../../lib/keyboardShortcuts'
 import { normalizePaletteMode, type PaletteMode } from '../Chrome/paletteEvents'
 import AskView from '../Search/AskView'
@@ -409,12 +409,13 @@ export default function CommandPalette({
 
   useEffect(() => {
     setIsMac(isApplePlatform(navigator as Navigator & { userAgentData?: { platform?: string } }))
-    setKeyboardLikely(!window.matchMedia(COARSE_POINTER_QUERY).matches)
   }, [])
 
   // Fresh state every time the palette opens.
   useEffect(() => {
     if (!isOpen) return
+    // A fine pointer, or a touch screen whose visitor has used a hardware keyboard ("?" opened this).
+    setKeyboardLikely(!window.matchMedia(COARSE_POINTER_QUERY).matches || keyboardSeen())
     setQuery(initialQueryRef.current)
     // Ask is a view of the top level: opened in Ask mode, no nested page.
     setMode(initialModeRef.current)
@@ -1259,7 +1260,8 @@ export default function CommandPalette({
 
   /**
    * The keyboard cheatsheet: compact under the browse view, every key on the
-   * Keyboard shortcuts page. Hidden on touch-first devices.
+   * Keyboard shortcuts page. Hidden on touch-first devices until a hardware
+   * keyboard has been used there (components/Chrome/platform).
    */
   const renderSheet = (full: boolean) => (
     <Box

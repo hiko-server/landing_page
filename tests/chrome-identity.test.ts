@@ -289,7 +289,8 @@ test('A5: palette shortcut label by platform; hints hidden on touch-first device
   assert.equal(paletteShortcutLabel(false), 'Ctrl K')
   assert.equal(paletteKeyShortcuts(true, true), 'Meta+K /')
   assert.equal(paletteKeyShortcuts(false, false), 'Control+K')
-  assert.deepEqual(HIDE_ON_COARSE_POINTER, { '@media (pointer: coarse)': { display: 'none !important' } })
+  // Hidden on touch-first devices until a hardware keyboard has been used there (UX-A-4).
+  assert.deepEqual(HIDE_ON_COARSE_POINTER, { '@media (pointer: coarse)': { 'html:not([data-keyboard]) &': { display: 'none !important' } } })
   const header = code('components/Header/Header.tsx')
   assert.match(header, /sx=\{HIDE_ON_COARSE_POINTER\}\s*>\s*\{paletteShortcutLabel\(isMac\)\}/)
   const palette = code('components/General-UI/CommandPalette.tsx')

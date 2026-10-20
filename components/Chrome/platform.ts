@@ -1,3 +1,5 @@
+import { isEditableTarget } from '../../lib/keyboardLayer'
+
 /**
  * Keyboard-hint helpers shared by the header, the ⌘K palette and the 404
  * page (framework-free, unit-tested in tests/chrome-identity.test.ts).
@@ -9,15 +11,60 @@
  *     script has to run. `display: none` also takes them out of the
  *     accessibility tree, where a hint for a key the visitor does not have
  *     would only add words.
+ *   - Unless the visitor has a keyboard after all (a tablet with a keyboard
+ *     case): the first key press only a hardware keyboard can make
+ *     (noteKeyboardUse, from the visitor keyboard layer) marks <html> with
+ *     `data-keyboard`, and the hints come back — "?" lists every shortcut
+ *     instead of an empty page.
  */
 
 /** Media query of a touch-first device (primary pointer is a finger). */
 export const COARSE_POINTER_QUERY = '(pointer: coarse)'
 
-/** Chakra `sx` that hides an element on touch-first devices. */
+/** Attribute on <html> once a hardware keyboard has been used on this page. */
+export const KEYBOARD_ATTR = 'data-keyboard'
+
+/** Chakra `sx` that hides an element on touch-first devices — until a hardware keyboard is used. */
 export const HIDE_ON_COARSE_POINTER = {
-  [`@media ${COARSE_POINTER_QUERY}`]: { display: 'none !important' },
+  [`@media ${COARSE_POINTER_QUERY}`]: { [`html:not([${KEYBOARD_ATTR}]) &`]: { display: 'none !important' } },
 } as const
+
+type KeyEventLike = {
+  key?: string
+  metaKey?: boolean
+  ctrlKey?: boolean
+  altKey?: boolean
+  isComposing?: boolean
+  keyCode?: number
+  target?: unknown
+}
+
+/**
+ * True for a key press only a hardware keyboard makes: one outside a text
+ * field (an on-screen keyboard is only open while a field has focus), with
+ * ⌘ / Ctrl held, or Tab / Escape (keys on-screen keyboards do not have).
+ * Composition, and the "Unidentified" / "Process" keys virtual keyboards
+ * send, never count.
+ */
+export function isHardwareKeyEvent(e: KeyEventLike): boolean {
+  if (e.isComposing === true || e.keyCode === 229) return false
+  const key = e.key || ''
+  if (!key || key === 'Unidentified' || key === 'Process' || key === 'Dead') return false
+  if (e.metaKey || e.ctrlKey) return true
+  if (key === 'Tab' || key === 'Escape') return true
+  return !isEditableTarget(e.target)
+}
+
+/** Mark the page as used with a hardware keyboard (see the module comment). */
+export function noteKeyboardUse(e: KeyEventLike): void {
+  if (typeof document === 'undefined' || document.documentElement.hasAttribute(KEYBOARD_ATTR)) return
+  if (isHardwareKeyEvent(e)) document.documentElement.setAttribute(KEYBOARD_ATTR, '')
+}
+
+/** True once a hardware keyboard has been used on this page. */
+export function keyboardSeen(): boolean {
+  return typeof document !== 'undefined' && document.documentElement.hasAttribute(KEYBOARD_ATTR)
+}
 
 type NavigatorLike = {
   platform?: string
