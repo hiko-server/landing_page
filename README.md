@@ -80,8 +80,13 @@ backup, and a hardened admin GUI for non-engineers.
   reasons list all come from `data/home.json`; built-in defaults when
   blank.
 - **Admin Inbox** — every contact message is stored with its delivery
-  status and can be read and answered from the dashboard, even when SMTP
-  is not configured.
+  status; folders (Inbox / Starred / Archived), the inquiry kind, search
+  (`is:unread`, `kind:role`), star, archive, replied, delete with Undo, and
+  threaded replies by e-mail with English / 中文 templates — or, without
+  SMTP, the same draft through your own mail app.
+- **Keyboard-first admin** — ⌘K lists every admin destination and the open
+  view's actions; `G` then a letter jumps (`G I` Inbox, `G S` System, …);
+  `j` / `k` move through lists; `?` shows a searchable sheet of every key.
 - **Industry-grade admin auth** — passkeys (WebAuthn) with one-time recovery
   codes, per-browser sessions, sign-in history and step-up re-verification
   for dangerous actions; scrypt with 16-byte salt; per-(email, IP)
@@ -430,7 +435,7 @@ All variables are documented in [`.env.example`](./.env.example). Headlines:
 | Sessions | `JWT_SECRET` (base64, ≥ 32 bytes) | ✅ always |
 | Site identity | `NEXT_PUBLIC_PRODUCT_NAME`, `NEXT_PUBLIC_SITE_HOST`, `SITE_URL` | recommended |
 | Default theme | `NEXT_PUBLIC_DEFAULT_THEME` (`dark` when empty, `light` or `system`; build time) | optional |
-| Mailer | `SMTP_HOST/PORT/USER/PASS`, `FROM_EMAIL`, `NOTIFY_EMAIL` | optional — silently skipped when unset |
+| Mailer | `SMTP_HOST/PORT/USER/PASS`, `FROM_EMAIL`, `NOTIFY_EMAIL`, `REPLY_FROM_EMAIL` (Inbox replies; defaults to the SMTP account's address) | optional — silently skipped when unset |
 | Contact captcha | none — built-in nonce + math + honeypot | n/a |
 | GitHub | `GITHUB_TOKEN` (fine-grained, public repositories read-only, no permissions) | recommended (raises API limit 60→5000/h) |
 | MongoDB backup | `MONGODB_URI`, `MONGODB_DB_NAME` | optional |
@@ -443,6 +448,7 @@ All variables are documented in [`.env.example`](./.env.example). Headlines:
 | Health detail | `HEALTH_TOKEN` (bearer token for monitors) | optional — without it only a signed-in admin sees the `/api/health` detail |
 | Admin step-up | `ADMIN_RECENT_AUTH_MINUTES` (1–60, default 10) | optional |
 | Restore drills | `RESTORE_DRILL_INTERVAL_HOURS` (default 168, `0` disables) | optional |
+| Link check | `LINK_CHECK_INTERVAL_HOURS` (default 24, `0` disables the schedule) | optional |
 
 > The repo never commits a real `.env`. `.env.example` contains placeholders
 > only — copy and fill in for your own deployment.
@@ -545,6 +551,37 @@ address, user agent or cookie — and listed in Admin → System → Errors
 Admin → System → Health shows the deployed build, uptime, memory, free
 disk, each database's size, WAL and schema version, backups, the restore
 drill and the recent warn / error log entries.
+
+**Content health** (Admin → System → Content, summarised on Health): every
+published post, case study and page, the CV and the home page are checked
+for broken or moved links (a daily, polite external-link check through
+`safeFetch` — HEAD first, one request per site at a time, results in
+`data/content-health/links.json`; LinkedIn's 999 and bot walls count as
+"couldn't verify", never broken), links to missing or draft posts, tracking
+parameters in links, images that are missing, hot-linked from another site,
+too large, without responsive sizes or with a file name for alt text,
+heading structure, duplicate or missing descriptions and hard line breaks.
+Safe fixes are one click — strip tracking parameters, import a remote image
+into uploads, generate responsive sizes, use a link's new address, remove a
+stray break — and go through the editor's own save path (version snapshot,
+R2 mirror, page revalidation, refused with 409 when the item changed since
+the report); anything that needs your words links to the editor. `j` / `k`
+move through the issues, `f` applies the focused fix.
+
+**Activity log** (Admin → System → Activity): every successful admin write —
+saves, publishes, restores, deletes, Inbox changes and replies, uploads,
+backups, security changes — with who (the signed-in browser: coarse device,
+network prefix, country; never a full address), what and when, merged with
+the sign-ins and password resets of the sign-in history. It lives in its own
+`data/audit.db` (versioned migrations in `scripts/db/audit`, 400 days /
+20 000 entries), is copied by the deploy's online backups and is not in the
+content snapshots, so restoring content never rewrites it. Writes are
+recorded in `withApi` for every route `lib/audit/describe.ts` names; a route
+that only knows its action while it runs calls `recordAdminAudit(req, res,
+{ action, area, target, summary })` (`lib/audit/record.ts`) after it
+succeeded, and a unit test fails when a writing route is in neither. The
+version history says which change replaced each version, and its diffs are
+word-level (Chinese segmented with `Intl.Segmenter`).
 
 <div align="center">
   <img src="docs/screenshots/admin-storage.png" alt="Storage & backup admin panel" width="780" />
@@ -683,9 +720,26 @@ third-party script and no cookie.
   plus a hash of the browser's random per-page-load measurement id, so a
   CLS / INP reported again replaces its earlier value instead of counting
   twice (it identifies a measurement, not a visitor).
+- **Goal events** (`POST /api/g`, plus three counted on the server): a
+  fixed allow-list of eight names, each with at most one bounded property —
+  `cv_download` (language × format; counted when `/cv.pdf` & co. are
+  fetched, 304 revalidations included, never HEAD), `cv_print` (`en` /
+  `zh`), `vcard_save` (server), `email_click` (the page path — never the
+  address), `outbound_click` (the destination host only), `contact_sent`
+  (server, the inquiry kind only), `read_through` (the article path, once
+  the reader reached the end and spent time proportional to its length) and
+  `search_empty` (a ⌘K search that found nothing: lowercased, at most 40
+  characters, never stored when it contains `@` or six or more digits).
+  The same exclusions and per-client / per-network budgets as page views;
+  the only visitor value is the same daily hash, which links a visit to a
+  download within one UTC day — the Analytics tab shows **Goals**, a
+  **Source → CV → Download** conversion and **Searches with no results**,
+  counted in *visitor-days*.
 - **Storage and retention**: a separate `data/analytics.db` (never part of
   `content.db`, R2 sync or restores). Raw page views are kept 35 days, raw
-  Web Vitals 30 days, daily roll-ups 400 days.
+  Web Vitals 30 days, raw goal events 35 days, daily roll-ups 400 days —
+  except `search_empty`, whose raw rows and daily totals are both deleted
+  after 35 days.
 - **Error reports** (see [Error monitoring](#error-monitoring-and-system-health))
   carry no visitor id either and are dropped under DNT / GPC; they are kept
   at most 90 days.
@@ -698,6 +752,17 @@ third-party script and no cookie.
   details: reason, kind, company, a link, a timeline) is stored in
   `data/contact-inbox.jsonl` and, with SMTP, e-mailed to the owner. The
   link is https-only and never fetched by the server.
+- In Admin → Inbox each message can be starred, archived, marked replied
+  and answered by e-mail. A reply is sent **from the SMTP account's own
+  address** (so it passes the recipient's DMARC check — a domain with
+  `p=reject` would have it refused if it came "from" the domain through
+  another provider) with **Reply-To** set to the e-mail the site shows, and
+  it threads with the notification you received (Message-ID, In-Reply-To,
+  References). Templates (English and 中文, placeholders `{firstName}`
+  `{name}` `{subject}` `{me}`) are content and live in the content store;
+  statuses and the replies you sent stay on the server next to the inbox
+  and are forgotten with the message. Without SMTP the composer explains
+  the setup and opens the same draft in your mail app.
 - Messages older than `CONTACT_RETENTION_DAYS` (default 365) are deleted by
   a nightly job (03:00 Hong Kong, `lib/inboxRetention.ts`); listings hide
   them before that, a restore never merges them back, and full-site
@@ -972,17 +1037,26 @@ are gated by the proxy (`proxy.ts`).
 | `/admin/dashboard?tab=cv` | CV Studio (per-field visibility, hidden-items panel, recruiter-readiness checks — `&panel=readiness`, A4 / website preview) + raw JSON |
 | `/admin/dashboard?tab=versions` | Version-history rollback |
 | `/admin/dashboard?tab=storage` | SQLite + R2 inventory, manual Backup / Pull |
-| `/admin/dashboard?tab=inbox` | Contact Inbox — read, reply by e-mail, mark, delete |
-| `/admin/dashboard?tab=analytics` | First-party page views, referrers, devices and real-user Web Vitals |
+| `/admin/dashboard?tab=inbox` | Contact Inbox — folders, kinds, search, star / archive / replied, threaded replies with EN / 中文 templates, delete with Undo |
+| `/admin/dashboard?tab=analytics` | First-party page views, referrers, devices, real-user Web Vitals, goals, Source → CV → Download and searches with no results |
 | `/admin/blog`, `/admin/blog/edit?slug=…` | Blog post manager: drafts, unpublished changes of live posts, publish checklist, live preview, history, slug change with redirect, search & sharing previews |
 | `/admin/work`, `/admin/work/edit?slug=…` | Case-study manager (the same tools) |
 | `/admin/tags` | Rename, unify or merge post tags and case-study tech; content export (.zip) |
 | `/admin/now`, `/admin/uses`, `/admin/about` | One-off page editors (`about` = the bio on /about; empty = no bio section) |
 | `/admin/db-config` | MongoDB connection + manual backup/restore |
 | `/admin/security` | Passkeys, recovery codes, "Require a passkey", signed-in browsers, sign-in history |
-| `/admin/system` | Health (build, disk, databases, backups, restore drill, recent warnings) and `?view=errors` |
+| `/admin/system` | Health (build, disk, databases, backups, restore drill, recent warnings), `?view=content` (content health), `?view=errors` and `?view=activity` (the activity log) |
 
-Press `?` on any admin page for the keyboard shortcuts.
+Press `?` on any admin page for the keyboard shortcuts (searchable). The
+admin is keyboard-first: ⌘K / Ctrl+K lists every admin page and the actions
+of the view on screen (an admin view adds its own with `useAdminCommands`,
+`components/Admin/shell/useAdminCommands.ts`); `G` then a letter jumps —
+`D` overview, `I` Inbox, `R` CV Studio, `E` Home editor, `P` posts, `O`
+case studies, `T` analytics, `V` versions, `F` storage, `S` System, `L`
+activity, `Q` content health, `X` errors, `K` security (the public `G H/A/W/B/C/N/U`
+work too); lists take `j` / `k`, `Enter`, `x` and their own letters
+(Inbox: `r` reply, `s` star, `e` archive, `u` unread, `#` delete, ⌘Z undo).
+Single-letter keys follow the *Single-key shortcuts* switch.
 
 ---
 

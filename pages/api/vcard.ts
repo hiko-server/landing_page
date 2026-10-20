@@ -5,6 +5,7 @@ import { profileLinks } from '../../lib/cvLinks'
 import { loadCvSource } from '../../lib/cvSource'
 import { absUrl } from '../../lib/schema'
 import { buildVcard, currentRoleFrom, vcardFileName } from '../../lib/vcard'
+import { recordServerGoal } from '../../lib/analytics/events'
 
 /**
  * GET /api/vcard → "Li-Yanpei.vcf" (vCard 4.0, lib/vcard.ts; the file name
@@ -13,7 +14,14 @@ import { buildVcard, currentRoleFrom, vcardFileName } from '../../lib/vcard'
  * Built from the public, CV-scoped personal information (hidden e-mail /
  * phone / address never appear), the current role from work experience, the
  * public GitHub / LinkedIn profiles the CV prints (lib/cvLinks) and the
- * public home avatar. Cached at the edge for an hour.
+ * public home avatar.
+ *
+ * Revalidated at the origin on every request (`no-cache`; Next's API
+ * response carries an ETag of the card and answers 304 while it is
+ * unchanged), so a CV save shows up at once and every save of the card
+ * reaches this route: a GET counts one vcard_save goal event
+ * (lib/analytics/events: no property, the daily visitor hash, the page-view
+ * exclusions; never HEAD or a prefetch).
  */
 export default withApi('vcard', async (req, res) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
@@ -34,6 +42,7 @@ export default withApi('vcard', async (req, res) => {
 
   res.setHeader('Content-Type', 'text/vcard; charset=utf-8')
   res.setHeader('Content-Disposition', `attachment; filename="${vcardFileName(personal)}"`)
-  res.setHeader('Cache-Control', 'public, s-maxage=3600')
+  res.setHeader('Cache-Control', 'public, no-cache')
+  if (req.method === 'GET') recordServerGoal(req, 'vcard_save')
   return res.status(200).send(card)
 })

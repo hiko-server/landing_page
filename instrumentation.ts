@@ -3,13 +3,17 @@
 //   - installs the first-party error capture (lib/errors/server): warn / error
 //     log entries feed the admin System panel's recent-log ring, and errors
 //     carrying an exception are recorded in the error monitor;
-//   - migrates the SQLite stores (content.db, analytics.db, auth.db) at boot
+//   - migrates the SQLite stores (content.db, analytics.db, auth.db, audit.db) at boot
 //     instead of on the first request (scripts/db; each migration is
 //     transactional and idempotent) — never during `next build`;
 //   - starts the scheduled, change-aware backups (lib/backupSchedule), the
-//     weekly restore drill (lib/restoreDrill) and the nightly expiry of
-//     contact messages (lib/inboxRetention) — never during `next build`, and
-//     only once per process;
+//     weekly restore drill (lib/restoreDrill), the nightly expiry of
+//     contact messages (lib/inboxRetention) and the daily external-link check
+//     of the content health center (lib/contentHealth/schedule) and the
+//     daily roll-up / retention of goal events (lib/analytics/events) — never
+//     during `next build`, and only once per process;
+//   - warns in the log when mail would be sent From a domain whose DMARC
+//     policy the SMTP account cannot pass (lib/mailAlignment);
 //   - adds `Cache-Control: no-transform` to HTML documents
 //     (lib/htmlNoTransform: keeps Cloudflare from injecting its analytics
 //     beacon);
@@ -30,6 +34,8 @@ type InstrumentationGlobal = typeof globalThis & {
   __backupScheduleStarted?: boolean
   __restoreDrillStarted?: boolean
   __inboxRetentionStarted?: boolean
+  __contentHealthScheduleStarted?: boolean
+  __eventsMaintenanceStarted?: boolean
 }
 
 export async function register() {
@@ -41,14 +47,16 @@ export async function register() {
       installServerErrorCapture()
       const { log } = await import('./lib/log')
       try {
-        const [{ getDb }, { getAnalyticsDb }, { getAuthDb }] = await Promise.all([
+        const [{ getDb }, { getAnalyticsDb }, { getAuthDb }, { getAuditDb }] = await Promise.all([
           import('./lib/db'),
           import('./lib/analytics/db'),
           import('./lib/adminAuth/db'),
+          import('./lib/audit/db'),
         ])
         getDb()
         getAnalyticsDb()
         getAuthDb()
+        getAuditDb()
       } catch (err) {
         log.error('could not open or migrate a database at startup', { err })
       }
@@ -83,7 +91,43 @@ export async function register() {
         log.error('could not start the contact message expiry', { err })
       }
     }
+    if (!building && !g.__contentHealthScheduleStarted) {
+      // The daily external-link check of the content health center
+      // (lib/contentHealth/schedule; the run itself is an internal job).
+      g.__contentHealthScheduleStarted = true
+      try {
+        const { startLinkCheckSchedule } = await import('./lib/contentHealth/schedule')
+        startLinkCheckSchedule()
+      } catch (err) {
+        const { log } = await import('./lib/log')
+        log.error('could not start the link check schedule', { err })
+      }
+    }
+    if (!building && !g.__eventsMaintenanceStarted) {
+      // Goal events: the daily roll-up and retention (search_empty 35 days)
+      // run even on a quiet server (lib/analytics/events).
+      g.__eventsMaintenanceStarted = true
+      try {
+        const { startEventsMaintenance } = await import('./lib/analytics/events')
+        startEventsMaintenance()
+      } catch (err) {
+        const { log } = await import('./lib/log')
+        log.error('could not start the goal-event retention', { err })
+      }
+    }
     if (!building) {
+      // Mail sent From a domain whose DMARC policy the SMTP account cannot
+      // satisfy is refused by recipients: say so once at start (lib/mailAlignment).
+      void import('./lib/mailAlignment')
+        .then(async ({ checkFromAlignment, checkReplyAlignment, notificationFrom }) => {
+          const { log } = await import('./lib/log')
+          const [notifications, replies] = await Promise.all([checkFromAlignment(notificationFrom()), checkReplyAlignment()])
+          if (notifications?.message) log.warn('mail: notifications may not arrive', { detail: notifications.message })
+          if (replies?.message) log.warn('mail: Inbox replies may not arrive', { detail: replies.message })
+        })
+        .catch(() => {
+          // A DNS failure here must never affect the start.
+        })
       const { installHtmlNoTransform } = await import('./lib/htmlNoTransform')
       installHtmlNoTransform()
       try {

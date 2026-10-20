@@ -1,7 +1,8 @@
 /**
  * VersionHistory — browse the CV / Home snapshots taken before every save and
- * restore, compare one with the live document as a readable structural diff,
- * download it, or restore it.
+ * restore (each with the change that replaced it, from the activity log),
+ * compare one with the live document as a readable structural diff — changed
+ * text values word by word — download it, or restore it.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -54,6 +55,8 @@ import {
   primaryButtonProps,
 } from './shell/ui'
 import SegmentedTabs, { tabPanelProps, type SegmentedItem } from './shell/SegmentedTabs'
+import WordDiffText from './shell/WordDiffText'
+import { afterSide, beforeSide, diffWords } from '../../lib/wordDiff'
 
 type DocType = 'cv' | 'home'
 
@@ -64,6 +67,8 @@ type VersionEntry = {
   index: number
   isLatest: boolean
   type: DocType
+  /** The admin change that took this snapshot (activity log), when known. */
+  replacedBy?: { summary: string; ts: number; device: string | null } | null
 }
 
 const TYPE_ITEMS: SegmentedItem<DocType>[] = [
@@ -99,8 +104,20 @@ function errorText(e: unknown, fallback: string): string {
   return fallback
 }
 
+/** Longest text compared word by word; longer values fall back to the two full values. */
+const WORD_DIFF_MAX_CHARS = 4000
+
+/** Word-level sides of a changed text value (lib/wordDiff), or null when not two comparable strings. */
+function wordSides(e: DiffEntry) {
+  if (e.kind !== 'changed' || typeof e.before !== 'string' || typeof e.after !== 'string') return null
+  if (e.before.length > WORD_DIFF_MAX_CHARS || e.after.length > WORD_DIFF_MAX_CHARS) return null
+  const d = diffWords(e.before, e.after)
+  return d.tooLarge ? null : { before: beforeSide(d.segments), after: afterSide(d.segments) }
+}
+
 function DiffRow({ e }: { e: DiffEntry }) {
   const kind = KIND_COPY[e.kind]
+  const words = useMemo(() => wordSides(e), [e])
   return (
     <Box
       py={2.5}
@@ -133,8 +150,9 @@ function DiffRow({ e }: { e: DiffEntry }) {
               color="page.fg-secondary"
               textDecoration={e.kind === 'removed' ? 'line-through' : undefined}
               wordBreak="break-word"
+              whiteSpace={words ? 'pre-wrap' : undefined}
             >
-              {formatDiffValue(e.before)}
+              {words ? <WordDiffText segments={words.before} side="del" /> : formatDiffValue(e.before)}
             </Text>
           </Flex>
         ) : null}
@@ -143,8 +161,8 @@ function DiffRow({ e }: { e: DiffEntry }) {
             <Text as="span" color="page.muted" flexShrink={0} w="64px">
               snapshot
             </Text>
-            <Text as="span" color="page.fg" wordBreak="break-word">
-              {formatDiffValue(e.after)}
+            <Text as="span" color="page.fg" wordBreak="break-word" whiteSpace={words ? 'pre-wrap' : undefined}>
+              {words ? <WordDiffText segments={words.after} side="add" /> : formatDiffValue(e.after)}
             </Text>
           </Flex>
         ) : null}
@@ -435,6 +453,12 @@ export default function VersionHistory() {
                   >
                     {v.filename}
                   </Text>
+                  {v.replacedBy ? (
+                    <Text fontSize="xs" color="page.fg-secondary" noOfLines={1} mt={0.5}>
+                      Replaced by: {v.replacedBy.summary}
+                      {v.replacedBy.device ? ` · ${v.replacedBy.device}` : ''}
+                    </Text>
+                  ) : null}
                 </Box>
                 <HStack spacing={1}>
                   <Button

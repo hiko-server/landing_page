@@ -1,6 +1,7 @@
 import crypto from 'node:crypto'
 import type { NextApiHandler, NextApiRequest, NextApiResponse } from 'next'
 import { log, type Logger } from './log'
+import { AUDITED_ROUTES, isWriteMethod } from './audit/describe'
 
 /**
  * Wrap every API route's default export:
@@ -16,6 +17,10 @@ import { log, type Logger } from './log'
  *     (no internals)
  *   - 5xx responses and slow requests (> 1 s) are logged; everything else is
  *     logged at debug level only
+ *   - admin writes are recorded in the activity log (lib/audit): a write to a
+ *     route lib/audit/describe names runs inside an audit scope and, when it
+ *     answers 2xx, gets an entry (who, what, when). The capture loads only
+ *     for such requests and can never fail or change the response.
  *
  * `export const config = …` stays a separate named export as Next requires.
  */
@@ -50,8 +55,17 @@ export function withApi(route: string, handler: ApiHandler): NextApiHandler {
     } catch {
       /* headers already sent by a misbehaving middleware: keep going */
     }
+    let audit: import('./audit/capture').AuditCapture | null = null
+    if (AUDITED_ROUTES.has(route) && isWriteMethod(req.method)) {
+      try {
+        audit = (await import('./audit/capture')).beginAudit(route, req, res)
+      } catch (err) {
+        rlog.warn('activity log unavailable', { err })
+      }
+    }
     try {
-      await handler(req, res, { requestId, log: rlog })
+      if (audit) await audit.run(() => handler(req, res, { requestId, log: rlog }))
+      else await handler(req, res, { requestId, log: rlog })
     } catch (err) {
       rlog.error('unhandled API error', { method: req.method, err })
       if (!res.headersSent) {
@@ -60,6 +74,7 @@ export function withApi(route: string, handler: ApiHandler): NextApiHandler {
         res.end()
       }
     } finally {
+      audit?.finish(res.statusCode, requestId)
       const ms = Date.now() - started
       const status = res.statusCode
       const fields = { method: req.method, status, ms }

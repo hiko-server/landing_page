@@ -1,6 +1,7 @@
 import { Badge, Box, Link, Text } from '@chakra-ui/react'
 import { INTENT_LABEL, inquiryRows, type InquiryIntent, type InquiryMeta } from '../../../lib/inquiry'
 import { MONO } from '../shell/ui'
+import { shortUrl } from '../shell/inboxFormat'
 
 const INTENT_SCHEME: Record<InquiryIntent, string> = {
   role: 'purple',
@@ -18,17 +19,6 @@ export function IntentBadge({ meta }: { meta?: InquiryMeta }) {
       {INTENT_LABEL[intent]}
     </Badge>
   )
-}
-
-/** Host + path of a link for display ("jobs.example.com/123"). */
-function shortUrl(url: string): string {
-  try {
-    const u = new URL(url)
-    const rest = `${u.pathname}${u.search}`.replace(/\/$/, '')
-    return `${u.host}${rest.length > 48 ? `${rest.slice(0, 47)}…` : rest}`
-  } catch {
-    return url
-  }
 }
 
 /**

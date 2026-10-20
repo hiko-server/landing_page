@@ -61,8 +61,13 @@ English → [README.md](./README.md)
   CV（奖项、专利、已发表论文、学历）原文生成建议，保存之前首页不显示任何内容。
 - **联系面板可编辑**：标题、眉标、副标语、原因下拉项均来自
   `data/home.json`；留空时回退到内置默认值。
-- **后台收件箱**：联系表单的每条留言都会连同是否已发出邮件一起保存，
-  即使没有配置 SMTP，也能在后台阅读并回复。
+- **后台收件箱**：联系表单的每条留言都会连同是否已发出邮件一起保存；
+  支持收件箱 / 星标 / 归档、按来意筛选、搜索（`is:unread`、`kind:role`）、
+  星标、归档、已回复、可撤销的删除，以及带线程和中英模板的邮件回复——回复
+  从 SMTP 账号自己的地址发出（能通过收件方的 DMARC 检查），Reply-To 是网站
+  公开的邮箱。没有配置 SMTP 时，同一份草稿可用自己的邮件程序打开。
+- **键盘优先的后台**：⌘K 列出所有后台页面和当前视图的操作；`G` 加字母直接跳转
+  （`G I` 收件箱、`G S` 系统…）；列表用 `j` / `k`；`?` 打开可搜索的快捷键表。
 - **工业级后台认证**：scrypt + 16 字节随机盐；按（邮箱，IP）锁定，遭受攻击时
   全站限制尝试速率；按 IP 限流；`httpOnly` + `SameSite=Strict`
   + `Secure` Cookie；Next.js 代理（`proxy.ts`）校验会话——签名与吊销状态，
@@ -312,7 +317,7 @@ docker compose up -d --build
 | 会话 | `JWT_SECRET`（base64，≥ 32 字节） | ✅ 始终必填 |
 | 站点身份 | `NEXT_PUBLIC_PRODUCT_NAME`、`NEXT_PUBLIC_SITE_HOST`、`SITE_URL` | 推荐填 |
 | 默认主题 | `NEXT_PUBLIC_DEFAULT_THEME`（留空为 `dark`，可选 `light` 或 `system`；构建时生效） | 可选 |
-| 邮件 | `SMTP_HOST/PORT/USER/PASS`、`FROM_EMAIL`、`NOTIFY_EMAIL` | 可选 — 未设置时静默跳过 |
+| 邮件 | `SMTP_HOST/PORT/USER/PASS`、`FROM_EMAIL`、`NOTIFY_EMAIL`、`REPLY_FROM_EMAIL`（收件箱回复的发件地址，默认为 SMTP 账号本身） | 可选 — 未设置时静默跳过 |
 | 联系验证码 | 无 — 内置 nonce + 数学题 + 蜜罐 | 不适用 |
 | GitHub | `GITHUB_TOKEN`（细粒度令牌，仅公开仓库只读，不授予任何权限） | 推荐（API 限额 60 → 5000/h） |
 | MongoDB 备份 | `MONGODB_URI`、`MONGODB_DB_NAME` | 可选 |
@@ -408,6 +413,27 @@ Promise 拒绝、错误边界捕获、CSP 违规与 Trusted Types 报告（`repo
 UA 或 Cookie；在 后台 → 系统 → 错误 中处理（已解决的错误再次出现会自动重开）。
 系统健康页显示部署版本、运行时长、内存、磁盘余量、各数据库大小/WAL/版本、备份、
 恢复演练与近期警告日志。
+
+**内容健康**（后台 → 系统 → 内容，健康页有摘要）：检查所有已发布的文章、案例、页面、
+简历和首页——失效或已迁移的链接（每天一次、礼貌的外链检查：经 `safeFetch`、先发 HEAD、
+同一站点一次只发一个请求，结果存于 `data/content-health/links.json`；LinkedIn 的 999
+和机器人拦截算作"无法验证"，不算失效）、指向不存在或草稿文章的链接、链接里的跟踪参数、
+缺失 / 外链 / 过大 / 缺少响应式尺寸 / 用文件名当 alt 的图片、标题层级、重复或缺失的描述，
+以及硬换行。能安全修复的一键完成——去掉跟踪参数、把外链图片导入上传目录、生成响应式
+尺寸、改用链接的新地址、删掉多余的换行——都走编辑器自己的保存流程（版本快照、R2 镜像、
+页面重新生成；若内容在报告之后改过则以 409 拒绝）；需要你亲自措辞的则链接到编辑器。
+`j` / `k` 浏览问题，`f` 应用当前问题的修复。环境变量 `LINK_CHECK_INTERVAL_HOURS`
+（默认 24，`0` 关闭定时检查）。
+
+**操作日志**（后台 → 系统 → 操作日志）：记录每次成功的后台写入——保存、发布、恢复、
+删除、收件箱操作与回复、上传、备份、安全设置——谁（已登录的浏览器：设备类型、网段、
+国家，从不存完整地址）、做了什么、何时，并与登录记录里的登录和密码重置合并显示。
+它存放在独立的 `data/audit.db`（`scripts/db/audit` 版本化迁移，保留 400 天 / 2 万条），
+部署时会在线备份，不进入内容快照，所以恢复内容不会改写它。`lib/audit/describe.ts`
+列出的路由由 `withApi` 自动记录；只有在运行时才知道操作内容的路由，在写入成功后调用
+`recordAdminAudit(req, res, { action, area, target, summary })`（`lib/audit/record.ts`）；
+既不在列表里也不调用它的写入路由会让单元测试失败。版本历史会说明每个版本是被哪次改动
+替换的，差异精确到词（中文用 `Intl.Segmenter` 分词）。
 
 <div align="center">
   <img src="docs/screenshots/admin-storage.png" alt="存储与备份面板" width="780" />
@@ -519,9 +545,20 @@ Analytics 标签页的数据由站点自己收集（`POST /api/a`）；没有第
 - 每次访问只保留：路径、来源域名（仅当来自其他站点）、国家（Cloudflare 的
   `cf-ipcountry`）、粗略的设备与浏览器类别、页面语言。Web Vitals 只保留
   路由、指标、数值与评级。
+- **目标事件**（`POST /api/g`，另有三项由服务器计数）：固定的八个名称，每个
+  最多带一个受限的属性——`cv_download`（语言 × 格式；获取 `/cv.pdf` 等文件时
+  计数，包括 304 重新验证，不计 HEAD）、`cv_print`（`en` / `zh`）、`vcard_save`
+  （服务器）、`email_click`（页面路径，从不记录地址）、`outbound_click`（只记
+  目标域名）、`contact_sent`（服务器，只记来意）、`read_through`（读到文末并停留
+  了与篇幅相称的时间，只记文章路径）以及 `search_empty`（⌘K 搜索无结果：转小写、
+  最多 40 个字符，含 `@` 或 6 个以上数字的一律不保存）。排除规则与访问统计相同；
+  唯一的访客值是同一个每日哈希，只能把同一个 UTC 日内的访问与下载关联起来。
+  Analytics 标签页显示「目标」「来源 → 简历 → 下载」转化和「无结果的搜索」，以
+  「访客·日」计数。
 - **存储与保留期**：独立的 `data/analytics.db`（不进入 `content.db`、R2 同步
-  或恢复）。原始访问记录保留 35 天，原始 Web Vitals 保留 30 天，按日汇总
-  保留 400 天。
+  或恢复）。原始访问记录保留 35 天，原始 Web Vitals 保留 30 天，原始目标事件
+  保留 35 天，按日汇总保留 400 天；`search_empty` 的原始记录和每日汇总都只保留
+  35 天。
 - `/colophon` 页面公开说明了同样的内容。
 
 ---
@@ -755,7 +792,7 @@ API 在 `/api/*`；`/api/admin/*` 全部需要鉴权（代理 `proxy.ts` 把关�
 | `/admin/dashboard?tab=cv` | CV Studio（逐字段显示/隐藏、隐藏项面板、A4 / 网站预览）+ 原始 JSON |
 | `/admin/dashboard?tab=versions` | 版本回滚 |
 | `/admin/dashboard?tab=storage` | SQLite + R2 清单，手动 Backup / Pull |
-| `/admin/dashboard?tab=inbox` | 联系收件箱：阅读、邮件回复、标记、删除 |
+| `/admin/dashboard?tab=inbox` | 联系收件箱：文件夹、来意、搜索、星标 / 归档 / 已回复、带中英模板的线程回复、可撤销的删除 |
 | `/admin/dashboard?tab=analytics` | 第一方访问量、来源、设备与真实用户 Web Vitals |
 | `/admin/blog`、`/admin/blog/edit?slug=…` | 博客管理：草稿、已上线文章的待发布修改、发布检查清单、实时预览、历史、改网址（自动 301/308）、搜索与分享预览 |
 | `/admin/work`、`/admin/work/edit?slug=…` | 案例研究管理（同样的工具） |
@@ -763,9 +800,12 @@ API 在 `/api/*`；`/api/admin/*` 全部需要鉴权（代理 `proxy.ts` 把关�
 | `/admin/now`、`/admin/uses` | 单页编辑器 |
 | `/admin/db-config` | MongoDB 连接 + 手动备份/恢复 |
 | `/admin/security` | 通行密钥、恢复码、"必须使用通行密钥"、已登录浏览器、登录记录 |
-| `/admin/system` | 系统健康（版本、磁盘、数据库、备份、恢复演练、近期警告）与 `?view=errors` 错误监控（自建，不发给第三方） |
+| `/admin/system` | 系统健康（版本、磁盘、数据库、备份、恢复演练、近期警告）、`?view=content` 内容健康、`?view=errors` 错误监控（自建，不发给第三方）与 `?view=activity` 操作日志 |
 
-在任意后台页面按 `?` 可查看键盘快捷键。
+在任意后台页面按 `?` 可查看（并搜索）键盘快捷键。`G` 加字母跳转：`D` 总览、`I` 收件箱、
+`R` CV Studio、`E` 首页编辑器、`P` 文章、`O` 案例、`T` 分析、`V` 版本、`F` 存储、`S` 系统、
+`L` 操作日志、`Q` 内容健康、`X` 错误、`K` 安全；列表支持 `j` / `k`、`Enter`、`x`，收件箱另有
+`r` 回复、`s` 星标、`e` 归档、`u` 未读、`#` 删除、⌘Z 撤销。单键快捷键可在 `?` 面板里关闭。
 
 编辑已上线的文章或案例时，“保存修改”（⌘S）只存为**待发布修改**，访客仍看到已发布版本，
 直到点“发布修改…”（附与线上版本的差异对比）；“预览”在真实网址上显示这些修改。网址旁的

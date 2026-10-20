@@ -19,8 +19,8 @@ import {
 } from '@chakra-ui/react'
 import { readJsonObject } from './http'
 import { canPublish, runPublishChecks, type CheckField, type PublishCheck, type PublishCheckInput } from './publishChecks'
-import { collapseContext, diffLines, documentText } from './textDiff'
-import { DiffView } from './ItemHistoryDrawer'
+import { diffLines, documentText } from './textDiff'
+import LineDiffView from './LineDiffView'
 import { Eyebrow, MONO, outlineButtonProps, primaryButtonProps } from './ui'
 import { importRemoteImage } from '../editor/upload'
 
@@ -255,7 +255,7 @@ export default function PublishSheet({
                       </Text>
                     </Text>
                     <Box maxH="320px" overflowY="auto" tabIndex={0} aria-label="Differences from the live version" role="region">
-                      <DiffView rows={collapseContext(textDiff.lines)} />
+                      <LineDiffView lines={textDiff.lines} />
                     </Box>
                   </>
                 )}

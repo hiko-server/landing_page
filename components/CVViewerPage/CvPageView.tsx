@@ -34,6 +34,7 @@ import { ogPresetUrl } from '../../lib/og/presets'
 import type { CvLang } from '../../lib/cvVisibility'
 import { useBottomBarOffset } from '../Common/useBottomBarOffset'
 import { CvHeaderExtrasContext } from './HeaderExtras'
+import { usePrintGoal } from '../../lib/analytics/printGoal'
 
 /**
  * The bilingual CV page: /cv (English) and /cv/zh (Chinese) render this with
@@ -158,6 +159,8 @@ export default function CvPageView({
   const [view, setView] = useState<View>('reading')
   const actionBar = useRef<HTMLDivElement>(null)
   useBottomBarOffset(actionBar)
+  // Opening the print dialog counts one cv_print goal event (lib/analytics/printGoal).
+  usePrintGoal()
 
   // The other language keeps ?print=1, so "print the Chinese version" works from a shared link.
   const printing = router.query.print === '1'

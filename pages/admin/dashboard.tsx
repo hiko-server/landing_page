@@ -39,6 +39,7 @@ import {
   tabShortcutLabel,
 } from '../../components/Admin/shell/shortcuts'
 import { readJsonObject } from '../../components/Admin/shell/http'
+import { useAdminCommands } from '../../components/Admin/shell/useAdminCommands'
 import {
   DASHBOARD_TABS,
   dashboardQuery,
@@ -167,7 +168,11 @@ function Dashboard() {
     try {
       const res = await fetch('/api/admin/test-mail', { method: 'POST' })
       const data = await readJsonObject(res)
-      if (res.ok && !data.skipped)
+      const alignment = (data.alignment || {}) as { notifications?: { message?: string } | null; replies?: { message?: string } | null }
+      const warning = [alignment.notifications?.message, alignment.replies?.message].filter(Boolean).join(' ')
+      if (res.ok && !data.skipped && warning)
+        toast({ status: 'warning', title: 'Test email sent — but mail may not arrive', description: warning, position: 'bottom-right' })
+      else if (res.ok && !data.skipped)
         toast({ status: 'success', title: 'Test email sent', position: 'bottom-right' })
       else if (data.skipped)
         toast({
@@ -192,6 +197,9 @@ function Dashboard() {
       })
     }
   }
+
+  // ⌘K: the dashboard's own action (the tabs are in the palette already).
+  useAdminCommands('dashboard', [{ id: 'test-mail', label: 'Send a test e-mail', hint: 'checks SMTP and DMARC alignment', keywords: 'smtp mail email test dmarc', run: sendTestMail }], 'v1')
 
   const tabItems: SegmentedItem<DashboardTab>[] = DASHBOARD_TABS.map((key, i) => ({
     key,

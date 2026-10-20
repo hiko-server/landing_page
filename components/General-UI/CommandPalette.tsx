@@ -27,6 +27,8 @@ import { jumpToSection } from '../Article/useActiveHeading'
 import { copyText } from '../MDX/clipboard'
 import { NAV_SHORTCUTS, shortcutLabelFor } from '../Chrome/chrome'
 import { adminEditTarget } from '../Chrome/adminEditTarget'
+import { ADMIN_CHORDS, adminShortcutFor } from '../Admin/shell/adminCommands'
+import { useRegisteredAdminCommands } from '../Admin/shell/useAdminCommands'
 import { useChromeLang } from '../Chrome/chromeLang'
 import { useChromeToast } from '../Chrome/useChromeToast'
 import { useShortcutsEnabled } from '../Chrome/useShortcutsEnabled'
@@ -56,6 +58,7 @@ import {
   type PageMember,
   type PalettePage,
 } from './paletteModel'
+import { noteSearchResults } from '../../lib/analytics/searchEmpty'
 
 /**
  * ⌘K command palette (loaded on demand by CommandPaletteLazy).
@@ -387,6 +390,8 @@ export default function CommandPalette({
   const [listReady, setListReady] = useState(false)
   // A keyboard is likely (fine pointer): the Keyboard shortcuts page is offered.
   const [keyboardLikely, setKeyboardLikely] = useState(true)
+  // Admin destinations and the commands of the admin view on screen (H14).
+  const viewCommands = useRegisteredAdminCommands()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const pending = useRef<(() => void) | null>(null)
@@ -527,6 +532,7 @@ export default function CommandPalette({
       label,
       href,
       hint,
+      shortcut: adminShortcutFor(href),
       keywords: `admin ${keywords}`,
     })
     // WCAG 2.1.4: single-character shortcuts ("/", "?", "G then …", J / K,
@@ -564,6 +570,12 @@ export default function CommandPalette({
         admin('new-work', 'New case study', '/admin/work/edit', 'project portfolio create'),
         admin('now', 'Edit /now', '/admin/now', 'now page status'),
         admin('uses', 'Edit /uses', '/admin/uses', 'uses page tools'),
+        ...ADMIN_CHORDS.filter((c) => !['/admin/dashboard?tab=inbox', '/admin/dashboard?tab=cv', '/admin/dashboard?tab=home', '/admin/dashboard?tab=versions', '/admin/dashboard?tab=storage', '/admin/dashboard?tab=analytics'].includes(c.href)).map((c) =>
+          admin(`go-${c.key}`, c.label, c.href, c.keywords),
+        ),
+        ...viewCommands.map(
+          (c): Item => ({ id: `admin:${c.id}`, group: 'Admin', kind: c.run ? 'action' : 'nav', label: c.label, hint: c.hint, shortcut: c.shortcut, href: c.href, run: c.run, keywords: `admin ${c.keywords || ''}` }),
+        ),
         {
           id: 'admin:backup',
           group: 'Admin',
@@ -794,7 +806,7 @@ export default function CommandPalette({
       else if (doc.kind === 'work') list.push(docItem(doc, 'Work'))
     }
     return list
-  }, [isAdmin, publications, editTarget, unread, index, preference, choose, shortcutsOn, keyboardLikely, isMac, toast, copyAndToast, backUpNow, logOut])
+  }, [isAdmin, publications, editTarget, unread, index, preference, choose, shortcutsOn, keyboardLikely, isMac, toast, copyAndToast, backUpNow, logOut, viewCommands])
 
   const recentItems: Item[] = useMemo(() => {
     const out: Item[] = []
@@ -894,6 +906,9 @@ export default function CommandPalette({
 
   // A new answer starts from its first option.
   useEffect(() => setActiveIdx(0), [askOpts])
+
+  // Searches that find nothing (lib/analytics/searchEmpty: settled, normalised, no identifiers).
+  useEffect(() => noteSearchResults(query, total, isOpen && !!index), [query, total, isOpen, index])
 
   useEffect(() => {
     if (!isOpen || active < 0) return

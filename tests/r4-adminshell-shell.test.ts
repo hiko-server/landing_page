@@ -47,12 +47,14 @@ test('the overlay lists the real bindings with platform labels', () => {
   assert.ok(flat(mac).includes('⌃+1–6 Switch dashboard tab'))
   assert.ok(flat(pc).includes('Alt+1–6 Switch dashboard tab'))
   assert.ok(flat(mac).includes('⌥+↑ / ↓ Move a bullet'))
-  assert.ok(flat(pc).includes('↑ / ↓ Previous / next message'))
+  assert.ok(flat(pc).includes('↑ / ↓ Previous / next item'))
+  assert.ok(flat(pc).includes('J+K Next / previous item'))
+  assert.ok(flat(mac).includes('G+I Inbox'))
   assert.ok(flat(pc).includes('Ctrl+⇧+P Toggle Write / Preview'))
   assert.ok(flat(pc).includes('/ Insert a block (slash menu)'))
   assert.deepEqual(
     mac.map((g) => g.title),
-    ['Everywhere in the admin', 'Dashboard', 'CV Studio', 'Inbox', 'Post & case study editor'],
+    ['Everywhere in the admin', 'Go to (G, then a letter)', 'Go to the site (G, then a letter)', 'Lists', 'Dashboard', 'Inbox', 'Content health', 'CV Studio', 'Post & case study editor'],
   )
 })
 

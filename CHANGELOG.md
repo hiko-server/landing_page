@@ -166,6 +166,78 @@ quoted from the site itself (J1).
 - The cited-quote highlight uses the accent tint in both themes
   (`::target-text`, `::highlight(cited-quote)`).
 
+### admin-ops
+
+Admin operations (wave 2B: H8, H9, H11, H13, H14, CORR-3).
+
+- **Content health center (H8)** — Admin → System → Content (and a card on
+  Health): broken, moved and unverifiable links (a daily, polite external
+  link check through `safeFetch`: HEAD first, one request per site at a time,
+  2 s apart, 400 links per run, `LINK_CHECK_INTERVAL_HOURS`; LinkedIn's 999
+  and bot walls are "couldn't verify"), links to missing or draft posts,
+  tracking parameters, missing / hot-linked / heavy / oversized images,
+  uploads without responsive sizes, file-name alt text, heading structure,
+  duplicate or missing descriptions and hard breaks — across published posts,
+  case studies, pages, the CV and the home page. One-click safe fixes (strip
+  tracking parameters, import a remote image, generate sizes, follow a
+  permanent redirect, remove a stray break; "Apply all safe fixes") save
+  through the editors' own path with a version check (409 when the item
+  changed); `j` / `k`, `Enter`, `f` on the list. The media optimiser moved to
+  `lib/mediaOptimize.ts`; `safeFetch` can report redirects hop by hop and
+  truncate a body instead of failing.
+- **Goals and recruiter signals (H9)** — cookieless goal events from an
+  allow-list of eight, each with at most one bounded property: CV download
+  (counted on the server, 304 revalidations included) and print, vCard save
+  (server; `/api/vcard` now revalidates at the origin), e-mail and outbound
+  link clicks (the page path / destination host only), contact sent
+  (server, the inquiry kind only), article read-through and the critic's
+  `search_empty` (normalised ⌘K query ≤ 40 characters, dropped with `@` or
+  six or more digits, kept 35 days). Same exclusions, daily-salted hash and
+  budgets as page views; analytics migrations 5 (vitals attribution, shared
+  with the perf stream) and 6 (events). Admin → Analytics gains **Goals**
+  (visitor-days, conversion rate, trend), a **Source → CV → Download**
+  conversion over the raw 35-day window and **Searches with no results**;
+  `/colophon` describes all of it.
+- **Inbox 2.0 (H11)** — folders (Inbox / Starred / Archived / All), the
+  inquiry kind from the structured fields, search across every field with
+  `is:unread` / `is:replied` / `kind:role` operators, star, archive, read and
+  replied, one message or a selection. **Reply by e-mail from the admin**:
+  threaded with the notification you received (Message-ID, In-Reply-To,
+  References), English / 中文 templates (`{firstName}` `{name}` `{subject}`
+  `{me}`; stored in the content store, so backups carry them) with the
+  original quoted, an optional Bcc to you. A reply is sent **from the SMTP
+  account's own address** (`REPLY_FROM_EMAIL` to override) with **Reply-To**
+  your public address, so a domain with DMARC `p=reject` can no longer get
+  it refused; the start-up log and the dashboard's test e-mail warn when a
+  From domain's policy would reject the mail. Without SMTP the composer
+  explains the setup and opens the same draft in your mail app, then "Mark
+  as replied". **Delete takes effect at once with Undo** (the request goes
+  out when the toast closes, or with `keepalive` when the page is left).
+- **Unified toasts (H11)** — one timing policy everywhere: successes stay
+  ≥ 4 s, notes ≥ 5 s, warnings ≥ 8 s, errors until dismissed (announced as
+  alerts); every toast has a close button and pauses while hovered, focused
+  or the tab is hidden.
+- **Activity log (H13)** — Admin → System → Activity, every successful admin
+  write with who / what / when in `data/audit.db` (its own migrations), plus
+  sign-ins and password resets from the sign-in history; word-level diffs
+  (Chinese segmented) in the version history. Other routes can record their
+  writes with `recordAdminAudit()` (`lib/audit/record.ts`); a unit test fails
+  when a route that writes is neither described nor listed as public.
+- **Keyboard-first admin (H14)** — ⌘K lists every admin destination (with
+  its `G` key) and the actions of the view on screen (the Inbox registers
+  reply / archive / star / delete …, the dashboard "Send a test e-mail");
+  `G` then a letter jumps across the admin (`I` Inbox, `R` CV Studio, `S`
+  System, `L` activity, `Q` content health, …; the public `G` keys keep
+  working); `j` / `k`, `Enter`, `x` in the Inbox, Activity, posts / case
+  studies and Errors lists; the `?` sheet is searchable. Every single-letter
+  key follows the *Single-key shortcuts* switch and never fires in a text
+  field or during IME composition.
+- **CORR-3** — a job link with Chinese characters (normalising percent-encodes
+  each one into nine characters) is no longer dropped from the stored Inbox
+  message: the stored form allows 2 048 characters, and a link that would
+  not fit is refused up front with "This link is too long — paste a shorter
+  link to the same page." (the form and the API share `checkRoleUrl`).
+
 ### security-a
 
 Security and reliability foundation.

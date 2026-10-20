@@ -22,20 +22,22 @@ import {
   useToast,
 } from '@chakra-ui/react'
 import { readJsonObject } from './http'
-import { collapseContext, diffLines, documentText, type DiffRow } from './textDiff'
+import { diffLines, documentText } from './textDiff'
+import LineDiffView from './LineDiffView'
 import { Eyebrow, MONO, outlineButtonProps, primaryButtonProps } from './ui'
 
 /**
  * Snapshot history of one post, case study or page (/now, /uses): every
  * save and delete snapshotted the previous state on the server. Lists them
  * with relative times, shows what restoring one would change against the
- * editor's current content (unified line diff of frontmatter + body), and
+ * editor’s current content (unified line diff of frontmatter + body with the changed words highlighted), and
  * restores it (asking first when the editor holds unsaved edits).
  */
 
 export type HistoryKind = 'blog' | 'work' | 'page'
 
-type Version = { filename: string; date: string; isLatest: boolean }
+/** `replacedBy`: the admin change that took this snapshot (activity log), when known. */
+type Version = { filename: string; date: string; isLatest: boolean; replacedBy?: { summary: string; ts: number; device: string | null } | null }
 
 type Props = {
   isOpen: boolean
@@ -67,68 +69,6 @@ export function relativeTime(iso: string, now = Date.now()): string {
 
 function refParam(kind: HistoryKind, itemRef: string): string {
   return kind === 'page' ? `name=${encodeURIComponent(itemRef)}` : `slug=${encodeURIComponent(itemRef)}`
-}
-
-/** Unified line diff (also used by the "Publish changes" sheet). */
-export function DiffView({ rows }: { rows: DiffRow[] }) {
-  return (
-    <Box
-      as="pre"
-      fontFamily={MONO}
-      fontSize="12px"
-      lineHeight={1.55}
-      border="1px solid"
-      borderColor="page.border"
-      borderRadius="md"
-      bg="page.bg"
-      overflowX="auto"
-      py={1}
-      m={0}
-    >
-      {rows.map((r, i) =>
-        r.type === 'skip' ? (
-          <Box key={i} px={3} py={0.5} color="page.muted" bg="page.bg-elevated" fontStyle="italic">
-            ⋯ {r.count} unchanged line{r.count === 1 ? '' : 's'}
-          </Box>
-        ) : r.line.kind === 'same' ? (
-          <Box key={i} px={3} color="page.fg-secondary" whiteSpace="pre-wrap" wordBreak="break-word">
-            {'  '}
-            {r.line.text}
-          </Box>
-        ) : r.line.kind === 'add' ? (
-          <Box
-            as="ins"
-            key={i}
-            display="block"
-            px={3}
-            textDecoration="none"
-            bg="rgba(34,197,94,0.12)"
-            color="page.fg"
-            whiteSpace="pre-wrap"
-            wordBreak="break-word"
-          >
-            {'+ '}
-            {r.line.text}
-          </Box>
-        ) : (
-          <Box
-            as="del"
-            key={i}
-            display="block"
-            px={3}
-            textDecoration="none"
-            bg="rgba(239,68,68,0.12)"
-            color="page.fg"
-            whiteSpace="pre-wrap"
-            wordBreak="break-word"
-          >
-            {'− '}
-            {r.line.text}
-          </Box>
-        ),
-      )}
-    </Box>
-  )
 }
 
 export default function ItemHistoryDrawer({ isOpen, onClose, kind, itemRef, current, dirty, onRestored }: Props) {
@@ -276,14 +216,22 @@ export default function ItemHistoryDrawer({ isOpen, onClose, kind, itemRef, curr
                         _focusVisible={{ outline: '2px solid', outlineColor: 'accent.500', outlineOffset: '-2px' }}
                         onClick={() => setSelected(v.filename)}
                       >
-                        <Text as="span" fontSize="13px" fontWeight={active ? 600 : 500}>
-                          {relativeTime(v.date)}
-                          {v.isLatest ? (
-                            <Text as="span" ml={2} fontSize="11px" color="page.fg-secondary" fontWeight={400}>
-                              latest snapshot
+                        <Box as="span" minW={0}>
+                          <Text as="span" display="block" fontSize="13px" fontWeight={active ? 600 : 500}>
+                            {relativeTime(v.date)}
+                            {v.isLatest ? (
+                              <Text as="span" ml={2} fontSize="11px" color="page.fg-secondary" fontWeight={400}>
+                                latest snapshot
+                              </Text>
+                            ) : null}
+                          </Text>
+                          {v.replacedBy ? (
+                            <Text as="span" display="block" fontSize="11px" color="page.fg-secondary" fontWeight={400} noOfLines={1}>
+                              Replaced by: {v.replacedBy.summary}
+                              {v.replacedBy.device ? ` · ${v.replacedBy.device}` : ''}
                             </Text>
                           ) : null}
-                        </Text>
+                        </Box>
                         <Text as="time" dateTime={v.date} fontFamily={MONO} fontSize="11px" color="page.fg-secondary" flexShrink={0}>
                           {new Date(v.date).toLocaleString(undefined, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                         </Text>
@@ -325,7 +273,7 @@ export default function ItemHistoryDrawer({ isOpen, onClose, kind, itemRef, curr
                     <Text fontFamily={MONO} fontSize="11px" color="page.fg-secondary" mb={1.5}>
                       +{diff.added} / −{diff.removed} lines
                     </Text>
-                    <DiffView rows={collapseContext(diff.lines)} />
+                    <LineDiffView lines={diff.lines} />
                   </>
                 )}
               </Box>

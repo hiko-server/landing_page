@@ -13,6 +13,7 @@ import '../styles/globals.css'
 import theme from '../theme/chakra'
 import { useReportWebVitals } from 'next/web-vitals'
 import { reportWebVital, useAnalytics } from '../lib/analytics/client'
+import { installGoalClicks } from '../lib/analytics/goalBeacon'
 import { pageKeyOf } from '../lib/viewTransition'
 import SiteChrome from '../components/Chrome/SiteChrome'
 import ThemeColorMeta from '../components/Chrome/ThemeColorMeta'
@@ -32,6 +33,7 @@ import { RestoreScrollOnMount, useDeferredScrollRestore } from '../components/Co
 import { ClockProvider } from '../lib/clock'
 import { motionTransition } from '../theme/tokens'
 import { createSiteEmotionCache } from '../lib/hoverMedia'
+import UnifiedToast from '../components/Common/UnifiedToast'
 
 // v6 typography — Geist (SIL OFL, public/fonts/OFL-Geist.txt), self-hosted
 // variable fonts so the build never depends on a font CDN. Exactly two files
@@ -91,8 +93,14 @@ const FONT_VARIABLES_CSS = `${monoFallbackFontFaces()}:root{--font-geist-sans:${
 // movement under reduced motion.
 const PAGE_TRANSITION = motionTransition('base')
 
-// Every toast: the elevated v6 Alert (theme/chakra.js), bottom centre, short.
-const TOAST_OPTIONS = { defaultOptions: { variant: 'v6', position: 'bottom', duration: 2000, isClosable: true } } as const
+// Every toast: the elevated v6 Alert (theme/chakra.js), bottom centre, with a
+// close button, timed by one policy (lib/notify via components/Common/
+// UnifiedToast): successes and notes stay long enough to read, errors until
+// dismissed; the timer pauses on hover, focus and while the tab is hidden.
+const TOAST_OPTIONS = {
+  defaultOptions: { variant: 'v6', position: 'bottom', isClosable: true },
+  component: UnifiedToast,
+} as const
 
 const App = ({ Component, pageProps, router }: AppProps) => {
   // Animate between *pages* only: a hash / query change (in-page anchors,
@@ -135,6 +143,9 @@ const App = ({ Component, pageProps, router }: AppProps) => {
   // First-party error monitor: uncaught errors and unhandled rejections are
   // reported to /api/e (the reporter loads only once something fails).
   useEffect(() => installErrorCapture(), [])
+
+  // Goal events: e-mail and outbound link clicks (lib/analytics/goalBeacon).
+  useEffect(() => installGoalClicks(), [])
 
   // Browsers with the View Transitions API animate route changes natively
   // (see components/Chrome/RouteTransitions.tsx), so the framer-motion wrapper

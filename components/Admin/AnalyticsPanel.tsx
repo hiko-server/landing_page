@@ -44,11 +44,13 @@ import {
   niceMax,
   ratingLabel,
 } from '../../lib/analytics/format'
+import GoalsSections from './analytics/GoalsSections'
 
 /**
  * Admin → Analytics: first-party, cookieless page views and real-user Core
- * Web Vitals (GET /api/admin/analytics). Mounted by the dashboard shell with
- * no props.
+ * Web Vitals (GET /api/admin/analytics), and the goal events — Goals,
+ * Conversion, Searches with no results — in components/Admin/analytics
+ * (GET /api/admin/goals). Mounted by the dashboard shell with no props.
  */
 
 const RANGE_LABEL: Record<AnalyticsRange, string> = { '7d': '7 days', '30d': '30 days', '12m': '12 months' }
@@ -538,6 +540,7 @@ export default function AnalyticsPanel() {
   const [report, setReport] = useState<AnalyticsReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
+  const [refreshToken, setRefreshToken] = useState(0)
   const requestRef = useRef<AbortController | null>(null)
 
   const load = useCallback(async (which: AnalyticsRange) => {
@@ -600,7 +603,10 @@ export default function AnalyticsPanel() {
           <Button
             size="sm"
             leftIcon={<Icon as={FaSync} aria-hidden />}
-            onClick={() => void load(range)}
+            onClick={() => {
+              void load(range)
+              setRefreshToken((n) => n + 1)
+            }}
             isLoading={loading}
             loadingText="Loading"
             variant="ghost"
@@ -649,6 +655,8 @@ export default function AnalyticsPanel() {
               </Text>
             )}
           </Panel>
+
+          <GoalsSections range={range} refreshToken={refreshToken} />
 
           <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4} mb={4}>
             <RankCard title="Top pages" keyLabel="Page" rows={report.topPages} showViews empty="No page views in this period." />

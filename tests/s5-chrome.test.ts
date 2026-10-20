@@ -501,7 +501,9 @@ test('theme: one accent focus ring, press feedback, v6 toasts, no body colour fa
   assert.match(theme, /v6:\s*\(props\)/)
   assert.match(theme, /transitionProperty:\s*'none'/)
   const app = read('pages/_app.tsx')
-  assert.match(app, /variant:\s*'v6',\s*position:\s*'bottom',\s*duration:\s*2000,\s*isClosable:\s*true/)
+  // Every toast closable; its timing comes from one policy (lib/notify via UnifiedToast, H11).
+  assert.match(app, /variant:\s*'v6',\s*position:\s*'bottom',\s*isClosable:\s*true/)
+  assert.match(app, /component:\s*UnifiedToast/)
   assert.match(app, /toastOptions=\{TOAST_OPTIONS\}/)
 })
 

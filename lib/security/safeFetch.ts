@@ -40,6 +40,14 @@ export type SafeFetchOptions = {
   maxBytes?: number
   /** Default 3. */
   maxRedirects?: number
+  /**
+   * 'manual': answer a 3xx as it is instead of following it, so the caller
+   * sees every hop (the content health link checker tells a permanent move
+   * from a temporary one). Each hop it then requests is vetted again.
+   */
+  redirect?: 'follow' | 'manual'
+  /** Past maxBytes, stop reading and return what arrived (`truncated`) instead of failing with TOO_LARGE. */
+  truncate?: boolean
   allowHttp?: boolean
   /** Test seam: resolve a hostname to addresses (defaults to dns.lookup all). */
   resolve?: (host: string) => Promise<string[]>
@@ -51,6 +59,8 @@ export type SafeFetchResult = {
   body: Buffer
   /** Final URL after redirects. */
   url: string
+  /** The body was cut at maxBytes (only with `truncate`). */
+  truncated?: boolean
 }
 
 // Everything that is not routable public unicast space.
@@ -144,7 +154,7 @@ async function vetHost(hostname: string, resolve: (h: string) => Promise<string[
 function requestOnce(
   u: URL,
   pinned: { address: string; family: 4 | 6 },
-  opts: Required<Pick<SafeFetchOptions, 'method' | 'maxBytes'>> & { headers: Record<string, string>; deadline: number },
+  opts: Required<Pick<SafeFetchOptions, 'method' | 'maxBytes'>> & { headers: Record<string, string>; deadline: number; truncate: boolean },
 ): Promise<SafeFetchResult> {
   return new Promise((resolve, reject) => {
     const lookup: LookupFunction = (_host, options, cb) => {
@@ -171,15 +181,23 @@ function requestOnce(
         const chunks: Buffer[] = []
         let size = 0
         const declared = Number(res.headers['content-length'] || 0)
-        if (opts.method === 'GET' && declared > opts.maxBytes) {
+        if (opts.method === 'GET' && declared > opts.maxBytes && !opts.truncate) {
           res.destroy()
           reject(new SafeFetchError('TOO_LARGE', `Response is ${declared} bytes (limit ${opts.maxBytes})`))
           return
         }
+        let cut = false
         res.on('data', (chunk: Buffer) => {
+          if (cut) return
           size += chunk.length
           if (size > opts.maxBytes) {
             res.destroy()
+            if (opts.truncate) {
+              cut = true
+              chunks.push(chunk.subarray(0, chunk.length - (size - opts.maxBytes)))
+              resolve({ status: res.statusCode || 0, headers: res.headers, body: Buffer.concat(chunks), url: u.toString(), truncated: true })
+              return
+            }
             reject(new SafeFetchError('TOO_LARGE', `Response exceeded ${opts.maxBytes} bytes`))
             return
           }
@@ -210,9 +228,9 @@ export async function safeFetch(rawUrl: string, options: SafeFetchOptions = {}):
   for (let hop = 0; ; hop++) {
     const pinned = await vetHost(url.hostname, resolve)
     if (Date.now() >= deadline) throw new SafeFetchError('TIMEOUT', 'Request timed out')
-    const res = await requestOnce(url, pinned, { method, maxBytes, headers: options.headers || {}, deadline })
+    const res = await requestOnce(url, pinned, { method, maxBytes, headers: options.headers || {}, deadline, truncate: !!options.truncate })
     const location = res.headers.location
-    if (res.status >= 300 && res.status < 400 && typeof location === 'string') {
+    if (options.redirect !== 'manual' && res.status >= 300 && res.status < 400 && typeof location === 'string') {
       if (hop >= maxRedirects) throw new SafeFetchError('REDIRECTS', 'Too many redirects')
       url = checkUrl(new URL(location, url).toString(), !!options.allowHttp)
       continue

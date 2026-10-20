@@ -8,9 +8,8 @@
  * is one the server accepts.
  */
 
-import { INQUIRY_LIMITS, INTENT_FIELDS, ROLE_URL_ERROR, type InquiryIntent, type InquiryTimeline } from '../../lib/inquiry'
+import { INTENT_FIELDS, checkRoleUrl, type InquiryIntent, type InquiryTimeline } from '../../lib/inquiry'
 import { retentionPeriodText } from '../../lib/retention'
-import { isHttpsUrl } from '../../lib/url'
 
 export const MESSAGE_MAX = 5000
 
@@ -62,8 +61,9 @@ export function validateContact(v: ContactValues, expectedMath: number | null, i
   else if (!EMAIL_RE.test(email)) errors.email = 'That email address doesn’t look right.'
   if (!v.subject.trim() && !v.reason.trim()) errors.subject = 'Add a subject or pick a reason.'
   const link = (v.roleUrl || '').trim()
-  if (INTENT_FIELDS[intent].includes('roleUrl') && link && (link.length > INQUIRY_LIMITS.roleUrlMax || !isHttpsUrl(link))) {
-    errors.roleUrl = ROLE_URL_ERROR
+  if (INTENT_FIELDS[intent].includes('roleUrl') && link) {
+    const checked = checkRoleUrl(link)
+    if (!checked.ok) errors.roleUrl = checked.error
   }
   if (!v.message.trim()) errors.message = 'Please write a message.'
   else if (v.message.length > MESSAGE_MAX) errors.message = `Keep the message under ${MESSAGE_MAX.toLocaleString('en-US')} characters.`

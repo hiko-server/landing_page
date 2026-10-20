@@ -3,6 +3,7 @@ import path from 'path'
 import matter from 'gray-matter'
 import { getDb } from './db'
 import { isR2Configured, r2PutText, r2Delete } from './r2'
+import { noteSnapshot } from './audit/context'
 
 /**
  * High-level dual-write content store.
@@ -749,11 +750,16 @@ function ownSnapshots(dir: string, prefix: string): string[] {
 export function writeSnapshotFile(dir: string, prefix: string, content: string, now = new Date()): string {
   fs.mkdirSync(dir, { recursive: true })
   const existing = ownSnapshots(dir, prefix)
-  if (existing.length && readSnapshotFile(dir, existing[0]) === content) return existing[0]
-  const stamp = now.toISOString().replace(/[:.]/g, '-').replace('T', '_').replace('Z', '')
-  const filename = `${prefix}_${stamp}.json`
-  fs.writeFileSync(path.join(dir, filename), content, 'utf-8')
-  pruneSnapshots(dir, prefix, SNAPSHOT_KEEP)
+  let filename: string
+  if (existing.length && readSnapshotFile(dir, existing[0]) === content) filename = existing[0]
+  else {
+    const stamp = now.toISOString().replace(/[:.]/g, '-').replace('T', '_').replace('Z', '')
+    filename = `${prefix}_${stamp}.json`
+    fs.writeFileSync(path.join(dir, filename), content, 'utf-8')
+    pruneSnapshots(dir, prefix, SNAPSHOT_KEEP)
+  }
+  // The activity log links this version to the write that replaces it (lib/audit).
+  if (prefix === 'cv' || prefix === 'home') noteSnapshot(prefix, filename)
   return filename
 }
 

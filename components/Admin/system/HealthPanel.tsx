@@ -27,6 +27,7 @@ import { readJsonObject } from '../shell/http'
 import { NETWORK_ERROR } from '../shell/authMessages'
 import { absoluteTime, relativeTime } from '../security/securityFormat'
 import { checkTone, formatBytes, formatDuration, formatUptime } from './systemFormat'
+import ContentHealthCard from './ContentHealthCard'
 
 function Stat({
   label,
@@ -123,11 +124,12 @@ function DrillChecks({ drill }: { drill: DrillResult }) {
 }
 
 /**
- * Admin → System → Health: the deployed build, runtime, disk, databases,
- * backups, restore drills, error totals and recent warnings (GET
- * /api/admin/system; drills: /api/admin/restore-drill).
+ * Admin → System → Health: the content health summary, the deployed build,
+ * runtime, disk, databases, backups, restore drills, error totals and recent
+ * warnings (GET /api/admin/system; drills: /api/admin/restore-drill; content:
+ * /api/admin/content-health?summary=1).
  */
-export default function HealthPanel({ onShowErrors }: { onShowErrors: () => void }) {
+export default function HealthPanel({ onShowErrors, onShowContent }: { onShowErrors: () => void; onShowContent: () => void }) {
   const toast = useToast()
   const [data, setData] = useState<SystemSnapshot | null>(null)
   const [error, setError] = useState('')
@@ -286,6 +288,8 @@ export default function HealthPanel({ onShowErrors }: { onShowErrors: () => void
       )}
 
       <SimpleGrid columns={{ base: 1, md: 2 }} gap={4}>
+        <ContentHealthCard onOpen={onShowContent} />
+
         <Panel as="section" aria-label="Build and runtime">
           <CardTitle>Build &amp; runtime</CardTitle>
           <SimpleGrid columns={2} gap={4}>

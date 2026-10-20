@@ -1,3 +1,8 @@
+import { NAV_SHORTCUTS } from '../../Chrome/chrome'
+import { ADMIN_CHORDS } from './adminCommands'
+
+const PUBLIC_PAGE_LABEL: Record<string, string> = { '/': 'Home page', '/about': 'About', '/work': 'Work', '/blog': 'Writing', '/cv': 'CV', '/now': 'Now', '/uses': 'Uses' }
+
 /**
  * Keyboard shortcut matching for the admin shell (pure — unit tested).
  *
@@ -65,14 +70,18 @@ export function isHelpShortcut(e: KeyLike, inEditable: boolean): boolean {
 export type ShortcutItem = { keys: string[]; label: string }
 export type ShortcutGroup = { title: string; items: ShortcutItem[] }
 
+export const EDITOR_GROUP_TITLE = 'Post & case study editor'
+
 /**
  * Every keyboard binding the admin actually implements, grouped for the "?"
  * overlay. Labels follow the platform: ⌘ / ⌥ / ⌃ on macOS, Ctrl / Alt
- * elsewhere.
+ * elsewhere. Single-letter keys (G chords, list and Inbox keys, "?") follow
+ * the shortcut switch (lib/keyboardShortcuts).
  */
 export function adminShortcutGroups(isMac: boolean, tabCount: number): ShortcutGroup[] {
   const mod = isMac ? '⌘' : 'Ctrl'
   const alt = isMac ? '⌥' : 'Alt'
+  const enter = isMac ? '↵' : 'Enter'
   const range = tabCount > 1 ? `1–${tabCount}` : '1'
   const tabSwitch: ShortcutItem[] = isMac
     ? [
@@ -85,11 +94,46 @@ export function adminShortcutGroups(isMac: boolean, tabCount: number): ShortcutG
       title: 'Everywhere in the admin',
       items: [
         { keys: ['?'], label: 'Show keyboard shortcuts' },
+        { keys: [mod, 'K'], label: 'Command menu: go anywhere, run an action' },
         { keys: [mod, 'S'], label: 'Save the open editor' },
         { keys: ['Esc'], label: 'Close a dialog or menu' },
       ],
     },
+    {
+      title: 'Go to (G, then a letter)',
+      items: ADMIN_CHORDS.map((c) => ({ keys: ['G', c.key.toUpperCase()], label: c.label })),
+    },
+    {
+      title: 'Go to the site (G, then a letter)',
+      items: NAV_SHORTCUTS.map((n) => ({ keys: ['G', n.key.toUpperCase()], label: PUBLIC_PAGE_LABEL[n.url] || n.url })),
+    },
+    {
+      title: 'Lists',
+      items: [
+        { keys: ['J', 'K'], label: 'Next / previous item' },
+        { keys: ['↑ / ↓'], label: 'Previous / next item' },
+        { keys: ['Home', 'End'], label: 'First / last item' },
+        { keys: ['Enter'], label: 'Open the item (also O)' },
+        { keys: ['X'], label: 'Select the message (Inbox)' },
+      ],
+    },
     { title: 'Dashboard', items: tabSwitch },
+    {
+      title: 'Inbox',
+      items: [
+        { keys: ['R'], label: 'Reply' },
+        { keys: ['S'], label: 'Star / unstar' },
+        { keys: ['E'], label: 'Archive (or move back to the inbox)' },
+        { keys: ['U'], label: 'Mark read / unread' },
+        { keys: ['#'], label: 'Delete (with Undo)' },
+        { keys: [mod, 'Z'], label: 'Undo the last delete or archive' },
+        { keys: [mod, enter], label: 'Send the reply' },
+      ],
+    },
+    {
+      title: 'Content health',
+      items: [{ keys: ['F'], label: 'Apply the focused issue’s safe fix' }],
+    },
     {
       title: 'CV Studio',
       items: [
@@ -102,11 +146,7 @@ export function adminShortcutGroups(isMac: boolean, tabCount: number): ShortcutG
       ],
     },
     {
-      title: 'Inbox',
-      items: [{ keys: ['↑ / ↓'], label: 'Previous / next message' }],
-    },
-    {
-      title: 'Post & case study editor',
+      title: EDITOR_GROUP_TITLE,
       items: [
         { keys: [mod, '⇧', 'P'], label: 'Toggle Write / Preview' },
         { keys: ['/'], label: 'Insert a block (slash menu)' },
@@ -117,4 +157,19 @@ export function adminShortcutGroups(isMac: boolean, tabCount: number): ShortcutG
       ],
     },
   ]
+}
+
+/** Case-insensitive search over a binding's label, its keys and its group ("" keeps everything). */
+export function filterShortcutGroups(groups: ShortcutGroup[], query: string): ShortcutGroup[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean)
+  if (!words.length) return groups
+  return groups
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((it) => {
+        const text = `${g.title} ${it.label} ${it.keys.join(' ')}`.toLowerCase()
+        return words.every((w) => text.includes(w))
+      }),
+    }))
+    .filter((g) => g.items.length > 0)
 }

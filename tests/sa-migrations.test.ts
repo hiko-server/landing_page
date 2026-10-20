@@ -239,6 +239,14 @@ test('an analytics store created before vitals.vkey gains the column and its uni
   assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'idx_vitals_key'").get())
   assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'errors'").get())
   assert.ok(db.prepare("SELECT 1 FROM sqlite_master WHERE name = 'restore_drills'").get())
+  // v5 (vitals attribution) and v6 (goal events) reach an old store too.
+  assert.ok(
+    (db.prepare('PRAGMA table_info(vitals)').all() as Array<{ name: string }>).some(
+      (c) => c.name === 'attr'
+    )
+  )
+  for (const table of ['events', 'events_daily', 'event_props_daily'])
+    assert.ok(db.prepare('SELECT 1 FROM sqlite_master WHERE name = ?').get(table), table)
   assert.equal(count(db, 'SELECT count(*) AS n FROM vitals'), 1)
   db.close()
 })
