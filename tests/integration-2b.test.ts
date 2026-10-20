@@ -4,6 +4,8 @@ import fs from 'fs'
 import os from 'os'
 import path from 'path'
 import Database from 'better-sqlite3'
+import { publicSections, UNDER_REVIEW_WITHHELD } from '../lib/cvVisibility'
+import { withEvidenceLinks } from '../lib/cvLinks'
 
 /**
  * Wave 2B integration: what the merged streams owe each other.
@@ -44,5 +46,46 @@ test('audit.db, its -wal and -shm files are owner-only (0600) from the first ope
   } finally {
     process.chdir(prevCwd)
     fs.rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+/**
+ * CV-L-1: a manuscript under review is cited without where it was submitted
+ * (no view prints its venue, volume, issue, pages or publisher), so the public
+ * projection — page props, /api/cvdata — never carries those fields either.
+ */
+test('under-review papers ship without venue, volume, issue, pages and publisher', () => {
+  const section = {
+    sessionName: 'publications',
+    headerName: 'PUBLICATIONS',
+    papers: [
+      { title: 'Submitted work', status: 'under-review', venue: 'Secret Venue', volume: '1', issue: '2', pages: '3-4', publisher: 'P', authors: [], date: '2026-01' },
+      { title: 'Printed work', status: 'published', venue: 'Known Venue', volume: '5', authors: [], date: '2025-01' },
+    ],
+  }
+  const [pub] = publicSections([section], 'any')
+  const [under, printed] = pub.papers as Array<Record<string, unknown>>
+  for (const key of UNDER_REVIEW_WITHHELD) assert.equal(key in under, false, `${key} withheld while under review`)
+  assert.equal(under.title, 'Submitted work')
+  assert.equal(under.status, 'under-review')
+  assert.equal(printed.venue, 'Known Venue')
+  assert.equal(printed.volume, '5')
+  assert.equal(JSON.stringify(pub).includes('Secret Venue'), false)
+})
+
+/**
+ * CV-L-2: the home page and /about ship their CV sections through the same
+ * link resolution as /cv, so a project's `caseStudy` is the slug of a
+ * PUBLISHED case study or '' — a draft's slug never reaches __NEXT_DATA__.
+ */
+test('a project pointing at an unpublished case study ships no slug on the home page and /about', () => {
+  const sections = [{ sessionName: 'project', headerName: 'PROJECTS', projectExperience: [{ title: 'Secret project', caseStudy: 'secret-draft' }, { title: 'Open project', caseStudy: 'open-work' }] }]
+  const out = withEvidenceLinks(sections, { works: [{ slug: 'open-work', title: 'Open project' }] })
+  const [secret, open] = (out[0] as { projectExperience: Array<Record<string, unknown>> }).projectExperience
+  assert.equal(secret.caseStudy, '')
+  assert.equal(open.caseStudy, 'open-work')
+  for (const f of ['pages/index.tsx', 'pages/about/index.tsx']) {
+    const src = fs.readFileSync(path.join(process.cwd(), f), 'utf8')
+    assert.match(src, /withEvidenceLinks\(/, `${f} resolves evidence links`)
   }
 })

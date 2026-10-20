@@ -181,6 +181,14 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
     autoCoding = deriveCurrentlyCoding(derivedFrom.en, clockMonth)
     meta = heroMeta(derivedFrom.en)
     en = rendered.length ? readPublicCvSections('website', rendered, ['en']).en : []
+    // Evidence links resolved like /cv (lib/cvLinks): a project's `caseStudy`
+    // becomes the slug of a PUBLISHED case study or '', so a draft's slug never
+    // ships; profile links come from the public socials.
+    if (en.length) {
+      const { withEvidenceLinks } = await import('../lib/cvLinks')
+      const { listWork } = await import('../lib/mdx')
+      en = withEvidenceLinks(en, { works: listWork().map(({ slug, frontmatter: fm }) => ({ slug, title: String(fm?.title || slug), link: typeof fm?.link === 'string' ? fm.link : undefined, repo: typeof fm?.repo === 'string' ? fm.repo : undefined })) })
+    }
   } catch {
     /* best effort — render with what we have */
   }

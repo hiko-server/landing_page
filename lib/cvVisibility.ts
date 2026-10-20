@@ -72,6 +72,9 @@ export const CONSENT_LISTS: Readonly<Record<string, { list: string; flag: string
  * the only trace of the hidden value — never the value itself.
  */
 export const POSITIONAL_ITEM_FIELDS: readonly string[] = ['authors']
+
+/** Paper fields no view shows while a manuscript is under review (lib/publications/citation showsVenue). */
+export const UNDER_REVIEW_WITHHELD: readonly string[] = ['venue', 'volume', 'issue', 'pages', 'publisher']
 export const HIDDEN_ITEM_MARK = '…'
 
 /**
@@ -182,6 +185,17 @@ function pruneSection(section: CvSectionLike): CvSectionLike {
         }
       : section
   const body = pruneNode(source)
+  // A manuscript under review is cited without where it was submitted (APA 7;
+  // lib/publications showsVenue): since no view renders those fields, the
+  // public data never carries them either.
+  if (name === 'publications' && Array.isArray(body.papers)) {
+    body.papers = body.papers.map((paper: unknown) => {
+      if (!isPlainObject(paper) || paper.status !== 'under-review') return paper
+      const rest = { ...paper }
+      for (const key of UNDER_REVIEW_WITHHELD) delete rest[key]
+      return rest
+    })
+  }
   for (const key of PRIVATE_SECTION_FIELDS[name] || []) {
     delete body[key]
     if (Array.isArray(body[REDACTED_KEY])) {

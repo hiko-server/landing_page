@@ -246,6 +246,13 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
     // names; the section itself is never shipped.
     const { readCvData, readPublicCvSections } = await import('../../lib/cvdata')
     cv = readPublicCvSections('website', CV_WEBSITE_SECTIONS, ['en', 'zh'])
+    // Evidence links resolved like /cv (lib/cvLinks): `caseStudy` is a PUBLISHED slug or ''.
+    {
+      const { withEvidenceLinks } = await import('../../lib/cvLinks')
+      const { listWork } = await import('../../lib/mdx')
+      const works = listWork().map(({ slug, frontmatter: fm }) => ({ slug, title: String(fm?.title || slug), link: typeof fm?.link === 'string' ? fm.link : undefined, repo: typeof fm?.repo === 'string' ? fm.repo : undefined }))
+      cv = { en: withEvidenceLinks(cv.en, { works }), zh: withEvidenceLinks(cv.zh, { works }) }
+    }
     const pi = readPublicCvSections('website', ['personalInformation'], ['en', 'zh'])
     const stored = readCvData()
     const storedHasPersonalInfo = [...stored.en, ...stored.zh].some((s) => s?.sessionName === 'personalInformation')
