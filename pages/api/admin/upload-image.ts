@@ -2,6 +2,7 @@ import { withApi } from '../../../lib/apiHandler'
 import { rateLimit } from '../../../lib/rateLimit'
 import { isAdminRequest } from '../../../lib/auth'
 import { IMAGE_TYPES, ImageRejectedError, isImageMime, storeUpload } from '../../../lib/imageVariants'
+import { ImageQueueFullError } from '../../../lib/imageJobs'
 
 /**
  * POST /api/admin/upload-image { filename, dataUrl } → { url, width, height, variants }
@@ -13,7 +14,9 @@ import { IMAGE_TYPES, ImageRejectedError, isImageMime, storeUpload } from '../..
  * WebP variants for srcset, metadata stripped), stored under a fresh
  * never-overwritten name in public/uploads and mirrored to R2. An image that
  * decodes to more than 80 megapixels (all frames) is refused with 413
- * { code: 'TOO_MANY_PIXELS' }, an unreadable one with 415.
+ * { code: 'TOO_MANY_PIXELS' }, an unreadable one with 415. Images are encoded
+ * one at a time across the server (lib/imageJobs); when too many already
+ * wait, the answer is 503 { code: 'BUSY' } with Retry-After.
  */
 export default withApi('admin/upload-image', async (req, res) => {
   if (req.method !== 'POST') {
@@ -51,6 +54,11 @@ export default withApi('admin/upload-image', async (req, res) => {
     stored = await storeUpload(buf, contentType, filename)
   } catch (err) {
     if (err instanceof ImageRejectedError) return res.status(err.status).json({ error: err.message, code: err.code })
+    // Too many images already wait to be encoded (lib/imageJobs): try again shortly.
+    if (err instanceof ImageQueueFullError) {
+      res.setHeader('Retry-After', String(err.retryAfterSeconds))
+      return res.status(err.status).json({ error: err.message, code: 'BUSY' })
+    }
     throw err
   }
   return res.status(200).json({

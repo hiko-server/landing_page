@@ -8,6 +8,7 @@ import { pathsReferencingUploads, type ContentSource } from './revalidate'
 import { UPLOAD_NAME_RE, isValidUploadName } from './security/uploadName'
 import { expectedVariantNames, isVariantName } from './uploadVariants'
 import { MAX_INPUT_PIXELS, apngFrameCount, makeVariants, mirrorUpload, uploadsDir, writeVariantFile } from './imageVariants'
+import { imageJobs } from './imageJobs'
 
 /**
  * The responsive variants of uploads made before the current pipeline
@@ -117,9 +118,16 @@ export async function optimizeUploads(opts: { only?: ReadonlySet<string> } = {})
           skipped++
           continue
         }
-        // Variants are made from the upright pixels; the original stays as stored.
-        const upright = meta.orientation && meta.orientation !== 1 ? await sharp(buf, { limitInputPixels: MAX_INPUT_PIXELS }).rotate().toBuffer() : buf
-        const variants = await makeVariants(upright, name, width, (v) => existing.has(v))
+        // Encoded in the process-wide image queue (lib/imageJobs), one image
+        // at a time, taking turns with uploads; made from the upright pixels,
+        // the original stays as stored.
+        const variants = await imageJobs().run(
+          async () => {
+            const upright = meta.orientation && meta.orientation !== 1 ? await sharp(buf, { limitInputPixels: MAX_INPUT_PIXELS }).rotate().toBuffer() : buf
+            return makeVariants(upright, name, width, (v) => existing.has(v))
+          },
+          { background: true },
+        )
         for (const v of variants) {
           // An existing file is left alone, and so is its R2 copy.
           if (!writeVariantFile(v)) continue

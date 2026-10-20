@@ -1,8 +1,10 @@
 import fs from 'fs'
+import os from 'os'
 import path from 'path'
 import crypto from 'crypto'
 import sharp, { type Sharp } from 'sharp'
 import { log } from './log'
+import { envInt, imageJobs } from './imageJobs'
 import { isR2Configured, r2PutBuffer } from './r2'
 import { uploadR2Key } from './contentStore'
 import { imageSizeFromBytes } from './rehype/imageSize'
@@ -45,7 +47,19 @@ import {
  *     removed, GIFs are stored untouched; none of them get variants.
  *   - A re-encode failure of an image under the pixel limit stores the
  *     original unchanged: an upload is never blocked by the optimizer.
+ *   - Memory (OPS-2): the encoding of an upload runs in the process-wide
+ *     image queue (lib/imageJobs — one image at a time by default, a bounded
+ *     wait, then 503), libvips uses at most SHARP_CONCURRENCY threads per
+ *     image (default: the CPUs available, at most 2) and keeps a small
+ *     operation cache, so concurrent uploads queue instead of multiplying
+ *     the AVIF encoder's working memory past the container's limit.
  */
+
+const availableCpus = typeof os.availableParallelism === 'function' ? os.availableParallelism() : os.cpus().length
+sharp.concurrency(envInt(process.env.SHARP_CONCURRENCY, Math.min(2, availableCpus), 1, 4))
+// libvips' operation cache (default 50 MB / 100 operations) only helps
+// repeated identical operations, which variant generation never makes.
+sharp.cache({ memory: 16, files: 0, items: 20 })
 
 export const MAX_EDGE = MAX_VARIANT_WIDTH
 /**
@@ -463,7 +477,8 @@ function nameInUse(dir: string, name: string): boolean {
  * its variant names gets a content-hash suffix; a variant-looking name is
  * renamed), write its variants and mirror what was written to R2.
  * Throws ImageRejectedError (nothing stored) for a pixel bomb or an
- * unreadable image.
+ * unreadable image, ImageQueueFullError (lib/imageJobs, HTTP 503) when too
+ * many images already wait to be encoded.
  */
 export async function storeUpload(raw: Buffer, mime: ImageMime, requestedName: string, opts: StoreUploadOptions = {}): Promise<StoredUpload> {
   const mirror = opts.mirror ?? mirrorUpload
@@ -474,7 +489,8 @@ export async function storeUpload(raw: Buffer, mime: ImageMime, requestedName: s
   if (nameInUse(dir, safeName)) {
     safeName = withHashSuffix(safeName, crypto.createHash('sha256').update(raw).digest('hex'))
   }
-  const processed = await processUpload(raw, safeName)
+  // One image is encoded at a time across the process (see the module comment).
+  const processed = await imageJobs().run(() => processUpload(raw, safeName))
   const filePath = path.join(dir, safeName)
   const warnings: string[] = []
   // Only files this call wrote are mirrored. An existing one (the same

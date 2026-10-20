@@ -2,6 +2,7 @@ import { withApi } from '../../../lib/apiHandler'
 import { isAdminRequest } from '../../../lib/auth'
 import { rateLimit } from '../../../lib/rateLimit'
 import { ImageRejectedError, storeUpload } from '../../../lib/imageVariants'
+import { ImageQueueFullError } from '../../../lib/imageJobs'
 import { fetchRemoteImage, RemoteImageError } from '../../../lib/remoteImage'
 
 /**
@@ -45,6 +46,10 @@ export default withApi('admin/import-image', async (req, res, ctx) => {
     if (err instanceof ImageRejectedError) {
       ctx.log.info('remote image import refused', { code: err.code })
       return res.status(err.status).json({ error: err.message, code: err.code })
+    }
+    if (err instanceof ImageQueueFullError) {
+      res.setHeader('Retry-After', String(err.retryAfterSeconds))
+      return res.status(err.status).json({ error: err.message, code: 'BUSY' })
     }
     throw err
   }
