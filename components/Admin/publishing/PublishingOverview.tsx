@@ -199,7 +199,8 @@ export default function PublishingOverview() {
             No active review links.
           </Text>
         ) : (
-          <Box as="ul" data-testid="review-list">
+          // The section label above already draws the rule over the first link.
+          <Box as="ul" data-testid="review-list" sx={{ '& > li:first-of-type': { borderTop: 'none', pt: 0 } }}>
             {links.map((l) => (
               <ReviewLinkItem key={l.id} link={l} now={now} onRevoke={revoke} showItem />
             ))}

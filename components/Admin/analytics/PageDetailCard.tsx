@@ -76,7 +76,11 @@ export default function PageDetailCard({
             {page.path}
           </Text>
         </Box>
-        <HStack spacing={2} flexShrink={0}>
+        {/* Pulled out by the ghost button's own padding, so where the row
+            wraps (phones; a post's two buttons up to ~560 px) "View page"
+            starts on the card's text edge; on one line the group stays flush
+            right (it is the last item of a space-between row). */}
+        <HStack spacing={2} flexShrink={0} ml={-3}>
           <Button as="a" href={page.path} target="_blank" rel="noopener" size="sm" variant="ghost" rightIcon={<ExternalLinkIcon aria-hidden />} color="page.fg-secondary">
             View page
           </Button>
