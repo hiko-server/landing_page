@@ -91,3 +91,41 @@ export function isTextEntryTarget(target: EventTarget | null): boolean {
     'input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"]), textarea, select, [contenteditable=""], [contenteditable="true"], [role="textbox"], [role="combobox"]',
   )
 }
+
+/** Elements that are a control or a widget of their own: j / k typed there belong to them. */
+const INTERACTIVE_SELECTOR =
+  'a[href], button, input, select, textarea, summary, [contenteditable=""], [contenteditable="true"], [role="button"], [role="link"], [role="checkbox"], [role="radio"], [role="switch"], [role="slider"], [role="spinbutton"], [role="textbox"], [role="combobox"], [role="option"], [role="tab"], [role="menuitem"], [role="treeitem"], [role="gridcell"]'
+
+/** Widgets that own the keyboard while anything inside them has focus. */
+const KEY_OWNER_SELECTOR = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="menubar"], [role="listbox"], [role="tablist"], [role="grid"], [role="tree"], [role="toolbar"], [role="radiogroup"]'
+
+type NowhereElement = {
+  id?: string
+  tagName?: string
+  matches?: (selector: string) => boolean
+  closest?: (selector: string) => unknown
+  getAttribute?: (name: string) => string | null
+}
+
+/**
+ * True when a key event's target is "nowhere in particular" for a list's
+ * global j / k (useListKeyboard `global`): the page body, <main>, or a plain
+ * container that only took focus because it was clicked or focused by
+ * script — a tab panel (Chakra's TabPanel is focusable), anything with
+ * tabindex="-1" that is not itself a control and not inside a widget that
+ * owns the keyboard (a dialog, a menu, a listbox, a tab list…). Clicking the
+ * blank space of the Inbox's dashboard panel focuses that panel; j / k
+ * still move through the list from there.
+ */
+export function isNowhereTarget(target: unknown, body: unknown = typeof document === 'undefined' ? null : document.body): boolean {
+  const el = target as NowhereElement | null | undefined
+  if (!el) return false
+  if (el === body || el.id === 'main' || String(el.tagName || '').toUpperCase() === 'MAIN') return true
+  if (typeof el.matches !== 'function' || typeof el.closest !== 'function') return false
+  try {
+    if (el.matches(INTERACTIVE_SELECTOR) || el.closest(KEY_OWNER_SELECTOR)) return false
+    return el.matches('[role="tabpanel"], [tabindex="-1"]')
+  } catch {
+    return false
+  }
+}

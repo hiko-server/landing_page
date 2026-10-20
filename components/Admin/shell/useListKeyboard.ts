@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FocusEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { getShortcutsEnabled, isImeComposing } from '../../../lib/keyboardShortcuts'
-import { isTextEntryTarget, listKeyAction, type ListKeyAction } from './listKeys'
+import { isNowhereTarget, isTextEntryTarget, listKeyAction, type ListKeyAction } from './listKeys'
 
 /**
  * Roving-tabindex keyboard navigation for an admin list (keys: listKeys.ts).
@@ -10,7 +10,8 @@ import { isTextEntryTarget, listKeyAction, type ListKeyAction } from './listKeys
  * its actions on the focused row.
  *
  * `global`: j / k also work while nothing in particular has focus (the page
- * body), the way list views in mail and issue trackers behave — never while a
+ * body, <main>, a clicked panel — listKeys isNowhereTarget), the way list
+ * views in mail and issue trackers behave — never while a
  * dialog is open, inside a text field or with single-key shortcuts off. That
  * listener runs in the capture phase, so it always comes before the visitor
  * keyboard layer (components/Chrome/KeyboardLayer, which also takes j / k
@@ -95,9 +96,9 @@ export function useListKeyboard(opts: UseListKeyboardOptions) {
       if (!container || container.contains(e.target as Node)) return
       if (isTextEntryTarget(e.target) || !getShortcutsEnabled()) return
       if (document.querySelector('[role="dialog"][aria-modal="true"], [role="alertdialog"]')) return
-      const el = e.target as HTMLElement | null
-      // Only from "nowhere": the body, <main> or the page shell — not from another widget.
-      if (el && el !== document.body && el.id !== 'main' && !el.matches?.('main')) return
+      // Only from "nowhere": the body, <main>, or a plain container focused by a click
+      // (the dashboard's tab panel) — not from a control or another widget.
+      if (e.target && !isNowhereTarget(e.target)) return
       const action = listKeyAction(e, {
         count: optsRef.current.count,
         active: activeRef.current,
