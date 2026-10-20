@@ -329,6 +329,19 @@ LinkedIn, X, WhatsApp, Slack and WeChat cards. The writing bar counts words
 typewriter scrolling. **Admin → Tags & export** renames or merges tags across
 all items and downloads everything as a .zip of Markdown and JSON.
 
+**Publish later, share before.** *Publish… → Schedule…* sets when a draft —
+or the saved changes of a live item — goes live, and optionally when it
+unpublishes again; times are picked and shown in Hong Kong time (and your
+device's, when it differs). The server does it on time with no browser open,
+catches up anything it missed while it was down, regenerates the pages,
+feeds and sitemap, and logs each action with *Scheduler* as the actor
+(`lib/schedule`; the times live in the item's `publishAt` / `unpublishAt`
+frontmatter). *⋯ → Share for review…* makes a private link (1 hour – 30 days)
+that shows the draft read-only under a "Preview" watermark — never indexed or
+cached — counts how often it was opened, and can be turned off at any time
+(`lib/review`, tokens signed and stored hashed in `auth.db`). **Admin →
+Scheduled & review links** lists both.
+
 ---
 
 ## Tech stack
@@ -1110,6 +1123,7 @@ message into the Inbox.
 | `/sitemap.xml` | Sitemap with EN / 中 alternates for the CV and for translated posts and case studies |
 | `/llms.txt`, `/llms-full.txt` | Index for language models and agents (llmstxt.org) and every published post and case study in full, as Markdown |
 | `/blog/[slug].md`, `/work/[slug].md` | Markdown version of a published post or case study (canonical link to the page, `noindex`) |
+| `/review/<token>` | A review link: one draft (or unpublished changes) read-only under a "Preview" watermark; private, `no-store`, `noindex`, `no-referrer`; 410 once expired or turned off |
 | `/api/search-index` | Public search documents (EN + ZH) and the "Ask Lucian" passages for the command palette |
 | `/api/vcard` | vCard of the public contact details |
 | `/api/health` | Health: `{"status":"ok"\|"empty"\|"degraded"}` for everyone; store, content, backup age, the restore drill, open errors and pending R2 writes only for an admin or `Authorization: Bearer <HEALTH_TOKEN>` |
@@ -1137,6 +1151,7 @@ are gated by the proxy (`proxy.ts`).
 | `/admin/blog`, `/admin/blog/edit?slug=…` | Blog post manager: drafts, unpublished changes of live posts, publish checklist, live preview, history, slug change with redirect, search & sharing previews |
 | `/admin/work`, `/admin/work/edit?slug=…` | Case-study manager (the same tools) |
 | `/admin/tags` | Rename, unify or merge post tags and case-study tech; content export (.zip) |
+| `/admin/publishing` | Scheduled & review links: what publishes or unpublishes on its own, the scheduler's state, every active review link |
 | `/admin/now`, `/admin/uses`, `/admin/about` | One-off page editors (`about` = the bio on /about; empty = no bio section) |
 | `/admin/db-config` | MongoDB connection + manual backup/restore |
 | `/admin/security` | Passkeys, recovery codes, "Require a passkey", signed-in browsers, sign-in history |
@@ -1148,7 +1163,7 @@ of the view on screen (an admin view adds its own with `useAdminCommands`,
 `components/Admin/shell/useAdminCommands.ts`); `G` then a letter jumps —
 `D` overview, `I` Inbox, `R` CV Studio, `E` Home editor, `P` posts, `O`
 case studies, `T` analytics, `V` versions, `F` storage, `S` System, `L`
-activity, `Q` content health, `X` errors, `K` security (the public `G H/A/W/B/C/N/U`
+activity, `Q` content health, `X` errors, `K` security, `Y` scheduled & review links (the public `G H/A/W/B/C/N/U`
 work too); lists take `j` / `k`, `Enter`, `x` and their own letters
 (Inbox: `r` reply, `s` star, `e` archive, `u` unread, `#` delete, ⌘Z undo).
 Single-letter keys follow the *Single-key shortcuts* switch.
