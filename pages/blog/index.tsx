@@ -7,22 +7,14 @@ import CustomHead from '../../components/General-UI/CustomHead'
 import PageHeader from '../../components/General-UI/PageHeader'
 import EmptyState from '../../components/General-UI/EmptyState'
 import TagFilterBar, { TagPrepaint, useTagFilter } from '../../components/Article/TagFilter'
-import { listPosts, type PostFrontmatter, type MDXIndexEntry } from '../../lib/mdx'
 import { hasTag, tagCounts, tagSlugList } from '../../lib/tagFilter'
 import { formatPostDate, isoDate } from '../../lib/postDate'
 import { absUrl, personAuthor, PERSON_NAME, SITE_HOST } from '../../lib/schema'
 import { ogPresetUrl } from '../../lib/og/presets'
-import { alsoInOf, collapseTranslations, type AlsoIn } from '../../lib/translations'
-import { LIST_UI } from '../../lib/uiStrings/lists'
+import { fillUi } from '../../lib/uiStrings'
+import type { BlogIndexProps } from '../../lib/indexPages'
 
-type IndexPost = MDXIndexEntry<PostFrontmatter> & {
-  /** Languages the post is also published in (F2): one entry per piece, in English where it exists. */
-  alsoIn: AlsoIn[]
-}
-
-type Props = {
-  posts: IndexPost[]
-}
+export type Props = BlogIndexProps
 
 const MONO = 'var(--font-geist-mono), monospace'
 
@@ -31,26 +23,41 @@ const MONO = 'var(--font-geist-mono), monospace'
  * (`?tag=edge-ai`, components/Article/TagFilter.tsx). A post published in
  * several languages is listed once, in English where it exists, marked
  * "Also in 简体中文" (its page switches language). ISR (60 s).
+ *
+ * /zh/blog (pages/zh/blog.tsx, F3) renders this page with the posts in
+ * Chinese and Chinese words; it exists only while a Chinese post is
+ * published (lib/indexPages). The words arrive with the props in the page's
+ * language (lib/uiStrings/lists), so no page bundles the other languages.
  */
-export default function BlogIndex({ posts }: Props) {
+export default function BlogIndex({ posts, ui, lang, alternates, nameZh }: Props) {
+  const t = ui.t
+  const zh = lang !== 'en'
+  const path = zh ? '/zh/blog' : '/blog'
   // Tags with counts, alphabetical, so the chip row never reshuffles.
   const tags = useMemo(() => tagCounts(posts.map((p) => p.frontmatter.tags)), [posts])
   const { active, select } = useTagFilter(tags)
 
   const visible = useMemo(() => (active ? posts.filter((p) => hasTag(p.frontmatter.tags, active)) : posts), [posts, active])
+  const owner = zh && nameZh ? `${nameZh}（Lucian）` : PERSON_NAME
+  // A title or description in another language than the page's says so.
+  const ownLang = (l: string) => (l === lang ? undefined : l)
 
   return (
     <>
       <CustomHead
-        title="Writing"
-        description={`Essays, notes, and technical write-ups by ${PERSON_NAME} on software engineering, machine learning, and building products.`}
-        url={absUrl('/blog')}
+        title={t.blog.title}
+        description={fillUi(t.blog.description, { name: owner })}
+        url={absUrl(path)}
         image={ogPresetUrl('writing')}
+        lang={lang}
+        nameZh={nameZh}
+        alternates={alternates}
         jsonLd={{
           '@context': 'https://schema.org',
           '@type': 'Blog',
-          name: `${SITE_HOST.toUpperCase()} — Writing`,
-          url: absUrl('/blog'),
+          name: `${SITE_HOST.toUpperCase()} — ${t.blog.listName}`,
+          url: absUrl(path),
+          inLanguage: lang,
           author: personAuthor,
           blogPost: posts.slice(0, 10).map((p) => ({
             '@type': 'BlogPosting',
@@ -63,16 +70,7 @@ export default function BlogIndex({ posts }: Props) {
       />
       <HeaderFooter>
         <Box maxW="var(--container-content)" mx="auto" px={[4, 6, 8]} py={[12, 16]}>
-          <PageHeader
-            eyebrow="Writing"
-            title="Notes, essays, and write-ups."
-            lede={
-              <>
-                Long-form pieces on engineering, ML, and the craft of shipping software. New posts land here when
-                they&rsquo;re ready — no drafts, no fluff.
-              </>
-            }
-          />
+          <PageHeader eyebrow={t.blog.eyebrow} title={t.blog.heading} lede={t.blog.lede} />
 
           {tags.length > 0 && (
             <TagFilterBar
@@ -80,21 +78,24 @@ export default function BlogIndex({ posts }: Props) {
               total={posts.length}
               active={active}
               onSelect={select}
-              label="Filter posts by tag"
-              noun={{ one: 'post', many: 'posts' }}
+              label={t.blog.filterLabel}
+              noun={{ one: t.blog.nounOne, many: t.blog.nounMany }}
+              allLabel={t.allTags}
+              announcement={t.taggedAnnouncement}
               matching={visible.length}
             />
           )}
 
           {visible.length === 0 ? (
             <EmptyState
-              title="No posts yet"
+              title={t.blog.emptyTitle}
               actions={[
-                { label: 'Case studies', href: '/work' },
-                { label: 'CV', href: '/cv' },
+                { label: t.nav.work, href: zh ? '/zh/work' : '/work' },
+                { label: t.nav.cv, href: zh ? '/cv/zh' : '/cv' },
               ]}
+              actionsLabel={t.whereNext}
             >
-              Posts will appear here as they&rsquo;re published.
+              {t.blog.emptyBody}
             </EmptyState>
           ) : (
             <>
@@ -132,7 +133,7 @@ export default function BlogIndex({ posts }: Props) {
                           color="page.fg-secondary"
                           w={['auto', '110px']}
                         >
-                          {formatPostDate(p.frontmatter.date)}
+                          {formatPostDate(p.frontmatter.date, lang)}
                         </Text>
                         <Box flex={1} minW={0}>
                           <Text
@@ -143,7 +144,7 @@ export default function BlogIndex({ posts }: Props) {
                             fontSize="17px"
                             transition="color 150ms var(--ease-out-quart)"
                             _groupHover={{ color: 'accent.text' }}
-                            lang={p.lang === 'en' ? undefined : p.lang}
+                            lang={ownLang(p.lang)}
                             data-vt-part="title"
                           >
                             {p.frontmatter.title}
@@ -156,14 +157,14 @@ export default function BlogIndex({ posts }: Props) {
                               fontSize="14px"
                               mt={1}
                               noOfLines={2}
-                              lang={p.lang === 'en' ? undefined : p.lang}
+                              lang={ownLang(p.lang)}
                             >
                               {p.frontmatter.description}
                             </Text>
                           )}
                           {p.alsoIn.length > 0 && (
                             <Text as="span" display="block" mt={1.5} fontFamily={MONO} fontSize="11px" color="page.fg-secondary" data-also-in="">
-                              {LIST_UI.en.alsoIn}{' '}
+                              {t.alsoIn}{' '}
                               {p.alsoIn.map((l, i) => (
                                 <span key={l.lang}>
                                   {i > 0 ? ', ' : ''}
@@ -174,7 +175,7 @@ export default function BlogIndex({ posts }: Props) {
                           )}
                         </Box>
                         <Text as="span" flexShrink={0} fontFamily={MONO} fontSize="11px" color="page.fg-secondary" className="tnum">
-                          {p.readingMinutes} min read
+                          {fillUi(t.blog.minutesRead, { n: p.readingMinutes })}
                           <Box as="span" aria-hidden className="nudge" ml={2} color="page.fg-subtle">
                             →
                           </Box>
@@ -192,13 +193,4 @@ export default function BlogIndex({ posts }: Props) {
   )
 }
 
-export const getStaticProps: GetStaticProps<Props> = async () => {
-  return {
-    props: {
-      posts: collapseTranslations(listPosts(), 'en').map(({ entry, alsoIn }) => ({ ...entry, alsoIn: alsoInOf(alsoIn) })),
-      // Whether /publications exists, for the nav link (lib/publicationsData).
-      ...(await import('../../lib/publicationsData')).chromePublicationsProp(),
-    },
-    revalidate: 60,
-  }
-}
+export const getStaticProps: GetStaticProps<Props> = async () => (await import('../../lib/indexPages')).loadBlogIndex('en')

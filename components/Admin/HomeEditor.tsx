@@ -53,6 +53,7 @@ import SiteSection from './home/SiteSection'
 import SectionsSection from './home/SectionsSection'
 import HighlightsSection from './home/HighlightsSection'
 import ContactReasonsField from './home/ContactReasonsField'
+import ChineseSection from './home/ChineseSection'
 
 const RETURN_PATH = '/admin/dashboard?tab=home'
 
@@ -204,6 +205,20 @@ export default function HomeEditor({ onUnsavedSource }: { onUnsavedSource?: (get
       return !!restored && JSON.stringify(serializeHome(restored, origin())) === JSON.stringify(serializeHome(b, origin()))
     },
   })
+
+  // A link to one section (the palette's "Edit the Chinese copy" →
+  // #home-chinese): scroll to it once the form has loaded.
+  useEffect(() => {
+    if (loadState !== 'ready') return
+    const id = decodeURIComponent(window.location.hash.slice(1))
+    if (!id.startsWith('home-')) return
+    // Below the sticky site header and dashboard tabs.
+    const frame = requestAnimationFrame(() => {
+      const el = document.getElementById(id)
+      if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 160 })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [loadState])
 
   // Latest state for "Copy unsaved changes" in the dashboard's error fallback.
   const latest = useRef({ payload, dirty })
@@ -685,6 +700,21 @@ export default function HomeEditor({ onUnsavedSource }: { onUnsavedSource?: (get
 
       <SectionLabel index={11} title="Site" hint="Site-wide identity." />
       <SiteSection value={form.site} onChange={set.site} />
+
+      <SectionLabel
+        index={12}
+        id="home-chinese"
+        title="Chinese (中文)"
+        hint="Your own Chinese copy for /zh and /zh/contact. A Chinese page is published only while its copy is written — nothing is translated for you, and the language switch stays hidden until then."
+      />
+      <ChineseSection
+        hero={hero}
+        contact={contact}
+        highlights={form.highlights}
+        photos={form.photos}
+        set={{ hero: set.hero, contact: set.contact, highlights: set.highlights, photos: set.photos }}
+        savedAt={savedAt}
+      />
 
       {/* Sticky save bar — always reachable, shows unsaved state. */}
       <Stack

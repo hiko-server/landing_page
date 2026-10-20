@@ -56,6 +56,12 @@ export type HomeData = {
     welcome: string
     brand: string
     tagline: string
+    /**
+     * The tagline in Chinese, in the same "role | phrase | phrase" form, for
+     * the Chinese home page (/zh, F3). Written by the owner — never
+     * translated by the site; /zh exists only while it is set.
+     */
+    tagline_zh?: string
     avatarUrl: string
     phone?: string
     email?: string
@@ -81,6 +87,10 @@ export type HomeData = {
       project?: string
       /** Muted footer line, e.g. "self-taught · since 2022" */
       note?: string
+      /** The three lines in Chinese, for /zh (each optional; a blank one is not shown there). */
+      label_zh?: string
+      project_zh?: string
+      note_zh?: string
     }
   }
   socials: {
@@ -91,7 +101,8 @@ export type HomeData = {
   }
   brands: HomeBrand[]
   quickAccess: { label: string; url: string }[]
-  photos?: { url: string; describe?: string; redirectTo?: string; visible?: boolean }[]
+  /** Field notes; `describe_zh` is the caption on the Chinese home page (/zh). */
+  photos?: { url: string; describe?: string; describe_zh?: string; redirectTo?: string; visible?: boolean }[]
   /**
    * Per-section visibility for the home page. Each key maps to one of the
    * [NN] sections rendered by `components/LandingPage/{LandingContent,
@@ -141,6 +152,22 @@ export type HomeData = {
      * (the built-in reasons have a built-in mapping).
      */
     intents?: Record<string, InquiryIntent>
+    /**
+     * The contact copy in Chinese, for /zh/contact (F3): the heading, the
+     * blurb (the page's lede) and the eyebrow. /zh/contact exists only
+     * while the heading or the blurb is set.
+     */
+    heading_zh?: string
+    blurb_zh?: string
+    eyebrow_zh?: string
+    /**
+     * The owner's reasons in Chinese, keyed by the English reason like
+     * `intents` (so reordering or renaming one never shifts the others); a
+     * reason without one shows in English, marked, on /zh/contact. Without a
+     * custom list the built-in reasons have Chinese names of their own
+     * (lib/uiStrings/contact).
+     */
+    reasons_zh?: Record<string, string>
   }
   /**
    * Work availability shown on the contact page and in the command palette.
@@ -216,6 +243,9 @@ export type HomeHighlight = {
   label: string
   /** Where it comes from: a site path (/cv#…, /work/…) or an https:// URL. */
   href: string
+  /** The headline and description in Chinese, for /zh (both, or the tile shows its English words there). */
+  value_zh?: string
+  label_zh?: string
 }
 
 /** Limits enforced on write (lib/home) and mirrored by the admin editor. */
@@ -552,7 +582,22 @@ function normalizeHighlights(input: unknown, errors: HomeFieldError[]): HomeHigh
       })
       ok = false
     }
-    if (ok) out.push({ value, label, href })
+    // The Chinese words (F3): optional, but only as a pair, within the same limits.
+    const valueZh = trimmed(h.value_zh)
+    const labelZh = trimmed(h.label_zh)
+    if (valueZh || labelZh) {
+      if (!valueZh || !labelZh) {
+        errors.push({ path: `highlights.${i}.${valueZh ? 'label_zh' : 'value_zh'}`, message: `Highlight ${n}: write both Chinese fields, or neither.` })
+        ok = false
+      } else if (valueZh.length > HOME_LIMITS.highlightValueMax) {
+        errors.push({ path: `highlights.${i}.value_zh`, message: `Highlight ${n}: keep the Chinese headline under ${HOME_LIMITS.highlightValueMax} characters.` })
+        ok = false
+      } else if (labelZh.length > HOME_LIMITS.highlightLabelMax) {
+        errors.push({ path: `highlights.${i}.label_zh`, message: `Highlight ${n}: keep the Chinese description under ${HOME_LIMITS.highlightLabelMax} characters.` })
+        ok = false
+      }
+    }
+    if (ok) out.push(valueZh && labelZh ? { value, label, href, value_zh: valueZh, label_zh: labelZh } : { value, label, href })
   })
   return out
 }
@@ -576,11 +621,92 @@ function normalizeBrands(input: HomeBrand[], errors: HomeFieldError[]): HomeBran
   })
 }
 
+/** Longest Chinese copy line (tagline, heading, blurb, eyebrow, a caption, a reason). */
+export const ZH_TEXT_MAX = 400
+
+/**
+ * A Chinese copy field (F3): trimmed text under ZH_TEXT_MAX, line breaks of
+ * a one-line field folded; undefined (dropped) when blank. Anything that is
+ * not text is reported.
+ */
+function zhText(value: unknown, path: string, errors: HomeFieldError[], opts: { multiline?: boolean } = {}): string | undefined {
+  if (value === undefined || value === null) return undefined
+  if (typeof value !== 'string') {
+    errors.push({ path, message: 'Must be text.' })
+    return undefined
+  }
+  const v = opts.multiline ? value.trim() : value.trim().replace(/[\r\n]+/g, ' ')
+  if (v.length > ZH_TEXT_MAX) {
+    errors.push({ path, message: `Keep it under ${ZH_TEXT_MAX} characters.` })
+    return undefined
+  }
+  return v || undefined
+}
+
+/** Set `key` on `obj` to `value`, or remove it when undefined. */
+function setOrDrop<T extends object>(obj: T, key: string, value: unknown): void {
+  const o = obj as Record<string, unknown>
+  if (value === undefined) delete o[key]
+  else o[key] = value
+}
+
+/**
+ * The owner's Chinese copy (F3) in the hero, the field notes and the
+ * contact block: trimmed, blanks dropped. `reasons_zh` keeps the names of
+ * the owner's current reasons only and is dropped when it names none.
+ */
+function normalizeZhCopy(home: HomeData, errors: HomeFieldError[]): void {
+  if (home.hero && typeof home.hero === 'object') {
+    const hero = { ...home.hero }
+    setOrDrop(hero, 'tagline_zh', zhText(hero.tagline_zh, 'hero.tagline_zh', errors))
+    if (hero.currentlyCoding && typeof hero.currentlyCoding === 'object') {
+      const cc = { ...hero.currentlyCoding }
+      for (const key of ['label_zh', 'project_zh', 'note_zh'] as const) setOrDrop(cc, key, zhText(cc[key], `hero.currentlyCoding.${key}`, errors))
+      hero.currentlyCoding = cc
+    }
+    home.hero = hero
+  }
+  if (Array.isArray(home.photos)) {
+    home.photos = home.photos.map((p, i) => {
+      if (!p || typeof p !== 'object' || p.describe_zh === undefined) return p
+      const photo = { ...p }
+      setOrDrop(photo, 'describe_zh', zhText(photo.describe_zh, `photos.${i}.describe_zh`, errors))
+      return photo
+    })
+  }
+  if (home.contact && typeof home.contact === 'object' && !Array.isArray(home.contact)) {
+    const contact = { ...home.contact }
+    setOrDrop(contact, 'heading_zh', zhText(contact.heading_zh, 'contact.heading_zh', errors))
+    setOrDrop(contact, 'blurb_zh', zhText(contact.blurb_zh, 'contact.blurb_zh', errors, { multiline: true }))
+    setOrDrop(contact, 'eyebrow_zh', zhText(contact.eyebrow_zh, 'contact.eyebrow_zh', errors))
+    const raw: unknown = contact.reasons_zh
+    if (raw === undefined || raw === null) delete contact.reasons_zh
+    else if (typeof raw !== 'object' || Array.isArray(raw)) {
+      errors.push({ path: 'contact.reasons_zh', message: 'Chinese reasons must map each reason to its Chinese name.' })
+    } else {
+      // Own keys only (a reason named "constructor" has no inherited Chinese name).
+      const src = raw as Record<string, unknown>
+      const names: Array<[string, string]> = []
+      const own = Array.isArray(contact.reasons) ? contact.reasons : []
+      own.forEach((r, i) => {
+        const reason = typeof r === 'string' ? r.trim() : ''
+        if (!reason || !Object.hasOwn(src, reason)) return
+        const name = zhText(src[reason], `contact.reasons_zh.${i}`, errors)
+        if (name) names.push([reason, name])
+      })
+      if (names.length) contact.reasons_zh = Object.fromEntries(names)
+      else delete contact.reasons_zh
+    }
+    home.contact = contact
+  }
+}
+
 /**
  * Validate and normalise the owner-editable extras of a home document before
  * it is stored: availability, open-source picks, the site name, brand logo
  * scales, the section order (completed with any missing section) and the
- * highlights (each needs a headline, a description and a source link). Text
+ * highlights (each needs a headline, a description and a source link) and
+ * the owner's Chinese copy (normalizeZhCopy). Text
  * is trimmed, empty optional values are dropped, and
  * anything that would render wrongly (a non-https booking link, a bad month,
  * an out-of-range scale) is reported instead of being stored. Every other
@@ -630,6 +756,9 @@ export function normalizeHomeWrite(
       home.contact = contact
     }
   }
+
+  // After the contact block above, which rebuilds home.contact from the input.
+  normalizeZhCopy(home, errors)
 
   if (input.sections && typeof input.sections === 'object') {
     for (const [k, v] of Object.entries(input.sections)) {

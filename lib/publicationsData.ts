@@ -72,8 +72,8 @@ export function readPublicationsView(): PublicationsView {
 }
 
 /** The home page's "Selected publications" (lib/publications selectPublications); null without a public paper. */
-export function readHomePublications(): SelectedPublications | null {
-  return selectPublications(readPublicationsView())
+export function readHomePublications(labels: 'en' | 'zh' = 'en'): SelectedPublications | null {
+  return selectPublications(readPublicationsView(), undefined, labels)
 }
 
 /** How many papers /publications lists (0: no page) — the count on the /about rail's link. */

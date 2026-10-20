@@ -3,8 +3,8 @@ import { Box } from '@chakra-ui/react'
 import Header from '../Header/Header'
 import Footer from '../Footer/Footer'
 import { ChromeContext } from './ChromeContext'
-import { useChromeLang } from './chromeLang'
-import { navLinksFor, resolveSocialLinks } from './chrome'
+import { useChromeUi } from './chromeLang'
+import { localizeNav, navLinksFor, resolveSocialLinks } from './chrome'
 import NavProgress from './NavProgress'
 import dynamic from 'next/dynamic'
 
@@ -32,6 +32,10 @@ const KeyboardLayer = dynamic(() => import('./KeyboardLayer'), { ssr: false, loa
  * fetched). Only when the first page rendered did not ship it at all
  * (undefined) is the public /api/home view read once after mount. The last
  * known value is kept across navigations to pages that do not ship it.
+ *
+ * The chrome speaks the page's interface language (F3, ./chromeLang): the
+ * labels come from the dictionary, and on a Chinese page every link leads
+ * to the Chinese version of its page where one exists.
  *
  * The Publications nav link (header, drawer, footer, ⌘K) follows
  * `publications` (`pageProps.chromePublications`, lib/publicationsData): the
@@ -92,7 +96,9 @@ export default function SiteChrome({
     if (publications !== undefined) setKnownPublications(publications)
   }, [publications])
   const hasPublications = publications !== undefined ? publications : knownPublications
-  const navLinks = useMemo(() => navLinksFor({ publications: hasPublications }), [hasPublications])
+  // In the chrome's language; on a Chinese page the links lead to the Chinese pages that exist (F3).
+  const { t, lang: uiLang, attr: chromeLang, zh } = useChromeUi()
+  const navLinks = useMemo(() => localizeNav(navLinksFor({ publications: hasPublications }), t, zh), [hasPublications, t, zh])
 
   useEffect(() => {
     if (!fetchOnMount.current) return
@@ -115,14 +121,12 @@ export default function SiteChrome({
 
   const effective = socials !== undefined ? socials : known
   const links = useMemo(() => resolveSocialLinks(effective), [effective])
-  // lang="en" on the English chrome when the page is in another language.
-  const chromeLang = useChromeLang()
 
   return (
     <ChromeContext.Provider value>
       <Box display="flex" flexDirection="column" minHeight="100vh" w="full">
         <a className="skip-nav no-print" href="#main" lang={chromeLang}>
-          Skip to content
+          {t.skip}
         </a>
         {/* Its own view-transition snapshot: the header stays pinned while
             route transitions slide / fade the page beneath it (globals.css).
@@ -158,7 +162,7 @@ export default function SiteChrome({
           <Footer socials={links} navLinks={navLinks} />
         </Box>
       </Box>
-      <KeyboardLayer />
+      <KeyboardLayer navLinks={navLinks} lang={uiLang} />
     </ChromeContext.Provider>
   )
 }

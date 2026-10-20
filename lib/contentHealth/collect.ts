@@ -2,6 +2,7 @@ import { listItems } from '../contentStore'
 import { readCvDataWithVersion } from '../cvdata'
 import { readHomeWithVersion } from '../home'
 import { PAGE_NAMES, readPage } from '../mdx-admin'
+import { pageAdminPath, pagePublicPath } from '../pageNames'
 import { isR2Configured } from '../r2'
 import { SITE_HOST } from '../schema'
 import {
@@ -26,7 +27,7 @@ import { countIssues, type HealthReport, type HealthSummary, type LinkHealth } f
  * body scans are memoised); it never touches the network.
  */
 
-const PAGE_TITLE: Record<string, string> = { now: 'Now', uses: 'Uses', about: 'About bio' }
+const PAGE_TITLE: Record<string, string> = { now: 'Now', uses: 'Uses', about: 'About bio', 'about-zh': 'About bio (中文)' }
 
 const str = (v: unknown) => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '')
 
@@ -66,8 +67,8 @@ export function publishedDocs(): { docs: HealthDoc[]; known: AnalyzeInput['known
       body: page.body,
       frontmatter: page.frontmatter || {},
       version: page.updatedAt,
-      editHref: `/admin/${name}`,
-      publicHref: `/${name}`,
+      editHref: pageAdminPath(name),
+      publicHref: pagePublicPath(name),
     })
   }
   return { docs, known }

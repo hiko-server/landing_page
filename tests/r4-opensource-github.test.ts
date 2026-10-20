@@ -155,9 +155,9 @@ test('statTiles shows meaningful numbers, vanity ones only on opt-in', () => {
     available: true,
   }
   assert.deepEqual(statTiles(base), [
-    { label: 'Public repos', value: 12 },
-    { label: 'Contributions (last year)', value: 1622 },
-    { label: 'Languages', value: 7 },
+    { key: 'repos', label: 'Public repos', value: 12 },
+    { key: 'contributions', label: 'Contributions (last year)', value: 1622 },
+    { key: 'languages', label: 'Languages', value: 7 },
   ])
   assert.deepEqual(
     statTiles({ ...base, contributions: null, languages: null, showVanity: true }).map((t) => t.label),

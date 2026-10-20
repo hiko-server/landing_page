@@ -2,26 +2,19 @@ import { Box, Flex, Text, chakra } from '@chakra-ui/react'
 import { openCommandPalette } from '../Chrome/paletteEvents'
 import { MessageCircleQuestionIcon, QuoteIcon } from '../Icons/ui/ask'
 import { cssTransition } from '../../theme/tokens'
+import { ASK_ENTRY_EN, type AskEntryStrings } from '../../lib/uiStrings/askEntry'
 
 /**
  * "Ask Lucian" on /about and /contact: opens the ⌘K palette in Ask mode,
  * where a question (English or Chinese) is answered only with quotes from
  * this site, each linked to its source (components/Search/AskView). Static
  * markup, no data and no script beyond the click: the palette loads the
- * passages when it opens. The Chinese name carries its own lang. Its few
- * words live here (the page chunk does not carry the answer view's copy,
- * lib/ask/copy).
+ * passages when it opens. The other language's name carries its own lang.
+ * Its few words are lib/uiStrings/askEntry's (the page chunk does not carry
+ * the answer view's copy, lib/ask/copy): English by default, the page's own
+ * on /zh/about and /zh/contact (`copy`, F3).
  */
-
-const COPY = {
-  title: 'Ask Lucian',
-  alt: '问问 Lucian',
-  text: 'Questions about his work, studies or projects? Get answers quoted from this site, each with its source. Ask in English or Chinese.',
-  button: 'Ask a question…',
-  badge: 'Quotes only',
-} as const
-
-export default function AskEntry({ id = 'ask-lucian', mb }: { id?: string; mb?: number | Record<string, number> }) {
+export default function AskEntry({ id = 'ask-lucian', mb, copy: COPY = ASK_ENTRY_EN }: { id?: string; mb?: number | Record<string, number>; copy?: AskEntryStrings }) {
   const headingId = `${id}-title`
   return (
     <Box
@@ -43,7 +36,7 @@ export default function AskEntry({ id = 'ask-lucian', mb }: { id?: string; mb?: 
         <Text as="h2" id={headingId} textStyle="title-sm" color="page.fg">
           {COPY.title}
         </Text>
-        <Text as="span" lang="zh-Hans" fontSize="caption" color="page.fg-secondary">
+        <Text as="span" lang={COPY.altLang} fontSize="caption" color="page.fg-secondary">
           {COPY.alt}
         </Text>
       </Flex>

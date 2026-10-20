@@ -4,6 +4,7 @@ import sharp from 'sharp'
 import { getPage, listItems } from './contentStore'
 import { readPublicHome } from './home'
 import { PAGE_NAMES } from './mdx-admin'
+import { pagePublicPath } from './pageNames'
 import { pathsReferencingUploads, type ContentSource } from './revalidate'
 import { UPLOAD_NAME_RE, isValidUploadName } from './security/uploadName'
 import { expectedVariantNames, isVariantName } from './uploadVariants'
@@ -47,7 +48,7 @@ export function publicUploadSources(): ContentSource[] {
   out.push({ path: '/work', text: workCovers.join('\n') })
   for (const name of PAGE_NAMES) {
     const page = getPage(name)
-    if (page) out.push({ path: `/${name}`, text: page.body })
+    if (page) out.push({ path: pagePublicPath(name), text: page.body })
   }
   // The home page ships the portrait's and the field-note photos' srcsets;
   // /about ships the portrait's.

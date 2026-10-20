@@ -16,6 +16,7 @@ import {
   CV_PAGE_PATHS,
   HOME_PAGE_PATHS,
   STATIC_CONTENT_PATHS,
+  pageRevalidatePaths,
   derivedPurgePaths,
 } from '../lib/revalidate'
 import { BUILD_REVALIDATE_SECONDS, PROFILE_REVALIDATE_SECONDS } from '../lib/isr'
@@ -48,9 +49,12 @@ test('(c) every CV download link points at the server-rendered PDFs, never the p
   assert.match(read('pages/about/index.tsx'), /cvLang=\{active\}/)
   assert.match(read('components/Admin/cvStudio/Preview.tsx'), /href=\{cvPdfPath\(lang\)\}/)
   // The palette downloads both languages.
+  // The palette downloads both languages: the page's CV first (F3: the Chinese one on a Chinese page).
   const palette = read('components/General-UI/CommandPalette.tsx')
-  assert.match(palette, /downloadFile\('\/cv\.pdf'\)/)
-  assert.match(palette, /downloadFile\('\/cv\/zh\.pdf'\)/)
+  assert.match(palette, /\{ page: '\/cv', pdf: '\/cv\.pdf' \}/)
+  assert.match(palette, /\{ page: '\/cv\/zh', pdf: '\/cv\/zh\.pdf' \}/)
+  assert.match(palette, /run: \(\) => downloadFile\(ownCv\.pdf\)/)
+  assert.match(palette, /run: \(\) => downloadFile\(otherCv\.pdf\)/)
 })
 
 // ── (d) home-about-isr + cv-docs + cv-studio-contact: one ISR picture ───────
@@ -62,10 +66,9 @@ test('(d) the five profile pages are ISR with their streams\' windows, one build
   assert.equal(CV_REVALIDATE_SECONDS, 60)
   assert.equal(CONTACT_REVALIDATE_SECONDS, 300)
   assert.equal(BUILD_REVALIDATE_SECONDS, 1)
-  for (const page of ['pages/index.tsx', 'pages/about/index.tsx']) {
-    assert.match(read(page), /export const getStaticProps/)
-    assert.match(read(page), /revalidate: revalidateAfter\(PROFILE_REVALIDATE_SECONDS\)/)
-  }
+  for (const page of ['pages/index.tsx', 'pages/about/index.tsx']) assert.match(read(page), /export const getStaticProps/)
+  // Their loaders, shared with /zh and /zh/about (F3).
+  for (const loader of ['lib/homePage.ts', 'lib/aboutPage.ts']) assert.match(read(loader), /revalidate: revalidateAfter\(PROFILE_REVALIDATE_SECONDS\)/)
   for (const page of ['pages/cv/index.tsx', 'pages/cv/zh.tsx', 'pages/contact/index.tsx']) {
     assert.match(read(page), /export const getStaticProps/)
     assert.doesNotMatch(read(page), /getServerSideProps/)
@@ -78,9 +81,10 @@ test('(d) the five profile pages are ISR with their streams\' windows, one build
 
 test('(d) every admin write regenerates exactly the pages that render what it changed', () => {
   // Home saves: availability feeds the CV header and the /contact card.
-  assert.deepEqual(sorted(HOME_PAGE_PATHS), ['/', '/about', '/contact', '/cv', '/cv/zh', '/now'])
+  // …and the Chinese pages (F3): /zh, /zh/about and /zh/contact show the home copy, and every Chinese page links the ones that exist.
+  assert.deepEqual(sorted(HOME_PAGE_PATHS), sorted(['/', '/about', '/contact', '/cv', '/cv/zh', '/now', '/zh', '/zh/about', '/zh/work', '/zh/blog', '/zh/contact']))
   // CV saves: /work lists every public project; /now the current roles; /publications the papers.
-  assert.deepEqual(sorted(CV_PAGE_PATHS), ['/', '/about', '/cv', '/cv/zh', '/now', '/publications', '/work'])
+  assert.deepEqual(sorted(CV_PAGE_PATHS), sorted(['/', '/about', '/cv', '/cv/zh', '/now', '/publications', '/work', '/zh', '/zh/about', '/zh/work']))
   assert.deepEqual([...CV_DOCUMENT_PATHS], ['/cv', '/cv/zh'])
   // The API routes use these lists (with the confirm pass) — no private copies.
   assert.match(read('pages/api/home.ts'), /export const HOME_STATIC_PATHS: readonly string\[\] = \[\.\.\.HOME_PAGE_PATHS\]/)
@@ -91,11 +95,15 @@ test('(d) every admin write regenerates exactly the pages that render what it ch
   assert.match(read('pages/api/versions.ts'), /const STATIC_PATHS: Record<JsonDocType, string\[\]> = \{ cv: \[\.\.\.CV_PAGE_PATHS\], home: \[\.\.\.HOME_PAGE_PATHS\] \}/)
   assert.match(read('pages/api/mongo.ts'), /if \(counts\.cv\) restoredPaths\.push\(\.\.\.CV_PAGE_PATHS\)/)
   assert.match(read('pages/api/mongo.ts'), /if \(counts\.home\) restoredPaths\.push\(\.\.\.HOME_PAGE_PATHS\)/)
-  // About-page (bio) saves and restores regenerate /about only.
-  assert.match(read('pages/api/admin/page.ts'), /const paths = \[`\/\$\{name\}`\]/)
+  // Single-page saves and restores regenerate their page (lib/revalidate pageRevalidatePaths): the Chinese bio
+  // publishes /zh/about, so /about (its language switch) and the Chinese pages (their nav) follow (F3).
+  assert.match(read('pages/api/admin/page.ts'), /const paths = pageRevalidatePaths\(name\)/)
+  assert.deepEqual(pageRevalidatePaths('about'), ['/about'])
+  assert.deepEqual(pageRevalidatePaths('now'), ['/now'])
+  assert.deepEqual(sorted(pageRevalidatePaths('about-zh')), sorted(['/about', '/zh', '/zh/about', '/zh/work', '/zh/blog', '/zh/contact', '/cv/zh']))
   // Post / case-study saves: their collection, the pages linking them and the CV (skill evidence, case-study links).
-  assert.deepEqual([...COLLECTION_EXTRA_PATHS.blog], ['/'])
-  assert.deepEqual([...COLLECTION_EXTRA_PATHS.work], ['/', '/about'])
+  assert.deepEqual([...COLLECTION_EXTRA_PATHS.blog], ['/', '/zh', '/zh/about', '/zh/work', '/zh/blog', '/zh/contact'])
+  assert.deepEqual([...COLLECTION_EXTRA_PATHS.work], ['/', '/about', '/zh', '/zh/about', '/zh/work', '/zh/blog', '/zh/contact'])
   assert.match(read('lib/mdx-admin.ts'), /\.\.\.COLLECTION_EXTRA_PATHS\[c\], \.\.\.CV_DOCUMENT_PATHS\]/)
   // Restores and storage pulls regenerate every ISR page.
   for (const p of new Set([...HOME_PAGE_PATHS, ...CV_PAGE_PATHS, '/blog', '/uses', '/colophon', '/publications'])) {

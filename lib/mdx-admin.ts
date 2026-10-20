@@ -1,3 +1,4 @@
+import { PAGE_NAMES, isPageName, type PageName } from './pageNames'
 import fs from 'fs'
 import path from 'path'
 import matter from 'gray-matter'
@@ -340,16 +341,10 @@ export async function restoreItemSnapshot(
 
 /**
  * The owner-written single pages: /now and /uses (an automatic version shows
- * while the body is empty) and the bio on /about (no bio section while it
- * is empty).
+ * while the body is empty), the bio on /about (no bio section while it is
+ * empty) and the Chinese bio, which publishes /zh/about (lib/pageNames).
  */
-export type PageName = 'now' | 'uses' | 'about'
-
-export const PAGE_NAMES: ReadonlyArray<PageName> = ['now', 'uses', 'about']
-
-export function isPageName(value: unknown): value is PageName {
-  return typeof value === 'string' && (PAGE_NAMES as ReadonlyArray<string>).includes(value)
-}
+export { PAGE_NAMES, isPageName, type PageName }
 
 function pageUpdatedAt(name: PageName): number {
   const row = getDb().prepare('SELECT updated_at FROM pages WHERE name = ?').get(name) as

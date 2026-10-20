@@ -2,7 +2,9 @@ import { Box, Flex, Text } from '@chakra-ui/react'
 import NextLink from 'next/link'
 
 import { formatPostDate } from '../../lib/postDate'
+import { fillUi } from '../../lib/uiStrings'
 import type { WritingItem } from './projectMatch'
+import { useHomeUi } from './homeUi'
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
@@ -39,8 +41,12 @@ export default function LatestWriting({
   hasPosts?: boolean
   hasWork?: boolean
 }) {
+  const { t, lang, links } = useHomeUi()
+  const w = t.writing
   const rows = Array.isArray(items) ? items : []
   if (!rows.length) return null
+  // A title in another language than the page's carries its own.
+  const ownLang = (l: string) => (l === lang ? undefined : l)
 
   return (
     <Box w="100%" maxW="1100px">
@@ -70,8 +76,8 @@ export default function LatestWriting({
                 letterSpacing="0.08em"
                 color="page.fg-secondary"
               >
-                {r.kind === 'post' ? 'POST' : 'WORK'}
-                <span className="sr-only">{r.kind === 'post' ? ' post: ' : ' case study: '}</span>
+                {r.kind === 'post' ? w.post : w.work}
+                <span className="sr-only">{r.kind === 'post' ? w.postSr : w.workSr}</span>
               </Text>
               <Box flex="1" minW={0}>
                 <Text
@@ -83,13 +89,13 @@ export default function LatestWriting({
                   fontWeight={500}
                   lineHeight="1.4"
                   letterSpacing="-0.005em"
-                  lang={r.lang === 'en' ? undefined : r.lang}
+                  lang={ownLang(r.lang)}
                   sx={{ transition: 'color 200ms var(--ease-out-quart)' }}
                 >
                   {r.title}
                 </Text>
                 {r.description && (
-                  <Text as="span" display="block" mt={1} fontSize="13px" lineHeight="1.6" color="page.fg-secondary" noOfLines={1} lang={r.lang === 'en' ? undefined : r.lang}>
+                  <Text as="span" display="block" mt={1} fontSize="13px" lineHeight="1.6" color="page.fg-secondary" noOfLines={1} lang={ownLang(r.lang)}>
                     {r.description}
                   </Text>
                 )}
@@ -106,11 +112,11 @@ export default function LatestWriting({
               >
                 {r.date && (
                   <time dateTime={r.date}>
-                    {r.kind === 'work' && <span className="sr-only">updated </span>}
-                    {formatPostDate(r.date)}
+                    {r.kind === 'work' && <span className="sr-only">{w.updated}</span>}
+                    {formatPostDate(r.date, lang)}
                   </time>
                 )}
-                {r.readingMinutes > 0 && <span>{r.readingMinutes} min</span>}
+                {r.readingMinutes > 0 && <span>{fillUi(w.minutes, { n: r.readingMinutes })}</span>}
               </Flex>
             </Flex>
           </Box>
@@ -119,13 +125,13 @@ export default function LatestWriting({
 
       <Flex mt={5} gap={6} wrap="wrap">
         {hasPosts && (
-          <Box as={NextLink} href="/blog" sx={moreLinkSx}>
-            All writing <span className="nudge" aria-hidden>→</span>
+          <Box as={NextLink} href={links.blog} sx={moreLinkSx}>
+            {w.allWriting} <span className="nudge" aria-hidden>→</span>
           </Box>
         )}
         {hasWork && (
-          <Box as={NextLink} href="/work" sx={moreLinkSx}>
-            All case studies <span className="nudge" aria-hidden>→</span>
+          <Box as={NextLink} href={links.work} sx={moreLinkSx}>
+            {w.allWork} <span className="nudge" aria-hidden>→</span>
           </Box>
         )}
       </Flex>

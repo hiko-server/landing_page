@@ -4,6 +4,7 @@ import { m, AnimatePresence } from 'framer-motion'
 
 import Hint, { HintGroup } from './Hint'
 import { cssTransition, motionTransition } from '../../theme/tokens'
+import { fillUi } from '../../lib/uiStrings'
 
 /**
  * Right-edge section navigator for long pages (desktop only).
@@ -13,11 +14,12 @@ import { cssTransition, motionTransition } from '../../theme/tokens'
  * The active dot is tracked with an IntersectionObserver — no scroll-handler
  * layout reads on every frame. A section whose content is still deferred
  * (components/Common/WhenVisible) is mounted first, via the URL hash, so the
- * jump lands where the section really ends up.
+ * jump lands where the section really ends up. Its words are the page's
+ * (`label`, `jumpTo` with {label}; English by default).
  */
 type Target = { id: string; label: string }
 
-export default function FloatingNav() {
+export default function FloatingNav({ label = 'Page sections', jumpTo = 'Jump to {label}' }: { label?: string; jumpTo?: string }) {
   const [targets, setTargets] = useState<Target[]>([])
   const [active, setActive] = useState<string | null>(null)
   const [visible, setVisible] = useState(false)
@@ -84,7 +86,7 @@ export default function FloatingNav() {
       <AnimatePresence>
         {visible && (
           <m.nav
-            aria-label="Page sections"
+            aria-label={label}
             initial={{ opacity: 0, x: 16 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 16 }}
@@ -115,7 +117,7 @@ export default function FloatingNav() {
                         <Box
                           as="button"
                           type="button"
-                          aria-label={`Jump to ${t.label}`}
+                          aria-label={fillUi(jumpTo, { label: t.label })}
                           aria-current={on ? 'true' : undefined}
                           onClick={() => go(t.id)}
                           display="grid"

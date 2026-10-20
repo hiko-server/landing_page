@@ -6,6 +6,9 @@ import { CheckIcon, MonitorIcon, MoonIcon, SunIcon } from '../Icons/ui/theme'
 import { useThemePreference } from '../Chrome/useThemePreference'
 import { systemPrefersDark, type ThemePreference } from '../../lib/themePreference'
 import { THEME_OPTIONS, menuKeyTarget, type MenuFocus } from './themeMenuKeys'
+import { useChromeUi } from '../Chrome/chromeLang'
+import { MENU_UI } from '../../lib/uiStrings/menu'
+import { fillUi } from '../../lib/uiStrings'
 
 /**
  * The header's theme menu: System / Light / Dark as a WAI-ARIA menu of
@@ -40,6 +43,10 @@ export type ThemeMenuProps = {
 
 export default function ThemeMenu({ id, triggerRef, initialFocus, onClose }: ThemeMenuProps) {
   const { preference, choose } = useThemePreference()
+  // The chrome's words (F3); a letter jumps by the first letter of the labels on screen.
+  const { t, lang } = useChromeUi()
+  const m = MENU_UI[lang]
+  const labels = THEME_OPTIONS.map((o) => m[o.value])
   const menuRef = useRef<HTMLDivElement>(null)
   const items = useRef<(HTMLButtonElement | null)[]>([])
   const checkedIndex = Math.max(0, THEME_OPTIONS.findIndex((o) => o.value === preference))
@@ -82,7 +89,7 @@ export default function ThemeMenu({ id, triggerRef, initialFocus, onClose }: The
       return
     }
     const current = items.current.findIndex((el) => el === document.activeElement)
-    const next = menuKeyTarget(e.key, current, THEME_OPTIONS.length)
+    const next = menuKeyTarget(e.key, current, THEME_OPTIONS.length, labels)
     if (next !== null) {
       e.preventDefault()
       items.current[next]?.focus()
@@ -94,7 +101,7 @@ export default function ThemeMenu({ id, triggerRef, initialFocus, onClose }: The
       ref={menuRef}
       id={id}
       role="menu"
-      aria-label="Theme"
+      aria-label={t.theme}
       aria-orientation="vertical"
       onKeyDown={onKeyDown}
       position="absolute"
@@ -141,12 +148,12 @@ export default function ThemeMenu({ id, triggerRef, initialFocus, onClose }: The
           >
             <Icon size="sm" />
             <Text as="span" flex={1}>
-              {option.label}
+              {labels[i]}
             </Text>
             {option.value === 'system' ? (
               <Text as="span" fontFamily="mono" fontSize="label" color="page.fg-subtle">
-                <span className="sr-only">: follows your device, now </span>
-                {systemMode}
+                <span className="sr-only">{fillUi(m.followsDevice, { mode: '' })}</span>
+                {m[systemMode].toLowerCase()}
               </Text>
             ) : null}
             <Box as="span" display="inline-flex" w="16px" color="accent.text" visibility={checked ? 'visible' : 'hidden'}>

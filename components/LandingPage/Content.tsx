@@ -29,6 +29,7 @@ import { list } from '../CVViewerPage/fields'
 import { HOME_REPO_LIMIT, type GithubPageData } from '../Common/githubEvents'
 import type { WorkIndexItem, WritingItem } from './projectMatch'
 import type { SelectedPublications } from '../../lib/publications/selected'
+import { useHomeUi } from './homeUi'
 
 // Below the fold and interactive-only: its code loads when it is about to
 // scroll into view (WhenVisible), not with the page.
@@ -80,6 +81,8 @@ const monoLabel = {
  * - Data the server already has (GitHub, CV, writing index) is rendered into
  *   the HTML; only the photo strip is code-split and mounts just before it
  *   scrolls into view. Contact is a link to /contact, not the form.
+ * - Headings and widget words are the page's (./homeUi): Chinese on /zh,
+ *   whose `cvEn` is the Chinese CV (F3).
  */
 const Content = ({
   photos,
@@ -91,7 +94,7 @@ const Content = ({
   publications,
 }: {
   photos?: ScrollerImage[]
-  /** Website-pruned EN CV, limited to the sections rendered here. */
+  /** Website-pruned CV in the page's language (the Chinese one on /zh), limited to the sections rendered here. */
   cvEn?: CvSectionLike[]
   home?: HomeData | null
   /** /work case-study index used to link project cards and roles. */
@@ -102,15 +105,18 @@ const Content = ({
   /** The first papers of /publications (null / empty: no section). */
   publications?: SelectedPublications | null
 }) => {
+  const { t } = useHomeUi()
+  const labels = t.sections
+  const fallback = (p: { reset?: () => void }) => <WidgetFallback {...p} title={t.widgetFailed} retryLabel={t.retry} />
   const calendarKnownMissing = github?.calendar?.available === false
   const defs: Partial<Record<SortableSectionKey, SectionDef>> = {
     'open-source': {
       key: 'open-source',
       id: 'section-open-source',
-      label: 'Open Source',
+      label: labels['open-source'],
       labelOnly: true,
       body: (
-        <ErrorBoundary name="home-open-source" fallback={(p) => <WidgetFallback {...p} />}>
+        <ErrorBoundary name="home-open-source" fallback={fallback}>
           <StatsBar initialData={github?.stats} />
           <Grid
             mt={8}
@@ -126,14 +132,14 @@ const Content = ({
             )}
             <Box minW={0}>
               <Text as="h3" sx={monoLabel}>
-                Languages
+                {t.languagesHeading}
               </Text>
               <LanguageStack initialData={github?.languages} />
             </Box>
           </Grid>
           <Box mt={10}>
             <Text as="h3" sx={monoLabel}>
-              Repositories
+              {t.repositoriesHeading}
             </Text>
             <TopRepos initialData={github?.repos} limit={HOME_REPO_LIMIT} />
           </Box>
@@ -143,30 +149,30 @@ const Content = ({
     'tech-stack': {
       key: 'tech-stack',
       id: 'section-tech-stack',
-      label: 'Skills',
+      label: labels['tech-stack'],
       labelOnly: true,
       body: <Skills cvEn={cvEn} />,
     },
     activity: {
       key: 'activity',
       id: 'section-activity',
-      label: 'Recent Activity',
+      label: labels.activity,
       labelOnly: true,
       body: (
-        <ErrorBoundary name="home-activity" fallback={(p) => <WidgetFallback {...p} />}>
+        <ErrorBoundary name="home-activity" fallback={fallback}>
           <ActivityFeed initialData={github?.events} />
         </ErrorBoundary>
       ),
     },
     ...(hasEntries(cvEn, 'project', 'projectExperience')
-      ? { projects: { key: 'projects' as const, id: 'section-projects', label: 'Selected Projects', body: <ProjectSpotlight cvEn={cvEn} work={work} /> } }
+      ? { projects: { key: 'projects' as const, id: 'section-projects', label: labels.projects, body: <ProjectSpotlight cvEn={cvEn} work={work} /> } }
       : {}),
     ...(publications && publications.items.length
       ? {
           publications: {
             key: 'publications' as const,
             id: 'section-publications',
-            label: 'Selected Publications',
+            label: labels.publications,
             body: <SelectedPublicationsList data={publications} />,
           },
         }
@@ -176,7 +182,7 @@ const Content = ({
           writing: {
             key: 'writing' as const,
             id: 'section-writing',
-            label: 'Writing & case studies',
+            label: labels.writing,
             body: <LatestWriting items={writing.items} hasPosts={writing.hasPosts} hasWork={writing.hasWork} />,
           },
         }
@@ -186,7 +192,7 @@ const Content = ({
           experience: {
             key: 'experience' as const,
             id: 'section-experience',
-            label: 'Experience',
+            label: labels.experience,
             labelOnly: true,
             body: <ExperienceTimeline cvEn={cvEn} work={work} />,
           },
@@ -197,7 +203,7 @@ const Content = ({
           certifications: {
             key: 'certifications' as const,
             id: 'section-certifications',
-            label: 'Certifications',
+            label: labels.certifications,
             labelOnly: true,
             body: <CertificationsPeek cvEn={cvEn} />,
           },
@@ -208,7 +214,7 @@ const Content = ({
           photos: {
             key: 'photos' as const,
             id: 'section-photos',
-            label: 'Field Notes',
+            label: labels.photos,
             plain: true,
             body: (
               <WhenVisible minHeight={{ base: '300px', md: '360px' }}>
@@ -221,7 +227,7 @@ const Content = ({
     contact: {
       key: 'contact',
       id: 'section-contact',
-      label: 'Get In Touch',
+      label: labels.contact,
       body: <ContactBand home={home} />,
     },
   }
@@ -243,7 +249,7 @@ const Content = ({
       pt={{ base: 10, md: 16 }}
       pb={{ base: 12, md: 20 }}
     >
-      <FloatingNav />
+      <FloatingNav label={t.pageSections} jumpTo={t.jumpTo} />
       {visible.map((s, i) => {
         const section = (
           <Box

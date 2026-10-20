@@ -4,6 +4,7 @@ import { useFetchJson } from '../Common/useFetchJson'
 import WidgetNotice from '../Common/WidgetNotice'
 import DigitRoll, { DIGIT_ROLL_NO_SCRIPT_CSS } from '../General-UI/DigitRoll'
 import { statColumns, statTiles, type GhStats } from '../Common/githubEvents'
+import { useHomeUi } from '../LandingPage/homeUi'
 
 /** Big figures: the fluid `stat` size (28→44px), tight tabular digits (theme/tokens.ts). */
 const numberSx = {
@@ -47,24 +48,25 @@ const StatSkeleton = () => (
  * an in-place notice rather than "0 · 0 · 0".
  */
 export default function StatsBar({ initialData }: { initialData?: GhStats | null }) {
+  const { t } = useHomeUi()
   const { data, error, retry } = useFetchJson<GhStats>('/api/github/stats', { initialData })
   const failed = error || (data !== null && data.available === false)
   const empty = data !== null && data.available !== false && !data.user
 
   if (failed || empty) {
     return (
-      <WidgetNotice kind={failed ? 'error' : 'empty'} onRetry={failed ? retry : undefined} minH={{ base: '72px', md: '116px' }}>
-        {failed ? 'GitHub stats are unavailable right now.' : 'No GitHub profile is linked yet.'}
+      <WidgetNotice kind={failed ? 'error' : 'empty'} onRetry={failed ? retry : undefined} retryLabel={t.tryAgain} minH={{ base: '72px', md: '116px' }}>
+        {failed ? t.stats.unavailable : t.stats.noProfile}
       </WidgetNotice>
     )
   }
 
-  const tiles = data ? statTiles(data) : null
+  const tiles = data ? statTiles(data, t.stats.tiles) : null
   const count = tiles ? tiles.length : SKELETON_TILES
   return (
     <Grid
       as="section"
-      aria-label="GitHub stats"
+      aria-label={t.stats.label}
       aria-busy={!tiles || undefined}
       templateColumns={statColumns(count)}
       columnGap={{ base: 3, sm: 8, md: 12 }}
@@ -79,7 +81,7 @@ export default function StatsBar({ initialData }: { initialData?: GhStats | null
         <style>{DIGIT_ROLL_NO_SCRIPT_CSS}</style>
       </noscript>
       {tiles
-        ? tiles.map((t) => <StatItem key={t.label} label={t.label} value={t.value} />)
+        ? tiles.map((tile) => <StatItem key={tile.key} label={tile.label} value={tile.value} />)
         : Array.from({ length: SKELETON_TILES }, (_, i) => <StatSkeleton key={i} />)}
     </Grid>
   )

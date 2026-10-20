@@ -269,21 +269,27 @@ test('the mono face uses the metric-matched fallbacks instead of next/font’s A
 
 // ── FIX-15: language of the chrome ──────────────────────────────────────────
 
-test('the English chrome is lang="en" only inside a non-English document', () => {
+test('the chrome carries lang only where its words are not in the document language (F3: Chinese chrome on Chinese pages)', () => {
   assert.equal(CHROME_LANG, 'en')
   for (const l of ['en', 'en-GB', 'EN-us']) {
     assert.equal(isEnglishLang(l), true, l)
     assert.equal(chromeLangFor(l), undefined, l)
   }
+  // The English chrome inside a non-English document.
   for (const l of ['zh-Hans', 'zh', 'ja', 'eng-x', '', null, undefined]) assert.equal(chromeLangFor(l), 'en', String(l))
+  // The Chinese chrome (a Chinese page ships its words) needs no lang in a Chinese document, and says so elsewhere.
+  for (const l of ['zh-Hans', 'zh', 'zh-CN']) assert.equal(chromeLangFor(l, 'zh-Hans'), undefined, l)
+  assert.equal(chromeLangFor('zh-Hant', 'zh-Hant'), undefined)
+  assert.equal(chromeLangFor('zh-Hant', 'zh-Hans'), 'zh-Hans')
+  assert.equal(chromeLangFor('en', 'zh-Hans'), 'zh-Hans')
   const app = read('pages/_app.tsx')
-  assert.match(app, /const chromeLang = chromeLangFor\(lang\)/)
-  assert.match(app, /<ChromeLangContext\.Provider value=\{chromeLang\}>/)
+  assert.match(app, /attr: chromeLangFor\(lang, chromeUi\?\.lang \?\? 'en'\)/)
+  assert.match(app, /<ChromeUiContext\.Provider value=\{chrome\}>/)
   const chrome = read('components/Chrome/SiteChrome.tsx')
   assert.match(chrome, /className="skip-nav no-print" href="#main" lang=\{chromeLang\}/)
   assert.equal((chrome.match(/lang=\{chromeLang\}/g) || []).length, 3, 'skip link, header, footer')
   assert.match(read('components/Header/MobileDrawer.tsx'), /<DrawerContent lang=\{chromeLang\}/)
-  assert.match(read('components/General-UI/CommandPalette.tsx'), /aria-label="Command palette"\s*lang=\{chromeLang\}/)
+  assert.match(read('components/General-UI/CommandPalette.tsx'), /aria-label=\{p\.dialog\}\s*lang=\{chromeLang\}/)
   for (const f of ['components/Header/Header.tsx', 'components/General-UI/CommandPalette.tsx']) {
     const code = read(f)
     assert.match(code, /useChromeToast\(\)/, f)

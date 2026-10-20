@@ -23,6 +23,8 @@ import type { HomeData } from './homeShape'
 import type { OwnerNames } from './publications/names'
 import type { PersonFacts } from './schema'
 import type { SkillEvidence } from './skillEvidence'
+import type { ChromeUi } from './uiStrings/chrome'
+import type { LangLink } from './zhRoutes'
 import { referenceMonth } from './clock'
 import { revalidateAfter } from './isr'
 
@@ -67,6 +69,20 @@ export type CvPageData = {
   ownerNames?: OwnerNames
   /** Whether /publications exists (lib/publicationsData): the CV header and the chrome link to it. */
   chromePublications?: boolean
+  /** The CV in the other language: the header's language switch (F3). */
+  langLinks: LangLink[]
+  /** On /cv/zh, the chrome's Chinese words and the Chinese pages its nav leads to (lib/pageLanguage). */
+  chromeUi?: ChromeUi
+  chromeZh?: string[]
+}
+
+/** The chrome's words on /cv/zh (best effort: the English chrome stays when the store cannot be read). */
+async function chromeLanguage(pageLang: string): Promise<{ chromeUi?: ChromeUi; chromeZh?: string[] }> {
+  try {
+    return (await import('./pageLanguage')).chromeLanguageProps(pageLang)
+  } catch {
+    return {}
+  }
 }
 
 export async function loadCvPageProps(lang: CvLang): Promise<{ props: CvPageData; revalidate: number }> {
@@ -160,6 +176,8 @@ export async function loadCvPageProps(lang: CvLang): Promise<{ props: CvPageData
       // Omitted when the home document could not be read: the chrome then loads the public view itself.
       ...(src.socials !== undefined ? { chromeSocials: src.socials as HomeData['socials'] | null } : {}),
       ...publications,
+      langLinks: lang === 'zh' ? [{ lang: 'en', href: '/cv' }] : [{ lang: 'zh-Hans', href: '/cv/zh' }],
+      ...(await chromeLanguage(lang === 'zh' ? 'zh-Hans' : 'en')),
     },
     revalidate: revalidateAfter(CV_REVALIDATE_SECONDS),
   }

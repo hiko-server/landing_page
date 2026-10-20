@@ -4,6 +4,8 @@ import { useThemePreference } from '../Chrome/useThemePreference'
 import type { ThemePreference } from '../../lib/themePreference'
 import { cssTransition } from '../../theme/tokens'
 import { THEME_OPTIONS as PREFERENCE_OPTIONS } from './themeMenuKeys'
+import { useChromeUi } from '../Chrome/chromeLang'
+import { MENU_UI } from '../../lib/uiStrings/menu'
 
 /**
  * System / Light / Dark segmented control (the mobile menu). The same
@@ -22,11 +24,13 @@ export const THEME_OPTIONS = PREFERENCE_OPTIONS.map((o) => ({ ...o, icon: ICONS[
 
 export default function ThemeSwitch() {
   const { preference, choose } = useThemePreference()
+  const { t, lang } = useChromeUi()
+  const m = MENU_UI[lang]
 
   return (
     <Box
       role="group"
-      aria-label="Theme"
+      aria-label={t.theme}
       display="grid"
       gridTemplateColumns={`repeat(${THEME_OPTIONS.length}, minmax(0, 1fr))`}
       gap="2px"
@@ -36,7 +40,7 @@ export default function ThemeSwitch() {
       borderRadius="10px"
       bg="page.bg"
     >
-      {THEME_OPTIONS.map(({ value, label, icon: Icon }) => {
+      {THEME_OPTIONS.map(({ value, icon: Icon }) => {
         const pressed = preference === value
         return (
           <chakra.button
@@ -64,7 +68,7 @@ export default function ThemeSwitch() {
             sx={{ '@media (forced-colors: active)': pressed ? { outline: '2px solid CanvasText' } : {} }}
           >
             <Icon size="sm" />
-            {label}
+            {m[value]}
           </chakra.button>
         )
       })}

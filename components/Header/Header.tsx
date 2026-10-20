@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Box, Text, Button, useDisclosure, Flex, IconButton, Link, Kbd } from '@chakra-ui/react'
 import NextLink from 'next/link'
 import dynamic from 'next/dynamic'
@@ -11,14 +11,16 @@ import {
   SOCIAL_LINKS,
   type NavLink,
   type SocialLink,
-  formatAge,
-  isActiveRoute,
+  isActiveLink,
   shouldProbeSession,
   shouldRecheckSession,
   splitBrand,
 } from '../Chrome/chrome'
 import { useBrandHost } from '../Chrome/useBrandHost'
 import { useChromeToast } from '../Chrome/useChromeToast'
+import { useChromeUi } from '../Chrome/chromeLang'
+import { fillUi } from '../../lib/uiStrings'
+import LanguageSwitch from './LanguageSwitch'
 import { useShortcutsEnabled } from '../Chrome/useShortcutsEnabled'
 import { HIDE_ON_COARSE_POINTER, isApplePlatform, paletteKeyShortcuts, paletteShortcutLabel } from '../Chrome/platform'
 import {
@@ -31,7 +33,6 @@ import {
   type PaletteMode,
 } from '../Chrome/paletteEvents'
 import type { PalettePage } from '../General-UI/paletteModel'
-import { useFetchJson } from '../Common/useFetchJson'
 import { MenuIcon, SearchIcon } from '../Icons/ui/chrome'
 import { isImeComposing } from '../../lib/keyboardShortcuts'
 import { pageKeyOf } from '../../lib/viewTransition'
@@ -41,8 +42,13 @@ import ThemeControl from './ThemeControl'
  * v6 Header — rendered once by components/Chrome/SiteChrome (persistent across
  * client-side navigations).
  *
- * Layout (lg+):      [logo · live-status]  [primary nav]  [⌘K · theme ▾ · admin]
- * Layout (< lg):     [logo]                [⌘K · theme ▾ · hamburger → drawer]
+ * Layout (lg+):      [logo · live-status]  [primary nav]  [中文 · ⌘K · theme ▾ · admin]
+ * Layout (< lg):     [logo]                [中文 · ⌘K · theme ▾ · hamburger → drawer]
+ *
+ * Every word comes from the chrome's dictionary (lib/uiStrings/chrome,
+ * components/Chrome/chromeLang): Chinese on a Chinese page. The language
+ * switch (./LanguageSwitch) links this page's version in the other
+ * language and is absent when there is none (F3).
  *
  * Breakpoints are pure CSS (no JS media query) and every colour is a semantic
  * token (CSS variable), so the header is correct on the very first paint at
@@ -54,6 +60,8 @@ import ThemeControl from './ThemeControl'
  */
 
 const MONO = 'var(--font-geist-mono), ui-monospace, monospace'
+
+const LiveStatusPill = dynamic(() => import('./LiveStatusPill'), { ssr: false, loading: () => null })
 
 const loadMobileDrawer = () => import('./MobileDrawer')
 const MobileDrawer = dynamic(loadMobileDrawer, { ssr: false, loading: () => null })
@@ -74,68 +82,14 @@ function useMediaQuery(query: string): boolean {
   return matches
 }
 
-type GithubEvents = { events?: { type?: string; created_at?: string }[] }
-
-/** "● Last commit · 2h ago" — only where it is shown (md+), fetched once per visit. */
+/**
+ * "● Last commit · 2h ago" — only where it is shown (md+). The pill is
+ * client-only (its age is computed in the browser), so its code is a chunk
+ * of its own, fetched once the header knows it is wide enough.
+ */
 function LiveStatus() {
   const wide = useMediaQuery('(min-width: 48em)')
   return wide ? <LiveStatusPill /> : null
-}
-
-function LiveStatusPill() {
-  // Shared with the home activity widgets (concurrent requests are deduped).
-  const { data } = useFetchJson<GithubEvents>('/api/github/events')
-  const created = useMemo(() => {
-    const events = data?.events || []
-    return (events.find((e) => e.type === 'PushEvent') || events[0])?.created_at || null
-  }, [data])
-
-  // The age is computed on the client only (no server/client mismatch) and
-  // recomputed when the page is restored from the back/forward cache.
-  const [now, setNow] = useState<number | null>(null)
-  useEffect(() => {
-    setNow(Date.now())
-  }, [created])
-  useEffect(() => {
-    const onPageShow = (e: PageTransitionEvent) => {
-      if (e.persisted) setNow(Date.now())
-    }
-    window.addEventListener('pageshow', onPageShow)
-    return () => window.removeEventListener('pageshow', onPageShow)
-  }, [])
-
-  const text = created && now ? formatAge(created, now) : null
-  if (!text) return null
-
-  return (
-    <Flex
-      // Hidden at lg (1024–1279): the full nav + admin actions leave no room there.
-      display={{ base: 'none', md: 'flex', lg: 'none', xl: 'flex' }}
-      alignItems="center"
-      gap="6px"
-      flexShrink={0}
-      whiteSpace="nowrap"
-      fontFamily={MONO}
-      fontSize="11px"
-      color="page.fg-subtle"
-      letterSpacing="0.02em"
-      className="tnum"
-      title={`Last commit · ${text}`}
-    >
-      <Box position="relative" w="6px" h="6px" aria-hidden>
-        <Box className="pulse-dot" position="absolute" inset={0} borderRadius="full" />
-        <Box w="6px" h="6px" borderRadius="full" bg="var(--live-green)" position="relative" />
-      </Box>
-      <Text as="span">
-        <span className="sr-only">Last commit </span>
-        {/* Beside the full nav (xl+, fixed-width header) only the age fits. */}
-        <Text as="span" aria-hidden display={{ base: 'inline', lg: 'none' }}>
-          Last commit ·{' '}
-        </Text>
-        {text}
-      </Text>
-    </Flex>
-  )
 }
 
 /**
@@ -154,6 +108,8 @@ const Header = ({
 }) => {
   const router = useRouter()
   const toast = useChromeToast()
+  // The chrome's words (F3: Chinese on a Chinese page) and the page's other-language versions.
+  const { t, links: langLinks } = useChromeUi()
   const [isAdmin, setIsAdmin] = useState(false)
   const { isOpen, onOpen, onClose } = useDisclosure()
   const { isOpen: cmdkOpen, onOpen: openCmdk, onClose: closeCmdk } = useDisclosure()
@@ -327,12 +283,12 @@ const Header = ({
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       sessionSeq.current += 1
       setIsAdmin(false)
-      toast({ status: 'success', title: 'Logged out' })
+      toast({ status: 'success', title: t.loggedOut })
       router.replace('/')
     } catch {
-      toast({ status: 'error', title: 'Logout failed' })
+      toast({ status: 'error', title: t.logoutFailed })
     }
-  }, [router, toast])
+  }, [router, toast, t])
 
   return (
     <>
@@ -361,7 +317,7 @@ const Header = ({
             <Link
               as={NextLink}
               href="/"
-              aria-label={`${brand} — home`}
+              aria-label={fillUi(t.homeLink, { brand })}
               display="inline-flex"
               alignItems="center"
               minH="44px"
@@ -386,7 +342,7 @@ const Header = ({
           {/* Center: primary nav (lg+) */}
           <Flex
             as="nav"
-            aria-label="Primary"
+            aria-label={t.primaryNav}
             alignItems="center"
             gap={1}
             display={{ base: 'none', lg: 'flex' }}
@@ -394,7 +350,7 @@ const Header = ({
             color="page.fg-secondary"
           >
             {navLinks.map((l) => {
-              const active = isActiveRoute(router.pathname, l.url)
+              const active = isActiveLink(router.pathname, l)
               return (
                 <Link
                   key={l.name}
@@ -436,6 +392,9 @@ const Header = ({
 
           {/* Right: utility */}
           <Flex alignItems="center" gap={2}>
+            {/* This page in the other language, when it has one (F3). */}
+            <LanguageSwitch links={langLinks} />
+
             {/* ⌘K search trigger — opens the full CommandPalette */}
             <Button
               size="sm"
@@ -454,12 +413,12 @@ const Header = ({
               onClick={() => openPalette()}
               onPointerEnter={preloadCommandPalette}
               onFocus={preloadCommandPalette}
-              aria-label="Open command palette"
+              aria-label={t.openPalette}
               aria-haspopup="dialog"
               aria-keyshortcuts={paletteKeyShortcuts(isMac, shortcutsOn)}
             >
               <Text as="span" display={{ base: 'none', xl: 'inline' }} mr={2}>
-                Search
+                {t.search}
               </Text>
               <Kbd
                 display={{ base: 'none', md: 'inline-block' }}
@@ -500,7 +459,7 @@ const Header = ({
                   fontWeight={500}
                   _hover={{ borderColor: 'page.border-strong', color: 'page.fg' }}
                 >
-                  Dashboard
+                  {t.dashboard}
                 </Button>
                 <Button
                   size="sm"
@@ -510,9 +469,9 @@ const Header = ({
                   fontSize="13px"
                   _hover={{ color: 'page.fg', bg: 'page.hover' }}
                   onClick={logout}
-                  title="Sign out of this browser (other devices: Admin → Security)"
+                  title={t.logoutTitle}
                 >
-                  Logout
+                  {t.logout}
                 </Button>
               </Flex>
             )}
@@ -524,7 +483,7 @@ const Header = ({
               onFocus={preloadMobileDrawer}
               variant="ghost"
               size="sm"
-              aria-label="Open menu"
+              aria-label={t.openMenu}
               aria-haspopup="dialog"
               aria-expanded={isOpen}
               aria-controls={MOBILE_MENU_DIALOG_ID}
@@ -542,6 +501,7 @@ const Header = ({
           onClose={onClose}
           socials={socials}
           navLinks={navLinks}
+          langLinks={langLinks}
           isAdmin={isAdmin}
           onLogout={logout}
           onSearch={searchFromDrawer}

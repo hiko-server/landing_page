@@ -4,12 +4,15 @@ import { log } from './log'
 import { uploadNamesIn } from './uploadVariants'
 import { LLMS_INDEX_PATH, LLMS_PATHS, markdownTwinPaths } from './markdownTwinPaths'
 import { invalidateSearchIndex } from './searchIndexCache'
+import { ZH_PATHS } from './zhRoutes'
+import { pagePublicPath, type PageName } from './pageNames'
 
 /**
  * On-demand ISR revalidation.
  *
  * /, /about, /cv, /cv/zh, /contact, /blog, /work, /now, /uses, the posts,
- * case studies and /colophon are statically generated with a revalidate window. Without this, an admin save
+ * case studies, /colophon and the Chinese pages (/zh, /zh/about, /zh/work,
+ * /zh/blog, /zh/contact) are statically generated with a revalidate window. Without this, an admin save
  * only shows up on the public page after that window elapses *and* someone
  * visits twice. Calling `res.revalidate()` right after a successful write
  * regenerates the affected pages immediately, so "Save" means "live".
@@ -122,6 +125,16 @@ export function revalidateSerially(path: string, regenerate: () => Promise<void>
 
 export type Collection = 'blog' | 'work'
 
+/**
+ * The Chinese pages (F3, lib/zhRoutes): /zh, /zh/about, /zh/work, /zh/blog,
+ * /zh/contact. Every Chinese page's chrome links the Chinese pages that
+ * exist, so a write that can make one appear or vanish — the home page's
+ * Chinese copy, the Chinese bio, a Chinese post or case study — refreshes
+ * all of them (with their English pages, whose language switch and
+ * hreflang follow; the other Chinese pages catch up within their window).
+ */
+export const ZH_PAGE_PATHS: readonly string[] = ZH_PATHS
+
 /** Upper bound on detail pages refreshed for one save (ISR covers the rest). */
 export const MAX_SIBLING_PATHS = 50
 
@@ -131,7 +144,7 @@ export const MAX_SIBLING_PATHS = 50
  * (contact copy, reasons and their kinds, availability, e-mail / phone) and
  * the CV pages (socials, portrait and availability feed the CV header).
  */
-export const HOME_PAGE_PATHS: readonly string[] = ['/', '/about', '/now', '/contact', '/cv', '/cv/zh']
+export const HOME_PAGE_PATHS: readonly string[] = ['/', '/about', '/now', '/contact', '/cv', '/cv/zh', ...ZH_PAGE_PATHS]
 
 /**
  * ISR pages that render the public CV: / (identity, hero facts, projects,
@@ -140,18 +153,30 @@ export const HOME_PAGE_PATHS: readonly string[] = ['/', '/about', '/now', '/cont
  * every public CV project), the CV itself (/cv, /cv/zh) and /publications
  * (the Publications section — PUBLICATIONS_STATIC_PATHS).
  */
-export const CV_PAGE_PATHS: readonly string[] = ['/', '/about', '/now', '/work', '/cv', '/cv/zh', '/publications']
+export const CV_PAGE_PATHS: readonly string[] = ['/', '/about', '/now', '/work', '/cv', '/cv/zh', '/publications', '/zh', '/zh/about', '/zh/work']
 
 /**
  * Pages outside a collection that a post or case-study save changes: the
  * home page lists the latest writing and links projects and roles to case
- * studies; /about links roles and CV projects to case studies. (The CV pages,
+ * studies; /about links roles and CV projects to case studies; the Chinese
+ * pages list the Chinese pieces (/zh, /zh/blog, /zh/work) and link the
+ * Chinese pages that exist (F3). (The CV pages,
  * CV_DOCUMENT_PATHS, are added by refreshCollection: their skill evidence
  * cites posts and case studies, and projects link their case study.)
  */
 export const COLLECTION_EXTRA_PATHS: Record<Collection, readonly string[]> = {
-  blog: ['/'],
-  work: ['/', '/about'],
+  blog: ['/', ...ZH_PAGE_PATHS],
+  work: ['/', '/about', ...ZH_PAGE_PATHS],
+}
+
+/**
+ * Public pages an owner-written single page renders on (lib/pageNames):
+ * its own page; the Chinese bio publishes /zh/about, so the English /about
+ * (its language switch, hreflang) and every Chinese page (their nav) follow.
+ */
+export function pageRevalidatePaths(name: PageName): string[] {
+  if (name === 'about-zh') return Array.from(new Set([pagePublicPath(name), '/about', ...ZH_PAGE_PATHS, '/cv/zh']))
+  return [pagePublicPath(name)]
 }
 
 /**
@@ -221,6 +246,12 @@ export const STATIC_CONTENT_PATHS = [
   '/contact',
   ...CV_DOCUMENT_PATHS,
   ...PUBLICATIONS_STATIC_PATHS,
+  // The Chinese pages (F3).
+  '/zh',
+  '/zh/about',
+  '/zh/work',
+  '/zh/blog',
+  '/zh/contact',
 ] as const
 
 // ── Edge notifications (Cloudflare purge, IndexNow) ──────────────────────
@@ -284,7 +315,9 @@ export function derivedPurgePaths(paths: readonly string[]): string[] {
       add(COLLECTION_DERIVED_PATHS)
       add(markdownTwinPaths([p]))
     } else if (p === '/now' || p === '/uses') add([SEARCH_INDEX_PATH, LLMS_INDEX_PATH])
-    else if (p === '/about' || p === '/contact') add([SEARCH_INDEX_PATH])
+    else if (p === '/about' || p === '/contact' || p === '/zh/about' || p === '/zh/contact') add([SEARCH_INDEX_PATH])
+    // The sitemap and /llms.txt list the Chinese pages only while they exist.
+    if (ZH_PAGE_PATHS.includes(p)) add(['/sitemap.xml', LLMS_INDEX_PATH])
     else if (CV_FILE_PATHS[p]) add([...CV_FILE_PATHS[p], LLMS_INDEX_PATH, SEARCH_INDEX_PATH])
     else if (p === '/publications') add(['/sitemap.xml', LLMS_INDEX_PATH, SEARCH_INDEX_PATH])
   }

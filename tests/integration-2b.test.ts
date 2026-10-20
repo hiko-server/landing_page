@@ -84,7 +84,8 @@ test('a project pointing at an unpublished case study ships no slug on the home 
   const [secret, open] = (out[0] as { projectExperience: Array<Record<string, unknown>> }).projectExperience
   assert.equal(secret.caseStudy, '')
   assert.equal(open.caseStudy, 'open-work')
-  for (const f of ['pages/index.tsx', 'pages/about/index.tsx']) {
+  // The home and about loaders (shared with /zh and /zh/about, F3).
+  for (const f of ['lib/homePage.ts', 'lib/aboutPage.ts']) {
     const src = fs.readFileSync(path.join(process.cwd(), f), 'utf8')
     assert.match(src, /withEvidenceLinks\(/, `${f} resolves evidence links`)
   }

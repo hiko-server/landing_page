@@ -178,16 +178,6 @@ export const QrCodeIcon = /*#__PURE__*/ makeUiIcon('QrCodeIcon', [
   ['path', { d: 'M12 21v-1' }],
 ])
 
-/** Lucide "languages": the article's language switch (F2). */
-export const LanguagesIcon = /*#__PURE__*/ makeUiIcon('LanguagesIcon', [
-  ['path', { d: 'm5 8 6 6' }],
-  ['path', { d: 'm4 14 6-6 2-3' }],
-  ['path', { d: 'M2 5h12' }],
-  ['path', { d: 'M7 2h1' }],
-  ['path', { d: 'm22 22-5-10-5 10' }],
-  ['path', { d: 'M14 18h6' }],
-])
-
 /** Lucide "lock": a privately shared CV (/cv/r/…, E4). */
 export const LockIcon = /*#__PURE__*/ makeUiIcon('LockIcon', [
   ['rect', { x: '3', y: '11', width: '18', height: '11', rx: '2', ry: '2' }],

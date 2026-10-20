@@ -13,6 +13,7 @@
  */
 
 import { formatSiteTime, parseInstant } from '../schedule/time'
+import { isPageName, pageAdminPath } from '../pageNames'
 
 export const AUDIT_AREAS = [
   'post',
@@ -110,7 +111,7 @@ function hostOf(url: unknown): string {
 }
 
 const COLLECTION_NOUN = { post: 'post', work: 'case study' } as const
-const PAGE_LABEL: Record<string, string> = { now: '/now', uses: '/uses', about: 'the About bio' }
+const PAGE_LABEL: Record<string, string> = { now: '/now', uses: '/uses', about: 'the About bio', 'about-zh': 'the Chinese bio (/zh/about)' }
 
 function collectionWrite(area: 'post' | 'work', req: AuditRequest, facts: AuditFacts): AuditDescription | null {
   const noun = COLLECTION_NOUN[area]
@@ -225,8 +226,8 @@ export function describeAdminWrite(route: string, req: AuditRequest, facts: Audi
       if (!PAGE_LABEL[name]) return null
       const empty = !str(b.body, 10)
       const summary = empty
-        ? name === 'about'
-          ? 'Removed the About bio'
+        ? name === 'about' || name === 'about-zh'
+          ? `Removed ${PAGE_LABEL[name]}`
           : `Cleared ${PAGE_LABEL[name]} (automatic version shown)`
         : `Saved ${PAGE_LABEL[name]}`
       return { action: empty ? 'page.clear' : 'page.save', area: 'page', target: name, summary }
@@ -383,7 +384,8 @@ export function auditTargetHref(area: string, target: string | null): string | n
     case 'work':
       return target && SLUG_RE.test(target) ? `/admin/work/edit?slug=${encodeURIComponent(target)}` : '/admin/work'
     case 'page':
-      return target && PAGE_LABEL[target] ? `/admin/${target}` : null
+      // The Chinese bio is edited beside the English one (/admin/about?lang=zh).
+      return target && PAGE_LABEL[target] && isPageName(target) ? pageAdminPath(target) : null
     case 'cv':
       return '/admin/dashboard?tab=cv'
     case 'home':

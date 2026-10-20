@@ -20,6 +20,7 @@ import { footnoteOptions } from './rehype/footnotes'
 import rehypeCodeThemeAttr from './rehype/codeThemeAttr'
 import rehypeImages, { type PlaceholderResolver, type SizeResolver, type SrcSetResolver } from './rehype/images'
 import rehypeLangSpans from './rehype/langSpans'
+import { pageFixedLang, pagePublicPath, type PageName } from './pageNames'
 import rehypeAutospace from './rehype/autospace'
 import { resolveImageSize } from './rehype/imageSize'
 import { placeholderDataUrl, variantAvifSrcSet, variantSrcSet, variantState } from './uploadVariants'
@@ -485,18 +486,22 @@ export async function getWork(slug: string, opts: GetOptions = {}): Promise<MDXR
   return render(entry, item.body)
 }
 
-// ── Static pages (now, uses, about) ───────────────────────────────────────
-/** A single owner-written page; null when it was never stored (callers check the body for emptiness). */
-export async function getStaticMdxPage(name: 'now' | 'uses' | 'about'): Promise<MDXRendered<PageFrontmatter> | null> {
+// ── Static pages (now, uses, about, about-zh) ────────────────────────────
+/**
+ * A single owner-written page; null when it was never stored (callers check
+ * the body for emptiness). The Chinese bio is Chinese whatever its words
+ * (lib/pageNames pageFixedLang), unless its frontmatter says otherwise.
+ */
+export async function getStaticMdxPage(name: PageName): Promise<MDXRendered<PageFrontmatter> | null> {
   const page = getPage(name)
   if (!page) return null
   const fm = cleanFrontmatter(page.frontmatter as PageFrontmatter, name)
   return render(
     {
       slug: name,
-      permalink: `/${name}`,
+      permalink: pagePublicPath(name),
       readingMinutes: readingMinutes(page.body),
-      lang: langOf(fm, page.body),
+      lang: langOf({ ...fm, lang: (fm as { lang?: unknown }).lang || pageFixedLang(name) || undefined }, page.body),
       updatedAt: null,
       frontmatter: fm,
     },

@@ -17,6 +17,7 @@ import { hasTag, resolveTagParam, tagCounts, tagHref, tagSlug, tagSlugList, TAG_
 import { projectLinks, relatedArticles, toArticleLink, type ArticleLink } from '../components/Article/collectionNav'
 import { archiveRows, archiveYears } from '../lib/projectArchive'
 import { SECTION_BY_NAME } from '../lib/cvSections'
+import { LIST_UI } from '../lib/uiStrings/lists'
 
 for (const k of ['R2_ENDPOINT', 'R2_BUCKET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY']) delete process.env[k]
 
@@ -268,7 +269,8 @@ test('E8 the CV Studio project form offers role and stack for the archive', () =
 
 test('E8 ProjectArchive: a real table from md up and cards on phones, case-study links, nothing without projects', async () => {
   const { default: ProjectArchive } = await import('../components/Work/ProjectArchive')
-  assert.equal(html(createElement(ProjectArchive, { rows: [], total: 0 })), '')
+  const t = LIST_UI.en.archive
+  assert.equal(html(createElement(ProjectArchive, { rows: [], total: 0, t })), '')
   const row = {
     key: '0',
     title: 'WeGreen AI',
@@ -281,7 +283,7 @@ test('E8 ProjectArchive: a real table from md up and cards on phones, case-study
     links: [{ kind: 'site' as const, url: 'https://wegreen.example' }],
     caseStudy: { slug: 'swcs', title: 'SWCS', permalink: '/work/swcs' },
   }
-  const out = html(createElement(ProjectArchive, { rows: [row], total: 1 }))
+  const out = html(createElement(ProjectArchive, { rows: [row], total: 1, t }))
   assert.match(out, /<table/)
   assert.match(out, /<caption[^>]*>All projects from the CV, newest first<\/caption>/)
   assert.equal((out.match(/<th[^>]*scope="col"/g) || []).length, 5)
@@ -291,7 +293,13 @@ test('E8 ProjectArchive: a real table from md up and cards on phones, case-study
   assert.match(out, /Case study<span class="sr-only">: SWCS<\/span>/)
   assert.match(out, /<a[^>]*target="_blank"[^>]*href="https:\/\/wegreen\.example"/)
   // Columns no project fills are left out instead of a column of dashes.
-  const bare = html(createElement(ProjectArchive, { rows: [{ ...row, role: '', stack: [], links: [], caseStudy: null }], total: 1 }))
+  const bare = html(createElement(ProjectArchive, { rows: [{ ...row, role: '', stack: [], links: [], caseStudy: null }], total: 1, t }))
   assert.equal((bare.match(/<th[^>]*scope="col"/g) || []).length, 2)
   assert.ok(!bare.includes('Built with'))
+  // F3: /zh/work lists the Chinese CV's projects with the archive in Chinese.
+  const zh = html(createElement(ProjectArchive, { rows: [row], total: 1, t: LIST_UI['zh-Hans'].archive }))
+  assert.match(zh, /<caption[^>]*>简历中的全部项目，按时间从新到旧排列<\/caption>/)
+  assert.match(zh, /简历中的 1 个项目/)
+  assert.match(zh, /项目案例<span class="sr-only">: SWCS<\/span>/)
+  assert.ok(!zh.includes('Built with') && !zh.includes('All projects'))
 })

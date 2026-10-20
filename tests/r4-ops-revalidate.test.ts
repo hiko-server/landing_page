@@ -202,7 +202,7 @@ test('derived purge paths and helpers', () => {
   // The /about bio is part of the search index (G1 / A4).
   assert.deepEqual(derivedPurgePaths(['/about']), ['/api/search-index'])
   // ISR pages only (/ and /about since home-about G1, /cv and /cv/zh since cv-docs G1, /contact since cv-studio-contact G1, /publications since publications).
-  assert.deepEqual([...STATIC_CONTENT_PATHS], ['/', '/about', '/blog', '/work', '/now', '/uses', '/colophon', '/contact', '/cv', '/cv/zh', '/publications'])
+  assert.deepEqual([...STATIC_CONTENT_PATHS], ['/', '/about', '/blog', '/work', '/now', '/uses', '/colophon', '/contact', '/cv', '/cv/zh', '/publications', '/zh', '/zh/about', '/zh/work', '/zh/blog', '/zh/contact'])
   // A CV page change purges its downloadable files with it, /llms.txt (it links a CV language only while it has public content, G9) and the search index (EN + ZH CV entries, F4 / J1).
   assert.deepEqual(derivedPurgePaths(['/cv']), ['/cv.pdf', '/cv.txt', '/cv.json', '/llms.txt', '/api/search-index'])
   assert.deepEqual(derivedPurgePaths(['/cv/zh']), ['/cv/zh.pdf', '/cv/zh.txt', '/cv/zh.json', '/llms.txt', '/api/search-index'])

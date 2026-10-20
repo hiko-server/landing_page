@@ -4,6 +4,7 @@ import { useRouter } from 'next/router'
 import { Box, Button, HStack } from '@chakra-ui/react'
 import { resolveTagParam, TAG_PREPAINT_SCRIPT, TAG_PREPAINT_STYLE_ID, type TagCount } from '../../lib/tagFilter'
 import { beginViewTransition, prefersReducedMotion } from '../../lib/viewTransition'
+import { fillUi } from '../../lib/uiStrings'
 
 /**
  * URL-synced tag filter for /blog and /work (D8, lib/tagFilter.ts).
@@ -74,6 +75,8 @@ export default function TagFilterBar({
   onSelect,
   label,
   noun,
+  allLabel = 'all',
+  announcement = '{n} {noun} tagged {tag}',
   matching,
 }: {
   tags: readonly TagCount[]
@@ -85,6 +88,10 @@ export default function TagFilterBar({
   label: string
   /** Nouns for the announcement ("post" / "posts"). */
   noun: { one: string; many: string }
+  /** The chip that clears the filter, in the page's language ("all", "全部"). */
+  allLabel?: string
+  /** What a screen reader hears after a choice ({n}, {noun}, {tag}; lib/uiStrings/lists). */
+  announcement?: string
   /** Items shown under the active tag. */
   matching: number
 }) {
@@ -93,7 +100,7 @@ export default function TagFilterBar({
     <Box mb={8}>
       <HStack role="group" aria-label={label} spacing={2} flexWrap="wrap" rowGap={2}>
         <Button {...chip(active === null)} aria-pressed={active === null} onClick={() => onSelect(null)}>
-          all ({total})
+          {allLabel} ({total})
         </Button>
         {tags.map((t) => (
           <Button key={t.slug} {...chip(active === t.slug)} aria-pressed={active === t.slug} onClick={() => onSelect(active === t.slug ? null : t.slug)}>
@@ -102,7 +109,7 @@ export default function TagFilterBar({
         ))}
       </HStack>
       <Box role="status" aria-live="polite" className="sr-only">
-        {activeTag ? `${matching} ${matching === 1 ? noun.one : noun.many} tagged ${activeTag.tag}` : ''}
+        {activeTag ? fillUi(announcement, { n: matching, noun: matching === 1 ? noun.one : noun.many, tag: activeTag.tag }) : ''}
       </Box>
     </Box>
   )

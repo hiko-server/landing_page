@@ -8,19 +8,17 @@ import PageHeader from '../../components/General-UI/PageHeader'
 import PageGrid from '../../components/General-UI/PageGrid'
 import EmptyState from '../../components/General-UI/EmptyState'
 import { useSpotlight } from '../../components/General-UI/useSpotlight'
-import CoverFrame, { type CoverView } from '../../components/Work/CoverFrame'
+import CoverFrame from '../../components/Work/CoverFrame'
 import ProjectArchive, { archiveColumns } from '../../components/Work/ProjectArchive'
 import TagFilterBar, { TagPrepaint, useTagFilter } from '../../components/Article/TagFilter'
-import { listWorkInDisplayOrder } from '../../lib/mdx'
-import { coverWordmark, primaryOutcome } from '../../lib/caseStudy'
 import { hasTag, tagCounts, tagSlugList } from '../../lib/tagFilter'
-import type { ArchiveRow } from '../../lib/projectArchive'
 import { absUrl, PERSON_NAME } from '../../lib/schema'
 import { ogPresetUrl } from '../../lib/og/presets'
 import { cssTransition, textStyleProps } from '../../theme/tokens'
 import { StarIcon } from '../../components/Icons/ui/content'
-import { alsoInOf, collapseTranslations, type AlsoIn } from '../../lib/translations'
-import { LIST_UI } from '../../lib/uiStrings/lists'
+import { fillUi } from '../../lib/uiStrings'
+import type { ListStrings } from '../../lib/uiStrings/lists'
+import type { WorkCardData, WorkIndexProps } from '../../lib/indexPages'
 
 /**
  * /work — case studies, featured first, then "All projects": every project
@@ -34,33 +32,17 @@ import { LIST_UI } from '../../lib/uiStrings/lists'
  * is shareable as `?tag=` (D8). Opening a card morphs its title and cover
  * into the case-study page's, and Back flies them home (data-vt-morph,
  * lib/viewTransition.ts). ISR (60 s), regenerated on case-study and CV saves.
+ *
+ * /zh/work (pages/zh/work.tsx, F3) renders this page with the case studies
+ * in Chinese, the Chinese CV's projects and Chinese words; it exists only
+ * while a Chinese case study is published (lib/indexPages). The words arrive
+ * with the props in the page's language (lib/uiStrings/lists).
  */
 
-type WorkCardData = {
-  slug: string
-  permalink: string
-  lang: string
-  title: string
-  description: string | null
-  period: string | null
-  status: 'live' | 'archived' | 'case-study' | null
-  featured: boolean
-  tech: string[]
-  cover: CoverView | null
-  /** Short name for the typographic cover ("SWCS"). */
-  wordmark: string
-  /** "93.59% offline classifier accuracy" — the first of the owner's metrics; null when none. */
-  metric: string | null
-  /** Languages the case study is also published in (F2); the card shows the English version where it exists. */
-  alsoIn: AlsoIn[]
-}
+export type Props = WorkIndexProps
 
-type Props = {
-  items: WorkCardData[]
-  archive: ArchiveRow[]
-}
-
-const titleLang = (w: WorkCardData) => (w.lang === 'en' ? undefined : w.lang)
+/** `lang` of a card's own text where it is not the page's language. */
+const ownLang = (w: WorkCardData, pageLang: string) => (w.lang === pageLang ? undefined : w.lang)
 
 const FEATURED_SIZES = '(min-width: 768px) 320px, calc(100vw - 2rem)'
 const GRID_SIZES = '(min-width: 1100px) 500px, (min-width: 768px) calc(50vw - 3rem), calc(100vw - 2rem)'
@@ -70,12 +52,12 @@ const liveColor = 'status.live'
 const featuredColor = 'status.featured'
 
 /** Status shown on a card: live and archived say something; every entry here is a case study. */
-const STATUS: Record<'live' | 'archived', { label: string; color: string; border: string }> = {
-  live: { label: 'Live', color: liveColor, border: 'status.live-border' },
-  archived: { label: 'Archived', color: 'page.fg-secondary', border: 'page.border-strong' },
+const STATUS: Record<'live' | 'archived', { color: string; border: string }> = {
+  live: { color: liveColor, border: 'status.live-border' },
+  archived: { color: 'page.fg-secondary', border: 'page.border-strong' },
 }
 
-function StatusPill({ status }: { status: WorkCardData['status'] }) {
+function StatusPill({ status, t }: { status: WorkCardData['status']; t: ListStrings }) {
   if (status !== 'live' && status !== 'archived') return null
   const s = STATUS[status]
   return (
@@ -94,12 +76,13 @@ function StatusPill({ status }: { status: WorkCardData['status'] }) {
       flexShrink={0}
     >
       {status === 'live' ? <Box as="span" aria-hidden w="6px" h="6px" borderRadius="pill" bg="currentColor" /> : null}
-      {s.label}
+      {t.work[status]}
     </Flex>
   )
 }
 
-function WorkCard({ w, featured, first }: { w: WorkCardData; featured: boolean; first: boolean }) {
+function WorkCard({ w, featured, first, t, pageLang }: { w: WorkCardData; featured: boolean; first: boolean; t: ListStrings; pageLang: string }) {
+  const titleLang = ownLang(w, pageLang)
   const cover = (
     <CoverFrame
       cover={w.cover}
@@ -119,21 +102,23 @@ function WorkCard({ w, featured, first }: { w: WorkCardData; featured: boolean; 
         {featured ? (
           <Text textStyle="label" color={featuredColor} className="tnum" display="inline-flex" alignItems="center" gap={1.5}>
             <StarIcon size="xs" />
-            <span>Featured · {w.period || '—'}</span>
+            <span>
+              {t.work.featured} · {w.period || '—'}
+            </span>
           </Text>
         ) : (
           <Text fontFamily="mono" fontSize="label" color="page.fg-secondary" className="tnum">
             {w.period || '—'}
           </Text>
         )}
-        <StatusPill status={w.status} />
+        <StatusPill status={w.status} t={t} />
       </Flex>
       <Heading
         as="h2"
         {...textStyleProps(featured ? 'title-lg' : 'title-md')}
         fontWeight={500}
         mb={featured ? 3 : 2}
-        lang={titleLang(w)}
+        lang={titleLang}
         data-vt-part="title"
       >
         <NextLink href={w.permalink} className="stretched-link">
@@ -141,13 +126,13 @@ function WorkCard({ w, featured, first }: { w: WorkCardData; featured: boolean; 
         </NextLink>
       </Heading>
       {w.description && (
-        <Text color="page.fg-secondary" fontSize="small" mb={4} noOfLines={featured ? 4 : 3} lang={titleLang(w)}>
+        <Text color="page.fg-secondary" fontSize="small" mb={4} noOfLines={featured ? 4 : 3} lang={titleLang}>
           {w.description}
         </Text>
       )}
       {w.alsoIn.length > 0 && (
         <Text fontFamily="mono" fontSize="label" color="page.fg-secondary" mt={-2} mb={4} data-also-in="">
-          {LIST_UI.en.alsoIn}{' '}
+          {t.alsoIn}{' '}
           {w.alsoIn.map((l, i) => (
             <span key={l.lang}>
               {i > 0 ? ', ' : ''}
@@ -157,7 +142,7 @@ function WorkCard({ w, featured, first }: { w: WorkCardData; featured: boolean; 
         </Text>
       )}
       {w.metric ? (
-        <Text as="p" display="flex" alignItems="baseline" gap={2} fontSize="small" fontWeight={500} color="page.fg" mb={4} className="tnum" lang={titleLang(w)}>
+        <Text as="p" display="flex" alignItems="baseline" gap={2} fontSize="small" fontWeight={500} color="page.fg" mb={4} className="tnum" lang={titleLang}>
           <Box as="span" aria-hidden w="6px" h="6px" borderRadius="pill" bg="var(--accent)" flexShrink={0} transform="translateY(-1px)" />
           {w.metric}
         </Text>
@@ -223,7 +208,11 @@ function WorkCard({ w, featured, first }: { w: WorkCardData; featured: boolean; 
   )
 }
 
-export default function WorkIndex({ items, archive }: Props) {
+export default function WorkIndex({ items, archive, ui, lang, alternates, nameZh }: Props) {
+  const t = ui.t
+  const zh = lang !== 'en'
+  const path = zh ? '/zh/work' : '/work'
+  const owner = zh && nameZh ? `${nameZh}（Lucian）` : PERSON_NAME
   const gridRef = useRef<HTMLDivElement>(null)
   useSpotlight(gridRef)
 
@@ -244,22 +233,27 @@ export default function WorkIndex({ items, archive }: Props) {
   return (
     <>
       <CustomHead
-        title="Work"
+        title={t.work.title}
         description={
-          `Selected project case studies and engineering write-ups by ${PERSON_NAME}` +
-          (items.length
-            ? ` — including ${items
-                .slice(0, 2)
-                .map((w) => w.title)
-                .join(' and ')}.`
-            : '.')
+          items.length
+            ? fillUi(t.work.descriptionWith, {
+                name: owner,
+                titles: items
+                  .slice(0, 2)
+                  .map((w) => w.title)
+                  .join(t.work.and),
+              })
+            : fillUi(t.work.description, { name: owner })
         }
-        url={absUrl('/work')}
+        url={absUrl(path)}
         image={ogPresetUrl('work')}
+        lang={lang}
+        nameZh={nameZh}
+        alternates={alternates}
         jsonLd={{
           '@context': 'https://schema.org',
           '@type': 'ItemList',
-          name: 'Selected Work',
+          name: t.work.listName,
           itemListElement: items.map((w, i) => ({
             '@type': 'ListItem',
             position: i + 1,
@@ -270,11 +264,7 @@ export default function WorkIndex({ items, archive }: Props) {
       />
       <HeaderFooter>
         <PageGrid py={[12, 16]}>
-          <PageHeader
-            eyebrow="Case studies"
-            title="Projects that shipped, with the story."
-            lede="Each entry is a written case study: the problem, the constraints, the decisions, and the outcome. No bullet points pretending to be a CV."
-          />
+          <PageHeader eyebrow={t.work.eyebrow} title={t.work.heading} lede={t.work.lede} />
 
           {showFilter ? (
             <TagFilterBar
@@ -282,8 +272,10 @@ export default function WorkIndex({ items, archive }: Props) {
               total={items.length + archive.length}
               active={active}
               onSelect={select}
-              label="Filter projects by technology"
-              noun={{ one: 'project', many: 'projects' }}
+              label={t.work.filterLabel}
+              noun={{ one: t.work.nounOne, many: t.work.nounMany }}
+              allLabel={t.allTags}
+              announcement={t.taggedAnnouncement}
               matching={shown.length + shownArchive.length}
             />
           ) : null}
@@ -291,95 +283,42 @@ export default function WorkIndex({ items, archive }: Props) {
 
           {items.length === 0 ? (
             <EmptyState
-              title="No case studies yet"
+              title={t.work.emptyTitle}
               actions={[
-                { label: 'Writing', href: '/blog' },
-                { label: 'CV', href: '/cv' },
+                { label: t.nav.writing, href: zh ? '/zh/blog' : '/blog' },
+                { label: t.nav.cv, href: zh ? '/cv/zh' : '/cv' },
               ]}
+              actionsLabel={t.whereNext}
             >
-              Case studies will appear here as they&rsquo;re published.
+              {t.work.emptyBody}
             </EmptyState>
           ) : (
             <Box ref={gridRef}>
               {active && shown.length === 0 ? (
                 <Text textStyle="meta" color="page.fg-secondary" py={4}>
-                  No case study uses this yet — see the projects below.
+                  {t.work.noCaseStudyUses}
                 </Text>
               ) : null}
               {featured.length > 0 && (
                 <Flex direction="column" gap={4} mb={[6, 10]}>
                   {featured.map((w) => (
-                    <WorkCard key={w.slug} w={w} featured first={w.slug === firstSlug} />
+                    <WorkCard key={w.slug} w={w} featured first={w.slug === firstSlug} t={t} pageLang={lang} />
                   ))}
                 </Flex>
               )}
               <SimpleGrid columns={[1, 1, 2]} spacing={[4, 6]}>
                 {rest.map((w) => (
-                  <WorkCard key={w.slug} w={w} featured={false} first={w.slug === firstSlug} />
+                  <WorkCard key={w.slug} w={w} featured={false} first={w.slug === firstSlug} t={t} pageLang={lang} />
                 ))}
               </SimpleGrid>
             </Box>
           )}
 
-          <ProjectArchive rows={shownArchive} total={archive.length} columns={columns} emptyNote={active ? 'No project in the archive lists this.' : undefined} />
+          <ProjectArchive rows={shownArchive} total={archive.length} columns={columns} emptyNote={active ? t.archive.noneUsesThis : undefined} t={t.archive} />
         </PageGrid>
       </HeaderFooter>
     </>
   )
 }
 
-const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null)
-
-export const getStaticProps: GetStaticProps<Props> = async () => {
-  const [{ resolveCover }, { archiveRows }] = await Promise.all([import('../../lib/coverImage'), import('../../lib/projectArchive')])
-  const works = listWorkInDisplayOrder()
-  // One card per case study: a piece published in several languages shows its English version (F2).
-  const items: WorkCardData[] = collapseTranslations(works, 'en').map(({ entry: w, alsoIn }) => {
-    const fm = w.frontmatter
-    return {
-      slug: w.slug,
-      permalink: w.permalink,
-      lang: w.lang,
-      title: fm.title,
-      description: str(fm.description),
-      period: str(fm.period),
-      status: fm.status === 'live' || fm.status === 'archived' || fm.status === 'case-study' ? fm.status : null,
-      featured: fm.featured === true,
-      tech: Array.isArray(fm.tech) ? fm.tech.filter((t): t is string => typeof t === 'string' && !!t.trim()) : [],
-      cover: resolveCover(fm.cover, '', fm.coverFocus),
-      wordmark: coverWordmark(fm.title),
-      metric: primaryOutcome(fm.outcomes) || null,
-      alsoIn: alsoInOf(alsoIn),
-    }
-  })
-
-  let archive: ArchiveRow[] = []
-  try {
-    const { readPublicCvSections } = await import('../../lib/cvdata')
-    const cv = readPublicCvSections('website', ['project'], ['en'])
-    archive = archiveRows(
-      cv.en,
-      works.map((w) => ({
-        slug: w.slug,
-        title: w.frontmatter.title,
-        permalink: w.permalink,
-        role: w.frontmatter.role,
-        tech: w.frontmatter.tech,
-        link: w.frontmatter.link,
-        repo: w.frontmatter.repo,
-      })),
-    )
-  } catch {
-    /* no CV: the archive is left out */
-  }
-
-  return {
-    props: {
-      items,
-      archive,
-      // Whether /publications exists, for the nav link (lib/publicationsData).
-      ...(await import('../../lib/publicationsData')).chromePublicationsProp(),
-    },
-    revalidate: 60,
-  }
-}
+export const getStaticProps: GetStaticProps<Props> = async () => (await import('../../lib/indexPages')).loadWorkIndex('en')

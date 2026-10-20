@@ -30,14 +30,14 @@ import {
   INQUIRY_LIMITS,
   INQUIRY_TIMELINES,
   INTENT_FIELDS,
-  INTENT_FIELD_COPY,
-  TIMELINE_LABEL,
   inquiryRows,
   intentOf,
   isInquiryTimeline,
   reasonsOf,
   type InquiryIntent,
 } from '../../lib/inquiry'
+import { fillUi } from '../../lib/uiStrings'
+import { CONTACT_EN, type ContactStrings } from '../../lib/uiStrings/contact-en'
 import CopyButton from '../General-UI/CopyButton'
 import EmailText from '../Common/EmailText'
 import QrSvg from '../Common/QrSvg'
@@ -84,15 +84,20 @@ type HomeData = {
   availability?: Availability | null
 }
 
-type Availability = { status?: string; bookingUrl?: string; workStatus?: string }
+type Availability = { status?: string; bookingUrl?: string; workStatus?: string; workStatusLang?: string }
+
+/**
+ * A reason the form offers: its label in the page's language, its kind of
+ * inquiry and, when the label is the owner's English one on a Chinese page
+ * (no Chinese name written), its language.
+ */
+export type ReasonOption = { label: string; intent: InquiryIntent; lang?: string }
 
 const MotionBox = m(Box)
 
-// Built-in defaults — used when home.json's contact block is missing or
-// any individual field is blank. The built-in reasons live in lib/inquiry
-// (DEFAULT_REASONS) with their inquiry kinds.
-const DEFAULT_EYEBROW = 'Reach me'
-const DEFAULT_BLURB = 'I usually reply within 24 hours.'
+// Built-in defaults (lib/uiStrings/contact `panel`) are used when the
+// contact block is missing or a field is blank. The built-in reasons live in
+// lib/inquiry (DEFAULT_REASONS) with their inquiry kinds.
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
@@ -131,11 +136,16 @@ const nextStepProps = {
 
 type Sent = { name: string; email: string; subject: string; intent: InquiryIntent }
 
-/** Heading of the disclosed structured fields per inquiry kind. */
-const DISCLOSURE_TITLE: Record<Exclude<InquiryIntent, 'other'>, string> = {
-  role: 'About the role',
-  freelance: 'About the project',
-  collab: 'About the collaboration',
+/**
+ * A dictionary sentence with React nodes in its `{name}` places (the
+ * confirmation's subject and address, the human check's numbers), so each
+ * language keeps its own word order.
+ */
+function fillNodes(template: string, values: Readonly<Record<string, React.ReactNode>>): React.ReactNode[] {
+  return template.split(/(\{\w+\})/).map((part, i) => {
+    const m = /^\{(\w+)\}$/.exec(part)
+    return <React.Fragment key={i}>{m && m[1] in values ? values[m[1]] : part}</React.Fragment>
+  })
 }
 
 /** Owner's https booking link, '' otherwise (never another scheme). */
@@ -184,6 +194,10 @@ const actionRow = {
  *     mismatch) with morphing copy buttons; /contact adds "Save contact
  *     (.vcf)" and a QR code for the vCard (`vcard`). The confirmation offers
  *     the CV, the contact card and the owner's booking link.
+ *   - Every word is the page's (`t`, lib/uiStrings/contact): /zh/contact
+ *     passes the Chinese ones and its reasons (`reasonOptions`: the owner's
+ *     Chinese names, the kinds of the English list), and a refusal from the
+ *     API is told by its `code` (F3).
  */
 export default function ContactPro({
   home,
@@ -194,6 +208,9 @@ export default function ContactPro({
   availability: availabilityProp,
   retentionDays: retentionProp,
   cvHref = '/cv',
+  t = CONTACT_EN,
+  lang = 'en',
+  reasonOptions,
 }: {
   home?: HomeData
   formOnly?: boolean
@@ -209,21 +226,33 @@ export default function ContactPro({
   retentionDays?: number
   /** Where "Read my CV" points after sending. */
   cvHref?: string
+  /** The page's words (lib/uiStrings/contact; English by default) and its language. */
+  t?: ContactStrings
+  lang?: string
+  /** The reasons in the page's language with their kinds (default: the home document's, in English). */
+  reasonOptions?: readonly ReasonOption[]
 }) {
   const reduce = useReducedMotion()
+  const englishPage = lang === 'en'
 
   // Admin copy wins when non-blank; blank / missing entries use the defaults.
-  const reasons = useMemo(() => reasonsOf(home?.contact), [home?.contact])
+  const options = useMemo<readonly ReasonOption[]>(
+    () => reasonOptions ?? reasonsOf(home?.contact).map((r) => ({ label: r, intent: intentOf(r, home?.contact) })),
+    [reasonOptions, home?.contact],
+  )
+  const reasons = useMemo(() => options.map((o) => o.label), [options])
   // The marker is an icon now; an owner eyebrow typed with the old ▸ glyph keeps one marker.
-  const eyebrowText = (home?.contact?.eyebrow ?? '').trim().replace(/^▸\s*/, '') || DEFAULT_EYEBROW
-  const headingText = (home?.contact?.heading ?? '').trim() || home?.hero?.brand || 'Contact'
-  const blurbText = (home?.contact?.blurb ?? '').trim() || DEFAULT_BLURB
+  const eyebrowText = (home?.contact?.eyebrow ?? '').trim().replace(/^▸\s*/, '') || t.panel.eyebrow
+  const headingText = (home?.contact?.heading ?? '').trim() || home?.hero?.brand || t.panel.heading
+  const blurbText = (home?.contact?.blurb ?? '').trim() || t.panel.blurb
   const email = (home?.hero?.email || '').trim()
   const phone = (home?.hero?.phone || '').trim()
   const mailtoBase = email ? safeHref(`mailto:${email}`) : ''
   const availability = availabilityProp === undefined ? home?.availability : availabilityProp
   const booking = availability?.status ? bookingHref(availability.bookingUrl) : ''
   const workStatus = availability?.status && typeof availability.workStatus === 'string' ? availability.workStatus.trim() : ''
+  // On a Chinese page the line is the owner's Chinese one, else their English one (marked so).
+  const workStatusLang = englishPage ? undefined : availability?.workStatusLang
   const vcardHref = vcard?.href || '/api/vcard'
 
   const [values, setValues] = useState<ContactValues>({
@@ -237,13 +266,14 @@ export default function ContactPro({
   })
   const set = (k: keyof ContactValues) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setValues((v) => ({ ...v, [k]: e.target.value }))
-  const intent = intentOf(values.reason, home?.contact)
+  const intent: InquiryIntent = options.find((o) => o.label === values.reason)?.intent ?? 'other'
+  const reasonLang = options.find((o) => o.label === values.reason)?.lang
   // The structured fields appear once the visitor picks a reason (or a draft
   // brings one back), so the form starts short; the kind is sent either way.
   const [reasonChosen, setReasonChosen] = useState(false)
   const shownIntent: InquiryIntent = reasonChosen ? intent : 'other'
   const disclosed = INTENT_FIELDS[shownIntent]
-  const copy = shownIntent === 'other' ? null : INTENT_FIELD_COPY[shownIntent]
+  const copy = shownIntent === 'other' ? null : t.fields[shownIntent]
   const payloadOf = (v: ContactValues) => ({ ...inquiryPayload(v, shownIntent), intent })
 
   // Retention period for the privacy notice: the page's value, else what the nonce endpoint reports.
@@ -256,10 +286,8 @@ export default function ContactPro({
   useEffect(() => {
     if (lastIntent.current === shownIntent) return
     lastIntent.current = shownIntent
-    setDisclosureNote(
-      copy ? `Added optional fields: ${disclosed.map((f) => copy[f].label).join(', ')}.` : 'No extra fields for this reason.',
-    )
-  }, [shownIntent, copy, disclosed])
+    setDisclosureNote(copy ? fillUi(t.disclosure.added, { fields: disclosed.map((f) => copy[f].label).join(t.hint.sep) }) : t.disclosure.none)
+  }, [shownIntent, copy, disclosed, t])
 
   const [touched, setTouched] = useState<Partial<Record<ContactField, boolean>>>({})
   const touch = (k: ContactField) => () => setTouched((t) => (t[k] ? t : { ...t, [k]: true }))
@@ -275,10 +303,10 @@ export default function ContactPro({
   const [mathPair, setMathPair] = useState<{ a: number; b: number } | null>(null)
   const expectedMath = mathPair ? mathPair.a + mathPair.b : null
 
-  const errors = validateContact(values, expectedMath, shownIntent)
+  const errors = validateContact(values, expectedMath, shownIntent, t)
   const valid = isContactValid(errors)
   const shown = visibleErrors(errors, touched, attempted)
-  const hint = submitHint(errors)
+  const hint = submitHint(errors, t)
 
   const nameRef = useRef<HTMLInputElement | null>(null)
   const successRef = useRef<HTMLHeadingElement | null>(null)
@@ -303,10 +331,10 @@ export default function ContactPro({
       return d.token as string
     } catch {
       nonceAtRef.current = 0
-      setNonceErr('Verification couldn’t start — check your connection and try again.')
+      setNonceErr(t.errors.nonce)
       return null
     }
-  }, [])
+  }, [t])
   const ensureNonce = useCallback(async (): Promise<string | null> => {
     if (nonce && Date.now() - nonceAtRef.current < NONCE_MAX_AGE_MS) return nonce
     return fetchNonce()
@@ -440,7 +468,7 @@ export default function ContactPro({
       e.preventDefault()
       const kept = !!messageValueRef.current.trim()
       if (!kept) setValues((v) => (v.message.trim() ? v : { ...v, message: message.slice(0, MESSAGE_MAX) }))
-      setPrefillNote(kept ? 'Your earlier message is kept in the Message field; the question was not added.' : 'Your question is in the Message field. Edit it or send it as it is.')
+      setPrefillNote(kept ? t.prefill.kept : t.prefill.added)
       const behavior: ScrollBehavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
       focusUntilItSticks(messageRef.current, {
         preventScroll: true,
@@ -456,7 +484,7 @@ export default function ContactPro({
     }
     window.addEventListener(CONTACT_PREFILL_EVENT, onPrefill)
     return () => window.removeEventListener(CONTACT_PREFILL_EVENT, onPrefill)
-  }, [])
+  }, [t])
 
   const resetForm = () => {
     try {
@@ -497,7 +525,7 @@ export default function ContactPro({
       // An expired nonce was replaced at submit time: its sum changed too.
       if (previous && token !== previous) {
         setValues((v) => ({ ...v, mathAnswer: '' }))
-        setServerError('The human check was refreshed — please answer the new sum.')
+        setServerError(t.errors.refreshed)
         return
       }
       // The server requires ≥ 2s between issuing the nonce and submitting.
@@ -529,18 +557,21 @@ export default function ContactPro({
         // Each challenge allows one attempt: take a fresh one after a miss.
         if (d?.code === 'BAD_CHALLENGE') await refreshChallenge()
         if (d?.field === 'roleUrl') setTouched((t) => ({ ...t, roleUrl: true }))
-        setServerError(typeof d?.error === 'string' && d.error ? d.error : 'The message couldn’t be sent. Please try again.')
+        // English pages show the server's own words; another language says it by the answer's code.
+        const own = typeof d?.error === 'string' && d.error ? d.error : ''
+        const coded = typeof d?.code === 'string' ? t.errors.codes[d.code] : undefined
+        setServerError(englishPage ? own || t.errors.sendFailed : coded || t.errors.sendFailed)
       }
     } catch {
-      setServerError('Network error — check your connection and try again.')
+      setServerError(t.errors.network)
     } finally {
       setSending(false)
     }
   }
 
   const contactRows = [
-    email ? { label: 'email', value: email, copyLabel: 'Copy email address', copied: 'Email copied' } : null,
-    phone ? { label: 'tel', value: phone, copyLabel: 'Copy phone number', copied: 'Phone number copied' } : null,
+    email ? { label: t.panel.email, value: email, copyLabel: t.panel.copyEmail, copied: t.panel.emailCopied } : null,
+    phone ? { label: t.panel.tel, value: phone, copyLabel: t.panel.copyPhone, copied: t.panel.phoneCopied } : null,
   ].filter((r): r is { label: string; value: string; copyLabel: string; copied: string } => r !== null)
 
   const socials = [
@@ -622,7 +653,7 @@ export default function ContactPro({
                       textDecorationColor="var(--accent-ring)"
                       _hover={{ textDecorationColor: 'currentColor' }}
                     >
-                      Save contact (.vcf)
+                      {t.panel.saveVcf}
                     </Link>
                   ) : null}
                 </Box>
@@ -633,7 +664,7 @@ export default function ContactPro({
               <Flex display={{ base: 'none', md: 'flex' }} align="center" gap={4}>
                 <Box
                   role="img"
-                  aria-label="QR code that saves this contact"
+                  aria-label={t.panel.qrLabel}
                   w="96px"
                   h="96px"
                   p="8px"
@@ -648,7 +679,7 @@ export default function ContactPro({
                   <QrSvg svg={vcard.qrSvg} />
                 </Box>
                 <Text fontFamily={monoFont} fontSize="11px" letterSpacing="0.04em" color="page.fg-secondary">
-                  Scan to save contact
+                  {t.panel.scanToSave}
                 </Text>
               </Flex>
             ) : null}
@@ -659,7 +690,7 @@ export default function ContactPro({
                 <Box>
                   <Text display="flex" alignItems="center" gap={1.5} fontFamily={monoFont} fontSize="11px" letterSpacing="0.16em" textTransform="uppercase" color="page.fg-secondary" mb={3}>
                     <ChevronRightIcon size="xs" />
-                    Elsewhere
+                    {t.panel.elsewhere}
                   </Text>
                   <HStack as="ul" listStyleType="none" spacing={2}>
                     {socials.map((s) => (
@@ -669,7 +700,7 @@ export default function ContactPro({
                           href={s.href}
                           target="_blank"
                           rel="noopener noreferrer"
-                          aria-label={`${s.name} (opens in a new tab)`}
+                          aria-label={`${s.name}${t.panel.newTab}`}
                           icon={s.icon}
                           variant="outline"
                           size="md"
@@ -708,43 +739,47 @@ export default function ContactPro({
               <path d="M15 27l7 7 15-16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
             </Box>
             <Heading as={headingAs === 'h1' ? 'h2' : 'h3'} ref={successRef} tabIndex={-1} size="md" fontWeight={500} letterSpacing="-0.015em" color="page.fg" _focus={{ outline: 'none' }}>
-              Message sent
+              {t.sent.title}
             </Heading>
             <Text fontSize="15px" color="page.fg-secondary" lineHeight="1.6" maxW="52ch">
-              Thanks{sent.name ? `, ${sent.name}` : ''} — your message about{' '}
-              <Text as="span" color="page.fg">
-                “{sent.subject}”
-              </Text>{' '}
-              is on its way. I’ll reply to{' '}
-              <Text as="span" color="page.fg" fontFamily={monoFont} fontSize="14px" wordBreak="break-all">
-                {sent.email}
-              </Text>
-              .
+              {fillNodes(t.sent.body, {
+                name: sent.name ? `${t.sent.nameSep}${sent.name}` : '',
+                subject: (
+                  <Text as="span" color="page.fg">
+                    “{sent.subject}”
+                  </Text>
+                ),
+                email: (
+                  <Text as="span" color="page.fg" fontFamily={monoFont} fontSize="14px" wordBreak="break-all">
+                    {sent.email}
+                  </Text>
+                ),
+              })}
             </Text>
-            <Box as="nav" aria-label="While you wait" w="100%" mt={1}>
+            <Box as="nav" aria-label={t.sent.whileYouWait} w="100%" mt={1}>
               <Text display="flex" alignItems="center" gap={1.5} fontFamily={monoFont} fontSize="11px" letterSpacing="0.16em" textTransform="uppercase" color="page.fg-secondary" mb={2.5}>
                 <ChevronRightIcon size="xs" />
-                While you wait
+                {t.sent.whileYouWait}
               </Text>
               <Flex as="ul" listStyleType="none" m={0} p={0} gap={2} flexWrap="wrap">
                 <li>
                   <Button as="a" href={cvHref} {...nextStepProps}>
-                    {sent.intent === 'role' ? 'Read my CV' : 'See my CV'}
+                    {sent.intent === 'role' ? t.sent.readCv : t.sent.seeCv}
                   </Button>
                 </li>
                 <li>
                   <Button as="a" href={vcardHref} download="Li-Yanpei.vcf" {...nextStepProps}>
-                    Save contact (.vcf)
+                    {t.panel.saveVcf}
                   </Button>
                 </li>
                 {booking ? (
                   <li>
                     <Button as="a" href={booking} target="_blank" rel="noopener noreferrer" {...nextStepProps}>
-                      Book a call
+                      {t.sent.bookCall}
                       <Box as="span" aria-hidden className="nudge-ne" display="inline-block" ml={1.5}>
                         ↗
                       </Box>
-                      <span className="sr-only"> (opens in a new tab)</span>
+                      <span className="sr-only">{t.panel.newTab}</span>
                     </Button>
                   </li>
                 ) : null}
@@ -762,14 +797,14 @@ export default function ContactPro({
               onClick={sendAnother}
               _hover={{ color: 'var(--accent)', bg: 'transparent' }}
             >
-              Send another message
+              {t.sent.sendAnother}
             </Button>
           </Flex>
         ) : (
           <>
             <Text display="flex" alignItems="center" gap={1.5} fontFamily={monoFont} fontSize="11px" letterSpacing="0.16em" textTransform="uppercase" color="page.fg-secondary" mb={5}>
               <ChevronRightIcon size="xs" />
-              Send a message
+              {t.form.title}
             </Text>
 
             <chakra.form
@@ -784,12 +819,12 @@ export default function ContactPro({
               <VStack spacing={5} align="stretch">
                 <Flex gap={4} align="flex-start" sx={responsiveRow}>
                   <FormControl isRequired isInvalid={!!shown.name} flex={1} minW={0}>
-                    <FormLabel {...labelProps}>Name</FormLabel>
-                    <Input ref={nameRef} value={values.name} onChange={set('name')} onBlur={touch('name')} autoComplete="name" placeholder="Your name" {...inputProps} />
+                    <FormLabel {...labelProps}>{t.form.name}</FormLabel>
+                    <Input ref={nameRef} value={values.name} onChange={set('name')} onBlur={touch('name')} autoComplete="name" placeholder={t.form.namePlaceholder} {...inputProps} />
                     <FormErrorMessage fontSize="12px">{shown.name}</FormErrorMessage>
                   </FormControl>
                   <FormControl isRequired isInvalid={!!shown.email} flex={1} minW={0}>
-                    <FormLabel {...labelProps}>Email</FormLabel>
+                    <FormLabel {...labelProps}>{t.form.email}</FormLabel>
                     <Input
                       type="email"
                       value={values.email}
@@ -797,7 +832,7 @@ export default function ContactPro({
                       onBlur={touch('email')}
                       autoComplete="email"
                       inputMode="email"
-                      placeholder="you@example.com"
+                      placeholder={t.form.emailPlaceholder}
                       {...inputProps}
                     />
                     <FormErrorMessage fontSize="12px">{shown.email}</FormErrorMessage>
@@ -806,30 +841,31 @@ export default function ContactPro({
 
                 <Flex gap={4} align="flex-start" sx={responsiveRow}>
                   <FormControl flex={1} minW={0}>
-                    <FormLabel {...labelProps}>Reason</FormLabel>
+                    <FormLabel {...labelProps}>{t.form.reason}</FormLabel>
                     <Select
                       value={values.reason}
                       onChange={(e) => {
                         set('reason')(e)
                         setReasonChosen(true)
                       }}
+                      lang={reasonLang}
                       {...inputProps}
                     >
-                      {reasons.map((r) => (
-                        <option key={r} value={r}>
-                          {r}
+                      {options.map((o) => (
+                        <option key={o.label} value={o.label} lang={o.lang}>
+                          {o.label}
                         </option>
                       ))}
                     </Select>
                   </FormControl>
                   <FormControl isInvalid={!!shown.subject} flex={1} minW={0}>
                     <FormLabel {...labelProps}>
-                      Subject{' '}
+                      {t.form.subject}{' '}
                       <Text as="span" color="page.fg-secondary" opacity={0.85}>
-                        (optional)
+                        {t.form.optional}
                       </Text>
                     </FormLabel>
-                    <Input value={values.subject} onChange={set('subject')} onBlur={touch('subject')} placeholder={values.reason || 'Subject'} {...inputProps} />
+                    <Input value={values.subject} onChange={set('subject')} onBlur={touch('subject')} placeholder={values.reason || t.form.subjectPlaceholder} {...inputProps} />
                     <FormErrorMessage fontSize="12px">{shown.subject}</FormErrorMessage>
                   </FormControl>
                 </Flex>
@@ -867,9 +903,9 @@ export default function ContactPro({
                       px={1.5}
                       mx={-1.5}
                     >
-                      {DISCLOSURE_TITLE[shownIntent]}{' '}
+                      {t.disclosure[shownIntent]}{' '}
                       <Text as="span" letterSpacing="0.04em" textTransform="none" opacity={0.85}>
-                        · optional
+                        {t.form.optionalGroup}
                       </Text>
                     </Text>
                     <VStack spacing={4} align="stretch" mt={1}>
@@ -909,10 +945,10 @@ export default function ContactPro({
                         <FormControl minW={0} sx={{ '@container (min-width: 30rem)': { maxWidth: 'calc(50% - 8px)' } }}>
                           <FormLabel {...labelProps}>{copy.timeline.label}</FormLabel>
                           <Select value={values.timeline} onChange={set('timeline')} {...inputProps}>
-                            <option value="">Not sure / skip</option>
-                            {INQUIRY_TIMELINES.map((t) => (
-                              <option key={t} value={t}>
-                                {TIMELINE_LABEL[t]}
+                            <option value="">{t.form.notSure}</option>
+                            {INQUIRY_TIMELINES.map((tl) => (
+                              <option key={tl} value={tl}>
+                                {t.timelines[tl]}
                               </option>
                             ))}
                           </Select>
@@ -921,9 +957,9 @@ export default function ContactPro({
                       {shownIntent === 'role' && workStatus ? (
                         <Text fontSize="13px" color="page.fg-secondary" lineHeight="1.55" data-work-status="">
                           <Text as="span" fontFamily={monoFont} fontSize="11px" letterSpacing="0.04em" mr={2}>
-                            work authorisation
+                            {t.form.workAuth}
                           </Text>
-                          <Text as="span" color="page.fg">
+                          <Text as="span" color="page.fg" lang={workStatusLang}>
                             {workStatus}
                           </Text>
                         </Text>
@@ -933,14 +969,14 @@ export default function ContactPro({
                 ) : null}
 
                 <FormControl isRequired isInvalid={!!shown.message}>
-                  <FormLabel {...labelProps}>Message</FormLabel>
+                  <FormLabel {...labelProps}>{t.form.message}</FormLabel>
                   <Textarea
                     ref={messageRef}
                     value={values.message}
                     onChange={set('message')}
                     onBlur={touch('message')}
                     maxLength={MESSAGE_MAX}
-                    placeholder="Tell me a bit more…"
+                    placeholder={t.form.messagePlaceholder}
                     rows={7}
                     resize="vertical"
                     {...inputProps}
@@ -961,15 +997,9 @@ export default function ContactPro({
                 <FormControl isRequired isInvalid={!!shown.mathAnswer}>
                   <Flex align="center" gap={3} p={3} border="1px solid" borderColor="page.border" borderRadius="md" flexWrap="wrap" minH="58px">
                     <FormLabel {...labelProps} mb={0} mr={0} display="flex" alignItems="center" gap={3} flexWrap="wrap" requiredIndicator={<></>}>
-                      <span>human check</span>
+                      <span>{t.form.humanCheck}</span>
                       <Text as="span" fontFamily="body" fontSize="14px" color="page.fg" letterSpacing="0">
-                        {mathPair ? (
-                          <>
-                            What is <strong>{mathPair.a}</strong> + <strong>{mathPair.b}</strong>?
-                          </>
-                        ) : (
-                          'Loading…'
-                        )}
+                        {mathPair ? fillNodes(t.form.whatIs, { a: <strong>{mathPair.a}</strong>, b: <strong>{mathPair.b}</strong> }) : t.form.loading}
                       </Text>
                     </FormLabel>
                     <Input
@@ -991,7 +1021,7 @@ export default function ContactPro({
                         <Box as="span" display="inline-flex" color="var(--accent)">
                           <CheckIcon size="xs" />
                         </Box>
-                        ok
+                        {t.form.ok}
                       </Text>
                     )}
                   </Flex>
@@ -1044,10 +1074,10 @@ export default function ContactPro({
                       _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '3px' }}
                       isDisabled={!valid}
                       isLoading={sending}
-                      loadingText="Sending…"
+                      loadingText={t.form.sending}
                       aria-describedby={!valid && hint ? hintId : undefined}
                     >
-                      Send message
+                      {t.form.send}
                       <Box as="span" aria-hidden className="nudge" ml={1.5}>
                         →
                       </Box>
@@ -1061,7 +1091,7 @@ export default function ContactPro({
                       fontSize="13px"
                       fontWeight={400}
                     >
-                      Clear
+                      {t.form.clear}
                     </Button>
                   </HStack>
                   {mailtoBase && (
@@ -1082,7 +1112,7 @@ export default function ContactPro({
                       fontSize="13px"
                       fontWeight={400}
                     >
-                      Use mail app
+                      {t.form.mailApp}
                       <Box as="span" aria-hidden className="nudge-ne" display="inline-block" ml={1.5}>
                         ↗
                       </Box>
@@ -1094,7 +1124,7 @@ export default function ContactPro({
                     {hint}
                   </Text>
                 )}
-                <PrivacyNotice retentionDays={retentionDays} />
+                <PrivacyNotice retentionDays={retentionDays} t={t} />
               </VStack>
             </chakra.form>
           </>
@@ -1110,7 +1140,7 @@ export default function ContactPro({
  * period — known later on pages that learn it from the nonce endpoint —
  * never shifts the layout.
  */
-function PrivacyNotice({ retentionDays }: { retentionDays: number | null }) {
+function PrivacyNotice({ retentionDays, t }: { retentionDays: number | null; t: ContactStrings }) {
   return (
     <Flex
       id="contact-privacy"
@@ -1134,7 +1164,7 @@ function PrivacyNotice({ retentionDays }: { retentionDays: number | null }) {
         />
       </Box>
       <Text m={0}>
-        {privacyNoticeText(retentionDays)}{' '}
+        {privacyNoticeText(retentionDays, t)}{' '}
         <Link
           href="/colophon#privacy"
           color="accent.text"
@@ -1143,7 +1173,7 @@ function PrivacyNotice({ retentionDays }: { retentionDays: number | null }) {
           textDecorationColor="var(--accent-ring)"
           _hover={{ textDecorationColor: 'currentColor' }}
         >
-          How this site handles data
+          {t.privacy.link}
         </Link>
       </Text>
     </Flex>

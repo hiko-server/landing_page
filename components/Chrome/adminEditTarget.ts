@@ -20,6 +20,12 @@ export function adminEditTarget(pathname: string, slug: unknown): { label: strin
       return { label: 'Edit publications in CV Studio', href: '/admin/dashboard?tab=cv' }
     case '/':
       return { label: 'Edit the home page', href: '/admin/dashboard?tab=home' }
+    // The Chinese pages (F3): their copy is in the Home editor's Chinese section and the Chinese bio.
+    case '/zh':
+    case '/zh/contact':
+      return { label: 'Edit the Chinese copy', href: '/admin/dashboard?tab=home#home-chinese' }
+    case '/zh/about':
+      return { label: 'Edit the Chinese bio', href: '/admin/about?lang=zh' }
     case '/now':
       return { label: 'Edit /now', href: '/admin/now' }
     case '/uses':

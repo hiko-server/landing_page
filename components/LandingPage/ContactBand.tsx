@@ -3,9 +3,7 @@ import { Box, Button, Flex, Text } from '@chakra-ui/react'
 
 import AvailabilityCard from '../Contact/AvailabilityCard'
 import type { HomeData } from '../../lib/homeShape'
-
-/** The same lede /contact shows when the owner wrote none (pages/contact). */
-export const CONTACT_FALLBACK_LEDE = 'Questions, roles or collaborations: send a note.'
+import { useHomeUi } from './homeUi'
 
 /**
  * The home page's contact section: the owner's availability (only when set
@@ -14,10 +12,12 @@ export const CONTACT_FALLBACK_LEDE = 'Questions, roles or collaborations: send a
  * human-check nonce was fetched on every home visit.
  */
 export default function ContactBand({ home }: { home?: HomeData | null }) {
-  const lede = (home?.contact?.blurb ?? '').trim() || CONTACT_FALLBACK_LEDE
+  const { t, lang, links } = useHomeUi()
+  // The same lede /contact shows when the owner wrote none (lib/uiStrings/contact fallbackLede).
+  const lede = (home?.contact?.blurb ?? '').trim() || t.contactBand.fallbackLede
   return (
     <Box>
-      <AvailabilityCard availability={home?.availability} mb={4} />
+      <AvailabilityCard availability={home?.availability} mb={4} t={t} zh={lang !== 'en'} />
       <Flex
         align={{ base: 'stretch', sm: 'center' }}
         direction={{ base: 'column', sm: 'row' }}
@@ -35,7 +35,7 @@ export default function ContactBand({ home }: { home?: HomeData | null }) {
         </Text>
         <Button
           as={NextLink}
-          href="/contact"
+          href={links.contact}
           flexShrink={0}
           h="44px"
           px={6}
@@ -47,7 +47,7 @@ export default function ContactBand({ home }: { home?: HomeData | null }) {
           _active={{ bg: 'accent.solid-active' }}
           _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '3px' }}
         >
-          Write to me&nbsp;
+          {t.contactBand.writeToMe}&nbsp;
           <span className="nudge" aria-hidden>
             →
           </span>

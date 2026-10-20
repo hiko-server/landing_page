@@ -1,61 +1,26 @@
 import React, { useMemo, useState } from 'react'
 import type { GetStaticProps } from 'next'
 import { Box, Flex, Grid, Text } from '@chakra-ui/react'
-import type { Root as HastRoot } from 'hast'
 
-import LandingCVSections, { CV_WEBSITE_SECTIONS, hasChineseCv, renderedCvSections } from '../../components/LandingPage/LandingCVSections'
+import LandingCVSections, { hasChineseCv, renderedCvSections } from '../../components/LandingPage/LandingCVSections'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 import MDXContent from '../../components/MDX/MDXContent'
-import IdentityRail, { type RailPortrait } from '../../components/About/IdentityRail'
+import IdentityRail from '../../components/About/IdentityRail'
 import { aboutNavEntries } from '../../components/About/aboutNav'
-import { heroIdentity, portraitAlt, taglinePhrases, type HeroIdentity } from '../../components/LandingPage/heroIdentity'
+import { taglinePhrases } from '../../components/LandingPage/heroIdentity'
 import { ogPresetUrl } from '../../lib/og/presets'
 import AboutRecommendations from '../../components/About/Recommendations'
 import SectionHeading from '../../components/General-UI/SectionHeading'
 import AskEntry from '../../components/Search/AskEntry'
-import { recommendationsSection } from '../../components/CVViewerPage/recommendationView'
-import type { WorkIndexItem } from '../../components/LandingPage/projectMatch'
-import { availabilityView, type AvailabilityView } from '../../components/Common/contactForm'
 import { resolveSocialLinks } from '../../components/Chrome/chrome'
-import { absUrl, personNode, profilePageNode, breadcrumb, PERSON_NAME, type PersonFacts } from '../../lib/schema'
-import type { CvSectionLike } from '../../lib/cvVisibility'
-import type { HomeData } from '../../lib/homeShape'
-import { safeHref } from '../../lib/cvFormat'
+import { absUrl, personNode, profilePageNode, breadcrumb, PERSON_NAME } from '../../lib/schema'
 import { clearOfHeader } from '../../lib/anchorOffset'
-import { referenceMonth } from '../../lib/clock'
-import { PROFILE_REVALIDATE_SECONDS, revalidateAfter } from '../../lib/isr'
+import { fillUi } from '../../lib/uiStrings'
+import { ABOUT_EN } from '../../lib/uiStrings/about'
+import type { AboutPageProps } from '../../lib/aboutPage'
 
-type Props = {
-  /** Only the brand + tagline the page prints — not the whole home document. */
-  hero: { brand: string; tagline: string }
-  /** Display names from the website-pruned Personal Info (never the section itself). */
-  identity: HeroIdentity
-  /** The home portrait with its crop, size and upload srcset; null when none is set. */
-  portrait: RailPortrait | null
-  /** The owner's availability (Home editor); null when not set. */
-  availability: AvailabilityView | null
-  /** The owner's bio (admin → About bio), compiled on the server; null while it is empty. */
-  bio: { tree: HastRoot; lang: string } | null
-  /** Website-pruned CV, limited to the sections this page renders. */
-  cv: { en: CvSectionLike[]; zh: CvSectionLike[] }
-  /** /work case-study index (slug + title) for "Case study →" links on roles and CV projects. */
-  work: WorkIndexItem[]
-  /** schema.org Person facts — the site-wide loader (lib/personFacts), identical on every page. */
-  personFacts: PersonFacts
-  /** Server reference month ('YYYY-MM', lib/clock.ts) for "Present" / "Expected". */
-  clockMonth: string
-  /** Public home.socials for the persistent header / footer and the rail (null = none set). */
-  chromeSocials?: HomeData['socials'] | null
-  /** Website-pruned Recommendations section (permitted entries only), or null. */
-  recommendations?: CvSectionLike | null
-  /** How many papers /publications lists (0: no page, no link on the rail). */
-  publicationCount?: number
-  /** The owner's public ORCID iD (website-audience Personal Info, lib/cvLinks orcidOf); '' when unset or hidden. */
-  orcid?: string
-  /** The owner connected that iD through ORCID's sign-in (the authenticated iD icon). */
-  orcidAuthenticated?: boolean
-}
+export type Props = AboutPageProps
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
@@ -77,11 +42,41 @@ const ANCHOR_SX = { scrollMarginTop: clearOfHeader('8px') } as const
  *
  * Each block opens with the site's plain SectionHeading (no index numbers).
  *
+ * /zh/about (pages/zh/about.tsx, F3) renders this page in Chinese: the
+ * Chinese bio (it exists only while that is written), the Chinese tagline's
+ * lead and focus areas, the Chinese CV first, the interface in Chinese
+ * (`ui`, lib/uiStrings/about). Data: lib/aboutPage.
+ *
  * The GitHub widgets and the experience timeline live on the home page only.
  * Below lg the rail is the page header; the section nav shows from lg up.
  */
-const About = ({ hero, identity, portrait, availability, bio, cv, work, personFacts, chromeSocials, recommendations, publicationCount = 0, orcid = '', orcidAuthenticated = false }: Props) => {
-  const [lang, setLang] = useState<'en' | 'zh'>('en')
+const About = ({
+  hero,
+  identity,
+  portrait,
+  availability,
+  bio,
+  cv,
+  work,
+  personFacts,
+  chromeSocials,
+  recommendations,
+  recommendationsLang = 'en',
+  publicationCount = 0,
+  orcid = '',
+  orcidAuthenticated = false,
+  ui,
+  lang: pageLang,
+  alternates,
+  nameZh,
+  chromeZh,
+}: Props) => {
+  const t = ui?.t ?? ABOUT_EN
+  const zhPage = pageLang !== 'en'
+  const path = zhPage ? '/zh/about' : '/about'
+  const owner = zhPage && nameZh ? `${nameZh}（Lucian）` : PERSON_NAME
+  // The CV stack starts in the page's language.
+  const [lang, setLang] = useState<'en' | 'zh'>(zhPage ? 'zh' : 'en')
   const [lead, ...focus] = taglinePhrases(hero.tagline)
   const socials = useMemo(() => resolveSocialLinks(chromeSocials), [chromeSocials])
   const active = lang === 'zh' && hasChineseCv(cv.zh) ? 'zh' : 'en'
@@ -91,24 +86,29 @@ const About = ({ hero, identity, portrait, availability, bio, cv, work, personFa
         hasBio: !!bio,
         hasRecommendations: !!recommendations,
         lang: active,
+        t,
+        zh: zhPage,
       }),
-    [active, cv.en, cv.zh, bio, recommendations],
+    [active, cv.en, cv.zh, bio, recommendations, t, zhPage],
   )
 
   return (
     <React.Fragment>
       <CustomHead
-        title="About"
-        description="About Li Yanpei (Lucian), a software engineer in Hong Kong: background, education, experience, projects, skills, patents and awards."
-        url={absUrl('/about')}
+        title={t.title}
+        description={fillUi(t.description, { name: owner })}
+        url={absUrl(path)}
         image={ogPresetUrl('about')}
         type="profile"
+        lang={pageLang}
+        nameZh={nameZh}
+        alternates={alternates}
         jsonLd={[
-          profilePageNode({ path: '/about', name: `About — ${PERSON_NAME}`, dateModified: personFacts.dateModified }),
+          profilePageNode({ path, name: fillUi(t.profileName, { name: owner }), dateModified: personFacts.dateModified }),
           personNode(personFacts),
           breadcrumb([
-            { name: 'Home', path: '/' },
-            { name: 'About', path: '/about' },
+            { name: t.home, path: zhPage && chromeZh?.includes('/') ? '/zh' : '/' },
+            { name: t.title, path },
           ]),
         ]}
       />
@@ -126,6 +126,8 @@ const About = ({ hero, identity, portrait, availability, bio, cv, work, personFa
               publicationCount={publicationCount}
               orcid={orcid}
               orcidAuthenticated={orcidAuthenticated}
+              t={t}
+              zh={zhPage}
             />
 
             <Box minW={0}>
@@ -139,7 +141,7 @@ const About = ({ hero, identity, portrait, availability, bio, cv, work, personFa
                   {focus.length ? (
                     <Flex
                       as="ul"
-                      aria-label="Focus areas"
+                      aria-label={t.focusAreas}
                       listStyleType="none"
                       wrap="wrap"
                       gap={2}
@@ -167,11 +169,11 @@ const About = ({ hero, identity, portrait, availability, bio, cv, work, personFa
                 </Box>
               ) : null}
 
-              {bio || cv.en.length || cv.zh.length ? <AskEntry mb={{ base: 14, md: 16 }} /> : null}
+              {bio || cv.en.length || cv.zh.length ? <AskEntry mb={{ base: 14, md: 16 }} copy={t.ask} /> : null}
 
               {bio ? (
                 <Box as="section" id="about-bio" aria-labelledby="about-bio-heading" mb={{ base: 14, md: 16 }} sx={{ scrollMarginTop: clearOfHeader('8px') }}>
-                  <SectionHeading id="about-bio-heading">Bio</SectionHeading>
+                  <SectionHeading id="about-bio-heading">{t.bio}</SectionHeading>
                   <Box lang={bio.lang}>
                     <MDXContent tree={bio.tree} as="div" />
                   </Box>
@@ -182,9 +184,12 @@ const About = ({ hero, identity, portrait, availability, bio, cv, work, personFa
                 <Box mb={{ base: 14, md: 16 }}>
                   <AboutRecommendations
                     section={recommendations}
+                    lang={recommendationsLang}
+                    pageLang={zhPage ? 'zh' : 'en'}
+                    sourceNewTab={t.sourceNewTab}
                     title={
                       <SectionHeading id="about-recommendations" sx={ANCHOR_SX}>
-                        Recommendations
+                        {t.recommendations}
                       </SectionHeading>
                     }
                   />
@@ -201,9 +206,11 @@ const About = ({ hero, identity, portrait, availability, bio, cv, work, personFa
                   idPrefix="about-"
                   language={lang}
                   onLanguageChange={setLang}
+                  labels={t.cvToggle}
+                  pageLang={zhPage ? 'zh' : 'en'}
                   title={
                     <SectionHeading id="about-cv-heading" mb={0} sx={ANCHOR_SX}>
-                      CV
+                      {t.cv}
                     </SectionHeading>
                   }
                 />
@@ -218,168 +225,5 @@ const About = ({ hero, identity, portrait, availability, bio, cv, work, personFa
 
 export default About
 
-/** Drop undefined values (Next refuses them in props). */
-function defined<T extends Record<string, unknown>>(o: T): T {
-  return Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T
-}
-
-const clamp = (v: unknown, min: number, max: number, fallback: number) => {
-  const n = Number(v)
-  return Number.isFinite(n) ? Math.max(min, Math.min(max, n)) : fallback
-}
-
-/**
- * Incremental static regeneration: regenerated right after a save of the
- * home document, the CV, the bio or a case study (lib/revalidate.ts), and at
- * most an hour after the previous render (lib/isr.ts — "Present" /
- * "Expected" follow the reference month). The build renders without the
- * content store; boot warm-up replaces that copy. Every read is best effort.
- */
-export const getStaticProps: GetStaticProps<Props> = async () => {
-  let cv: Props['cv'] = { en: [], zh: [] }
-  let identity: HeroIdentity = heroIdentity(undefined, undefined)
-  let hero: Props['hero'] = { brand: '', tagline: '' }
-  let portrait: Props['portrait'] = null
-  let availability: Props['availability'] = null
-  let bio: Props['bio'] = null
-  let chromeSocials: HomeData['socials'] | null | undefined
-  let work: WorkIndexItem[] = []
-  let personFacts: PersonFacts = {}
-  let orcid = ''
-  let orcidAuthenticated = false
-
-  try {
-    // Live CV from the content store, website audience, exactly the sections
-    // rendered here. personalInformation is read only to derive the display
-    // names and the public ORCID iD; the section itself is never shipped.
-    const { readCvData, readPublicCvSections } = await import('../../lib/cvdata')
-    const { orcidAuthenticatedOf, orcidOf } = await import('../../lib/orcid/cv')
-    cv = readPublicCvSections('website', CV_WEBSITE_SECTIONS, ['en', 'zh'])
-    // Evidence links resolved like /cv (lib/cvLinks): `caseStudy` is a PUBLISHED slug or ''.
-    {
-      const { withEvidenceLinks } = await import('../../lib/cvLinks')
-      const { listWork } = await import('../../lib/mdx')
-      const works = listWork().map(({ slug, frontmatter: fm }) => ({ slug, title: String(fm?.title || slug), link: typeof fm?.link === 'string' ? fm.link : undefined, repo: typeof fm?.repo === 'string' ? fm.repo : undefined }))
-      cv = { en: withEvidenceLinks(cv.en, { works }), zh: withEvidenceLinks(cv.zh, { works }) }
-    }
-    const pi = readPublicCvSections('website', ['personalInformation'], ['en', 'zh'])
-    const stored = readCvData()
-    const storedHasPersonalInfo = [...stored.en, ...stored.zh].some((s) => s?.sessionName === 'personalInformation')
-    identity = heroIdentity(pi.en[0], pi.zh[0], { storedHasPersonalInfo })
-    const orcidPi = orcidOf(pi.en[0]) ? pi.en[0] : pi.zh[0]
-    orcid = orcidOf(orcidPi)
-    orcidAuthenticated = orcidAuthenticatedOf(orcidPi)
-  } catch {
-    /* best effort — render with what we have */
-  }
-
-  // Recommendations (E11): the website view of the English CV keeps only
-  // entries with permission; the section renders only when one is left.
-  let recommendations: CvSectionLike | null = null
-  try {
-    const { readPublicCvSections } = await import('../../lib/cvdata')
-    recommendations = recommendationsSection(readPublicCvSections('website', ['recommendations'], ['en']).en)
-  } catch {
-    /* no recommendations section */
-  }
-
-  try {
-    // The site-wide Person entity: the same facts the home and CV pages emit.
-    personFacts = (await import('../../lib/personFacts')).loadPersonFacts()
-  } catch {
-    /* best effort — the node keeps its built-in defaults */
-  }
-
-  try {
-    const { readPublicHome } = await import('../../lib/home')
-    const home = readPublicHome()
-    hero = { brand: home?.hero?.brand || '', tagline: home?.hero?.tagline || '' }
-    chromeSocials = home?.socials ?? null
-    availability = availabilityView(home?.availability)
-    const avatarUrl = safeHref(home?.hero?.avatarUrl)
-    if (avatarUrl) {
-      const t = home?.hero?.avatarTransform
-      let facts: { width?: number; height?: number; srcSet?: string; avifSrcSet?: string } = {}
-      if (avatarUrl.startsWith('/')) {
-        try {
-          const [{ localImageSize }, { variantAvifSrcSet, variantSrcSet }] = await Promise.all([import('../../lib/rehype/imageSize'), import('../../lib/uploadVariants')])
-          const size = localImageSize(avatarUrl)
-          const srcSet = variantSrcSet(avatarUrl)
-          facts = defined({ width: size?.width, height: size?.height, srcSet, avifSrcSet: srcSet ? variantAvifSrcSet(avatarUrl) : undefined })
-        } catch {
-          /* the portrait renders without its size / variants */
-        }
-      }
-      portrait = defined({
-        src: avatarUrl,
-        ...facts,
-        x: clamp(t?.x, 0, 100, 50),
-        y: clamp(t?.y, 0, 100, 50),
-        scale: clamp(t?.scale, 0.5, 3, 1),
-        alt: portraitAlt(identity),
-      })
-    }
-  } catch {
-    /* best effort — render with what we have */
-  }
-
-  try {
-    // The owner's bio: rendered only when it has real content. Never a
-    // fallback to the CV's introduction.
-    const { getPage } = await import('../../lib/contentStore')
-    if ((getPage('about')?.body || '').trim()) {
-      const { getStaticMdxPage } = await import('../../lib/mdx')
-      const page = await getStaticMdxPage('about')
-      if (page) bio = { tree: page.tree, lang: page.lang }
-    }
-  } catch {
-    bio = null
-  }
-
-  // Only read the /work index when something on the page can link to it:
-  // a role or a CV project (either language).
-  const has = (list: CvSectionLike[], name: string, key: string) => {
-    const s = list.find((x) => x.sessionName === name)
-    return Array.isArray(s?.[key]) && s[key].length > 0
-  }
-  if (has(cv.en, 'workExperience', 'experiences') || has(cv.en, 'project', 'projectExperience') || has(cv.zh, 'project', 'projectExperience')) {
-    try {
-      const { listWork } = await import('../../lib/mdx')
-      work = listWork().map(({ slug, frontmatter: fm }) => ({ slug, title: String(fm?.title || slug) }))
-    } catch {
-      /* best effort — roles and projects simply render without case-study links */
-    }
-  }
-
-  // The rail links /publications with its count (the website view the page lists).
-  let publicationCount = 0
-  try {
-    publicationCount = (await import('../../lib/publicationsData')).publicationCount()
-  } catch {
-    /* no link */
-  }
-
-  return {
-    revalidate: revalidateAfter(PROFILE_REVALIDATE_SECONDS),
-    props: {
-      hero,
-      identity,
-      portrait,
-      availability,
-      bio,
-      cv,
-      work,
-      personFacts,
-      recommendations,
-      publicationCount,
-      orcid,
-      orcidAuthenticated,
-      clockMonth: referenceMonth(),
-      // Omitted when the home document could not be read: the chrome then
-      // loads the public view itself.
-      ...(chromeSocials !== undefined ? { chromeSocials } : {}),
-      // Whether /publications exists, for the nav link (lib/publicationsData).
-      ...(await import('../../lib/publicationsData')).chromePublicationsProp(),
-    },
-  }
-}
+/** Data and regeneration: lib/aboutPage (shared with /zh/about). */
+export const getStaticProps: GetStaticProps<Props> = async () => (await import('../../lib/aboutPage')).loadAboutPage('en')

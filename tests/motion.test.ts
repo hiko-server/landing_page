@@ -587,7 +587,8 @@ test('the layer is wired: single keys live in the layer (lazy actions), ⌘K sta
   assert.match(layer, /import\('\.\/keyboardLayerActions'\)/)
   assert.match(layer, /getShortcutsEnabled\(\)/)
   const chrome = read('components/Chrome/SiteChrome.tsx')
-  assert.match(chrome, /<KeyboardLayer \/>/)
+  // The layer gets the chrome's navigation and language (F3: "G then H" leads to /zh from a Chinese page).
+  assert.match(chrome, /<KeyboardLayer navLinks=\{navLinks\} lang=\{uiLang\} \/>/)
   // Mounted from its own chunk after hydration: the listener is not first-load JS (perf budget).
   assert.match(chrome, /dynamic\(\(\) => import\('\.\/KeyboardLayer'\), \{ ssr: false/)
   for (const file of ['pages/blog/index.tsx', 'pages/work/index.tsx', 'pages/publications.tsx']) assert.match(read(file), /data-kbd-item=""/, file)

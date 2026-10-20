@@ -35,20 +35,31 @@ export function isExpired(at: string, cutoff: number | null): boolean {
   return Number.isFinite(t) && t < cutoff
 }
 
+/** How a period is said (`{n}`: the count), in English by default; lib/uiStrings/contact has the others. */
+export type PeriodWords = { day: string; days: string; month: string; months: string; year: string; years: string }
+
+const PERIODS_EN: PeriodWords = { day: '1 day', days: '{n} days', month: '1 month', months: '{n} months', year: '12 months', years: '{n} years' }
+
 /**
  * "12 months", "6 months", "2 years", "90 days", "1 day" — the period as a
  * person would say it (whole months / years when the day count is one).
  */
 export function retentionPeriodText(days: number): string {
+  return retentionPeriodIn(days, PERIODS_EN)
+}
+
+/** retentionPeriodText with another language's words ("12 个月", "2 年"). */
+export function retentionPeriodIn(days: number, words: PeriodWords): string {
   const d = Math.floor(days)
   if (d <= 0) return ''
+  const n = (template: string, count: number) => template.replace('{n}', String(count))
   if (d % 365 === 0) {
     const years = d / 365
-    return years === 1 ? '12 months' : `${years} years`
+    return years === 1 ? words.year : n(words.years, years)
   }
   if (d % 30 === 0 && d < 365) {
     const months = d / 30
-    return months === 1 ? '1 month' : `${months} months`
+    return months === 1 ? words.month : n(words.months, months)
   }
-  return d === 1 ? '1 day' : `${d} days`
+  return d === 1 ? words.day : n(words.days, d)
 }

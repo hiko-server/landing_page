@@ -4,7 +4,17 @@
  *
  * No Node or DB imports: the widgets import this module in the browser, the
  * loaders import it on the server, and the unit tests import it directly.
+ *
+ * The words of the activity lines, times and dates are the page's (`w`,
+ * lib/uiStrings/home `github`; English by default): the Chinese home page
+ * (/zh, F3) passes its own.
  */
+
+import { GITHUB_EN, type GithubWords } from '../../lib/uiStrings/github-en'
+
+/** {name} → value (lib/uiStrings fillUi, inlined: this module is shared with the server loaders). */
+const fill = (template: string, values: Readonly<Record<string, string | number>>) =>
+  template.replace(/\{(\w+)\}/g, (whole, name: string) => (name in values ? String(values[name]) : whole))
 
 // ── Payload types (the JSON the /api/github/* routes and loadGithubSummary return) ──
 
@@ -92,16 +102,26 @@ export type GithubSummary = {
 
 // ── Stats ────────────────────────────────────────────────────────────────────
 
-export type StatTile = { label: string; value: number }
+export type StatTileKey = 'repos' | 'contributions' | 'languages' | 'followers' | 'stars'
+export type StatTile = { key: StatTileKey; label: string; value: number }
 
-/** The stat tiles worth showing, in order. Vanity numbers only when the owner opted in. */
-export function statTiles(s: GhStats): StatTile[] {
-  const tiles: StatTile[] = [{ label: 'Public repos', value: s.public_repos }]
-  if (typeof s.contributions === 'number') tiles.push({ label: 'Contributions (last year)', value: s.contributions })
-  if (typeof s.languages === 'number') tiles.push({ label: 'Languages', value: s.languages })
+const TILE_LABELS_EN: Record<StatTileKey, string> = {
+  repos: 'Public repos',
+  contributions: 'Contributions (last year)',
+  languages: 'Languages',
+  followers: 'Followers',
+  stars: 'Total stars',
+}
+
+/** The stat tiles worth showing, in order (labels in the page's language). Vanity numbers only when the owner opted in. */
+export function statTiles(s: GhStats, labels: Readonly<Record<StatTileKey, string>> = TILE_LABELS_EN): StatTile[] {
+  const tile = (key: StatTileKey, value: number): StatTile => ({ key, label: labels[key], value })
+  const tiles: StatTile[] = [tile('repos', s.public_repos)]
+  if (typeof s.contributions === 'number') tiles.push(tile('contributions', s.contributions))
+  if (typeof s.languages === 'number') tiles.push(tile('languages', s.languages))
   if (s.showVanity) {
-    tiles.push({ label: 'Followers', value: s.followers })
-    tiles.push({ label: 'Total stars', value: s.total_stars })
+    tiles.push(tile('followers', s.followers))
+    tiles.push(tile('stars', s.total_stars))
   }
   return tiles
 }
@@ -158,75 +178,79 @@ export function eventKind(type: string): EventKind {
   }
 }
 
-/** Verb phrase without the repo, e.g. "Pushed 3 commits to", "Opened PR #12 in". */
-export function eventAction(e: GhEvent): string {
+/** Verb phrase without the repo, e.g. "Pushed 3 commits to", "Opened PR #12 in" ("新建 PR #12："). */
+export function eventAction(e: GhEvent, w: GithubWords = GITHUB_EN): string {
   const p = e.payload || {}
+  const pick = (action: string | undefined, opened: string, closed: string, updated: string) => (action === 'opened' ? opened : action === 'closed' ? closed : updated)
   switch (e.type) {
     case 'PushEvent': {
       const n = typeof p.size === 'number' && p.size > 0 ? p.size : 0
-      return n ? `Pushed ${n} commit${n > 1 ? 's' : ''} to` : 'Pushed to'
+      return n > 1 ? fill(w.pushedN, { n }) : n === 1 ? w.pushedOne : w.pushed
     }
     case 'PullRequestEvent': {
       const num = typeof p.number === 'number' ? ` #${p.number}` : ''
-      const verb = p.action === 'opened' ? 'Opened' : p.action === 'closed' ? 'Closed' : 'Updated'
-      return `${verb} PR${num} in`
+      return fill(pick(p.action, w.prOpened, w.prClosed, w.prUpdated), { num })
     }
     case 'IssuesEvent': {
       const n = p.issue?.number
       const num = typeof n === 'number' ? ` #${n}` : ''
-      const verb = p.action === 'opened' ? 'Opened' : p.action === 'closed' ? 'Closed' : 'Updated'
-      return `${verb} issue${num} in`
+      return fill(pick(p.action, w.issueOpened, w.issueClosed, w.issueUpdated), { num })
     }
     case 'CreateEvent':
-      return p.ref_type === 'repository' ? 'Created repository' : `Created ${p.ref_type || 'ref'} in`
+      if (p.ref_type === 'repository') return w.createdRepo
+      return fill(w.createdRef, { ref: p.ref_type === 'branch' || p.ref_type === 'tag' ? w.refWords[p.ref_type] : p.ref_type || w.refWords.ref })
     case 'RepoUpdateEvent':
-      return 'Updated'
+      return w.updated
     case 'WatchEvent':
-      return 'Starred'
+      return w.starred
     case 'ForkEvent':
-      return 'Forked'
+      return w.forked
     case 'ReleaseEvent':
-      return 'Published a release in'
+      return w.released
     default: {
       const words = String(e.type || '')
         .replace(/Event$/, '')
         .replace(/([a-z])([A-Z])/g, '$1 $2')
         .toLowerCase()
-      return words ? `${cap(words)} in` : 'Activity in'
+      // GitHub's own name of the event, where the words have a place for it ("Member in").
+      return words ? fill(w.other, { words: cap(words) }) : w.activity
     }
   }
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+/** A UTC date in the page's words ("Oct 12, 2026", "2026年10月12日"). */
+function utcDate(t: number, w: GithubWords): string {
+  const date = new Date(t)
+  return fill(w.date, { month: w.months[date.getUTCMonth()], m: date.getUTCMonth() + 1, d: date.getUTCDate(), y: date.getUTCFullYear() })
+}
 
 /**
  * "just now", "5m ago", "3h ago", "2d ago", or a short UTC date beyond 30
- * days. Pass the same `now` on the server and during hydration so the text
- * matches (see useRenderNow).
+ * days ("刚刚", "5 分钟前" … with the Chinese words). Pass the same `now` on
+ * the server and during hydration so the text matches (see useRenderNow).
  */
-export function relativeTime(iso: string, now: number = Date.now()): string {
+export function relativeTime(iso: string, now: number = Date.now(), w: GithubWords = GITHUB_EN): string {
   const t = Date.parse(iso)
   if (!Number.isFinite(t)) return ''
   const s = Math.max(0, Math.round((now - t) / 1000))
-  if (s < 60) return 'just now'
+  if (s < 60) return w.justNow
   const m = Math.round(s / 60)
-  if (m < 60) return `${m}m ago`
+  if (m < 60) return fill(w.minutesAgo, { n: m })
   const h = Math.round(m / 60)
-  if (h < 24) return `${h}h ago`
+  if (h < 24) return fill(w.hoursAgo, { n: h })
   const d = Math.round(h / 24)
-  if (d <= 30) return `${d}d ago`
-  const date = new Date(t)
-  return `${MONTHS[date.getUTCMonth()]} ${date.getUTCDate()}, ${date.getUTCFullYear()}`
+  if (d <= 30) return fill(w.daysAgo, { n: d })
+  return utcDate(t, w)
 }
 
-/** Timezone-independent absolute timestamp for a `title`: "Oct 12, 2026, 09:05 UTC". */
-export function absoluteTime(iso: string): string {
+/** Timezone-independent absolute timestamp for a `title`: "Oct 12, 2026, 09:05 UTC" ("2026年10月12日 09:05 UTC"). */
+export function absoluteTime(iso: string, w: GithubWords = GITHUB_EN): string {
   const t = Date.parse(iso)
   if (!Number.isFinite(t)) return ''
   const d = new Date(t)
   const hh = String(d.getUTCHours()).padStart(2, '0')
   const mm = String(d.getUTCMinutes()).padStart(2, '0')
-  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}, ${hh}:${mm} UTC`
+  return fill(w.dateTime, { month: w.months[d.getUTCMonth()], m: d.getUTCMonth() + 1, d: d.getUTCDate(), y: d.getUTCFullYear(), hh, mm })
 }
 
 export type EventGroup = {
@@ -250,20 +274,21 @@ export function groupEvents(events: readonly GhEvent[] | null | undefined): Even
   return groups
 }
 
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
+/** "{n} things" from a [one, many] pair of templates. */
+const plural = (n: number, [one, many]: readonly [string, string]) => fill(n === 1 ? one : many, { n })
 
-function numbered(label: string, labels: string, nums: number[], count: number): string {
+function numbered([label, labels]: readonly [string, string], counted: readonly [string, string], nums: number[], count: number, w: GithubWords): string {
   const unique = Array.from(new Set(nums))
   if (unique.length && unique.length === count) {
     const shown = unique.slice(0, 2).map((n) => `#${n}`)
     const more = unique.length > 2 ? ` +${unique.length - 2}` : ''
-    return `${unique.length === 1 ? label : labels} ${shown.join(', ')}${more}`
+    return `${unique.length === 1 ? label : labels} ${shown.join(w.summary.sep)}${more}`
   }
-  return plural(count, label, labels)
+  return plural(count, counted)
 }
 
-/** "PR #14, 1 branch, 1 comment" — what a group of events on one repo amounts to. */
-export function summarizeGroup(events: readonly GhEvent[]): string {
+/** "PR #14, 1 branch, 1 comment" ("PR #14、1 个分支、1 条评论") — what a group of events on one repo amounts to. */
+export function summarizeGroup(events: readonly GhEvent[], w: GithubWords = GITHUB_EN): string {
   type Bucket = { count: number; commits: number; sizesKnown: boolean; nums: number[] }
   const order: string[] = []
   const buckets = new Map<string, Bucket>()
@@ -294,46 +319,47 @@ export function summarizeGroup(events: readonly GhEvent[]): string {
         add(e.type, e)
     }
   }
+  const s = w.summary
   return order
     .map((key) => {
       const b = buckets.get(key) as Bucket
       switch (key) {
         case 'PushEvent':
-          return b.sizesKnown ? plural(b.commits, 'commit', 'commits') : plural(b.count, 'push', 'pushes')
+          return b.sizesKnown ? plural(b.commits, s.commit) : plural(b.count, s.push)
         case 'PullRequestEvent':
-          return numbered('PR', 'PRs', b.nums, b.count)
+          return numbered(s.pr, s.prCount, b.nums, b.count, w)
         case 'IssuesEvent':
-          return numbered('issue', 'issues', b.nums, b.count)
+          return numbered(s.issue, s.issueCount, b.nums, b.count, w)
         case 'IssueCommentEvent':
         case 'CommitCommentEvent':
-          return plural(b.count, 'comment', 'comments')
+          return plural(b.count, s.comment)
         case 'PullRequestReviewEvent':
-          return plural(b.count, 'review', 'reviews')
+          return plural(b.count, s.review)
         case 'PullRequestReviewCommentEvent':
-          return plural(b.count, 'review comment', 'review comments')
+          return plural(b.count, s.reviewComment)
         case 'branch':
-          return plural(b.count, 'branch', 'branches')
+          return plural(b.count, s.branch)
         case 'tag':
-          return plural(b.count, 'tag', 'tags')
+          return plural(b.count, s.tag)
         case 'ref':
-          return plural(b.count, 'ref', 'refs')
+          return plural(b.count, s.ref)
         case 'created':
-          return 'repository created'
+          return s.created
         case 'deleted':
-          return plural(b.count, 'deletion', 'deletions')
+          return plural(b.count, s.deletion)
         case 'ReleaseEvent':
-          return plural(b.count, 'release', 'releases')
+          return plural(b.count, s.release)
         case 'WatchEvent':
-          return 'starred'
+          return s.starred
         case 'ForkEvent':
-          return 'forked'
+          return s.forked
         case 'RepoUpdateEvent':
-          return 'updated'
+          return s.updated
         default:
-          return plural(b.count, 'other event', 'other events')
+          return plural(b.count, s.other)
       }
     })
-    .join(', ')
+    .join(s.sep)
 }
 
 // ── Featured repositories ────────────────────────────────────────────────────
@@ -415,11 +441,11 @@ export function weekdayOf(date: string): number {
   return new Date(dayStamp(date)).getUTCDay()
 }
 
-/** 'Oct 3' (or 'Oct 3, 2026' with the year) for a 'YYYY-MM-DD' date. */
-export function formatDay(date: string, withYear = false): string {
+/** 'Oct 3' (or 'Oct 3, 2026' with the year) for a 'YYYY-MM-DD' date ('10月3日', '2026年10月3日'). */
+export function formatDay(date: string, withYear = false, w: GithubWords = GITHUB_EN): string {
   const [y, m, d] = date.split('-').map(Number)
   if (!y || !m || !d) return date
-  return `${MONTHS[m - 1]} ${d}${withYear ? `, ${y}` : ''}`
+  return fill(withYear ? w.dayWithYear : w.day, { month: w.months[m - 1], m, d, y })
 }
 
 /**
@@ -478,14 +504,14 @@ export function buildCalendar(
  * (a partial first month) or to the right edge is dropped so labels never
  * overlap or overflow.
  */
-export function monthLabels(weeks: readonly ContributionWeek[], minGap = 3): Array<{ col: number; label: string }> {
+export function monthLabels(weeks: readonly ContributionWeek[], minGap = 3, w: GithubWords = GITHUB_EN): Array<{ col: number; label: string }> {
   const raw: Array<{ col: number; label: string }> = []
   let prev = -1
-  weeks.forEach((w, col) => {
-    const first = w.days[0]?.date
+  weeks.forEach((week, col) => {
+    const first = week.days[0]?.date
     if (!first) return
     const month = Number(first.slice(5, 7)) - 1
-    if (month !== prev) raw.push({ col, label: MONTHS[month] })
+    if (month !== prev) raw.push({ col, label: w.months[month] })
     prev = month
   })
   // The next label (or the right edge, for the last one) must leave room for the text.
@@ -613,11 +639,10 @@ export function calendarHighlights(weeks: readonly ContributionWeek[]): {
   return { bestMonth, longestStreak }
 }
 
-/** 'October 2026' for '2026-10'. */
-export function formatMonth(month: string): string {
+/** 'October 2026' for '2026-10' ('2026年10月'). */
+export function formatMonth(month: string, w: GithubWords = GITHUB_EN): string {
   const [y, m] = month.split('-').map(Number)
-  const names = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
-  return y && m >= 1 && m <= 12 ? `${names[m - 1]} ${y}` : month
+  return y && m >= 1 && m <= 12 ? fill(w.monthYear, { month: w.monthsLong[m - 1], m, y }) : month
 }
 
 // ── Language share (components/GitHub/LanguageStack) ─────────────────────────

@@ -1,6 +1,6 @@
 import NextLink from 'next/link'
 import { Box, Flex } from '@chakra-ui/react'
-import { LanguagesIcon } from '../Icons/ui/content'
+import { LanguagesIcon } from '../Icons/ui/chrome'
 import type { SwitchLink } from '../../lib/translations'
 import { cssTransition } from '../../theme/tokens'
 

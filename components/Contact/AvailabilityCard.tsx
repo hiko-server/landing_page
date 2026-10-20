@@ -1,5 +1,5 @@
 import { Box, Button, Flex, Text } from '@chakra-ui/react'
-import { availabilityView, type AvailabilityStatus } from '../Common/contactForm'
+import { AVAILABILITY_WORDS_EN, availabilityView, type AvailabilityStatus, type AvailabilityWords } from '../Common/availability'
 
 /**
  * The owner's availability on /contact (home.availability, set in the Home
@@ -14,6 +14,10 @@ import { availabilityView, type AvailabilityStatus } from '../Common/contactForm
  * (2 s, CSS keyframes `status-pulse` from styles/globals.css, which exist
  * only when motion is allowed, so the dot is static under reduced motion). The label always states the status in words, so colour is
  * never the only cue; in forced-colors mode the dot takes the text colour.
+ *
+ * On a Chinese page (`zh`, F3) it shows the owner's Chinese lines and the
+ * page's words (`t`, lib/uiStrings/contact); a line the owner wrote only in
+ * English is shown as written, marked lang="en".
  */
 
 const mono = 'var(--font-geist-mono), ui-monospace, monospace'
@@ -29,12 +33,21 @@ type AvailabilityInput = Parameters<typeof availabilityView>[0]
 export default function AvailabilityCard({
   availability,
   mb = 6,
+  t = AVAILABILITY_WORDS_EN,
+  zh = false,
 }: {
   availability?: AvailabilityInput
   /** Space below the card (Chakra spacing). */
   mb?: number | string
+  /** The page's words (lib/uiStrings/contact or home `availability`; English by default). */
+  t?: AvailabilityWords
+  /** A Chinese page: the owner's Chinese lines. */
+  zh?: boolean
 }) {
-  const view = availabilityView(availability)
+  const view = availabilityView(availability, { zh, t })
+  const a = t.availability
+  // "From 2026-11" / "2026-11 起": the date keeps its <time> in either word order.
+  const [fromBefore = '', fromAfter = ''] = a.from.split('{date}')
   if (!view) return null
 
   return (
@@ -105,7 +118,9 @@ export default function AvailabilityCard({
         </Flex>
         {view.from ? (
           <Text fontFamily={mono} fontSize="12px" color="page.fg-secondary" className="tnum" m={0}>
-            From <time dateTime={view.from}>{view.from}</time>
+            {fromBefore}
+            <time dateTime={view.from}>{view.from}</time>
+            {fromAfter}
           </Text>
         ) : null}
       </Flex>
@@ -113,9 +128,9 @@ export default function AvailabilityCard({
       {view.workStatus ? (
         <Text mt={3} fontSize="14px" lineHeight="1.55" color="page.fg" data-work-status="">
           <Text as="span" fontFamily={mono} fontSize="11px" letterSpacing="0.04em" color="page.fg-secondary" mr={2}>
-            work authorisation
+            {a.workAuth}
           </Text>
-          {view.workStatus}
+          <span lang={view.workStatusLang}>{view.workStatus}</span>
         </Text>
       ) : null}
 
@@ -124,7 +139,8 @@ export default function AvailabilityCard({
           {view.roles.length ? (
             <Flex
               as="ul"
-              aria-label="Roles"
+              aria-label={a.roles}
+              lang={view.rolesLang}
               listStyleType="none"
               m={0}
               p={0}
@@ -166,11 +182,11 @@ export default function AvailabilityCard({
               _active={{ bg: 'accent.solid-active' }}
               _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '3px' }}
             >
-              Book a call
+              {a.bookCall}
               <Box as="span" aria-hidden className="nudge-ne" display="inline-block" ml={1.5}>
                 ↗
               </Box>
-              <span className="sr-only"> (opens in a new tab)</span>
+              <span className="sr-only">{a.newTab}</span>
             </Button>
           ) : null}
         </Flex>

@@ -114,6 +114,7 @@ export function isHighlightHref(value: unknown): value is string {
  * The highlights visitors may see: complete tiles only (headline,
  * description and a valid link), at most HIGHLIGHT_LIMITS.highlightsMax,
  * trimmed. A malformed stored entry is skipped rather than shown broken.
+ * Chinese words are kept only as a complete pair (value_zh + label_zh).
  */
 export function visibleHighlights(raw: unknown): HomeHighlight[] {
   if (!Array.isArray(raw)) return []
@@ -125,7 +126,10 @@ export function visibleHighlights(raw: unknown): HomeHighlight[] {
     const label = typeof h.label === 'string' ? h.label.trim() : ''
     const href = typeof h.href === 'string' ? h.href.trim() : ''
     if (!value || !label || !isHighlightHref(href)) continue
-    out.push({ value, label, href })
+    // The Chinese words (F3) travel only as a pair: half a translation is none.
+    const valueZh = typeof h.value_zh === 'string' ? h.value_zh.trim() : ''
+    const labelZh = typeof h.label_zh === 'string' ? h.label_zh.trim() : ''
+    out.push(valueZh && labelZh ? { value, label, href, value_zh: valueZh, label_zh: labelZh } : { value, label, href })
     if (out.length >= HIGHLIGHT_LIMITS.highlightsMax) break
   }
   return out

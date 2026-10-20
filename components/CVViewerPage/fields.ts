@@ -12,6 +12,8 @@
 import { hiddenIndices, isRedacted, type CvLang } from '../../lib/cvVisibility'
 import { cleanList, cvLabels, formatCvDate, formatCvRange, formatGraduation, isFuture, isPresent, type CvNow } from '../../lib/cvFormat'
 import { isPublicationStatus } from '../../lib/publications/types'
+import { fillUi } from '../../lib/uiStrings'
+import { cvFieldsUiFor, type CvSeoSection } from '../../lib/uiStrings/cvFields'
 
 const isObject = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v)
 
@@ -92,8 +94,6 @@ export function graduation(node: unknown, lang: CvLang, now?: CvNow): string {
   return formatGraduation(field(node, 'endDate'), lang, now)
 }
 
-const EXPIRES = { en: 'Expires', zh: '有效期至' } as const
-
 /**
  * Validity of a certificate:
  *   issued + expiry       → "Dec 2024 – Dec 2027"
@@ -106,7 +106,7 @@ export function certificateValidity(cert: unknown, lang: CvLang): string {
   const expiry = formatCvDate(field(cert, 'expirationDate'), lang)
   if (issued && expiry) return `${issued} – ${expiry}`
   if (issued) return isRedacted(cert, 'expirationDate') ? issued : `${issued} – ${cvLabels(lang).noExpiry}`
-  if (expiry) return `${EXPIRES[lang] || EXPIRES.en} ${expiry}`
+  if (expiry) return `${cvFieldsUiFor(lang).expires} ${expiry}`
   return ''
 }
 
@@ -167,25 +167,26 @@ export function isRenderablePaper(paper: unknown): boolean {
 }
 
 type SeoSection = {
-  name: string
+  name: CvSeoSection
   /** Lists that hold the section's entries. */
   keys: readonly string[]
-  en: string
-  zh: string
   /** Which entries count (default: any visible entry). */
   counts?: (entry: unknown) => boolean
 }
 
-/** Sections the descriptions mention, in mention order, with the list that holds their entries. */
+/**
+ * Sections the descriptions mention, in mention order, with the list that
+ * holds their entries. Their names in each language: lib/uiStrings/cvFields.
+ */
 const SEO_SECTIONS: ReadonlyArray<SeoSection> = [
-  { name: 'education', keys: ['educationExperience'], en: 'education', zh: '教育' },
-  { name: 'workExperience', keys: ['experiences'], en: 'experience', zh: '工作经历' },
-  { name: 'project', keys: ['projectExperience'], en: 'projects', zh: '项目' },
+  { name: 'education', keys: ['educationExperience'] },
+  { name: 'workExperience', keys: ['experiences'] },
+  { name: 'project', keys: ['projectExperience'] },
   // Only once a public paper exists — never promise publications the CV does not list.
-  { name: 'publications', keys: ['papers'], en: 'publications', zh: '论文', counts: isRenderablePaper },
-  { name: 'patents', keys: ['patentExperience'], en: 'patents', zh: '专利' },
-  { name: 'competitionAwards', keys: ['awards'], en: 'awards', zh: '奖项' },
-  { name: 'certification', keys: ['certifications'], en: 'certifications', zh: '证书' },
+  { name: 'publications', keys: ['papers'], counts: isRenderablePaper },
+  { name: 'patents', keys: ['patentExperience'] },
+  { name: 'competitionAwards', keys: ['awards'] },
+  { name: 'certification', keys: ['certifications'] },
 ]
 
 /** sessionNames (from SEO_SECTIONS) that have at least one visible entry in these public sections. */
@@ -207,8 +208,8 @@ export function displayColumns(text: string): number {
 
 function enumerate(items: string[], lang: CvLang): string {
   if (items.length <= 1) return items.join('')
-  if (lang === 'zh') return `${items.slice(0, -1).join('、')}与${items[items.length - 1]}`
-  return `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`
+  const { listSep, listLast } = cvFieldsUiFor(lang).seo
+  return `${items.slice(0, -1).join(listSep)}${listLast}${items[items.length - 1]}`
 }
 
 /**
@@ -216,7 +217,8 @@ function enumerate(items: string[], lang: CvLang): string {
  * names present (publicSeoSections) and the public Chinese name (zh only).
  */
 export function cvDescription(lang: CvLang, opts: { present: readonly string[]; nameZh?: string }): string {
-  const parts = SEO_SECTIONS.filter((s) => opts.present.includes(s.name)).map((s) => (lang === 'zh' ? s.zh : s.en))
+  const names = cvFieldsUiFor(lang).seo.sections
+  const parts = SEO_SECTIONS.filter((s) => opts.present.includes(s.name)).map((s) => names[s.name])
   // A CV with every section would run past what a search snippet shows: the
   // last-named sections are left out until it fits (none is ever invented).
   let text = describe(lang, parts, opts.nameZh)
@@ -228,16 +230,7 @@ export function cvDescription(lang: CvLang, opts: { present: readonly string[]; 
 }
 
 function describe(lang: CvLang, parts: string[], nameZh: string | undefined): string {
-  if (lang === 'zh') {
-    const who = nameZh ? `${nameZh}（Lucian）` : 'Li Yanpei（Lucian）'
-    // The tail keeps even a CV without public sections at a useful length
-    // (≥ 70 display columns) using only facts about the page itself.
-    const tail = '另有英文版，可在线浏览，也可打印或保存为 A4 PDF。'
-    return parts.length
-      ? `${who}的中文简历：${enumerate(parts, 'zh')}，${tail}`
-      : `${who}的中文简历，${tail}`
-  }
-  return parts.length
-    ? `The CV / résumé of Li Yanpei (Lucian) in English and Chinese: ${enumerate(parts, 'en')}, printable as an A4 PDF.`
-    : 'The CV / résumé of Li Yanpei (Lucian) in English and Chinese, printable as an A4 PDF.'
+  const who = lang === 'zh' ? (nameZh ? `${nameZh}（Lucian）` : 'Li Yanpei（Lucian）') : 'Li Yanpei (Lucian)'
+  const { withSections, noSections } = cvFieldsUiFor(lang).seo
+  return parts.length ? fillUi(withSections, { who, sections: enumerate(parts, lang) }) : fillUi(noSections, { who })
 }

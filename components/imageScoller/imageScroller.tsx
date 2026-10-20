@@ -1,3 +1,5 @@
+import { fillUi } from '../../lib/uiStrings'
+import { useHomeUi } from '../LandingPage/homeUi'
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Box, Flex, HStack, IconButton, Link, Text } from '@chakra-ui/react'
 import { useReducedMotion } from 'framer-motion'
@@ -17,6 +19,8 @@ import { safeHref } from '../../lib/cvFormat'
 export type ScrollerImage = {
   url: string
   describe?: string
+  /** The caption's language where it is not the page's (an English caption on /zh, F3). */
+  lang?: string
   redirectTo?: string
   visible?: boolean
   width?: number
@@ -95,6 +99,9 @@ const FieldNoteTile = forwardRef<HTMLDivElement, { img: TileImage }>(function Fi
  *     announced politely.
  */
 const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
+  // The page's words (components/LandingPage/homeUi): Chinese on /zh.
+  const { t } = useHomeUi()
+  const p = t.photos
   // Only safe image sources / link targets reach the DOM (admin-supplied URLs).
   const data = useMemo(
     () =>
@@ -104,6 +111,7 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
           url: safeHref(i.url),
           describe: typeof i.describe === 'string' ? i.describe.trim() : '',
           redirectTo: safeHref(i.redirectTo),
+          lang: typeof i.lang === 'string' && i.lang ? i.lang : undefined,
           width: validSize(i.width),
           height: validSize(i.height),
           srcSet: typeof i.srcSet === 'string' && i.srcSet ? i.srcSet : undefined,
@@ -159,11 +167,12 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
       const visible = Math.max(1, count - snapCount + 1)
       if (visible === 1) {
         const d = data[pos]?.describe
-        return `Photo ${pos + 1} of ${count}${d ? `: ${d}` : ''}`
+        const at = fillUi(p.photo, { i: pos + 1, n: count })
+        return d ? `${at}${p.photo.match(/[\u3400-\u9fff]/) ? '：' : ': '}${d}` : at
       }
-      return `Photos ${pos + 1}–${Math.min(count, pos + visible)} of ${count}`
+      return fillUi(p.photoRange, { i: pos + 1, j: Math.min(count, pos + visible), n: count })
     },
-    [count, data],
+    [count, data, p],
   )
 
   const scrollToPosition = useCallback(
@@ -247,7 +256,7 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
     src: img.url,
     srcSet: img.srcSet,
     avifSrcSet: img.avifSrcSet,
-    alt: img.describe || `Photo ${i + 1} of ${count}`,
+    alt: img.describe || fillUi(p.photo, { i: i + 1, n: count }),
     caption: img.describe || undefined,
     width: img.width,
     height: img.height,
@@ -260,7 +269,7 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
         ref={rootRef}
         role="region"
         aria-roledescription="carousel"
-        aria-label="Field notes photos"
+        aria-label={p.region}
         borderRadius="12px"
         sx={{
           '& > .field-notes-strip': { gridAutoColumns: { base: '83%', md: '48%', lg: '32%' } },
@@ -285,7 +294,7 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
         <div
           ref={scrollerRef}
           tabIndex={0}
-          aria-label="Photos (scrolls horizontally)"
+          aria-label={p.scroller}
           onScroll={onScroll}
           onKeyDown={(e) => {
             if (e.target !== e.currentTarget) return
@@ -327,7 +336,7 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
                 <Box
                   as="button"
                   type="button"
-                  aria-label={`Enlarge photo: ${alt}`}
+                  aria-label={fillUi(p.enlarge, { alt })}
                   onClick={() => setViewer(i)}
                   display="block"
                   w="100%"
@@ -345,7 +354,7 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
                 </Box>
                 {(img.describe || img.redirectTo) && (
                   <Flex as="figcaption" mt={2.5} gap={3} align="baseline" justify="space-between" fontSize="13px" color="page.fg-secondary" lineHeight="1.5">
-                    <Text as="span" minW={0} noOfLines={2}>
+                    <Text as="span" minW={0} noOfLines={2} lang={img.lang}>
                       {img.describe}
                     </Text>
                     {img.redirectTo && (
@@ -364,10 +373,11 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
                         _hover={{ textDecoration: 'underline' }}
                         _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
                       >
-                        Visit <span className="nudge-ne" aria-hidden>↗</span>
+                        {p.visit} <span className="nudge-ne" aria-hidden>↗</span>
                         <span className="sr-only">
                           {' '}
-                          {img.describe || `photo ${i + 1}`} link{img.redirectTo.startsWith('/') ? '' : ' (opens in a new tab)'}
+                          {fillUi(p.link, { label: img.describe || fillUi(p.photo, { i: i + 1, n: count }) })}
+                          {img.redirectTo.startsWith('/') ? '' : t.newTab}
                         </span>
                       </Link>
                     )}
@@ -384,7 +394,7 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
 
         {positions > 1 ? (
           <Flex mt={3} align="center" justify="space-between" gap={3} px={{ base: 0, md: '24px' }}>
-            <HStack spacing={0} role="group" aria-label="Choose position">
+            <HStack spacing={0} role="group" aria-label={p.choose}>
               {Array.from({ length: positions }, (_, i) => (
                 <Box
                   key={i}
@@ -418,7 +428,7 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
             </HStack>
             <HStack spacing={1}>
               <IconButton
-                aria-label={playing ? 'Pause slideshow' : 'Play slideshow'}
+                aria-label={playing ? p.pause : p.play}
                 aria-pressed={!playing}
                 icon={playing ? <PauseIcon size="xs" /> : <PlayIcon size="xs" />}
                 size="sm"
@@ -427,8 +437,8 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
                 onClick={() => setPlaying((p) => !p)}
                 isDisabled={!!reduce}
               />
-              <IconButton aria-label="Previous photos" icon={<ArrowLeftIcon size="sm" />} size="sm" variant="outline" borderColor="page.border-strong" onClick={() => go(-1, true)} />
-              <IconButton aria-label="Next photos" icon={<ArrowRightIcon size="sm" />} size="sm" variant="outline" borderColor="page.border-strong" onClick={() => go(1, true)} />
+              <IconButton aria-label={p.previous} icon={<ArrowLeftIcon size="sm" />} size="sm" variant="outline" borderColor="page.border-strong" onClick={() => go(-1, true)} />
+              <IconButton aria-label={p.next} icon={<ArrowRightIcon size="sm" />} size="sm" variant="outline" borderColor="page.border-strong" onClick={() => go(1, true)} />
             </HStack>
           </Flex>
         ) : null}

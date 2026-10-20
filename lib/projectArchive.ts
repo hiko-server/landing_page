@@ -54,14 +54,14 @@ function ymIndex(d: Ym | null): number {
   return d ? d.y * 12 + ((d.m ?? 12) - 1) : -Infinity
 }
 
-/** Years of a CV range: "2024 – 2026", one year once, an open or future end as "now". */
-export function archiveYears(start: unknown, end: unknown, now: CvNow = new Date()): { years: string; startYear: string; endYear: string } {
+/** Years of a CV range: "2024 – 2026", one year once, an open or future end as "now" (`ongoing`: "至今" on a Chinese page). */
+export function archiveYears(start: unknown, end: unknown, now: CvNow = new Date(), ongoingLabel = 'now'): { years: string; startYear: string; endYear: string } {
   const s = parseCvDate(start)
   const ongoing = isPresent(end) || (typeof end === 'string' && !!end.trim() && isFuture(end, now))
   const e = ongoing ? null : parseCvDate(end)
   const sy = s ? String(s.y) : ''
   const ey = e ? String(e.y) : ''
-  if (ongoing) return { years: sy ? `${sy} – now` : 'now', startYear: sy, endYear: '' }
+  if (ongoing) return { years: sy ? `${sy} – ${ongoingLabel}` : ongoingLabel, startYear: sy, endYear: '' }
   if (sy && ey) return { years: sy === ey ? sy : `${sy} – ${ey}`, startYear: sy, endYear: ey }
   return { years: sy || ey, startYear: sy, endYear: ey }
 }
@@ -80,8 +80,12 @@ function uniq(items: string[], max: number): string[] {
   return out
 }
 
-/** Rows for every project of the website CV's `project` section(s), newest activity first. */
-export function archiveRows(sections: readonly unknown[] | null | undefined, works: readonly ArchiveWork[], now: CvNow = new Date()): ArchiveRow[] {
+/**
+ * Rows for every project of the website CV's `project` section(s), newest
+ * activity first; `ongoingLabel` ends a range that has not ended ("now",
+ * "至今" for the Chinese CV on /zh/work).
+ */
+export function archiveRows(sections: readonly unknown[] | null | undefined, works: readonly ArchiveWork[], now: CvNow = new Date(), ongoingLabel = 'now'): ArchiveRow[] {
   const items: Array<{ row: ArchiveRow; end: number; start: number; order: number }> = []
   let order = 0
   for (const section of sections || []) {
@@ -91,7 +95,7 @@ export function archiveRows(sections: readonly unknown[] | null | undefined, wor
       if (!title) continue
       const startRaw = field(item, 'startDate')
       const endRaw = field(item, 'endDate')
-      const { years, startYear, endYear } = archiveYears(startRaw, endRaw, now)
+      const { years, startYear, endYear } = archiveYears(startRaw, endRaw, now, ongoingLabel)
       const work = matchCaseStudy({ title, caseStudy: field(item, 'caseStudy') }, works)
       const cvStack = bullets(item, 'relatedSkills')
       const site = safeHref(field(item, 'url')) || safeHref(work?.link)

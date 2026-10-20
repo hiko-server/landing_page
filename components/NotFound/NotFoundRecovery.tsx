@@ -6,6 +6,8 @@ import { HIDE_ON_COARSE_POINTER, isApplePlatform, paletteShortcutLabel } from '.
 import { openCommandPalette } from '../Chrome/paletteEvents'
 import { STATIC_CANDIDATES, queryFromPath, suggestFromIndex, suggestPages, type Suggestion } from '../../lib/notFoundSuggest'
 import SectionHeading from '../General-UI/SectionHeading'
+import { fillUi } from '../../lib/uiStrings'
+import { NOT_FOUND_UI, type NotFoundStrings } from '../../lib/uiStrings/notFound'
 
 /**
  * The 404 page's way back: Home, a search field that opens the ⌘K palette
@@ -25,8 +27,6 @@ import SectionHeading from '../General-UI/SectionHeading'
 
 const MONO = 'var(--font-geist-mono), ui-monospace, monospace'
 
-const KIND_LABEL: Record<Suggestion['kind'], string> = { page: 'Page', post: 'Post', work: 'Case study', cv: 'CV', publication: 'Paper' }
-
 /** Matched words: accent text and weight, never colour alone. */
 function Marked({ segments }: { segments: readonly Segment[] }) {
   return (
@@ -44,7 +44,8 @@ function Marked({ segments }: { segments: readonly Segment[] }) {
   )
 }
 
-export default function NotFoundRecovery() {
+/** `t`: the page's words in the missing address's language (lib/uiStrings/notFound). */
+export default function NotFoundRecovery({ t = NOT_FOUND_UI.en }: { t?: NotFoundStrings }) {
   const [query, setQuery] = useState('')
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null)
   const [apple, setApple] = useState<boolean | null>(null)
@@ -67,7 +68,7 @@ export default function NotFoundRecovery() {
     return () => ctrl.abort()
   }, [])
 
-  const searchLabel = query ? `Search for “${query}”` : 'Search the site'
+  const searchLabel = query ? fillUi(t.searchFor, { query }) : t.searchSite
 
   return (
     <>
@@ -86,7 +87,8 @@ export default function NotFoundRecovery() {
           _active={{ bg: 'accent.solid-active' }}
           _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '3px' }}
         >
-          <span aria-hidden>←&nbsp;</span>Home
+          <span aria-hidden>←&nbsp;</span>
+          {t.home}
         </Button>
         <chakra.button
           type="button"
@@ -133,7 +135,7 @@ export default function NotFoundRecovery() {
       {suggestions && suggestions.length > 0 && (
         <Box as="section" aria-labelledby="not-found-suggestions" mt={{ base: 12, md: 16 }} maxW="720px">
           <SectionHeading id="not-found-suggestions" mb={3}>
-            Did you mean
+            {t.didYouMean}
           </SectionHeading>
           <Box as="ul" className="hover-list" listStyleType="none" m={0} p={0} borderTop="1px solid" borderColor="page.border">
             {suggestions.map((s) => (
@@ -165,7 +167,7 @@ export default function NotFoundRecovery() {
                     </Text>
                   </Box>
                   <Flex as="span" align="center" gap={2} flexShrink={0} fontFamily={MONO} fontSize="10px" letterSpacing="0.1em" textTransform="uppercase" color="page.fg-secondary">
-                    {KIND_LABEL[s.kind]}
+                    {t.kinds[s.kind]}
                     <span aria-hidden className="nudge">
                       →
                     </span>

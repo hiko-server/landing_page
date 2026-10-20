@@ -16,14 +16,29 @@
  *   ./compile     COMPILE_UI — words the MDX compiler writes into the tree
  *                 on the server: callout titles, footnotes, heading
  *                 self-links;
- *   ./lists       LIST_UI — the index lines of a piece with translations;
+ *   ./lists       LIST_UI — the blog and work indexes and the project
+ *                 archive (F3), and the index line of a piece with
+ *                 translations;
  *   ./languages   LANGUAGE_AUTONYMS / READ_IN — language names and "Read in
  *                 …" links, each written in the language it names (they
  *                 never follow the page).
  *
- * The bilingual site chrome (F3) adds its modules the same way — chrome
- * (header, footer, drawer), palette, notFound — each a `UiTable` of its own
- * strings type:
+ * The bilingual site (F3) adds its modules the same way:
+ *
+ *   ./chrome      CHROME_UI — header, footer, skip link, theme control
+ *                 (English in ./chrome-en, the only table the shared bundle
+ *                 holds; a Chinese page receives its words as props);
+ *   ./menu        MENU_UI — the mobile menu, theme menu, back-to-top and
+ *                 the "G then …" hint (lazy chunks only);
+ *   ./palette     PALETTE_UI — the command palette (its own chunk);
+ *   ./notFound    NOT_FOUND_UI — the 404 page;
+ *   ./home, ./about, ./contact   the home, about and contact pages (with
+ *                 ./github-en and ./askEntry), shipped as page props in the
+ *                 page's language;
+ *   ./cv, ./cvFields   the CV page's controls; the certificate and meta
+ *                 description words of the CV helpers.
+ *
+ * Each is a `UiTable` of its own strings type:
  *
  *   - every table holds every interface language (`UiTable<T>`): a key added
  *     to one language and not the others fails the type check;

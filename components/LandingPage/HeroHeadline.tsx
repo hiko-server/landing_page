@@ -31,6 +31,7 @@ export default function HeroHeadline({
   rotating,
   startStep = 0,
   avatar,
+  zh = false,
 }: {
   brand?: string
   identity: HeroIdentity
@@ -40,9 +41,15 @@ export default function HeroHeadline({
   startStep?: number
   /** Small portrait shown beside the h1 below md (the large card is hidden there). */
   avatar?: React.ReactNode
+  /** /zh (F3): the 中文 name leads and the English one follows (marked lang="en"). */
+  zh?: boolean
 }) {
   // EN name (or nickname) leads; when the owner shows only the 中文 name it leads alone.
-  const primary = identity.name || identity.nick
+  // On the Chinese page the 中文 name leads and the English one is the second name.
+  const zhFirst = zh && !!identity.nameZh
+  const primary = zhFirst ? identity.nameZh : identity.name || identity.nick
+  const secondary = zhFirst ? identity.name || identity.nick : identity.nameZh
+  const secondaryLang = zhFirst ? 'en' : 'zh-Hans'
   const headline = primary || identity.nameZh
   const brandText = (brand || '').trim()
   // Paint only a domain-style suffix (".dev") in the accent, as the header does.
@@ -94,20 +101,20 @@ export default function HeroHeadline({
               letterSpacing="-0.035em"
               color="page.fg"
             >
-              {primary ? (
+              {primary && !zhFirst ? (
                 <Words text={primary} />
               ) : (
-                <span className="hero-word" style={heroWordStyle(0)} lang="zh-Hans">
-                  {identity.nameZh}
+                <span className="hero-word" style={heroWordStyle(0)} lang={zh ? undefined : 'zh-Hans'}>
+                  {primary || identity.nameZh}
                 </span>
               )}
-              {primary && identity.nameZh && (
+              {primary && secondary && (
                 <>
                   {' '}
                   <Box
                     as="span"
                     className="hero-word"
-                    style={heroWordStyle(headlineWords(primary).length)}
+                    style={heroWordStyle(zhFirst ? 1 : headlineWords(primary).length)}
                     fontWeight={300}
                     color="page.fg-secondary"
                     whiteSpace="nowrap"
@@ -116,7 +123,7 @@ export default function HeroHeadline({
                       {'/ '}
                     </Box>
                     <span className="sr-only">, </span>
-                    <span lang="zh-Hans">{identity.nameZh}</span>
+                    <span lang={secondaryLang}>{secondary}</span>
                   </Box>
                 </>
               )}

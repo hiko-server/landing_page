@@ -36,6 +36,12 @@ import { recordServerGoal } from '../../lib/analytics/events'
  * Each is capped; fields the intent does not ask for are dropped; the link
  * must be a plain https URL (400 otherwise) and is never fetched. They are
  * stored as the Inbox message's `meta` and listed at the top of the e-mail.
+ *
+ * Every refusal carries a stable `code` next to its English `error`
+ * (RATE_LIMITED, MISSING_FIELDS, TOKEN_MISSING / _INVALID / _EXPIRED,
+ * TOO_FAST, CHALLENGE_MISSING, BAD_CHALLENGE, BAD_EMAIL, BAD_LINK, BUSY,
+ * UNAVAILABLE): the form on /zh/contact says it in Chinese (F3,
+ * lib/uiStrings/contact).
  */
 
 const nonces = () => sharedReplayGuard('contact-nonce')
@@ -55,7 +61,7 @@ export default withApi('contact', async (req, res, { log }) => {
 
   const rl = rateLimit(req, 5, 10 * 60 * 1000)
   res.setHeader('X-RateLimit-Remaining', String(rl.remaining))
-  if (!rl.allowed) return res.status(429).json({ error: 'Too many requests, try later' })
+  if (!rl.allowed) return res.status(429).json({ error: 'Too many requests, try later', code: 'RATE_LIMITED' })
 
   const { name, email, subject, message, nonce, mathAnswer, hp, reason, intent, company, roleUrl, timeline } = req.body || {}
 
@@ -66,12 +72,12 @@ export default withApi('contact', async (req, res, { log }) => {
 
   // 2. Required fields
   if (!name || !email || !subject || !message) {
-    return res.status(400).json({ error: 'Missing required fields' })
+    return res.status(400).json({ error: 'Missing required fields', code: 'MISSING_FIELDS' })
   }
 
   // 3. Nonce
   if (!nonce || typeof nonce !== 'string') {
-    return res.status(400).json({ error: 'Missing verification token' })
+    return res.status(400).json({ error: 'Missing verification token', code: 'TOKEN_MISSING' })
   }
   let nonceExpiresAt: number
   let nonceId: unknown
@@ -85,24 +91,24 @@ export default withApi('contact', async (req, res, { log }) => {
       t?: string
     }
     if (decoded.t !== 'contact-nonce') {
-      return res.status(400).json({ error: 'Invalid verification token' })
+      return res.status(400).json({ error: 'Invalid verification token', code: 'TOKEN_INVALID' })
     }
     const issuedAt = (decoded.iat || 0) * 1000
     const elapsed = Date.now() - issuedAt
     if (elapsed < 2_000) {
-      return res.status(400).json({ error: 'Please slow down a moment.' })
+      return res.status(400).json({ error: 'Please slow down a moment.', code: 'TOO_FAST' })
     }
     nonceExpiresAt = (decoded.exp || 0) * 1000
     nonceId = decoded.jti
     answerHash = decoded.ah
   } catch {
-    return res.status(400).json({ error: 'Verification token expired — refresh the form.' })
+    return res.status(400).json({ error: 'Verification token expired — refresh the form.', code: 'TOKEN_EXPIRED' })
   }
 
   // 4. Sum. Nonces minted before the server-side check existed carry no
   // answer hash; for those (≤ 30 min after a deploy) presence is enough.
   if (!mathAnswer && mathAnswer !== 0) {
-    return res.status(400).json({ error: 'Please complete the human check.' })
+    return res.status(400).json({ error: 'Please complete the human check.', code: 'CHALLENGE_MISSING' })
   }
   if (answerHash !== undefined && !verifyChallenge(getJwtSecret(), nonceId, mathAnswer, answerHash)) {
     // One attempt per challenge: burn the nonce so the 17 possible sums
@@ -121,18 +127,18 @@ export default withApi('contact', async (req, res, { log }) => {
   const safeSubject = clean(subject, 200)
   const safeMessage = String(message ?? '').slice(0, 10_000)
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(safeEmail)) {
-    return res.status(400).json({ error: 'Please enter a valid email address.' })
+    return res.status(400).json({ error: 'Please enter a valid email address.', code: 'BAD_EMAIL' })
   }
   // Checked before the nonce is claimed, so the visitor can fix the link and resend.
   const inquiry = normalizeInquiry({ reason, intent, company, roleUrl, timeline })
-  if (!inquiry.ok) return res.status(400).json({ error: inquiry.error, field: inquiry.field })
+  if (!inquiry.ok) return res.status(400).json({ error: inquiry.error, field: inquiry.field, code: 'BAD_LINK' })
   const meta = inquiry.meta
   const details = inquiryRows(meta).map((r) => `${r.label}: ${r.value}`)
 
   // 6. One message per nonce. Claimed now, released below if nothing was accepted.
   const key = nonceKey(nonce, nonceId)
   if (!nonces().claim(key, nonceExpiresAt)) {
-    return res.status(400).json({ error: 'Verification token expired — refresh the form.' })
+    return res.status(400).json({ error: 'Verification token expired — refresh the form.', code: 'TOKEN_EXPIRED' })
   }
 
   const to = process.env.NOTIFY_EMAIL || process.env.ADMIN_EMAIL
@@ -140,7 +146,7 @@ export default withApi('contact', async (req, res, { log }) => {
   const refuse = (retryAfterMs: number | null, error: string) => {
     nonces().release(key)
     if (retryAfterMs) res.setHeader('Retry-After', String(Math.max(1, Math.ceil(retryAfterMs / 1000))))
-    return res.status(503).json({ error })
+    return res.status(503).json({ error, code: error === BUSY ? 'BUSY' : 'UNAVAILABLE' })
   }
   // Inbox paused and no recipient to email: nothing could accept the message.
   if (!capacity.ok && !to) return refuse(capacity.retryAfterMs, BUSY)

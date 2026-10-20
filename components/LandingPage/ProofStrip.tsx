@@ -63,10 +63,20 @@ function Value({ value }: { value: string }) {
  * Responsive values only (no layout shift); no entrance animation beyond the
  * number roll, which reduced motion turns off.
  */
-export default function ProofStrip({ highlights }: { highlights: HomeHighlight[] }) {
+export default function ProofStrip({
+  highlights,
+  label = 'Highlights',
+  newTab = ' (opens in a new tab)',
+}: {
+  /** On /zh each tile carries its Chinese words, or its English ones marked `lang` (pages/index, F3). */
+  highlights: Array<HomeHighlight & { lang?: string }>
+  /** The strip's name and the new-tab note, in the page's language. */
+  label?: string
+  newTab?: string
+}) {
   if (!highlights.length) return null
   return (
-    <Box as="section" aria-label="Highlights" w="100%" maxW="var(--container-content)" mx="auto" px={{ base: 4, md: 6, lg: 8 }}>
+    <Box as="section" aria-label={label} w="100%" maxW="var(--container-content)" mx="auto" px={{ base: 4, md: 6, lg: 8 }}>
       <noscript>
         <style>{DIGIT_ROLL_NO_SCRIPT_CSS}</style>
       </noscript>
@@ -114,10 +124,10 @@ export default function ProofStrip({ highlights }: { highlights: HomeHighlight[]
                   '&:hover .proof-arrow': { color: 'accent.text' },
                 }}
               >
-                <Box pr={6}>
+                <Box pr={6} lang={h.lang}>
                   <Value value={h.value} />
                 </Box>
-                <Text as="span" fontSize={{ base: '13px', md: '14px' }} lineHeight="1.45" color="page.fg-secondary">
+                <Text as="span" fontSize={{ base: '13px', md: '14px' }} lineHeight="1.45" color="page.fg-secondary" lang={h.lang}>
                   {h.label}
                 </Text>
                 <Text
@@ -134,7 +144,7 @@ export default function ProofStrip({ highlights }: { highlights: HomeHighlight[]
                 >
                   {external ? '↗' : '→'}
                 </Text>
-                {external ? <span className="sr-only"> (opens in a new tab)</span> : null}
+                {external ? <span className="sr-only">{newTab}</span> : null}
               </Link>
             </Box>
           )

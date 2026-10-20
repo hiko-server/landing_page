@@ -7,6 +7,7 @@ import { ChevronDownIcon } from '../Icons/ui/chrome'
 import ErrorBoundary from '../Common/ErrorBoundary'
 import ThemeIcon from './ThemeIcon'
 import { triggerKeyFocus, type MenuFocus } from './themeTriggerKeys'
+import { useChromeUi } from '../Chrome/chromeLang'
 
 /**
  * The header's theme control: a one-tap Light ⇄ Dark toggle (the circular
@@ -57,11 +58,12 @@ export default function ThemeControl() {
     return () => router.events.off('routeChangeStart', close)
   }, [router.events])
 
+  const { t } = useChromeUi()
   const isDark = colorMode === 'dark'
-  const toggleLabel = isDark ? 'Switch to light theme' : 'Switch to dark theme'
+  const toggleLabel = isDark ? t.toLight : t.toDark
 
   return (
-    <Flex role="group" aria-label="Theme" position="relative" alignItems="center">
+    <Flex role="group" aria-label={t.theme} position="relative" alignItems="center">
       <IconButton
         size="sm"
         variant="ghost"
@@ -88,8 +90,8 @@ export default function ThemeControl() {
         color="page.fg-subtle"
         _hover={{ color: 'page.fg', bg: 'page.hover' }}
         _expanded={{ color: 'page.fg', bg: 'page.hover' }}
-        aria-label="Theme preference"
-        title="Theme: System, Light or Dark"
+        aria-label={t.themePreference}
+        title={t.themeTitle}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? MENU_ID : undefined}

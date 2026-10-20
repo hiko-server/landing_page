@@ -69,10 +69,16 @@ type LandingCVSectionsProps = {
   onLanguageChange?: (lang: Lang) => void
   /** Replaces the mono "Language / CV" caption on the left of the toggle row. */
   title?: ReactNode
+  /** The page's words for the toggle row (lib/uiStrings/about cvToggle; English by default). */
+  labels?: { language: string; cv: string; group: string }
+  /** The page's language: the stack in the other language is marked with its own lang (F3). */
+  pageLang?: 'en' | 'zh'
 }
 
-const LandingCVSections = ({ en, zh, work, expanded, headingLevel, idPrefix, language: controlled, onLanguageChange, title }: LandingCVSectionsProps) => {
-  const [own, setOwn] = useState<Lang>('en')
+const TOGGLE_EN = { language: 'Language', cv: 'CV', group: 'CV language' }
+
+const LandingCVSections = ({ en, zh, work, expanded, headingLevel, idPrefix, language: controlled, onLanguageChange, title, labels = TOGGLE_EN, pageLang = 'en' }: LandingCVSectionsProps) => {
+  const [own, setOwn] = useState<Lang>(pageLang)
   const language = controlled ?? own
   const setLanguage = (lang: Lang) => {
     if (controlled === undefined) setOwn(lang)
@@ -95,11 +101,11 @@ const LandingCVSections = ({ en, zh, work, expanded, headingLevel, idPrefix, lan
       <Flex align="center" justify="space-between" gap={4} minH="32px" mb={{ base: 5, md: 6 }}>
         {title ?? (
           <Text fontFamily={monoFont} fontSize="11px" letterSpacing="0.08em" color="page.fg-secondary" textTransform="uppercase">
-            {hasZh ? 'Language' : 'CV'}
+            {hasZh ? labels.language : labels.cv}
           </Text>
         )}
         {hasZh && (
-          <Flex gap={1} fontFamily={monoFont} fontSize="11px" role="group" aria-label="CV language">
+          <Flex gap={1} fontFamily={monoFont} fontSize="11px" role="group" aria-label={labels.group}>
             {langs.map(({ key, label }) => (
               <Box
                 key={key}
@@ -135,7 +141,7 @@ const LandingCVSections = ({ en, zh, work, expanded, headingLevel, idPrefix, lan
         for unpruned callers.
       */}
       <CVSectionsContext.Provider value={context}>
-        <Flex direction="column" lang={active === 'zh' ? 'zh-Hans' : undefined}>
+        <Flex direction="column" lang={active === pageLang ? undefined : active === 'zh' ? 'zh-Hans' : 'en'}>
           {renderedCvSections(cvData).map((section: any, key: number) => {
             const k = `${section.sessionName}-${key}`
             const props = { data: section, lang: active }

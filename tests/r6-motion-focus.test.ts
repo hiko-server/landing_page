@@ -533,7 +533,8 @@ test('every single-character shortcut checks the preference and IME composition'
   assert.match(read('lib/keyboardLayer.ts'), /if \(e\.isComposing === true \|\| e\.keyCode === 229\) return null/)
   const palette = read('components/General-UI/CommandPalette.tsx')
   assert.match(palette, /id: 'action:shortcuts'/)
-  assert.match(palette, /label: `Keyboard shortcuts: \$\{shortcutsOn \? 'on' : 'off'\}`/)
+  // In the palette's language (lib/uiStrings/palette, F3).
+  assert.match(palette, /label: fillUi\(p\.shortcuts, \{ state: shortcutsOn \? p\.on : p\.off \}\)/)
   assert.match(palette, /setShortcutsEnabled\(next\)/)
   const overlay = read('components/Admin/shell/ShortcutsOverlay.tsx')
   assert.match(overlay, /<Switch[\s\S]*isChecked=\{shortcutsOn\}[\s\S]*setShortcutsEnabled\(e\.target\.checked\)/)

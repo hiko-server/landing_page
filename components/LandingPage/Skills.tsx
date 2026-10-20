@@ -6,8 +6,8 @@ import Hint, { HintGroup } from '../General-UI/Hint'
 import { useScrollReveal } from '../General-UI/useScrollReveal'
 import type { CvSectionLike } from '../../lib/cvVisibility'
 import { revealVariant } from '../../lib/reveal'
-import { labelLang } from '../../lib/toc'
 import { skillGroups, type Skill } from './projectMatch'
+import { useHomeUi, useOwnLang } from './homeUi'
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
@@ -41,12 +41,14 @@ const chipSx = {
  * Renders nothing when the section is hidden or empty.
  */
 export default function Skills({ cvEn }: { cvEn?: CvSectionLike[] }) {
+  const { t } = useHomeUi()
+  const ownLang = useOwnLang()
   const reduce = useReducedMotion()
   const reveal = useScrollReveal<HTMLDivElement>()
   const groups = useMemo(() => {
     const section = Array.isArray(cvEn) ? cvEn.find((s) => s?.sessionName === 'skill') : undefined
-    return skillGroups(section)
-  }, [cvEn])
+    return skillGroups(section, t.skills)
+  }, [cvEn, t.skills])
 
   if (!groups.length) return null
 
@@ -79,7 +81,7 @@ export default function Skills({ cvEn }: { cvEn?: CvSectionLike[] }) {
                 color="page.fg-secondary"
                 w={{ sm: '168px' }}
                 flexShrink={0}
-                lang={labelLang(g.label)}
+                lang={ownLang(g.label)}
               >
                 {g.label}
               </Text>
@@ -101,8 +103,9 @@ export default function Skills({ cvEn }: { cvEn?: CvSectionLike[] }) {
 }
 
 function SkillChip({ skill }: { skill: Skill }) {
+  const ownLang = useOwnLang()
   const name = (
-    <Text as="span" lang={labelLang(skill.name)}>
+    <Text as="span" lang={ownLang(skill.name)}>
       {skill.name}
     </Text>
   )

@@ -22,6 +22,9 @@ import {
   type CompactCalendar,
   type ContributionLevel,
 } from '../Common/githubEvents'
+import { fillUi } from '../../lib/uiStrings'
+import type { HomeStrings } from '../../lib/uiStrings/home'
+import { useHomeUi } from '../LandingPage/homeUi'
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 const GRID_H = LABEL_H + ROWS * STEP - GAP
@@ -62,11 +65,15 @@ const levelSx = {
   },
 }
 
-const contributionsText = (count: number) => `${count === 0 ? 'No' : count.toLocaleString('en-US')} contribution${count === 1 ? '' : 's'}`
+/** "1,622 contributions" / "1,622 次贡献" in the page's words (lib/uiStrings/home calendar). */
+const contributionsText = (count: number, c: HomeStrings['calendar']) => (count === 0 ? c.none : fillUi(count === 1 ? c.one : c.many, { n: count.toLocaleString('en-US') }))
 
 type Tip = { key: string; text: string; x: number; y: number }
 
 function Calendar({ data }: { data: CompactCalendar }) {
+  const { t } = useHomeUi()
+  const c = t.calendar
+  const w = t.github
   const reduce = useReducedMotion()
   const summaryId = useId()
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -78,7 +85,7 @@ function Calendar({ data }: { data: CompactCalendar }) {
   const weeks = useMemo(() => expandCalendar(data), [data])
   const { cells, byKey } = useMemo(() => calendarLayout(weeks), [weeks])
   const paths = useMemo(() => calendarPaths(weeks), [weeks])
-  const labels = useMemo(() => monthLabels(weeks), [weeks])
+  const labels = useMemo(() => monthLabels(weeks, 3, w), [weeks, w])
   const facts = useMemo(() => calendarFacts(weeks), [weeks])
   const more = useMemo(() => calendarHighlights(weeks), [weeks])
   const width = weeks.length * STEP - GAP
@@ -151,12 +158,12 @@ function Calendar({ data }: { data: CompactCalendar }) {
     }
     if (tip?.key === cell.key) return
     const topLeft = new DOMPoint(col * STEP + CELL / 2, LABEL_H + row * STEP).matrixTransform(ctm)
-    const w = wrap.getBoundingClientRect()
+    const box = wrap.getBoundingClientRect()
     setTip({
       key: cell.key,
-      text: `${contributionsText(cell.day.count)} · ${formatDay(cell.day.date)}`,
-      x: topLeft.x - w.left,
-      y: topLeft.y - w.top,
+      text: `${contributionsText(cell.day.count, c)} · ${formatDay(cell.day.date, false, w)}`,
+      x: topLeft.x - box.left,
+      y: topLeft.y - box.top,
     })
   }
 
@@ -173,20 +180,22 @@ function Calendar({ data }: { data: CompactCalendar }) {
   const fade = (on: boolean) => (on ? '24px' : '0px')
   const first = weeks[0]?.days[0]?.date
   const lastDay = cells[cells.length - 1]?.day.date
+  const lower = (text: string) => text.toLowerCase()
   const summary = [
-    first && lastDay ? `${contributionsText(data.total)} between ${formatDay(first, true)} and ${formatDay(lastDay, true)}.` : '',
-    `Active on ${facts.activeDays} of ${facts.days} days.`,
-    facts.best ? `Busiest day: ${formatDay(facts.best.date, true)}, with ${contributionsText(facts.best.count).toLowerCase()}.` : '',
-    more.bestMonth ? `Busiest month: ${formatMonth(more.bestMonth.month)}, with ${contributionsText(more.bestMonth.count).toLowerCase()}.` : '',
-    more.longestStreak > 1 ? `Longest streak: ${more.longestStreak} days in a row.` : '',
+    first && lastDay ? fillUi(c.range, { count: contributionsText(data.total, c), from: formatDay(first, true, w), to: formatDay(lastDay, true, w) }) : '',
+    fillUi(c.active, { active: facts.activeDays, days: facts.days }),
+    facts.best ? fillUi(c.busiestDay, { day: formatDay(facts.best.date, true, w), count: lower(contributionsText(facts.best.count, c)) }) : '',
+    more.bestMonth ? fillUi(c.busiestMonth, { month: formatMonth(more.bestMonth.month, w), count: lower(contributionsText(more.bestMonth.count, c)) }) : '',
+    more.longestStreak > 1 ? fillUi(c.streak, { n: more.longestStreak }) : '',
   ]
     .filter(Boolean)
-    .join(' ')
+    // Chinese sentences follow each other without a space.
+    .join(/[\u3400-\u9fff]/.test(c.active) ? '' : ' ')
 
   return (
     <Box ref={wrapRef} position="relative" sx={levelSx}>
       <Text className="tnum" fontSize="sm" color="page.fg" mb={3}>
-        {data.total.toLocaleString('en-US')} contributions in the last year
+        {fillUi(c.total, { n: data.total.toLocaleString('en-US') })}
       </Text>
       <p id={summaryId} className="sr-only">
         {summary}
@@ -206,7 +215,7 @@ function Calendar({ data }: { data: CompactCalendar }) {
           pb={1}
           tabIndex={scrollable ? 0 : undefined}
           role={scrollable ? 'group' : undefined}
-          aria-label={scrollable ? 'Contribution calendar, scrolls sideways' : undefined}
+          aria-label={scrollable ? c.scroller : undefined}
           sx={{
             scrollbarWidth: 'thin',
             '&:focus-visible': { outline: '2px solid var(--accent)', outlineOffset: '2px', borderRadius: '4px' },
@@ -218,7 +227,7 @@ function Calendar({ data }: { data: CompactCalendar }) {
           <svg
             ref={svgRef}
             role="img"
-            aria-label="Contribution calendar"
+            aria-label={c.label}
             aria-describedby={summaryId}
             width={width}
             height={GRID_H}
@@ -252,13 +261,13 @@ function Calendar({ data }: { data: CompactCalendar }) {
           </svg>
         </Box>
         <Flex align="center" justify="flex-end" gap={1.5} mt={2} fontFamily={monoFont} fontSize="11px" color="page.fg-secondary" aria-hidden>
-          <span>Less</span>
+          <span>{c.less}</span>
           <svg width={LEVELS.length * STEP - GAP} height={CELL} style={{ display: 'block' }}>
             {LEVELS.map((level) => (
               <rect key={level} data-level={level} x={level * STEP + 1.5} y={1.5} width={CELL - 3} height={CELL - 3} />
             ))}
           </svg>
-          <span>More</span>
+          <span>{c.more}</span>
         </Flex>
       </Box>
       {tip ? (
@@ -289,6 +298,7 @@ const SKELETON_H = `${GRID_H + 52}px`
  * Renders nothing when the calendar is unavailable.
  */
 export default function ContributionGraph({ initialData }: { initialData?: CompactCalendar | { available: false } | null }) {
+  const { t } = useHomeUi()
   const { data, error } = useFetchJson<CalendarInput>('/api/github/contributions', { initialData })
   const calendar = useMemo(() => compactCalendar(data), [data])
 
@@ -296,7 +306,7 @@ export default function ContributionGraph({ initialData }: { initialData?: Compa
 
   if (!calendar) {
     return (
-      <Box aria-busy="true" aria-label="Loading contribution calendar" h={SKELETON_H}>
+      <Box aria-busy="true" aria-label={t.calendar.loading} h={SKELETON_H}>
         <Skeleton h="14px" w="260px" maxW="70%" mb={3} borderRadius="sm" startColor="page.bg-elevated" endColor="page.bg-overlay" />
         <Skeleton h={`${GRID_H}px`} w="100%" borderRadius="md" startColor="page.bg-elevated" endColor="page.bg-overlay" />
       </Box>

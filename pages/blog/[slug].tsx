@@ -290,6 +290,10 @@ export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
       translations,
       alternates,
       ui: articleUiFor(post.lang),
+      // The header's language switch: this piece's other versions (F3); and on a Chinese
+      // piece the chrome's Chinese words and links (lib/pageLanguage).
+      langLinks: translations.map((tr) => ({ lang: tr.lang, href: tr.permalink })),
+      ...(await import('../../lib/pageLanguage')).chromeLanguageProps(post.lang),
       pendingPreview: draftMode && !!(await import('../../lib/pendingRevisions')).getPendingRevision('blog', post.slug),
       ...(review ? { review: true } : {}),
       // Whether /publications exists, for the nav link (lib/publicationsData).
