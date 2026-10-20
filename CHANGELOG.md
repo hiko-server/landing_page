@@ -8,6 +8,33 @@ portfolio CMS, no public package). Entries are grouped by release date.
 
 ## [Unreleased]
 
+### Review fixes
+
+- **Header: the nav stays put.** From 1024 px the nav is centred in the
+  header, and on pages without a language switch its place is kept, so the
+  nav and its underline no longer jump sideways between pages.
+- **Header on small phones**: below 375 px the language switch shows only
+  its icon, so it no longer runs into the brand (screen readers still
+  hear "中文" / "English").
+- **Chinese type on every Chinese page**: /zh pages, /cv/zh and the
+  header, footer and palette there now use the Chinese typesetting the
+  articles had — Chinese fonts and punctuation (—— joins up), no letter
+  spacing, more line height in titles and ledes, and space between Chinese
+  and Latin text. English pages and the A4 CV sheet are unchanged.
+- **Image viewer**: the previous / next arrows fade in with the viewer
+  instead of flashing. A click, a double tap or the zoom button now zooms
+  only as far as the photo's file has pixels (1:1), never into a blurry
+  upscale; a photo already shown at full size has no zoom button, and a
+  click on it closes the viewer. Pinch, the wheel and + / − still zoom.
+- **⌘K on Chinese pages**: result labels and recent items name their
+  group in Chinese (页面, 操作) instead of PAGES / ACTIONS.
+- **CV Studio**: the confirmation after a change (for example "shows on")
+  shows its text again instead of an empty pill.
+- **Review and draft preview bars** line up with the page edges at every
+  width; **Scheduled & review links** has one rule under "Review links";
+  the **analytics page card**'s "View page" lines up with the title on
+  phones.
+
 ### patch-2b1
 
 Fixes after the wave 2B deploy (the post-deploy end-to-end run against
