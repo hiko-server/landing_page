@@ -143,6 +143,8 @@ function cvOutputs(doc: CvDoc, lang: 'en' | 'zh'): string {
   const pi = sections.find((s) => s.sessionName === 'personalInformation')
   const workSection = sections.find((s) => s.sessionName === 'workExperience')
   return [
+    // The public payload itself (what /api/cvdata and the pages ship), the ORCID marker included.
+    JSON.stringify(publicCvDoc(doc, 'cv')[lang]),
     JSON.stringify(model),
     renderCvText(model),
     JSON.stringify(buildJsonResume(sections, { lang, now: NOW, canonical: 'https://lucian-dev.com/cv.json' })),
@@ -176,7 +178,12 @@ test('no hidden value reaches the model, the text, the JSON Resume, the evidence
   for (const slot of slots) {
     const { value, needles } = sentinelFor(slot)
     const base = buildDoc()
-    const planted: CvDoc = { en: setAt(base.en, slot.path, value), zh: setAt(base.zh, slot.path, value) }
+    let planted: CvDoc = { en: setAt(base.en, slot.path, value), zh: setAt(base.zh, slot.path, value) }
+    // A connected iD carries the "authenticated" marker with the same iD: hiding the iD must take it along.
+    if (slot.field === 'orcid') {
+      const marker = { orcidAuthenticated: { id: value, at: '2026-10-21T08:00:00.000Z' } }
+      planted = { en: merge(planted.en, slot.ownerPath, marker), zh: merge(planted.zh, slot.ownerPath, marker) }
+    }
     const has = (text: string) => needles.some((n) => text.includes(n))
     if (has(cvOutputs(planted, 'en')) || has(websiteOutputs(planted))) controls++
 
@@ -233,7 +240,12 @@ test('the PDF draws no hidden value (sampled: one slot per section and field kin
   for (const slot of sample) {
     const { value, needles } = sentinelFor(slot)
     const base = buildDoc()
-    const planted: CvDoc = { en: setAt(base.en, slot.path, value), zh: setAt(base.zh, slot.path, value) }
+    let planted: CvDoc = { en: setAt(base.en, slot.path, value), zh: setAt(base.zh, slot.path, value) }
+    // A connected iD carries the "authenticated" marker with the same iD: hiding the iD must take it along.
+    if (slot.field === 'orcid') {
+      const marker = { orcidAuthenticated: { id: value, at: '2026-10-21T08:00:00.000Z' } }
+      planted = { en: merge(planted.en, slot.ownerPath, marker), zh: merge(planted.zh, slot.ownerPath, marker) }
+    }
     for (const mech of mechanisms(slot).filter((m) => m.hiddenFrom.includes('cv'))) {
       const doc: CvDoc = { en: mech.apply(planted.en), zh: mech.apply(planted.zh) }
       const sections = withEvidenceLinks(publicCvDoc(doc, 'cv').en, { works, socials })
