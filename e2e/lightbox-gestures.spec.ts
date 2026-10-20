@@ -665,9 +665,11 @@ test.describe('lightbox gestures: article images', { tag: '@admin' }, () => {
         await drag(tab, f, { x: c.cx + 100, y: c.cy }, { x: c.cx - 140, y: c.cy })
         await expect(tab.locator('.lightbox-counter')).toHaveText('2 / 3')
         await idle(tab)
+        const shot = await oneShot(tab)
         await doubleTap(tab, f, { x: c.cx, y: c.cy })
         await idle(tab)
-        expect((await view(tab)).scale).toBeGreaterThanOrEqual(2.5)
+        // As far as the file has pixels (none for a photo already shown at its full size).
+        expect((await view(tab)).scale).toBeCloseTo(shot.zoomable ? shot.scale : 1, 2)
         await doubleTap(tab, f, { x: c.cx, y: c.cy })
         await idle(tab)
         await drag(tab, f, { x: c.cx, y: c.cy - 60 }, { x: c.cx, y: c.cy + 200 }, 6, 16)
