@@ -167,7 +167,7 @@ function FailedAttempts({ summary, now }: { summary: FailureSummary; now: number
           id="security-failures"
           fontSize="sm"
           fontWeight={600}
-          color={recent ? 'orange.400' : undefined}
+          color={recent ? 'status.warning' : undefined}
         >
           Failed attempts
         </Text>
@@ -208,9 +208,10 @@ function FailedAttempts({ summary, now }: { summary: FailureSummary; now: number
       <Text fontSize="xs" color="page.fg-secondary" mt={2}>
         {summary.byMethod.map((m) => failureKindLabel(m.type, m.method, m.count)).join(' · ')}
       </Text>
-      {summary.byCountry.length ? (
+      {/* Only when Cloudflare named at least one country (locally it names none). */}
+      {summary.byCountry.some((c) => c.country) ? (
         <Text fontSize="xs" color="page.fg-secondary" mt={0.5}>
-          From {failureCountriesLabel(summary.byCountry)}
+          By country: {failureCountriesLabel(summary.byCountry)}
         </Text>
       ) : null}
     </Box>
