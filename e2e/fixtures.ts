@@ -98,9 +98,9 @@ function testClientAddress(slot: number, workers: number, n: number): string {
 type Fixtures = { pageGuard: void }
 
 export const test = base.extend<Fixtures>({
-  extraHTTPHeaders: async ({ extraHTTPHeaders }, use, testInfo) => {
+  extraHTTPHeaders: async ({ extraHTTPHeaders }, run, testInfo) => {
     const address = testClientAddress(testInfo.parallelIndex, testInfo.config.workers, testsInWorker++)
-    await use({ 'cf-connecting-ip': address, ...extraHTTPHeaders })
+    await run({ 'cf-connecting-ip': address, ...extraHTTPHeaders })
   },
   pageGuard: [
     async ({ page, baseURL, browserName }, run) => {
