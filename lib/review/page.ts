@@ -10,8 +10,10 @@ import { resolveReviewToken, reviewTarget, type ReviewCollection, type ReviewLin
  *   render       an active link whose draft / changes still exist
  *   redirect     an active link whose item is public by now (published, or
  *                its changes went live or were dropped) → its public page
- *   unavailable  expired or turned off (410), unknown or forged (404),
- *                emptied — the draft deleted or unpublished again (410) —
+ *   unavailable  expired or turned off (410; deleting the item, or giving
+ *                its address to another item, turns its links off),
+ *                unknown or forged (404), emptied — the draft deleted, or
+ *                the changes' item unpublished again (410) —
  *                too many failed look-ups (429), no key configured (503);
  *                in the reader's language, saying nothing about the draft
  */

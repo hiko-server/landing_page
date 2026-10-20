@@ -189,6 +189,74 @@ test('what a link shows follows the item: its draft, then the public page once p
   assert.ok(gone.kind === 'unavailable' && gone.status === 410)
 })
 
+test('SECU-1: a link never passes to another item at its address — delete, rename, reclaimed old addresses', async () => {
+  const { decideReview } = await import('../lib/review/page')
+  const { renameSlug } = await import('../lib/slugRename')
+  const { getReviewLink } = await import('../lib/review/store')
+  const open = (link: { path: string }) => decideReview(tokenOf(link.path), { allowMiss: () => true })
+  const del = async (slug: string) => assert.equal((await h.call(posts, { method: 'DELETE', query: { slug } })).statusCode, 200)
+  const create = async (slug: string, title: string, body: string) => {
+    const out = await h.call(posts, { method: 'PUT', body: { slug, frontmatter: { title, date: '2026-05-01', draft: true }, body, create: true } })
+    assert.equal(out.statusCode, 200, JSON.stringify(out.body))
+  }
+  const rendersSlug = (d: ReturnType<typeof open>) => (d.kind === 'render' ? d.slug : null)
+
+  // 1. Shared, deleted, then a different draft at the same address: the old link stays dead.
+  await create('q4-plans', 'Shared draft', 'ALPHA-SHARED')
+  const a = (await share('q4-plans')).body.link
+  assert.equal(rendersSlug(open(a)), 'q4-plans')
+  await del('q4-plans')
+  assert.equal(getReviewLink(a.id)?.revokedAt !== null, true, 'deleting the item turns its links off')
+  await create('q4-plans', 'A different confidential draft', 'BRAVO-NEVER-SHARED')
+  const afterReuse = open(a)
+  assert.ok(afterReuse.kind === 'unavailable' && afterReuse.status === 410, 'never the new draft')
+  const listedForNew = await h.call(links, { query: { collection: 'blog', slug: 'q4-plans' } })
+  assert.ok(!listedForNew.body.links.some((l: any) => l.id === a.id && l.status === 'active'), 'not listed as active under the new item')
+
+  // 2. Shared, renamed (the link follows), then a new item at the old address: the link ends.
+  await create('xslug', 'Charlie', 'CHARLIE')
+  const c = (await share('xslug')).body.link
+  assert.equal((await renameSlug({ collection: 'blog', from: 'xslug', to: 'yslug', redirect: true })).ok, true)
+  assert.equal(rendersSlug(open(c)), 'yslug', 'follows the rename')
+  await create('xslug', 'Delta', 'DELTA-NEVER-SHARED')
+  const reclaimed = open(c)
+  assert.ok(reclaimed.kind === 'unavailable' && reclaimed.status === 410, 'never the item that reclaimed the address')
+
+  // 3. Another item renamed onto an address with links left there: they end; renaming back
+  //    to an item's own old address keeps its links.
+  await create('echo', 'Echo', 'ECHO')
+  const e = (await share('echo')).body.link
+  assert.equal((await renameSlug({ collection: 'blog', from: 'echo', to: 'echo-2', redirect: true })).ok, true)
+  assert.equal((await renameSlug({ collection: 'blog', from: 'echo-2', to: 'echo', redirect: true })).ok, true)
+  assert.equal(rendersSlug(open(e)), 'echo', 'renamed back: still its own link')
+  await create('foxtrot', 'Foxtrot', 'FOXTROT')
+  const f = (await share('foxtrot')).body.link
+  assert.equal((await renameSlug({ collection: 'blog', from: 'foxtrot', to: 'foxtrot-new', redirect: false })).ok, true)
+  assert.equal(getReviewLink(f.id)?.revokedAt !== null, true, 'without a redirect the old address no longer leads to it')
+  await create('golf', 'Golf', 'GOLF')
+  assert.equal((await renameSlug({ collection: 'blog', from: 'golf', to: 'foxtrot', redirect: true })).ok, true)
+  const ontoOld = open(f)
+  assert.ok(ontoOld.kind === 'unavailable' && ontoOld.status === 410)
+
+  // 4. Removing an old address ends the links made under it.
+  await create('hotel', 'Hotel', 'HOTEL')
+  const ho = (await share('hotel')).body.link
+  assert.equal((await renameSlug({ collection: 'blog', from: 'hotel', to: 'hotel-2', redirect: true })).ok, true)
+  const removed = await h.call(posts, { method: 'POST', body: { action: 'remove-redirect', slug: 'hotel-2', from: 'hotel' } })
+  assert.equal(removed.statusCode, 200, JSON.stringify(removed.body))
+  assert.equal(getReviewLink(ho.id)?.revokedAt !== null, true)
+
+  // 5. An item that vanished some other way (e.g. a content restore): creating or restoring
+  //    an item at its address still turns the links left there off before it can be read.
+  await create('india', 'India', 'INDIA')
+  const i = (await share('india')).body.link
+  const { removeItem } = await import('../lib/contentStore')
+  assert.equal((await removeItem('blog', 'india')).ok, true)
+  await create('india', 'Juliet', 'JULIET-NEVER-SHARED')
+  const vanished = open(i)
+  assert.ok(vanished.kind === 'unavailable' && vanished.status === 410)
+})
+
 test('lifetimes 1 h – 30 days only; at most 20 active links per item; turning all off at once; old ones are pruned', async () => {
   await draft('limits')
   for (const bad of [0, 0.5, 721, 'week', null]) {

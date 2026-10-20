@@ -30,6 +30,7 @@ import {
 } from './contentStore'
 import { deletePendingRevision, getPendingRevision, pendingRevisionIndex, putPendingRevision } from './pendingRevisions'
 import { forgetRedirectFrom, redirectsTo, removeRedirect } from './redirects'
+import { linkSlugsOf, revokeItemLinks, revokeLinksAt } from './review/store'
 import { planRename, renameSlug } from './slugRename'
 import { emitEditorialEvent } from './editorialEvents'
 import { carryScheduleOnSave, itemSchedule, parseScheduleBody, withoutSchedule } from './schedule/fields'
@@ -331,7 +332,8 @@ export async function restoreItemSnapshot(
   // The schedule (H5) is not part of a version: the restored item keeps the current one, never the snapshot's.
   const current = getItem(c, slug)
   const frontmatter = carryScheduleOnSave({ target: 'live', live: current?.frontmatter ?? null, pending: null, incoming: doc.frontmatter, now: Date.now() })
-  const out = await writeOne(c, slug, frontmatter, doc.body)
+  // Restoring a deleted item puts an item at an address again: no review link left there may show it (SECU-1).
+  const out = await writeOne(c, slug, frontmatter, doc.body, current ? {} : { inTransaction: () => void revokeLinksAt(c, slug) })
   if (out.ok && pending) deletePendingRevision(c, slug)
   if (out.ok) rearmPublishScheduler()
   return out
@@ -643,7 +645,9 @@ export function createCollectionApi(c: Collection, opts: { noun: string; require
       }
 
       const before = itemSchedule(existing?.frontmatter, pendingNow?.frontmatter)
-      const result = await writeOne(c, slug, scheduled('live'), text)
+      // A new item takes over an address: review links made there for a deleted item, or for a
+      // renamed one whose old address this reclaims, are turned off before it can be read (SECU-1).
+      const result = await writeOne(c, slug, scheduled('live'), text, existing ? {} : { inTransaction: () => void revokeLinksAt(c, slug) })
       if (!result.ok) return res.status(400).json({ error: result.error })
       // The editor sent its whole state: a pending revision is superseded.
       const hadPending = deletePendingRevision(c, slug)
@@ -738,6 +742,8 @@ export function createCollectionApi(c: Collection, opts: { noun: string; require
         const from = (req.body as { from?: unknown }).from
         if (typeof from !== 'string' || !isSafeSlug(from)) return res.status(400).json({ error: 'Invalid old slug' })
         if (!removeRedirect(c, from, slug)) return res.status(404).json({ error: 'No such redirect' })
+        // The old address no longer leads to this item: its review links end there too (SECU-1).
+        revokeItemLinks(c, [from])
         emitEditorialEvent({ action: 'redirect-removed', collection: c, from, to: slug }, { req })
         // The old address answers 404 from now on.
         const failed = await revalidatePaths(res, [`/${c}/${from}`])
@@ -757,9 +763,16 @@ export function createCollectionApi(c: Collection, opts: { noun: string; require
       const slug = req.query.slug
       if (typeof slug !== 'string' || !slug) return res.status(400).json({ error: 'Missing slug' })
       const previousKey = isSafeSlug(slug) ? getItem(c, slug)?.frontmatter?.translationKey : undefined
+      const linkSlugs = isSafeSlug(slug) ? linkSlugsOf(c, slug) : []
       const result = await deleteOne(c, slug)
       if (!result.ok) return res.status(result.error === 'Invalid slug' ? 400 : 404).json({ error: result.error })
       deletePendingRevision(c, slug)
+      // Its review links end with it — under its old slugs too — and never pass to a later item at that address (SECU-1).
+      try {
+        revokeItemLinks(c, linkSlugs)
+      } catch (err) {
+        log.error('delete: could not turn off the review links', { err, collection: c, slug })
+      }
       rearmPublishScheduler()
       return res.status(200).json({ ...result, ...(await refreshCollection(res, c, slug, [previousKey])) })
     }
