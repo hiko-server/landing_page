@@ -92,7 +92,7 @@ const PersonalInfo = ({
   const posX = clamp(Number(home?.hero?.avatarTransform?.x ?? 50), 0, 100, 50)
   const posY = clamp(Number(home?.hero?.avatarTransform?.y ?? 50), 0, 100, 50)
   const scale = clamp(Number(home?.hero?.avatarTransform?.scale ?? 1), 0.5, 3, 1)
-  const avatarSrc = safeHref(home?.hero?.avatarUrl) || '/images/hikoAvator.png'
+  const avatarSrc = safeHref(home?.hero?.avatarUrl) || '/images/avatar-placeholder.png'
   const alt = portraitAlt(identity)
 
   // A channel the owner cleared in the Home editor is removed; the built-in

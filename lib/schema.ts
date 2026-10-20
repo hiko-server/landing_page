@@ -203,7 +203,7 @@ export function personNode(data: PersonFacts & Record<string, unknown> = {}) {
     name: PERSON_NAME,
     alternateName: uniq(['Lucian', ...(data.alternateName || []).filter(nonEmpty)]),
     url: SITE_URL,
-    image: absUrl(data.image || '/images/hikoAvator.png'),
+    image: absUrl(data.image || '/images/avatar-placeholder.png'),
     jobTitle: nonEmpty(data.jobTitle) ? data.jobTitle.trim() : DEFAULT_JOB_TITLE,
     ...(nonEmpty(data.description) ? { description: data.description.trim() } : {}),
     sameAs,

@@ -96,7 +96,7 @@ test('variantUrl prefers a stored width variant and passes anything else through
   assert.equal(variantUrl('/uploads/portrait.jpg', 640), '/uploads/portrait.jpg')
   fs.writeFileSync(path.join(dir, 'portrait.jpg.w640.webp'), 'x')
   assert.equal(variantUrl('/uploads/portrait.jpg', 640), '/uploads/portrait.jpg.w640.webp')
-  assert.equal(variantUrl('/images/hikoAvator.png', 640), '/images/hikoAvator.png')
+  assert.equal(variantUrl('/images/avatar-placeholder.png', 640), '/images/avatar-placeholder.png')
   assert.equal(variantUrl('https://cdn.example.test/a.jpg', 640), 'https://cdn.example.test/a.jpg')
 })
 
@@ -150,5 +150,5 @@ test('one Person loader: real portrait (640 px variant), the 中文 name, public
 
   // No portrait set: the site default (what the hero shows), never a broken URL.
   assert.equal((await writeHome({ ...home, hero: { ...home.hero, avatarUrl: '' } } as any)).ok, true)
-  assert.equal(personNode(loadPersonFacts()).image, absUrl('/images/hikoAvator.png'))
+  assert.equal(personNode(loadPersonFacts()).image, absUrl('/images/avatar-placeholder.png'))
 })

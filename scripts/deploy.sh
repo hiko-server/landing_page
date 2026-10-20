@@ -15,7 +15,8 @@
 #                 /root/landing_page-backups/<ts>/; `docker tag <image>:latest
 #                 <image>:pre-<ts>`; fast-forward the checkout from the bundle
 #                 while keeping the server's own data/home.json and
-#                 docker-compose.override.yml byte-for-byte
+#                 docker-compose.override.yml byte-for-byte, and the server's
+#                 copy of any file the update deletes but now ignores
 #   3. build      `docker compose build` (the old container keeps serving)
 #   4. activate   `docker compose up -d --no-build`, wait for `healthy` and the
 #                 `[warm-isr] regenerated` log line, /api/health status "ok",
@@ -204,8 +205,25 @@ case "$MODE" in
         [ -z "$f" ] && continue
         if grep -qxF "$f" <<<"$incoming"; then G checkout -- "$f"; fi
       done < <(G diff --name-only HEAD)
+      # A file the new commits delete AND ignore from then on (personal photos
+      # that left the public repository) is server-local content: save it
+      # now, put it back after the fast-forward.
+      gone=$(G diff --name-only --diff-filter=D HEAD "$TARGET")
+      while IFS= read -r f; do
+        [ -n "$f" ] && [ -f "$DIR/$f" ] || continue
+        mkdir -p "$B/kept/$(dirname "$f")"
+        cp -p "$DIR/$f" "$B/kept/$f"
+      done <<<"$gone"
       G merge --ff-only --quiet "$TARGET"
       restore_preserved
+      while IFS= read -r f; do
+        [ -n "$f" ] && [ -f "$B/kept/$f" ] || continue
+        if G check-ignore -q --no-index -- "$f"; then
+          mkdir -p "$DIR/$(dirname "$f")"
+          cp -p "$B/kept/$f" "$DIR/$f"
+          say "kept server-local: $f"
+        fi
+      done <<<"$gone"
       say "checkout: ${SERVER_HEAD:0:7} → ${TARGET:0:7}"
     fi
     ;;

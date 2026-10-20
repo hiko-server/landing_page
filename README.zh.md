@@ -561,6 +561,8 @@ scripts/deploy.sh                         # --force 重新构建当前已部署�
    compose 覆盖文件；当前镜像打上 `…:pre-<时间戳>` 标签。
 3. **更新**：检出目录从 bundle 快进。服务器自己的 `data/home.json` 和
    `docker-compose.override.yml` 逐字节保留；出现其他本地修改则中止部署。
+   本次更新删除、且此后被 `.gitignore` 忽略的文件（移出公开仓库的个人照片）
+   在服务器上保留原副本。
 4. **构建**：执行 `docker compose build`，旧容器继续提供服务。构建失败时恢复
    检出目录，其余一切未变。
 5. **切换**：`docker compose up -d --no-build`，然后等待容器变为 `healthy` 并

@@ -720,7 +720,9 @@ scripts/deploy.sh                         # --force rebuilds the deployed commit
    override; the running image is tagged `…:pre-<timestamp>`.
 3. **Update** — the checkout fast-forwards from the bundle. The server's own
    `data/home.json` and `docker-compose.override.yml` are kept byte for
-   byte; any other local modification stops the deploy.
+   byte; any other local modification stops the deploy. A file the update
+   deletes and `.gitignore` now ignores (personal photos taken out of the
+   public repository) keeps its server copy.
 4. **Build** — `docker compose build` while the old container keeps serving.
    A failed build resets the checkout; nothing else changed.
 5. **Switch** — `docker compose up -d --no-build`, then wait for the

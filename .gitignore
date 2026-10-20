@@ -60,6 +60,14 @@ docker-compose.override.yml
 # local data (persisted content, credentials)
 data/
 
+# Personal photos never go into the public repository: uploads made through
+# the admin (served from the bind-mount + R2) and the home photo wall live on
+# the server only. The few files already tracked under public/uploads are demo
+# assets. scripts/deploy.sh keeps the server's copy of a file that leaves git
+# and is ignored from then on.
+public/uploads/
+public/images/imageScroller/
+
 # Claude harness state (per-project session config)
 .claude/
 
