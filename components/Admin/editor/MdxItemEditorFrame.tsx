@@ -65,13 +65,21 @@ const RichEditor = dynamic(() => import('../RichEditor'), {
 type ItemFm = Record<string, unknown> & { draft: boolean; title: string; description: string; cover: string }
 type Ed<F extends ItemFm> = ReturnType<typeof useMdxItemEditor<F>>
 
-/** The words a button drops on a phone (from sm up it reads in full: "Save changes", "Publish changes…"). */
-function ShortOnPhones({ children }: { children: React.ReactNode }) {
+/**
+ * A button label that is shorter on a phone ("Save", "Publish…") and in full
+ * from sm up ("Save changes", "Publish changes…"). Two whole labels, one
+ * shown: the accessible name is always exactly the visible one.
+ */
+function PhoneLabel({ short, full }: { short: string; full: string }) {
   return (
-    <Box as="span" display={{ base: 'none', sm: 'inline' }} whiteSpace="pre">
-      {' '}
-      {children}
-    </Box>
+    <>
+      <Box as="span" display={{ base: 'inline', sm: 'none' }}>
+        {short}
+      </Box>
+      <Box as="span" display={{ base: 'none', sm: 'inline' }}>
+        {full}
+      </Box>
+    </>
   )
 }
 
@@ -242,9 +250,8 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
               aria-keyshortcuts={saveKeys[0] === '⌘' ? 'Meta+S' : 'Control+S'}
               title={published ? 'Saved as unpublished changes — visitors keep seeing the published version' : undefined}
             >
-              Save
               {/* Phones: "Save" / "Publish…", so the actions fit on one row. */}
-              <ShortOnPhones>{published ? 'changes' : 'draft'}</ShortOnPhones>
+              <PhoneLabel short="Save" full={published ? 'Save changes' : 'Save draft'} />
             </Button>
             {published ? (
               <Button
@@ -254,8 +261,7 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
                 isDisabled={!ready || ed.saving || !changesReady}
                 title={changesReady ? undefined : 'Nothing to publish — the live version matches the editor'}
               >
-                Publish
-                <ShortOnPhones>changes</ShortOnPhones>…
+                <PhoneLabel short="Publish…" full="Publish changes…" />
               </Button>
             ) : (
               <Button size="sm" {...primaryButtonProps} onClick={() => setPublishOpen(true)} isDisabled={!ready || ed.saving}>
