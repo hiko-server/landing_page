@@ -1183,7 +1183,7 @@ operations) on the release candidate.
   second half, once the title has nearly landed. Reduced motion stays
   instant.
 - **Admin**: j / k work after a click on a panel's blank space (UX-A-5); the
-  admin's checkboxes get a ≥ 3:1 border (`page.control-border`, UX-A-6); the
+  admin's checkboxes get a ≥ 3:1 border (`--control-border`, admin-only CSS, UX-A-6); the
   Activity log's area label, the Inbox star, the version-history labels, the
   line-diff "unchanged lines", the tab shortcut hints, the error fingerprint
   and the editor placeholder move off the decorative `page.muted` to
