@@ -132,6 +132,20 @@ function LinkRow({ link, now, onChanged }: { link: ShareLink; now: number; onCha
   const [editing, setEditing] = useState(false)
   const [note, setNote] = useState(link.note)
   const noteId = useId()
+  // A control that removes itself hands focus on (never to <body>): Keep → Revoke; a revoked or ended link → Remove.
+  const revokeRef = useRef<HTMLButtonElement>(null)
+  const removeRef = useRef<HTMLButtonElement>(null)
+  const refocus = useRef<'revoke' | 'remove' | null>(null)
+  useEffect(() => {
+    if (refocus.current === 'revoke' && !confirmRevoke) {
+      refocus.current = null
+      revokeRef.current?.focus()
+    } else if (refocus.current === 'remove' && link.state !== 'active') {
+      refocus.current = null
+      setConfirmRevoke(false)
+      removeRef.current?.focus()
+    }
+  }, [confirmRevoke, link.state])
 
   const send = async (method: 'PATCH' | 'DELETE', body: Record<string, unknown>, stepUp = false) => {
     setBusy(true)
@@ -202,10 +216,26 @@ function LinkRow({ link, now, onChanged }: { link: ShareLink; now: number; onCha
                 <Text fontSize="12px" color="page.fg-secondary" mr={1}>
                   Stop it working now?
                 </Text>
-                <Button size="xs" colorScheme="red" isLoading={busy} onClick={async () => (await send('PATCH', { action: 'revoke' })) && setConfirmRevoke(false)} autoFocus>
+                <Button
+                  size="xs"
+                  colorScheme="red"
+                  isLoading={busy}
+                  onClick={async () => {
+                    // The row stays in this step until the list shows the link revoked, then Remove takes focus.
+                    if (await send('PATCH', { action: 'revoke' })) refocus.current = 'remove'
+                  }}
+                  autoFocus
+                >
                   Revoke
                 </Button>
-                <Button size="xs" variant="ghost" onClick={() => setConfirmRevoke(false)}>
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  onClick={() => {
+                    refocus.current = 'revoke'
+                    setConfirmRevoke(false)
+                  }}
+                >
                   Keep
                 </Button>
               </HStack>
@@ -226,7 +256,7 @@ function LinkRow({ link, now, onChanged }: { link: ShareLink; now: number; onCha
                     ))}
                   </MenuList>
                 </Menu>
-                <Button size="xs" variant="outline" colorScheme="red" onClick={() => setConfirmRevoke(true)} aria-label={`Revoke ${label}`}>
+                <Button ref={revokeRef} size="xs" variant="outline" colorScheme="red" onClick={() => setConfirmRevoke(true)} aria-label={`Revoke ${label}`}>
                   Revoke
                 </Button>
               </>
@@ -245,12 +275,12 @@ function LinkRow({ link, now, onChanged }: { link: ShareLink; now: number; onCha
                   ))}
                 </MenuList>
               </Menu>
-              <Button size="xs" variant="ghost" isLoading={busy} onClick={() => void send('DELETE', {})} aria-label={`Remove ${label} from the list`}>
+              <Button ref={removeRef} size="xs" variant="ghost" isLoading={busy} onClick={() => void send('DELETE', {})} aria-label={`Remove ${label} from the list`}>
                 Remove
               </Button>
             </>
           ) : (
-            <Button size="xs" variant="ghost" isLoading={busy} onClick={() => void send('DELETE', {})} aria-label={`Remove ${label} from the list`}>
+            <Button ref={removeRef} size="xs" variant="ghost" isLoading={busy} onClick={() => void send('DELETE', {})} aria-label={`Remove ${label} from the list`}>
               Remove
             </Button>
           )}
@@ -288,6 +318,7 @@ export default function ShareLinks({
   const [days, setDays] = useState(DEFAULT_EXPIRY_DAYS)
   const [creating, setCreating] = useState(false)
   const [fresh, setFresh] = useState<string | null>(null)
+  const noteRef = useRef<HTMLInputElement>(null)
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => setNow(Date.now()), [links])
   useEffect(() => setFresh(null), [variantId])
@@ -345,7 +376,16 @@ export default function ShareLinks({
         what this variant prints for private links. You see how often it was opened and on which day last — nothing about who.
       </Text>
 
-      {fresh ? <NewLinkCard url={fresh} onDone={() => setFresh(null)} /> : null}
+      {fresh ? (
+        <NewLinkCard
+          url={fresh}
+          onDone={() => {
+            setFresh(null)
+            // The card goes away under the focus: on to the form for the next link.
+            requestAnimationFrame(() => noteRef.current?.focus())
+          }}
+        />
+      ) : null}
 
       <Box as="form" onSubmit={create} border="1px dashed" borderColor="page.border-strong" borderRadius="lg" p={3} mb={4} aria-describedby={blocked ? `${formId}-blocked` : undefined}>
         <Flex gap={3} flexWrap="wrap" align="flex-end">
@@ -353,7 +393,7 @@ export default function ShareLinks({
             <FormLabel fontSize="12px" mb={1}>
               Note <Text as="span" color="page.fg-secondary">(only you see it)</Text>
             </FormLabel>
-            <Input {...inputProps} size="sm" value={note} maxLength={NOTE_MAX} placeholder="Who it is for — e.g. Example Corp, ML Engineer" onChange={(e) => setNote(e.target.value)} />
+            <Input ref={noteRef} {...inputProps} size="sm" value={note} maxLength={NOTE_MAX} placeholder="Who it is for — e.g. Example Corp, ML Engineer" onChange={(e) => setNote(e.target.value)} />
           </FormControl>
           <FormControl w="auto">
             <FormLabel fontSize="12px" mb={1} id={`${formId}-lang`}>
