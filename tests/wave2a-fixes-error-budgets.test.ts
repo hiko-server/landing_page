@@ -39,6 +39,7 @@ after(() => {
 })
 beforeEach(() => {
   store.resetErrorStoreState()
+  ingest.resetErrorIngestShares()
   analyticsDb.getAnalyticsDb().exec('DELETE FROM errors; DELETE FROM error_daily; DELETE FROM meta')
 })
 
@@ -89,16 +90,24 @@ const rows = (source?: 'server' | 'reported') => {
   return all.filter((r) => (source === 'server' ? r.source === 'server' : r.source !== 'server'))
 }
 
-test('the reviewed attack: 600 fake reports from one address store 30, and a server error is still recorded', () => {
+test('the reviewed attack: 600 fake reports store 30 an hour (from one address only its daily share, review-fixes-2b SECU-2), and a server error is still recorded', () => {
   const t0 = Date.UTC(2026, 9, 20, 0)
-  let stored = 0
+  let alone = 0
   for (let i = 0; i < 600; i++) {
     // 20 a minute (the per-client budget), the clock moving on a minute every 20.
     const now = t0 + Math.floor(i / 20) * 61_000
-    stored += ingest.ingestErrorReport(
-      report('203.0.113.7', `cannot read ${word(i)}`),
-      now
-    ).recorded
+    alone += ingest.ingestErrorReport(report('203.0.113.7', `cannot read ${word(i)}`), now).recorded
+  }
+  assert.equal(alone, ingest.CLIENT_NEW_FINGERPRINTS_PER_DAY, 'one address: its daily share of new fingerprints')
+
+  // From 200 networks at once, the store's global cap holds: 30 new an hour.
+  store.resetErrorStoreState()
+  ingest.resetErrorIngestShares()
+  analyticsDb.getAnalyticsDb().exec('DELETE FROM errors; DELETE FROM error_daily; DELETE FROM meta')
+  let stored = 0
+  for (let i = 0; i < 600; i++) {
+    const now = t0 + HOUR + Math.floor(i / 20) * 1000
+    stored += ingest.ingestErrorReport(report(`198.18.${i % 200}.7`, `cannot read ${word(i)}`), now).recorded
   }
   assert.equal(
     stored,
@@ -106,7 +115,7 @@ test('the reviewed attack: 600 fake reports from one address store 30, and a ser
     'one hour admits 30 new browser fingerprints'
   )
   assert.equal(rows('reported').length, store.ERROR_LIMITS.newReportedPerHour)
-  assert.equal(store.errorTotals(t0 + 31 * 60_000).droppedToday, 600 - stored)
+  assert.equal(store.errorTotals(t0 + HOUR + 31 * 60_000).droppedToday, 600 - stored)
 
   server.captureServerError(new Error('SQLITE_BUSY: database is locked'), {
     kind: 'render',

@@ -1,6 +1,7 @@
 import type { NextApiRequest } from 'next'
-import { BOT_UA, browserOf } from '../analytics/ingest'
-import { networkOf, takeUnits } from '../analytics/limits'
+import { BOT_UA, browserOf, saltFor } from '../analytics/ingest'
+import { createDailyShares, networkOf, takeUnits, type DailyShares } from '../analytics/limits'
+import { utcDay } from '../analytics/shared'
 import { ipFromReq } from '../rateLimit'
 import { ipBucket } from '../security/ip'
 import { sharedLimiter } from '../security/rateLimitCore'
@@ -29,9 +30,16 @@ import { recordError, type ErrorEventInput } from './store'
  * browser family. The client address is used only, in memory, for the rate
  * limits below.
  *
- * Abuse budgets (per minute, in memory): CLIENT_EVENTS per client (IPv4 /
- * IPv6 /64), NETWORK_EVENTS per network (IPv4 /24, IPv6 /48); plus the
- * store's caps (lib/errors/store.ts ERROR_LIMITS). Trusted Types reports
+ * Abuse budgets (in memory), per client (IPv4 / IPv6 /64) and per network
+ * (IPv4 /24, IPv6 /48):
+ *   - per minute: CLIENT_EVENTS_PER_MIN / NETWORK_EVENTS_PER_MIN events;
+ *   - per UTC day: CLIENT_NEW_FINGERPRINTS_PER_DAY / NETWORK_NEW_…
+ *     problems not seen before (new fingerprints), and CLIENT_EVENTS_PER_DAY
+ *     / NETWORK_EVENTS_PER_DAY stored events — so one sender can neither
+ *     fill the store's share of browser-reported rows (whose rows are never
+ *     evicted by other reports: a flood could only delete real ones) nor use
+ *     up the day's events for everyone (SECU-2);
+ * plus the store's caps (lib/errors/store.ts ERROR_LIMITS). Trusted Types reports
  * come from a report-only policy that fires on ordinary page views, so each
  * of their groups records at most REPORT_ONLY_PER_GROUP_PER_DAY events a UTC
  * day: enough to see which sinks fire and how widely, without spending the
@@ -40,6 +48,19 @@ import { recordError, type ErrorEventInput } from './store'
 
 export const CLIENT_EVENTS_PER_MIN = 20
 export const NETWORK_EVENTS_PER_MIN = 60
+/**
+ * New fingerprints (problems the store has not seen) one client may add per
+ * UTC day. A real visitor's browser hits one or two; the store's own cap
+ * (30 an hour for every sender together, 300 rows) is then never one
+ * sender's to fill.
+ */
+export const CLIENT_NEW_FINGERPRINTS_PER_DAY = 5
+/** New fingerprints one network may add per UTC day (four clients' worth). */
+export const NETWORK_NEW_FINGERPRINTS_PER_DAY = 20
+/** Stored events one client may add per UTC day (the store keeps 20 000 browser events a day for everyone). */
+export const CLIENT_EVENTS_PER_DAY = 1_000
+/** Stored events one network may add per UTC day. */
+export const NETWORK_EVENTS_PER_DAY = 4_000
 export const REPORT_ONLY_PER_GROUP_PER_DAY = 50
 /** Largest browser error report (lib/errors/client.ts sends a few hundred bytes). */
 const MAX_BODY = 8192
@@ -326,6 +347,19 @@ export function resetReportOnlySamples(): void {
   delete (globalThis as ReportOnlyGlobal).__reportOnlySamples
 }
 
+type SharesGlobal = typeof globalThis & { __errorIngestShares?: DailyShares }
+
+/** Today's per-client / per-network counters (keys hashed with the analytics day salt, never an address). */
+function dailyShares(): DailyShares {
+  const g = globalThis as SharesGlobal
+  return (g.__errorIngestShares ??= createDailyShares(saltFor))
+}
+
+/** Test helper: forget today's per-client / per-network counters. */
+export function resetErrorIngestShares(): void {
+  delete (globalThis as SharesGlobal).__errorIngestShares
+}
+
 const header = (req: Pick<NextApiRequest, 'headers'>, name: string): string => {
   const v = req.headers[name]
   return (Array.isArray(v) ? v[0] : v) || ''
@@ -395,10 +429,32 @@ export function ingestErrorReport(
     allowed = takeUnits(limiter, `n|${net}`, NETWORK_EVENTS_PER_MIN, allowed, 60_000, now)
   if (!allowed) return { recorded: 0, dropped: 'rate-limited' }
 
+  // The day's shares: stored events, and new fingerprints (asked only for a
+  // fingerprint the store would otherwise add, so repeats never use them).
+  const day = utcDay(now)
+  const shares = dailyShares()
+  const client = `c|${ipBucket(ip)}`
+  const network = net ? `n|${net}` : null
+  const left = Math.min(
+    allowed,
+    shares.remaining(`events|${client}`, day, CLIENT_EVENTS_PER_DAY),
+    network ? shares.remaining(`events|${network}`, day, NETWORK_EVENTS_PER_DAY) : Infinity
+  )
+  if (!left) return { recorded: 0, dropped: 'rate-limited' }
+  const admitNew = (): boolean => {
+    if (shares.remaining(`new|${client}`, day, CLIENT_NEW_FINGERPRINTS_PER_DAY) < 1) return false
+    if (network && shares.remaining(`new|${network}`, day, NETWORK_NEW_FINGERPRINTS_PER_DAY) < 1) return false
+    shares.add(`new|${client}`, day, 1)
+    if (network) shares.add(`new|${network}`, day, 1)
+    return true
+  }
+
   let recorded = 0
-  for (const e of events.slice(0, allowed)) {
-    const outcome = recordError(e, now)
+  for (const e of events.slice(0, left)) {
+    const outcome = recordError(e, now, { admitNew })
     if (outcome === 'recorded' || outcome === 'new') recorded++
   }
+  shares.add(`events|${client}`, day, recorded)
+  if (network) shares.add(`events|${network}`, day, recorded)
   return recorded === events.length ? { recorded } : { recorded, dropped: 'capped' }
 }

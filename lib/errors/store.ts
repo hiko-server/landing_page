@@ -16,8 +16,10 @@ import { utcDay, dayMinus } from '../analytics/shared'
  * server errors:
  *   - at most maxFingerprints rows in all. Browser reports may hold at most
  *     maxReportedFingerprints of them and add at most newReportedPerHour new
- *     ones per clock hour (every sender together); the rest of the table is
- *     reserved for server errors. A new server error that finds the table
+ *     ones per clock hour (every sender together; each sender has a small
+ *     daily share of its own, checked by the caller through `admitNew` —
+ *     lib/errors/ingest.ts); the rest of the table is reserved for server
+ *     errors. A new server error that finds the table
  *     full replaces the least valuable browser-reported row (resolved first,
  *     then the least recently seen open one; ignored rows last). Repeats of
  *     known problems always count.
@@ -273,11 +275,20 @@ function newFingerprintRefusal(source: ErrorSource, s: StoreState): 'capped' | n
   return evictReportedRow() ? null : 'capped'
 }
 
+export type RecordOptions = {
+  /**
+   * Asked once the store's own caps would admit a NEW fingerprint (never for
+   * a repeat): false refuses it ('capped'). The ingest route spends the
+   * sender's daily share of new fingerprints here.
+   */
+  admitNew?: () => boolean
+}
+
 /**
  * Store one error event. Never throws for a bad event (the caller already
  * validated it); a database failure does throw — callers catch it.
  */
-export function recordError(e: ErrorEventInput, now = Date.now()): RecordOutcome {
+export function recordError(e: ErrorEventInput, now = Date.now(), opts: RecordOptions = {}): RecordOutcome {
   const s = state()
   const day = utcDay(now)
   if (s.day !== day) {
@@ -304,7 +315,7 @@ export function recordError(e: ErrorEventInput, now = Date.now()): RecordOutcome
       .prepare('SELECT browsers, status FROM errors WHERE fingerprint = ?')
       .get(e.fingerprint) as { browsers: string; status: ErrorStatus } | undefined
     if (!existing) {
-      const refused = newFingerprintRefusal(e.source, s)
+      const refused = newFingerprintRefusal(e.source, s) ?? (opts.admitNew && !opts.admitNew() ? 'capped' : null)
       if (refused) {
         bumpDropped(day)
         return refused
