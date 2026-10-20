@@ -324,6 +324,9 @@ const mdxComponents = {
             textAlign: 'left',
           },
           th: { fontFamily: MONO, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.06em' },
+          // GFM column alignment (`:-:`, `-:`), set in the visual editor's table toolbar.
+          'th[align="center"], td[align="center"]': { textAlign: 'center' },
+          'th[align="right"], td[align="right"]': { textAlign: 'right' },
         }}
         {...props}
       />
