@@ -69,6 +69,16 @@ const nextConfig = {
   // advisories). Images are resized and converted at upload time instead, so
   // next/image emits original URLs and /_next/image answers 404.
   images: { unoptimized: true },
+  // One acorn in the browser. The admin's visual editor parses MDX with
+  // remark-mdx (micromark imports acorn's ES module); acorn-jsx's CommonJS
+  // `require("acorn")` would add acorn's UMD build to the same lazy chunk
+  // (~33 KB gzip, never executed: acorn-jsx uses the parser it is given).
+  webpack(config, { isServer }) {
+    if (!isServer) {
+      config.resolve.alias = { ...config.resolve.alias, acorn$: path.join(path.dirname(require.resolve('acorn/package.json')), 'dist/acorn.mjs') }
+    }
+    return config
+  },
   experimental: {
     // Back / Forward return to the previous scroll position instead of the
     // top. Next saves each history entry's position and restores it in the
