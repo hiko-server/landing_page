@@ -44,7 +44,8 @@ import { applySecurityHeaders } from './lib/security/responseHeaders'
  *
  *     Whitelisted public admin routes (login, forgot, reset) stay
  *     reachable. The session/check endpoint stays public so the login
- *     page can poll it without a redirect loop.
+ *     page can poll it without a redirect loop, and so does ORCID's
+ *     redirect URI, which authorises itself (isPublicAdminApi).
  */
 
 // Routes under /admin and /api/admin that MUST stay reachable while logged
@@ -66,9 +67,18 @@ const PUBLIC_ADMIN_API_PATHS = new Set<string>([
  * Exit link) is public: leaving Draft Mode must keep working after the session
  * ended (logout, expiry). That branch only clears the bypass cookie and
  * validates its redirect path; enabling Draft Mode still needs a session.
+ *
+ * `GET /api/admin/orcid/callback` is ORCID's redirect URI: the browser
+ * arrives there from orcid.org, a cross-site navigation that does not carry
+ * the SameSite=Strict session cookie. The route authorises itself — it acts
+ * only for the signed, single-use flow cookie (SameSite=Lax, that path only)
+ * which /api/admin/orcid/connect issued to a signed-in session, and only
+ * while that session is still live (lib/orcid/flow, lib/orcid/connectRoute).
+ * Without one it changes nothing and only links back to the Studio.
  */
 export function isPublicAdminApi(pathname: string, method: string, searchParams: URLSearchParams): boolean {
   if (PUBLIC_ADMIN_API_PATHS.has(pathname)) return true
+  if (pathname === '/api/admin/orcid/callback') return method === 'GET'
   return pathname === '/api/admin/draft' && method === 'GET' && searchParams.get('disable') === '1'
 }
 

@@ -77,7 +77,15 @@ export default function OrcidImport({ section, sectionIdx }: { section: any; sec
         </Flex>
       </Flex>
       {mounted ? (
-        <OrcidImportDialog isOpen={open} onClose={() => setOpen(false)} orcid={api.orcid} existing={existing} langLabel={langLabel} onImport={onImport} />
+        <OrcidImportDialog
+          isOpen={open}
+          onClose={() => setOpen(false)}
+          orcid={api.orcid}
+          orcidAuthenticated={!!api.orcidAuthenticated}
+          existing={existing}
+          langLabel={langLabel}
+          onImport={onImport}
+        />
       ) : null}
     </Box>
   )

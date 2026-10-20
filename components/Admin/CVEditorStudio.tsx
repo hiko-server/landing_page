@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import dynamic from 'next/dynamic'
+import { useRouter } from 'next/router'
 import {
   AlertDialog,
   AlertDialogBody,
@@ -98,6 +99,9 @@ import {
 } from '../../lib/cvReadiness'
 import { referenceMonth } from '../../lib/clock'
 import { normalizeOrcidId } from '../../lib/orcid/id'
+import { dropStaleOrcidAuth } from '../../lib/orcid/connection'
+import { orcidAuthMarkerOf } from '../../lib/orcid/marker'
+import { ORCID_RETURN_KEYS, orcidConnectNotice, type OrcidNotice } from '../../lib/orcid/connectUi'
 
 // The readiness drawer only loads when it is first opened.
 const ReadinessPanel = dynamic(() => import('./cvStudio/ReadinessPanel'), { ssr: false })
@@ -426,12 +430,13 @@ export default function CVEditorStudio() {
   )
 
   // The ORCID iD the Publications import reads (this language first; the field is shared, so usually both agree).
-  const orcid = useMemo(() => {
+  const [orcid, orcidAuthenticated] = useMemo((): [string, boolean] => {
     for (const l of [lang, other]) {
-      const id = normalizeOrcidId(doc[l].find((s) => s.sessionName === 'personalInformation')?.orcid)
-      if (id) return id
+      const pi = doc[l].find((s) => s.sessionName === 'personalInformation')
+      const id = normalizeOrcidId(pi?.orcid)
+      if (id) return [id, orcidAuthMarkerOf(pi)?.id === id]
     }
-    return ''
+    return ['', false]
   }, [doc, lang, other])
 
   // ── Edit API (context for every form control) ──────────────────────────
@@ -441,8 +446,10 @@ export default function CVEditorStudio() {
       linked,
       focus,
       setValue: (path: CvPath, value: any, opts?: { shared?: boolean }) => {
-        if (opts?.shared && linked) apply((d) => setSharedValue(d, lang, path, value, true).doc, `${lang}:${path.join('.')}`)
-        else apply((d) => setValue(d, lang, path, value), `${lang}:${path.join('.')}`)
+        // Changing the ORCID iD also drops an "authenticated" marker that no
+        // longer confirms it, in the same undo step (lib/orcid/connection).
+        if (opts?.shared && linked) apply((d) => dropStaleOrcidAuth(setSharedValue(d, lang, path, value, true).doc), `${lang}:${path.join('.')}`)
+        else apply((d) => dropStaleOrcidAuth(setValue(d, lang, path, value)), `${lang}:${path.join('.')}`)
       },
       toggleField: (nodePath: CvPath, field: string, label: string) => {
         const r = run((d) => toggleFieldHidden(d, lang, nodePath, field, linked))
@@ -496,6 +503,9 @@ export default function CVEditorStudio() {
         setFocus({ lang, path: [idx, field], nonce: Date.now(), control: true })
       },
       orcid,
+      orcidAuthenticated,
+      dirty,
+      serverChange: { etag: cv.getBaseEtag, adopt: cv.adoptSaved, current: getDoc },
       twinLength: (listPath: CvPath) => twinListLength(getDoc(), lang, listPath),
       twinValue: (path: CvPath) => {
         const d = getDoc()
@@ -504,8 +514,39 @@ export default function CVEditorStudio() {
         return at < 0 ? undefined : getAt(d[other], [at, ...path.slice(1)])
       },
     }),
-    [apply, run, getDoc, lang, other, linked, focus, orcid, reportVisibility, applyListOp, announce, unlinkedReason, sectionNameAt, notifyUndoable, scope],
+    [apply, run, getDoc, lang, other, linked, focus, orcid, orcidAuthenticated, dirty, cv.getBaseEtag, cv.adoptSaved, reportVisibility, applyListOp, announce, unlinkedReason, sectionNameAt, notifyUndoable, scope],
   )
+
+  // Back from "Connect your ORCID iD" (?orcid=connected | ?orcid=error&reason=…,
+  // lib/orcid/connectUi): the keys leave the address at once (a reload must
+  // not repeat the toast); once the CV is loaded, the toast and the iD field.
+  const router = useRouter()
+  const [orcidNotice, setOrcidNotice] = useState<OrcidNotice | null>(null)
+  useEffect(() => {
+    if (!router.isReady) return
+    const notice = orcidConnectNotice(router.query)
+    if (!notice) return
+    setOrcidNotice(notice)
+    const rest = { ...router.query }
+    for (const key of ORCID_RETURN_KEYS) delete rest[key]
+    router.replace({ pathname: router.pathname, query: rest }, undefined, { shallow: true, scroll: false }).catch(() => undefined)
+    // Once, when the address is known.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router.isReady])
+  useEffect(() => {
+    if (!orcidNotice || cv.loadState !== 'ready') return
+    setOrcidNotice(null)
+    toast({
+      id: 'orcid-connect',
+      status: orcidNotice.status,
+      title: orcidNotice.title,
+      description: orcidNotice.description,
+      position: 'bottom-right',
+      isClosable: true,
+      duration: orcidNotice.status === 'success' ? 7000 : 12000,
+    })
+    api.goToField('personalInformation', 'orcid')
+  }, [orcidNotice, cv.loadState, toast, api])
 
   const confirmPendingRemove = (both: boolean) => {
     const p = pendingRemove

@@ -48,6 +48,7 @@ export default function OrcidImportDialog({
   isOpen,
   onClose,
   orcid,
+  orcidAuthenticated = false,
   existing,
   langLabel,
   onImport,
@@ -56,6 +57,8 @@ export default function OrcidImportDialog({
   onClose: () => void
   /** The owner's bare iD (validated by the caller). */
   orcid: string
+  /** The iD is the one ORCID confirmed (shown with the authenticated iD icon). */
+  orcidAuthenticated?: boolean
   /** The papers already in the Publications section being edited. */
   existing: readonly ExistingPaper[]
   /** "EN", "中文" or "EN and 中文" — where the papers are added. */
@@ -141,6 +144,7 @@ export default function OrcidImportDialog({
             Public works of{' '}
             <OrcidIdLink
               id={orcid}
+              authenticated={orcidAuthenticated}
               iconSize={16}
               color="accent.text"
               fontFamily={monoFont}

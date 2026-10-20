@@ -48,10 +48,20 @@ export type StudioApi = {
    * out of the Studio's import.
    */
   orcid: string
+  /** That iD is the one ORCID confirmed ("Connect your ORCID iD"). */
+  orcidAuthenticated?: boolean
   /** Append whole entries (the ORCID import's papers) to an object list as ONE undo step; mirrored when linked and aligned. */
   appendEntries: (listPath: CvPath, entries: readonly Record<string, any>[], label: string) => void
   /** Open a section and focus one of its fields' input (e.g. Personal Info → ORCID iD). */
   goToField: (sectionName: string, field: string) => void
+  /** The document has unsaved changes (connecting ORCID waits for a save). */
+  dirty?: boolean
+  /**
+   * The server changed the stored CV itself (disconnecting ORCID) on top of
+   * the version this editor is based on: `etag` is the editor's If-Match for
+   * that request; `adopt` takes the server's result as the saved state.
+   */
+  serverChange?: { etag: () => string | null; adopt: (doc: { en: any[]; zh: any[] }, etag: string) => void; current: () => { en: any[]; zh: any[] } }
 }
 
 export const StudioContext = createContext<StudioApi | null>(null)

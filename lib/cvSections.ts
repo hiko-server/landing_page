@@ -155,7 +155,7 @@ export const CV_SECTIONS: SectionDef[] = [
         shared: true,
         span: 2,
         placeholder: '0000-0000-0000-0000',
-        help: 'Paste your iD or its https://orcid.org/… link; the bare iD is stored. Shown with the ORCID iD icon on /cv, /publications and /about, in the CV files, the vCard and structured data; Publications can import your works from it. Hide it to leave ORCID off everywhere.',
+        help: 'Paste your iD or its https://orcid.org/… link (the bare iD is stored), or connect it by signing in to ORCID. Shown on /cv, /publications and /about, in the CV files, the vCard and structured data; Publications can import your works from it. Hide it to leave ORCID off everywhere.',
       },
       { key: 'address', label: 'Location', kind: 'text', span: 2 },
       { key: 'introduction', label: 'Summary', kind: 'textarea', span: 2 },

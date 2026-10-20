@@ -47,6 +47,7 @@ import {
 import { cvPathAttr, pathStartsWith, useStudio } from './StudioContext'
 import PhotoField from './PhotoField'
 import OrcidImport from './OrcidImport'
+import OrcidConnect from './OrcidConnect'
 import { PUBLICATIONS_SECTION } from '../../../lib/publications/types'
 import { entryKey, type ListOp } from './docOps'
 
@@ -184,6 +185,8 @@ function FieldRenderer({ def, node, nodePath }: { def: FieldDef; node: any; node
           autoComplete={def.format === 'orcid' ? 'off' : undefined}
         />
       )
+      // The ORCID iD gets "Connect your ORCID iD" beside it and its status under it.
+      if (def.format === 'orcid') control = <OrcidConnect pi={node}>{control}</OrcidConnect>
   }
 
   return (

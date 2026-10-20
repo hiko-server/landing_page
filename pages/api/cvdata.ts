@@ -20,6 +20,7 @@ import { warmCvExports } from '../../lib/cvExport/service'
 import { trackPublicationsNav } from '../../lib/publicationsNav'
 import { validateCvDoc, type CvValidationError } from '../../lib/cvValidate'
 import { withBareOrcid } from '../../lib/orcid/id'
+import { reconcileOrcidAuth } from '../../lib/orcid/connection'
 import { withApi } from '../../lib/apiHandler'
 import type { Logger } from '../../lib/log'
 
@@ -169,7 +170,9 @@ export default withApi('cvdata', async (req: NextApiRequest, res: NextApiRespons
     const newEn = Array.isArray(en) ? en : current.en
     const baseZh = Array.isArray(zh) ? zh : current.zh
     const newZh = syncZh ? syncLanguage(newEn, baseZh) : baseZh
-    const next = { en: newEn, zh: newZh }
+    // The ORCID "authenticated" marker is the server's: kept only where the
+    // stored one is still sent with the same iD (lib/orcid/connection).
+    const next = reconcileOrcidAuth({ en: newEn, zh: newZh }, current)
 
     // Nothing changed: no snapshot, no write, version (ETag) unchanged.
     if (stableStringify(next) === stableStringify({ en: current.en, zh: current.zh })) {
@@ -255,7 +258,7 @@ export default withApi('cvdata', async (req: NextApiRequest, res: NextApiRespons
       const newZh = zhIn ? syncLanguage(newEn, zhIn) : current.zh
       snapshotQuietly(ctx.log, 'import')
       const nav = trackPublicationsNav()
-      const importResult = await writeCvData({ en: newEn, zh: newZh })
+      const importResult = await writeCvData(reconcileOrcidAuth({ en: newEn, zh: newZh }, current))
       if (!importResult.ok) return res.status(500).json({ error: importResult.error })
       const etag = kvEtag(importResult.updatedAt)
       const revalidation = await revalidateCvPages(res, nav)

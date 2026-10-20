@@ -18,6 +18,10 @@ import { ipInCidr, parseCidrList, parseIp, type IpAddr } from './ip'
  *     is impossible
  *   - redirects are followed manually (bounded) and every hop is re-checked
  *   - hard timeout and a byte cap on the body
+ *
+ * A POST (a form or JSON body, e.g. an OAuth token exchange) is never
+ * redirected: its 3xx answer comes back as it is, so a body (which may hold
+ * a client secret) is only ever sent to the vetted URL the caller named.
  */
 
 export type SafeFetchCode = 'BAD_URL' | 'BLOCKED_HOST' | 'DNS' | 'TIMEOUT' | 'TOO_LARGE' | 'REDIRECTS' | 'NETWORK'
@@ -32,8 +36,10 @@ export class SafeFetchError extends Error {
 }
 
 export type SafeFetchOptions = {
-  method?: 'GET' | 'HEAD'
+  method?: 'GET' | 'HEAD' | 'POST'
   headers?: Record<string, string>
+  /** Request body (POST only; sent with its byte length as Content-Length). */
+  body?: string
   /** Whole request budget (connect + headers + body), default 5000 ms. */
   timeoutMs?: number
   /** Body byte cap, default 10 MB; exceeded → TOO_LARGE. */
@@ -154,7 +160,7 @@ async function vetHost(hostname: string, resolve: (h: string) => Promise<string[
 function requestOnce(
   u: URL,
   pinned: { address: string; family: 4 | 6 },
-  opts: Required<Pick<SafeFetchOptions, 'method' | 'maxBytes'>> & { headers: Record<string, string>; deadline: number; truncate: boolean },
+  opts: Required<Pick<SafeFetchOptions, 'method' | 'maxBytes'>> & { headers: Record<string, string>; deadline: number; truncate: boolean; body?: Buffer },
 ): Promise<SafeFetchResult> {
   return new Promise((resolve, reject) => {
     const lookup: LookupFunction = (_host, options, cb) => {
@@ -171,7 +177,12 @@ function requestOnce(
       u,
       {
         method: opts.method,
-        headers: { 'user-agent': 'lucian-dev.com/safe-fetch', accept: '*/*', ...opts.headers },
+        headers: {
+          'user-agent': 'lucian-dev.com/safe-fetch',
+          accept: '*/*',
+          ...opts.headers,
+          ...(opts.body ? { 'content-length': String(opts.body.length) } : {}),
+        },
         lookup,
         // SNI and Host stay the original hostname; only the socket address is pinned.
         servername: u.protocol === 'https:' && !parseIp(u.hostname.replace(/^\[|\]$/g, '')) ? u.hostname : undefined,
@@ -181,7 +192,7 @@ function requestOnce(
         const chunks: Buffer[] = []
         let size = 0
         const declared = Number(res.headers['content-length'] || 0)
-        if (opts.method === 'GET' && declared > opts.maxBytes && !opts.truncate) {
+        if (opts.method !== 'HEAD' && declared > opts.maxBytes && !opts.truncate) {
           res.destroy()
           reject(new SafeFetchError('TOO_LARGE', `Response is ${declared} bytes (limit ${opts.maxBytes})`))
           return
@@ -213,7 +224,7 @@ function requestOnce(
     req.on('timeout', () => req.destroy(new SafeFetchError('TIMEOUT', 'Request timed out')))
     req.on('error', (err) => reject(err instanceof SafeFetchError ? err : new SafeFetchError('NETWORK', err.message)))
     req.on('close', () => clearTimeout(timer))
-    req.end()
+    req.end(opts.body)
   })
 }
 
@@ -224,13 +235,16 @@ export async function safeFetch(rawUrl: string, options: SafeFetchOptions = {}):
   const resolve = options.resolve || defaultResolve
   const deadline = Date.now() + (options.timeoutMs ?? 5000)
   let url = checkUrl(rawUrl, !!options.allowHttp)
+  if (options.body !== undefined && method !== 'POST') throw new SafeFetchError('BAD_URL', `A ${method} request cannot carry a body`)
+  const body = method === 'POST' ? Buffer.from(options.body ?? '', 'utf8') : undefined
 
   for (let hop = 0; ; hop++) {
     const pinned = await vetHost(url.hostname, resolve)
     if (Date.now() >= deadline) throw new SafeFetchError('TIMEOUT', 'Request timed out')
-    const res = await requestOnce(url, pinned, { method, maxBytes, headers: options.headers || {}, deadline, truncate: !!options.truncate })
+    const res = await requestOnce(url, pinned, { method, maxBytes, headers: options.headers || {}, deadline, truncate: !!options.truncate, body })
     const location = res.headers.location
-    if (options.redirect !== 'manual' && res.status >= 300 && res.status < 400 && typeof location === 'string') {
+    // A POST is never redirected (see the module comment): its 3xx is the answer.
+    if (method !== 'POST' && options.redirect !== 'manual' && res.status >= 300 && res.status < 400 && typeof location === 'string') {
       if (hop >= maxRedirects) throw new SafeFetchError('REDIRECTS', 'Too many redirects')
       url = checkUrl(new URL(location, url).toString(), !!options.allowHttp)
       continue
