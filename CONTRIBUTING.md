@@ -84,13 +84,15 @@ time, checked in both themes), add its path to that override's `files`.
 ## Local checks before pushing
 
 ```bash
-npx tsc --noEmit       # type-check (must pass — CI gate)
-yarn lint              # ESLint (warnings allowed in CI for now)
+npx tsc --noEmit       # type-check (must pass)
+yarn lint              # ESLint, zero warnings
 yarn build             # full build, ~30s
 ```
 
-The harness in `.github/workflows/ci.yml` runs the same three steps on
-every push / PR to `main`.
+There is no hosted CI, so these checks are the gate: run them (plus
+`yarn test`) before every push to `main`, and `scripts/check-container.sh`
+too when the Dockerfile, `docker-entrypoint.sh` or a compose file changes.
+README → *Quality gates* lists the full set.
 
 ## Branch + commit conventions
 

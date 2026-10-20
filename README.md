@@ -17,6 +17,8 @@ backup, and a hardened admin GUI for non-engineers.
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
+<img src="docs/screenshots/hero-light.png" alt="Home page in light mode" width="900" />
+
 </div>
 
 ---
@@ -115,9 +117,11 @@ backup, and a hardened admin GUI for non-engineers.
 
 <table>
 <tr>
+<td><img src="docs/screenshots/admin-home.png" alt="Admin Home editor" /></td>
 <td><img src="docs/screenshots/admin-storage.png" alt="Storage + backup panel" /></td>
 </tr>
 <tr>
+<td align="center"><sub>Admin → Home: visibility toggles + content fields</sub></td>
 <td align="center"><sub>Admin → Storage: local SQLite + R2 mirror + tarball snapshots</sub></td>
 </tr>
 </table>
@@ -242,9 +246,10 @@ backup, and a hardened admin GUI for non-engineers.
 - The server's compose override is no longer tracked (loopback-only
   example), container logs rotate, the base image is pinned by digest and
   the release image carries only the traced runtime.
-- CI gates: a blocking production-dependency audit with an expiring
-  allowlist, a performance budget, and Playwright + axe end-to-end tests
-  against the exact Docker image.
+- [Quality gates](#quality-gates) run before each push: a blocking
+  production-dependency audit with an expiring allowlist, a performance
+  budget, and a container gate that builds the image and runs the
+  Playwright + axe end-to-end tests against it.
 - [`scripts/deploy.sh`](#deploying-to-production) — health-checked deploy
   with backups and automatic rollback.
 - [Versioned Cloudflare configuration](#cloudflare) plus env-gated cache
@@ -342,7 +347,7 @@ all items and downloads everything as a .zip of Markdown and JSON.
 | Auth | **scrypt + `jsonwebtoken` + `jose` (edge)** | Lockout-aware login, edge JWT verify |
 | Editor | **TipTap** (rich) + **Monaco-style JSON** | Block editor for posts + raw JSON for CV |
 | Images | **sharp** at upload time | WebP variants + dimensions; no on-request optimizer |
-| Testing | **node:test**, **Playwright** + **axe-core** | Unit tests, browser E2E and WCAG 2.2 AA checks in CI |
+| Testing | **node:test**, **Playwright** + **axe-core** | Unit tests, browser E2E and WCAG 2.2 AA checks |
 
 ---
 
@@ -858,7 +863,7 @@ yarn content:migrate    # filesystem → SQLite (idempotent)
 yarn content:pull       # R2 → SQLite (overwrites; uses .env)
 yarn content:push       # SQLite → R2 (overwrites; uses .env)
 yarn content:list       # list R2 objects
-yarn check              # tsc + ESLint + unit tests
+yarn run check          # tsc + ESLint + unit tests
 yarn e2e                # Playwright + axe against E2E_BASE_URL (default http://127.0.0.1:3000)
 yarn audit:deps         # production-dependency audit gate (security/audit-allowlist.json)
 yarn db:status          # schema version of each SQLite store (no writes)
@@ -882,13 +887,11 @@ docker compose up -d --build
 
 `docker-compose.override.yml` is **not tracked**: each host keeps its own
 copy, made from `docker-compose.override.example.yml`. The example binds the
-site to `127.0.0.1:3002` only (the Cloudflare Tunnel connects there; CI
-asserts that the merged config publishes nothing beyond loopback), replaces
+site to `127.0.0.1:3002` only (the Cloudflare Tunnel connects there), replaces
 the named volumes with bind mounts of `./data` and `./public/uploads`, and
 rotates container logs (`local` driver, 5 × 10 MB). The base file drops every
-Linux capability, sets `no-new-privileges` and a PID limit (CI asserts all
-three and runs the E2E suite against a container started the same way). The
-root file system stays writable: ISR rewrites prerendered pages under
+Linux capability, sets `no-new-privileges` and a PID limit. The root file
+system stays writable: ISR rewrites prerendered pages under
 `/app/.next/server`; making it read-only would need that directory on a
 volume re-seeded from the image on every deploy. A page that turns into a
 404 (a deleted or unpublished post or case study, `/publications` without
@@ -941,7 +944,7 @@ drives the server over `ssh vultr_tokyo` (an alias in `~/.ssh/config`). The
 server has no GitHub credentials: the new commits travel as a git bundle.
 
 ```bash
-git switch main && git pull && git push   # main == origin/main, CI green
+git switch main && git pull && git push   # main == origin/main
 scripts/deploy.sh                         # --force rebuilds the deployed commit
 ```
 
@@ -1052,14 +1055,21 @@ never stays at the edge longer than 5 minutes
 
 ## Quality gates
 
-CI (`.github/workflows/ci.yml`) runs on every push and pull request:
+There is no hosted CI: run these before pushing to `main`.
 
-| Job | What must pass |
+| Command | What must pass |
 |---|---|
-| build | `tsc`, ESLint with zero warnings, unit tests, `next build --webpack`, and the performance budget (`scripts/perf-budget.mjs`: shared and per-page first-load JS, shared CSS, number and weight of preloaded fonts) |
-| audit | `scripts/check-audit.mjs`: no high/critical advisory in production dependencies unless allowlisted in `security/audit-allowlist.json` with a reason and an expiry date; expired entries fail too. The full report is kept as an artifact |
-| docker | the merged compose config publishes loopback only; the image builds, starts on an empty data volume, serves, warms its ISR pages and stops gracefully; then the Playwright + axe suite runs against that exact container (Chromium, WebKit on an iPhone, Firefox) |
-| fixture-gates | the synthetic fixture store (`e2e/fixtures/store`: *Example Person*, generated images) is installed, built and served in the pinned Playwright image: CLS ≤ 0.05 and TBT ≤ 200 ms on a calibrated mid-range-phone profile (LCP reported), no horizontal scroll at 375 / 768 / 1440 px on Chromium, WebKit and Firefox, no image over 200 KB or decoded far larger than shown, axe on the article, and 30 visual baselines (`e2e/visual.spec.ts-snapshots`) compared pixel by pixel |
+| `yarn run check`, `yarn build`, `node scripts/perf-budget.mjs` | `tsc`, ESLint with zero warnings, unit tests, `next build --webpack`, and the performance budget (shared and per-page first-load JS, shared CSS, number and weight of preloaded fonts) |
+| `yarn audit:deps` | `scripts/check-audit.mjs`: no high/critical advisory in production dependencies unless allowlisted in `security/audit-allowlist.json` with a reason and an expiry date; expired entries fail too |
+| `scripts/check-container.sh` | the merged compose config publishes loopback only and keeps the hardening; the image builds, starts on fresh data holding only the git seeds, serves, warms its ISR pages, runs as uid 1001 with no capabilities and `NoNewPrivs`; the Playwright + axe suite (`@admin` specs included, with a throwaway admin) passes against that container; it stops in under 8 s. Needs Docker, `jq` and `curl`; required for changes to the Dockerfile, `docker-entrypoint.sh` or the compose files, `--no-e2e` skips the suite |
+| `scripts/check-fixture-gates.sh` | the synthetic fixture store (`e2e/fixtures/store`: *Example Person*, generated images — never the live content) is built and served in the pinned Playwright image (`mcr.microsoft.com/playwright`, the image the visual baselines were made in): CLS ≤ 0.05 and TBT ≤ 200 ms on a calibrated phone profile; no horizontal scroll at 375 / 768 / 1440 in Chromium, WebKit (iPhone) and Firefox; no image over 200 KB; axe on an article; and the visual baselines of the home page, an article, a case study, the CV and the contact page (dark / light × phone / tablet / desktop). `--update-snapshots` regenerates the baselines after an intended change |
+
+To run the suite against another server, point `E2E_BASE_URL` at it (a local
+`yarn start` listens on `http://127.0.0.1:3002`; the default is
+`http://127.0.0.1:3000`). The `@admin` specs sign in with `ADMIN_EMAIL` /
+`ADMIN_PASS` from the environment (`yarn e2e` does not read `.env`) and
+are skipped without them; they change content, so leave them out with
+`--grep-invert @admin` for anything but a disposable store.
 
 The E2E suite (`e2e/`) checks every public page on desktop, tablet, phone
 and reduced-motion profiles: one visible `h1`, `lang` (`zh-Hans` on
@@ -1068,9 +1078,10 @@ and reduced-motion profiles: one visible `h1`, `lang` (`zh-Hans` on
 phones (inline text links exempt), nothing animating under reduced motion,
 theme persistence, the ⌘K palette and the legacy redirect — and it fails on
 any console error, uncaught exception or CSP violation. The `@admin`
-specs (CI only) sign in, hide and restore a CV field end to end, provoke a
-*Changed elsewhere* conflict between two editors, open the shortcuts
-overlay and follow a contact message into the Inbox.
+specs (local containers only: they change content) sign in, hide and
+restore a CV field end to end, provoke a *Changed elsewhere* conflict
+between two editors, open the shortcuts overlay and follow a contact
+message into the Inbox.
 
 ---
 
@@ -1140,6 +1151,11 @@ activity, `Q` content health, `X` errors, `K` security (the public `G H/A/W/B/C/
 work too); lists take `j` / `k`, `Enter`, `x` and their own letters
 (Inbox: `r` reply, `s` star, `e` archive, `u` unread, `#` delete, ⌘Z undo).
 Single-letter keys follow the *Single-key shortcuts* switch.
+
+<div align="center">
+  <img src="docs/screenshots/admin-cv-studio.png" alt="CV Editor Studio" width="780" />
+  <br /><sub>Admin → CV → Studio: split-pane editor with live preview</sub>
+</div>
 
 ---
 

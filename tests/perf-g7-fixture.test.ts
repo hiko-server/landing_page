@@ -8,7 +8,7 @@
  *     metadata, and every file it references is in it;
  *   - it can never reach production: e2e/ is outside the Docker build
  *     context, and the installer refuses a checkout with a real store;
- *   - CI runs the gates in the Playwright image of the pinned version, and
+ *   - scripts/check-fixture-gates.sh runs the gates in the Playwright image of the pinned version, and
  *     the visual baselines exist for every page × viewport × theme.
  */
 import { test } from 'node:test'
@@ -145,15 +145,20 @@ test('install(): refuses a real store and production; copies data, content and u
   }
 })
 
-test('CI runs the fixture gates in the Playwright image of the pinned version, on the platform of the baselines', () => {
-  const ci = fs.readFileSync(path.join(ROOT, '.github/workflows/ci.yml'), 'utf8')
+test('scripts/check-fixture-gates.sh runs the gates in the Playwright image of the pinned version, on the fixture store', () => {
+  // The GitHub Actions workflow is gone (the owner removed CI); the gates run locally through this script.
+  const script = fs.readFileSync(path.join(ROOT, 'scripts/check-fixture-gates.sh'), 'utf8')
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'))
   const version = String(pkg.devDependencies['@playwright/test']).replace(/^[^\d]*/, '')
-  assert.match(ci, new RegExp(`image: mcr\\.microsoft\\.com/playwright:v${version.replace(/\./g, '\\.')}-noble`))
-  assert.match(ci, /fixture-gates:[\s\S]*runs-on: ubuntu-24\.04-arm/)
-  assert.match(ci, /scripts\/ci\/fixture-store\.mjs/)
-  assert.match(ci, /E2E_FIXTURE: '1'/)
-  assert.match(ci, /npx playwright install --with-deps chromium webkit firefox/)
+  assert.match(script, new RegExp(`mcr\\.microsoft\\.com/playwright:v${version.replace(/\./g, '\\.')}-noble`), 'the image matches @playwright/test')
+  assert.match(script, /scripts\/ci\/fixture-store\.mjs/)
+  assert.match(script, /E2E_FIXTURE=1/)
+  assert.match(script, /TZ=UTC/)
+  assert.match(script, /--grep @cwv --workers=1/, 'the CWV gate runs alone')
+  assert.match(script, /--project=webkit --project=firefox --project=visual/)
+  // Never the owner's content: the live store, uploads and photos are removed from the scratch tree.
+  assert.match(script, /rm -rf "\$WT\/data" "\$WT\/public\/uploads" "\$WT\/public\/images\/imageScroller"/)
+  assert.equal(fs.existsSync(path.join(ROOT, '.github/workflows/ci.yml')), false)
   const config = fs.readFileSync(path.join(ROOT, 'e2e/playwright.config.ts'), 'utf8')
   for (const project of ['webkit', 'firefox', 'visual']) assert.match(config, new RegExp(`name: '${project}'`))
 })

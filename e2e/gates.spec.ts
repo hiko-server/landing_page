@@ -19,7 +19,8 @@ import { test, expect, seriousA11yViolations } from './fixtures'
  *     (it depends on the runner's network). TBT is measured from the long
  *     tasks the page really runs (not Lighthouse's simulation); the home page,
  *     the heaviest, measures ~150 ms (almost all of it React hydration) both
- *     on macOS and in the Linux CI image. Tagged @cwv: CI runs it on its own
+ *     on macOS and in the Linux Playwright image. Tagged @cwv:
+ *     scripts/check-fixture-gates.sh runs it on its own
  *     (one worker), since parallel tests would steal its CPU;
  *   - images: no same-site image over 200 KB, none decoded at more than
  *     twice the pixels it is shown at;

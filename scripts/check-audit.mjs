@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Blocking dependency-audit gate (CI job "audit", `yarn audit:deps`).
+ * Blocking dependency-audit gate (`yarn audit:deps`, README → Quality gates).
  *
  * Runs `yarn audit --groups dependencies --json` (production dependencies
  * only) and fails when

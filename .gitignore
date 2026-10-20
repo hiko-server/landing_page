@@ -51,6 +51,9 @@ next-env.d.ts
 # CI audit report (scripts/check-audit.mjs --report)
 /audit-report.json
 
+# scripts/check-container.sh scratch directory (removed when it exits)
+/.container-check.*/
+
 # Server-local compose overrides: copy docker-compose.override.example.yml.
 # Never tracked — it holds host-specific ports, mounts and networks.
 docker-compose.override.yml

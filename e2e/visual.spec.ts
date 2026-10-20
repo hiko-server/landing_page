@@ -15,14 +15,14 @@ import { test, expect } from './fixtures'
  * — the copyright year, the CV's "Updated <month>", the contact form's
  * random human-check sum — masked. Rendering differs between operating
  * systems, so the baselines are made and compared in the same Linux image
- * CI uses (mcr.microsoft.com/playwright, linux/arm64; the `-linux` suffix);
- * after an intended change regenerate them there:
+ * scripts/check-fixture-gates.sh uses (mcr.microsoft.com/playwright, linux/arm64;
+ * the `-linux` suffix); after an intended change regenerate them there:
  *
- *   E2E_FIXTURE=1 npx playwright test -c e2e/playwright.config.ts --project=visual --update-snapshots
+ *   scripts/check-fixture-gates.sh --update-snapshots
  *
  * Runs only against the fixture store (E2E_FIXTURE=1), in the `visual`
  * project, built with TZ=UTC and NEXT_PUBLIC_SITE_HOST=example.com like the
- * CI job (.github/workflows/ci.yml, fixture-gates).
+ * script (scripts/check-fixture-gates.sh).
  */
 
 const FIXTURE = process.env.E2E_FIXTURE === '1'

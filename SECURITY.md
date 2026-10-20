@@ -380,10 +380,8 @@ unsent drafts.
 
 The image runs as the non-root user `nextjs` (uid 1001) under `dumb-init`.
 Compose drops every Linux capability (`cap_drop: [ALL]`), sets
-`no-new-privileges`, and limits the container to 256 processes/threads;
-CI starts the E2E container with the same flags and checks that its
-capability bounding set is empty and `NoNewPrivs` is 1. The root file
-system is writable on purpose: ISR rewrites prerendered pages under
+`no-new-privileges`, and limits the container to 256 processes/threads.
+The root file system is writable on purpose: ISR rewrites prerendered pages under
 `/app/.next/server`, which a read-only image would have to move to a
 volume re-seeded on every deploy.
 

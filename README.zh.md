@@ -17,6 +17,8 @@ English → [README.md](./README.md)
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 
+<img src="docs/screenshots/hero-light.png" alt="浅色模式首页" width="900" />
+
 </div>
 
 ---
@@ -88,9 +90,11 @@ English → [README.md](./README.md)
 
 <table>
 <tr>
+<td><img src="docs/screenshots/admin-home.png" alt="后台 Home 编辑器" /></td>
 <td><img src="docs/screenshots/admin-storage.png" alt="存储与备份面板" /></td>
 </tr>
 <tr>
+<td align="center"><sub>后台 → Home：可见性开关 + 内容字段</sub></td>
 <td align="center"><sub>后台 → Storage：本地 SQLite + R2 镜像 + tarball 快照</sub></td>
 </tr>
 </table>
@@ -194,8 +198,8 @@ English → [README.md](./README.md)
   内容或后台提供的 URL 时一律经过 `lib/security/safeFetch.ts`。
 - 服务器上的 compose 覆盖文件不再纳入版本库（提供只绑定回环地址的示例），
   容器日志轮转，基础镜像按 digest 固定，发布镜像只包含追踪出的运行时文件。
-- CI 关卡：阻断式生产依赖审计（带到期日的豁免清单）、性能预算，以及针对同一
-  Docker 镜像运行的 Playwright + axe 端到端测试。
+- 推送前运行的[质量关卡](#质量关卡)：阻断式生产依赖审计（带到期日的豁免清单）、
+  性能预算，以及构建镜像并针对它运行 Playwright + axe 端到端测试的容器关卡。
 - [`scripts/deploy.sh`](#部署到生产环境)：带健康检查、备份与自动回滚的部署。
 - [版本化的 Cloudflare 配置](#cloudflare)，以及每次重新生成页面时按环境变量
   启用的缓存清除与 IndexNow 推送。
@@ -218,7 +222,7 @@ English → [README.md](./README.md)
 | 鉴权 | **scrypt + `jsonwebtoken` + `jose`（Edge）** | 锁定感知登录、Edge JWT 校验 |
 | 编辑器 | **TipTap**（富文本） + 类 Monaco JSON | 文章块编辑器 + 原始 JSON CV |
 | 图片 | **sharp**（上传时处理） | WebP 尺寸变体 + 宽高；不做按请求优化 |
-| 测试 | **node:test**、**Playwright** + **axe-core** | 单元测试、浏览器端到端测试与 CI 中的 WCAG 2.2 AA 检查 |
+| 测试 | **node:test**、**Playwright** + **axe-core** | 单元测试、浏览器端到端测试与 WCAG 2.2 AA 检查 |
 
 ---
 
@@ -626,7 +630,7 @@ yarn content:migrate    # 文件系统 → SQLite（幂等）
 yarn content:pull       # R2 → SQLite（覆盖；读 .env）
 yarn content:push       # SQLite → R2（覆盖；读 .env）
 yarn content:list       # 列出 R2 对象
-yarn check              # tsc + ESLint + 单元测试
+yarn run check          # tsc + ESLint + 单元测试
 yarn e2e                # 针对 E2E_BASE_URL 运行 Playwright + axe（默认 http://127.0.0.1:3000）
 yarn audit:deps         # 生产依赖审计关卡（security/audit-allowlist.json）
 yarn db:status          # 各 SQLite 库的版本（只读）
@@ -647,11 +651,9 @@ docker compose up -d --build
 
 `docker-compose.override.yml` **不纳入版本库**：每台主机按
 `docker-compose.override.example.yml` 保留自己的副本。示例只把站点绑定到
-`127.0.0.1:3002`（Cloudflare Tunnel 从这里接入；CI 会断言合并后的配置不对
-回环以外的地址暴露端口），用 `./data` 与 `./public/uploads` 的绑定挂载取代
+`127.0.0.1:3002`（Cloudflare Tunnel 从这里接入），用 `./data` 与 `./public/uploads` 的绑定挂载取代
 具名卷，并轮转容器日志（`local` 驱动，5 × 10 MB）。基础文件还去掉了全部 Linux
-capability、设置 `no-new-privileges` 与进程数上限（CI 断言这三项，并用同样参数
-启动容器跑 E2E）。根文件系统保持可写：ISR 会改写 `/app/.next/server` 下的预渲染
+capability、设置 `no-new-privileges` 与进程数上限。根文件系统保持可写：ISR 会改写 `/app/.next/server` 下的预渲染
 页面，只读镜像需要把该目录放到每次部署都重新初始化的卷上。页面变成 404 时（删除或
 撤回发布的文章与案例研究、没有公开论文的 `/publications`），每次内容写入后及启动时
 都会删除它在该目录下的持久化副本（`lib/isrCache`、`lib/isrPages`），否则重启后
@@ -694,7 +696,7 @@ musl）；发布阶段只包含 Next 追踪出的 standalone 输出——构建�
 凭据：新提交以 git bundle 的形式传过去。
 
 ```bash
-git switch main && git pull && git push   # main == origin/main，且 CI 通过
+git switch main && git pull && git push   # main == origin/main
 scripts/deploy.sh                         # --force 重新构建当前已部署的提交
 ```
 
@@ -788,21 +790,27 @@ IndexNow（密钥文件位于站点根目录 `/<INDEXNOW_KEY>.txt`：密钥文�
 
 ## 质量关卡
 
-CI（`.github/workflows/ci.yml`）在每次推送和 Pull Request 时运行：
+项目没有托管的 CI：推送到 `main` 之前请在本地运行以下检查。
 
-| 任务 | 必须通过 |
+| 命令 | 必须通过 |
 |---|---|
-| build | `tsc`、零警告的 ESLint、单元测试、`next build --webpack`，以及性能预算（`scripts/perf-budget.mjs`：共享与逐页首屏 JS、共享 CSS、预加载字体的数量与体积） |
-| audit | `scripts/check-audit.mjs`：生产依赖中不得有高危 / 严重漏洞，除非在 `security/audit-allowlist.json` 中写明理由与到期日；过期条目同样失败。完整报告作为构建产物保留 |
-| docker | 合并后的 compose 配置只暴露回环地址；镜像能构建、在空数据卷上启动、提供服务、预热 ISR 页面并优雅停止；随后针对该容器运行 Playwright + axe 测试（Chromium、iPhone 上的 WebKit、Firefox） |
-| fixture-gates | 在固定版本的 Playwright 镜像中安装、构建并运行合成测试数据（`e2e/fixtures/store`：*Example Person* 与程序生成的图片，绝不取自线上内容）：在校准过的中端手机配置下 CLS ≤ 0.05、TBT ≤ 200 ms（LCP 只报告），375 / 768 / 1440 px 在 Chromium、WebKit、Firefox 中都无横向滚动，图片不超过 200 KB 且不远大于显示尺寸，文章页通过 axe，以及 30 张视觉基线截图（`e2e/visual.spec.ts-snapshots`）逐像素比对 |
+| `yarn run check`、`yarn build`、`node scripts/perf-budget.mjs` | `tsc`、零警告的 ESLint、单元测试、`next build --webpack`，以及性能预算（共享与逐页首屏 JS、共享 CSS、预加载字体的数量与体积） |
+| `yarn audit:deps` | `scripts/check-audit.mjs`：生产依赖中不得有高危 / 严重漏洞，除非在 `security/audit-allowlist.json` 中写明理由与到期日；过期条目同样失败 |
+| `scripts/check-container.sh` | 合并后的 compose 配置只暴露回环地址并保留加固项；镜像能构建、在只含 git 种子的全新数据目录上启动、提供服务、预热 ISR 页面，以 uid 1001 运行、没有任何 capability 且 `NoNewPrivs` 为 1；针对该容器运行的 Playwright + axe 测试（含 `@admin` 用例，使用一次性的管理员账号）全部通过；8 秒内优雅停止。需要 Docker、`jq` 与 `curl`；修改 Dockerfile、`docker-entrypoint.sh` 或 compose 文件时必须运行，`--no-e2e` 可跳过端到端测试 |
+| `scripts/check-fixture-gates.sh` | 在固定版本的 Playwright 镜像（视觉基线即在其中生成）中构建并运行合成测试数据（`e2e/fixtures/store`：*Example Person* 与程序生成的图片，绝不取自线上内容）：在校准过的手机配置下 CLS ≤ 0.05、TBT ≤ 200 ms；Chromium、WebKit（iPhone）与 Firefox 在 375 / 768 / 1440 下无横向滚动；图片不超过 200 KB；文章页 axe 检查；以及首页、文章、案例、简历与联系页（深 / 浅色 × 手机 / 平板 / 桌面）的视觉基线。`--update-snapshots` 在有意的改动后重新生成基线 |
+
+要针对其他服务器运行测试，把 `E2E_BASE_URL` 指向它（本地 `yarn start` 监听
+`http://127.0.0.1:3002`；默认值为 `http://127.0.0.1:3000`）。`@admin` 用例从环境
+变量 `ADMIN_EMAIL` / `ADMIN_PASS` 读取登录信息（`yarn e2e` 不会读取 `.env`），
+缺少时会被跳过；它们会修改内容，因此除一次性的数据存储外，请用
+`--grep-invert @admin` 排除它们。
 
 端到端测试（`e2e/`）在桌面、平板、手机与减少动效四种配置下检查每个公开页面：
 恰好一个可见的 `h1`、`lang`（`/cv/zh` 为 `zh-Hans`）、标题与描述、无严重 /
 关键级 axe 问题（WCAG 2.0–2.2 A/AA）、无横向滚动、手机上 24 × 24 px 的点击目标
 （正文内联链接除外）、减少动效时没有正在播放的动画、主题持久化、⌘K 命令面板和
 旧地址跳转——任何控制台错误、未捕获异常或 CSP 违规都会使测试失败。`@admin`
-用例（仅在 CI 中）会登录后台，端到端地隐藏并恢复一个 CV 字段，制造两个编辑器
+用例（只针对本地容器运行：它们会修改内容）会登录后台，端到端地隐藏并恢复一个 CV 字段，制造两个编辑器
 之间的「Changed elsewhere」冲突，打开快捷键面板，并跟踪一条联系留言进入收件箱。
 
 ---
@@ -871,6 +879,11 @@ API 在 `/api/*`；`/api/admin/*` 全部需要鉴权（代理 `proxy.ts` 把关�
 通用链接图标）。写作栏提供中英文字数（中日韩按字计）、阅读时间、查找替换（⌘F）、专注模式和打字机滚动。
 “后台 → Tags & export”可跨文章重命名或合并标签，并一键把全部内容导出为 Markdown + JSON 的 .zip。
 
+
+<div align="center">
+  <img src="docs/screenshots/admin-cv-studio.png" alt="CV Studio" width="780" />
+  <br /><sub>后台 → CV → Studio：分屏编辑 + 实时预览</sub>
+</div>
 
 ---
 

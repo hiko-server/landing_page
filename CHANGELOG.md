@@ -1145,6 +1145,14 @@ shown.
 
 ### Changed
 
+- **No hosted CI**: `.github/workflows/ci.yml` is removed, so pushes and pull
+  requests no longer run GitHub Actions. The same gates (`yarn run check`,
+  `yarn build` + `scripts/perf-budget.mjs`, `yarn audit:deps`) are run
+  locally before pushing; the docker job's checks (compose config, image
+  build, fresh-data start, runtime hardening, E2E against the container,
+  graceful stop) moved into `scripts/check-container.sh`. README → *Quality
+  gates* lists them.
+  `scripts/deploy.sh`, Dependabot and the issue / PR templates stay.
 - **No more "[01] INTRODUCTION" labels** (owner request): the public site
   has no `[NN]` index markers or bracket labels any more. Every page section
   opens with one plain heading (`components/General-UI/SectionHeading`, the

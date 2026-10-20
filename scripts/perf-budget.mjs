@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Performance budget over a finished `next build` (CI runs it right after the
- * build; locally: `node scripts/perf-budget.mjs` after `yarn build`).
+ * Performance budget over a finished `next build`: `node scripts/perf-budget.mjs`
+ * right after `yarn build` (README → Quality gates).
  *
  * Reads only build output:
  *   - .next/build-manifest.json → the JS every page loads first: the shared
