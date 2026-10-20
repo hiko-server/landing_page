@@ -111,7 +111,9 @@ export default function TableMenu({ editor, announce }: { editor: Editor; announ
         const first = barRef.current?.querySelector<HTMLButtonElement>('button:not([disabled])')
         if (first) {
           e.preventDefault()
-          first.focus()
+          // A keyboard move: show the ring even when the caret got into the
+          // cell by mouse (Chrome does not count Alt+F10 as keyboard use).
+          first.focus({ focusVisible: true } as FocusOptions)
         }
       }
     }
@@ -164,13 +166,20 @@ export default function TableMenu({ editor, announce }: { editor: Editor; announ
         borderColor="page.border-strong"
         borderRadius="lg"
         boxShadow="0 10px 28px rgba(0,0,0,0.18)"
+        // On a phone the eleven buttons wrap onto a second row: a sideways
+        // scroller would clip "Delete table" and be a scroll region with no
+        // tab stop of its own (its buttons are reached with ← →).
         maxW="calc(100vw - 16px)"
-        overflowX="auto"
+        flexWrap="wrap"
+        rowGap={0.5}
         sx={{
           '@keyframes tableMenuIn': { from: { opacity: 0, transform: 'translateY(2px)' }, to: { opacity: 1, transform: 'none' } },
           animation: 'tableMenuIn 120ms cubic-bezier(0.22, 1, 0.36, 1)',
           '@media (prefers-reduced-motion: reduce)': { animation: 'none' },
-          '& button:focus-visible': { boxShadow: '0 0 0 2px var(--accent-ring)' },
+          // The buttons never take focus from a pointer (tabIndex -1, mousedown
+          // prevented): any focus is the keyboard's (Alt+F10, ← →, Home, End),
+          // so the site's ring shows on :focus, not only :focus-visible.
+          '& button:focus, & button:focus-visible': { outline: '2px solid var(--accent)', outlineOffset: '2px', boxShadow: '0 0 0 2px var(--accent-ring)' },
         }}
       >
         <ToolButton label="Row above" icon={<TbRowInsertTop size={16} />} disabled={!s || s.inHeaderRow} onClick={() => run(() => c.addRowBefore(), 'Row added above.')} />
