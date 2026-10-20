@@ -1,4 +1,5 @@
 import { test, beforeEach, afterEach } from 'node:test'
+import { PALETTE_UI } from '../lib/uiStrings/palette'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -334,7 +335,10 @@ test('header: a one-tap toggle plus a lazily loaded System / Light / Dark menu; 
   assert.match(menu, /aria-checked=\{checked\}/)
   assert.match(menu, /flushSync\(\(\) => onClose\(true\)\)/, 'closed before the reveal snapshot')
   const palette = read('components/General-UI/CommandPalette.tsx')
-  for (const label of ['System theme', 'Light theme', 'Dark theme']) assert.ok(palette.includes(`label: '${label}'`), label)
+  // The three preferences, in the palette's language (lib/uiStrings/palette, F3).
+  assert.match(palette, /label: p\.themeItems\[value\]/)
+  assert.deepEqual(Object.values(PALETTE_UI.en.themeItems), ['System theme', 'Light theme', 'Dark theme'])
+  assert.deepEqual(Object.values(PALETTE_UI['zh-Hans'].themeItems), ['跟随系统主题', '浅色主题', '深色主题'])
   assert.match(palette, /run: \(\) => choose\(value, null\)/)
   assert.doesNotMatch(palette, /useColorMode/)
 })

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { AppProps } from 'next/app'
 import Head from 'next/head'
 import dynamic from 'next/dynamic'
@@ -24,7 +24,10 @@ import { RouteTransitionGate, useRouteViewTransitions } from '../components/Chro
 import { useFocusMainOnPageChange } from '../components/Chrome/routeFocus'
 import { resolveHtmlLang, routeHasChrome } from '../components/Chrome/chrome'
 import { HtmlLangContext } from '../components/Common/htmlLang'
-import { ChromeLangContext, chromeLangFor } from '../components/Chrome/chromeLang'
+import { ChromeUiContext, chromeLangFor, type ChromeUiValue } from '../components/Chrome/chromeLang'
+import { uiLangOf } from '../lib/uiStrings'
+import { CHROME_EN } from '../lib/uiStrings/chrome-en'
+import type { ChromeUi } from '../lib/uiStrings/chrome'
 import { monoFallbackFontFaces } from '../lib/monoFallback'
 import { installPrintDetails } from '../lib/print'
 import { installErrorCapture } from '../lib/errors/capture'
@@ -214,8 +217,42 @@ const App = ({ Component, pageProps, router }: AppProps) => {
   useEffect(() => {
     document.documentElement.lang = lang
   }, [lang, router.asPath])
-  // The English chrome is marked lang="en" whenever the page is not English.
-  const chromeLang = chromeLangFor(lang)
+  // The chrome speaks the page's interface language (F3, components/Chrome/
+  // chromeLang): a Chinese page ships its words (pageProps.chromeUi); the
+  // shared bundle has only the English ones. A page that reports Chinese
+  // without shipping them (the static 404 under /zh/) loads them on demand.
+  const uiLang = uiLangOf(lang)
+  const shipped = pageProps?.chromeUi as ChromeUi | null | undefined
+  const [loadedUi, setLoadedUi] = useState<ChromeUi | null>(null)
+  const needsLoad = uiLang !== 'en' && shipped?.lang !== uiLang
+  useEffect(() => {
+    if (!needsLoad) return
+    let alive = true
+    import('../lib/uiStrings/chrome')
+      .then(({ chromeUiFor }) => {
+        if (alive) setLoadedUi(chromeUiFor(uiLang))
+      })
+      .catch(() => {
+        // The English chrome stays (marked lang="en").
+      })
+    return () => {
+      alive = false
+    }
+  }, [needsLoad, uiLang])
+  const chromeUi = uiLang === 'en' ? null : shipped?.lang === uiLang ? shipped : loadedUi?.lang === uiLang ? loadedUi : null
+  const chromeZh = pageProps?.chromeZh as readonly string[] | undefined
+  const langLinks = pageProps?.langLinks as ChromeUiValue['links'] | undefined
+  const chrome = useMemo<ChromeUiValue>(
+    () => ({
+      t: chromeUi?.t ?? CHROME_EN,
+      lang: chromeUi?.lang ?? 'en',
+      // lang="en" on the English chrome whenever the page is not English (and vice versa).
+      attr: chromeLangFor(lang, chromeUi?.lang ?? 'en'),
+      zh: chromeUi ? chromeZh ?? [] : null,
+      links: Array.isArray(langLinks) ? langLinks : [],
+    }),
+    [chromeUi, chromeZh, langLinks, lang],
+  )
 
   // Printing: closed <details> are opened for the print, then closed again.
   useEffect(() => installPrintDetails(window), [])
@@ -274,7 +311,7 @@ const App = ({ Component, pageProps, router }: AppProps) => {
         <ThemePreferenceSync />
         {/* Server-computed reference month (pageProps.clockMonth) so time-based
             text renders identically on the server and while hydrating. */}
-        <ChromeLangContext.Provider value={chromeLang}>
+        <ChromeUiContext.Provider value={chrome}>
           <ClockProvider month={pageProps?.clockMonth}>
             <HtmlLangContext.Provider value={setReportedLang}>
               {withChrome ? (
@@ -288,7 +325,7 @@ const App = ({ Component, pageProps, router }: AppProps) => {
           </ClockProvider>
           <ScrollToTop />
           <ScrollProgressBar />
-        </ChromeLangContext.Provider>
+        </ChromeUiContext.Provider>
       </MotionProvider>
     </AppChakraProvider>
   )

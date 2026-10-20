@@ -64,17 +64,22 @@ export function isPrefetchableHref(href: string | undefined, external = false): 
 /** A highlighted row is prefetched once it has stayed highlighted this long (ms): arrowing past rows costs nothing. */
 export const PREFETCH_DELAY_MS = 120
 
-export type ShortcutRow = { keys: readonly string[]; label: string }
+export type ShortcutRow = {
+  /** Key of the row's words in lib/uiStrings/palette (layerRows). */
+  id: 'search' | 'help' | 'list' | 'open' | 'article' | 'theme'
+  keys: readonly string[]
+  label: string
+}
 
 /**
  * The keyboard layer's keys (lib/keyboardLayer.ts) as the Keyboard shortcuts
  * page lists them; the "G then …" rows come from NAV_SHORTCUTS.
  */
 export const LAYER_SHORTCUT_ROWS: readonly ShortcutRow[] = [
-  { keys: ['/'], label: 'Search' },
-  { keys: ['?'], label: 'Every shortcut (this page)' },
-  { keys: ['J', 'K'], label: 'Next / previous item in a list' },
-  { keys: ['↵'], label: 'Open the selected item' },
-  { keys: ['[', ']'], label: 'Previous / next article' },
-  { keys: ['T'], label: 'Switch light / dark' },
+  { id: 'search', keys: ['/'], label: 'Search' },
+  { id: 'help', keys: ['?'], label: 'Every shortcut (this page)' },
+  { id: 'list', keys: ['J', 'K'], label: 'Next / previous item in a list' },
+  { id: 'open', keys: ['↵'], label: 'Open the selected item' },
+  { id: 'article', keys: ['[', ']'], label: 'Previous / next article' },
+  { id: 'theme', keys: ['T'], label: 'Switch light / dark' },
 ]

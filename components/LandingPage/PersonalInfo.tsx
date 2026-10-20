@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react'
 // Type-only import from the pure shape module — never lib/home (server-only).
-import type { AvailabilityStatus, HomeData } from '../../lib/homeShape'
-import { mergeCurrentlyCoding, type CurrentlyCoding } from '../../lib/currentlyCoding'
+import type { HomeData } from '../../lib/homeShape'
+import { CODING_LABEL, STUDYING_LABEL, mergeCurrentlyCoding, type CurrentlyCoding } from '../../lib/currentlyCoding'
 import { safeHref } from '../../lib/cvFormat'
 import { Box, Button, Flex, Grid, IconButton, Text } from '@chakra-ui/react'
 import NextLink from 'next/link'
@@ -16,6 +16,7 @@ import { revealSx, settleSx } from './heroReveal'
 import { portraitFrameSx } from './portraitFrame'
 import Picture from '../Common/Picture'
 import { useImageReveal } from '../Common/useImageReveal'
+import { useHomeUi } from './homeUi'
 
 /**
  * The home hero.
@@ -39,12 +40,6 @@ const SOCIAL_ICONS: Record<SocialName, React.ReactElement> = {
   GitLab: <GitLabIcon />,
   LinkedIn: <LinkedInIcon />,
   WhatsApp: <WhatsAppIcon />,
-}
-
-const AVAILABILITY_LABEL: Record<AvailabilityStatus, string> = {
-  open: 'Available for work',
-  limited: 'Limited availability',
-  closed: 'Not taking new work',
 }
 
 /** Server-side facts about the portrait file (intrinsic size, variants, blur placeholder — lib/uploadVariants imageSources). */
@@ -122,6 +117,7 @@ const PersonalInfo = ({
   autoCoding,
   avatar,
   meta,
+  zh = false,
 }: {
   home?: HomeData
   identity: HeroIdentity
@@ -130,7 +126,10 @@ const PersonalInfo = ({
   avatar?: AvatarMeta
   /** Location and languages from the public CV (heroMeta); a blank item is not shown. */
   meta?: HeroMeta
+  /** /zh (F3): the Chinese name leads, the page's words and links are Chinese. */
+  zh?: boolean
 }) => {
+  const { t, links } = useHomeUi()
   // Memoised so the phrase list keeps its identity across re-renders (e.g. a
   // colour-mode toggle) instead of restarting the rotation.
   const tagline = home?.hero?.tagline
@@ -140,7 +139,7 @@ const PersonalInfo = ({
   const posY = clamp(Number(home?.hero?.avatarTransform?.y ?? 50), 0, 100, 50)
   const scale = clamp(Number(home?.hero?.avatarTransform?.scale ?? 1), 0.5, 3, 1)
   const avatarSrc = safeHref(home?.hero?.avatarUrl) || '/images/avatar-placeholder.png'
-  const alt = portraitAlt(identity)
+  const alt = portraitAlt(identity, zh)
 
   // A channel the owner cleared in the Home editor is removed; the built-in
   // links are used only when the home document has no socials at all.
@@ -148,10 +147,13 @@ const PersonalInfo = ({
 
   // The owner's stated availability; nothing is shown when it is not set.
   const availability = home?.availability
-  const availabilityText = availability ? (availability.label || '').trim() || AVAILABILITY_LABEL[availability.status] : ''
+  const availabilityText = availability ? (availability.label || '').trim() || t.hero.availability[availability.status] : ''
 
-  // The owner's lines and the CV-derived chip, combined exactly as /now does.
-  const coding = mergeCurrentlyCoding(home?.hero?.currentlyCoding, autoCoding)
+  // The owner's lines and the CV-derived chip, combined exactly as /now does;
+  // the built-in labels in the page's words (F3: "正在就读" on /zh).
+  const merged = mergeCurrentlyCoding(home?.hero?.currentlyCoding, autoCoding)
+  const builtIn: Record<string, string> = { [CODING_LABEL]: t.hero.coding, [STUDYING_LABEL]: t.hero.studying }
+  const coding = { ...merged, label: Object.hasOwn(builtIn, merged.label) ? builtIn[merged.label] : merged.label }
   const hasCoding = Boolean(coding.label || coding.project || coding.note)
   const location = (meta?.location || '').trim()
   const languages = (meta?.languages || '').trim()
@@ -191,7 +193,7 @@ const PersonalInfo = ({
           >
             {/* Copy column */}
             <Box flex="1" minW={0}>
-              <HeroHeadline brand={home?.hero?.brand} identity={identity} role={role} rotating={rotating} startStep={1} avatar={phoneAvatar} />
+              <HeroHeadline brand={home?.hero?.brand} identity={identity} role={role} rotating={rotating} startStep={1} avatar={phoneAvatar} zh={zh} />
 
               {hasMeta && (
                 <Box overflow="hidden" mt={{ base: 6, md: 8 }} sx={revealSx(5)}>
@@ -242,7 +244,7 @@ const PersonalInfo = ({
                 <Grid templateColumns={{ base: '1fr 1fr', sm: 'auto auto' }} gap={{ base: 2, sm: 3 }}>
                   <Button
                     as={NextLink}
-                    href="/cv"
+                    href={links.cv}
                     h="44px"
                     px={{ base: 3, sm: 6 }}
                     bg="accent.solid"
@@ -253,11 +255,11 @@ const PersonalInfo = ({
                     _active={{ bg: 'accent.solid-active' }}
                     _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '3px' }}
                   >
-                    View CV&nbsp;<span className="nudge" aria-hidden>→</span>
+                    {t.hero.viewCv}&nbsp;<span className="nudge" aria-hidden>→</span>
                   </Button>
                   <Button
                     as={NextLink}
-                    href="/contact"
+                    href={links.contact}
                     h="44px"
                     px={{ base: 3, sm: 6 }}
                     variant="outline"
@@ -269,13 +271,13 @@ const PersonalInfo = ({
                     _hover={{ borderColor: 'page.fg-secondary', bg: 'page.surface' }}
                     _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '3px' }}
                   >
-                    Get in touch
+                    {t.hero.getInTouch}
                   </Button>
                 </Grid>
 
                 {socials.length > 0 && (
                   <HintGroup>
-                    <Flex as="ul" listStyleType="none" gap={2} ml={{ sm: 1 }} aria-label="Profiles">
+                    <Flex as="ul" listStyleType="none" gap={2} ml={{ sm: 1 }} aria-label={t.hero.profiles}>
                       {socials.map((s) => (
                         <li key={s.name}>
                           <Hint label={s.name} placement="top">
@@ -284,7 +286,7 @@ const PersonalInfo = ({
                               href={s.url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              aria-label={`${s.name} (opens in a new tab)`}
+                              aria-label={`${s.name}${t.newTab}`}
                               icon={SOCIAL_ICONS[s.name]}
                               variant="outline"
                               h="44px"

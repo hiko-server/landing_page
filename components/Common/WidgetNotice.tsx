@@ -12,14 +12,17 @@ export default function WidgetNotice({
   children,
   onRetry,
   minH,
+  retryLabel,
 }: {
   kind: 'empty' | 'error'
   children: React.ReactNode
   onRetry?: () => void
   minH?: string | Record<string, string>
+  /** The retry button's word in the page's language (EmptyState's English "Try again" by default). */
+  retryLabel?: string
 }) {
   return (
-    <EmptyState variant="inline" tone={kind} role={kind === 'error' ? 'status' : undefined} onRetry={onRetry} minH={minH}>
+    <EmptyState variant="inline" tone={kind} role={kind === 'error' ? 'status' : undefined} onRetry={onRetry} retryLabel={retryLabel} minH={minH}>
       {children}
     </EmptyState>
   )

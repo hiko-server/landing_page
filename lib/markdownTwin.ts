@@ -332,6 +332,17 @@ export type LlmsInput = {
   /** The owner's descriptions of /now and /uses, when written. */
   nowDescription?: string
   usesDescription?: string
+  /** The Chinese pages that exist (F3: '/zh', '/zh/about', …), in nav order. */
+  zhPages?: readonly string[]
+}
+
+/** The Chinese pages (F3), named in English for the index. */
+const ZH_PAGE_NAMES: Readonly<Record<string, string>> = {
+  '/zh': 'Home',
+  '/zh/about': 'About',
+  '/zh/work': 'Case studies',
+  '/zh/blog': 'Writing',
+  '/zh/contact': 'Contact',
 }
 
 function entryLine(e: LlmsEntry, siteUrl: string): string {
@@ -348,8 +359,8 @@ function entryLine(e: LlmsEntry, siteUrl: string): string {
  * sections of links — the profile and the CV in each language that has
  * public content, every published case study and post (each to its
  * Markdown twin, language and date noted) and, under "Optional", the
- * secondary pages and feeds. No contact details: the contact page is
- * linked instead.
+ * secondary pages and feeds. The Chinese pages that exist (F3) are listed
+ * with the profile. No contact details: the contact page is linked instead.
  */
 export function buildLlmsTxt(input: LlmsInput): string {
   const u = (p: string) => `${input.siteUrl}${p}`
@@ -376,6 +387,8 @@ export function buildLlmsTxt(input: LlmsInput): string {
   if (input.publications) out.push(`- ${mdLink('Publications', u('/publications'))}: papers with citations`)
   if (input.orcid) out.push(`- ORCID iD: ${input.orcid}`)
   out.push(`- ${mdLink('Contact', u('/contact'))}: how to get in touch, and availability`)
+  const zh = (input.zhPages || []).filter((p) => ZH_PAGE_NAMES[p])
+  if (zh.length) out.push(`- The site in Chinese (简体中文): ${zh.map((p) => mdLink(ZH_PAGE_NAMES[p], u(p))).join(', ')}`)
   out.push('')
 
   if (input.work.length) {

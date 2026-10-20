@@ -111,8 +111,12 @@ export function heroCopy(tagline: unknown): { role: string; rotating: string[] }
   return { role: phrases[0] || FALLBACK_ROLE, rotating: phrases.slice(1) }
 }
 
-/** Accessible name for the portrait: "Li Yanpei (Lucian)". */
-export function portraitAlt(id: HeroIdentity): string {
+/**
+ * Accessible name for the portrait: "Li Yanpei (Lucian)"; on a Chinese page
+ * (`zh`, F3) "李彦霈（Li Yanpei）" when the CV shows the Chinese name.
+ */
+export function portraitAlt(id: HeroIdentity, zh = false): string {
+  if (zh && id.nameZh) return id.name ? `${id.nameZh}（${id.name}）` : id.nameZh
   const base = id.name || id.nick || id.nameZh
   if (!base) return 'Portrait'
   return id.nick && id.name ? `${id.name} (${id.nick})` : base

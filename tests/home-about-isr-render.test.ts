@@ -43,6 +43,13 @@ register(
 const html = (el: unknown) =>
   renderToStaticMarkup(el as Parameters<typeof renderToStaticMarkup>[0]).replace(/<style[^>]*>[\s\S]*?<\/style>/g, '')
 
+/** A home section inside the home page's words (F3: LandingContent provides them; components/LandingPage/homeUi). */
+async function inHome(el: unknown, lang: 'en' | 'zh-Hans' = 'en') {
+  const [{ HomeUiContext, EN_HOME_LINKS }, { HOME_UI }] = await Promise.all([import('../components/LandingPage/homeUi'), import('../lib/uiStrings/home')])
+  const value = { t: HOME_UI[lang], lang, cvLang: lang === 'en' ? 'en' : 'zh', links: lang === 'en' ? EN_HOME_LINKS : { ...EN_HOME_LINKS, cv: '/cv/zh', contact: '/zh/contact' } }
+  return createElement(HomeUiContext.Provider, { value: value as never }, el as never)
+}
+
 test('A1: the proof strip renders nothing without highlights, else one link per tile to its source', async () => {
   const { default: ProofStrip } = await import('../components/LandingPage/ProofStrip')
   assert.equal(html(createElement(ProofStrip, { highlights: [] })), '')
@@ -67,39 +74,60 @@ test('A1: the proof strip renders nothing without highlights, else one link per 
 })
 
 test('A2: the contact band links to /contact and shows availability only when set', async () => {
-  const { default: ContactBand, CONTACT_FALLBACK_LEDE } = await import('../components/LandingPage/ContactBand')
-  const plain = html(createElement(ContactBand, { home: null }))
+  const { default: ContactBand } = await import('../components/LandingPage/ContactBand')
+  const { HOME_UI } = await import('../lib/uiStrings/home')
+  const plain = html(await inHome(createElement(ContactBand, { home: null })))
   assert.match(plain, /<a [^>]*href="\/contact"[^>]*>Write to me/)
-  assert.ok(plain.includes(CONTACT_FALLBACK_LEDE))
+  assert.ok(plain.includes(HOME_UI.en.contactBand.fallbackLede))
   assert.doesNotMatch(plain, /<form|<textarea|<input/)
   assert.doesNotMatch(plain, /id="availability"/, 'no invented availability')
   const open = html(
-    createElement(ContactBand, {
-      home: { hero: {}, socials: {}, brands: [], quickAccess: [], contact: { blurb: 'Hiring? Say hello.' }, availability: { status: 'open', label: 'Open to backend roles' } } as never,
-    }),
+    await inHome(
+      createElement(ContactBand, {
+        home: { hero: {}, socials: {}, brands: [], quickAccess: [], contact: { blurb: 'Hiring? Say hello.' }, availability: { status: 'open', label: 'Open to backend roles' } } as never,
+      }),
+    ),
   )
   assert.match(open, /id="availability"/)
   assert.match(open, /Open to backend roles/)
   assert.match(open, /Hiring\? Say hello\./)
+  // F3: on /zh the band speaks Chinese and leads to /zh/contact; an availability without a Chinese label says its status in Chinese.
+  const zh = html(
+    await inHome(
+      createElement(ContactBand, {
+        home: { hero: {}, socials: {}, brands: [], quickAccess: [], contact: { blurb: '欢迎留言。' }, availability: { status: 'open', label: 'Open to backend roles' } } as never,
+      }),
+      'zh-Hans',
+    ),
+  )
+  assert.match(zh, /<a [^>]*href="\/zh\/contact"[^>]*>给我留言/)
+  assert.match(zh, /可以承接新工作/)
+  assert.doesNotMatch(zh, /Open to backend roles/, 'the English label never stands in for a Chinese one')
 })
 
 test('A2: the contribution calendar is five paths and a text summary, from the compact props', async () => {
   const { default: ContributionGraph } = await import('../components/GitHub/ContributionGraph')
   const counts = Array.from({ length: 120 }, (_, i) => (i % 5 === 0 ? 0 : (i % 7) + 1))
-  const out = html(createElement(ContributionGraph, { initialData: { available: true, total: 600, start: '2026-06-14', counts } }))
+  const out = html(await inHome(createElement(ContributionGraph, { initialData: { available: true, total: 600, start: '2026-06-14', counts } })))
   assert.match(out, /<svg[^>]*role="img"[^>]*aria-label="Contribution calendar"/)
   assert.ok((out.match(/<path data-level=/g) || []).length <= 5)
   assert.doesNotMatch(out, /role="gridcell"|role="grid"/)
   assert.match(out, /Active on \d+ of 120 days\./)
   assert.match(out, /Busiest month: /)
   assert.match(out, /600 contributions in the last year/)
-  assert.equal(html(createElement(ContributionGraph, { initialData: { available: false } })), '', 'unavailable: nothing')
+  assert.equal(html(await inHome(createElement(ContributionGraph, { initialData: { available: false } }))), '', 'unavailable: nothing')
+  // F3: the Chinese home page's calendar.
+  const zh = html(await inHome(createElement(ContributionGraph, { initialData: { available: true, total: 600, start: '2026-06-14', counts } }), 'zh-Hans'))
+  assert.match(zh, /aria-label="贡献日历"/)
+  assert.match(zh, /近一年 600 次贡献/)
+  assert.match(zh, /120 天中有 \d+ 天有贡献。/)
+  assert.match(zh, />6月</, 'Chinese month labels')
 })
 
 test('A2: languages are one decorative bar plus a text legend (top five + Other)', async () => {
   const { default: LanguageStack } = await import('../components/GitHub/LanguageStack')
   const out = html(
-    createElement(LanguageStack, {
+    await inHome(createElement(LanguageStack, {
       initialData: {
         available: true,
         count: 9,
@@ -109,7 +137,7 @@ test('A2: languages are one decorative bar plus a text legend (top five + Other)
           { name: 'Other', pct: 45.5, other: true },
         ],
       },
-    }),
+    })),
   )
   assert.match(out, /aria-hidden="true"[^>]*data-language-bar=""|data-language-bar=""[^>]*aria-hidden="true"/)
   assert.match(out, /aria-label="Languages by share of code, top 2 of 9"/)

@@ -507,6 +507,7 @@ const squash = (s: unknown) => (typeof s === 'string' ? s.replace(/\s+/g, ' ').t
 /**
  * Document title:
  *   home            → "Li Yanpei (Lucian) — Software Engineer"
+ *   zh home (/zh)   → "李彦霈（Lucian）— <the Chinese role line>"
  *   zh page         → "简历 · 李彦霈" (nameZh, else "Li Yanpei")
  *   any other page  → "Writing · Li Yanpei"
  *   no title        → `fallback` (the site name)
@@ -526,10 +527,11 @@ export function composeTitle({
   jobTitle?: string
   fallback?: string
 }): string {
-  if (home) return `${PERSON_NAME} — ${squash(jobTitle) || DEFAULT_JOB_TITLE}`
+  const zh = (lang || '').toLowerCase().startsWith('zh')
+  // The Chinese home page (/zh, F3): "李彦霈（Lucian）— <the owner's Chinese role line>".
+  if (home) return `${zh && squash(nameZh) ? `${squash(nameZh)}（Lucian）` : PERSON_NAME} — ${squash(jobTitle) || DEFAULT_JOB_TITLE}`
   const t = squash(title)
   if (!t) return fallback
-  const zh = (lang || '').toLowerCase().startsWith('zh')
   const owner = zh ? squash(nameZh) || PERSON_SHORT_NAME : PERSON_SHORT_NAME
   return t.endsWith(owner) ? t : `${t} · ${owner}`
 }

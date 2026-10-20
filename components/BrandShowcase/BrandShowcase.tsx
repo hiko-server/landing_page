@@ -141,7 +141,7 @@ function LogoImage({
  *   before hydration) falls back to the brand name in mono caps.
  * - Links only for safe http(s) URLs; otherwise the logo is static.
  */
-const BrandLogo = ({ brand }: { brand: Brand }) => {
+const BrandLogo = ({ brand, newTab = ' (opens in a new tab)' }: { brand: Brand; newTab?: string }) => {
   const imgRef = useRef<HTMLImageElement | null>(null)
   const [failed, setFailed] = useState(!brand.image)
 
@@ -179,7 +179,7 @@ const BrandLogo = ({ brand }: { brand: Brand }) => {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      aria-label={`${brand.name} (opens in a new tab)`}
+      aria-label={`${brand.name}${newTab}`}
       display="flex"
       alignItems="center"
       justifyContent="center"
@@ -198,8 +198,8 @@ const BrandLogo = ({ brand }: { brand: Brand }) => {
   )
 }
 
-/** Public brand entries with their clamped scale and validated measurements. */
-export function brandsForDisplay(brands?: HomeBrand[]): Brand[] {
+/** Public brand entries with their clamped scale and validated measurements (`fallbackName`: a logo without a name). */
+export function brandsForDisplay(brands?: HomeBrand[], fallbackName = 'Affiliation'): Brand[] {
   return (Array.isArray(brands) ? brands : [])
     .map((b) => {
       const image = safeHref(b?.image)
@@ -214,11 +214,11 @@ export function brandsForDisplay(brands?: HomeBrand[]): Brand[] {
       }
     })
     .filter((b) => b.name || b.image)
-    .map((b) => ({ ...b, name: b.name || 'Affiliation' }))
+    .map((b) => ({ ...b, name: b.name || fallbackName }))
 }
 
 /** The logo row itself (also the Home editor's live preview). */
-export function BrandStrip({ brands }: { brands: Brand[] }) {
+export function BrandStrip({ brands, newTab }: { brands: Brand[]; newTab?: string }) {
   const spans = balancedSpans(brands.length)
   return (
     <Box
@@ -244,15 +244,18 @@ export function BrandStrip({ brands }: { brands: Brand[] }) {
           justifyContent="center"
           gridColumn={{ base: `span ${spans[i]}`, md: 'auto' }}
         >
-          <BrandLogo brand={brand} />
+          <BrandLogo brand={brand} newTab={newTab} />
         </Box>
       ))}
     </Box>
   )
 }
 
-const Brands = ({ brands }: { brands?: HomeBrand[] }) => {
-  const data = brandsForDisplay(brands)
+/** The words of the band, in the page's language (lib/uiStrings/home). */
+type BrandLabels = { affiliations: string; affiliation: string; newTab: string }
+
+const Brands = ({ brands, labels }: { brands?: HomeBrand[]; labels?: BrandLabels }) => {
+  const data = brandsForDisplay(brands, labels?.affiliation)
   if (!data.length) return null
 
   return (
@@ -265,9 +268,9 @@ const Brands = ({ brands }: { brands?: HomeBrand[] }) => {
           mb={6}
           textAlign={{ base: 'center', md: 'left' }}
         >
-          Affiliations
+          {labels?.affiliations ?? 'Affiliations'}
         </Text>
-        <BrandStrip brands={data} />
+        <BrandStrip brands={data} newTab={labels?.newTab} />
       </Box>
     </Box>
   )

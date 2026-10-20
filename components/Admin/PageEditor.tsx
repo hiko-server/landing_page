@@ -21,7 +21,9 @@ import {
   useToast,
 } from '@chakra-ui/react'
 import { useRouter } from 'next/router'
+import NextLink from 'next/link'
 import dynamic from 'next/dynamic'
+import { pageAdminPath, pagePublicPath, type PageName } from '../../lib/pageNames'
 import { AdminDirtyProvider, useDirtyRegistration } from './AdminDirtyContext'
 import {
   AdminPageShell,
@@ -51,8 +53,6 @@ const RichEditor = dynamic(() => import('./RichEditor'), {
   ssr: false,
   loading: () => <Skeleton h="520px" borderRadius="lg" />,
 })
-
-type PageName = 'now' | 'uses' | 'about'
 
 type Frontmatter = {
   title: string
@@ -101,7 +101,21 @@ const MANUAL_COPY: Partial<Record<PageName, { empty: string; filled: string; pla
     placeholder: 'Your story in your own words: what you build, how you got here, what you are looking for. Markdown works.',
     live: '/about#about-bio',
   },
+  // F3: the Chinese bio is what publishes /zh/about.
+  'about-zh': {
+    empty:
+      'While the Chinese bio is empty, /zh/about does not exist and /about offers no Chinese version. Nothing is translated for you: write it in your own words.',
+    filled: 'Clear the body and save to take /zh/about down (the language switch on /about hides again).',
+    placeholder: 'Your bio in Chinese, in your own words — saving it publishes /zh/about. Markdown works.',
+    live: '/zh/about#about-bio',
+  },
 }
+
+/** The title a page gets before the owner names it. */
+const DEFAULT_TITLE: Record<PageName, string> = { now: 'Now', uses: 'Uses', about: 'About', 'about-zh': '关于' }
+
+/** The language versions of a page edited side by side (F3: the bio in English and in Chinese). */
+export type PageLanguage = { name: PageName; label: string; lang: string; href: string }
 
 /**
  * Single-file MDX editor used by /admin/now, /admin/uses and /admin/about:
@@ -112,8 +126,10 @@ const MANUAL_COPY: Partial<Record<PageName, { empty: string; filled: string; pla
  * ("Start from this") or a way back ("Revert to automatic"); the /about bio
  * has no automatic version, so an empty body means no bio on the page.
  */
-function PageEditorInner({ name }: { name: PageName }) {
+function PageEditorInner({ name, languages }: { name: PageName; languages?: readonly PageLanguage[] }) {
   const router = useRouter()
+  const publicPath = pagePublicPath(name)
+  const adminPath = pageAdminPath(name)
   const toast = useToast()
   const richRef = useRef<RichEditorHandle>(null)
 
@@ -152,7 +168,7 @@ function PageEditorInner({ name }: { name: PageName }) {
       try {
         const res = await fetch(`/api/admin/page?name=${name}`, { cache: 'no-store' })
         if (res.status === 401) {
-          router.replace(loginHref(`/admin/${name}`))
+          router.replace(loginHref(adminPath))
           return
         }
         const data = await readJsonObject(res)
@@ -160,7 +176,7 @@ function PageEditorInner({ name }: { name: PageName }) {
         if (!alive) return
         const f = (data.frontmatter as Record<string, unknown>) || {}
         setFm({
-          title: String(f.title ?? name.charAt(0).toUpperCase() + name.slice(1)),
+          title: String(f.title ?? DEFAULT_TITLE[name]),
           description: String(f.description ?? ''),
           updated: toIsoDay(f.updated),
         })
@@ -323,15 +339,15 @@ function PageEditorInner({ name }: { name: PageName }) {
             title: text.trim()
               ? 'Saved — snapshot taken'
               : manual
-                ? `Removed from /${name} — snapshot taken`
-                : `/${name} is automatic again — snapshot taken`,
+                ? `Removed from ${publicPath} — snapshot taken`
+                : `${publicPath} is automatic again — snapshot taken`,
             position: 'bottom-right',
           })
           return true
         })(),
       )
     },
-    [loadState, fm, extra, body, etag, name, manual, toast, flushDraft, clearDraft, track],
+    [loadState, fm, extra, body, etag, name, publicPath, manual, toast, flushDraft, clearDraft, track],
   )
 
   // "Save and leave": true only once the edits are stored; a 409 / 422 / 401,
@@ -345,14 +361,14 @@ function PageEditorInner({ name }: { name: PageName }) {
 
   const historyCurrent = useMemo(() => ({ frontmatter: pageFrontmatter(fm, extra), body }), [fm, extra, body])
   const copy = AUTO_COPY[name]
-  const liveHref = manual?.live ?? `/${name}`
+  const liveHref = manual?.live ?? publicPath
   const hasStoredBody = loadState === 'ready' && !!serverBody.trim()
 
   return (
     <AdminPageShell
-      headTitle={`Admin · /${name}`}
+      headTitle={`Admin · ${publicPath}`}
       eyebrow={`[admin] page · ${name}`}
-      title={`Edit /${name}`}
+      title={`Edit ${publicPath}`}
       maxW="1440px"
       status={<SaveStatus state={saveState} savedAt={savedAt} label={saveState === 'dirty' ? 'Unsaved · draft kept on this device' : undefined} />}
       actions={
@@ -371,8 +387,9 @@ function PageEditorInner({ name }: { name: PageName }) {
       }
     >
       <Stack spacing={4}>
-        {loadState === 'error' ? <LoadErrorNotice what={`/${name}`} error={loadError} onRetry={() => setReloadKey((k) => k + 1)} /> : null}
-        {sessionExpired ? <SessionExpiredNotice returnPath={`/admin/${name}`} keepEdits /> : null}
+        {languages && languages.length > 1 ? <LanguageTabs languages={languages} current={name} /> : null}
+        {loadState === 'error' ? <LoadErrorNotice what={publicPath} error={loadError} onRetry={() => setReloadKey((k) => k + 1)} /> : null}
+        {sessionExpired ? <SessionExpiredNotice returnPath={adminPath} keepEdits /> : null}
         {loadState === 'ready' && localDraft ? (
           <DraftBanner at={localDraft.at} stale={localDraftStale} onRestore={restoreDraft} onDiscard={discardDraft} />
         ) : null}
@@ -386,7 +403,7 @@ function PageEditorInner({ name }: { name: PageName }) {
         {revalidated.length ? <RevalidatedPaths paths={revalidated} /> : null}
 
         {loadState === 'loading' ? (
-          <Stack spacing={4} aria-busy="true" aria-label={`Loading /${name}`}>
+          <Stack spacing={4} aria-busy="true" aria-label={`Loading ${publicPath}`}>
             <Skeleton h="40px" />
             <Skeleton h="40px" />
             <Skeleton h="420px" />
@@ -416,7 +433,7 @@ function PageEditorInner({ name }: { name: PageName }) {
                 </FormControl>
 
                 {automatic && copy && !body.trim() ? (
-                  <Box border="1px solid" borderColor="page.border-strong" borderRadius="lg" bg="var(--accent-soft)" px={4} py={3} role="region" aria-label={`Automatic /${name}`}>
+                  <Box border="1px solid" borderColor="page.border-strong" borderRadius="lg" bg="var(--accent-soft)" px={4} py={3} role="region" aria-label={`Automatic ${publicPath}`}>
                     <Text fontSize="sm" fontWeight={500}>
                       {copy.what}:
                     </Text>
@@ -483,7 +500,7 @@ function PageEditorInner({ name }: { name: PageName }) {
                 {manual ? (
                   hasStoredBody ? (
                     <Button size="sm" variant="ghost" color="page.fg-secondary" onClick={() => setRevertOpen(true)} isDisabled={saving}>
-                      Remove from /{name}
+                      Remove from {publicPath}
                     </Button>
                   ) : null
                 ) : !automatic ? (
@@ -528,7 +545,7 @@ function PageEditorInner({ name }: { name: PageName }) {
       <AlertDialog isOpen={revertOpen} leastDestructiveRef={revertCancelRef} onClose={() => setRevertOpen(false)} isCentered>
         <AlertDialogOverlay>
           <AlertDialogContent bg="page.bg-elevated" border="1px solid" borderColor="page.border" mx={4}>
-            <AlertDialogHeader fontSize="md">{manual ? `Remove the text from /${name}?` : `Go back to the automatic /${name}?`}</AlertDialogHeader>
+            <AlertDialogHeader fontSize="md">{manual ? `Remove the text from ${publicPath}?` : `Go back to the automatic ${publicPath}?`}</AlertDialogHeader>
             <AlertDialogBody fontSize="sm">
               {manual
                 ? 'This saves an empty body, so the section disappears from the page. '
@@ -558,10 +575,46 @@ function PageEditorInner({ name }: { name: PageName }) {
   )
 }
 
-export default function PageEditor({ name }: { name: PageName }) {
+/**
+ * The language versions of the page as tabs (links: switching is a route
+ * change, so unsaved edits get the usual leave prompt).
+ */
+function LanguageTabs({ languages, current }: { languages: readonly PageLanguage[]; current: PageName }) {
+  return (
+    <Flex as="nav" aria-label="Language version" gap={1} p={1} border="1px solid" borderColor="page.border" borderRadius="10px" w="fit-content" maxW="full" flexWrap="wrap">
+      {languages.map((l) => {
+        const active = l.name === current
+        return (
+          <Button
+            key={l.name}
+            as={NextLink}
+            href={l.href}
+            lang={l.lang}
+            aria-current={active ? 'page' : undefined}
+            size="sm"
+            minH="36px"
+            variant="ghost"
+            fontWeight={active ? 600 : 500}
+            color={active ? 'page.fg' : 'page.fg-secondary'}
+            bg={active ? 'page.hover' : 'transparent'}
+            _hover={{ color: 'page.fg', bg: 'page.hover' }}
+          >
+            {l.label}
+            <Text as="span" ml={2} fontSize="xs" fontWeight={400} color="page.fg-secondary" lang="en">
+              {pagePublicPath(l.name)}
+            </Text>
+          </Button>
+        )
+      })}
+    </Flex>
+  )
+}
+
+export default function PageEditor({ name, languages }: { name: PageName; languages?: readonly PageLanguage[] }) {
   return (
     <AdminDirtyProvider>
-      <PageEditorInner name={name} />
+      {/* A new language version is a new document: fresh state, draft and history. */}
+      <PageEditorInner key={name} name={name} languages={languages} />
     </AdminDirtyProvider>
   )
 }

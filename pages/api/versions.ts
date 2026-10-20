@@ -40,7 +40,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { kvEtag, restoreErrorStatus, safeSnapshotName } from '../../lib/contentStore'
 import { isAdminRequest } from '../../lib/auth'
 import { sendVersionedJson } from '../../lib/http'
-import { CV_PAGE_PATHS, HOME_PAGE_PATHS, revalidatePaths } from '../../lib/revalidate'
+import { CV_PAGE_PATHS, HOME_PAGE_PATHS, pageRevalidatePaths, revalidatePaths } from '../../lib/revalidate'
 import { warmCvExports } from '../../lib/cvExport/service'
 import { trackPublicationsNav } from '../../lib/publicationsNav'
 import { withApi } from '../../lib/apiHandler'
@@ -164,7 +164,7 @@ async function handleMdx(req: NextApiRequest, res: NextApiResponse, kind: Snapsh
       const result = await restorePageSnapshot(ref, info.filename)
       if (!result.ok) return res.status('notFound' in result ? 404 : 500).json({ error: result.error })
       const etag = versionEtag(readPage(ref).updatedAt)
-      const paths = [`/${ref}`]
+      const paths = pageRevalidatePaths(ref)
       const failed = await revalidatePaths(res, paths)
       return sendVersionedJson(res, 200, {
         ...result,

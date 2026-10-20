@@ -5,11 +5,12 @@ import { ArrowLeftIcon, ArrowRightIcon } from '../Icons/ui/content'
 
 import Collapse from '../General-UI/Collapse'
 import { useSpotlight } from '../General-UI/useSpotlight'
+import { fillUi } from '../../lib/uiStrings'
 import { entryRange, field, list } from '../CVViewerPage/fields'
 import type { CvSectionLike } from '../../lib/cvVisibility'
 import { useReferenceMonth } from '../../lib/clock'
-import { labelLang } from '../../lib/toc'
 import { chipList, matchCaseStudy, type WorkIndexItem } from './projectMatch'
+import { useHomeUi, useOwnLang } from './homeUi'
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
@@ -24,11 +25,6 @@ type Card = {
   tech: string[]
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  live: 'Live',
-  archived: 'Archived',
-  'case-study': 'Case study',
-}
 
 /**
  * Selected projects — horizontal, snap-scrolling cards built from the
@@ -47,6 +43,7 @@ const STATUS_LABEL: Record<string, string> = {
  *     inside a <Collapse>, and the button always names its panel.
  */
 export default function ProjectSpotlight({ cvEn, work }: { cvEn?: CvSectionLike[]; work?: WorkIndexItem[] }) {
+  const { t, cvLang } = useHomeUi()
   const month = useReferenceMonth()
   const cards: Card[] = useMemo(() => {
     const section = Array.isArray(cvEn) ? cvEn.find((s) => s?.sessionName === 'project') : undefined
@@ -60,7 +57,7 @@ export default function ProjectSpotlight({ cvEn, work }: { cvEn?: CvSectionLike[
           key: `${i}-${title}`,
           title: title || description,
           description: title ? description : '',
-          period: entryRange(p, 'en', { futureEndAsPresent: true, now: month }),
+          period: entryRange(p, cvLang, { futureEndAsPresent: true, now: month }),
           location: field(p, 'projectLocation'),
           features: list(p, 'features')
             .map((f: any) => field(f, 'description'))
@@ -71,7 +68,7 @@ export default function ProjectSpotlight({ cvEn, work }: { cvEn?: CvSectionLike[
       })
       .filter((c): c is Card => c !== null)
       .slice(0, 6)
-  }, [cvEn, work, month])
+  }, [cvEn, work, month, cvLang])
 
   const scrollerRef = useRef<HTMLDivElement>(null)
   const [edges, setEdges] = useState({ start: true, end: false })
@@ -107,11 +104,11 @@ export default function ProjectSpotlight({ cvEn, work }: { cvEn?: CvSectionLike[
     <Box w="100%" maxW="1100px">
       <Flex justify="space-between" align="center" mb={4} gap={4}>
         <Text fontFamily={monoFont} fontSize="11px" letterSpacing="0.04em" color="page.fg-secondary">
-          {cards.length} {cards.length === 1 ? 'project' : 'projects'} · scroll →
+          {fillUi(cards.length === 1 ? t.projects.countOne : t.projects.countMany, { n: cards.length })}
         </Text>
         <Flex gap={2} display={{ base: 'none', md: 'flex' }}>
           <IconButton
-            aria-label="Scroll projects left"
+            aria-label={t.projects.scrollLeft}
             icon={<ArrowLeftIcon size="sm" />}
             size="sm"
             variant="outline"
@@ -122,7 +119,7 @@ export default function ProjectSpotlight({ cvEn, work }: { cvEn?: CvSectionLike[
             _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
           />
           <IconButton
-            aria-label="Scroll projects right"
+            aria-label={t.projects.scrollRight}
             icon={<ArrowRightIcon size="sm" />}
             size="sm"
             variant="outline"
@@ -138,7 +135,7 @@ export default function ProjectSpotlight({ cvEn, work }: { cvEn?: CvSectionLike[
       <Box
         ref={scrollerRef}
         role="region"
-        aria-label="Selected projects (scrolls horizontally)"
+        aria-label={t.projects.region}
         tabIndex={0}
         onScroll={syncEdges}
         // Containing block for anything absolutely positioned inside, so it
@@ -202,10 +199,12 @@ export default function ProjectSpotlight({ cvEn, work }: { cvEn?: CvSectionLike[
 }
 
 function ProjectCard({ card }: { card: Card }) {
+  const { t } = useHomeUi()
+  const ownLang = useOwnLang()
   const [expanded, setExpanded] = useState(false)
   const panelId = useId()
   const href = card.study ? `/work/${card.study.slug}` : ''
-  const status = card.study?.status ? STATUS_LABEL[card.study.status] : ''
+  const status = card.study?.status ? t.projects.status[card.study.status as keyof typeof t.projects.status] || '' : ''
   const hasMore = card.features.length > 0
   // The primary action owns the stretched hit area; everything else sits above it.
   const moreIsPrimary = !href && hasMore
@@ -264,13 +263,13 @@ function ProjectCard({ card }: { card: Card }) {
         color="page.fg"
         mb={2}
         letterSpacing="-0.01em"
-        lang={labelLang(card.title)}
+        lang={ownLang(card.title)}
         data-vt-part={href ? 'title' : undefined}
       >
         {href ? (
           <NextLink href={href} className="stretched-link">
             {card.title}
-            <span className="sr-only"> — read case study</span>
+            <span className="sr-only">{t.projects.readCaseStudy}</span>
           </NextLink>
         ) : (
           card.title
@@ -278,7 +277,7 @@ function ProjectCard({ card }: { card: Card }) {
       </Text>
 
       {card.description && (
-        <Text fontSize="13px" color="page.fg-secondary" noOfLines={3} lineHeight="1.65" lang={labelLang(card.description)}>
+        <Text fontSize="13px" color="page.fg-secondary" noOfLines={3} lineHeight="1.65" lang={ownLang(card.description)}>
           {card.description}
         </Text>
       )}
@@ -297,7 +296,7 @@ function ProjectCard({ card }: { card: Card }) {
                 borderColor="var(--accent)"
                 mb={2}
                 lineHeight="1.55"
-                lang={labelLang(f)}
+                lang={ownLang(f)}
               >
                 {f}
               </Text>
@@ -307,7 +306,7 @@ function ProjectCard({ card }: { card: Card }) {
       )}
 
       {card.tech.length > 0 && (
-        <Flex as="ul" listStyleType="none" wrap="wrap" gap={1.5} mt={4} aria-label="Tech">
+        <Flex as="ul" listStyleType="none" wrap="wrap" gap={1.5} mt={4} aria-label={t.projects.tech}>
           {card.tech.map((t) => (
             <Text
               as="li"
@@ -330,7 +329,7 @@ function ProjectCard({ card }: { card: Card }) {
 
       <Flex align="center" justify="space-between" gap={3} mt={4} pt={3} borderTop="1px solid" borderColor="page.border" fontFamily={monoFont} fontSize="11px" letterSpacing="0.04em">
         {card.location ? (
-          <Text as="span" color="page.fg-secondary" noOfLines={1} lang={labelLang(card.location)}>
+          <Text as="span" color="page.fg-secondary" noOfLines={1} lang={ownLang(card.location)}>
             {card.location}
           </Text>
         ) : (
@@ -356,7 +355,7 @@ function ProjectCard({ card }: { card: Card }) {
               _hover={{ color: 'page.fg' }}
               _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
             >
-              {expanded ? 'Less' : 'More'}
+              {expanded ? t.projects.less : t.projects.more}
               <span className="sr-only"> about {card.title}</span>
             </Box>
           )}

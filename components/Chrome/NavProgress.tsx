@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/router'
 import { createNavProgress, pendingLinkOf } from '../../lib/navProgress'
+import { useChromeUi } from './chromeLang'
 
 /** SiteChrome's <main> (routeFocus.ts MAIN_ID; not imported, so this stays in the chrome's bundle module). */
 const MAIN_ID = 'main'
@@ -21,6 +22,10 @@ export default function NavProgress() {
   const { events } = useRouter()
   const barRef = useRef<HTMLSpanElement>(null)
   const statusRef = useRef<HTMLSpanElement>(null)
+  // "Loading…" in the chrome's language, read when it is announced.
+  const { t } = useChromeUi()
+  const loading = useRef(t.loading)
+  loading.current = t.loading
 
   useEffect(() => {
     let clicked: Element | null = null
@@ -37,7 +42,7 @@ export default function NavProgress() {
         pending?.setAttribute('data-nav-pending', '')
       },
       announce() {
-        if (statusRef.current) statusRef.current.textContent = 'Loading…'
+        if (statusRef.current) statusRef.current.textContent = loading.current
       },
       hide() {
         barRef.current?.setAttribute('data-state', 'idle')

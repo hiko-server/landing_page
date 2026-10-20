@@ -47,13 +47,14 @@ export type SelectedPublications = {
 /** The papers /publications lists, as its reader `readPublicationsView` returns them. */
 export type PublicationsSource = { lang: PubLang; publications: readonly Publication[]; owner: OwnerNames }
 
-export function selectPublications(view: PublicationsSource | null | undefined, max: number = HOME_PUBLICATIONS_MAX): SelectedPublications | null {
+export function selectPublications(view: PublicationsSource | null | undefined, max: number = HOME_PUBLICATIONS_MAX, labels: PubLang = 'en'): SelectedPublications | null {
   const list = view?.publications || []
   if (!list.length || max < 1) return null
   // Keys over the whole list, exactly as /publications computes its anchors.
   const keys = citationKeys(list)
   const items = list.slice(0, max).map((pub, i) => {
-    const c = formatCitationParts(pub, 'en', view!.owner)
+    // The status labels in the page's language (the Chinese home page, F3); /publications stays English.
+    const c = formatCitationParts(pub, labels, view!.owner)
     return { key: keys[i], title: c.title, authors: c.authors, venue: c.venue, year: c.year, status: c.status, award: c.award }
   })
   return { items, total: list.length, lang: view!.lang }

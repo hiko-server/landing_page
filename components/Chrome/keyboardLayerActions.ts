@@ -1,8 +1,20 @@
 import Router from 'next/router'
 import type { LayerKey } from '../../lib/keyboardLayer'
 import { CHORD_HINT_DELAY_MS, LIST_ITEM_ATTR, anchorIndex, armChord, chordArmed, primaryLinkIndex, stepIndex, type Chord } from '../../lib/keyboardNavigation'
-import { NAV_SHORTCUTS, PRIMARY_LINKS, shortcutTarget } from './chrome'
+import { NAV_SHORTCUTS, PRIMARY_LINKS, shortcutTarget, type NavLink } from './chrome'
 import { MAIN_ID } from './routeFocus'
+import type { UiLang } from '../../lib/uiStrings'
+import { MENU_UI } from '../../lib/uiStrings/menu'
+
+/** The navigation the chrome shows (labels and links in its language, F3); the English one by default. */
+export type LayerNav = { links: readonly NavLink[]; lang: UiLang }
+
+const ENGLISH_NAV: LayerNav = { links: PRIMARY_LINKS, lang: 'en' }
+
+/** The link a shortcut's English URL stands for in `nav` ('/about' → '/zh/about' on a Chinese page). */
+function navLinkFor(url: string, nav: LayerNav): NavLink | undefined {
+  return nav.links.find((l) => (l.base ?? l.url) === url)
+}
 
 /**
  * What the keyboard layer's keys do (loaded on demand by KeyboardLayer.tsx;
@@ -14,31 +26,40 @@ let chord: Chord | null = null
 let hintTimer: ReturnType<typeof setTimeout> | null = null
 let expireTimer: ReturnType<typeof setTimeout> | null = null
 let hint: HTMLElement | null = null
+/** The words the hint was built with: rebuilt when the chrome's language changes. */
+let hintKey = ''
 let routeListener = false
 
 // ── "G then …" hint ─────────────────────────────────────────────────────────
 
 /** The hint: "Go to" and every second key with its page (aria-hidden: the palette's shortcut page is the accessible list). */
-function hintElement(): HTMLElement {
-  if (hint?.isConnected) return hint
+function hintElement(nav: LayerNav): HTMLElement {
+  const rows = NAV_SHORTCUTS.map(({ key, url }) => [key.toUpperCase(), navLinkFor(url, nav)?.name || url] as const)
+  const goTo = MENU_UI[nav.lang].goTo
+  const key = JSON.stringify([goTo, rows])
+  if (hint?.isConnected && hintKey === key) return hint
+  hint?.remove()
   const el = document.createElement('div')
   el.className = 'kbd-hint no-print'
   el.setAttribute('aria-hidden', 'true')
-  el.setAttribute('lang', 'en')
+  // The chrome's words: in the document's language unless the chrome speaks another one.
+  const chromeLang = document.querySelector('.site-header-sticky')?.getAttribute('lang')
+  if (chromeLang) el.setAttribute('lang', chromeLang)
   const title = document.createElement('span')
   title.className = 'kbd-hint__title'
-  title.textContent = 'Go to'
+  title.textContent = goTo
   el.appendChild(title)
-  for (const { key, url } of NAV_SHORTCUTS) {
+  for (const [letter, name] of rows) {
     const row = document.createElement('span')
     const kbd = document.createElement('kbd')
-    kbd.textContent = key.toUpperCase()
+    kbd.textContent = letter
     row.appendChild(kbd)
-    row.appendChild(document.createTextNode(PRIMARY_LINKS.find((l) => l.url === url)?.name || url))
+    row.appendChild(document.createTextNode(name))
     el.appendChild(row)
   }
   document.body.appendChild(el)
   hint = el
+  hintKey = key
   return el
 }
 
@@ -55,7 +76,7 @@ function disarm(): void {
   hideHint()
 }
 
-function arm(at: number): void {
+function arm(at: number, nav: LayerNav): void {
   disarm()
   chord = armChord(at)
   const left = chord.armedUntil - Date.now()
@@ -67,7 +88,7 @@ function arm(at: number): void {
   // Shown only when G is held a moment: a fluent "G H" never flashes it.
   hintTimer = setTimeout(() => {
     hintTimer = null
-    const el = hintElement()
+    const el = hintElement(nav)
     // One frame at rest first, so the entrance transition runs.
     requestAnimationFrame(() => {
       if (chord) el.setAttribute('data-open', '')
@@ -150,21 +171,23 @@ function toggleTheme(): void {
 
 /**
  * Runs a key KeyboardLayer classified as `key` (`char`: the key as typed) at
- * time `at`; "/" and "?" opened the palette already and only end a chord.
+ * time `at` with the chrome's navigation `nav`; "/" and "?" opened the
+ * palette already and only end a chord.
  */
-export function handleLayerKey(key: LayerKey, char: string, at: number): void {
+export function handleLayerKey(key: LayerKey, char: string, at: number, nav: LayerNav = ENGLISH_NAV): void {
   const armed = chordArmed(chord, at)
   disarm()
   if (armed) {
     const url = shortcutTarget(char)
     if (url) {
-      go(url)
+      // The page in the chrome's language where it has one (/zh/about on a Chinese page).
+      go(navLinkFor(url, nav)?.url || url)
       return
     }
   }
   switch (key) {
     case 'g':
-      arm(at)
+      arm(at, nav)
       return
     case 'j':
       moveInList(1)

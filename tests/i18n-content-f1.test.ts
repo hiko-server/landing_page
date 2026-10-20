@@ -186,10 +186,11 @@ test('the article interface is drawn from the dictionary: no English UI literals
     .map((f) => read(`lib/uiStrings/${f}`))
     .join('\n')
   for (const p of ['On this page', 'Written by', 'Copy code', 'Back to reference', 'Link to section', '← All posts', 'Also in']) assert.ok(dictionary.includes(p), p)
-  // The index pages take their line from the small lists table, not the article one.
+  // The index pages take their line from the lists table, shipped in the page's language with its props (F3).
   for (const f of ['pages/blog/index.tsx', 'pages/work/index.tsx']) {
-    assert.match(read(f), /LIST_UI\.en\.alsoIn/, f)
+    assert.match(read(f), /\{t\.alsoIn\}/, f)
     assert.doesNotMatch(read(f), /uiStrings\/article/, f)
+    assert.doesNotMatch(read(f), /^import \{[^}]*LIST_UI[^}]*\} from/m, `${f} bundles no language table`)
   }
 })
 

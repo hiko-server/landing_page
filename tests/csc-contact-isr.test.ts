@@ -30,7 +30,7 @@ after(async () => {
 test('the page exports getStaticProps (from lib/contactPage) and no getServerSideProps', () => {
   assert.match(pageSource, /export const getStaticProps\b/)
   assert.doesNotMatch(pageSource, /getServerSideProps/)
-  assert.match(pageSource, /loadContactPage\(\)/)
+  assert.match(pageSource, /loadContactPage\('en'\)/)
 })
 
 test('/contact props: the public home slice, availability, retention; a time window and the build guard', async () => {

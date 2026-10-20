@@ -8,9 +8,10 @@ import { useScrollReveal } from '../General-UI/useScrollReveal'
 import { bullets, entryRange, field, list } from '../CVViewerPage/fields'
 import type { CvSectionLike } from '../../lib/cvVisibility'
 import { revealVariant } from '../../lib/reveal'
-import { labelLang } from '../../lib/toc'
 import { ChevronRightIcon } from '../Icons/ui/content'
 import { chipList, matchCaseStudy, type WorkIndexItem } from './projectMatch'
+import { useHomeUi, useOwnLang } from './homeUi'
+import { fillUi } from '../../lib/uiStrings'
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
@@ -58,6 +59,7 @@ export default function ExperienceTimeline({
   /** Open every role's highlights initially (/about). */
   defaultExpanded?: boolean
 }) {
+  const { cvLang } = useHomeUi()
   const reduce = useReducedMotion()
   const reveal = useScrollReveal<HTMLOListElement>()
 
@@ -71,7 +73,7 @@ export default function ExperienceTimeline({
           key: `${i}-${company}-${title}`,
           title,
           company,
-          period: entryRange(e, 'en'),
+          period: entryRange(e, cvLang),
           location: field(e, 'location'),
           summary: field(e, 'jobDescription'),
           highlights: list(e, 'features')
@@ -83,7 +85,7 @@ export default function ExperienceTimeline({
       })
       .filter((r) => r.title || r.company)
       .slice(0, 6)
-  }, [cvEn, work])
+  }, [cvEn, work, cvLang])
 
   if (!rows.length) return null
 
@@ -127,6 +129,8 @@ export default function ExperienceTimeline({
 }
 
 function TimelineRow({ row: r, first, defaultExpanded }: { row: Row; first: boolean; defaultExpanded: boolean }) {
+  const { t } = useHomeUi()
+  const ownLang = useOwnLang()
   const [open, setOpen] = useState(defaultExpanded)
   const panelId = useId()
   const hasDetails = r.highlights.length > 0 || r.skills.length > 0
@@ -178,14 +182,14 @@ function TimelineRow({ row: r, first, defaultExpanded }: { row: Row; first: bool
 
       <Box minW={0}>
         <Text as="h3" fontWeight={500} fontSize="16px" color="page.fg" letterSpacing="-0.005em" lineHeight="1.4">
-          <span lang={labelLang(r.title || r.company)}>{r.title || r.company}</span>
+          <span lang={ownLang(r.title || r.company)}>{r.title || r.company}</span>
           {r.title && r.company && (
             <>
               <Text as="span" aria-hidden color="page.fg-secondary" mx={2}>
                 ·
               </Text>
               <span className="sr-only">, </span>
-              <Text as="span" color="page.fg-secondary" fontWeight={400} lang={labelLang(r.company)}>
+              <Text as="span" color="page.fg-secondary" fontWeight={400} lang={ownLang(r.company)}>
                 {r.company}
               </Text>
             </>
@@ -193,13 +197,13 @@ function TimelineRow({ row: r, first, defaultExpanded }: { row: Row; first: bool
         </Text>
 
         {r.location && (
-          <Text mt={1} fontFamily={monoFont} fontSize="11px" color="page.fg-secondary" letterSpacing="0.04em" lang={labelLang(r.location)}>
+          <Text mt={1} fontFamily={monoFont} fontSize="11px" color="page.fg-secondary" letterSpacing="0.04em" lang={ownLang(r.location)}>
             {r.location}
           </Text>
         )}
 
         {r.summary && (
-          <Text mt={2.5} fontSize="15px" color="page.fg-secondary" lineHeight="1.65" maxW="68ch" lang={labelLang(r.summary)}>
+          <Text mt={2.5} fontSize="15px" color="page.fg-secondary" lineHeight="1.65" maxW="68ch" lang={ownLang(r.summary)}>
             {r.summary}
           </Text>
         )}
@@ -232,7 +236,7 @@ function TimelineRow({ row: r, first, defaultExpanded }: { row: Row; first: bool
                 >
                   <ChevronRightIcon size="xs" />
                 </Box>
-                {r.highlights.length > 0 ? `Highlights (${r.highlights.length})` : `Skills (${r.skills.length})`}
+                {r.highlights.length > 0 ? fillUi(t.experience.highlights, { n: r.highlights.length }) : fillUi(t.experience.skills, { n: r.skills.length })}
                 <span className="sr-only"> — {r.title || r.company}</span>
               </Box>
             )}
@@ -249,7 +253,7 @@ function TimelineRow({ row: r, first, defaultExpanded }: { row: Row; first: bool
                 _hover={{ textDecoration: 'underline', textUnderlineOffset: '3px' }}
                 _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
               >
-                Case study <span className="nudge" aria-hidden>→</span>
+                {t.experience.caseStudy} <span className="nudge" aria-hidden>→</span>
                 <span className="sr-only">: {r.study.title}</span>
               </Box>
             )}
@@ -263,11 +267,11 @@ function TimelineRow({ row: r, first, defaultExpanded }: { row: Row; first: bool
                 <Box as="ul" listStyleType="none" m={0} p={0}>
                   {r.highlights.map((h, i) => (
                     <Box as="li" key={i} pl={3} mb={2.5} borderLeft="2px solid" borderColor="var(--accent)" fontSize="14px" lineHeight="1.6" color="page.fg-secondary">
-                      <span lang={labelLang(h.text)}>{h.text}</span>
+                      <span lang={ownLang(h.text)}>{h.text}</span>
                       {h.sub.length > 0 && (
                         <Box as="ul" listStyleType="disc" pl={5} mt={1}>
                           {h.sub.map((s, j) => (
-                            <li key={j} lang={labelLang(s)}>
+                            <li key={j} lang={ownLang(s)}>
                               {s}
                             </li>
                           ))}
@@ -278,7 +282,7 @@ function TimelineRow({ row: r, first, defaultExpanded }: { row: Row; first: bool
                 </Box>
               )}
               {r.skills.length > 0 && (
-                <Flex as="ul" listStyleType="none" wrap="wrap" gap={1.5} mt={r.highlights.length ? 3 : 0} aria-label="Related skills">
+                <Flex as="ul" listStyleType="none" wrap="wrap" gap={1.5} mt={r.highlights.length ? 3 : 0} aria-label={t.experience.relatedSkills}>
                   {r.skills.map((s) => (
                     <Text
                       as="li"
@@ -292,7 +296,7 @@ function TimelineRow({ row: r, first, defaultExpanded }: { row: Row; first: bool
                       border="1px solid"
                       borderColor="page.border"
                       borderRadius="4px"
-                      lang={labelLang(s)}
+                      lang={ownLang(s)}
                     >
                       {s}
                     </Text>

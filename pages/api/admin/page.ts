@@ -10,11 +10,12 @@ import {
 import { rateLimit } from '../../../lib/rateLimit'
 import { isAdminRequest } from '../../../lib/auth'
 import { sendVersionedJson } from '../../../lib/http'
-import { revalidatePaths } from '../../../lib/revalidate'
+import { pageRevalidatePaths, revalidatePaths } from '../../../lib/revalidate'
 import { ensurePosters } from '../../../lib/videoPoster'
 
 /**
- * Admin CRUD for the single MDX pages (/now, /uses and the /about bio).
+ * Admin CRUD for the single MDX pages (/now, /uses, the /about bio and the
+ * Chinese bio of /zh/about — lib/pageNames).
  *
  *   GET /api/admin/page?name=now  → { name, frontmatter, body, updatedAt }, ETag = its version
  *   PUT /api/admin/page           → { name, frontmatter, body } write; optional If-Match
@@ -64,8 +65,9 @@ export default withApi('admin/page', async (req, res) => {
     const result = await writePage(name, fm, text)
     if (!result.ok) return res.status(400).json({ error: result.error })
     const etag = versionEtag(readPage(name).updatedAt)
-    // /now, /uses and /about are statically generated: regenerate the edited one now.
-    const paths = [`/${name}`]
+    // /now, /uses, /about and /zh/about are statically generated: regenerate the edited one now
+    // (the Chinese bio publishes /zh/about: /about and the Chinese pages follow, lib/revalidate).
+    const paths = pageRevalidatePaths(name)
     const failed = await revalidatePaths(res, paths)
     return sendVersionedJson(
       res,

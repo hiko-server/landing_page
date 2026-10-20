@@ -4,6 +4,7 @@
  * no zero-padded index labels. Every page section opens with
  * components/General-UI/SectionHeading.
  */
+import { HOME_UI } from '../lib/uiStrings/home'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
@@ -151,8 +152,11 @@ test('no public component renders a "[NN]" index, a bracket marker or a zero-pad
 test('the drawer, the writing list and the social card drop their index numbers and brackets', () => {
   assert.doesNotMatch(read('components/Header/MobileDrawer.tsx'), /padStart/)
   const writing = stripComments(read('components/LandingPage/LatestWriting.tsx'))
-  assert.match(writing, /\{r\.kind === 'post' \? 'POST' : 'WORK'\}/)
+  // The kind labels come from the home dictionary (F3), still without brackets.
+  assert.match(writing, /\{r\.kind === 'post' \? w\.post : w\.work\}/)
   assert.doesNotMatch(writing, /\[\{r\.kind/)
+  assert.deepEqual([HOME_UI.en.writing.post, HOME_UI.en.writing.work], ['POST', 'WORK'])
+  for (const l of Object.values(HOME_UI)) assert.doesNotMatch(`${l.writing.post}${l.writing.work}`, /[[\]]/)
   assert.match(read('pages/api/og.tsx'), />\{kindLabel\(p\.kind, p\.lang\)\}</)
 })
 

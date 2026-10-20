@@ -62,8 +62,9 @@ test('UX-A-2: the Ask copy carries its BCP-47 language; Chinese is zh-Hans', () 
   // Every view root of AskView speaks the copy's language (failed, loading, intro / vague, none, answer).
   assert.ok((view.match(/lang=\{copy\.lang\}/g) || []).length >= 6, 'view roots and option rows carry lang={copy.lang}')
   const palette = read('components/General-UI/CommandPalette.tsx')
-  assert.match(palette, /role="status"[^>]*lang=\{asking \? askCopy\.lang : undefined\}/)
-  assert.match(palette, /uiLang: copy\.lang === 'en' \? undefined : copy\.lang/)
+  // F3: the palette speaks the page's language; a question in the other language is marked.
+  assert.match(palette, /role="status"[^>]*lang=\{asking && askCopy\.lang !== askPage\.lang \? askCopy\.lang : undefined\}/)
+  assert.match(palette, /uiLang: copy\.lang === askPage\.lang \? undefined : copy\.lang/)
 })
 
 // ── UX-A-3 ──────────────────────────────────────────────────────────────────

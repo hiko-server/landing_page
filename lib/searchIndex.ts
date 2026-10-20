@@ -390,17 +390,19 @@ function pageDoc(name: 'now' | 'uses', fallbackTitle: string): SearchDoc {
  * (the page then shows no bio, and an "About" result would only repeat the
  * navigation entry).
  */
-function aboutDoc(): SearchDoc | null {
-  const page = getPage('about')
+function aboutDoc(name: 'about' | 'about-zh' = 'about'): SearchDoc | null {
+  const page = getPage(name)
   if (!(page?.body || '').trim()) return null
   const fm = (page?.frontmatter || {}) as Record<string, unknown>
   const body = page?.body || ''
+  const zh = name === 'about-zh'
   const doc: SearchDoc = {
     kind: 'page',
-    title: str(fm.title) || 'About',
-    href: '/about#about-bio',
+    title: str(fm.title) || (zh ? '关于' : 'About'),
+    // The Chinese bio is on /zh/about (F3), which exists while it has text.
+    href: zh ? '/zh/about#about-bio' : '/about#about-bio',
     // The bio's own language (frontmatter `lang`, else detected), as the page marks it.
-    lang: detectContentLang({ lang: fm.lang, body }),
+    lang: detectContentLang({ lang: fm.lang || (zh ? 'zh-Hans' : undefined), body }),
   }
   const description = str(fm.description)
   if (description) doc.description = description
@@ -426,7 +428,7 @@ export function subjectNames(): string[] {
   return Array.from(out).slice(0, 12)
 }
 
-/** The whole public index (posts, case studies, /now, /uses, the /about bio, CV entries in both languages, papers). */
+/** The whole public index (posts, case studies, /now, /uses, the /about and /zh/about bios, CV entries in both languages, papers). */
 export function buildSearchIndex(): SearchIndex {
   const cv = readPublicCvData('cv')
   const aligned = cvAlignment(cv.en, cv.zh)
@@ -435,7 +437,7 @@ export function buildSearchIndex(): SearchIndex {
     ...listWorkInDisplayOrder().map((w) => articleDoc('work', w, bodyOf('work', w.slug), w.frontmatter.tech)),
     pageDoc('now', 'Now'),
     pageDoc('uses', 'Uses'),
-    ...[aboutDoc()].filter((d): d is SearchDoc => d !== null),
+    ...[aboutDoc('about'), aboutDoc('about-zh')].filter((d): d is SearchDoc => d !== null),
     ...cvSearchDocs(cv.en, 'en', aligned),
     ...cvSearchDocs(cv.zh, 'zh', aligned),
     ...publicationDocs(readPublicationsView(), cv.en),

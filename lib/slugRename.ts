@@ -1,3 +1,4 @@
+import { PAGE_NAMES, pagePublicPath } from './pageNames'
 import { SITE_HOST } from './schema'
 import { getConfiguredSiteValues, hostnameOf, isLocalHostname } from './env'
 import { log } from './log'
@@ -5,7 +6,7 @@ import { getItem, getItemFromDb, listItems, renameItem } from './contentStore'
 import { applyRename, redirectTarget, type RedirectCollection } from './redirects'
 import { rewriteDocument, rewriteJsonLinks, type LinkCollection } from './linkRewrite'
 import { getPendingRevision, listPendingRevisions, movePendingRevision, putPendingRevision, rebasedPendingBase } from './pendingRevisions'
-import { COLLECTION_EXTRA_PATHS, CV_DOCUMENT_PATHS, CV_PAGE_PATHS, HOME_PAGE_PATHS, collectionPaths } from './revalidate'
+import { COLLECTION_EXTRA_PATHS, CV_DOCUMENT_PATHS, CV_PAGE_PATHS, HOME_PAGE_PATHS, collectionPaths, pageRevalidatePaths } from './revalidate'
 
 /**
  * Renaming a post or case study (H6): the item moves to its new slug with
@@ -51,7 +52,6 @@ export type RenameFailure = { ok: false; status: 400 | 404 | 409 | 500; code: st
 const SLUG_RE = /^[a-z0-9][a-z0-9-_]*$/
 /** New slugs: the editor's limit (components/Admin/shell/publishChecks SLUG_MAX). */
 export const RENAME_SLUG_MAX = 64
-const PAGE_NAMES = ['now', 'uses', 'about'] as const
 
 /** Hosts whose absolute URLs count as internal links (canonical + configured public hosts). */
 export function siteHosts(): string[] {
@@ -125,12 +125,13 @@ async function collectChanges(req: RenameRequest, hosts: string[]): Promise<DocC
     if (!page.updatedAt && !page.body) continue
     const r = rewriteDocument({ frontmatter: page.frontmatter, body: page.body }, linkC, from, to, hosts)
     if (!r.count) continue
+    const publicPath = pagePublicPath(name)
     changes.push({
-      target: { kind: 'page', ref: name, title: `/${name}`, links: r.count },
-      paths: [`/${name}`],
+      target: { kind: 'page', ref: name, title: publicPath, links: r.count },
+      paths: pageRevalidatePaths(name),
       apply: async () => {
         const result = await writePage(name, r.value.frontmatter as Record<string, any>, r.value.body)
-        return result.ok ? ('r2Warning' in result && result.r2Warning ? result.r2Warning : null) : `could not update links on /${name}: ${result.error}`
+        return result.ok ? ('r2Warning' in result && result.r2Warning ? result.r2Warning : null) : `could not update links on ${publicPath}: ${result.error}`
       },
     })
   }

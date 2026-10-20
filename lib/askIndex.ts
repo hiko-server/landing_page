@@ -68,7 +68,7 @@ import {
   list,
 } from '../components/CVViewerPage/fields'
 import { recommendationCredit, recommendationItems } from '../components/CVViewerPage/recommendationView'
-import { availabilityView } from '../components/Common/contactForm'
+import { availabilityView } from '../components/Common/availability'
 import { cvLabels, formatCvDate, majorAddsInfo } from './cvFormat'
 import { detectContentLang } from './toc'
 import { textDirectiveTerms } from './search/textFragment'
@@ -592,20 +592,26 @@ function ledePassage(kind: 'post' | 'work', url: string, page: string, lang: str
   return [{ text, url, page, lang: quoteLang(text, lang), kind, block: true }]
 }
 
-function pagePassages(name: 'now' | 'uses' | 'about', fallbackTitle: string): Draft[] {
+/** The bios link to their section: /about#about-bio, and the Chinese one on /zh/about (F3). */
+const BIO: Partial<Record<string, { url: string; page: string; section: string; lang?: string }>> = {
+  about: { url: '/about#about-bio', page: 'About', section: 'Bio' },
+  'about-zh': { url: '/zh/about#about-bio', page: '关于', section: '简介', lang: 'zh-Hans' },
+}
+
+function pagePassages(name: 'now' | 'uses' | 'about' | 'about-zh', fallbackTitle: string): Draft[] {
   const page = getPage(name)
   const body = page?.body || ''
   if (!body.trim()) return []
   const fm = (page?.frontmatter || {}) as Record<string, unknown>
   const title = str(fm.title) || fallbackTitle
-  const lang = detectContentLang({ lang: fm.lang, title: fm.title, body })
-  const url = name === 'about' ? '/about#about-bio' : `/${name}`
+  const bio = BIO[name]
+  const lang = detectContentLang({ lang: fm.lang || bio?.lang, title: fm.title, body })
   return bodyPassages(cachedTree(`page:${name}:${lang}:${body}`, body, lang), {
-    url,
-    page: name === 'about' ? 'About' : title,
+    url: bio ? bio.url : `/${name}`,
+    page: bio ? bio.page : title,
     lang,
     kind: 'page',
-    section: name === 'about' ? 'Bio' : undefined,
+    section: bio?.section,
   })
 }
 
@@ -665,7 +671,7 @@ export async function buildAskIndex(docs: readonly SearchDoc[] = []): Promise<As
     const tree = cachedTree(`${entry.permalink}@${entry.updatedAt ?? 0}:${entry.lang}:${body.length}`, body, entry.lang)
     drafts.push(...bodyPassages(tree, { url: entry.permalink, page, lang: entry.lang, kind }))
   }
-  drafts.push(...pagePassages('now', 'Now'), ...pagePassages('uses', 'Uses'), ...pagePassages('about', 'About'))
+  drafts.push(...pagePassages('now', 'Now'), ...pagePassages('uses', 'Uses'), ...pagePassages('about', 'About'), ...pagePassages('about-zh', '关于'))
   drafts.push(...availabilityPassages((readPublicHome() as { availability?: unknown } | null)?.availability))
   for (const doc of docs) if (!SOURCED_KINDS.has(doc.kind)) drafts.push(...docPassages(doc))
   return finish(drafts)

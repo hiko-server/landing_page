@@ -29,7 +29,12 @@ import { NAV_SHORTCUTS, shortcutLabelFor } from '../Chrome/chrome'
 import { adminEditTarget } from '../Chrome/adminEditTarget'
 import { ADMIN_CHORDS, adminShortcutFor } from '../Admin/shell/adminCommands'
 import { useRegisteredAdminCommands } from '../Admin/shell/useAdminCommands'
-import { useChromeLang } from '../Chrome/chromeLang'
+import { useChromeUi } from '../Chrome/chromeLang'
+import { fillUi, type UiLang } from '../../lib/uiStrings'
+import { PALETTE_UI, type PaletteStrings } from '../../lib/uiStrings/palette'
+import { MENU_UI } from '../../lib/uiStrings/menu'
+import { autonymOf } from '../../lib/uiStrings/languages'
+import { zhHref } from '../../lib/zhRoutes'
 import { useChromeToast } from '../Chrome/useChromeToast'
 import { useShortcutsEnabled } from '../Chrome/useShortcutsEnabled'
 import { useThemePreference } from '../Chrome/useThemePreference'
@@ -43,14 +48,13 @@ import AskView from '../Search/AskView'
 import ModeToggle from '../Search/ModeToggle'
 import { useAsk } from '../Search/useAsk'
 import { openCitation } from '../Search/citation'
-import { askCopyFor, ASK_COPY } from '../../lib/ask/copy'
+import { askCopyFor, ASK_COPY, type AskLang } from '../../lib/ask/copy'
 import { askStatusText, type AskOption } from '../../lib/ask/view'
 import { isExplicitQuestion } from '../../lib/search/text'
 import { onEmptyResult } from '../../lib/search/emptyResult'
 import { CONTACT_FORM_ID, stashContactQuestion } from '../../lib/contactPrefill'
 import {
   LAYER_SHORTCUT_ROWS,
-  PAGE_TITLES,
   PREFETCH_DELAY_MS,
   browseItems,
   isPrefetchableHref,
@@ -105,6 +109,11 @@ import { listenSearchEmpty } from '../../lib/analytics/searchEmpty'
  * The search index is fetched once per visit (full page load), the first time
  * the palette opens. Recent items live in localStorage (per browser; failures
  * ignored).
+ *
+ * Its words follow the chrome (F3, components/Chrome/chromeLang): Chinese on
+ * a Chinese page (lib/uiStrings/palette, the page names from the chrome's
+ * table), where its pages lead to their Chinese versions when they exist
+ * and "Ask" starts in Chinese. The owner's admin commands stay English.
  */
 
 type Group = 'Recent' | 'On this page' | 'Admin' | 'Pages' | 'Actions' | 'Writing' | 'Work' | 'Content'
@@ -174,7 +183,6 @@ const RESULT_LIMIT = 40
 const BROWSE_LIMIT = 6
 const GROUP_ORDER: Group[] = ['Recent', 'On this page', 'Admin', 'Pages', 'Actions', 'Writing', 'Work', 'Content']
 const GROUP_BOOST: Record<Item['group'], number> = { Pages: 6, Admin: 5, Actions: 4, 'On this page': 3, Writing: 2, Work: 2, Content: 2 }
-const KIND_LABEL: Record<SearchDocLike['kind'], string> = { post: 'Post', work: 'Case study', page: 'Page', cv: 'CV', publication: 'Paper' }
 /** The "Ask: …" row of a search, and the browse view's "Ask Lucian a question" action. */
 const ASK_ROW_ID = 'ask:question'
 const ASK_ACTION_ID = 'action:ask'
@@ -183,12 +191,24 @@ const EMPTY_SETTLE_MS = 1200
 const MONO = 'var(--font-geist-mono), monospace'
 const NO_ROWS: { rows: Row[]; total: number } = { rows: [], total: 0 }
 
-/** The theme preference actions, in menu order. */
-const THEME_ITEMS: readonly { value: ThemePreference; label: string; hint: string; keywords: string }[] = [
-  { value: 'system', label: 'System theme', hint: 'follow your device', keywords: 'system auto automatic device os follow' },
-  { value: 'light', label: 'Light theme', hint: 'switch to light', keywords: 'light day bright' },
-  { value: 'dark', label: 'Dark theme', hint: 'switch to dark', keywords: 'dark night' },
+/** The theme preference actions, in menu order (their words: lib/uiStrings/palette). */
+const THEME_ITEMS: readonly { value: ThemePreference; keywords: string }[] = [
+  { value: 'system', keywords: 'system auto automatic device os follow 系统 跟随' },
+  { value: 'light', keywords: 'light day bright 浅色 亮色' },
+  { value: 'dark', keywords: 'dark night 深色 暗色' },
 ]
+
+/** Group → its heading in the palette's words. */
+const GROUP_KEY: Record<Group, keyof PaletteStrings['groups']> = {
+  Recent: 'recent',
+  'On this page': 'onThisPage',
+  Admin: 'admin',
+  Pages: 'pages',
+  Actions: 'actions',
+  Writing: 'writing',
+  Work: 'work',
+  Content: 'content',
+}
 
 // ── Search index (one request per visit) ────────────────────────────────
 
@@ -242,7 +262,7 @@ function headingLabel(el: HTMLElement): string {
     .trim()
 }
 
-function collectSections(): Item[] {
+function collectSections(p: PaletteStrings): Item[] {
   const seen = new Set<string>()
   const out: Item[] = []
   document
@@ -257,7 +277,7 @@ function collectSections(): Item[] {
         group: 'On this page',
         kind: 'section',
         label,
-        hint: el.tagName === 'H3' ? 'subsection' : 'section',
+        hint: el.tagName === 'H3' ? p.subsection : p.section,
         keywords: 'jump section heading',
         run: () => jumpToSection(el.id),
       })
@@ -303,8 +323,14 @@ function Key({ children }: { children: React.ReactNode }) {
   )
 }
 
-function docItem(doc: SearchDocLike, group: Item['group']): Item {
-  const zh = /^zh/i.test(doc.lang || '')
+/** The palette's words and language, for the module-level row builders. */
+type Words = { p: PaletteStrings; lang: UiLang }
+
+const sameLanguage = (docLang: string | undefined, lang: UiLang) => (/^zh/i.test(docLang || '') ? lang !== 'en' : lang === 'en')
+
+function docItem(doc: SearchDocLike, group: Item['group'], { p, lang }: Words): Item {
+  // A result in another language than the palette's says so ("Post · 中文", "文章 · English").
+  const other = sameLanguage(doc.lang, lang) ? '' : ` · ${/^zh/i.test(doc.lang || '') ? '中文' : autonymOf(doc.lang || 'en')}`
   return {
     // CV skill groups share their section's href: the title keeps ids unique.
     id: doc.kind === 'cv' ? `doc:${doc.href}|${doc.title}` : `doc:${doc.href}`,
@@ -313,18 +339,19 @@ function docItem(doc: SearchDocLike, group: Item['group']): Item {
     label: doc.title,
     href: doc.href,
     hint: group === 'Content' ? undefined : doc.description ? truncate(doc.description) : undefined,
-    badge: zh ? `${KIND_LABEL[doc.kind]} · 中文` : KIND_LABEL[doc.kind],
-    lang: doc.lang && doc.lang !== 'en' ? doc.lang : undefined,
+    badge: `${p.kinds[doc.kind]}${other}`,
+    // The title's language where it is not the palette's.
+    lang: (doc.lang || 'en') === lang ? undefined : doc.lang || 'en',
   }
 }
 
 /** "in: …" line for a content hit (nothing extra when only the title matched). */
-function docDetail(hit: DocHit<SearchDocLike>): Detail | undefined {
+function docDetail(hit: DocHit<SearchDocLike>, p: PaletteStrings): Detail | undefined {
   if (hit.field === 'title') {
     return hit.doc.description ? { prefix: '', segments: [{ text: truncate(hit.doc.description), match: false }] } : undefined
   }
-  if (hit.snippet && hit.snippet.length) return { prefix: 'in: ', segments: hit.snippet }
-  return { prefix: 'in: ', segments: [{ text: truncate(hit.value), match: false }] }
+  if (hit.snippet && hit.snippet.length) return { prefix: p.matchedIn, segments: hit.snippet }
+  return { prefix: p.matchedIn, segments: [{ text: truncate(hit.value), match: false }] }
 }
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -366,8 +393,17 @@ export default function CommandPalette({
 }: CommandPaletteProps) {
   const router = useRouter()
   const toast = useChromeToast()
-  // The palette's own text is English; results in another language carry their own lang.
-  const chromeLang = useChromeLang()
+  // The palette speaks the chrome's language (English unless the page is Chinese);
+  // results in another language carry their own lang.
+  const { t, lang: uiLang, attr: chromeLang, zh: zhPaths } = useChromeUi()
+  const p = PALETTE_UI[uiLang]
+  const m = MENU_UI[uiLang]
+  const words = useMemo<Words>(() => ({ p, lang: uiLang }), [p, uiLang])
+  // "Ask Lucian" in the page's language until a question says otherwise.
+  const askLang: AskLang = uiLang === 'en' ? 'en' : 'zh'
+  const askPage = ASK_COPY[askLang]
+  // The admin's commands are English: marked so inside a palette in another language.
+  const adminLang = uiLang === 'en' ? undefined : 'en'
   const reduceMotion = usePrefersReducedMotion()
   const { preference, choose } = useThemePreference()
   const shortcutsOn = useShortcutsEnabled()
@@ -438,7 +474,7 @@ export default function CommandPalette({
     let timer = 0
     const frame = requestAnimationFrame(() => {
       timer = window.setTimeout(() => {
-        setSections(collectSections())
+        setSections(collectSections(p))
         setRecent(readRecent())
         setListReady(true)
       }, 0)
@@ -447,7 +483,8 @@ export default function CommandPalette({
       cancelAnimationFrame(frame)
       window.clearTimeout(timer)
     }
-  }, [isOpen])
+    // `p` is the language's table (a stable reference): the sections are read again only when the language changes.
+  }, [isOpen, p])
 
   // Content index: one request per visit (shared by every open).
   useEffect(() => {
@@ -486,9 +523,9 @@ export default function CommandPalette({
   const copyAndToast = useCallback(
     async (text: string, title: string) => {
       const ok = await copyText(text)
-      toast(ok ? { status: 'success', title, description: text } : { status: 'error', title: 'Copy failed' })
+      toast(ok ? { status: 'success', title, description: text } : { status: 'error', title: p.copyFailed })
     },
-    [toast],
+    [toast, p],
   )
 
   const backUpNow = useCallback(async () => {
@@ -521,12 +558,14 @@ export default function CommandPalette({
   const editTarget = useMemo(() => adminEditTarget(router.pathname, slug), [router.pathname, slug])
 
   const items: Item[] = useMemo(() => {
+    // A page by its English address (ids and "G then …" shortcuts), linked in the chrome's
+    // language: on a Chinese page, its Chinese version where one exists (lib/zhRoutes).
     const page = (label: string, href: string, keywords?: string): Item => ({
       id: `page:${href}`,
       group: 'Pages',
       kind: 'nav',
       label,
-      href,
+      href: zhPaths ? zhHref(href, zhPaths) : href,
       shortcut: shortcutLabelFor(href),
       keywords,
     })
@@ -539,7 +578,12 @@ export default function CommandPalette({
       hint,
       shortcut: adminShortcutFor(href),
       keywords: `admin ${keywords}`,
+      lang: adminLang,
+      uiLang: adminLang,
     })
+    // This page's CV and the other language's (/cv/zh first on a Chinese page).
+    const ownCv = uiLang === 'en' ? { page: '/cv', pdf: '/cv.pdf' } : { page: '/cv/zh', pdf: '/cv/zh.pdf' }
+    const otherCv = uiLang === 'en' ? { page: '/cv/zh', pdf: '/cv/zh.pdf' } : { page: '/cv', pdf: '/cv.pdf' }
     // WCAG 2.1.4: single-character shortcuts ("/", "?", "G then …", J / K,
     // [ / ], T, "E") can be turned off; ⌘K / Ctrl+K keeps working either
     // way. At the top level and on the Keyboard shortcuts page.
@@ -547,18 +591,18 @@ export default function CommandPalette({
       id: 'action:shortcuts',
       group: 'Actions',
       kind: 'action',
-      label: `Keyboard shortcuts: ${shortcutsOn ? 'on' : 'off'}`,
-      hint: shortcutsOn ? 'turn off single-key shortcuts' : 'turn on single-key shortcuts',
+      label: fillUi(p.shortcuts, { state: shortcutsOn ? p.on : p.off }),
+      hint: shortcutsOn ? p.turnOff : p.turnOn,
       run: () => {
         const next = !shortcutsOn
         setShortcutsEnabled(next)
         toast(
           next
-            ? { status: 'success', title: 'Keyboard shortcuts on', description: '/ opens this palette, ? lists every shortcut.' }
-            : { status: 'success', title: 'Keyboard shortcuts off', description: `Single-key shortcuts are off. ${isMac ? '⌘K' : 'Ctrl+K'} still opens this palette.` },
+            ? { status: 'success', title: p.shortcutsOn, description: p.shortcutsOnDetail }
+            : { status: 'success', title: p.shortcutsOff, description: fillUi(p.shortcutsOffDetail, { mod: isMac ? '⌘K' : 'Ctrl+K' }) },
         )
       },
-      keywords: 'keyboard shortcuts hotkeys keys single key disable enable turn on off accessibility',
+      keywords: 'keyboard shortcuts hotkeys keys single key disable enable turn on off accessibility 快捷键',
     }
     const list: Item[] = []
 
@@ -579,7 +623,7 @@ export default function CommandPalette({
           admin(`go-${c.key}`, c.label, c.href, c.keywords),
         ),
         ...viewCommands.map(
-          (c): Item => ({ id: `admin:${c.id}`, group: 'Admin', kind: c.run ? 'action' : 'nav', label: c.label, hint: c.hint, shortcut: c.shortcut, href: c.href, run: c.run, keywords: `admin ${c.keywords || ''}` }),
+          (c): Item => ({ id: `admin:${c.id}`, group: 'Admin', kind: c.run ? 'action' : 'nav', label: c.label, hint: c.hint, shortcut: c.shortcut, href: c.href, run: c.run, keywords: `admin ${c.keywords || ''}`, lang: adminLang, uiLang: adminLang }),
         ),
         {
           id: 'admin:backup',
@@ -589,6 +633,8 @@ export default function CommandPalette({
           hint: 'snapshot to disk + R2',
           run: backUpNow,
           keywords: 'admin backup snapshot save storage',
+          lang: adminLang,
+          uiLang: adminLang,
         },
         {
           id: 'admin:logout',
@@ -598,56 +644,60 @@ export default function CommandPalette({
           hint: 'this browser',
           run: logOut,
           keywords: 'admin sign out logout',
+          lang: adminLang,
+          uiLang: adminLang,
         },
       )
     }
 
     list.push(
-      page('Home', '/', 'start landing index'),
-      page('About', '/about', 'bio profile'),
-      page('Work', '/work', 'case studies projects portfolio'),
-      page('Writing', '/blog', 'blog posts essays articles'),
-      page('CV', '/cv', 'resume curriculum vitae'),
-      ...(publications ? [page('Publications', '/publications', 'papers research articles preprints citations bibtex apa doi 论文')] : []),
-      page('Now', '/now', 'status current focus'),
-      page('Uses', '/uses', 'tools gear setup'),
-      page('Contact', '/contact', 'email message hire'),
-      page('Colophon', '/colophon', 'about this site fonts stack privacy analytics'),
+      // Each page by its name in the chrome's language; the English keywords stay (and the
+      // Chinese names find the page from an English palette too).
+      page(t.nav.home, '/', 'home start landing index 首页 主页'),
+      page(t.nav.about, '/about', 'about bio profile 关于 简介'),
+      page(t.nav.work, '/work', 'work case studies projects portfolio 项目 作品 案例'),
+      page(t.nav.writing, '/blog', 'writing blog posts essays articles 文章 博客'),
+      page(t.nav.cv, '/cv', 'cv resume curriculum vitae 简历'),
+      ...(publications ? [page(t.nav.publications, '/publications', 'publications papers research articles preprints citations bibtex apa doi 论文')] : []),
+      page(t.nav.now, '/now', 'now status current focus 近况'),
+      page(t.nav.uses, '/uses', 'uses tools gear setup 工具'),
+      page(t.nav.contact, '/contact', 'contact email message hire 联系'),
+      page(t.nav.colophon, '/colophon', 'colophon about this site fonts stack privacy analytics 本站说明 隐私'),
       // The nested pages' entries (paletteModel.ts), first among the actions.
       {
         id: 'open:theme',
         group: 'Actions',
         kind: 'page',
         opens: 'theme',
-        label: PAGE_TITLES.theme,
-        hint: preference === 'system' ? 'System' : preference === 'light' ? 'Light' : 'Dark',
-        keywords: 'theme appearance mode colour color dark light system',
+        label: p.pageTitles.theme,
+        hint: preference === 'system' ? m.system : preference === 'light' ? m.light : m.dark,
+        keywords: 'theme appearance mode colour color dark light system 主题',
       },
       {
         id: 'open:cv',
         group: 'Actions',
         kind: 'page',
         opens: 'cv',
-        label: PAGE_TITLES.cv,
-        hint: 'PDF · 中文',
-        keywords: 'resume curriculum vitae pdf download chinese 简历',
+        label: p.pageTitles.cv,
+        hint: p.cvHint,
+        keywords: 'cv resume curriculum vitae pdf download chinese english 简历',
       },
       {
         id: 'open:contact',
         group: 'Actions',
         kind: 'page',
         opens: 'contact',
-        label: PAGE_TITLES.contact,
-        hint: 'email · vCard',
-        keywords: 'email mail message hire vcard reach',
+        label: p.pageTitles.contact,
+        hint: p.contactHint,
+        keywords: 'contact email mail message hire vcard reach 联系 邮件',
       },
       {
         // Switches to Ask mode (runItem); the question is typed there.
         id: ASK_ACTION_ID,
         group: 'Actions',
         kind: 'action',
-        label: ASK_COPY.en.askAction,
-        hint: ASK_COPY.en.askActionHint,
+        label: askPage.askAction,
+        hint: askPage.askActionHint,
         keywords: 'ask question answer quote faq 问问 提问 问题',
       },
       // CV ›
@@ -657,40 +707,40 @@ export default function CommandPalette({
         kind: 'nav',
         page: 'cv',
         nestedOnly: true,
-        label: 'View the CV',
-        hint: 'English',
-        href: '/cv',
-        keywords: 'resume curriculum vitae open',
+        label: p.viewCv,
+        hint: p.viewCvHint,
+        href: ownCv.page,
+        keywords: 'resume curriculum vitae open 简历',
       },
       {
         id: 'action:cv-pdf',
         group: 'Actions',
         kind: 'action',
         page: 'cv',
-        label: 'Download CV (PDF)',
-        hint: 'A4 · English',
-        run: () => downloadFile('/cv.pdf'),
-        keywords: 'resume pdf print save download file a4',
+        label: p.cvPdf,
+        hint: p.cvPdfHint,
+        run: () => downloadFile(ownCv.pdf),
+        keywords: 'resume pdf print save download file a4 下载',
       },
       {
         id: 'action:cv-pdf-zh',
         group: 'Actions',
         kind: 'action',
         page: 'cv',
-        label: 'Download CV in 中文 (PDF)',
-        hint: 'A4 · Chinese',
-        run: () => downloadFile('/cv/zh.pdf'),
-        keywords: 'resume pdf download chinese zh 简历 中文 下载',
+        label: p.otherCvPdf,
+        hint: p.otherCvPdfHint,
+        run: () => downloadFile(otherCv.pdf),
+        keywords: 'resume pdf download chinese english zh en 简历 中文 英文 下载',
       },
       {
         id: 'action:cv-zh',
         group: 'Actions',
         kind: 'nav',
         page: 'cv',
-        label: 'CV in 中文',
-        hint: 'Chinese version',
-        href: '/cv/zh',
-        keywords: 'chinese zh resume 简历 中文 cv',
+        label: p.otherCv,
+        hint: p.otherCvHint,
+        href: otherCv.page,
+        keywords: 'chinese english zh en resume 简历 中文 英文 cv',
       },
       // Contact ›
       {
@@ -699,30 +749,30 @@ export default function CommandPalette({
         kind: 'nav',
         page: 'contact',
         nestedOnly: true,
-        label: 'Contact page',
-        hint: 'write a message',
-        href: '/contact',
-        keywords: 'email message hire form',
+        label: p.contactPage,
+        hint: p.contactPageHint,
+        href: zhPaths ? zhHref('/contact', zhPaths) : '/contact',
+        keywords: 'email message hire form 留言',
       },
       {
         id: 'action:copy-email',
         group: 'Actions',
         kind: 'action',
         page: 'contact',
-        label: 'Copy email address',
+        label: p.copyEmail,
         hint: HIKO_EMAIL,
-        run: () => copyAndToast(HIKO_EMAIL, 'Email copied'),
-        keywords: 'contact mail clipboard',
+        run: () => copyAndToast(HIKO_EMAIL, p.emailCopied),
+        keywords: 'contact mail clipboard 邮件 复制',
       },
       {
         id: 'action:vcard',
         group: 'Actions',
         kind: 'action',
         page: 'contact',
-        label: 'Download vCard',
-        hint: 'add to contacts',
+        label: p.vcard,
+        hint: p.vcardHint,
         run: () => window.location.assign('/api/vcard'),
-        keywords: 'contact card vcf address book save',
+        keywords: 'contact card vcf address book save 名片',
       },
     )
     if (index?.bookingUrl) {
@@ -731,8 +781,8 @@ export default function CommandPalette({
         group: 'Actions',
         kind: 'nav',
         page: 'contact',
-        label: 'Book a call',
-        hint: 'opens the booking page',
+        label: p.bookCall,
+        hint: p.bookCallHint,
         href: index.bookingUrl,
         external: true,
         keywords: 'meeting schedule calendar call chat hire',
@@ -741,13 +791,18 @@ export default function CommandPalette({
     list.push(
       // System / Light / Dark (lib/themePreference.ts); the current one says so.
       ...THEME_ITEMS.map(
-        ({ value, label, hint, keywords }): Item => ({
+        ({ value, keywords }): Item => ({
           id: `action:theme-${value}`,
           group: 'Actions',
           kind: 'action',
           page: 'theme',
-          label,
-          hint: preference === value ? 'current' : value === 'system' ? `${hint} (${systemPrefersDark() ? 'dark' : 'light'} now)` : hint,
+          label: p.themeItems[value],
+          hint:
+            preference === value
+              ? p.current
+              : value === 'system'
+                ? `${p.themeHints.system} ${fillUi(p.nowMode, { mode: m[systemPrefersDark() ? 'dark' : 'light'].toLowerCase() })}`
+                : p.themeHints[value],
           run: () => choose(value, null),
           keywords: `theme appearance mode colour color toggle switch ${keywords}`,
         }),
@@ -762,8 +817,8 @@ export default function CommandPalette({
               group: 'Actions',
               kind: 'page',
               opens: 'shortcuts',
-              label: PAGE_TITLES.shortcuts,
-              hint: 'every key',
+              label: p.pageTitles.shortcuts,
+              hint: p.everyKey,
               keywords: 'keyboard shortcuts hotkeys keys cheatsheet help list',
             } satisfies Item,
           ]
@@ -772,16 +827,16 @@ export default function CommandPalette({
         id: 'action:copy-link',
         group: 'Actions',
         kind: 'action',
-        label: 'Copy page link',
-        hint: 'share this page',
-        run: () => copyAndToast(window.location.href, 'Link copied'),
+        label: p.copyLink,
+        hint: p.copyLinkHint,
+        run: () => copyAndToast(window.location.href, p.linkCopied),
         keywords: 'url share permalink clipboard',
       },
       {
         id: 'action:source',
         group: 'Actions',
         kind: 'nav',
-        label: 'View source on GitHub',
+        label: p.viewSource,
         href: 'https://github.com/hiko-server/landing_page',
         external: true,
         keywords: 'repo source code',
@@ -790,7 +845,7 @@ export default function CommandPalette({
         id: 'action:rss',
         group: 'Actions',
         kind: 'nav',
-        label: 'RSS feed',
+        label: p.rss,
         href: '/feed.xml',
         external: true,
         keywords: 'subscribe feed atom json',
@@ -801,17 +856,17 @@ export default function CommandPalette({
         id: 'action:admin',
         group: 'Actions',
         kind: 'nav',
-        label: 'Admin login',
+        label: p.adminLogin,
         href: '/admin/login',
         keywords: 'sign in dashboard',
       })
     }
     for (const doc of index?.docs || []) {
-      if (doc.kind === 'post') list.push(docItem(doc, 'Writing'))
-      else if (doc.kind === 'work') list.push(docItem(doc, 'Work'))
+      if (doc.kind === 'post') list.push(docItem(doc, 'Writing', words))
+      else if (doc.kind === 'work') list.push(docItem(doc, 'Work', words))
     }
     return list
-  }, [isAdmin, publications, editTarget, unread, index, preference, choose, shortcutsOn, keyboardLikely, isMac, toast, copyAndToast, backUpNow, logOut, viewCommands])
+  }, [isAdmin, publications, editTarget, unread, index, preference, choose, shortcutsOn, keyboardLikely, isMac, toast, copyAndToast, backUpNow, logOut, viewCommands, p, m, t, words, uiLang, zhPaths, askPage, adminLang])
 
   const recentItems: Item[] = useMemo(() => {
     const out: Item[] = []
@@ -859,9 +914,9 @@ export default function CommandPalette({
         boost(it.id, it.group),
       ).map(({ item, score, indices }) => ({ row: { item, group: item.group, indices }, score }))
       if (!view) {
-        for (const hit of rankSearchDocs(index?.docs || [], q, (doc) => boost(docItem(doc, 'Content').id, 'Content'), { subject: index?.subject })) {
+        for (const hit of rankSearchDocs(index?.docs || [], q, (doc) => boost(docItem(doc, 'Content', words).id, 'Content'), { subject: index?.subject })) {
           ranked.push({
-            row: { item: docItem(hit.doc, 'Content'), group: 'Content', indices: hit.indices, detail: docDetail(hit) },
+            row: { item: docItem(hit.doc, 'Content', words), group: 'Content', indices: hit.indices, detail: docDetail(hit, p) },
             score: hit.score,
           })
         }
@@ -872,10 +927,10 @@ export default function CommandPalette({
       const out = found.slice(0, RESULT_LIMIT).map((r) => r.row)
       if (!view) {
         // "Ask: …" — first when the query is phrased as a question, otherwise after the results (or alone).
-        const copy = askCopyFor(q, 'en')
+        const copy = askCopyFor(q, uiLang)
         const askRow: Row = {
           // The row speaks the question's language: label, hint and badge alike.
-          item: { id: ASK_ROW_ID, group: 'Actions', kind: 'action', label: copy.askRow(q), hint: copy.askRowHint, badge: copy.modeAsk, lang: copy.lang === 'en' ? undefined : copy.lang, uiLang: copy.lang === 'en' ? undefined : copy.lang },
+          item: { id: ASK_ROW_ID, group: 'Actions', kind: 'action', label: copy.askRow(q), hint: copy.askRowHint, badge: copy.modeAsk, lang: copy.lang === askPage.lang ? undefined : copy.lang, uiLang: copy.lang === askPage.lang ? undefined : copy.lang },
           group: 'Actions',
           indices: [],
         }
@@ -884,7 +939,7 @@ export default function CommandPalette({
       }
       return { rows: out, total: found.length }
     },
-    [browseRows, items, sections, recent, index],
+    [browseRows, items, sections, recent, index, words, p, uiLang, askPage],
   )
 
   const q = deferredQuery.trim()
@@ -899,8 +954,8 @@ export default function CommandPalette({
 
   // ── Ask mode (J1): answers quoted from the site (components/Search) ─────
   const ask = useAsk(index, query, isOpen && asking, { failed: indexFailed })
-  // The palette's chrome is English; the answer speaks the question's language.
-  const askCopy = askCopyFor(ask.state.question, 'en')
+  // The palette speaks the page's language; the answer speaks the question's.
+  const askCopy = askCopyFor(ask.state.question, uiLang)
   const askOpts = ask.options
   // The search results without the "Ask: …" row (the counts, the empty state).
   const matchCount = rows.filter((r) => r.item.id !== ASK_ROW_ID).length
@@ -1237,7 +1292,7 @@ export default function CommandPalette({
             textTransform="uppercase"
             color="page.fg-secondary"
           >
-            {group}
+            {p.groups[GROUP_KEY[group]]}
           </Text>
           {groupRows.map((row) => renderRow(row, idx++))}
         </Box>
@@ -1255,7 +1310,7 @@ export default function CommandPalette({
   const keysOf = (keys: readonly string[], joiner: 'or' | 'then' | ' ' = ' ') =>
     keys.map((k, i) => (
       <React.Fragment key={k}>
-        {i > 0 && (joiner === ' ' ? ' ' : <Text as="span"> {joiner} </Text>)}
+        {i > 0 && (joiner === ' ' ? ' ' : <Text as="span"> {joiner === 'or' ? p.or : p.then} </Text>)}
         <Key>{k}</Key>
       </React.Fragment>
     ))
@@ -1268,7 +1323,7 @@ export default function CommandPalette({
   const renderSheet = (full: boolean) => (
     <Box
       as="section"
-      aria-label="Keyboard shortcuts"
+      aria-label={p.pageTitles.shortcuts}
       mt={2}
       mx={3}
       mb={2}
@@ -1279,12 +1334,12 @@ export default function CommandPalette({
     >
       {!full && (
         <Text fontFamily={MONO} fontSize="10px" letterSpacing="0.16em" textTransform="uppercase" color="page.fg-secondary" mb={3}>
-          Shortcuts
+          {p.sheet}
         </Text>
       )}
       {full && !shortcutsOn && (
         <Text fontSize="12px" color="page.fg-secondary" mb={3}>
-          Single-key shortcuts are off; {mod} K still opens this palette. Turn them on above.
+          {fillUi(p.sheetOff, { mod })}
         </Text>
       )}
       <Box
@@ -1298,33 +1353,33 @@ export default function CommandPalette({
         sx={{ '& > div': { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 3 }, '& dd': { m: 0, whiteSpace: 'nowrap' } }}
       >
         {sheetRow(
-          'Open / close palette',
+          p.openClose,
           <>
             <Key>{mod}</Key> <Key>K</Key>
             {shortcutsOn && (
               <>
                 {' '}
-                <Text as="span">or</Text> <Key>/</Key>
+                <Text as="span">{p.or}</Text> <Key>/</Key>
               </>
             )}
           </>,
         )}
-        {sheetRow('Move / open', keysOf(['↑', '↓', '↵']))}
-        {full && sheetRow('Back from a page', keysOf(['⌫', 'Esc'], 'or'))}
+        {sheetRow(p.moveOpen, keysOf(['↑', '↓', '↵']))}
+        {full && sheetRow(p.backFromPage, keysOf(['⌫', 'Esc'], 'or'))}
         {!full &&
           (shortcutsOn ? (
             <>
-              {pageShortcuts.map((it) => sheetRow(`Go to ${it.label}`, <Key>{it.shortcut}</Key>, it.id))}
-              {keyboardLikely && sheetRow('Every shortcut', <Key>?</Key>)}
+              {pageShortcuts.map((it) => sheetRow(fillUi(p.goToPage, { page: it.label }), <Key>{it.shortcut}</Key>, it.id))}
+              {keyboardLikely && sheetRow(p.everyShortcut, <Key>?</Key>)}
             </>
           ) : (
-            sheetRow('Single-key shortcuts', 'off')
+            sheetRow(p.singleKey, p.off)
           ))}
         {full && (
           <>
-            {LAYER_SHORTCUT_ROWS.filter((r) => r.keys[0] !== '/').map((r) => sheetRow(r.label, keysOf(r.keys)))}
-            {pageShortcuts.map((it) => sheetRow(`Go to ${it.label}`, keysOf(['G', (it.shortcut || '').slice(2)], 'then'), it.id))}
-            {isAdmin && editTarget && sheetRow('Edit this page', <Key>E</Key>)}
+            {LAYER_SHORTCUT_ROWS.filter((r) => r.keys[0] !== '/').map((r) => sheetRow(p.layerRows[r.id], keysOf(r.keys), r.id))}
+            {pageShortcuts.map((it) => sheetRow(fillUi(p.goToPage, { page: it.label }), keysOf(['G', (it.shortcut || '').slice(2)], 'then'), it.id))}
+            {isAdmin && editTarget && sheetRow(p.editPage, <Key>E</Key>)}
           </>
         )}
       </Box>
@@ -1335,12 +1390,12 @@ export default function CommandPalette({
     ? ''
     : asking
       ? askStatusText(ask.state, askCopy)
-      : `${subpage ? `${PAGE_TITLES[subpage]}: ` : ''}${
+      : `${subpage ? `${p.pageTitles[subpage]}${uiLang === 'en' ? ': ' : '：'}` : ''}${
           searching
             ? total > matchCount
-              ? `Showing ${matchCount} of ${total} results`
-              : `${total} result${total === 1 ? '' : 's'}`
-            : `${rows.length} command${rows.length === 1 ? '' : 's'}`
+              ? fillUi(p.showing, { n: matchCount, total })
+              : fillUi(total === 1 ? p.resultOne : p.resultMany, { n: total })
+            : fillUi(rows.length === 1 ? p.commandOne : p.commandMany, { n: rows.length })
         }`
 
   return (
@@ -1361,7 +1416,7 @@ export default function CommandPalette({
           frame or more on open (and nothing under reduced transparency). */}
       <ModalOverlay bg="rgba(0,0,0,0.5)" sx={{ '@media (hover: hover) and (pointer: fine)': { backdropFilter: 'blur(12px)' } }} />
       <ModalContent
-        aria-label="Command palette"
+        aria-label={p.dialog}
         lang={chromeLang}
         motionProps={
           // From the keyboard it is simply there; from a click it scales in.
@@ -1391,7 +1446,7 @@ export default function CommandPalette({
               as="button"
               type="button"
               onClick={leaveSubpage}
-              aria-label={`Back to all commands (leave ${PAGE_TITLES[subpage]})`}
+              aria-label={fillUi(p.backToAll, { page: p.pageTitles[subpage] })}
               display="inline-flex"
               alignItems="center"
               gap={1}
@@ -1415,7 +1470,7 @@ export default function CommandPalette({
                 ‹
               </Text>
               <Text as="span" minW={0} overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap">
-                {PAGE_TITLES[subpage]}
+                {p.pageTitles[subpage]}
               </Text>
             </Box>
           ) : (
@@ -1437,7 +1492,7 @@ export default function CommandPalette({
             }}
             onKeyDown={onKey}
             role="combobox"
-            aria-label={asking ? ASK_COPY.en.inputLabel : subpage ? `Search ${PAGE_TITLES[subpage]}` : 'Search pages, sections, actions, posts, case studies and the CV'}
+            aria-label={asking ? askPage.inputLabel : subpage ? fillUi(p.inputLabelPage, { page: p.pageTitles[subpage] }) : p.inputLabel}
             aria-expanded={optionCount > 0}
             aria-controls={listId}
             aria-autocomplete="list"
@@ -1446,7 +1501,7 @@ export default function CommandPalette({
             autoCorrect="off"
             spellCheck={false}
             // On a nested page the chip names the page: a short placeholder.
-            placeholder={asking ? ASK_COPY.en.placeholder : subpage ? 'Filter…' : 'Search or jump to…'}
+            placeholder={asking ? askPage.placeholder : subpage ? p.placeholderPage : p.placeholder}
             variant="unstyled"
             fontSize="15px"
             color="page.fg"
@@ -1459,9 +1514,9 @@ export default function CommandPalette({
             minW="72px"
             textOverflow="ellipsis"
           />
-          {loading && <Spinner size="xs" color="page.fg-secondary" label="Loading the search index" />}
+          {loading && <Spinner size="xs" color="page.fg-secondary" label={p.loadingIndex} />}
           {/* Search / Ask belongs to the top level; a nested page has the chip (and ⌫ / Esc) to go back. */}
-          {!subpage && <ModeToggle mode={mode} onChange={switchMode} labels={{ group: ASK_COPY.en.modes, search: ASK_COPY.en.modeSearch, ask: ASK_COPY.en.modeAsk }} />}
+          {!subpage && <ModeToggle mode={mode} onChange={switchMode} labels={{ group: askPage.modes, search: askPage.modeSearch, ask: askPage.modeAsk }} />}
           <Box display={{ base: 'none', sm: 'inline-flex' }} flexShrink={0}>
             <Key>ESC</Key>
           </Box>
@@ -1471,7 +1526,7 @@ export default function CommandPalette({
           ref={scrollRef}
           // Long answers scroll: the region is reachable by keyboard too (↑ ↓ in the field scroll it as well).
           role="region"
-          aria-label={asking ? ASK_COPY.en.name : 'Results'}
+          aria-label={asking ? askPage.name : p.results}
           tabIndex={0}
           _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '-2px' }}
           maxH={['65vh', '60vh']}
@@ -1498,18 +1553,18 @@ export default function CommandPalette({
                   onRun={runAsk}
                 />
               ) : (
-                <Box id={listId} role="listbox" aria-label={ASK_COPY.en.name} />
+                <Box id={listId} role="listbox" aria-label={askPage.name} />
               )
             ) : (
               <>
                 {listReady && searching && matchCount === 0 && (
                   // Above the list: the "Ask: …" row follows at the top level.
                   <Flex direction="column" align="center" justify="center" pt={8} pb={subpage ? 8 : 4} color="page.fg-secondary" fontFamily={MONO} fontSize="12px" gap={1}>
-                    <Text>no matches</Text>
-                    <Text>{loading && !subpage ? 'still loading posts and projects…' : 'try fewer or different letters'}</Text>
+                    <Text>{p.noMatches}</Text>
+                    <Text>{loading && !subpage ? p.stillLoading : p.tryFewer}</Text>
                   </Flex>
                 )}
-                <Box id={listId} role="listbox" aria-label={subpage ? PAGE_TITLES[subpage] : 'Commands'}>
+                <Box id={listId} role="listbox" aria-label={subpage ? p.pageTitles[subpage] : p.commands}>
                   {searching || subpage ? rows.map((row, i) => renderRow(row, i)) : renderGrouped()}
                 </Box>
                 {listReady && !searching && (subpage === 'shortcuts' ? renderSheet(true) : subpage ? null : renderSheet(false))}
@@ -1533,21 +1588,21 @@ export default function CommandPalette({
             <Flex gap={1} alignItems="center">
               <Key>↑</Key>
               <Key>↓</Key>
-              <Text>navigate</Text>
+              <Text>{p.navigate}</Text>
             </Flex>
             <Flex gap={1} alignItems="center">
               <Key>↵</Key>
-              <Text>open</Text>
+              <Text>{p.open}</Text>
             </Flex>
             {(subpage || asking) && (
               <Flex gap={1} alignItems="center">
                 <Key>⌫</Key>
-                <Text>back</Text>
+                <Text>{p.back}</Text>
               </Flex>
             )}
           </Flex>
           {/* While asking, the status speaks the question's language (askStatusText uses its copy). */}
-          <Text role="status" aria-live="polite" ml="auto" className="tnum" lang={asking ? askCopy.lang : undefined}>
+          <Text role="status" aria-live="polite" ml="auto" className="tnum" lang={asking && askCopy.lang !== askPage.lang ? askCopy.lang : undefined}>
             {resultText}
           </Text>
         </Flex>

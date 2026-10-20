@@ -19,6 +19,8 @@ import { Box, Button, Flex, Link, Text } from '@chakra-ui/react'
  * here" reads alike across the site. Colours are semantic tokens (both
  * themes on the first paint); `tone="error"` only changes the dot to the
  * accent and announces the row (role="status", or "alert" for a crash).
+ * Its own words (the retry button, the actions' name) are props, so a page
+ * in another language passes its own (lib/uiStrings).
  */
 
 const MONO = 'var(--font-geist-mono), ui-monospace, monospace'
@@ -39,6 +41,8 @@ type BlockProps = Common & {
   icon?: React.ReactNode
   /** Heading level of the title (it sits inside a page, under the page's h1). */
   as?: 'h2' | 'h3' | 'p'
+  /** Accessible name of the actions list, in the page's language ("Where to next"). */
+  actionsLabel?: string
 }
 
 type InlineProps = Common & {
@@ -125,7 +129,7 @@ export default function EmptyState(props: EmptyStateProps) {
     )
   }
 
-  const { title, children, actions = [], icon, as = 'h2', role } = props
+  const { title, children, actions = [], icon, as = 'h2', role, actionsLabel = 'Where to next' } = props
   return (
     <Flex
       role={role}
@@ -164,7 +168,7 @@ export default function EmptyState(props: EmptyStateProps) {
         </Text>
       ) : null}
       {actions.length > 0 && (
-        <Flex as="ul" listStyleType="none" m={0} p={0} mt={1} gap={2} wrap="wrap" justify="center" aria-label="Where to next">
+        <Flex as="ul" listStyleType="none" m={0} p={0} mt={1} gap={2} wrap="wrap" justify="center" aria-label={actionsLabel}>
           {actions.map((a) => (
             <li key={a.href}>
               <Link

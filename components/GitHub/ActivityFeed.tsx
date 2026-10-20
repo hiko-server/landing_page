@@ -24,6 +24,8 @@ import {
   type GhEvent,
   type GhEventsPayload,
 } from '../Common/githubEvents'
+import { fillUi } from '../../lib/uiStrings'
+import { useHomeUi } from '../LandingPage/homeUi'
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 const ROW_H = '44px'
@@ -79,6 +81,7 @@ function RepoName({ repo }: { repo: string }) {
 
 /** The repository, linked to GitHub when the name is well-formed. */
 function RepoLink({ repo }: { repo: string }) {
+  const { t } = useHomeUi()
   const href = repoUrl(repo)
   if (!href) return <RepoName repo={repo} />
   return (
@@ -92,16 +95,17 @@ function RepoLink({ repo }: { repo: string }) {
       _focusVisible={focusRing}
     >
       <RepoName repo={repo} />
-      <span className="sr-only"> (opens GitHub in a new tab)</span>
+      <span className="sr-only">{t.activity.newTab}</span>
     </Link>
   )
 }
 
 function When({ iso, now }: { iso: string; now: number }) {
-  const when = relativeTime(iso, now)
+  const { t } = useHomeUi()
+  const when = relativeTime(iso, now, t.github)
   if (!when) return null
   return (
-    <Text as="time" dateTime={iso} title={absoluteTime(iso)} className="tnum" flexShrink={0} fontFamily={monoFont} fontSize="11px" color="page.fg-secondary">
+    <Text as="time" dateTime={iso} title={absoluteTime(iso, t.github)} className="tnum" flexShrink={0} fontFamily={monoFont} fontSize="11px" color="page.fg-secondary">
       {when}
     </Text>
   )
@@ -129,11 +133,12 @@ function Glyph({ kind }: { kind: EventKind }) {
 
 /** Action phrase + repository on one line (the phrase never wraps, the repo truncates). */
 function EventLine({ e }: { e: GhEvent }) {
+  const { t } = useHomeUi()
   const repo = e.repo?.name || ''
   return (
     <Flex as="span" align="baseline" gap={1.5} minW={0} flex="1" fontSize="sm" lineHeight="1.4" color="page.fg-secondary">
       <Box as="span" flexShrink={0} whiteSpace="nowrap">
-        {eventAction(e)}
+        {eventAction(e, t.github)}
       </Box>
       {repo ? <RepoLink repo={repo} /> : null}
     </Flex>
@@ -141,6 +146,7 @@ function EventLine({ e }: { e: GhEvent }) {
 }
 
 function GroupRow({ group, now }: { group: EventGroup; now: number }) {
+  const { t } = useHomeUi()
   const [open, setOpen] = useState(false)
   const panelId = useId()
   const newest = group.events[0]
@@ -155,7 +161,7 @@ function GroupRow({ group, now }: { group: EventGroup; now: number }) {
     )
   }
 
-  const summary = summarizeGroup(group.events)
+  const summary = summarizeGroup(group.events, t.github)
   return (
     <Box w="100%">
       <Flex align="center" gap={3} minW={0} w="100%" minH={ROW_H}>
@@ -178,7 +184,7 @@ function GroupRow({ group, now }: { group: EventGroup; now: number }) {
         >
           <Flex as="span" align="baseline" gap={1.5} minW={0} flex="1" fontSize="sm" lineHeight="1.4">
             <Box as="span" flexShrink={0} whiteSpace="nowrap">
-              {group.events.length} events in
+              {fillUi(t.activity.eventsIn, { n: group.events.length })}
             </Box>
             <RepoName repo={group.repo} />
             {summary ? (
@@ -224,6 +230,7 @@ function GroupRow({ group, now }: { group: EventGroup; now: number }) {
  * relative times use the server's stamp until hydration, then the real clock.
  */
 export default function ActivityFeed({ initialData }: { initialData?: GhEventsPayload | null }) {
+  const { t } = useHomeUi()
   const reduce = useReducedMotion()
   const reveal = useScrollReveal<HTMLElement>()
   const { data, error, retry } = useFetchJson<GhEventsPayload>('/api/github/events', { initialData })
@@ -231,15 +238,15 @@ export default function ActivityFeed({ initialData }: { initialData?: GhEventsPa
 
   if (error || data?.available === false) {
     return (
-      <WidgetNotice kind="error" onRetry={retry}>
-        Recent activity couldn’t be loaded from GitHub.
+      <WidgetNotice kind="error" onRetry={retry} retryLabel={t.tryAgain}>
+        {t.activity.unavailable}
       </WidgetNotice>
     )
   }
 
   if (!data) {
     return (
-      <Flex direction="column" gap={2} aria-busy="true" aria-label="Loading recent activity">
+      <Flex direction="column" gap={2} aria-busy="true" aria-label={t.activity.loading}>
         {Array.from({ length: SKELETON_ROWS }).map((_, i) => (
           <Flex key={i} h={ROW_H} align="center" gap={3} pl={7}>
             <Skeleton w="22px" h="22px" borderRadius="6px" startColor="page.bg-elevated" endColor="page.bg-overlay" />
@@ -253,7 +260,7 @@ export default function ActivityFeed({ initialData }: { initialData?: GhEventsPa
   const groups = groupEvents(data.events).slice(0, MAX_ROWS)
   const variants = staggerVariants(reduce)
   if (!groups.length) {
-    return <WidgetNotice kind="empty">No recent public GitHub activity.</WidgetNotice>
+    return <WidgetNotice kind="empty">{t.activity.empty}</WidgetNotice>
   }
 
   return (
@@ -267,7 +274,7 @@ export default function ActivityFeed({ initialData }: { initialData?: GhEventsPa
         listStyleType="none"
         direction="column"
         gap={2}
-        aria-label="Recent GitHub activity"
+        aria-label={t.activity.label}
         variants={variants.list}
         initial={false}
         animate={revealVariant(reveal.phase)}

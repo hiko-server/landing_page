@@ -3,6 +3,7 @@ import { Box, Button, Flex, Text, type BoxProps } from '@chakra-ui/react'
 import { FileDownIcon } from '../Icons/ui/content'
 import type { CvLang } from '../../lib/cvVisibility'
 import { EXPORT_PATHS, cvFileName, type ExportFormat } from '../../lib/cvExport/files'
+import { cvUiFor } from '../../lib/uiStrings/cv'
 
 /**
  * Download controls of the CV page.
@@ -19,31 +20,9 @@ import { EXPORT_PATHS, cvFileName, type ExportFormat } from '../../lib/cvExport/
  *                 when closed. `placement="up"` opens above the button (the
  *                 phone action bar at the bottom of the screen).
  *
- * Interaction-only and tiny: no menu library, no positioning engine.
+ * Interaction-only and tiny: no menu library, no positioning engine. Words:
+ * lib/uiStrings/cv (the CV's language).
  */
-
-const COPY = {
-  en: {
-    pdf: 'Download PDF',
-    more: 'More formats',
-    txt: 'Plain text',
-    txtHint: '.txt · for paste-in application forms',
-    json: 'JSON Resume',
-    jsonHint: '.json · jsonresume.org schema',
-    print: 'Print this page',
-    printHint: 'A4, from your browser',
-  },
-  zh: {
-    pdf: '下载 PDF',
-    more: '更多格式',
-    txt: '纯文本',
-    txtHint: '.txt · 适合粘贴到网申表单',
-    json: 'JSON Resume',
-    jsonHint: '.json · jsonresume.org 格式',
-    print: '打印本页',
-    printHint: 'A4，使用浏览器打印',
-  },
-} as const
 
 const mono = 'var(--font-geist-mono), monospace'
 
@@ -58,7 +37,7 @@ export function PdfLink({ lang, fileBase, children, ...rest }: PdfLinkProps) {
   const f = fileOf(lang, fileBase, 'pdf')
   return (
     <Button as="a" href={f.href} download={f.download} {...rest}>
-      {children ?? COPY[lang].pdf}
+      {children ?? cvUiFor(lang).pdf}
     </Button>
   )
 }
@@ -89,7 +68,8 @@ export function FormatsMenu({
     onKeyDown: (e: React.KeyboardEvent) => void
   }) => React.ReactNode
 }) {
-  const T = COPY[lang]
+  const ui = cvUiFor(lang)
+  const T = ui.formats
   const [open, setOpen] = useState(false)
   const listId = `cv-formats-${useId().replace(/:/g, '')}`
   const wrap = useRef<HTMLDivElement>(null)
@@ -184,7 +164,7 @@ export function FormatsMenu({
         <Box
           as="ul"
           id={listId}
-          aria-label={T.more}
+          aria-label={ui.more}
           listStyleType="none"
           m={0}
           p={1.5}

@@ -11,6 +11,10 @@ import WidgetNotice from '../Common/WidgetNotice'
 import { useScrollReveal } from '../General-UI/useScrollReveal'
 import { useSpotlight } from '../General-UI/useSpotlight'
 import { relativeTime, repoCard, type GhRepoCard, type GhRepoCards, type GhTopRepos } from '../Common/githubEvents'
+import { fillUi } from '../../lib/uiStrings'
+import type { HomeStrings } from '../../lib/uiStrings/home'
+import { langWithin } from '../../lib/toc'
+import { useHomeUi } from '../LandingPage/homeUi'
 
 const LANG_COLORS: Record<string, string> = {
   TypeScript: '#3178c6',
@@ -49,11 +53,11 @@ const staggerVariants = (reduce: boolean | null): { list: Variants; item: Varian
 })
 
 /** Card body: the owner's blurb, else GitHub's description, else what we do know. */
-function repoSummary(r: GhRepoCard, now: number): string {
+function repoSummary(r: GhRepoCard, now: number, t: HomeStrings): string {
   const text = (r.blurb || r.description || '').trim()
   if (text) return text
-  const when = relativeTime(r.pushed_at, now)
-  return [r.language, when ? `updated ${when}` : ''].filter(Boolean).join(' · ')
+  const when = relativeTime(r.pushed_at, now, t.github)
+  return [r.language, when ? fillUi(t.repos.updated, { when }) : ''].filter(Boolean).join(' · ')
 }
 
 /**
@@ -64,19 +68,20 @@ function repoSummary(r: GhRepoCard, now: number): string {
  * account get an in-place notice.
  */
 export default function TopRepos({ initialData, limit = 6 }: { initialData?: GhRepoCards | null; limit?: number }) {
+  const { t } = useHomeUi()
   const { data, error, retry } = useFetchJson<GhRepoCards | GhTopRepos>('/api/github/top-repos', { initialData })
 
   if (error || data?.available === false) {
     return (
-      <WidgetNotice kind="error" onRetry={retry} minH={CARD_H}>
-        Repositories couldn’t be loaded from GitHub.
+      <WidgetNotice kind="error" onRetry={retry} retryLabel={t.tryAgain} minH={CARD_H}>
+        {t.repos.unavailable}
       </WidgetNotice>
     )
   }
 
   if (!data) {
     return (
-      <Grid templateColumns={COLUMNS} gap={4} w="100%" aria-busy="true" aria-label="Loading repositories">
+      <Grid templateColumns={COLUMNS} gap={4} w="100%" aria-busy="true" aria-label={t.repos.loading}>
         {Array.from({ length: limit }).map((_, i) => (
           <Skeleton key={i} h={CARD_H} borderRadius="lg" startColor="page.bg-elevated" endColor="page.bg-overlay" />
         ))}
@@ -89,7 +94,7 @@ export default function TopRepos({ initialData, limit = 6 }: { initialData?: GhR
     .slice(0, limit)
     .map(repoCard)
   if (!repos.length) {
-    return <WidgetNotice kind="empty">No public repositories to show yet.</WidgetNotice>
+    return <WidgetNotice kind="empty">{t.repos.empty}</WidgetNotice>
   }
 
   return <RepoGrid repos={repos} asOf={data.asOf} />
@@ -97,6 +102,7 @@ export default function TopRepos({ initialData, limit = 6 }: { initialData?: GhR
 
 /** The loaded grid (its own component so the spotlight attaches once the list exists). */
 function RepoGrid({ repos, asOf }: { repos: GhRepoCard[]; asOf?: number }) {
+  const { t, lang } = useHomeUi()
   const reduce = useReducedMotion()
   const listRef = useRef<HTMLElement | null>(null)
   const reveal = useScrollReveal<HTMLElement>()
@@ -122,14 +128,14 @@ function RepoGrid({ repos, asOf }: { repos: GhRepoCard[]; asOf?: number }) {
       templateColumns={COLUMNS}
       gap={4}
       w="100%"
-      aria-label="Repositories"
+      aria-label={t.repos.label}
       variants={variants.list}
       initial={false}
       animate={revealVariant(reveal.phase)}
     >
       {repos.map((r) => {
         const langColor = r.language ? LANG_COLORS[r.language] || 'var(--accent)' : 'var(--accent)'
-        const summary = repoSummary(r, now)
+        const summary = repoSummary(r, now, t)
         const fromText = !!(r.blurb || r.description)
         return (
           <MotionLi as="li" key={r.id} variants={variants.item} data-reveal-item="" display="flex">
@@ -161,12 +167,14 @@ function RepoGrid({ repos, asOf }: { repos: GhRepoCard[]; asOf?: number }) {
                 <Text as="span" className="nudge-ne" fontFamily={monoFont} fontSize="11px" color="page.fg-secondary" aria-hidden>
                   ↗
                 </Text>
-                <span className="sr-only"> (opens GitHub in a new tab)</span>
+                <span className="sr-only">{t.repos.newTab}</span>
               </Flex>
               <Text
                 fontSize="13px"
                 color="page.fg-secondary"
                 fontFamily={fromText ? undefined : monoFont}
+                // The owner's blurb or GitHub's description, in their own language.
+                lang={fromText ? langWithin(summary, lang) : undefined}
                 noOfLines={2}
                 lineHeight="1.55"
                 mb={3}
@@ -181,19 +189,19 @@ function RepoGrid({ repos, asOf }: { repos: GhRepoCard[]; asOf?: number }) {
                     <StarIcon size="xs" />
                     <Text as="span">
                       {r.stargazers_count}
-                      <span className="sr-only"> stars</span>
+                      <span className="sr-only">{t.repos.stars}</span>
                     </Text>
                   </Flex>
                   <Flex align="center" gap={1}>
                     <GitForkIcon size="xs" />
                     <Text as="span">
                       {r.forks_count}
-                      <span className="sr-only"> forks</span>
+                      <span className="sr-only">{t.repos.forks}</span>
                     </Text>
                   </Flex>
                   {r.featured ? (
                     <Text as="span" letterSpacing="0.08em" textTransform="uppercase" color="accent.text">
-                      Featured
+                      {t.repos.featured}
                     </Text>
                   ) : null}
                 </Flex>

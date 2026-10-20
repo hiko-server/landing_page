@@ -103,7 +103,8 @@ test('icons are tree-shakeable and grouped by bundle: the shared chrome file sta
     const pure = src.match(/export const \w+ = \/\*#__PURE__\*\/ makeUiIcon\(/g) || []
     assert.equal(pure.length, defs.length, `${g}: every icon is marked pure`)
   }
-  assert.deepEqual(Object.keys(groups.chrome).sort(), ['ArrowUpIcon', 'ChevronDownIcon', 'MenuIcon', 'SearchIcon'])
+  // LanguagesIcon: the header's language switch (F3), shared with the article's.
+  assert.deepEqual(Object.keys(groups.chrome).sort(), ['ArrowUpIcon', 'ChevronDownIcon', 'LanguagesIcon', 'MenuIcon', 'SearchIcon'])
   assert.equal(existsSync(path.join(ROOT, 'components/Icons/ui.tsx')), false, 'no barrel that would pull every icon')
   assert.equal(existsSync(path.join(ROOT, 'components/Icons/ui/index.ts')), false, 'no barrel')
   // The persistent chrome imports only the chrome group.

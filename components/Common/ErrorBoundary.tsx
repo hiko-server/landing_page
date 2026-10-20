@@ -97,7 +97,7 @@ const MONO = 'var(--font-geist-mono), ui-monospace, monospace'
  * Compact, inline fallback for public widgets — the WidgetNotice look
  * (dashed hairline, accent dot, mono caption) with a Retry button.
  */
-export function WidgetFallback({ reset, title = 'This section couldn’t load.' }: Partial<FallbackProps> & { title?: string }) {
+export function WidgetFallback({ reset, title = 'This section couldn’t load.', retryLabel = 'Retry' }: Partial<FallbackProps> & { title?: string; retryLabel?: string }) {
   return (
     <Flex
       role="alert"
@@ -131,7 +131,7 @@ export function WidgetFallback({ reset, title = 'This section couldn’t load.' 
           _hover={{ borderColor: 'var(--accent)', color: 'accent.text' }}
           _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
         >
-          Retry
+          {retryLabel}
         </Button>
       ) : null}
     </Flex>

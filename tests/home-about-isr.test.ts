@@ -340,11 +340,14 @@ test('G1: / and /about regenerate hourly at runtime and after a second when prer
   assert.equal(isBuildPhase({}), false)
   assert.equal(revalidateAfter(3600, { NEXT_PHASE: 'phase-production-build' }), 1)
   assert.equal(revalidateAfter(3600, { NEXT_PHASE: 'phase-production-server' }), 3600)
-  for (const page of ['pages/index.tsx', 'pages/about/index.tsx']) {
+  for (const page of ['pages/index.tsx', 'pages/about/index.tsx', 'pages/zh/index.tsx', 'pages/zh/about.tsx']) {
     const src = read(page)
     assert.match(src, /export const getStaticProps: GetStaticProps<Props>/, page)
     assert.doesNotMatch(src, /getServerSideProps/, page)
-    assert.match(src, /revalidate: revalidateAfter\(PROFILE_REVALIDATE_SECONDS\)/, page)
+  }
+  // The loaders shared with the Chinese pages (F3) hold the windows.
+  for (const loader of ['lib/homePage.ts', 'lib/aboutPage.ts']) {
+    assert.match(read(loader), /revalidate: revalidateAfter\(PROFILE_REVALIDATE_SECONDS\)/, loader)
   }
   assert.match(read('next.config.js'), /expireTime: 86400/)
 })
@@ -354,8 +357,10 @@ test('G1: every write that changes / or /about regenerates them', () => {
     assert.ok(HOME_PAGE_PATHS.includes(p), `home → ${p}`)
     assert.ok(CV_PAGE_PATHS.includes(p), `CV → ${p}`)
   }
-  assert.deepEqual([...COLLECTION_EXTRA_PATHS.blog], ['/'])
-  assert.deepEqual([...COLLECTION_EXTRA_PATHS.work], ['/', '/about'])
+  // …and the Chinese pages (F3): they list Chinese pieces and link the Chinese pages that exist.
+  const zh = ['/zh', '/zh/about', '/zh/work', '/zh/blog', '/zh/contact']
+  assert.deepEqual([...COLLECTION_EXTRA_PATHS.blog], ['/', ...zh])
+  assert.deepEqual([...COLLECTION_EXTRA_PATHS.work], ['/', '/about', ...zh])
   assert.ok(STATIC_CONTENT_PATHS.includes('/' as never) && STATIC_CONTENT_PATHS.includes('/about' as never), 'restores regenerate them')
   assert.deepEqual(derivedPurgePaths(['/about']), ['/api/search-index'])
 })

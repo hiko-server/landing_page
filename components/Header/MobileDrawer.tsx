@@ -17,8 +17,12 @@ import {
 } from '@chakra-ui/react'
 import NextLink from 'next/link'
 import { useRouter } from 'next/router'
-import { MOBILE_MENU_ID, PRIMARY_LINKS, type NavLink, type SocialLink, type SocialName, isActiveRoute } from '../Chrome/chrome'
-import { useChromeLang } from '../Chrome/chromeLang'
+import { MOBILE_MENU_ID, PRIMARY_LINKS, type NavLink, type SocialLink, type SocialName, isActiveLink } from '../Chrome/chrome'
+import { useChromeUi } from '../Chrome/chromeLang'
+import { autonymOf } from '../../lib/uiStrings/languages'
+import { MENU_UI } from '../../lib/uiStrings/menu'
+import type { LangLink } from '../../lib/zhRoutes'
+import { LanguagesIcon } from '../Icons/ui/chrome'
 import { cvPdfPath } from '../../lib/cvExport/paths'
 import { GitHubIcon, GitLabIcon, LinkedInIcon, WhatsAppIcon } from '../Icons/brand'
 import ThemeSwitch from './ThemeSwitch'
@@ -49,7 +53,8 @@ import {
  *   NAVIGATE
  *   01  Home                 large type, the current page marked
  *   …
- *   [⌕ Search] [↓ CV as PDF] [文 中文简历]   quick actions
+ *   [⌕ Search] [↓ CV as PDF] [文 中文简历]   quick actions (the CV in the other language)
+ *   LANGUAGE   this page in the other language, when it has one (F3)
  *   ELSEWHERE  (profile icons)
  *   THEME  [☀ Light | ☾ Dark]               icon and label agree
  *   ADMIN (signed in only)
@@ -114,6 +119,12 @@ const ZhGlyph = () => (
   </Box>
 )
 
+const EnGlyph = () => (
+  <Box as="span" aria-hidden fontSize="14px" lineHeight="18px" fontWeight={600} letterSpacing="0.02em" lang="en">
+    EN
+  </Box>
+)
+
 /** Shared look of the quick-action tiles. */
 const TILE = {
   display: 'flex',
@@ -173,7 +184,7 @@ function NavLinks({
   return (
     <Box as="ul" listStyleType="none" m={0} p={0}>
       {links.map((link, i) => {
-        const active = isActiveRoute(pathname, link.url)
+        const active = isActiveLink(pathname, link)
         return (
           <li
             key={link.name}
@@ -245,6 +256,8 @@ export type MobileDrawerProps = {
   socials: readonly SocialLink[]
   /** The primary navigation (chrome navLinksFor); defaults to PRIMARY_LINKS. */
   navLinks?: readonly NavLink[]
+  /** This page in other languages (the language switch, F3); none: no Language group. */
+  langLinks?: readonly LangLink[]
   isAdmin: boolean
   onLogout: () => void
   /** Quick action: close the menu and open the ⌘K palette. */
@@ -260,6 +273,7 @@ export default function MobileDrawer({
   onClose,
   socials,
   navLinks = PRIMARY_LINKS,
+  langLinks = [],
   isAdmin,
   onLogout,
   onSearch,
@@ -268,8 +282,12 @@ export default function MobileDrawer({
 }: MobileDrawerProps) {
   const router = useRouter()
   const firstLinkRef = useRef<HTMLAnchorElement>(null)
-  // Portaled to <body>, outside the header's lang="en" subtree.
-  const chromeLang = useChromeLang()
+  // Portaled to <body>, outside the header's subtree: it carries the chrome's lang itself.
+  const { t, attr: chromeLang, lang: uiLang } = useChromeUi()
+  const m = MENU_UI[uiLang]
+  // The CV in the other language (written in that language): the Chinese one from an
+  // English page, the English one from a Chinese page.
+  const otherCv = uiLang === 'en' ? { href: '/cv/zh', lang: 'zh-Hans' } : { href: '/cv', lang: 'en' }
   const reduceMotion = prefersReducedMotion(typeof window === 'undefined' ? undefined : window)
 
   // Decided as the menu opens, in the render that mounts its content: the
@@ -428,7 +446,7 @@ export default function MobileDrawer({
             display="none"
             sx={{ '@media (pointer: coarse)': { display: 'block' } }}
           />
-          <DrawerCloseButton top="10px" color="page.fg-subtle" _hover={{ color: 'page.fg', bg: 'page.hover' }} />
+          <DrawerCloseButton top="10px" color="page.fg-subtle" _hover={{ color: 'page.fg', bg: 'page.hover' }} aria-label={m.closeMenu} />
           <DrawerHeader
             borderBottomWidth="1px"
             borderColor="page.border"
@@ -440,40 +458,78 @@ export default function MobileDrawer({
             color="page.fg-subtle"
             py={4}
           >
-            Menu
+            {m.menu}
           </DrawerHeader>
           {/* The body is the scroll container, where touch-action is decided: it must also leave horizontal pans to the sheet. */}
           <DrawerBody py={5} px={6} minH={0} overscrollBehavior="contain" sx={{ touchAction: 'pan-y' }}>
             <Flex direction="column" gap={6}>
               <Box as="nav" aria-labelledby="drawer-nav-label">
-                <DrawerLabel id="drawer-nav-label">Navigate</DrawerLabel>
+                <DrawerLabel id="drawer-nav-label">{m.navigate}</DrawerLabel>
                 <NavLinks pathname={router.pathname} links={navLinks} stagger={stagger.current} onNavigate={onClose} firstLinkRef={firstLinkRef} />
               </Box>
 
-              <Grid as="ul" listStyleType="none" m={0} p={0} templateColumns="repeat(3, minmax(0, 1fr))" gap={2} aria-label="Quick actions">
+              <Grid as="ul" listStyleType="none" m={0} p={0} templateColumns="repeat(3, minmax(0, 1fr))" gap={2} aria-label={m.quickActions}>
                 <li>
                   <chakra.button type="button" sx={TILE} onClick={onSearch} aria-haspopup="dialog">
                     <SearchGlyph />
-                    Search
+                    {t.search}
                   </chakra.button>
                 </li>
                 <li>
-                  <Link href={cvPdfPath(chromeLang ? 'zh' : 'en')} download type="application/pdf" sx={TILE} onClick={onClose}>
+                  {/* The CV PDF in the chrome's language. */}
+                  <Link href={cvPdfPath(uiLang === 'en' ? 'en' : 'zh')} download type="application/pdf" sx={TILE} onClick={onClose}>
                     <DownloadGlyph />
-                    CV as PDF
+                    {m.cvPdf}
                   </Link>
                 </li>
                 <li>
-                  <Link as={NextLink} href="/cv/zh" sx={TILE} onClick={onClose}>
-                    <ZhGlyph />
-                    <span lang="zh-Hans">中文简历</span>
+                  <Link as={NextLink} href={otherCv.href} hrefLang={otherCv.lang} sx={TILE} onClick={onClose}>
+                    {otherCv.lang === 'en' ? <EnGlyph /> : <ZhGlyph />}
+                    <span lang={otherCv.lang}>{m.otherCv}</span>
                   </Link>
                 </li>
               </Grid>
 
+              {langLinks.length > 0 && (
+                <Box>
+                  <DrawerLabel id="drawer-lang-label">{m.language}</DrawerLabel>
+                  <Flex as="ul" listStyleType="none" m={0} p={0} direction="column" gap={2} aria-labelledby="drawer-lang-label">
+                    {langLinks.map((l) => (
+                      <li key={l.lang}>
+                        <Link
+                          as={NextLink}
+                          href={l.href}
+                          hrefLang={l.lang}
+                          lang={l.lang}
+                          onClick={onClose}
+                          data-lang-switch=""
+                          display="flex"
+                          alignItems="center"
+                          gap={2.5}
+                          minH="44px"
+                          px={3}
+                          border="1px solid"
+                          borderColor="page.border"
+                          borderRadius="10px"
+                          bg="page.bg-elevated"
+                          color="page.fg-secondary"
+                          fontSize="15px"
+                          fontWeight={500}
+                          _hover={{ color: 'page.fg', borderColor: 'page.border-strong', textDecoration: 'none' }}
+                          _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
+                        >
+                          <LanguagesIcon size="sm" />
+                          {autonymOf(l.lang)}
+                        </Link>
+                      </li>
+                    ))}
+                  </Flex>
+                </Box>
+              )}
+
               {socials.length > 0 && (
                 <Box>
-                  <DrawerLabel>Elsewhere</DrawerLabel>
+                  <DrawerLabel>{t.elsewhere}</DrawerLabel>
                   <Flex gap={2} wrap="wrap">
                     {socials.map((s) => (
                       <IconButton
@@ -490,7 +546,7 @@ export default function MobileDrawer({
                         borderColor="page.border"
                         color="page.fg-subtle"
                         _hover={{ color: 'page.fg', borderColor: 'page.border-strong' }}
-                        aria-label={`${s.name} (opens in a new tab)`}
+                        aria-label={`${s.name}${t.newTab}`}
                         title={s.name}
                       />
                     ))}
@@ -499,14 +555,14 @@ export default function MobileDrawer({
               )}
 
               <Box>
-                <DrawerLabel>Theme</DrawerLabel>
+                <DrawerLabel>{t.theme}</DrawerLabel>
                 <ThemeSwitch />
               </Box>
 
               {/* Admin section — like the desktop header, only when signed in. */}
               {isAdmin && (
                 <Box>
-                  <DrawerLabel>Admin</DrawerLabel>
+                  <DrawerLabel>{m.admin}</DrawerLabel>
                   <Flex direction="column" gap={2}>
                     <Button
                       as={NextLink}
@@ -518,7 +574,7 @@ export default function MobileDrawer({
                       _hover={{ borderColor: 'page.border-strong', color: 'page.fg' }}
                       onClick={onClose}
                     >
-                      Dashboard
+                      {t.dashboard}
                     </Button>
                     <Button
                       h="44px"
@@ -530,7 +586,7 @@ export default function MobileDrawer({
                         onLogout()
                       }}
                     >
-                      Logout
+                      {t.logout}
                     </Button>
                   </Flex>
                 </Box>

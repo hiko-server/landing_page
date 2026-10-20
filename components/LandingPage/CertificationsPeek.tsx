@@ -7,8 +7,8 @@ import { useScrollReveal } from '../General-UI/useScrollReveal'
 import { safeHref } from '../../lib/cvFormat'
 import type { CvSectionLike } from '../../lib/cvVisibility'
 import { revealVariant } from '../../lib/reveal'
-import { labelLang } from '../../lib/toc'
 import { ChevronRightIcon } from '../Icons/ui/content'
+import { useHomeUi, useOwnLang } from './homeUi'
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
@@ -25,6 +25,8 @@ type Org = { key: string; name: string; certs: Array<{ key: string; name: string
  * carry their own `lang`.
  */
 export default function CertificationsPeek({ cvEn }: { cvEn?: CvSectionLike[] }) {
+  const { t } = useHomeUi()
+  const ownLang = useOwnLang()
   const reduce = useReducedMotion()
   const reveal = useScrollReveal<HTMLDivElement>()
 
@@ -58,7 +60,7 @@ export default function CertificationsPeek({ cvEn }: { cvEn?: CvSectionLike[] })
                 <Box as="span" display="inline-flex" mr={1.5}>
                   <ChevronRightIcon size="xs" />
                 </Box>
-                <span lang={labelLang(org.name)}>{org.name}</span>
+                <span lang={ownLang(org.name)}>{org.name}</span>
               </Text>
             )}
             <Flex as="ul" listStyleType="none" wrap="wrap" gap={2}>
@@ -87,14 +89,14 @@ export default function CertificationsPeek({ cvEn }: { cvEn?: CvSectionLike[] })
                         _hover={{ textDecoration: 'none', borderColor: 'page.border-strong', color: 'accent.text' }}
                         _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
                       >
-                        <span lang={labelLang(c.name)}>{c.name}</span>
+                        <span lang={ownLang(c.name)}>{c.name}</span>
                         <Text as="span" fontFamily={monoFont} fontSize="10px" color="page.fg-secondary" aria-hidden>
                           ↗
                         </Text>
-                        <span className="sr-only"> (credential, opens in a new tab)</span>
+                        <span className="sr-only">{t.certificationLink}</span>
                       </Link>
                     ) : (
-                      <Box as="span" {...chip} lang={labelLang(c.name)}>
+                      <Box as="span" {...chip} lang={ownLang(c.name)}>
                         {c.name}
                       </Box>
                     )}

@@ -31,6 +31,8 @@ import {
   SITE_HOST,
 } from '../../lib/schema'
 import { ogPresetUrl } from '../../lib/og/presets'
+import { fillUi } from '../../lib/uiStrings'
+import { cvUiFor } from '../../lib/uiStrings/cv'
 import type { CvLang } from '../../lib/cvVisibility'
 import { useBottomBarOffset } from '../Common/useBottomBarOffset'
 import { CvHeaderExtrasContext } from './HeaderExtras'
@@ -77,50 +79,6 @@ const mono = 'var(--font-geist-mono), monospace'
 const PATHS: Record<CvLang, string> = { en: '/cv', zh: '/cv/zh' }
 const HTML_LANG: Record<CvLang, string> = { en: 'en', zh: 'zh-Hans' }
 
-const COPY = {
-  en: {
-    eyebrow: 'Curriculum vitae',
-    title: 'CV / Résumé',
-    home: 'Home',
-    language: 'language',
-    layout: 'layout',
-    reading: 'Reading',
-    a4: 'A4',
-    pdf: 'Download PDF',
-    more: 'More formats',
-    updated: 'Updated',
-    downloads: 'Downloads',
-    copy: 'Copy link',
-    copied: 'Link copied',
-    copyFailed: 'Could not copy — the link is',
-    empty: 'The CV has not been published yet.',
-    actions: 'CV actions',
-    publications: 'Publications',
-    qrCaption: `Live CV · ${SITE_HOST}${PATHS.en}`,
-    qrLabel: `QR code linking to ${SITE_HOST}${PATHS.en}`,
-  },
-  zh: {
-    eyebrow: '个人简历',
-    title: '简历',
-    home: '首页',
-    language: '语言',
-    layout: '版式',
-    reading: '阅读',
-    a4: 'A4',
-    pdf: '下载 PDF',
-    more: '更多格式',
-    updated: '更新于',
-    downloads: '下载',
-    copy: '复制链接',
-    copied: '链接已复制',
-    copyFailed: '无法复制，链接为',
-    empty: '中文简历暂未发布。',
-    actions: '简历操作',
-    publications: '论文列表',
-    qrCaption: `在线简历 · ${SITE_HOST}${PATHS.zh}`,
-    qrLabel: `指向 ${SITE_HOST}${PATHS.zh} 的二维码`,
-  },
-} as const
 
 /** Scroll to the visible element for a `#cv-…` hash: the sheet's id, or the Reading view's data-cv-anchor. */
 function revealCvAnchor() {
@@ -154,7 +112,8 @@ export default function CvPageView({
   const router = useRouter()
   const toast = useToast()
   const language = initialLang
-  const T = COPY[language]
+  // The page's words (lib/uiStrings/cv).
+  const T = cvUiFor(language)
   const other: CvLang = language === 'zh' ? 'en' : 'zh'
   const [view, setView] = useState<View>('reading')
   const actionBar = useRef<HTMLDivElement>(null)
@@ -492,7 +451,15 @@ export default function CvPageView({
                     cvData={sections}
                     lang={language}
                     ownerNames={ownerNames}
-                    qr={qrSvg ? { svg: qrSvg, caption: T.qrCaption, label: T.qrLabel } : null}
+                    qr={
+                      qrSvg
+                        ? {
+                            svg: qrSvg,
+                            caption: fillUi(T.qrCaption, { url: `${SITE_HOST}${PATHS[language]}` }),
+                            label: fillUi(T.qrLabel, { url: `${SITE_HOST}${PATHS[language]}` }),
+                          }
+                        : null
+                    }
                   />
                 </ScaledSheet>
               </Box>

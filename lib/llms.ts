@@ -10,6 +10,8 @@ import { hasPublicationsPage } from './publicationsData'
 import { orcidOf } from './orcid/cv'
 import { orcidUrl } from './orcid/id'
 import type { CvLang } from './cvVisibility'
+import { zhPathOf } from './zhRoutes'
+import { zhAvailable } from './zhSite'
 
 /**
  * Loaders for the Markdown twins, /llms.txt and /llms-full.txt (G9) —
@@ -156,6 +158,7 @@ async function llmsInput(posts: PostEntry[], work: WorkEntry[]): Promise<LlmsInp
     ...(await publicOrcid().then((orcid) => (orcid ? { orcid } : {}))),
     nowDescription: pageDescription('now'),
     usesDescription: pageDescription('uses'),
+    zhPages: zhAvailable().flatMap((p) => zhPathOf(p) ?? []),
   }
 }
 

@@ -6,8 +6,16 @@
 
 import { safeHref } from '../../lib/url'
 import { ADMIN_HINT_COOKIE } from '../../lib/adminHint'
+import { fillUi } from '../../lib/uiStrings'
+import { CHROME_EN, type ChromeStrings, type NavStrings } from '../../lib/uiStrings/chrome-en'
+import { zhHref } from '../../lib/zhRoutes'
 
-export type NavLink = { name: string; url: string }
+/**
+ * A navigation link. `base` is the English page it stands for when `url`
+ * is another language's version of it ('/zh/blog' for '/blog'), so a
+ * Chinese post still marks 文章 as the current section.
+ */
+export type NavLink = { name: string; url: string; base?: string }
 
 /** Primary navigation — header (lg+), mobile drawer and footer all render this list. */
 export const PRIMARY_LINKS: readonly NavLink[] = [
@@ -20,6 +28,34 @@ export const PRIMARY_LINKS: readonly NavLink[] = [
   { name: 'Uses', url: '/uses' },
   { name: 'Contact', url: '/contact' },
 ]
+
+/** The dictionary key of each primary page's label (lib/uiStrings/chrome NavStrings). */
+export const NAV_KEYS: Readonly<Record<string, keyof NavStrings>> = {
+  '/': 'home',
+  '/about': 'about',
+  '/work': 'work',
+  '/blog': 'writing',
+  '/cv': 'cv',
+  '/publications': 'publications',
+  '/now': 'now',
+  '/uses': 'uses',
+  '/contact': 'contact',
+  '/colophon': 'colophon',
+}
+
+/**
+ * The navigation in the chrome's language (F3): each label from the
+ * dictionary and, on a Chinese page (`zh`: the English paths whose Chinese
+ * page exists), each link to its Chinese page where there is one
+ * (lib/zhRoutes zhHref: /about → /zh/about, /cv → /cv/zh).
+ */
+export function localizeNav(links: readonly NavLink[], t: ChromeStrings, zh: readonly string[] | null): NavLink[] {
+  return links.map((l) => {
+    const key = NAV_KEYS[l.url]
+    const url = zh ? zhHref(l.url, zh) : l.url
+    return { name: key ? t.nav[key] : l.name, url, ...(url !== l.url ? { base: l.url } : {}) }
+  })
+}
 
 /** /publications: listed only while it has public papers (pageProps.chromePublications). */
 export const PUBLICATIONS_LINK: NavLink = { name: 'Publications', url: '/publications' }
@@ -113,10 +149,15 @@ export function routeHasChrome(pathname: string): boolean {
   return !CHROMELESS_ROUTES.includes(pathname)
 }
 
-/** Current route matches a nav link (exact for "/", segment prefix otherwise). */
+/** Current route matches a nav link (exact for the home pages "/" and "/zh", segment prefix otherwise). */
 export function isActiveRoute(pathname: string, url: string): boolean {
-  if (url === '/') return pathname === '/'
+  if (url === '/' || url === '/zh') return pathname === url
   return pathname === url || pathname.startsWith(`${url}/`)
+}
+
+/** A nav link is the current section: its own route or the English page it stands for (NavLink.base). */
+export function isActiveLink(pathname: string, link: NavLink): boolean {
+  return isActiveRoute(pathname, link.url) || (!!link.base && isActiveRoute(pathname, link.base))
 }
 
 /** Sign-in flow screens: crossing one of these can change the session. */
@@ -182,12 +223,15 @@ export function splitBrand(brand: string): [head: string, tail: string] {
   return dot > 0 ? [brand.slice(0, dot), brand.slice(dot)] : [brand, '']
 }
 
-/** Human "time since" label for the header's last-commit pill. */
-export function formatAge(fromIso: string, now: number): string | null {
+/** The words formatAge needs (lib/uiStrings/chrome; English by default). */
+type AgeStrings = Pick<ChromeStrings, 'minutesAgo' | 'hoursAgo' | 'daysAgo'>
+
+/** Human "time since" label for the header's last-commit pill ("2h ago", "2 小时前"). */
+export function formatAge(fromIso: string, now: number, t: AgeStrings = CHROME_EN): string | null {
   const then = new Date(fromIso).getTime()
   if (!Number.isFinite(then)) return null
   const minutes = Math.max(0, Math.floor((now - then) / 60000))
-  if (minutes < 60) return `${minutes}m ago`
-  if (minutes < 60 * 24) return `${Math.floor(minutes / 60)}h ago`
-  return `${Math.floor(minutes / 60 / 24)}d ago`
+  if (minutes < 60) return fillUi(t.minutesAgo, { n: minutes })
+  if (minutes < 60 * 24) return fillUi(t.hoursAgo, { n: Math.floor(minutes / 60) })
+  return fillUi(t.daysAgo, { n: Math.floor(minutes / 60 / 24) })
 }

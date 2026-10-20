@@ -33,6 +33,8 @@ register(
 
 const { default: SelectedPublications } = await import('../components/LandingPage/SelectedPublications')
 const { default: IdentityRail } = await import('../components/About/IdentityRail')
+const { HomeUiContext, EN_HOME_LINKS } = await import('../components/LandingPage/homeUi')
+const { HOME_UI } = await import('../lib/uiStrings/home')
 
 const SECRET = 'ZZ-HIDDEN-ZZ'
 
@@ -63,8 +65,14 @@ function data(count = 3) {
   return selectPublications({ lang: 'en', publications: publicPublications(sections), owner: ownerNamesFromSections(sections) })!
 }
 
+/** A home section inside the home page's words (F3: LandingContent provides them). */
+function inHome(el: unknown) {
+  const value = { t: HOME_UI.en, lang: 'en', cvLang: 'en', links: EN_HOME_LINKS }
+  return createElement(HomeUiContext.Provider, { value: value as never }, el as never)
+}
+
 test('home rows: titles link to their /publications anchors, the owner in bold, a hidden author unnamed, statuses shown', () => {
-  const html = render(createElement(SelectedPublications, { data: data() }))
+  const html = render(inHome(createElement(SelectedPublications, { data: data() })))
   assert.equal((html.match(/<h3/g) || []).length, 3)
   assert.match(html, /<h3[^>]*><a[^>]*href="\/publications#doe2025tiny"[^>]*>Tiny models at the edge<\/a><\/h3>/)
   assert.match(html, /class="[^"]*stretched-link[^"]*"/, 'the whole row is the link’s target, the title its name')
@@ -81,10 +89,10 @@ test('home rows: titles link to their /publications anchors, the owner in bold, 
 })
 
 test('home rows: more papers than rows → "All N publications"; no data → nothing', () => {
-  const html = render(createElement(SelectedPublications, { data: data(5) }))
+  const html = render(inHome(createElement(SelectedPublications, { data: data(5) })))
   assert.equal((html.match(/<h3/g) || []).length, 3)
   assert.match(html, />All 5 publications </)
-  assert.equal(render(createElement(SelectedPublications, { data: { items: [], total: 0, lang: 'en' } })), '')
+  assert.equal(render(inHome(createElement(SelectedPublications, { data: { items: [], total: 0, lang: 'en' } }))), '')
 })
 
 const railProps = {

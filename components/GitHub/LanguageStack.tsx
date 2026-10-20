@@ -4,6 +4,8 @@ import { Box, Flex, Grid, Skeleton, Text } from '@chakra-ui/react'
 import { useFetchJson } from '../Common/useFetchJson'
 import WidgetNotice from '../Common/WidgetNotice'
 import { languageStackProp, type GhLanguageStack, type GhLanguages, type LanguageSlice } from '../Common/githubEvents'
+import { fillUi } from '../../lib/uiStrings'
+import { useHomeUi } from '../LandingPage/homeUi'
 
 /** GitHub's canonical language colours; anything unlisted uses the site accent. */
 const LANG_COLORS: Record<string, string> = {
@@ -49,20 +51,22 @@ const colorFor = (s: LanguageSlice) => (s.other ? 'var(--chakra-colors-page-fg-s
  * widget fetches /api/github/languages and derives the same stack.
  */
 export default function LanguageStack({ initialData }: { initialData?: GhLanguageStack | null }) {
+  const { t } = useHomeUi()
+  const l = t.languageStack
   const { data, error, retry } = useFetchJson<GhLanguageStack | GhLanguages>('/api/github/languages', { initialData })
   const stack = useMemo(() => languageStackProp(data), [data])
 
   if (error || stack?.available === false) {
     return (
-      <WidgetNotice kind="error" onRetry={retry}>
-        Language breakdown is unavailable right now.
+      <WidgetNotice kind="error" onRetry={retry} retryLabel={t.tryAgain}>
+        {l.unavailable}
       </WidgetNotice>
     )
   }
 
   if (!stack) {
     return (
-      <Box aria-busy="true" aria-label="Loading language breakdown">
+      <Box aria-busy="true" aria-label={l.loading}>
         <Skeleton h="10px" borderRadius="full" startColor="page.bg-elevated" endColor="page.bg-overlay" />
         <Grid templateColumns="repeat(2, minmax(0, 1fr))" gap={2} mt={4}>
           {Array.from({ length: 6 }).map((_, i) => (
@@ -73,7 +77,7 @@ export default function LanguageStack({ initialData }: { initialData?: GhLanguag
     )
   }
 
-  if (!stack.slices.length) return <WidgetNotice kind="empty">No language data to show yet.</WidgetNotice>
+  if (!stack.slices.length) return <WidgetNotice kind="empty">{l.empty}</WidgetNotice>
 
   return (
     <Box>
@@ -94,7 +98,7 @@ export default function LanguageStack({ initialData }: { initialData?: GhLanguag
       <Grid
         as="ul"
         listStyleType="none"
-        aria-label={`Languages by share of code${stack.count > stack.slices.length ? `, top ${stack.slices.filter((s) => !s.other).length} of ${stack.count}` : ''}`}
+        aria-label={`${l.label}${stack.count > stack.slices.length ? fillUi(l.labelTop, { top: stack.slices.filter((s) => !s.other).length, count: stack.count }) : ''}`}
         templateColumns="repeat(2, minmax(0, 1fr))"
         columnGap={4}
         rowGap={2}
@@ -104,7 +108,7 @@ export default function LanguageStack({ initialData }: { initialData?: GhLanguag
           <Flex as="li" key={s.name} align="center" gap={2} minW={0} fontSize="13px">
             <Box as="span" aria-hidden w="8px" h="8px" borderRadius="full" bg={colorFor(s)} flexShrink={0} />
             <Text as="span" color="page.fg" noOfLines={1} minW={0}>
-              {s.name}
+              {s.other ? l.other : s.name}
             </Text>
             <Text as="span" ml="auto" className="tnum" fontFamily={monoFont} fontSize="12px" color="page.fg-secondary" flexShrink={0}>
               {s.pct.toFixed(1)}%

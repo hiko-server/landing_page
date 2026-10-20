@@ -7,13 +7,15 @@ import { keyframes } from '@emotion/react'
 import Hint, { HintGroup } from '../General-UI/Hint'
 import { GitHubIcon, GitLabIcon, LinkedInIcon, WhatsAppIcon } from '../Icons/brand'
 import type { SocialLink, SocialName } from '../Chrome/chrome'
-import type { AvailabilityView } from '../Common/contactForm'
+import type { AvailabilityView } from '../Common/availability'
 import type { HeroIdentity } from '../LandingPage/heroIdentity'
 import { clearOfHeader } from '../../lib/anchorOffset'
 import { cvPdfPath } from '../../lib/cvExport/paths'
 import type { CvLang } from '../../lib/cvVisibility'
 import { aboutHeading, paperCount, type AboutNavEntry } from './aboutNav'
 import OrcidIdLink from '../Common/OrcidIdLink'
+import { fillUi } from '../../lib/uiStrings'
+import { ABOUT_EN, type AboutStrings } from '../../lib/uiStrings/about'
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
@@ -76,6 +78,9 @@ function useActiveSection(ids: readonly string[]): string | null {
  * beside the content on large screens (scrolling inside itself if the
  * window is too short), a plain header block above it on smaller ones and
  * in print.
+ *
+ * On /zh/about (`zh`, F3) the Chinese name is the h1 and the English one
+ * follows it, and every word is the page's (`t`, lib/uiStrings/about).
  */
 export default function IdentityRail({
   brand,
@@ -88,6 +93,8 @@ export default function IdentityRail({
   publicationCount = 0,
   orcid = '',
   orcidAuthenticated = false,
+  t = ABOUT_EN,
+  zh = false,
 }: {
   brand?: string
   identity?: HeroIdentity | null
@@ -103,11 +110,24 @@ export default function IdentityRail({
   orcid?: string
   /** The owner connected the iD (lib/orcid/cv orcidAuthenticatedOf): the authenticated iD icon; else the unauthenticated one. */
   orcidAuthenticated?: boolean
+  /** The page's words (lib/uiStrings/about; English by default). */
+  t?: AboutStrings
+  /** /zh/about: the Chinese name leads. */
+  zh?: boolean
 }) {
-  const heading = aboutHeading(identity)
+  const heading = aboutHeading(identity, zh)
   const nick = identity?.name && identity.nick && identity.nick !== heading ? identity.nick : ''
-  const nameZh = identity?.nameZh && identity.nameZh !== heading ? identity.nameZh : ''
-  const eyebrow = (brand || '').trim() || 'About'
+  // The name in the other script: the Chinese one under an English h1, the English one under a Chinese h1.
+  const otherName = zh
+    ? identity?.name && identity.name !== heading
+      ? identity.name
+      : ''
+    : identity?.nameZh && identity.nameZh !== heading
+      ? identity.nameZh
+      : ''
+  const otherLang = zh ? 'en' : 'zh-Hans'
+  const eyebrow = (brand || '').trim() || t.rail.eyebrow
+  const [fromBefore = '', fromAfter = ''] = t.rail.from.split('{date}')
   const active = useActiveSection(nav.map((n) => n.id))
 
   return (
@@ -171,7 +191,7 @@ export default function IdentityRail({
             <Heading as="h1" fontSize={{ base: '3xl', md: '4xl' }} fontWeight={700} letterSpacing="-0.025em" lineHeight="1.05" color="page.fg">
               {heading}
             </Heading>
-            {nameZh || nick ? (
+            {otherName || nick ? (
               <Flex
                 wrap="wrap"
                 columnGap={2.5}
@@ -181,8 +201,8 @@ export default function IdentityRail({
                 color="page.fg-secondary"
                 sx={{ '& > span + span::before': { content: '"·"', mr: 2.5, opacity: 0.6 } }}
               >
-                {nameZh ? <span lang="zh-Hans">{nameZh}</span> : null}
-                {nick ? <span>{nick}</span> : null}
+                {otherName ? <span lang={otherLang}>{otherName}</span> : null}
+                {nick ? <span lang={zh ? 'en' : undefined}>{nick}</span> : null}
               </Flex>
             ) : null}
           </Box>
@@ -200,10 +220,12 @@ export default function IdentityRail({
               bg={`status.${availability.status}`}
               sx={{ '@media (forced-colors: active)': { bg: 'CanvasText', forcedColorAdjust: 'none' } }}
             />
-            <span>{availability.label}</span>
+            <span lang={availability.labelLang}>{availability.label}</span>
             {availability.from ? (
               <Text as="span" fontFamily={monoFont} fontSize="12px" color="page.fg-secondary" className="tnum">
-                from <time dateTime={availability.from}>{availability.from}</time>
+                {fromBefore}
+                <time dateTime={availability.from}>{availability.from}</time>
+                {fromAfter}
               </Text>
             ) : null}
           </Flex>
@@ -223,7 +245,7 @@ export default function IdentityRail({
             _active={{ bg: 'accent.solid-active' }}
             _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '3px' }}
           >
-            View CV&nbsp;<span className="nudge" aria-hidden>→</span>
+            {t.rail.viewCv}&nbsp;<span className="nudge" aria-hidden>→</span>
           </Button>
           <Button
             as="a"
@@ -241,7 +263,7 @@ export default function IdentityRail({
             _hover={{ borderColor: 'page.fg-secondary', bg: 'page.surface' }}
             _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '3px' }}
           >
-            Download PDF
+            {t.rail.downloadPdf}
           </Button>
         </Flex>
 
@@ -251,7 +273,7 @@ export default function IdentityRail({
               as={NextLink}
               href="/publications"
               // One name for the whole link — "Publications: 3 papers" — that starts with its visible label (WCAG 2.5.3).
-              aria-label={`Publications: ${paperCount(publicationCount)}`}
+              aria-label={fillUi(t.rail.publicationsLabel, { count: paperCount(publicationCount, t.rail) })}
               display="inline-flex"
               align="center"
               gap={2}
@@ -264,7 +286,7 @@ export default function IdentityRail({
               _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '3px' }}
               sx={{ '&:hover .rail-count': { borderColor: 'var(--accent)', color: 'accent.text' } }}
             >
-              Publications
+              {t.rail.publications}
               <Box
                 as="span"
                 className="rail-count tnum"
@@ -310,7 +332,7 @@ export default function IdentityRail({
 
         {socials.length > 0 ? (
           <HintGroup>
-            <Flex as="ul" listStyleType="none" gap={2} mt={4} aria-label="Profiles" sx={{ '@media print': { display: 'none' } }}>
+            <Flex as="ul" listStyleType="none" gap={2} mt={4} aria-label={t.rail.profiles} sx={{ '@media print': { display: 'none' } }}>
               {socials.map((s) => (
                 <li key={s.name}>
                   <Hint label={s.name} placement="top">
@@ -319,7 +341,7 @@ export default function IdentityRail({
                       href={s.url}
                       target="_blank"
                       rel="noopener noreferrer me"
-                      aria-label={`${s.name} (opens in a new tab)`}
+                      aria-label={`${s.name}${t.rail.newTab}`}
                       icon={SOCIAL_ICONS[s.name]}
                       variant="outline"
                       h="40px"
@@ -340,9 +362,9 @@ export default function IdentityRail({
       </Box>
 
       {nav.length > 1 ? (
-        <Box as="nav" aria-label="On this page" display={{ base: 'none', lg: 'block' }} mt={10} sx={{ '@media print': { display: 'none' } }}>
+        <Box as="nav" aria-label={t.rail.onThisPage} display={{ base: 'none', lg: 'block' }} mt={10} sx={{ '@media print': { display: 'none' } }}>
           <Text fontFamily={monoFont} fontSize="11px" letterSpacing="0.12em" textTransform="uppercase" color="page.fg-subtle" mb={3}>
-            On this page
+            {t.rail.onThisPage}
           </Text>
           <Box as="ul" listStyleType="none" borderLeft="1px solid" borderColor="page.border">
             {nav.map((n) => {

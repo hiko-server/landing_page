@@ -11,8 +11,24 @@ const mono = 'var(--font-geist-mono), ui-monospace, monospace'
  * figcaption — no Review structured data. `title` replaces the default h2
  * (the page's own section heading); it must carry id="about-recommendations".
  */
-export default function AboutRecommendations({ section, title }: { section: unknown; title?: React.ReactNode }) {
+export default function AboutRecommendations({
+  section,
+  title,
+  lang = 'en',
+  pageLang = 'en',
+  sourceNewTab = ' (source, opens in a new tab)',
+}: {
+  section: unknown
+  title?: React.ReactNode
+  /** The CV's language the entries come from ('zh' on /zh/about when the Chinese CV has them, F3). */
+  lang?: 'en' | 'zh'
+  /** The page's language: entries in another language carry their own lang. */
+  pageLang?: 'en' | 'zh'
+  /** After a source link's name, for screen readers (the page's words). */
+  sourceNewTab?: string
+}) {
   const items = recommendationItems(section)
+  const own = lang === pageLang ? undefined : lang === 'zh' ? 'zh-Hans' : 'en'
   if (!items.length) return null
   return (
     <Box as="section" aria-labelledby="about-recommendations" w="100%" maxW="1100px" mx="auto">
@@ -23,9 +39,9 @@ export default function AboutRecommendations({ section, title }: { section: unkn
       )}
       <SimpleGrid as="ul" listStyleType="none" m={0} p={0} columns={{ base: 1, md: items.length > 1 ? 2 : 1 }} gap={4}>
         {items.map(({ item, index }) => {
-          const credit = recommendationCredit(item, 'en')
+          const credit = recommendationCredit(item, lang)
           return (
-            <Box as="li" key={index} minW={0}>
+            <Box as="li" key={index} minW={0} lang={own}>
               <Box
                 as="figure"
                 m={0}
@@ -67,7 +83,9 @@ export default function AboutRecommendations({ section, title }: { section: unkn
                         _hover={{ textDecorationColor: 'currentColor' }}
                       >
                         {item.name}
-                        <span className="sr-only"> (source, opens in a new tab)</span>
+                        <span className="sr-only" lang={pageLang === 'zh' ? 'zh-Hans' : 'en'}>
+                          {sourceNewTab}
+                        </span>
                       </Link>
                     ) : (
                       item.name

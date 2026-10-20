@@ -1,8 +1,10 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { getShortcutsEnabled } from '../../lib/keyboardShortcuts'
 import { layerKeyOf } from '../../lib/keyboardLayer'
 import { openCommandPalette } from './paletteEvents'
 import { noteKeyboardUse } from './hardwareKeyboard'
+import type { NavLink } from './chrome'
+import type { UiLang } from '../../lib/uiStrings'
 
 /** An open modal dialog (the palette, the menu, the lightbox) owns the keyboard. */
 const OPEN_MODAL = '[aria-modal="true"]'
@@ -26,7 +28,14 @@ export function preloadKeyboardLayer(): void {
   loadActions().catch(() => undefined)
 }
 
-export default function KeyboardLayer() {
+/**
+ * `navLinks`: the primary navigation in the chrome's language (SiteChrome):
+ * "G then H" goes to its home link (/zh on a Chinese page that has one), and
+ * the hint names the pages as the header does; `lang`: the chrome's language.
+ */
+export default function KeyboardLayer({ navLinks = [], lang = 'en' }: { navLinks?: readonly NavLink[]; lang?: UiLang }) {
+  const nav = useRef({ links: navLinks, lang })
+  nav.current = { links: navLinks, lang }
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // A tablet with a keyboard case: the keyboard hints come back (components/Chrome/platform).
@@ -42,7 +51,7 @@ export default function KeyboardLayer() {
       const at = Date.now()
       const char = e.key
       loadActions().then(
-        (actions) => actions.handleLayerKey(key, char, at),
+        (actions) => actions.handleLayerKey(key, char, at, nav.current),
         () => undefined,
       )
     }

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { IconButton } from '@chakra-ui/react'
 import { ArrowUpIcon } from '../Icons/ui/chrome'
-import { useChromeLang } from '../Chrome/chromeLang'
+import { useChromeUi } from '../Chrome/chromeLang'
+import { MENU_UI } from '../../lib/uiStrings/menu'
 
 /** Show the button once the visitor is this far down the page (px). */
 const SHOW_AFTER = 400
@@ -29,7 +30,9 @@ const BOTTOM = 'calc(var(--bottom-bar-h, calc(8px + env(safe-area-inset-bottom, 
  */
 const ScrollToTop: React.FC = () => {
   const [isVisible, setIsVisible] = useState(false)
-  const chromeLang = useChromeLang()
+  // Its own chunk (loaded after hydration): it picks its words from the lazy menu table.
+  const { lang, attr: chromeLang } = useChromeUi()
+  const label = MENU_UI[lang].scrollTop
 
   useEffect(() => {
     let frame = 0
@@ -75,9 +78,9 @@ const ScrollToTop: React.FC = () => {
       _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
       className="no-print glass scroll-top"
       data-visible={isVisible}
-      aria-label="Scroll to top"
+      aria-label={label}
       lang={chromeLang}
-      title="Scroll to top"
+      title={label}
     />
   )
 }

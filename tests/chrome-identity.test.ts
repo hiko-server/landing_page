@@ -262,7 +262,8 @@ test('A5: footer columns — site, this site (colophon, privacy, feeds, source),
   assert.doesNotMatch(footer, /justifyContent=\{\{ base: 'center'/, 'no centred row that strands Contact')
   assert.match(footer, /gridTemplateAreas=\{\{ base: `"brand brand" "site meta" "site else"`, md: `"brand site meta else"` \}\}/)
   assert.match(footer, /BUILD_COMMIT && \(/)
-  assert.match(footer, /aria-label="Footer"/)
+  // F3: the footer's words are the chrome's dictionary's (Chinese on a Chinese page).
+  assert.match(footer, /aria-label=\{t\.footerNav\}/)
 })
 
 test('A5: the build line names the deployed commit, or nothing', () => {
@@ -308,15 +309,17 @@ test('A5: the drawer theme control pairs each icon with its own label', () => {
   assert.match(sw, /const \{ preference, choose \} = useThemePreference\(\)/)
   assert.match(sw, /const pressed = preference === value/)
   assert.match(sw, /aria-pressed=\{pressed\}/)
-  assert.match(sw, /role="group"\s*aria-label="Theme"/)
+  assert.match(sw, /role="group"\s*aria-label=\{t\.theme\}/)
   assert.match(sw, /if \(!pressed\) choose\(value, e\.currentTarget\)/)
   assert.doesNotMatch(sw, /toggleColorMode|useColorMode/, 'never a two-state toggle that would overwrite System')
   // Quick actions and large links.
-  assert.match(drawer, /aria-label="Quick actions"/)
-  // CV as PDF downloads the server-rendered PDF in the page's language (cv-docs E2).
-  assert.match(drawer, /href=\{cvPdfPath\(chromeLang \? 'zh' : 'en'\)\} download/)
+  // F3: the drawer's words are the menu dictionary's, in the chrome's language.
+  assert.match(drawer, /aria-label=\{m\.quickActions\}/)
+  // CV as PDF downloads the server-rendered PDF in the chrome's language (cv-docs E2, F3).
+  assert.match(drawer, /href=\{cvPdfPath\(uiLang === 'en' \? 'en' : 'zh'\)\} download/)
   assert.doesNotMatch(drawer, /print=1/)
-  assert.match(drawer, /href="\/cv\/zh"/)
+  // …and the other tile opens the CV in the other language.
+  assert.match(drawer, /uiLang === 'en' \? \{ href: '\/cv\/zh', lang: 'zh-Hans' \} : \{ href: '\/cv', lang: 'en' \}/)
   assert.match(drawer, /onClick=\{onSearch\} aria-haspopup="dialog"/)
   assert.match(drawer, /fontSize="26px"/)
 })
@@ -575,7 +578,8 @@ test('B5: the 404 stays a real 404 and recovers client-side', () => {
   const page = code('pages/404.tsx')
   assert.doesNotMatch(page, /router\.(replace|push)|location\.(assign|replace)|getServerSideProps|getStaticProps/)
   assert.match(page, /<PageHeader/)
-  assert.match(page, /<NotFoundRecovery \/>/)
+  // F3: the words of the missing address's language (Chinese under /zh/).
+  assert.match(page, /<NotFoundRecovery t=\{t\} \/>/)
   const recovery = code('components/NotFound/NotFoundRecovery.tsx')
   assert.match(recovery, /fetch\('\/api\/search-index'/)
   assert.match(recovery, /openCommandPalette\(query\)/)

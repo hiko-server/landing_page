@@ -5,6 +5,8 @@ import { textLang } from '../../lib/publications/citation'
 import type { SelectedPublications as SelectedPublicationsData } from '../../lib/publications/selected'
 import AuthorLine from '../Publications/AuthorLine'
 import { StarIcon } from '../Icons/ui/content'
+import { fillUi } from '../../lib/uiStrings'
+import { useHomeUi } from './homeUi'
 
 const COLOR_TRANSITION = 'color var(--duration-fast) var(--ease-standard)'
 
@@ -26,6 +28,9 @@ const COLOR_TRANSITION = 'color var(--duration-fast) var(--ease-standard)'
  * out. Type, motion and radii are design tokens (theme/tokens.ts).
  */
 export default function SelectedPublications({ data }: { data: SelectedPublicationsData }) {
+  const { t, lang, links } = useHomeUi()
+  // Entered text is marked against the page's language ('en' / 'zh').
+  const pageLang = lang === 'en' ? 'en' : 'zh'
   const rows = data?.items || []
   if (!rows.length) return null
   const more = data.total - rows.length
@@ -58,18 +63,18 @@ export default function SelectedPublications({ data }: { data: SelectedPublicati
                     as={NextLink}
                     href={`/publications#${item.key}`}
                     className="stretched-link pub-row-title"
-                    lang={textLang(item.title, 'en')}
+                    lang={textLang(item.title, pageLang)}
                     _hover={{ textDecoration: 'none' }}
                     sx={{ transition: COLOR_TRANSITION }}
                   >
                     {item.title}
                   </Box>
                 </Text>
-                <AuthorLine authors={item.authors} lang="en" fontSize="small" mt={1} />
+                <AuthorLine authors={item.authors} lang={pageLang} fontSize="small" mt={1} />
                 {item.venue || item.status || item.award ? (
                   <Flex mt={1.5} columnGap={3} rowGap={1.5} wrap="wrap" align="center" textStyle="small" color="page.fg-secondary">
                     {item.venue ? (
-                      <Text as="cite" fontStyle="italic" lang={textLang(item.venue, 'en')}>
+                      <Text as="cite" fontStyle="italic" lang={textLang(item.venue, pageLang)}>
                         {item.venue}
                       </Text>
                     ) : null}
@@ -79,7 +84,7 @@ export default function SelectedPublications({ data }: { data: SelectedPublicati
                       </Box>
                     ) : null}
                     {item.award ? (
-                      <Flex as="span" align="center" gap={1.5} color="page.fg" lang={textLang(item.award, 'en')}>
+                      <Flex as="span" align="center" gap={1.5} color="page.fg" lang={textLang(item.award, pageLang)}>
                         <Box as="span" color="accent.text" display="inline-flex" aria-hidden>
                           <StarIcon size="xs" fill="currentColor" />
                         </Box>
@@ -97,7 +102,7 @@ export default function SelectedPublications({ data }: { data: SelectedPublicati
       <Flex mt={5} gap={6} wrap="wrap">
         <Box
           as={NextLink}
-          href="/publications"
+          href={links.publications}
           display="inline-flex"
           alignItems="center"
           gap={1.5}
@@ -107,7 +112,7 @@ export default function SelectedPublications({ data }: { data: SelectedPublicati
           _hover={{ textDecoration: 'underline', textUnderlineOffset: '3px' }}
           _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px', borderRadius: 'control' }}
         >
-          {more > 0 ? `All ${data.total} publications` : 'All publications'} <span className="nudge" aria-hidden>→</span>
+          {more > 0 ? fillUi(t.publications.allN, { n: data.total }) : t.publications.all} <span className="nudge" aria-hidden>→</span>
         </Box>
       </Flex>
     </Box>

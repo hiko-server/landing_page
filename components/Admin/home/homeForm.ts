@@ -8,6 +8,10 @@
  * PUT expects: `_id`s and the preview cache-buster `__ts` are stripped, URLs
  * normalised, empty optional groups omitted. Unknown top-level keys of the
  * loaded document pass through untouched.
+ *
+ * The owner's Chinese copy (F3: `_zh` fields, the Chinese section) is part of
+ * the form, so saving the English fields never drops it; blank Chinese
+ * fields are left out of the payload.
  */
 
 import {
@@ -30,19 +34,23 @@ export type Keyed<T> = T & { _id: string }
 
 export type BrandItem = Keyed<{ name: string; href: string; image: string; scale: number }>
 export type QuickItem = Keyed<{ label: string; url: string }>
-export type PhotoItem = Keyed<{ url: string; describe: string; redirectTo: string; visible: boolean }>
+/** `describe_zh`: the caption on the Chinese home page (F3; absent in drafts of older builds). */
+export type PhotoItem = Keyed<{ url: string; describe: string; redirectTo: string; visible: boolean; describe_zh?: string }>
 export type FeaturedItem = Keyed<{ name: string; blurb: string }>
-export type HighlightItem = Keyed<{ value: string; label: string; href: string }>
+/** `value_zh` / `label_zh`: the tile on the Chinese home page (F3), both or neither. */
+export type HighlightItem = Keyed<{ value: string; label: string; href: string; value_zh?: string; label_zh?: string }>
 
 export type HeroForm = {
   welcome: string
   brand: string
   tagline: string
+  /** The tagline in Chinese: /zh exists while it is set (F3). */
+  tagline_zh: string
   avatarUrl: string
   phone: string
   email: string
   avatarTransform: { x: number; y: number; scale: number }
-  currentlyCoding: { label: string; project: string; note: string }
+  currentlyCoding: { label: string; project: string; note: string; label_zh: string; project_zh: string; note_zh: string }
 }
 
 export type SocialsForm = { github: string; gitlab: string; linkedin: string; whatsapp: string }
@@ -53,6 +61,12 @@ export type ContactForm = {
   reasons: string[]
   /** Kind of each custom reason (lib/inquiry.ts); missing = 'other'. */
   intents: Record<string, InquiryIntent>
+  /** The contact copy on /zh/contact (F3): it exists while the heading or the blurb is set. */
+  heading_zh: string
+  blurb_zh: string
+  eyebrow_zh: string
+  /** Each custom reason's Chinese name, keyed by the English reason. */
+  reasons_zh: Record<string, string>
 }
 
 export type AvailabilityForm = {
@@ -161,11 +175,19 @@ export function formFromHome(data: unknown, makeId: () => string = newId): HomeF
       welcome: str(hero.welcome),
       brand: str(hero.brand),
       tagline: str(hero.tagline),
+      tagline_zh: str(hero.tagline_zh),
       avatarUrl: str(hero.avatarUrl),
       phone: str(hero.phone),
       email: str(hero.email),
       avatarTransform: { x: num(at.x, 50), y: num(at.y, 50), scale: num(at.scale, 1) },
-      currentlyCoding: { label: str(cc.label), project: str(cc.project), note: str(cc.note) },
+      currentlyCoding: {
+        label: str(cc.label),
+        project: str(cc.project),
+        note: str(cc.note),
+        label_zh: str(cc.label_zh),
+        project_zh: str(cc.project_zh),
+        note_zh: str(cc.note_zh),
+      },
     },
     socials: {
       github: str(socials.github),
@@ -183,7 +205,14 @@ export function formFromHome(data: unknown, makeId: () => string = newId): HomeF
     }),
     photos: arr(d.photos).map((raw) => {
       const p = obj(raw)
-      return { _id: makeId(), url: str(p.url), describe: str(p.describe), redirectTo: str(p.redirectTo), visible: p.visible !== false }
+      return {
+        _id: makeId(),
+        url: str(p.url),
+        describe: str(p.describe),
+        describe_zh: str(p.describe_zh),
+        redirectTo: str(p.redirectTo),
+        visible: p.visible !== false,
+      }
     }),
     sections: Object.fromEntries(
       Object.entries(obj(d.sections)).filter(([, v]) => typeof v === 'boolean'),
@@ -192,7 +221,7 @@ export function formFromHome(data: unknown, makeId: () => string = newId): HomeF
     sectionOrderSet: Array.isArray(d.sectionOrder),
     highlights: arr(d.highlights)
       .map(obj)
-      .map((h) => ({ _id: makeId(), value: str(h.value), label: str(h.label), href: str(h.href) })),
+      .map((h) => ({ _id: makeId(), value: str(h.value), label: str(h.label), href: str(h.href), value_zh: str(h.value_zh), label_zh: str(h.label_zh) })),
     contact: (() => {
       const reasons = arr(contact.reasons).filter((r): r is string => typeof r === 'string')
       return {
@@ -201,6 +230,10 @@ export function formFromHome(data: unknown, makeId: () => string = newId): HomeF
         eyebrow: str(contact.eyebrow),
         reasons,
         intents: cleanIntentMap(reasons, contact.intents),
+        heading_zh: str(contact.heading_zh),
+        blurb_zh: str(contact.blurb_zh),
+        eyebrow_zh: str(contact.eyebrow_zh),
+        reasons_zh: reasonNames(reasons, contact.reasons_zh),
       }
     })(),
     availability: status
@@ -272,16 +305,43 @@ export function isLinkUrl(u: string): boolean {
 
 const cleanUrl = (u: string, origin: string) => normalizeUrl(stripTs(u, origin))
 
+/**
+ * The Chinese names of the given reasons (F3), keyed by the English reason:
+ * own keys only, trimmed, blanks left out.
+ */
+export function reasonNames(reasons: readonly string[], names: unknown): Record<string, string> {
+  const src = obj(names)
+  const out: Array<[string, string]> = []
+  for (const r of reasons) {
+    const key = typeof r === 'string' ? r.trim() : ''
+    const v = key && Object.hasOwn(src, key) ? str(src[key]).trim() : ''
+    if (v) out.push([key, v])
+  }
+  return Object.fromEntries(out)
+}
+
+/** `{ [key]: value.trim() }`, or nothing when blank (the Chinese fields are optional). */
+const zhField = <K extends string>(key: K, value: unknown): Partial<Record<K, string>> => {
+  const v = str(value).trim()
+  return v ? ({ [key]: v } as Record<K, string>) : {}
+}
+
 /** The PUT payload for a form: the HomeData shape, without editor-only keys. */
 export function serializeHome(form: HomeForm, origin = 'http://localhost'): HomeData {
   const out: HomeData & Record<string, unknown> = {
     ...form.extra,
-    hero: {
-      ...form.hero,
-      avatarUrl: cleanUrl(form.hero.avatarUrl, origin),
-      avatarTransform: { ...form.hero.avatarTransform },
-      currentlyCoding: { ...form.hero.currentlyCoding },
-    },
+    hero: (() => {
+      // The Chinese lines go in only when written.
+      const { tagline_zh: taglineZh, ...hero } = form.hero
+      const { label_zh: labelZh, project_zh: projectZh, note_zh: noteZh, ...coding } = form.hero.currentlyCoding
+      return {
+        ...hero,
+        ...zhField('tagline_zh', taglineZh),
+        avatarUrl: cleanUrl(form.hero.avatarUrl, origin),
+        avatarTransform: { ...form.hero.avatarTransform },
+        currentlyCoding: { ...coding, ...zhField('label_zh', labelZh), ...zhField('project_zh', projectZh), ...zhField('note_zh', noteZh) },
+      }
+    })(),
     socials: { ...form.socials },
     brands: form.brands.map((b) => {
       const scale = snapBrandScale(b.scale)
@@ -296,6 +356,7 @@ export function serializeHome(form: HomeForm, origin = 'http://localhost'): Home
     photos: form.photos.map((p) => ({
       url: cleanUrl(p.url, origin),
       describe: p.describe,
+      ...zhField('describe_zh', p.describe_zh),
       ...(p.redirectTo ? { redirectTo: cleanUrl(p.redirectTo, origin) } : {}),
       visible: p.visible,
     })),
@@ -303,12 +364,17 @@ export function serializeHome(form: HomeForm, origin = 'http://localhost'): Home
     contact: (() => {
       const reasons = form.contact.reasons.map((r) => r.trim()).filter(Boolean)
       const intents = cleanIntentMap(reasons, form.contact.intents)
+      const reasonsZh = reasonNames(reasons, form.contact.reasons_zh)
       return {
         heading: form.contact.heading.trim(),
         blurb: form.contact.blurb.trim(),
         eyebrow: form.contact.eyebrow.trim(),
         reasons,
         ...(Object.keys(intents).length ? { intents } : {}),
+        ...zhField('heading_zh', form.contact.heading_zh),
+        ...zhField('blurb_zh', form.contact.blurb_zh),
+        ...zhField('eyebrow_zh', form.contact.eyebrow_zh),
+        ...(Object.keys(reasonsZh).length ? { reasons_zh: reasonsZh } : {}),
       }
     })(),
   }
@@ -346,7 +412,13 @@ export function serializeHome(form: HomeForm, origin = 'http://localhost'): Home
   const order = resolveSectionOrder(form.sectionOrder)
   if (form.sectionOrderSet || !isSameOrder(order, DEFAULT_SECTION_ORDER)) out.sectionOrder = order
   const highlights = (Array.isArray(form.highlights) ? form.highlights : [])
-    .map((h) => ({ value: str(h.value).trim(), label: str(h.label).trim(), href: str(h.href).trim() }))
+    .map((h) => ({
+      value: str(h.value).trim(),
+      label: str(h.label).trim(),
+      href: str(h.href).trim(),
+      ...zhField('value_zh', h.value_zh),
+      ...zhField('label_zh', h.label_zh),
+    }))
     .filter((h) => h.value || h.label || h.href)
   if (highlights.length) out.highlights = highlights
   return out

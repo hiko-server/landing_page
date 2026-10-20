@@ -2,7 +2,7 @@ import { readCvData, readPublicCvSections } from './cvdata'
 import { readPublicHome } from './home'
 import { safeHref } from './cvFormat'
 import { variantAvifSrcSet, variantSrcSet, variantUrl } from './uploadVariants'
-import { availabilityView } from '../components/Common/contactForm'
+import { availabilityView } from '../components/Common/availability'
 import { heroCopy, heroIdentity, portraitAlt } from '../components/LandingPage/heroIdentity'
 import { PERSON_NAME } from './schema'
 

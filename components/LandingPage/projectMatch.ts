@@ -221,11 +221,11 @@ export function skillLevel(level: unknown): Pick<Skill, 'level' | 'note'> {
 
 /**
  * The CV's own Skills section as chip groups: the core-skills list (skill +
- * proficiency) as "Core skills", then every technical group with its own
- * title. Hidden entries / items are already gone from the website-pruned
+ * proficiency) as "Core skills" (`labels`: the page's words), then every
+ * technical group with its own title. Hidden entries / items are already gone from the website-pruned
  * section; blank names are skipped and repeats within a group are dropped.
  */
-export function skillGroups(section: unknown): SkillGroup[] {
+export function skillGroups(section: unknown, labels: { core: string; fallback: string } = { core: 'Core skills', fallback: 'Skills' }): SkillGroup[] {
   if (!section || typeof section !== 'object') return []
   const groups: SkillGroup[] = []
   const dedupe = (items: Skill[]) => {
@@ -239,12 +239,12 @@ export function skillGroups(section: unknown): SkillGroup[] {
   }
 
   const core = dedupe(list(section, 'languages').map((it) => ({ name: field(it, 'language'), ...skillLevel(field(it, 'level')) })))
-  if (core.length) groups.push({ label: 'Core skills', items: core })
+  if (core.length) groups.push({ label: labels.core, items: core })
 
   for (const g of list(section, 'technical')) {
     const items = dedupe(bullets(g, 'description').map((name) => ({ name: name.trim() })))
     const label = field(g, 'name')
-    if (items.length) groups.push({ label: label || 'Skills', items })
+    if (items.length) groups.push({ label: label || labels.fallback, items })
   }
   return groups
 }
