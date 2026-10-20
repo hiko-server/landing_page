@@ -98,6 +98,7 @@ import {
   type ReadinessFinding,
 } from '../../lib/cvReadiness'
 import { referenceMonth } from '../../lib/clock'
+import { publishedCaseStudies } from '../../lib/caseStudyLinks'
 import { normalizeOrcidId } from '../../lib/orcid/id'
 import { dropStaleOrcidAuth } from '../../lib/orcid/connection'
 import { orcidAuthMarkerOf } from '../../lib/orcid/marker'
@@ -439,6 +440,10 @@ export default function CVEditorStudio() {
     return ['', false]
   }, [doc, lang, other])
 
+  // Published case studies, as /cv links them (the readiness context's index; null until it loads).
+  const caseStudies = readyCtx?.caseStudies ?? null
+  const publishedWorks = useMemo(() => publishedCaseStudies(caseStudies), [caseStudies])
+
   // ── Edit API (context for every form control) ──────────────────────────
   const api: StudioApi = useMemo(
     () => ({
@@ -504,6 +509,7 @@ export default function CVEditorStudio() {
       },
       orcid,
       orcidAuthenticated,
+      caseStudies,
       dirty,
       serverChange: { etag: cv.getBaseEtag, adopt: cv.adoptSaved, current: getDoc },
       twinLength: (listPath: CvPath) => twinListLength(getDoc(), lang, listPath),
@@ -514,7 +520,7 @@ export default function CVEditorStudio() {
         return at < 0 ? undefined : getAt(d[other], [at, ...path.slice(1)])
       },
     }),
-    [apply, run, getDoc, lang, other, linked, focus, orcid, orcidAuthenticated, dirty, cv.getBaseEtag, cv.adoptSaved, reportVisibility, applyListOp, announce, unlinkedReason, sectionNameAt, notifyUndoable, scope],
+    [apply, run, getDoc, lang, other, linked, focus, orcid, orcidAuthenticated, caseStudies, dirty, cv.getBaseEtag, cv.adoptSaved, reportVisibility, applyListOp, announce, unlinkedReason, sectionNameAt, notifyUndoable, scope],
   )
 
   // Back from "Connect your ORCID iD" (?orcid=connected | ?orcid=error&reason=…,
@@ -1006,7 +1012,7 @@ export default function CVEditorStudio() {
     </Flex>
   )
 
-  const preview = <Preview sections={sections} lang={lang} onPages={onPages} ownerNames={ownerNames} />
+  const preview = <Preview sections={sections} lang={lang} onPages={onPages} ownerNames={ownerNames} works={publishedWorks} />
 
   return (
     <StudioContext.Provider value={api}>

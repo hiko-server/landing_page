@@ -130,6 +130,9 @@ export function HiddenChip({ label = 'hidden' }: { label?: string }) {
  * lists) get role="group" labelled by the visible label instead, and give
  * each of their inputs its own id derived from `fieldId` — ids stay unique.
  */
+/** A help line that warns about the value: 4.5:1 in both themes (as shell/ui warnTextProps). */
+const WARN_TEXT = { color: 'orange.700', _dark: { color: 'orange.300' } } as const
+
 export function FieldShell({
   fieldId,
   label,
@@ -138,6 +141,7 @@ export function FieldShell({
   hideable = true,
   onToggleHidden,
   help,
+  helpTone,
   invalid,
   children,
   gridColumn,
@@ -151,6 +155,8 @@ export function FieldShell({
   hideable?: boolean
   onToggleHidden?: () => void
   help?: string
+  /** 'warning': the help line is a warning about the value (shown in the warning colour). */
+  helpTone?: 'warning'
   invalid?: boolean
   children: React.ReactNode
   gridColumn?: string
@@ -214,7 +220,7 @@ export function FieldShell({
         )}
         {body}
         {help ? (
-          <Text id={helpId} mt={1} fontSize="11px" color={dim}>
+          <Text id={helpId} mt={1} fontSize="11px" {...(helpTone === 'warning' ? WARN_TEXT : { color: dim })}>
             {help}
           </Text>
         ) : null}
@@ -231,7 +237,7 @@ export function FieldShell({
       )}
       {body}
       {help ? (
-        <FormHelperText mt={1} fontSize="11px" color={dim}>
+        <FormHelperText mt={1} fontSize="11px" {...(helpTone === 'warning' ? WARN_TEXT : { color: dim })}>
           {help}
         </FormHelperText>
       ) : null}

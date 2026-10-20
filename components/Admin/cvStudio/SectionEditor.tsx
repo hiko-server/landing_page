@@ -48,6 +48,7 @@ import { cvPathAttr, pathStartsWith, useStudio } from './StudioContext'
 import PhotoField from './PhotoField'
 import OrcidImport from './OrcidImport'
 import OrcidConnect from './OrcidConnect'
+import { caseStudyFieldNote } from '../../../lib/caseStudyLinks'
 import { PUBLICATIONS_SECTION } from '../../../lib/publications/types'
 import { entryKey, type ListOp } from './docOps'
 
@@ -69,7 +70,9 @@ function FieldRenderer({ def, node, nodePath }: { def: FieldDef; node: any; node
   const missing = !!def.required && !str.trim() && def.kind !== 'bullets' && def.kind !== 'tags'
   const malformed = !!str.trim() && !wellFormed(def, str.trim())
   const invalid = missing || malformed
-  const hint = malformed ? formatHint(def, str.trim()) : def.help
+  // A case-study slug that names no published case study: /cv shows no link, say why here.
+  const caseNote = def.key === 'caseStudy' ? caseStudyFieldNote(str, api.caseStudies) : ''
+  const hint = malformed ? formatHint(def, str.trim()) : caseNote || def.help
   const singular = def.label.replace(/s$/, '')
 
   let control: React.ReactNode
@@ -198,6 +201,7 @@ function FieldRenderer({ def, node, nodePath }: { def: FieldDef; node: any; node
       hideable={isFieldHideable(def)}
       onToggleHidden={() => api.toggleField(nodePath, def.key, def.label)}
       help={hint}
+      helpTone={caseNote && !malformed ? 'warning' : undefined}
       invalid={invalid}
       gridColumn={gridColumn}
       group={def.kind === 'bullets' || def.kind === 'image' || def.kind === 'switch'}

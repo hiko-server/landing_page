@@ -5,6 +5,7 @@ import { FaFilePdf } from 'react-icons/fa'
 import CVResult from '../../CVViewerPage/CVResult'
 import ScaledSheet from '../../CVViewerPage/ScaledSheet'
 import { publicSections, type CvLang } from '../../../lib/cvVisibility'
+import { withEvidenceLinks, type CvWork } from '../../../lib/cvLinks'
 import { cvPdfPath } from '../../../lib/cvExport/paths'
 import type { OwnerNames } from '../../../lib/publications/names'
 import { monoFont, useStudioTokens } from './fields'
@@ -22,7 +23,10 @@ const MODE_KEY = 'cv-studio:preview-mode'
 
 /**
  * Live preview of exactly what visitors get — same pruning, same renderers:
- *   A4 CV   → /cv and the PDF (publicSections 'cv' through CVResult)
+ *   A4 CV   → /cv and the PDF (publicSections 'cv' through CVResult, with
+ *             the evidence links resolved as /cv resolves them: a project's
+ *             case study only when it is PUBLISHED — never a /work/<slug>
+ *             that would 404)
  *   Website → the CV stack on /about (publicSections 'website')
  * Rendering is deferred so typing never waits on the preview.
  */
@@ -31,6 +35,7 @@ export default function Preview({
   lang,
   onPages,
   ownerNames,
+  works = null,
 }: {
   sections: Section[]
   lang: CvLang
@@ -38,10 +43,12 @@ export default function Preview({
   onPages?: (lang: CvLang, pages: number) => void
   /** The owner's name forms (bold in publication author lists, as on /cv). */
   ownerNames?: OwnerNames
+  /** Published case studies (lib/caseStudyLinks); null while unknown — then no case-study links. */
+  works?: readonly CvWork[] | null
 }) {
   const deferred = useDeferredValue(sections)
   const [mode, setMode] = useState<Mode>('cv')
-  const cvData = useMemo(() => (mode === 'cv' ? publicSections(deferred, 'cv') : []), [deferred, mode])
+  const cvData = useMemo(() => (mode === 'cv' ? withEvidenceLinks(publicSections(deferred, 'cv'), { works: works ?? [] }) : []), [deferred, mode, works])
   const [zoom, setZoom] = useState<'fit' | number>('fit')
   const [scale, setScale] = useState(1)
   const { border, dim } = useStudioTokens()

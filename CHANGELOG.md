@@ -1078,6 +1078,12 @@ shown.
   `e2e/orcid-connect.spec.ts` (@admin: the disabled state, the callback's
   error paths arriving cross-site); `e2e/orcid.spec.ts` expects the
   unauthenticated form for a typed iD.
+- Fixed (CV Studio): the A4 preview linked a project's case-study slug to
+  `/work/<slug>` even when no such case study was published (a 404 link, and
+  a console 404 from its prefetch). It now resolves case-study links as `/cv`
+  does (`withEvidenceLinks`: a published slug, else a strict title match,
+  else none), and the project editor says so under the field: "No published
+  case study at /work/<slug>" (or that it is still a draft).
 
 ### Changed
 

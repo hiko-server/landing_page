@@ -54,6 +54,8 @@ export type StudioApi = {
   appendEntries: (listPath: CvPath, entries: readonly Record<string, any>[], label: string) => void
   /** Open a section and focus one of its fields' input (e.g. Personal Info → ORCID iD). */
   goToField: (sectionName: string, field: string) => void
+  /** Every case study (drafts flagged) for the project editor's slug note; null while unknown. */
+  caseStudies?: readonly { slug: string; title: string; draft?: boolean }[] | null
   /** The document has unsaved changes (connecting ORCID waits for a save). */
   dirty?: boolean
   /**
