@@ -30,11 +30,22 @@ export type InquiryTimeline = (typeof INQUIRY_TIMELINES)[number]
 
 export type InquiryField = 'company' | 'roleUrl' | 'timeline'
 
-/** Server-side caps (the form uses the same values as maxLength). */
+/**
+ * Server-side caps (the form uses the same values as maxLength).
+ *
+ * A link is capped twice: `roleUrlMax` on what the visitor typed or pasted,
+ * and `roleUrlStoredMax` on its normalised form — what is e-mailed and kept
+ * in the Inbox. Normalising percent-encodes non-ASCII characters (one Chinese
+ * character becomes nine), so a 102-character job link can store as 534
+ * characters; the stored cap leaves room for that, and checkRoleUrl refuses
+ * a link whose normalised form would not fit, so whatever normalizeInquiry
+ * accepts is always kept by parseInquiryMeta.
+ */
 export const INQUIRY_LIMITS = {
   reasonMax: 80,
   companyMax: 120,
   roleUrlMax: 500,
+  roleUrlStoredMax: 2048,
 } as const
 
 /** What is stored with an Inbox message (every key optional; older messages have none). */
@@ -158,12 +169,27 @@ export type InquiryInput = {
 export type InquiryResult = { ok: true; meta: InquiryMeta } | { ok: false; field: InquiryField; error: string }
 
 export const ROLE_URL_ERROR = 'The link must be a full https:// address.'
+export const ROLE_URL_TOO_LONG = 'This link is too long — paste a shorter link to the same page.'
+
+/**
+ * Check a typed link (form and API share it): too long as typed or once
+ * normalised → ROLE_URL_TOO_LONG; not a plain https URL → ROLE_URL_ERROR;
+ * otherwise the normalised href that is sent and stored.
+ */
+export function checkRoleUrl(value: string): { ok: true; href: string } | { ok: false; error: string } {
+  const raw = value.trim()
+  if (raw.length > INQUIRY_LIMITS.roleUrlMax) return { ok: false, error: ROLE_URL_TOO_LONG }
+  if (!isHttpsUrl(raw)) return { ok: false, error: ROLE_URL_ERROR }
+  const href = new URL(raw).toString()
+  if (href.length > INQUIRY_LIMITS.roleUrlStoredMax) return { ok: false, error: ROLE_URL_TOO_LONG }
+  return { ok: true, href }
+}
 
 /**
  * Validate and normalise the structured part of a contact submission.
  * Unknown intents count as 'other'; fields the intent does not disclose are
  * dropped; an unknown timeline is dropped; a link that is not a plain https
- * URL is refused (the visitor can fix it).
+ * URL, or is too long (checkRoleUrl), is refused (the visitor can fix it).
  */
 export function normalizeInquiry(input: InquiryInput): InquiryResult {
   const meta: InquiryMeta = {}
@@ -179,8 +205,9 @@ export function normalizeInquiry(input: InquiryInput): InquiryResult {
   if (allowed.has('roleUrl')) {
     const raw = typeof input.roleUrl === 'string' ? input.roleUrl.trim() : ''
     if (raw) {
-      if (raw.length > INQUIRY_LIMITS.roleUrlMax || !isHttpsUrl(raw)) return { ok: false, field: 'roleUrl', error: ROLE_URL_ERROR }
-      meta.roleUrl = new URL(raw).toString()
+      const link = checkRoleUrl(raw)
+      if (!link.ok) return { ok: false, field: 'roleUrl', error: link.error }
+      meta.roleUrl = link.href
     }
   }
   if (allowed.has('timeline') && isInquiryTimeline(input.timeline)) meta.timeline = input.timeline
@@ -197,7 +224,7 @@ export function parseInquiryMeta(raw: unknown): InquiryMeta | undefined {
   if (isInquiryIntent(o.intent)) meta.intent = o.intent
   const company = cleanLine(o.company, INQUIRY_LIMITS.companyMax)
   if (company) meta.company = company
-  if (typeof o.roleUrl === 'string' && o.roleUrl.length <= INQUIRY_LIMITS.roleUrlMax && isHttpsUrl(o.roleUrl)) meta.roleUrl = o.roleUrl
+  if (typeof o.roleUrl === 'string' && o.roleUrl.length <= INQUIRY_LIMITS.roleUrlStoredMax && isHttpsUrl(o.roleUrl)) meta.roleUrl = o.roleUrl
   if (isInquiryTimeline(o.timeline)) meta.timeline = o.timeline
   return Object.keys(meta).length ? meta : undefined
 }

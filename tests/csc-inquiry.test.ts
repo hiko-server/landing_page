@@ -9,6 +9,7 @@ import {
   DEFAULT_REASONS,
   INTENT_FIELDS,
   ROLE_URL_ERROR,
+  ROLE_URL_TOO_LONG,
   cleanIntentMap,
   hasCustomReasons,
   inquiryRows,
@@ -85,9 +86,15 @@ test('normalizeInquiry: caps, strips line breaks, drops what the kind does not a
 })
 
 test('normalizeInquiry refuses links that are not plain https', () => {
-  for (const roleUrl of ['http://jobs.example.com', 'javascript:alert(1)', 'https://user:pw@x.example', '//x.example', 'ftp://x', `https://x.example/${'a'.repeat(600)}`]) {
+  for (const roleUrl of ['http://jobs.example.com', 'javascript:alert(1)', 'https://user:pw@x.example', '//x.example', 'ftp://x']) {
     assert.deepEqual(normalizeInquiry({ intent: 'role', roleUrl }), { ok: false, field: 'roleUrl', error: ROLE_URL_ERROR }, roleUrl)
   }
+  // Too long is its own, clearer error (CORR-3: tests/admin-ops-inbox.test.ts).
+  assert.deepEqual(normalizeInquiry({ intent: 'role', roleUrl: `https://x.example/${'a'.repeat(600)}` }), {
+    ok: false,
+    field: 'roleUrl',
+    error: ROLE_URL_TOO_LONG,
+  })
   assert.equal(normalizeInquiry({ intent: 'other', roleUrl: 'javascript:alert(1)' }).ok, true, 'ignored when the kind has no link field')
 })
 
