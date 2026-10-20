@@ -43,6 +43,8 @@ export default function PageHeader({
       </Text>
       <Heading
         as="h1"
+        // .page-title: Chinese titles get Chinese leading (globals.css).
+        className="page-title"
         mt={6}
         // Fluid 36→56px, tight tracking (theme/tokens.ts `display`), as
         // explicit props so Heading's own responsive size never wins.

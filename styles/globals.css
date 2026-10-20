@@ -137,12 +137,13 @@ h3,
  * Chinese typesetting (F1; W3C "Requirements for Chinese Text Layout",
  * clreq, and the Apple / Ant Design Chinese type guidelines).
  *
- * Posts and case studies only (`.article-page`, the <article> of
- * pages/blog/[slug] and pages/work/[slug]), so the CV's A4 print layout and
- * the rest of the site are untouched. Everything keys on the language of
- * the text itself (`:lang`), so a Chinese passage inside an English article
- * (lib/rehype/langSpans marks it) and an English label inside a Chinese
- * one each get their own rules.
+ * Posts and case studies (`.article-page`, the <article> of
+ * pages/blog/[slug] and pages/work/[slug]) get the full setting below —
+ * measure, body leading, emphasis dots; the faces, tracking, title and lede
+ * leading and autospace also apply on every Chinese page (the next block).
+ * Everything keys on the language of the text itself (`:lang`), so a
+ * Chinese passage inside an English article (lib/rehype/langSpans marks it)
+ * and an English label inside a Chinese one each get their own rules.
  *
  *   - Faces: Geist for Latin, then each platform's Chinese UI face for the
  *     script — Simplified (PingFang SC, Noto Sans SC, Microsoft YaHei) or
@@ -242,6 +243,71 @@ h3,
   font-style: italic;
   -webkit-text-emphasis: none;
   text-emphasis: none;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * Chinese text on every page (F3), with the rules above: the /zh pages,
+ * /cv/zh and Chinese posts and case studies — their header, footer and
+ * palette included — and a Chinese title or excerpt on an English page.
+ * English pages are untouched (everything keys on `:lang(zh)` or on an
+ * element that declares Chinese), and an English run inside Chinese text
+ * keeps Geist, its punctuation and its tracking. The CV's A4 sheet
+ * (`.cv-print-area`) keeps its own setting, which the PDF shares.
+ *
+ *   - Faces: an element that declares Chinese — <html> on a Chinese page —
+ *     sets the Chinese stack, and so do Chakra's body and heading faces
+ *     under it (headings and form fields name those); mono labels keep
+ *     their face, which falls back to the same Chinese fonts.
+ *   - Tracking: none (`[data-script='latin']` marks text that is always
+ *     Latin, such as the domain wordmark, which keeps its own).
+ *   - Leading: 1.25 for the page title, 1.75 for its lede.
+ *   - Spacing between Han and Latin letters or digits: `text-autospace`
+ *     (Chromium's and Safari's initial value is `no-autospace`). Where
+ *     `text-spacing-trim` exists (Chromium), its initial `normal` already
+ *     closes the gap between adjacent punctuation; headings also start flush
+ *     with an opening bracket or quotation mark (`trim-start`).
+ * ──────────────────────────────────────────────────────────────────────── */
+html:lang(zh-Hans) body,
+:where(body [lang|='zh-Hans']:not(.cv-print-area *)) {
+  font-family: var(--font-zh-hans);
+}
+html:lang(zh-Hans),
+:where(body [lang|='zh-Hans']:not(.cv-print-area *)) {
+  --chakra-fonts-body: var(--font-zh-hans);
+  --chakra-fonts-heading: var(--font-zh-hans);
+}
+html:lang(zh-Hant) body,
+:where(body [lang|='zh-Hant']:not(.cv-print-area *)) {
+  font-family: var(--font-zh-hant);
+}
+html:lang(zh-Hant),
+:where(body [lang|='zh-Hant']:not(.cv-print-area *)) {
+  --chakra-fonts-body: var(--font-zh-hant);
+  --chakra-fonts-heading: var(--font-zh-hant);
+}
+:where(html:lang(zh) body [lang|='en']:not(.cv-print-area *)) {
+  font-family: var(--font-geist-sans);
+  --chakra-fonts-body: var(--font-geist-sans);
+  --chakra-fonts-heading: var(--font-geist-sans);
+}
+:root :lang(zh):not(.cv-print-area, .cv-print-area *, [data-script='latin'], [data-script='latin'] *) {
+  letter-spacing: 0;
+}
+html:lang(zh),
+:where(body [lang|='zh']:not(.cv-print-area *)) {
+  text-autospace: normal;
+}
+.cv-print-area:lang(zh) {
+  text-autospace: no-autospace;
+}
+:root :is(h1, h2, h3, h4, h5, h6):lang(zh):not(.cv-print-area *) {
+  text-spacing-trim: trim-start;
+}
+.page-title:lang(zh) {
+  line-height: 1.25;
+}
+.lede:lang(zh) {
+  line-height: 1.75;
 }
 
 /* Lucide interface icons (components/Icons/ui): never squeezed by a flex

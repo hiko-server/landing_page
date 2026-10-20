@@ -161,6 +161,8 @@ const Footer = ({ socials = SOCIAL_LINKS, navLinks = PRIMARY_LINKS }: { socials?
                 fontSize="13px"
                 fontWeight={600}
                 letterSpacing="-0.01em"
+                // The domain is always Latin: it keeps its tracking on a Chinese page (globals.css).
+                data-script="latin"
                 color="page.fg"
                 _hover={{ textDecoration: 'none' }}
               >
