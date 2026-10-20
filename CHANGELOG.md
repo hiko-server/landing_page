@@ -8,6 +8,21 @@ portfolio CMS, no public package). Entries are grouped by release date.
 
 ## [Unreleased]
 
+### Review fixes
+
+- Editor, light theme: a selected figure's caption, a video's title, an MDX island, a callout or selected table cells keep their text (it turned white) (UX-A-1).
+- Review pages: Tab into the footer no longer hides a link behind the "Preview" bar (UX-A-2).
+- Editor prompts, errors, the block menu's Delete, Done / Apply and the CV audience menu meet 4.5:1 in both themes (UX-A-3).
+- "Create & copy link" now says it copied — on the new link's button and to screen readers (UX-A-4).
+- An MDX block's source field is named for screen readers; its hint shows Ctrl+↵ outside macOS (UX-A-5).
+- Alt+F10 into the table toolbar always shows the focus ring; on phones the toolbar wraps instead of scrolling (UX-A-6).
+- The schedule dialog hands focus back to "Publish…" (or ⋯) when it closes (UX-A-7).
+- Focus moves to the next sensible control after Unschedule, Keep, Revoke, Done, Turn off, removing a filter or closing the custom range (UX-A-8).
+- The schedule dialog says why "Schedule" is off — a past or empty time — and links the reason to the fields and the button (UX-A-9).
+- Solid confirm buttons (red, accent and the other colours) meet 4.5:1 in light mode (UX-A-10).
+- Video and figure controls in the editor are at least 24px tall (UX-A-11).
+- Typing a component in the MDX tab no longer re-announces the parse error at every pause; only the change is announced (UX-A-12).
+
 ### patch-2b1
 
 Fixes after the wave 2B deploy (the post-deploy end-to-end run against
