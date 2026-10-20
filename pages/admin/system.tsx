@@ -24,11 +24,16 @@ const ActivityPanel = dynamic(() => import('../../components/Admin/system/Activi
   ssr: false,
   loading: panelLoading('Loading activity'),
 })
+const ContentHealthPanel = dynamic(() => import('../../components/Admin/system/ContentHealthPanel'), {
+  ssr: false,
+  loading: panelLoading('Loading content health'),
+})
 
-const SYSTEM_VIEWS = ['health', 'errors', 'activity'] as const
+const SYSTEM_VIEWS = ['health', 'content', 'errors', 'activity'] as const
 type View = (typeof SYSTEM_VIEWS)[number]
 const VIEWS: SegmentedItem<View>[] = [
   { key: 'health', label: 'Health' },
+  { key: 'content', label: 'Content' },
   { key: 'errors', label: 'Errors' },
   { key: 'activity', label: 'Activity' },
 ]
@@ -37,9 +42,11 @@ const isView = (v: unknown): v is View => typeof v === 'string' && (SYSTEM_VIEWS
 
 /**
  * Admin → System: server health (build, disk, databases, backups, restore
- * drills, recent warnings), the first-party error monitor and the activity
- * log (who changed what, when).
+ * drills, recent warnings), the content health center (links, images,
+ * structure of the published content), the first-party error monitor and
+ * the activity log (who changed what, when).
  *   /admin/system                health
+ *   /admin/system?view=content   content health
  *   /admin/system?view=errors    errors
  *   /admin/system?view=activity  activity log
  */
@@ -83,7 +90,15 @@ export default function AdminSystem() {
       }
     >
       <Box {...tabPanelProps('system', view)}>
-        {view === 'errors' ? <ErrorsPanel /> : view === 'activity' ? <ActivityPanel /> : <HealthPanel onShowErrors={() => go('errors')} />}
+        {view === 'errors' ? (
+          <ErrorsPanel />
+        ) : view === 'activity' ? (
+          <ActivityPanel />
+        ) : view === 'content' ? (
+          <ContentHealthPanel />
+        ) : (
+          <HealthPanel onShowErrors={() => go('errors')} onShowContent={() => go('content')} />
+        )}
       </Box>
     </AdminPageShell>
   )
