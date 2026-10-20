@@ -329,7 +329,7 @@ export default function ScheduleDialog({ isOpen, onClose, collection, mode, hasC
                 </Text>
               </Checkbox>
               {nothingPicked ? (
-                <Text id={`${ids}-nothing`} fontSize="xs" mt={2} pl={6} {...warnTextProps}>
+                <Text id={`${ids}-nothing`} fontSize="xs" mt={2} pl={6} color="page.fg-secondary">
                   {nothingPicked}
                 </Text>
               ) : null}

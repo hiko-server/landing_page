@@ -43,11 +43,11 @@ async function adminFetch(page: Page, method: string, url: string, body?: unknow
   )
 }
 
-async function createDraft(page: Page, slug: string, body: string, title = 'E2E review r3') {
+async function createDraft(page: Page, slug: string, body: string, title = 'E2E review r3', draft = true) {
   const out = await adminFetch(page, 'PUT', '/api/admin/posts', {
     slug,
     create: true,
-    frontmatter: { title, date: today(), draft: true, description: 'Created by the review-r3 end-to-end suite; deleted afterwards.' },
+    frontmatter: { title, date: today(), draft, description: 'Created by the review-r3 end-to-end suite; deleted afterwards.' },
     body,
   })
   expect(out.status, out.text).toBe(200)
@@ -394,6 +394,26 @@ test.describe('review-r3 accessibility fixes', { tag: '@admin' }, () => {
       await page.keyboard.press('Escape')
     } finally {
       await adminCleanup(page, 'DELETE', `/api/admin/posts?slug=${slug}`)
+    }
+
+    // A live post with nothing to publish can only unpublish later: until that is ticked, Schedule says why it is off.
+    const live = `e2e-r3-sched-live-${Date.now()}`
+    await createDraft(page, live, 'A live post the review-r3 suite opens the schedule dialog for.', 'E2E review r3 live', false)
+    try {
+      await openEditor(page, live)
+      await page.getByRole('button', { name: 'More actions' }).click()
+      await page.getByRole('menuitem', { name: 'Schedule…' }).click()
+      const dialog = page.getByTestId('schedule-dialog')
+      const schedule = dialog.getByRole('button', { name: 'Schedule', exact: true })
+      await expect(schedule).toBeDisabled()
+      await expect(dialog.getByText('Tick “Unpublish automatically” to pick when.')).toBeVisible()
+      await expect(schedule).toHaveAccessibleDescription('Tick “Unpublish automatically” to pick when.')
+      await dialog.getByText('Unpublish automatically', { exact: true }).click()
+      await expect(schedule).toBeEnabled()
+      await expect(dialog.getByText('Tick “Unpublish automatically” to pick when.')).toHaveCount(0)
+      await page.keyboard.press('Escape')
+    } finally {
+      await adminCleanup(page, 'DELETE', `/api/admin/posts?slug=${live}`)
     }
   })
 
