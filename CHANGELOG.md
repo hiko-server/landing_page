@@ -34,6 +34,14 @@ https://lucian-dev.com).
   does not guarantee. Every request for /now's data is now answered from
   memory (fetched once, as a navigation asks for it) and the page's code is
   loaded beforehand, so no server round trip is left inside the 150 ms.
+- **E2E: the HTML edge-cache check (OPS-1) knows when it is behind
+  Cloudflare.** Cloudflare reads `Cloudflare-CDN-Cache-Control` and never
+  forwards it, so against production the header read as missing. Through
+  Cloudflare (a `cf-ray` on the response) the test now checks what is
+  observable there — `cf-cache-status` is present and a copy the edge
+  serves from its cache is never older than 5 minutes (`age` ≤ 300) — and
+  keeps the origin's `Cache-Control` checks; the header itself stays covered
+  against the container and by `tests/wave2a-fixes-edge.test.ts`.
 
 ### admin-editorial
 

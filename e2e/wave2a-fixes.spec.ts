@@ -13,6 +13,9 @@ import { test, expect, loginAsAdmin, seriousA11yViolations, settle } from './fix
 
 const isLocal = (url: string) => ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(url).hostname)
 
+/** Cloudflare's answer for a response it served from its cache (`age` is how long it has been there). */
+const EDGE_CACHED = new Set(['HIT', 'STALE', 'UPDATING', 'REVALIDATED'])
+
 test.describe('edge cache of HTML (OPS-1)', () => {
   test('a page with an hour-long ISR window stays at most 5 minutes at the edge; the CV keeps its own minute', async ({
     request,
@@ -20,23 +23,48 @@ test.describe('edge cache of HTML (OPS-1)', () => {
     // The first request after a start may get the build-time copy (1 s window);
     // its regeneration carries the real one.
     await expect
-      .poll(async () => (await request.get('/')).headers()['cloudflare-cdn-cache-control'] ?? '', {
-        timeout: 20_000,
-      })
-      .toBe('max-age=300, stale-if-error=86400')
+      .poll(async () => (await request.get('/')).headers()['cache-control'] ?? '', { timeout: 20_000 })
+      .toMatch(/s-maxage=3600\b/)
     const home = await request.get('/')
     expect(home.headers()['cache-control']).toMatch(/s-maxage=3600\b/)
     expect(home.headers()['cache-control']).toContain('no-transform')
-
-    const colophon = await request.get('/colophon')
-    expect(colophon.headers()['cloudflare-cdn-cache-control']).toBe(
-      'max-age=300, stale-if-error=86400'
-    )
     await expect
       .poll(async () => (await request.get('/cv')).headers()['cache-control'] ?? '', {
         timeout: 20_000,
       })
       .toMatch(/s-maxage=60\b/)
+
+    if (home.headers()['cf-ray']) {
+      // Through Cloudflare (production): the edge reads
+      // Cloudflare-CDN-Cache-Control and never forwards it — the origin header
+      // stays covered by tests/wave2a-fixes-edge.test.ts and by this test
+      // against the container (scripts/check-container.sh). What can be seen
+      // here is the edge's own copy: Cloudflare says whether it answered from
+      // its cache, and a copy it serves is never older than 5 minutes.
+      test.info().annotations.push({
+        type: 'edge',
+        description: 'Behind Cloudflare: Cloudflare-CDN-Cache-Control is consumed at the edge; checked cf-cache-status and age instead',
+      })
+      for (const path of ['/', '/colophon']) {
+        const res = await request.get(path)
+        const status = res.headers()['cf-cache-status'] ?? ''
+        expect(status, `${path}: Cloudflare consulted its cache`).not.toBe('')
+        if (EDGE_CACHED.has(status)) {
+          expect(Number(res.headers()['age'] ?? '0'), `${path}: age of the edge copy (${status})`).toBeLessThanOrEqual(300)
+        }
+      }
+      return
+    }
+
+    await expect
+      .poll(async () => (await request.get('/')).headers()['cloudflare-cdn-cache-control'] ?? '', {
+        timeout: 20_000,
+      })
+      .toBe('max-age=300, stale-if-error=86400')
+    const colophon = await request.get('/colophon')
+    expect(colophon.headers()['cloudflare-cdn-cache-control']).toBe(
+      'max-age=300, stale-if-error=86400'
+    )
     expect((await request.get('/cv')).headers()['cloudflare-cdn-cache-control']).toBeUndefined()
     // Never on API responses.
     expect(
