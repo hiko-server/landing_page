@@ -16,8 +16,10 @@ import { Box, Text } from '@chakra-ui/react'
  *     CSS only, decorative (the title follows as text).
  *
  * The box is reserved by aspect-ratio before any file loads (no layout
- * shift). `vtName` names the image for the shared-element morph between the
- * /work card and the case-study page.
+ * shift). `morph` marks the image's frame as the part that morphs between the
+ * /work card and the case-study page (lib/viewTransition.ts; its rounded
+ * corners and border travel with it; only an image cover — the typographic
+ * one exists on the card alone).
  */
 
 export type CoverView = {
@@ -45,7 +47,7 @@ export default function CoverFrame({
   eyebrow,
   sizes,
   eager,
-  vtName,
+  morph,
   decorative,
   radius = 'md',
 }: {
@@ -58,7 +60,8 @@ export default function CoverFrame({
   sizes: string
   /** In the first viewport: load at once with high priority (the likely LCP image). */
   eager?: boolean
-  vtName?: string
+  /** The image morphs with the other page's cover (see above). */
+  morph?: boolean
   /** Inside a link whose text names the item: the image is decorative (alt=""). */
   decorative?: boolean
   radius?: string
@@ -144,7 +147,6 @@ export default function CoverFrame({
               maxWidth: '100%',
               maxHeight: '100%',
               borderRadius: '4px',
-              ...(vtName ? { viewTransitionName: vtName } : null),
             } as React.CSSProperties)
           : ({
               display: 'block',
@@ -152,7 +154,6 @@ export default function CoverFrame({
               height: '100%',
               objectFit: 'cover',
               objectPosition: cover.focus,
-              ...(vtName ? { viewTransitionName: vtName } : null),
             } as React.CSSProperties)
       }
     />
@@ -160,13 +161,13 @@ export default function CoverFrame({
 
   if (cover.small) {
     return (
-      <Box {...frame} data-cover="small" display="flex" alignItems="center" justifyContent="center" p={{ base: 4, md: 6 }} style={PANEL_STYLE}>
+      <Box {...frame} data-cover="small" data-vt-part={morph ? 'cover' : undefined} display="flex" alignItems="center" justifyContent="center" p={{ base: 4, md: 6 }} style={PANEL_STYLE}>
         {img}
       </Box>
     )
   }
   return (
-    <Box {...frame} data-cover="image">
+    <Box {...frame} data-cover="image" data-vt-part={morph ? 'cover' : undefined}>
       {img}
     </Box>
   )

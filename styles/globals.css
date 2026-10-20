@@ -74,7 +74,7 @@
    sticky bottom bar (data-bottom-bar) and its controls are left out. */
 :where(#main),
 :where(#main)
-  :where([id], a, button, input, select, textarea, summary, [tabindex], [contenteditable]):where(
+  :where([id], a, button, input, select, textarea, summary, [tabindex], [contenteditable], [data-kbd-item]):where(
     :not([data-bottom-bar], [data-bottom-bar] *)
   ) {
   scroll-margin-top: calc(var(--header-h) + 16px);
@@ -342,11 +342,18 @@ h3,
   background-position: 0 100%;
   transition: background-size var(--duration-base) var(--ease-standard);
 }
-.link-underline:hover,
 .link-underline:focus-visible,
-a:hover > .link-underline,
 a:focus-visible > .link-underline {
   background-size: 100% 1px;
+}
+/* Hover effects only where a pointer can hover: on a touch screen a tapped
+   element would otherwise keep its hover look until the next tap elsewhere.
+   (Chakra hover styles get the same guard from lib/hoverMedia.ts.) */
+@media (hover: hover) {
+  .link-underline:hover,
+  a:hover > .link-underline {
+    background-size: 100% 1px;
+  }
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -406,29 +413,60 @@ a:focus-visible > .link-underline {
 
 /* ──────────────────────────────────────────────────────────────────────────
  * View transitions — client-side route changes (components/Chrome/
- * RouteTransitions.tsx starts them only when motion is allowed).
+ * RouteTransitions.tsx starts them only when motion is allowed) and, in
+ * browsers that support it, full page loads between the site's own pages.
  *
- * The page cross-fades as one snapshot: the persistent header is identical in
- * both states, so it stays put while the content changes underneath it.
- * Elements that share a `view-transition-name` across two pages (e.g. a blog
- * card title and the post's <h1>: `vt-blog-<slug>`) morph between their old
- * and new boxes on the same curve.
+ * The page FADES THROUGH as one snapshot: the outgoing page is gone (first
+ * 40%) before the incoming one fades in (from 30%), so two pages are never
+ * seen on top of each other. The persistent header has its own snapshot and
+ * stays put while the content changes underneath it.
+ *
+ * Shared elements: a card's title / cover and the detail page's are named
+ * only for the one transition that links them (lib/viewTransition.ts
+ * planMorph) and morph between their boxes; such a transition carries the
+ * type 'morph' and takes the slow duration.
  * ──────────────────────────────────────────────────────────────────────── */
-/* Same duration + curve on both halves keeps the UA's plus-lighter
-   cross-fade at full opacity throughout (no dip on unchanged pixels). */
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation-duration: var(--duration-base);
-  animation-timing-function: var(--ease-standard);
+:root {
+  /* The route transition's length (the morph type lengthens it). */
+  --vt-route: var(--duration-base);
+}
+html:active-view-transition-type(morph) {
+  --vt-route: var(--duration-slow);
+}
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition {
+    navigation: auto;
+  }
+}
+/* Behind the snapshots: the page colour, so the gap between the outgoing and
+   the incoming page is never the browser's canvas. */
+::view-transition {
+  background-color: var(--chakra-colors-page-bg);
+}
+@keyframes vt-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes vt-fade-in {
+  from {
+    opacity: 0;
+  }
 }
 ::view-transition-group(*) {
-  animation-duration: var(--duration-base);
+  animation-duration: var(--vt-route);
   animation-timing-function: var(--ease-standard);
+}
+::view-transition-old(root) {
+  animation: calc(var(--vt-route) * 0.4) var(--ease-standard) both vt-fade-out;
+}
+::view-transition-new(root) {
+  animation: calc(var(--vt-route) * 0.7) var(--ease-standard) calc(var(--vt-route) * 0.3) both vt-fade-in;
 }
 
 /* Directional route transitions. RouteTransitions passes a type: 'next' /
    'prev' (article prev/next links) or 'forward' / 'back' (history order).
-   A transition without a type keeps the plain cross-fade above. */
+   A transition without a type keeps the plain fade-through above. */
 @keyframes vt-out-left {
   to {
     opacity: 0;
@@ -454,16 +492,68 @@ a:focus-visible > .link-underline {
   }
 }
 html:active-view-transition-type(next, forward)::view-transition-old(root) {
-  animation: var(--duration-base) var(--ease-standard) both vt-out-left;
+  animation: calc(var(--vt-route) * 0.4) var(--ease-standard) both vt-out-left;
 }
 html:active-view-transition-type(next, forward)::view-transition-new(root) {
-  animation: var(--duration-base) var(--ease-standard) both vt-in-right;
+  animation: calc(var(--vt-route) * 0.7) var(--ease-standard) calc(var(--vt-route) * 0.3) both vt-in-right;
 }
 html:active-view-transition-type(prev, back)::view-transition-old(root) {
-  animation: var(--duration-base) var(--ease-standard) both vt-out-right;
+  animation: calc(var(--vt-route) * 0.4) var(--ease-standard) both vt-out-right;
 }
 html:active-view-transition-type(prev, back)::view-transition-new(root) {
-  animation: var(--duration-base) var(--ease-standard) both vt-in-left;
+  animation: calc(var(--vt-route) * 0.7) var(--ease-standard) calc(var(--vt-route) * 0.3) both vt-in-left;
+}
+/* While a card morphs into its page (or flies back), the page itself only
+   fades through: a sliding page would compete with the moving title. */
+html:active-view-transition-type(morph)::view-transition-old(root) {
+  animation: calc(var(--vt-route) * 0.4) var(--ease-standard) both vt-fade-out;
+}
+html:active-view-transition-type(morph)::view-transition-new(root) {
+  animation: calc(var(--vt-route) * 0.7) var(--ease-standard) calc(var(--vt-route) * 0.3) both vt-fade-in;
+}
+
+/* Morphing title (vt-morph-title): never stretched. Each snapshot keeps its
+   own size, pinned to the top-left of the moving box (the large title is
+   revealed as the box grows), and the two fade through instead of
+   overlapping. Styled by name, so engines without view-transition-class
+   still get it. */
+::view-transition-old(vt-morph-title),
+::view-transition-new(vt-morph-title) {
+  height: 100%;
+  object-fit: none;
+  object-position: left top;
+}
+::view-transition-old(vt-morph-title) {
+  animation: calc(var(--vt-route) * 0.35) var(--ease-standard) both vt-fade-out;
+}
+::view-transition-new(vt-morph-title) {
+  animation: calc(var(--vt-route) * 0.6) var(--ease-standard) calc(var(--vt-route) * 0.2) both vt-fade-in;
+}
+/* Morphing cover (vt-morph-cover, the image's frame): the picture scales
+   with its box (both frames are 16:10); the outgoing image stays opaque
+   underneath while the incoming one (sharper, perhaps still decoding) fades
+   in over it — no dim midpoint. */
+::view-transition-old(vt-morph-cover),
+::view-transition-new(vt-morph-cover) {
+  height: 100%;
+  object-fit: cover;
+}
+::view-transition-old(vt-morph-cover) {
+  animation: none;
+}
+::view-transition-new(vt-morph-cover) {
+  animation: var(--vt-route) var(--ease-standard) both vt-fade-in;
+  mix-blend-mode: normal;
+}
+/* A part without a partner on the other page (its card is off screen, the
+   list shows no cover) fades exactly like the page around it. */
+::view-transition-old(vt-morph-title):only-child,
+::view-transition-old(vt-morph-cover):only-child {
+  animation: calc(var(--vt-route) * 0.4) var(--ease-standard) both vt-fade-out;
+}
+::view-transition-new(vt-morph-title):only-child,
+::view-transition-new(vt-morph-cover):only-child {
+  animation: calc(var(--vt-route) * 0.7) var(--ease-standard) calc(var(--vt-route) * 0.3) both vt-fade-in;
 }
 
 /* The sticky, blurred header (view-transition-name: site-header, set in
@@ -575,15 +665,21 @@ html:active-view-transition-type(prev, back)::view-transition-new(root) {
   display: inline-block;
   transition: transform var(--duration-fast) var(--ease-standard);
 }
-a:hover .nudge,
-a:focus-visible .nudge,
-button:hover .nudge {
+a:focus-visible .nudge {
   transform: translateX(3px);
 }
-a:hover .nudge-ne,
-a:focus-visible .nudge-ne,
-button:hover .nudge-ne {
+a:focus-visible .nudge-ne {
   transform: translate(2px, -2px);
+}
+@media (hover: hover) {
+  a:hover .nudge,
+  button:hover .nudge {
+    transform: translateX(3px);
+  }
+  a:hover .nudge-ne,
+  button:hover .nudge-ne {
+    transform: translate(2px, -2px);
+  }
 }
 
 /* Whole-card link: the ::after covers the nearest positioned ancestor. */
@@ -637,11 +733,17 @@ button:hover .nudge-ne {
   top: 50%;
   translate: 0 -50%;
 }
-.hint-wrap:hover .hint,
 .hint-wrap:focus-within .hint {
   opacity: 1;
   transform: none;
   transition-delay: var(--hint-delay, 300ms);
+}
+@media (hover: hover) {
+  .hint-wrap:hover .hint {
+    opacity: 1;
+    transform: none;
+    transition-delay: var(--hint-delay, 300ms);
+  }
 }
 [data-hint-instant] .hint {
   --hint-delay: 0ms;
@@ -766,6 +868,238 @@ button:hover .nudge-ne {
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
+ * Interaction motion — the sticky header, slow navigations, touch presses,
+ * reading aids and the keyboard layer. Every duration is a motion token, so
+ * reduced motion makes all of it instant.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+/* Sticky header (components/Header/Header.tsx `.site-header`): borderless
+   while it sits at the top of the page; its hairline and a soft shadow fade
+   in once it is stuck over scrolled content — a scroll-state container
+   query on the sticky wrapper (SiteChrome `.site-header-sticky`), no script.
+   Engines without scroll-state queries keep the hairline throughout. */
+:root {
+  --header-stuck-shadow: 0 6px 18px -14px rgba(0, 0, 0, 0.35);
+}
+[data-theme='dark'],
+.chakra-ui-dark {
+  --header-stuck-shadow: 0 8px 22px -12px rgba(0, 0, 0, 0.9);
+}
+@supports (container-type: scroll-state) {
+  .site-header-sticky {
+    container-type: scroll-state;
+  }
+  /* html …: above the header's own (Emotion) border colour. */
+  html .site-header {
+    border-bottom-color: transparent;
+    transition:
+      border-color var(--duration-base) var(--ease-standard),
+      box-shadow var(--duration-base) var(--ease-standard);
+  }
+  @container scroll-state(stuck: top) {
+    html .site-header {
+      border-bottom-color: var(--chakra-colors-page-border);
+      box-shadow: var(--header-stuck-shadow);
+    }
+  }
+}
+
+/* Long articles on small screens (components/Article/useAutoHideHeader.ts
+   sets data-header-hidden while reading down): the header slides away and
+   comes back on the first scroll up — never while a dialog or the article's
+   outline is open, a slow navigation is loading, or focus is inside it. */
+.site-header-sticky {
+  transition: transform var(--duration-base) var(--ease-standard);
+}
+@media screen and (max-width: 61.99em) {
+  html[data-header-hidden]:not(:has([aria-modal='true'], .nav-progress[data-state='loading'], [data-toc-open='true']))
+    .site-header-sticky:not(:focus-within) {
+    transform: translateY(-100%);
+  }
+}
+
+/* Slow-navigation bar on the header's bottom edge (components/Chrome/
+   NavProgress.tsx shows it only after 150ms). A sweep while loading; a still
+   bar under reduced motion. The followed link waits with a progress cursor. */
+.nav-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--duration-base) var(--ease-standard);
+}
+.nav-progress[data-state='loading'] {
+  opacity: 1;
+  transition-duration: var(--duration-fast);
+}
+.nav-progress::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, var(--accent) 35%, var(--accent) 65%, transparent);
+  transform: translateX(-100%);
+}
+.nav-progress[data-state='loading']::before {
+  animation: nav-progress-sweep 1100ms ease-in-out infinite;
+}
+@keyframes nav-progress-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-progress::before,
+  .nav-progress[data-state='loading']::before {
+    width: 100%;
+    transform: none;
+    background: var(--accent);
+    animation: none !important;
+  }
+}
+a[data-nav-pending] {
+  cursor: progress;
+}
+
+/* Touch press feedback (touch screens only; a mouse has hover instead).
+   No grey tap flash; cards and list rows (`.pressable`) tint and sink a
+   little while pressed — after 40ms, so a touch that turns into a scroll
+   does not flash; plain links dim. Buttons press in through the theme. */
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+@media (hover: none) and (pointer: coarse) {
+  html .pressable {
+    transition:
+      transform var(--duration-fast) var(--ease-standard),
+      box-shadow var(--duration-fast) var(--ease-standard);
+  }
+  html .pressable:active {
+    transform: scale(0.985);
+    box-shadow: inset 0 0 0 100vmax var(--chakra-colors-page-hover);
+    transition-delay: 40ms;
+  }
+  html :where(a[href]):active:not(.pressable, .pressable *) {
+    opacity: 0.6;
+    transition: opacity var(--duration-fast) var(--ease-standard) 40ms;
+  }
+}
+@media (hover: none) and (pointer: coarse) and (prefers-reduced-motion: reduce) {
+  html .pressable:active {
+    transform: none;
+  }
+}
+
+/* Scroll-to-top (components/ScrollToTop): fades and rises in, fades out —
+   hidden it is out of the tab order and the accessibility tree. */
+html .scroll-top {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(8px) scale(0.96);
+  transition:
+    opacity var(--duration-base) var(--ease-standard),
+    transform var(--duration-base) var(--ease-standard),
+    visibility 0s linear var(--duration-base);
+}
+html .scroll-top[data-visible='true'] {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+  transition:
+    opacity var(--duration-base) var(--ease-standard),
+    transform var(--duration-base) var(--ease-standard),
+    visibility 0s;
+}
+html .scroll-top[data-visible='true']:active {
+  transform: scale(0.94);
+}
+
+/* Table of contents: one marker glides to the current section
+   (components/Article/TableOfContents.tsx writes --toc-y / --toc-h). */
+.toc-marker {
+  position: absolute;
+  top: 0;
+  left: -1px;
+  width: 2px;
+  height: var(--toc-h, 0px);
+  border-radius: 1px;
+  background: var(--accent);
+  transform: translateY(var(--toc-y, 0px));
+  opacity: 0;
+  pointer-events: none;
+}
+.toc-marker[data-on] {
+  opacity: 1;
+}
+.toc-marker[data-ready] {
+  transition:
+    transform var(--duration-base) var(--ease-standard),
+    height var(--duration-base) var(--ease-standard),
+    opacity var(--duration-fast) var(--ease-standard);
+}
+
+/* "G then …" hint (components/Chrome/keyboardLayerActions.ts): appears when
+   no second key follows G within 450 ms; a fluent "G H" never shows it. */
+.kbd-hint {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  z-index: 1500;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 14px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 10px 14px;
+  border: 1px solid var(--chakra-colors-page-border-strong);
+  border-radius: 12px;
+  background: var(--chakra-colors-page-bg-elevated);
+  color: var(--chakra-colors-page-fg-secondary);
+  box-shadow: var(--elevation-md);
+  font: 400 12px/1.5 var(--font-geist-sans), system-ui, sans-serif;
+  opacity: 0;
+  transform: translate(-50%, 8px);
+  pointer-events: none;
+  transition:
+    opacity var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard);
+}
+.kbd-hint[data-open] {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.kbd-hint > span {
+  white-space: nowrap;
+}
+.kbd-hint kbd {
+  display: inline-block;
+  min-width: 18px;
+  margin-right: 6px;
+  padding: 1px 5px;
+  border: 1px solid var(--chakra-colors-page-border-strong);
+  border-radius: 4px;
+  color: var(--chakra-colors-page-fg);
+  font: 500 11px/1.4 var(--font-geist-mono), ui-monospace, monospace;
+  text-align: center;
+}
+.kbd-hint__title {
+  color: var(--chakra-colors-page-fg);
+  font-weight: 500;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
  * Reduced motion — respect user preference everywhere.
  * ──────────────────────────────────────────────────────────────────────── */
 /* The reduced-motion zero of the duration tokens (theme/tokens.ts). */
@@ -845,17 +1179,29 @@ button:hover .nudge-ne {
     color: MarkText;
   }
   /* The animated underline is a background gradient; use a real underline. */
-  .link-underline:hover,
   .link-underline:focus-visible,
-  a:hover > .link-underline,
   a:focus-visible > .link-underline {
     text-decoration: underline;
+  }
+  @media (hover: hover) {
+    .link-underline:hover,
+    a:hover > .link-underline {
+      text-decoration: underline;
+    }
   }
   .rail-fill,
   .rail-dot,
   .eyebrow-rule::after {
     forced-color-adjust: none;
     background: CanvasText !important;
+  }
+  .nav-progress::before,
+  .toc-marker {
+    forced-color-adjust: none;
+    background: Highlight !important;
+  }
+  .kbd-hint {
+    border-color: CanvasText;
   }
 }
 

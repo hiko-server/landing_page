@@ -134,11 +134,14 @@ backup, and a hardened admin GUI for non-engineers.
   `/feed.xml` (RSS with per-item language), `/work/feed.xml` and
   `/feed.json`, listed in the footer's *This site* column next to the
   colophon and the privacy notes.
-- **Command palette 3.0** (⌘K / `/`) — loads on demand, searches the full
-  content through `/api/search-index`, and gives the signed-in owner an
-  *Admin* group with a route-aware *Edit this page*. Its *Keyboard
-  shortcuts: on/off* action (also in the admin `?` sheet) turns the
-  single-key shortcuts (`/`, `G` then a letter) off, per browser.
+- **Command palette 4.0** (⌘K / `/`) — loads on demand, opens at once from
+  the keyboard, searches the full content through `/api/search-index`, has
+  nested *Theme ›*, *CV ›*, *Contact ›* and *Keyboard shortcuts ›* pages
+  (`?`), and gives the signed-in owner an *Admin* group with a route-aware
+  *Edit this page*. Visitors also get `J` / `K` through lists, `[` / `]`
+  between articles, `T` for the theme and `G` then a letter to jump. Its
+  *Keyboard shortcuts: on/off* action (also in the admin `?` sheet) turns
+  every single-key shortcut off, per browser.
 - **Theme** — System / Light / Dark: a one-tap toggle in the header plus a
   menu beside it, the same three choices in ⌘K and in the mobile menu (one
   stored preference, so all of them agree); dark by default (`NEXT_PUBLIC_DEFAULT_THEME`),

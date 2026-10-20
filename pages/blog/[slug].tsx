@@ -185,13 +185,13 @@ export default function BlogPost({
             </Flex>
           </Flex>
 
-          <ArticleRoot ui={articleUi} lang={lang}>
+          <ArticleRoot ui={articleUi} lang={lang} morphId={path}>
             <PageHeader
               eyebrow={<span lang={ui}>{t.writing}</span>}
               title={frontmatter.title}
               titleLang={titleLang !== lang ? titleLang : undefined}
               lede={frontmatter.description}
-              vtName={`vt-blog-${slug}`}
+              morph
             />
 
             <Box mb={12} pb={6} borderBottom="1px solid" borderColor="page.border" lang={ui}>

@@ -11,6 +11,7 @@ import { TocDisclosure, TocRail } from './TableOfContents'
 import ArticleProgress from './ArticleProgress'
 import { useActiveHeading } from './useActiveHeading'
 import { useArticleUi } from './articleUi'
+import { useAutoHideHeader } from './useAutoHideHeader'
 
 /** A table of contents is only worth showing for two or more sections. */
 const MIN_TOC_ENTRIES = 2
@@ -26,12 +27,16 @@ const MIN_TOC_ENTRIES = 2
  *
  * The prose column starts on the same left edge as the page title and the
  * meta grid (no inner padding); paragraphs are capped at 68ch.
+ *
+ * While reading a long article on a small screen the sticky header tucks
+ * away on the way down and returns on the way up (useAutoHideHeader).
  */
 export default function ArticleBody({ tree, toc }: { tree: HastRoot; toc: TocEntry[] }) {
   // The article's words, in its language (the page provides them: ./articleUi).
   const ui = useArticleUi().t
   const showToc = toc.length >= MIN_TOC_ENTRIES
   const activeId = useActiveHeading(showToc ? toc.map((t) => t.id) : [])
+  useAutoHideHeader()
 
   const images = useMemo(() => collectImages(tree as unknown as HastNode), [tree])
   const [index, setIndex] = useState<number | null>(null)

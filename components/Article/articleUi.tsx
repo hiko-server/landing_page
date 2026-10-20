@@ -34,10 +34,21 @@ export function useArticleUi(): ArticleUi {
 }
 
 /** The <article> of a post or case study: its language, the typesetting hook and its words for everything inside. */
-export function ArticleRoot({ ui, lang, children }: { ui: ArticleUi; lang: string; children: ReactNode }) {
+export function ArticleRoot({
+  ui,
+  lang,
+  morphId,
+  children,
+}: {
+  ui: ArticleUi
+  lang: string
+  /** The page path: the card ↔ page morph names this article (lib/viewTransitionMorph). */
+  morphId?: string
+  children: ReactNode
+}) {
   return (
     <ArticleLanguage ui={ui}>
-      <Box as="article" lang={lang} className="article-page">
+      <Box as="article" lang={lang} className="article-page" data-vt-morph={morphId}>
         {children}
       </Box>
     </ArticleLanguage>

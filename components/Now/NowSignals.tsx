@@ -84,8 +84,8 @@ export default function NowSignals({ signals, variant }: { signals: Signals; var
       title: 'Latest writing',
       body: (
         <Flex direction={compact ? 'column' : ['column', 'row']} gap={3}>
-          {signals.post ? <WritingCard item={signals.post} kind="Blog post" collection="blog" compact={compact} /> : null}
-          {signals.work ? <WritingCard item={signals.work} kind="Case study" collection="work" compact={compact} /> : null}
+          {signals.post ? <WritingCard item={signals.post} kind="Blog post" compact={compact} /> : null}
+          {signals.work ? <WritingCard item={signals.work} kind="Case study" compact={compact} /> : null}
         </Flex>
       ),
     })
@@ -165,18 +165,17 @@ function RoleRow({ role, compact, first }: { role: NowRole; compact: boolean; fi
 function WritingCard({
   item,
   kind,
-  collection,
   compact,
 }: {
   item: NowLink
   kind: string
-  collection: 'blog' | 'work'
   compact: boolean
 }) {
-  const slug = item.href.split('/').filter(Boolean).pop() || ''
   return (
     <LinkBox
       as="article"
+      className="pressable"
+      data-vt-morph={item.href}
       flex="1"
       minW={0}
       border="1px solid"
@@ -205,7 +204,7 @@ function WritingCard({
         fontWeight={600}
         lineHeight="1.35"
         color="page.fg"
-        style={slug ? { viewTransitionName: `vt-${collection}-${slug}` } as React.CSSProperties : undefined}
+        data-vt-part="title"
       >
         <LinkOverlay as={NextLink} href={item.href} _focus={{ outline: 'none' }}>
           {item.title}

@@ -525,7 +525,12 @@ test('the live value notifies subscribers once per change', () => {
 test('every single-character shortcut checks the preference and IME composition', () => {
   const header = read('components/Header/Header.tsx')
   assert.match(header, /if \(isImeComposing\(e\)\) return/)
-  assert.match(header, /if \(!getShortcutsEnabled\(\)\) \{\s*armedUntil = 0\s*return\s*\}\s*if \(e\.key === '\/'\)/)
+  // The single-key layer ("/", "?", "G then …", J / K, [ / ], T): one listener
+  // that classifies the key (IME composition, modifiers, fields excluded)
+  // and stops unless the visitor has the shortcuts on.
+  const layer = read('components/Chrome/KeyboardLayer.tsx')
+  assert.match(layer, /const key = layerKeyOf\(e\)\s*if \(!key \|\| !getShortcutsEnabled\(\)/)
+  assert.match(read('lib/keyboardLayer.ts'), /if \(e\.isComposing === true \|\| e\.keyCode === 229\) return null/)
   const palette = read('components/General-UI/CommandPalette.tsx')
   assert.match(palette, /id: 'action:shortcuts'/)
   assert.match(palette, /label: `Keyboard shortcuts: \$\{shortcutsOn \? 'on' : 'off'\}`/)

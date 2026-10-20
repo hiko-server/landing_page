@@ -70,6 +70,8 @@ export default function ThemeControl() {
         aria-label={toggleLabel}
         title={toggleLabel}
         icon={<ThemeIcon />}
+        // The keyboard layer's T presses this (components/Chrome/keyboardLayerActions.ts).
+        data-theme-toggle=""
         onContextMenu={(e) => {
           e.preventDefault()
           openMenu('checked')

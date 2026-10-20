@@ -5,6 +5,8 @@ import Footer from '../Footer/Footer'
 import { ChromeContext } from './ChromeContext'
 import { useChromeLang } from './chromeLang'
 import { navLinksFor, resolveSocialLinks } from './chrome'
+import NavProgress from './NavProgress'
+import KeyboardLayer from './KeyboardLayer'
 
 /**
  * Page chrome: skip link + sticky <Header> + <main id="main"> + <Footer>.
@@ -118,9 +120,22 @@ export default function SiteChrome({
           Skip to content
         </a>
         {/* Its own view-transition snapshot: the header stays pinned while
-            route transitions slide / fade the page beneath it (globals.css). */}
-        <Box ref={headerRef} position="sticky" top={0} zIndex={40} className="no-print" lang={chromeLang} style={{ viewTransitionName: 'site-header' }}>
+            route transitions slide / fade the page beneath it (globals.css).
+            The slow-navigation bar sits on its bottom edge, inside that
+            snapshot. In long articles on small screens the header tucks
+            away while reading down (.site-header-sticky,
+            Article/useAutoHideHeader). */}
+        <Box
+          ref={headerRef}
+          position="sticky"
+          top={0}
+          zIndex={40}
+          className="no-print site-header-sticky"
+          lang={chromeLang}
+          style={{ viewTransitionName: 'site-header' }}
+        >
           <Header socials={links} navLinks={navLinks} publications={hasPublications} />
+          <NavProgress />
         </Box>
         <Box
           as="main"
@@ -138,6 +153,7 @@ export default function SiteChrome({
           <Footer socials={links} navLinks={navLinks} />
         </Box>
       </Box>
+      <KeyboardLayer />
     </ChromeContext.Provider>
   )
 }

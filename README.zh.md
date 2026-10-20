@@ -116,10 +116,12 @@ English → [README.md](./README.md)
 - **可发现性**：标题带上站长姓名，ProfilePage / Person JSON-LD，品牌字体的
   社交卡片，以及全文订阅源：`/feed.xml`（RSS，逐条标注语言）、
   `/work/feed.xml`、`/feed.json`，列在页脚「This site」一栏，与技术说明和隐私说明并列。
-- **命令面板 3.0**（⌘K / `/`）：按需加载，通过 `/api/search-index` 全文搜索；
-  站长登录后多出「Admin」分组，含随当前页面变化的「编辑此页」。面板里的
-  「Keyboard shortcuts: on/off」（后台 `?` 面板里也有）可按浏览器关闭单键快捷键
-  （`/`、`G` 加字母）。
+- **命令面板 4.0**（⌘K / `/`）：按需加载，键盘打开时立即出现，通过
+  `/api/search-index` 全文搜索；带「Theme ›」「CV ›」「Contact ›」和
+  「Keyboard shortcuts ›」（`?`）嵌套页；站长登录后多出「Admin」分组，含随当前
+  页面变化的「编辑此页」。访客还可用 `J` / `K` 在列表中移动、`[` / `]` 切换文章、
+  `T` 切换主题、`G` 加字母跳转。面板里的「Keyboard shortcuts: on/off」（后台
+  `?` 面板里也有）可按浏览器关闭全部单键快捷键。
 - **主题**：跟随系统 / 浅色 / 深色。顶栏一键切换，旁边的菜单、⌘K 和移动端菜单
   都可选三种偏好（同一份存储的偏好，彼此一致）；默认深色（`NEXT_PUBLIC_DEFAULT_THEME`），在首帧绘制前生效，任何
   页面都不会闪错颜色；选「跟随系统」时随操作系统切换。

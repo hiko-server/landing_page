@@ -17,8 +17,9 @@ import { textStyleProps } from '../../theme/tokens'
  * Typography is token-driven (theme/tokens.ts): the eyebrow is the `label`
  * text style, the title `display` (fluid clamp, no breakpoints), the lede
  * `lede`; `titleLang` marks a
- * title in another language than the page, `vtName` gives the h1 a view
- * transition name for a shared-element morph.
+ * title in another language than the page, `morph` marks the h1 as the part
+ * that morphs with the card the page was opened from (the page's <article>
+ * carries the key, lib/viewTransition.ts).
  */
 export default function PageHeader({
   eyebrow,
@@ -26,14 +27,14 @@ export default function PageHeader({
   lede,
   actions,
   titleLang,
-  vtName,
+  morph,
 }: {
   eyebrow: React.ReactNode
   title: React.ReactNode
   lede?: React.ReactNode
   actions?: React.ReactNode
   titleLang?: string
-  vtName?: string
+  morph?: boolean
 }) {
   return (
     <Box as="header" maxW="var(--container-content)" mb={[8, 12]}>
@@ -48,7 +49,7 @@ export default function PageHeader({
         {...textStyleProps('display')}
         color="page.fg"
         lang={titleLang}
-        style={vtName ? ({ viewTransitionName: vtName } as React.CSSProperties) : undefined}
+        data-vt-part={morph ? 'title' : undefined}
       >
         {title}
       </Heading>

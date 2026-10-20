@@ -618,6 +618,68 @@ Bilingual and machine-readable content (F1, F2, G9).
   details, no CV data, never a draft. Edge caches are purged with the
   pages they derive from; `robots.txt` is unchanged.
 
+### motion
+
+Motion and interaction (C1, C2, C5, C6, C7, C9).
+
+- **Cards morph into their pages** (C1): opening a post row, a case-study
+  card, a home "Writing & case studies" row or a /now card, its title (and,
+  for an image cover, the cover's frame) morphs into the page's; Back flies
+  it home to the card it came from (or to the collection). The title is
+  never stretched: both snapshots keep their size and fade through while
+  the box moves. The page itself now *fades through* (the outgoing page is
+  gone before the incoming one appears), so two pages are never seen on top
+  of each other. Names are set only for the one transition that links two
+  elements (never in the markup), nothing morphs out from under an open
+  palette or menu, and reduced motion stays instant. Full page loads
+  between the site's pages fade too (`@view-transition`). The morph code is
+  its own chunk, fetched while the browser is idle.
+- **Slow-navigation feedback** (C2): a navigation still loading after
+  150 ms shows a thin bar on the header's bottom edge (a still line under
+  reduced motion), marks `<main>` `aria-busy` and the followed link
+  (progress cursor), and after a second says "Loading…" to screen readers.
+  A fast navigation shows nothing, and the bar is gone before a transition
+  takes its snapshot.
+- **Command palette 4.0** (C5): from the keyboard (⌘K, `/`, `?`) it is
+  simply there, with no entrance animation; from a click it still scales
+  in. The first frame is only the panel and the field — the rows, and the
+  read of the page's sections, follow a frame later; ranking runs on a
+  deferred copy of the query; phones get a plain scrim instead of a
+  full-screen blur. Nested pages **Theme ›, CV ›, Contact ›** and
+  **Keyboard shortcuts ›** (also `?`) gather their actions; Esc or ⌫ in
+  the empty field goes back with the entry highlighted, and a search from
+  the top still finds everything inside them. A highlighted page is
+  prefetched after 120 ms and Enter opens it at once. Measured with the
+  Event Timing API (Playwright, input → next paint, median of 5): first
+  open by tap on a Pixel 7 profile at 4× CPU throttling 128 → 80 ms,
+  typing 72 → 24 ms; ⌘K on desktop 48 → 40 ms, typing 56 → 32 ms.
+- **Touch press feedback, no sticky hover** (C6): every Chakra hover style
+  now applies only where a pointer can hover (`@media (hover:hover)`,
+  through the site's Emotion cache, `lib/hoverMedia.ts`), as do the static
+  ones in `globals.css` — a tapped button no longer keeps its hover look.
+  No grey tap flash; list rows and cards sink a little and tint while
+  pressed (after 40 ms, so a scroll does not flash them); plain links dim.
+  The scroll-to-top button fades and rises in, and is out of the tab order
+  while hidden.
+- **Reading micro-motion** (C7): the sticky header's hairline and shadow
+  appear only once it is stuck over the page (a scroll-state container
+  query; elsewhere the hairline stays). In long articles on phones and
+  tablets the header tucks away while reading down and returns on the
+  first scroll up — never while a dialog or the article outline is open, a
+  slow navigation is loading or focus is in the header. The outline's
+  current-section marker glides between entries.
+- **Visitor keyboard layer** (C9): `J` / `K` move through the items of
+  /blog, /work and /publications (focus lands on the item's link, so `↵`
+  opens it); `[` / `]` previous / next article; `T` switches light / dark;
+  `?` lists every shortcut; when no second key follows `G` within 450 ms,
+  a hint shows where `G` then a letter goes. All single-key shortcuts respect the on/off switch (WCAG 2.1.4),
+  never fire in a field, a dialog or a menu, with a modifier or while an
+  input method is composing; ⌘K stays in the header. Only the listener is
+  in the shared bundle — the actions load while the browser is idle.
+- Shared first-load JS 203.8 → 205.6 kB gzip (listener, slow-navigation
+  bar, hover guard, morph loader); the palette, the keyboard actions and
+  the morphs are lazy chunks.
+
 ### Changed
 
 - **No more "[01] INTRODUCTION" labels** (owner request): the public site

@@ -104,11 +104,13 @@ export default function BlogIndex({ posts }: Props) {
                   <Box
                     as="li"
                     key={p.slug}
-                    className="hover-item"
+                    className="hover-item pressable"
                     borderBottom="1px solid"
                     borderColor="page.border"
                     data-tag-item=""
                     data-tag-slugs={tagSlugList(p.frontmatter.tags)}
+                    data-vt-morph={p.permalink}
+                    data-kbd-item=""
                   >
                     <Link
                       as={NextLink}
@@ -142,7 +144,7 @@ export default function BlogIndex({ posts }: Props) {
                             transition="color 150ms var(--ease-out-quart)"
                             _groupHover={{ color: 'accent.text' }}
                             lang={p.lang === 'en' ? undefined : p.lang}
-                            style={{ viewTransitionName: `vt-blog-${p.slug}` }}
+                            data-vt-part="title"
                           >
                             {p.frontmatter.title}
                           </Text>

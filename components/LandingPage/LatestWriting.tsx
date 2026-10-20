@@ -50,7 +50,8 @@ export default function LatestWriting({
             <Flex
               as={NextLink}
               href={r.href}
-              className="hover-item"
+              className="hover-item pressable"
+              data-vt-morph={r.href}
               direction={{ base: 'column', md: 'row' }}
               align={{ base: 'flex-start', md: 'baseline' }}
               gap={{ base: 1, md: 6 }}
@@ -76,6 +77,7 @@ export default function LatestWriting({
                 <Text
                   as="span"
                   className="writing-title"
+                  data-vt-part="title"
                   display="block"
                   fontSize="16px"
                   fontWeight={500}

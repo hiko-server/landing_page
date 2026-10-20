@@ -22,8 +22,6 @@ type Card = {
   features: string[]
   study: WorkIndexItem | null
   tech: string[]
-  /** Only the first card per case study carries the view-transition name (names must be unique). */
-  morph: boolean
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -38,8 +36,8 @@ const STATUS_LABEL: Record<string, string> = {
  *
  *   - A project that has a /work case study (the owner's `caseStudy` slug,
  *     else a strict title match) links to it ("Read case study →"), shows
- *     that study's tech as chips and morphs into its page title via a shared
- *     view-transition name.
+ *     that study's tech as chips, and its title morphs into the case-study
+ *     page's (data-vt-morph, lib/viewTransition.ts).
  *   - The whole card is the hit area of its primary action (a stretched
  *     link: the case study, else the "More" disclosure); other controls sit
  *     above it. Cards have cursor-lit borders (useSpotlight + `.spotlight`).
@@ -52,15 +50,12 @@ export default function ProjectSpotlight({ cvEn, work }: { cvEn?: CvSectionLike[
   const month = useReferenceMonth()
   const cards: Card[] = useMemo(() => {
     const section = Array.isArray(cvEn) ? cvEn.find((s) => s?.sessionName === 'project') : undefined
-    const seen = new Set<string>()
     return list(section, 'projectExperience')
       .map((p: any, i: number): Card | null => {
         const title = field(p, 'title')
         const description = field(p, 'description')
         if (!title && !description) return null
         const study = matchCaseStudy({ title, caseStudy: field(p, 'caseStudy') }, work)
-        const morph = !!study && !seen.has(study.slug)
-        if (study) seen.add(study.slug)
         return {
           key: `${i}-${title}`,
           title: title || description,
@@ -72,7 +67,6 @@ export default function ProjectSpotlight({ cvEn, work }: { cvEn?: CvSectionLike[
             .filter(Boolean),
           study,
           tech: chipList(study?.tech),
-          morph,
         }
       })
       .filter((c): c is Card => c !== null)
@@ -221,7 +215,8 @@ function ProjectCard({ card }: { card: Card }) {
       as="article"
       data-card
       data-spotlight
-      className="spotlight"
+      data-vt-morph={href || undefined}
+      className="spotlight pressable"
       direction="column"
       position="relative"
       w={{ base: 'min(82vw, 320px)', sm: '320px', md: '340px' }}
@@ -261,13 +256,19 @@ function ProjectCard({ card }: { card: Card }) {
         )}
       </Flex>
 
-      <Text as="h3" fontWeight={500} fontSize="17px" lineHeight="1.3" color="page.fg" mb={2} letterSpacing="-0.01em" lang={labelLang(card.title)}>
+      <Text
+        as="h3"
+        fontWeight={500}
+        fontSize="17px"
+        lineHeight="1.3"
+        color="page.fg"
+        mb={2}
+        letterSpacing="-0.01em"
+        lang={labelLang(card.title)}
+        data-vt-part={href ? 'title' : undefined}
+      >
         {href ? (
-          <NextLink
-            href={href}
-            className="stretched-link"
-            style={card.morph && card.study ? { viewTransitionName: `vt-work-${card.study.slug}` } : undefined}
-          >
+          <NextLink href={href} className="stretched-link">
             {card.title}
             <span className="sr-only"> — read case study</span>
           </NextLink>
