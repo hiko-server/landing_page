@@ -5,9 +5,9 @@
  * generated from the section registry (every section, field, nested list
  * and bullet, EN and 中文). A unique sentinel is planted in each slot and
  * then kept OFF one surface at a time by every audience that covers it —
- * the field's own list (`fieldsOnlyIn`), each entry around it (`onlyIn`),
- * each list around it, its section — and the outputs of that surface may
- * not contain it:
+ * a bullet's own list (`itemsOnlyIn`, followups-3), the field's own list
+ * (`fieldsOnlyIn`), each entry around it (`onlyIn`), each list around it,
+ * its section — and the outputs of that surface may not contain it:
  *
  *   web       the public API payload (/api/cvdata), the /cv page data (= the
  *             __NEXT_DATA__ and the HTML), the /about + home data, the
@@ -125,11 +125,19 @@ const withFieldOnly = (sections: any[], ownerPath: CvPath, field: string, allowe
   const node = getAt(sections, ownerPath) || {}
   return merge(sections, ownerPath, { fieldsOnlyIn: { ...(node.fieldsOnlyIn || {}), [field]: allowed } })
 }
+/** One bullet's own audience (itemsOnlyIn, keyed by its position). */
+const withItemOnly = (sections: any[], ownerPath: CvPath, field: string, index: number, allowed: CvSurface[]) => {
+  const node = getAt(sections, ownerPath) || {}
+  const map = node.itemsOnlyIn || {}
+  return merge(sections, ownerPath, { itemsOnlyIn: { ...map, [field]: { ...(map[field] || {}), [String(index)]: allowed } } })
+}
+const bulletIndex = (slot: { path: CvPath }) => Number(slot.path[slot.path.length - 1])
 
 type Mechanism = { label: string; apply: (s: any[], allowed: CvSurface[]) => any[] }
 
 function mechanisms(slot: Slot): Mechanism[] {
   const out: Mechanism[] = [{ label: `field ${slot.field}`, apply: (s, a) => withFieldOnly(s, slot.ownerPath, slot.field, a) }]
+  if (slot.kind === 'bullet') out.unshift({ label: `bullet ${slot.field} #${bulletIndex(slot)}`, apply: (s, a) => withItemOnly(s, slot.ownerPath, slot.field, bulletIndex(slot), a) })
   for (const e of slot.entryPaths) out.push({ label: `entry ${e.join('.')}`, apply: (s, a) => merge(s, e, { onlyIn: a }) })
   for (const l of slot.lists) out.push({ label: `list ${l.key}`, apply: (s, a) => withFieldOnly(s, l.ownerPath, l.key, a) })
   out.push({ label: 'section', apply: (s, a) => merge(s, [slot.path[0]], { onlyIn: a }) })
@@ -239,6 +247,10 @@ test('hidden always wins: an audience that names every surface brings nothing hi
     const planted: CvDoc = { en: setAt(base.en, slot.path, value), zh: setAt(base.zh, slot.path, value) }
     const has = (text: string) => needles.some((n) => text.includes(n))
     const hides: Array<(s: any[]) => any[]> = [(s) => merge(s, slot.ownerPath, { hiddenFields: [slot.field], fieldsOnlyIn: { [slot.field]: [...CV_SURFACES] } })]
+    if (slot.kind === 'bullet') {
+      const i = bulletIndex(slot)
+      hides.push((s) => merge(s, slot.ownerPath, { hiddenItems: { [slot.field]: [i] }, itemsOnlyIn: { [slot.field]: { [String(i)]: [...CV_SURFACES] } } }))
+    }
     for (const e of slot.entryPaths) hides.push((s) => merge(s, e, { isVisible: false, onlyIn: [...CV_SURFACES] }))
     for (const hide of hides) {
       const doc: CvDoc = { en: hide(planted.en), zh: hide(planted.zh) }
@@ -265,17 +277,22 @@ test('the PDF draws nothing kept off its surface (sampled: one slot per section 
     const { value, needles } = sentinelFor(slot)
     const base = buildDoc()
     const planted: CvDoc = { en: setAt(base.en, slot.path, value), zh: setAt(base.zh, slot.path, value) }
-    for (const off of ['download', 'private'] as const) {
-      const allowed = CV_SURFACES.filter((s) => s !== off)
-      const doc: CvDoc = { en: withFieldOnly(planted.en, slot.ownerPath, slot.field, allowed), zh: withFieldOnly(planted.zh, slot.ownerPath, slot.field, allowed) }
-      const source = off === 'private' ? { en: applyVariant(doc.en, variantFromCv(doc.en, 'All')), zh: [] } : doc
-      const sections = withEvidenceLinks(publicCvDoc(source, 'cv', off).en, { works, socials })
-      const model = buildCvModel(sections, { lang: 'en', now: NOW, canonical: 'https://example.com/cv' })
-      const drawn: string[] = []
-      const out = await renderCvPdf(model, { fonts, onText: (t) => drawn.push(t) })
-      rendered++
-      assert.ok(!needles.some((n) => drawn.join('\n').includes(n)), `${slot.path.join('.')} kept off ${off}: drawn in the PDF`)
-      assert.ok(slot.kind !== 'url' || !out.buffer.toString('latin1').includes(URL_NEEDLE), `${slot.path.join('.')} kept off ${off}: URL in a PDF annotation`)
+    // The field's own audience; a bullet's own too.
+    const keepOff: Array<(s: any[], allowed: CvSurface[]) => any[]> = [(s, a) => withFieldOnly(s, slot.ownerPath, slot.field, a)]
+    if (slot.kind === 'bullet') keepOff.push((s, a) => withItemOnly(s, slot.ownerPath, slot.field, bulletIndex(slot), a))
+    for (const apply of keepOff) {
+      for (const off of ['download', 'private'] as const) {
+        const allowed = CV_SURFACES.filter((s) => s !== off)
+        const doc: CvDoc = { en: apply(planted.en, allowed), zh: apply(planted.zh, allowed) }
+        const source = off === 'private' ? { en: applyVariant(doc.en, variantFromCv(doc.en, 'All')), zh: [] } : doc
+        const sections = withEvidenceLinks(publicCvDoc(source, 'cv', off).en, { works, socials })
+        const model = buildCvModel(sections, { lang: 'en', now: NOW, canonical: 'https://example.com/cv' })
+        const drawn: string[] = []
+        const out = await renderCvPdf(model, { fonts, onText: (t) => drawn.push(t) })
+        rendered++
+        assert.ok(!needles.some((n) => drawn.join('\n').includes(n)), `${slot.path.join('.')} kept off ${off}: drawn in the PDF`)
+        assert.ok(slot.kind !== 'url' || !out.buffer.toString('latin1').includes(URL_NEEDLE), `${slot.path.join('.')} kept off ${off}: URL in a PDF annotation`)
+      }
     }
   }
   assert.ok(rendered > 40, `rendered ${rendered} PDFs`)

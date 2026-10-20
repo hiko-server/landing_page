@@ -1,16 +1,22 @@
 import { useRef, useState } from 'react'
-import { Box, Button, Flex, Image, Text } from '@chakra-ui/react'
+import { Box, Button, Flex, Image, Text, VisuallyHidden } from '@chakra-ui/react'
 import { uploadHomeImage } from '../home/imageUpload'
 import { stripTs } from '../home/homeForm'
+import { preloadMediaPicker, useLibraryPicker } from '../media/LibraryPicker'
+import type { MediaFormat } from '../../../lib/media/types'
 import { monoFont, useStudioTokens } from './fields'
 
 /**
  * Studio control for the PDF-only photo (E10). Uploads through the shared
  * image pipeline (downscaled, EXIF / GPS stripped on the server) and stores
- * the /uploads/… path. "Use the EN / 中文 photo" copies the other
- * language's photo when this one has none. The value never reaches a public
- * page (lib/cvVisibility PRIVATE_SECTION_FIELDS).
+ * the /uploads/… path. "From library…" picks an earlier upload from the
+ * media library instead — still JPEG, PNG or WebP, what the upload takes
+ * (the PDF re-encodes it: lib/cvExport/photo). "Use the EN / 中文 photo"
+ * copies the other language's photo when this one has none. The value never
+ * reaches a public page (lib/cvVisibility PRIVATE_SECTION_FIELDS).
  */
+
+const PDF_PHOTO_FORMATS: readonly MediaFormat[] = ['jpeg', 'png', 'webp']
 export default function PhotoField({
   value,
   onChange,
@@ -28,6 +34,7 @@ export default function PhotoField({
   const [status, setStatus] = useState('')
   const { border, dim, surfaceAlt } = useStudioTokens()
   const twinPhoto = typeof twin === 'string' && twin.trim() && twin.trim() !== value ? twin.trim() : ''
+  const library = useLibraryPicker()
 
   const upload = async (file: File) => {
     setBusy(true)
@@ -71,6 +78,28 @@ export default function PhotoField({
           <Button size="sm" variant="outline" onClick={() => fileRef.current?.click()} isLoading={busy} loadingText="Uploading">
             {value ? 'Replace photo…' : 'Upload photo…'}
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            isDisabled={busy}
+            onPointerEnter={preloadMediaPicker}
+            onFocus={preloadMediaPicker}
+            onClick={() =>
+              library.open({
+                labels: { title: 'Choose the photo for the PDF', confirm: 'Use on the PDF' },
+                altLang: null,
+                formats: PDF_PHOTO_FORMATS,
+                current: value,
+                onPick: (img) => {
+                  onChange(img.url)
+                  setStatus('Photo chosen from the library. Save the CV to keep it.')
+                },
+              })
+            }
+          >
+            From library…
+            <VisuallyHidden> — choose the PDF photo from the media library</VisuallyHidden>
+          </Button>
           {value ? (
             <Button
               size="sm"
@@ -112,6 +141,7 @@ export default function PhotoField({
             e.target.value = ''
           }}
         />
+        {library.element}
       </Flex>
     </Flex>
   )

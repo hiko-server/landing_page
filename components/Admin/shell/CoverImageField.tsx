@@ -1,5 +1,4 @@
 import React, { useEffect, useId, useRef, useState } from 'react'
-import dynamic from 'next/dynamic'
 import {
   Box,
   Button,
@@ -13,6 +12,7 @@ import {
   useToast,
 } from '@chakra-ui/react'
 import { UPLOAD_ACCEPT, altFromFileName, responsiveSummary, uploadImage } from '../editor/upload'
+import { MediaPickerLazy as MediaPicker } from '../media/LibraryPicker'
 import { inputProps, MONO, outlineButtonProps, warnTextProps } from './ui'
 import { cleanFocus, COVER_RECOMMENDED_MIN as COVER_RECOMMENDED, COVER_SHARP_MIN as COVER_SHARP, focusPoint } from '../../../lib/caseStudy'
 
@@ -32,7 +32,6 @@ import { cleanFocus, COVER_RECOMMENDED_MIN as COVER_RECOMMENDED, COVER_SHARP_MIN
  * image from the media library (H7, loaded on demand) with the alt text chosen there.
  */
 
-const MediaPicker = dynamic(() => import('../media/MediaPicker'), { ssr: false })
 
 export type CoverSize = { width: number; height: number }
 

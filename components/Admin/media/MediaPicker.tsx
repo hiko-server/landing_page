@@ -22,9 +22,9 @@ import {
   useToast,
 } from '@chakra-ui/react'
 import { SearchIcon } from '@chakra-ui/icons'
-import type { MediaItem, MediaLibraryResponse } from '../../../lib/media/types'
+import type { MediaFormat, MediaItem, MediaLibraryResponse, MediaMeta } from '../../../lib/media/types'
 import { ALT_MAX, CAPTION_MAX, metaFor } from '../../../lib/media/meta'
-import { EMPTY_FILTER, filterItems, formatBytes, formatDims, sortItems } from '../../../lib/media/view'
+import { EMPTY_FILTER, filterItems, fitsFormats, formatBytes, formatDims, formatLabel, sortItems, uploadNameIn, usedInCount } from '../../../lib/media/view'
 import SegmentedTabs, { tabPanelProps, type SegmentedItem } from '../shell/SegmentedTabs'
 import { MONO, inputProps, outlineButtonProps, primaryButtonProps, warnTextProps } from '../shell/ui'
 import { isFilenameAlt } from '../shell/publishChecks'
@@ -45,12 +45,39 @@ import { useUploadQueue } from './useUploadQueue'
  *
  *   mode 'insert'  an image in a post / page body (alt + caption)
  *   mode 'cover'   a cover (alt only)
+ *   mode 'field'   an image field of the home page or the CV (followups-3):
+ *                  its own title and button (`labels`); the alt text in the
+ *                  field's language only (`altLang`) — or none, for a field
+ *                  without one (the portrait, the PDF photo: `altLang` null);
+ *                  `formats` limits what can be chosen (the PDF photo takes
+ *                  still JPEG, PNG and WebP) and `current` selects the image
+ *                  the field holds.
  *
- * Loaded on demand (next/dynamic) by components/Admin/RichEditor and
- * components/Admin/shell/CoverImageField.
+ * The picked image carries its default texts in both languages (`meta`),
+ * so a field can fill its other language too (the home photos' Chinese
+ * caption).
+ *
+ * Loaded on demand through components/Admin/media/LibraryPicker
+ * (MediaPickerLazy, one chunk) by components/Admin/RichEditor,
+ * components/Admin/shell/CoverImageField, the home editor's photo, logo and
+ * avatar fields and CV Studio's PDF photo.
  */
 
-export type PickedImage = { name: string; url: string; width: number | null; height: number | null; alt: string; caption: string }
+export type MediaTexts = Pick<MediaMeta, 'alt' | 'altZh' | 'caption' | 'captionZh'>
+
+export type PickedImage = {
+  name: string
+  url: string
+  width: number | null
+  height: number | null
+  /** The alt text chosen in the picker ('' for a field without one). */
+  alt: string
+  caption: string
+  /** The image's default texts, as stored after the pick (null: none). */
+  meta: MediaTexts | null
+}
+
+export type PickerLabels = { title: string; confirm: string }
 
 type Lang = 'en' | 'zh'
 const LANGS: SegmentedItem<Lang>[] = [
@@ -71,10 +98,30 @@ type Props = {
   isOpen: boolean
   onClose: () => void
   onPick: (image: PickedImage) => void
-  mode?: 'insert' | 'cover'
+  mode?: 'insert' | 'cover' | 'field'
+  /** mode 'field': the dialog's title and its button. */
+  labels?: PickerLabels
+  /**
+   * The language of the field's alt text: offered and edited in that
+   * language only. null: the field has no alt text. Left out: chosen in the
+   * picker (posts, pages, covers).
+   */
+  altLang?: Lang | null
+  /** Only images of these formats can be chosen (the others are not listed). */
+  formats?: readonly MediaFormat[]
+  /** The field's value: the upload it points at is selected when the picker opens. */
+  current?: string
 }
 
-export default function MediaPicker({ isOpen, onClose, onPick, mode = 'insert' }: Props) {
+const FORMAT_WORDS = (formats: readonly MediaFormat[]) => {
+  const names = formats.map((f) => formatLabel(f))
+  return names.length > 1 ? `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}` : names[0] || ''
+}
+
+export default function MediaPicker({ isOpen, onClose, onPick, mode = 'insert', labels, altLang, formats, current }: Props) {
+  const withAlt = altLang !== null
+  const fixedLang = altLang !== undefined
+  const withCaption = mode === 'insert'
   const toast = useToast()
   const ids = useId()
   const [lib, setLib] = useState<MediaLibraryResponse | null>(null)
@@ -90,6 +137,9 @@ export default function MediaPicker({ isOpen, onClose, onPick, mode = 'insert' }
   const detailRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const pendingSelect = useRef<string | null>(null)
+  const contentRef = useRef<HTMLElement | null>(null)
+  // The field's own image, once selected on open, is scrolled into view.
+  const revealCurrent = useRef(false)
 
   const load = useCallback(async () => {
     const out = await fetchLibrary()
@@ -101,18 +151,33 @@ export default function MediaPicker({ isOpen, onClose, onPick, mode = 'insert' }
     setLib(out.body)
     if (pendingSelect.current && out.body.items.some((i) => i.name === pendingSelect.current)) {
       setSelectedName(pendingSelect.current)
-      pendingSelect.current = null
     }
+    pendingSelect.current = null
   }, [])
 
   useEffect(() => {
     if (!isOpen) return
-    setLang(readLang())
+    setLang(altLang || readLang())
+    // The image the field holds is the one selected (once the library is in).
+    const name = uploadNameIn(current)
+    if (name) {
+      pendingSelect.current = name
+      revealCurrent.current = true
+    }
     void load()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- read when the picker opens
   }, [isOpen, load])
 
-  const items = useMemo(() => sortItems(filterItems((lib?.items ?? []).filter((i) => i.local), { ...EMPTY_FILTER, q }), 'newest'), [lib, q])
-  const selected: MediaItem | null = selectedName ? lib?.items.find((i) => i.name === selectedName) ?? null : null
+  const choosable = useMemo(() => (lib?.items ?? []).filter((i) => i.local && fitsFormats(i, formats)), [lib, formats])
+  const items = useMemo(() => sortItems(filterItems(choosable, { ...EMPTY_FILTER, q }), 'newest'), [choosable, q])
+  const selected: MediaItem | null = selectedName ? choosable.find((i) => i.name === selectedName) ?? null : null
+
+  useEffect(() => {
+    if (!revealCurrent.current || !selected) return
+    revealCurrent.current = false
+    const frame = requestAnimationFrame(() => contentRef.current?.querySelector('[aria-current="true"]')?.scrollIntoView({ block: 'nearest' }))
+    return () => cancelAnimationFrame(frame)
+  }, [selected])
   const defaults = metaFor(selected?.meta ?? null, lang)
   const other = metaFor(selected?.meta ?? null, lang === 'en' ? 'zh' : 'en')
 
@@ -133,7 +198,7 @@ export default function MediaPicker({ isOpen, onClose, onPick, mode = 'insert' }
     }
   }
 
-  const changed = !!selected && (alt.trim() !== defaults.alt || (mode === 'insert' && caption.trim() !== defaults.caption))
+  const changed = !!selected && withAlt && (alt.trim() !== defaults.alt || (withCaption && caption.trim() !== defaults.caption))
 
   const queue = useUploadQueue((name) => {
     pendingSelect.current = name
@@ -144,18 +209,25 @@ export default function MediaPicker({ isOpen, onClose, onPick, mode = 'insert' }
   const pick = async (item: MediaItem | null = selected) => {
     if (!item || inserting) return
     const isSelected = item.name === selected?.name
-    const texts = isSelected ? { alt: alt.trim(), caption: mode === 'insert' ? caption.trim() : '' } : { alt: metaFor(item.meta, lang).alt, caption: mode === 'insert' ? metaFor(item.meta, lang).caption : '' }
+    const offered = metaFor(item.meta, lang)
+    const texts = !withAlt
+      ? { alt: '', caption: '' }
+      : isSelected
+        ? { alt: alt.trim(), caption: withCaption ? caption.trim() : '' }
+        : { alt: offered.alt, caption: withCaption ? offered.caption : '' }
+    let meta: MediaTexts | null = item.meta ? { alt: item.meta.alt, altZh: item.meta.altZh, caption: item.meta.caption, captionZh: item.meta.captionZh } : null
     if (isSelected && changed && keep) {
       setInserting(true)
       const fields =
         lang === 'en'
-          ? { alt: texts.alt, ...(mode === 'insert' ? { caption: texts.caption } : {}) }
-          : { altZh: texts.alt, ...(mode === 'insert' ? { captionZh: texts.caption } : {}) }
+          ? { alt: texts.alt, ...(withCaption ? { caption: texts.caption } : {}) }
+          : { altZh: texts.alt, ...(withCaption ? { captionZh: texts.caption } : {}) }
       const out = await postMedia({ action: 'meta', name: item.name, ...fields, expectedUpdatedAt: item.meta?.updatedAt ?? 0 })
       setInserting(false)
-      if (!out.ok) toast({ status: 'warning', title: 'Inserted, but the defaults were not saved', description: out.error, position: 'bottom-right' })
+      if (out.ok) meta = { ...(meta ?? { alt: '', altZh: '', caption: '', captionZh: '' }), ...fields }
+      else toast({ status: 'warning', title: `${mode === 'insert' ? 'Inserted' : 'Chosen'}, but the defaults were not saved`, description: out.error, position: 'bottom-right' })
     }
-    onPick({ name: item.name, url: item.url, width: item.width, height: item.height, ...texts })
+    onPick({ name: item.name, url: item.url, width: item.width, height: item.height, ...texts, meta })
     onClose()
   }
 
@@ -166,14 +238,17 @@ export default function MediaPicker({ isOpen, onClose, onPick, mode = 'insert' }
     }
   }
 
-  const title = mode === 'cover' ? 'Choose a cover image' : 'Insert an image'
-  const altMissing = !!selected && !alt.trim()
-  const altFile = !!alt.trim() && isFilenameAlt(alt.trim())
+  const title = mode === 'field' && labels ? labels.title : mode === 'cover' ? 'Choose a cover image' : 'Insert an image'
+  const confirm = mode === 'field' && labels ? labels.confirm : mode === 'cover' ? 'Use as cover' : 'Insert image'
+  const altMissing = withAlt && !!selected && !alt.trim()
+  const altFile = withAlt && !!alt.trim() && isFilenameAlt(alt.trim())
+  const altLabel = fixedLang ? `Alt text (${lang === 'zh' ? '中文' : 'English'})` : 'Alt text'
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} size={{ base: 'full', md: '6xl' }} scrollBehavior="inside" initialFocusRef={searchRef}>
       <ModalOverlay />
       <ModalContent
+        ref={contentRef}
         bg="page.bg-elevated"
         border={{ md: '1px solid' }}
         borderColor="page.border"
@@ -187,7 +262,8 @@ export default function MediaPicker({ isOpen, onClose, onPick, mode = 'insert' }
             {title}
           </Text>
           <Text fontSize="xs" fontWeight={400} color="page.fg-secondary" mt={0.5}>
-            From the media library{lib ? ` · ${lib.items.filter((i) => i.local).length} images` : ''} — or upload a new one (drop it anywhere here).
+            From the media library{lib ? ` · ${choosable.length} image${choosable.length === 1 ? '' : 's'}` : ''}
+            {formats?.length ? ` (${FORMAT_WORDS(formats)})` : ''} — or upload a new one (drop it anywhere here).
           </Text>
           <Flex gap={2} mt={3} flexWrap="wrap">
             <InputGroup size="sm" flex="1 1 240px">
@@ -234,7 +310,9 @@ export default function MediaPicker({ isOpen, onClose, onPick, mode = 'insert' }
                 </Box>
               ) : !items.length ? (
                 <Box border="1px dashed" borderColor="page.border-strong" borderRadius="lg" p={8} textAlign="center">
-                  <Text fontSize="sm">{q ? 'No image matches.' : 'No images yet — upload one.'}</Text>
+                  <Text fontSize="sm">
+                    {q ? 'No image matches.' : formats?.length && lib.items.some((i) => i.local) ? `No ${FORMAT_WORDS(formats)} images yet — upload one.` : 'No images yet — upload one.'}
+                  </Text>
                 </Box>
               ) : (
                 <MediaCollection
@@ -268,7 +346,7 @@ export default function MediaPicker({ isOpen, onClose, onPick, mode = 'insert' }
             >
               {!selected ? (
                 <Text fontSize="sm" color="page.fg-secondary">
-                  Choose an image to see its alt text{mode === 'insert' ? ' and caption' : ''}.
+                  {withAlt ? `Choose an image to see its alt text${withCaption ? ' and caption' : ''}.` : 'Choose an image to see it here.'}
                 </Text>
               ) : (
                 <>
@@ -281,37 +359,46 @@ export default function MediaPicker({ isOpen, onClose, onPick, mode = 'insert' }
                   <Text fontSize="11px" color="page.fg-secondary" className="tnum">
                     {formatDims(selected.width, selected.height)} · {formatBytes(selected.bytes)}
                   </Text>
-                  <Box mt={3}>
-                    <SegmentedTabs items={LANGS} value={lang} onSelect={(l) => {
-                      setLang(l)
-                      try {
-                        window.localStorage.setItem(LANG_KEY, l)
-                      } catch {
-                        /* the choice lasts for this visit */
-                      }
-                    }} label="Language of the page" idPrefix={`${ids}-lang`} size="sm" />
-                  </Box>
-                  <Box {...tabPanelProps(`${ids}-lang`, lang)} mt={3} lang={lang === 'zh' ? 'zh-Hans' : 'en'}>
-                    <FormControl>
-                      <FormLabel htmlFor={`${ids}-alt`} fontSize="12px" mb={1}>
-                        Alt text
-                      </FormLabel>
-                      <Textarea id={`${ids}-alt`} {...inputProps} size="sm" rows={2} maxLength={ALT_MAX} value={alt} onChange={(e) => setAlt(e.target.value)} placeholder={lang === 'en' ? 'What the picture shows' : '图片内容的简短描述'} />
-                    </FormControl>
-                    {!alt.trim() && other.alt ? (
-                      <Button size="xs" variant="link" color="accent.text" mt={1} onClick={() => setAlt(other.alt)}>
-                        Start from the {lang === 'en' ? 'Chinese' : 'English'} text
-                      </Button>
-                    ) : null}
-                    {mode === 'insert' ? (
-                      <FormControl mt={3}>
-                        <FormLabel htmlFor={`${ids}-caption`} fontSize="12px" mb={1}>
-                          Caption
+                  {!withAlt ? (
+                    <Text fontSize="11px" color="page.fg-secondary" mt={1}>
+                      {usedInCount(selected) ? `Used in ${usedInCount(selected)} place${usedInCount(selected) === 1 ? '' : 's'}` : 'Not used anywhere yet'}
+                    </Text>
+                  ) : null}
+                  {withAlt && !fixedLang ? (
+                    <Box mt={3}>
+                      <SegmentedTabs items={LANGS} value={lang} onSelect={(l) => {
+                        setLang(l)
+                        try {
+                          window.localStorage.setItem(LANG_KEY, l)
+                        } catch {
+                          /* the choice lasts for this visit */
+                        }
+                      }} label="Language of the page" idPrefix={`${ids}-lang`} size="sm" />
+                    </Box>
+                  ) : null}
+                  {withAlt ? (
+                    <Box {...(fixedLang ? {} : tabPanelProps(`${ids}-lang`, lang))} mt={3} lang={lang === 'zh' ? 'zh-Hans' : 'en'}>
+                      <FormControl>
+                        <FormLabel htmlFor={`${ids}-alt`} fontSize="12px" mb={1}>
+                          {altLabel}
                         </FormLabel>
-                        <Input id={`${ids}-caption`} {...inputProps} size="sm" maxLength={CAPTION_MAX} value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Shown under the picture (optional)" />
+                        <Textarea id={`${ids}-alt`} {...inputProps} size="sm" rows={2} maxLength={ALT_MAX} value={alt} onChange={(e) => setAlt(e.target.value)} placeholder={lang === 'en' ? 'What the picture shows' : '图片内容的简短描述'} />
                       </FormControl>
-                    ) : null}
-                  </Box>
+                      {!alt.trim() && other.alt ? (
+                        <Button size="xs" variant="link" color="accent.text" mt={1} onClick={() => setAlt(other.alt)}>
+                          Start from the {lang === 'en' ? 'Chinese' : 'English'} text
+                        </Button>
+                      ) : null}
+                      {withCaption ? (
+                        <FormControl mt={3}>
+                          <FormLabel htmlFor={`${ids}-caption`} fontSize="12px" mb={1}>
+                            Caption
+                          </FormLabel>
+                          <Input id={`${ids}-caption`} {...inputProps} size="sm" maxLength={CAPTION_MAX} value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="Shown under the picture (optional)" />
+                        </FormControl>
+                      ) : null}
+                    </Box>
+                  ) : null}
                   {altMissing ? (
                     <Text fontSize="xs" {...warnTextProps} mt={2}>
                       No alt text: screen readers will skip this image.
@@ -333,13 +420,13 @@ export default function MediaPicker({ isOpen, onClose, onPick, mode = 'insert' }
         </ModalBody>
         <ModalFooter gap={2} borderTop="1px solid" borderColor="page.border">
           <Text fontSize="xs" color="page.fg-secondary" mr="auto" display={{ base: 'none', md: 'block' }}>
-            Double-click an image or press ⌘ / Ctrl + Enter to {mode === 'cover' ? 'use it' : 'insert it'}.
+            Double-click an image or press ⌘ / Ctrl + Enter to {mode === 'insert' ? 'insert it' : 'use it'}.
           </Text>
           <Button size="sm" {...outlineButtonProps} onClick={onClose}>
             Cancel
           </Button>
           <Button size="sm" {...primaryButtonProps} onClick={() => void pick()} isDisabled={!selected} isLoading={inserting} loadingText="Saving">
-            {mode === 'cover' ? 'Use as cover' : 'Insert image'}
+            {confirm}
           </Button>
         </ModalFooter>
       </ModalContent>

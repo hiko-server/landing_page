@@ -7,6 +7,8 @@ import { useLogoMetrics, type LogoMeasurement } from './useLogoMetrics'
 import { BrandStrip, brandsForDisplay } from '../../BrandShowcase/BrandShowcase'
 import { opticalLogoSize, UNMEASURED_LOGO } from '../../../lib/logoSize'
 import { snapBrandScale } from '../../../lib/homeShape'
+import { LibraryButton, useLibraryPicker, type LibraryRequest } from '../media/LibraryPicker'
+import { logoFromLibrary, newLogoFromLibrary } from './libraryPick'
 import {
   CardShell,
   ImagePreview,
@@ -49,12 +51,23 @@ function measurementText(measurement: LogoMeasurement | undefined, image: string
  * optically from their measured content box and ink (lib/logoSize.ts — the
  * same measurement the save stores), and each card says what was measured,
  * so the scale is only needed for taste.
+ *
+ * "Library…" (beside the drop zone's button, on each card's image URL and
+ * in its ⋯ menu) picks an uploaded logo from the media library; its English
+ * alt text names a card that has no name yet (./libraryPick).
  */
 export default function BrandsSection({ value, onChange }: SectionProps<BrandItem[]>) {
   const remove = useUndoableRemove(onChange, 'logo')
   const { busy, upload } = useCardUpload()
+  const library = useLibraryPicker()
   const patch = (id: string, change: Partial<BrandItem>) =>
     onChange((prev) => prev.map((b) => (b._id === id ? { ...b, ...change } : b)))
+  const pickFor = (b: BrandItem, index: number): LibraryRequest => ({
+    labels: { title: `Choose logo ${index + 1}${b.name.trim() ? ` (${b.name.trim()})` : ''}`, confirm: 'Use this logo' },
+    altLang: 'en',
+    current: b.image,
+    onPick: (img) => onChange((prev) => prev.map((x) => (x._id === b._id ? { ...x, ...logoFromLibrary(x, img) } : x))),
+  })
   const measured = useLogoMetrics(value.map((b) => (b.image ? cleanImage(b.image) : '')))
   const preview = brandsForDisplay(
     value.map((b) => {
@@ -70,6 +83,21 @@ export default function BrandsSection({ value, onChange }: SectionProps<BrandIte
         hint="Drop logo files here or pick them — SVG, PNG or WebP keep transparency."
         onUploaded={(url, file) =>
           onChange((prev) => [...prev, { _id: newId(), name: nameFromFile(file), href: '', image: url, scale: 1 }])
+        }
+        extra={
+          <LibraryButton
+            size="sm"
+            context="— add a logo from the media library"
+            onClick={() =>
+              library.open({
+                labels: { title: 'Add a logo from the library', confirm: 'Add logo' },
+                altLang: 'en',
+                onPick: (img) => onChange((prev) => [...prev, { _id: newId(), ...newLogoFromLibrary(img) }]),
+              })
+            }
+          >
+            From library…
+          </LibraryButton>
         }
       />
       {preview.length > 0 ? (
@@ -112,12 +140,20 @@ export default function BrandsSection({ value, onChange }: SectionProps<BrandIte
               replacing={busy === b._id}
               preview={<ImagePreview src={b.image} alt={b.name ? `${b.name} logo` : `Logo ${index + 1}`} variant="brand" scale={b.scale} />}
               onReplace={(file) => void upload(b._id, file, (url) => patch(b._id, { image: url }))}
+              onLibrary={() => library.open(pickFor(b, index))}
               onMoveTop={() => onChange((prev) => moveItem(prev, prev.findIndex((x) => x._id === b._id), 0))}
               onRemove={() => remove(value, index)}
             >
               <TextField label="Name" value={b.name} onChange={(v) => patch(b._id, { name: v })} placeholder="Organisation name (alt text)" />
               <TextField label="Link" value={b.href} onChange={(v) => patch(b._id, { href: v })} placeholder="https://…" invalid={linkError(b.href)} />
-              <TextField label="Image URL" value={b.image} onChange={(v) => patch(b._id, { image: v })} placeholder="/images/brand/…" invalid={linkError(b.image)} />
+              <TextField
+                label="Image URL"
+                value={b.image}
+                onChange={(v) => patch(b._id, { image: v })}
+                placeholder="/images/brand/…"
+                invalid={linkError(b.image)}
+                extra={<LibraryButton variant="ghost" color="accent.text" context={`for logo ${index + 1}`} onClick={() => library.open(pickFor(b, index))} />}
+              />
               <ScaleField value={b.scale} onChange={(v) => patch(b._id, { scale: v })} />
               <Text fontSize="xs" color="page.fg-secondary" className="tnum">
                 {measurementText(b.image ? measured.get(cleanImage(b.image)) : undefined, b.image, b.scale)}
@@ -136,6 +172,7 @@ export default function BrandsSection({ value, onChange }: SectionProps<BrandIte
           Add empty logo card
         </Button>
       </Flex>
+      {library.element}
     </Box>
   )
 }

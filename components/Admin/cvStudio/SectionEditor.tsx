@@ -26,6 +26,7 @@ import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, us
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { audienceOf, countHidden, fieldAudience, hiddenIndices, isFieldHidden, type CvPath } from '../../../lib/cvVisibility'
+import { itemAudience } from '../../../lib/cvItemAudience'
 import { cvLabels } from '../../../lib/cvFormat'
 import { defaultSpan, isFieldHideable, type FieldDef, type ListDef, type SectionDef } from '../../../lib/cvSections'
 import { normalizeDoi } from '../../../lib/publications/doi'
@@ -155,6 +156,17 @@ function FieldRenderer({ def, node, nodePath }: { def: FieldDef; node: any; node
           onOp={(op) => api.list(path, op, op.type === 'remove' ? `Deleted ${singular.toLowerCase()}` : undefined)}
           onPasteLines={(i, lines) => api.insertMany(path, i, lines, !(items[i] || '').trim())}
           onToggleHidden={(i) => api.toggleItem(nodePath, def.key, i, (items[i] || '').trim() || `${singular} ${i + 1}`)}
+          renderAudience={(i, text) => {
+            const name = text.trim() ? `“${text.trim().slice(0, 40)}”` : `${singular.toLowerCase()} ${i + 1}`
+            return (
+              <AudienceMenu
+                value={itemAudience(node, def.key, i)}
+                onChange={(l) => api.setItemAudience(nodePath, def.key, i, l, text.trim() || `${singular} ${i + 1}`)}
+                label={name}
+                compactOnPhones
+              />
+            )
+          }}
         />
       )
       break

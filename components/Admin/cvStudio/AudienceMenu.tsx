@@ -20,12 +20,18 @@ export default function AudienceMenu({
   value,
   onChange,
   label,
+  compactOnPhones = false,
 }: {
   /** null = every surface. */
   value: readonly CvSurface[] | null
   onChange: (next: CvSurface[] | null) => void
   /** What it applies to, for the accessible name ("Phone"). */
   label: string
+  /**
+   * On a phone a restricted trigger is the tinted icon alone (a bullet's
+   * text needs the width); the chip's words stay in its name and tooltip.
+   */
+  compactOnPhones?: boolean
 }) {
   const { faint, dim } = useStudioTokens()
   const checked: readonly CvSurface[] = value ?? CV_SURFACES
@@ -45,7 +51,7 @@ export default function AudienceMenu({
           aria-label={name}
           data-audience-toggle=""
           data-restricted={restricted ? '' : undefined}
-          px={restricted ? 1.5 : 0}
+          px={restricted ? (compactOnPhones ? { base: 0, md: 1.5 } : 1.5) : 0}
           minW="24px"
           h="24px"
           fontFamily={monoFont}
@@ -66,7 +72,11 @@ export default function AudienceMenu({
         >
           <Box as="span" display="inline-flex" alignItems="center" gap={1}>
             <FiShare2 aria-hidden size={11} />
-            {restricted ? <span aria-hidden>{audienceChip(value)}</span> : null}
+            {restricted ? (
+              <Box as="span" aria-hidden display={compactOnPhones ? { base: 'none', md: 'inline' } : undefined}>
+                {audienceChip(value)}
+              </Box>
+            ) : null}
           </Box>
         </MenuButton>
       </Tooltip>

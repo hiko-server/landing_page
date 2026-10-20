@@ -451,7 +451,11 @@ test('_app moves focus after page changes; dialogs closed by a page change do no
   assert.match(header, /returnFocusOnClose=\{dialogsReturnFocus\}/)
   assert.match(header, /if \(leavesPage\) \{\s*setDialogsReturnFocus\(false\)/)
   assert.match(read('components/Header/MobileDrawer.tsx'), /returnFocusOnClose=\{returnFocusOnClose\}/)
-  assert.match(read('components/General-UI/CommandPalette.tsx'), /returnFocusOnClose=\{restoreFocus && returnFocusOnClose\}/)
+  // (followups-3: the palette returns focus itself — components/General-UI/paletteSession.ts —
+  // and only when the close hands focus back.)
+  const palette = read('components/General-UI/CommandPalette.tsx')
+  assert.match(palette, /restores: restoreFocus && returnFocusOnClose/)
+  assert.match(palette, /finalFocusRef=\{returnFocusRef\}/)
 })
 
 // ── FIX-14: single-character shortcuts can be turned off ──────────────────────

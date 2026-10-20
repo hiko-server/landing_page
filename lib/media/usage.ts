@@ -225,6 +225,27 @@ export function homeFieldLabel(home: Record<string, unknown>, path: Array<string
   return pathLabel(path)
 }
 
+/**
+ * Whether a home image field shows its picture with a real alt text: a
+ * field-note photo's description is its alt text, and a logo's name is its
+ * accessible name (the alt text, or the link's label when it links). The
+ * portrait's alt text is the page's own (the owner's name): null, like any
+ * field that is not an image tag.
+ */
+export function homeFieldAlt(home: Record<string, unknown>, path: Array<string | number>): UsageAlt | null {
+  const [a, i, b] = path
+  if (typeof i !== 'number') return null
+  if (a === 'photos' && b === 'url') {
+    const photo = (home.photos as Array<Record<string, unknown>> | undefined)?.[i]
+    return altState(typeof photo?.describe === 'string' ? photo.describe : '')
+  }
+  if (a === 'brands' && b === 'image') {
+    const brand = (home.brands as Array<Record<string, unknown>> | undefined)?.[i]
+    return altState(typeof brand?.name === 'string' ? brand.name : '')
+  }
+  return null
+}
+
 const CV_LANG = { en: 'EN', zh: '中文' } as const
 
 function scanCv(c: Collector, cv: NonNullable<UsageSources['cv']>) {
@@ -272,7 +293,9 @@ export function scanUsage(src: UsageSources, opts: UsageOptions = {}): MediaUsag
     const home = src.home
     const doc: DocInfo = { doc: 'home', docKind: 'home', docTitle: 'Home page', docState: 'live', editHref: '/admin/dashboard?tab=home', publicHref: '/' }
     walkStrings(home, (value, path) => {
-      for (const ref of uploadRefsIn(value)) c.add(doc, fieldKey(path), homeFieldLabel(home, path), ref.name, null, null)
+      // A logo's stored measurement names the file it measured (metrics.source): bookkeeping, not a place it shows.
+      if (path[0] === 'brands' && path[2] === 'metrics') return
+      for (const ref of uploadRefsIn(value)) c.add(doc, fieldKey(path), homeFieldLabel(home, path), ref.name, null, homeFieldAlt(home, path))
     })
   }
   if (src.cv) scanCv(c, src.cv)

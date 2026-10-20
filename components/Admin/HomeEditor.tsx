@@ -54,6 +54,7 @@ import SectionsSection from './home/SectionsSection'
 import HighlightsSection from './home/HighlightsSection'
 import ContactReasonsField from './home/ContactReasonsField'
 import ChineseSection from './home/ChineseSection'
+import { LibraryButton, useLibraryPicker } from './media/LibraryPicker'
 
 const RETURN_PATH = '/admin/dashboard?tab=home'
 
@@ -350,6 +351,9 @@ export default function HomeEditor({ onUnsavedSource }: { onUnsavedSource?: (get
   const toggleSection = (key: SectionKey, visible: boolean) => set.sections((prev) => ({ ...prev, [key]: visible }))
   const setSectionOrder = (order: SortableSectionKey[]) => setForm((prev) => ({ ...prev, sectionOrder: order }))
 
+  // The media library (followups-3): the portrait from an earlier upload.
+  const library = useLibraryPicker()
+
   const uploadAvatar = async (file: File) => {
     try {
       const { url, warning } = await uploadHomeImage(file)
@@ -482,6 +486,21 @@ export default function HomeEditor({ onUnsavedSource }: { onUnsavedSource?: (get
               input.value = ''
             }}
           />
+          <LibraryButton
+            mt={2}
+            context="— choose the avatar from the media library"
+            onClick={() =>
+              library.open({
+                labels: { title: 'Choose the avatar', confirm: 'Use as avatar' },
+                // The portrait's alt text is the page's own (the owner's name), not the image's.
+                altLang: null,
+                current: hero.avatarUrl,
+                onPick: (img) => set.hero((h) => ({ ...h, avatarUrl: img.url })),
+              })
+            }
+          >
+            Choose from library…
+          </LibraryButton>
         </FormControl>
 
         <FormControl gridColumn="1 / -1">
@@ -791,6 +810,7 @@ export default function HomeEditor({ onUnsavedSource }: { onUnsavedSource?: (get
           </AlertDialogContent>
         </AlertDialogOverlay>
       </AlertDialog>
+      {library.element}
     </Box>
   )
 }

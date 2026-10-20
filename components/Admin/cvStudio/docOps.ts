@@ -28,6 +28,7 @@ import {
   type CvSurface,
 } from '../../../lib/cvVisibility'
 import { newEntryUid, uidListKeys } from '../../../lib/cvEntryUid'
+import { itemAudience, remapItemAudiences, withItemAudience } from '../../../lib/cvItemAudience'
 
 /** Keys that are bookkeeping, not typed content: visibility, audiences and the entry uid. */
 const isMetaKey = (k: string) => k === ENTRY_UID_KEY || (VISIBILITY_KEYS as readonly string[]).includes(k)
@@ -371,6 +372,29 @@ export function setNodeAudience(doc: Doc, lang: CvLang, path: CvPath, list: read
   return updateNode(doc, lang, path, (n) => withNodeAudience(n || {}, list), linked)
 }
 
+/**
+ * Set the audience of one item of a string list (a bullet; null = every
+ * surface); linked like a bullet's hide — only when the list lines up in the
+ * other language, so position N is the same bullet there.
+ */
+export function setItemAudience(
+  doc: Doc,
+  lang: CvLang,
+  parentPath: CvPath,
+  field: string,
+  index: number,
+  list: readonly CvSurface[] | null,
+  linked: boolean,
+): LinkedResult {
+  const mine = { ...doc, [lang]: setAt(doc[lang], parentPath, withItemAudience(getAt(doc[lang], parentPath) || {}, field, index, list)) }
+  if (!linked) return { doc: mine, reached: false }
+  const twin = alignedTwin(doc, lang, [...parentPath, field, index])
+  const o = otherLang(lang)
+  const theirNode = twin ? getAt(doc[o], twin.slice(0, -2)) : undefined
+  if (!twin || !isPlainObject(theirNode)) return { doc: mine, reached: false }
+  return { doc: { ...mine, [o]: setAt(doc[o], twin.slice(0, -2), withItemAudience(theirNode, field, index, list)) }, reached: true }
+}
+
 // ── Lists (object entries and string bullets) ─────────────────────────────
 
 export type ListOp =
@@ -445,6 +469,12 @@ function listOpOnSections(sections: Section[], listPath: CvPath, op: ListOp, for
     if (op.type === 'duplicate' && nextList.length > arr.length && hidden.includes(op.index)) {
       nextParent = withItemHidden(nextParent, field, op.index + 1, true)
     }
+  }
+  // Item audiences are keyed by position too: they follow their bullets, and a copy keeps its source's.
+  nextParent = remapItemAudiences(nextParent, field, mappingFor(op, arr.length))
+  if (op.type === 'duplicate' && nextList.length > arr.length) {
+    const copied = itemAudience(parent, field, op.index)
+    if (copied) nextParent = withItemAudience(nextParent, field, op.index + 1, copied)
   }
   return setAt(sections, parentPath, nextParent)
 }
