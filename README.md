@@ -198,7 +198,8 @@ backup, and a hardened admin GUI for non-engineers.
   the release image carries only the traced runtime.
 - [Quality gates](#quality-gates) run before each push: a blocking
   production-dependency audit with an expiring allowlist, a performance
-  budget, and Playwright + axe end-to-end tests against a production build.
+  budget, and a container gate that builds the image and runs the
+  Playwright + axe end-to-end tests against it.
 - [`scripts/deploy.sh`](#deploying-to-production) — health-checked deploy
   with backups and automatic rollback.
 - [Versioned Cloudflare configuration](#cloudflare) plus env-gated cache
@@ -803,7 +804,14 @@ There is no hosted CI: run these before pushing to `main`.
 |---|---|
 | `yarn check`, `yarn build`, `node scripts/perf-budget.mjs` | `tsc`, ESLint with zero warnings, unit tests, `next build --webpack`, and the performance budget (shared and per-page first-load JS, shared CSS, number and weight of preloaded fonts) |
 | `yarn audit:deps` | `scripts/check-audit.mjs`: no high/critical advisory in production dependencies unless allowlisted in `security/audit-allowlist.json` with a reason and an expiry date; expired entries fail too |
-| `yarn e2e` | the Playwright + axe suite against a running production build or container (`E2E_BASE_URL`, default `http://127.0.0.1:3000`) |
+| `scripts/check-container.sh` | the merged compose config publishes loopback only and keeps the hardening; the image builds, starts on fresh data holding only the git seeds, serves, warms its ISR pages, runs as uid 1001 with no capabilities and `NoNewPrivs`; the Playwright + axe suite (`@admin` specs included, with a throwaway admin) passes against that container; it stops in under 8 s. Needs Docker, `jq` and `curl`; required for changes to the Dockerfile, `docker-entrypoint.sh` or the compose files, `--no-e2e` skips the suite |
+
+To run the suite against another server, point `E2E_BASE_URL` at it (a local
+`yarn start` listens on `http://127.0.0.1:3002`; the default is
+`http://127.0.0.1:3000`). The `@admin` specs sign in with `ADMIN_EMAIL` /
+`ADMIN_PASS` from the environment (`yarn e2e` does not read `.env`) and
+are skipped without them; they change content, so leave them out with
+`--grep-invert @admin` for anything but a disposable store.
 
 The E2E suite (`e2e/`) checks every public page on desktop, tablet, phone
 and reduced-motion profiles: one visible `h1`, `lang` (`zh-Hans` on

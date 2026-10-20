@@ -32,6 +32,7 @@ test-results
 blob-report
 security
 audit-report.json
+.container-check.*
 # Server-local deploy state.
 docker-compose.override.yml
 .deployed-sha

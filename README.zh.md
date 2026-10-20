@@ -155,7 +155,7 @@ English → [README.md](./README.md)
 - 服务器上的 compose 覆盖文件不再纳入版本库（提供只绑定回环地址的示例），
   容器日志轮转，基础镜像按 digest 固定，发布镜像只包含追踪出的运行时文件。
 - 推送前运行的[质量关卡](#质量关卡)：阻断式生产依赖审计（带到期日的豁免清单）、
-  性能预算，以及针对生产构建运行的 Playwright + axe 端到端测试。
+  性能预算，以及构建镜像并针对它运行 Playwright + axe 端到端测试的容器关卡。
 - [`scripts/deploy.sh`](#部署到生产环境)：带健康检查、备份与自动回滚的部署。
 - [版本化的 Cloudflare 配置](#cloudflare)，以及每次重新生成页面时按环境变量
   启用的缓存清除与 IndexNow 推送。
@@ -633,7 +633,13 @@ IndexNow（密钥文件位于站点根目录 `/<INDEXNOW_KEY>.txt`：密钥文�
 |---|---|
 | `yarn check`、`yarn build`、`node scripts/perf-budget.mjs` | `tsc`、零警告的 ESLint、单元测试、`next build --webpack`，以及性能预算（共享与逐页首屏 JS、共享 CSS、预加载字体的数量与体积） |
 | `yarn audit:deps` | `scripts/check-audit.mjs`：生产依赖中不得有高危 / 严重漏洞，除非在 `security/audit-allowlist.json` 中写明理由与到期日；过期条目同样失败 |
-| `yarn e2e` | 针对正在运行的生产构建或容器运行 Playwright + axe 测试（`E2E_BASE_URL`，默认 `http://127.0.0.1:3000`） |
+| `scripts/check-container.sh` | 合并后的 compose 配置只暴露回环地址并保留加固项；镜像能构建、在只含 git 种子的全新数据目录上启动、提供服务、预热 ISR 页面，以 uid 1001 运行、没有任何 capability 且 `NoNewPrivs` 为 1；针对该容器运行的 Playwright + axe 测试（含 `@admin` 用例，使用一次性的管理员账号）全部通过；8 秒内优雅停止。需要 Docker、`jq` 与 `curl`；修改 Dockerfile、`docker-entrypoint.sh` 或 compose 文件时必须运行，`--no-e2e` 可跳过端到端测试 |
+
+要针对其他服务器运行测试，把 `E2E_BASE_URL` 指向它（本地 `yarn start` 监听
+`http://127.0.0.1:3002`；默认值为 `http://127.0.0.1:3000`）。`@admin` 用例从环境
+变量 `ADMIN_EMAIL` / `ADMIN_PASS` 读取登录信息（`yarn e2e` 不会读取 `.env`），
+缺少时会被跳过；它们会修改内容，因此除一次性的数据存储外，请用
+`--grep-invert @admin` 排除它们。
 
 端到端测试（`e2e/`）在桌面、平板、手机与减少动效四种配置下检查每个公开页面：
 恰好一个可见的 `h1`、`lang`（`/cv/zh` 为 `zh-Hans`）、标题与描述、无严重 /
