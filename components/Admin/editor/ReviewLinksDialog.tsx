@@ -47,32 +47,80 @@ async function copyText(text: string): Promise<boolean> {
 
 const absolute = (path: string) => (typeof window === 'undefined' ? path : `${window.location.origin}${path}`)
 
+type CopyState = 'idle' | 'copied' | 'failed'
+
+/**
+ * A polite status message that is announced every time it is set, also when
+ * the words repeat: cleared first, set on the next frame (the live region
+ * itself stays in the page the whole time).
+ */
+function useStatusMessage(): [string, (message: string) => void] {
+  const [message, setMessage] = useState('')
+  const frame = useRef(0)
+  useEffect(() => () => cancelAnimationFrame(frame.current), [])
+  const say = useCallback((next: string) => {
+    setMessage('')
+    cancelAnimationFrame(frame.current)
+    frame.current = requestAnimationFrame(() => setMessage(next))
+  }, [])
+  return [message, say]
+}
+
 /** One link: its address with Copy, what it shows, its life and views, and Turn off. */
 export function ReviewLinkItem({
   link,
   now,
   onRevoke,
   showItem = false,
-  autoCopied = false,
+  autoCopy = null,
 }: {
   link: ReviewLinkRow
   now: number
-  onRevoke: (id: string) => Promise<void>
+  /** Resolves false when the link could not be turned off. */
+  onRevoke: (id: string) => Promise<boolean>
   showItem?: boolean
-  autoCopied?: boolean
+  /**
+   * The dialog copied this new link itself ('copied' / 'failed'). The row
+   * shows it on its button once it is in the page; the dialog announces it.
+   */
+  autoCopy?: Exclude<CopyState, 'idle'> | null
 }) {
-  const [copied, setCopied] = useState<'idle' | 'copied' | 'failed'>(autoCopied ? 'copied' : 'idle')
+  const [copied, setCopied] = useState<CopyState>('idle')
+  const [said, say] = useStatusMessage()
   const [confirm, setConfirm] = useState(false)
   const [busy, setBusy] = useState(false)
+  const rowRef = useRef<HTMLLIElement>(null)
+  const refocusRow = useRef(false)
   const active = link.status === 'active' && !!link.path
+  // A state change of a row that is already rendered (seeding useState from the prop missed it: the row mounts before the copy settles).
+  useEffect(() => {
+    if (autoCopy) setCopied(autoCopy)
+  }, [autoCopy])
   useEffect(() => {
     if (copied !== 'copied') return
     const t = setTimeout(() => setCopied('idle'), 2500)
     return () => clearTimeout(t)
   }, [copied])
+  // Turned off: its buttons are gone, so focus stays on the row (it says "off"), never on <body>.
+  useEffect(() => {
+    if (active || !refocusRow.current) return
+    refocusRow.current = false
+    rowRef.current?.focus()
+    say('Review link turned off')
+  }, [active, say])
 
   return (
-    <Box as="li" listStyleType="none" py={3} borderTop="1px solid" borderColor="page.border" data-testid="review-link" data-status={link.status}>
+    <Box
+      as="li"
+      ref={rowRef}
+      tabIndex={-1}
+      listStyleType="none"
+      py={3}
+      borderTop="1px solid"
+      borderColor="page.border"
+      data-testid="review-link"
+      data-status={link.status}
+    >
       <Flex align="flex-start" justify="space-between" gap={3} wrap="wrap">
         <Box minW={0} flex="1 1 240px">
           <Flex align="center" gap={2} wrap="wrap">
@@ -109,7 +157,11 @@ export function ReviewLinkItem({
               size="xs"
               minH="28px"
               {...outlineButtonProps}
-              onClick={async () => setCopied((await copyText(absolute(link.path as string))) ? 'copied' : 'failed')}
+              onClick={async () => {
+                const ok = await copyText(absolute(link.path as string))
+                setCopied(ok ? 'copied' : 'failed')
+                say(ok ? 'Link copied' : 'Could not copy the link')
+              }}
               aria-label={`Copy the review link${link.label ? ` (${link.label})` : ''}`}
             >
               {copied === 'copied' ? 'Copied' : copied === 'failed' ? 'Copy failed' : 'Copy link'}
@@ -129,9 +181,15 @@ export function ReviewLinkItem({
                   return
                 }
                 setBusy(true)
-                await onRevoke(link.id)
-                setBusy(false)
-                setConfirm(false)
+                refocusRow.current = true
+                let ok = false
+                try {
+                  ok = await onRevoke(link.id)
+                } finally {
+                  if (!ok) refocusRow.current = false
+                  setBusy(false)
+                  setConfirm(false)
+                }
               }}
             >
               {confirm ? 'Confirm — turn off' : 'Turn off'}
@@ -140,7 +198,7 @@ export function ReviewLinkItem({
         ) : null}
       </Flex>
       <Box as="span" role="status" aria-live="polite" className="sr-only">
-        {copied === 'copied' ? 'Link copied' : copied === 'failed' ? 'Could not copy the link' : ''}
+        {said}
       </Box>
     </Box>
   )
@@ -166,7 +224,9 @@ export default function ReviewLinksDialog({ isOpen, onClose, collection, slug, n
   const [label, setLabel] = useState('')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
-  const [fresh, setFresh] = useState<string | null>(null)
+  // The link just made and whether it reached the clipboard.
+  const [fresh, setFresh] = useState<{ id: string; copy: Exclude<CopyState, 'idle'> } | null>(null)
+  const [notice, announce] = useStatusMessage()
   const [now, setNow] = useState(() => Date.now())
 
   const load = useCallback(async () => {
@@ -210,8 +270,11 @@ export default function ReviewLinksDialog({ isOpen, onClose, collection, slug, n
       const link = parseReviewLink(data.link)
       if (link) {
         setLinks((l) => [link, ...(l || [])])
-        // Copied straight away: sharing is what the owner came for.
-        if (link.path && (await copyText(absolute(link.path)))) setFresh(link.id)
+        // Copied straight away: sharing is what the owner came for. The new
+        // row's button says so; the dialog's status line announces it.
+        const ok = !!link.path && (await copyText(absolute(link.path)))
+        setFresh({ id: link.id, copy: ok ? 'copied' : 'failed' })
+        announce(ok ? 'Review link created and copied to the clipboard.' : 'Review link created — copy it from the list below.')
       }
       setLabel('')
       setNow(Date.now())
@@ -229,8 +292,10 @@ export default function ReviewLinksDialog({ isOpen, onClose, collection, slug, n
       if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`)
       const updated = parseReviewLink(data.link)
       setLinks((l) => (l || []).map((x) => (x.id === id ? (updated ?? { ...x, status: 'revoked', revokedAt: Date.now(), path: null }) : x)))
+      return true
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
+      return false
     }
   }
 
@@ -319,12 +384,16 @@ export default function ReviewLinksDialog({ isOpen, onClose, collection, slug, n
                 </Text>
                 <Box as="ul" mt={1}>
                   {[...active, ...ended].map((l) => (
-                    <ReviewLinkItem key={l.id} link={l} now={now} onRevoke={revoke} autoCopied={fresh === l.id} />
+                    <ReviewLinkItem key={l.id} link={l} now={now} onRevoke={revoke} autoCopy={fresh?.id === l.id ? fresh.copy : null} />
                   ))}
                 </Box>
               </Box>
             ) : null}
           </Stack>
+          {/* In the page while the dialog is open, so what Create & copy did is announced. */}
+          <Box role="status" aria-live="polite" className="sr-only" data-testid="review-links-status">
+            {notice}
+          </Box>
         </ModalBody>
         <ModalFooter gap={2}>
           <Button size="sm" {...outlineButtonProps} onClick={onClose}>

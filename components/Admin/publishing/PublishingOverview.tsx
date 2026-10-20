@@ -97,10 +97,11 @@ export default function PublishingOverview() {
     const data = await readJsonObject(res)
     if (!res.ok) {
       setError(data.error || `HTTP ${res.status}`)
-      return
+      return false
     }
     const updated = parseReviewLink(data.link)
     setLinks((l) => (l || []).map((x) => (x.id === id ? (updated ?? { ...x, status: 'revoked' as const, path: null }) : x)))
+    return true
   }
 
   return (
