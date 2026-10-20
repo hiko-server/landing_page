@@ -906,7 +906,8 @@ async function restoreFromBuffer(buf: Buffer, source: 'r2' | 'local', key: strin
     // 5b. The media library's trash: its rows came with the DB, its folders did not (lib/media/trash).
     if (dbReplaced) {
       try {
-        const { reconcileTrashAfterRestore } = await import('./media/trash')
+        // The light module (no content rendering): lib/backupSchedule runs from instrumentation.ts.
+        const { reconcileTrashAfterRestore } = await import('./media/trashStore')
         const back = await reconcileTrashAfterRestore()
         if (back.length) {
           warnings.push(

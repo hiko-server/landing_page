@@ -8,7 +8,7 @@ import { purgeEdgeUrls } from '../revalidate'
 import { isValidUploadName } from '../security/uploadName'
 import { imageSizeFromBytes } from '../rehype/imageSize'
 import { isVariantName, variantOriginalName } from '../uploadVariants'
-import { isTrashed, rebuildUsage, uploadsDir, usageOf } from './library'
+import { isTrashed, uploadsDir, usageOf } from './library'
 import { TRASH_DAYS, assetTrashDir, parseList, purgeExpiredTrash, purgeFromTrash, trashDir } from './trashStore'
 import { cleanMeta, isEmptyMeta } from './meta'
 import { giveMediaMeta, takeMediaMeta } from './metaStore'
@@ -344,41 +344,6 @@ export async function restoreFromTrash(name: string, opts: { r2?: R2Ops; now?: n
     }
   }
   return failed ? { ok: true, name, r2Warning: `R2 upload failed for ${failed} file${failed === 1 ? '' : 's'}: the next sync retries` } : { ok: true, name }
-}
-
-/**
- * After a content restore (lib/backup): content.db — and with it the
- * trash's rows — comes from the snapshot, but the trash's folders
- * (data/media-trash) are not in snapshots, and the uploads are copied back
- * without removing newer ones. A row whose original is on disk in
- * public/uploads names a file the restored content has live: the live file
- * wins — the row and its address redirect go and its texts come back, as a
- * restore from the trash would do (the restore's R2 mirror then uploads
- * what R2 lacks). A row with neither its folder nor the file is kept: it is
- * a tombstone (its R2 deletes may still be pending; dropping it would let
- * the boot sync pull the deleted image back). Returns the names given back.
- */
-export async function reconcileTrashAfterRestore(now = Date.now()): Promise<string[]> {
-  let rows: TrashRow[]
-  try {
-    rows = getDb().prepare('SELECT * FROM media_trash').all() as TrashRow[]
-  } catch {
-    return []
-  }
-  const dir = uploadsDir()
-  const live = rows.filter((r) => isValidUploadName(r.name) && fs.existsSync(path.join(dir, r.name)))
-  if (!live.length) return []
-  const db = getDb()
-  db.transaction(() => {
-    for (const r of live) {
-      db.prepare('DELETE FROM media_trash WHERE name = ?').run(r.name)
-      db.prepare('DELETE FROM media_redirects WHERE from_name = ?').run(r.name)
-    }
-  })()
-  for (const r of live) await giveMediaMeta(r.name, metaOf(r.meta), now)
-  rebuildUsage(true)
-  log.warn('media: trash rows the restore left beside live files were dropped (the files are back in the library)', { names: live.map((r) => r.name) })
-  return live.map((r) => r.name)
 }
 
 /** The file to preview a trashed upload with: a small WebP variant when it had one, else the original. */
