@@ -6,7 +6,12 @@ import { ChromeContext } from './ChromeContext'
 import { useChromeLang } from './chromeLang'
 import { navLinksFor, resolveSocialLinks } from './chrome'
 import NavProgress from './NavProgress'
-import KeyboardLayer from './KeyboardLayer'
+import dynamic from 'next/dynamic'
+
+// The visitor keyboard layer mounts right after hydration from a chunk of its
+// own (nothing a visitor types in the first frame is a shortcut), so its
+// listener stays out of the first-load JS (perf budget: pages/_app).
+const KeyboardLayer = dynamic(() => import('./KeyboardLayer'), { ssr: false, loading: () => null })
 
 /**
  * Page chrome: skip link + sticky <Header> + <main id="main"> + <Footer>.

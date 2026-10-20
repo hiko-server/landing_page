@@ -545,7 +545,10 @@ test('the layer is wired: single keys live in the layer (lazy actions), ⌘K sta
   const layer = read('components/Chrome/KeyboardLayer.tsx')
   assert.match(layer, /import\('\.\/keyboardLayerActions'\)/)
   assert.match(layer, /getShortcutsEnabled\(\)/)
-  assert.match(read('components/Chrome/SiteChrome.tsx'), /<KeyboardLayer \/>/)
+  const chrome = read('components/Chrome/SiteChrome.tsx')
+  assert.match(chrome, /<KeyboardLayer \/>/)
+  // Mounted from its own chunk after hydration: the listener is not first-load JS (perf budget).
+  assert.match(chrome, /dynamic\(\(\) => import\('\.\/KeyboardLayer'\), \{ ssr: false/)
   for (const file of ['pages/blog/index.tsx', 'pages/work/index.tsx', 'pages/publications.tsx']) assert.match(read(file), /data-kbd-item=""/, file)
   assert.match(read('components/Header/ThemeControl.tsx'), /data-theme-toggle=""/)
 })
