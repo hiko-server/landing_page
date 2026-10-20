@@ -8,6 +8,49 @@ portfolio CMS, no public package). Entries are grouped by release date.
 
 ## [Unreleased]
 
+### bilingual-site
+
+A genuinely bilingual site (wave 3: F3).
+
+- **Chinese pages** — `/zh`, `/zh/about`, `/zh/work`, `/zh/blog` and
+  `/zh/contact` render the owner's own Chinese copy and list the posts and
+  case studies written in Chinese (a translation through `translationKey`
+  counts). A Chinese page exists only while its copy does: the Chinese
+  tagline publishes `/zh`, the Chinese bio `/zh/about`, the Chinese contact
+  heading or blurb `/zh/contact`, a published Chinese post or case study
+  `/zh/blog` or `/zh/work`. Without it the address is a 404 — never a
+  machine translation, never a placeholder. Highlights and field-note
+  captions without a Chinese version, and CV lines written only in English,
+  show as written, marked `lang="en"`.
+- **Chinese chrome** — header, footer, mobile menu, command palette, theme
+  menu, toasts, empty states, the 404 page (under `/zh/`), the index, about,
+  contact and home pages and the CV page speak Chinese on Chinese pages
+  (Chinese posts and case studies included) and inherit `<html lang>`. The
+  words are the typed dictionary `lib/uiStrings` (EN / zh-Hans / zh-Hant, one
+  module per area: chrome, menu, palette, notFound, lists, home, about,
+  contact, cv, cvFields, availability); no i18n framework. The shared bundle
+  carries only the English chrome: a Chinese page receives its table with its
+  props and `_app` loads it on demand (`pages/_app` 79.1 / 80 KiB).
+- **Pairs** — reciprocal hreflang alternates with an English x-default on
+  every EN / ZH pair (and `/cv` ⇄ `/cv/zh`, posts ⇄ translations); the
+  header's language switch leads to the same page in the other language and
+  is hidden when there is none; on a Chinese page the navigation leads to the
+  Chinese pages that exist. The sitemap lists each Chinese page with its
+  alternates, `/llms.txt` names them, and a Chinese page that stops existing
+  is removed from the ISR cache.
+- **Editors** — the Home editor's new **Chinese (中文)** section: the
+  tagline, the "currently coding" lines, the highlights and photo captions,
+  the contact eyebrow, heading, blurb and each reason's Chinese name, with
+  the publish status of every Chinese page (`GET /api/admin/zh-pages`). The
+  About editor edits the bio in **English** and **中文** (`/admin/about?lang=zh`;
+  the `about-zh` page, with history, drafts and the activity log). Saving
+  either regenerates the pages it shows on.
+- The CV page's own labels moved into `lib/uiStrings/cv` and
+  `lib/uiStrings/cvFields`; the availability card's English words into
+  `lib/uiStrings/availability` (the home page no longer bundles the contact
+  form's words). Contact API errors carry a `code`, so `/zh/contact` explains
+  them in Chinese.
+
 ### admin-editorial
 
 Editorial tools in the post and case-study editors (wave 2B: H1, H3, H4, H6, H16).

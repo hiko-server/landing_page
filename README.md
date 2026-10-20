@@ -132,6 +132,13 @@ backup, and a hardened admin GUI for non-engineers.
 
 **For visitors**
 
+- **A bilingual site** — `/zh`, `/zh/about`, `/zh/work`, `/zh/blog` and
+  `/zh/contact` show the owner's own Chinese copy (Home editor → *Chinese
+  (中文)*, About editor → *中文*) and the pieces written in Chinese, with a
+  Chinese interface from the typed dictionary `lib/uiStrings`. A Chinese page
+  exists only while its copy does (never machine-translated); each pair has
+  hreflang alternates, sitemap entries and a header language switch that is
+  hidden when there is no counterpart.
 - **Geist typography** (sans, mono, variable italic), self-hosted under the
   OFL; the old 780 KB of preloaded Inter / JetBrains Mono is gone.
 - **Chinese CV at its own URL** — `/cv/zh` with `lang="zh-Hans"`, a Chinese
