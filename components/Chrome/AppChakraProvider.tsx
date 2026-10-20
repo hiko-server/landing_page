@@ -16,11 +16,13 @@ import { hasPendingToasts, watchToasts } from './toastWatch'
  * Chakra's provider stack (G5): what `ChakraProvider` renders — theme,
  * colour mode, CSS reset, global styles, environment, toast defaults —
  * except that the toast host is not in the shared bundle: ./ToastHost.tsx
- * (the app's own host for Chakra's toast store, animated with the
- * LazyMotion features instead of framer-motion's full `motion` element)
+ * (the app's own host for Chakra's toast store, which renders every toast
+ * in the site's one frame, components/Common/UnifiedToast, animated with
+ * the LazyMotion features instead of framer-motion's full `motion` element)
  * loads in a chunk of its own once the browser is idle after the page has
  * loaded, or immediately when a toast is raised before that, and from then
- * on stays mounted.
+ * on stays mounted. The toast frame is the host's, so there is no
+ * `toastOptions.component` to pass.
  *
  * The host is mounted with no toast showing whenever possible, because its
  * `aria-live` regions must exist before a message is put into them for

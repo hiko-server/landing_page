@@ -1,8 +1,8 @@
-import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
-import { Portal, chakra, toastStore } from '@chakra-ui/react'
-import { AnimatePresence, m, useIsPresent, type Variants } from 'framer-motion'
-import { motionTransition } from '../../theme/tokens'
-import { subscribeToToasts, toastListStyle, toastStackStyle, type ToastPlacement } from './toastWatch'
+import { useSyncExternalStore, type CSSProperties } from 'react'
+import { Portal, toastStore, type ToastOptions } from '@chakra-ui/react'
+import { AnimatePresence } from 'framer-motion'
+import UnifiedToast from '../Common/UnifiedToast'
+import { subscribeToToasts, toastListStyle, type ToastPlacement } from './toastWatch'
 
 /**
  * The toast host, in a chunk of its own (AppChakraProvider loads it once the
@@ -10,110 +10,31 @@ import { subscribeToToasts, toastListStyle, toastStackStyle, type ToastPlacement
  *
  * It renders Chakra's toast store (`useToast()` / `toastStore.notify`) the
  * way Chakra's ToastProvider does — one polite live region per placement,
- * newest toast first at the top / last at the bottom, auto-dismiss after the
- * toast's duration with the timer paused while a pointer rests on it, the
- * toast's own close button, `requestClose`, `onCloseComplete` — but each
- * toast is an `m.div` animated with the LazyMotion features (G5), where
- * Chakra's own provider uses the full `motion` element: importing it would
- * put all of framer-motion back into the shared bundle (its module also
- * holds the toast-options context every `useToast` reads).
+ * newest toast first at the top / last at the bottom — and each toast is the
+ * site's one toast frame, components/Common/UnifiedToast: the timing policy
+ * of lib/notify (errors and loading toasts stay until dismissed, successes
+ * and notes long enough to read, the timer paused on hover, focus and a
+ * hidden tab), errors announced as alerts, `requestClose` and
+ * `onCloseComplete`, animated with the LazyMotion features (G5) — Chakra's
+ * own provider uses the full `motion` element, and importing it would put
+ * all of framer-motion back into the shared bundle (its module also holds
+ * the toast-options context every `useToast` reads).
  *
- * Enter: fade and a short slide from the toast's edge; exit: fade and shrink;
- * the stack reflows with a layout animation. MotionConfig in pages/_app
- * drops the movement under prefers-reduced-motion.
+ * The frame is part of this chunk, not a chunk of its own: a toast raised
+ * before the host has loaded appears once, already in its final frame and
+ * with its whole duration (it waits in the store meanwhile, see
+ * ./toastWatch.ts), never in a stand-in frame first.
  */
 
-type StoredToast = {
-  id: string | number
-  message: ReactNode | ((props: { id: string | number; onClose: () => void }) => ReactNode)
-  position: ToastPlacement
-  duration?: number | null
-  onCloseComplete?: () => void
-  onRequestRemove: () => void
-  requestClose?: boolean
-  containerStyle?: Record<string, unknown>
-}
+type StoreState = Record<ToastPlacement, ToastOptions[]>
 
-type StoreState = Record<ToastPlacement, StoredToast[]>
+const getState = () => toastStore.getState() as unknown as StoreState
 
-const ENTER = motionTransition('slow')
-const EXIT = motionTransition('fast')
-
-const variants: Variants = {
-  initial: (custom: { position: ToastPlacement }) => {
-    const { position } = custom
-    const axis = position === 'top' || position === 'bottom' ? 'y' : 'x'
-    let factor = position === 'top-right' || position === 'bottom-right' ? 1 : -1
-    if (position === 'bottom') factor = 1
-    return { opacity: 0, [axis]: factor * 24 }
-  },
-  animate: { opacity: 1, x: 0, y: 0, scale: 1, transition: ENTER },
-  exit: { opacity: 0, scale: 0.85, transition: EXIT },
-}
-
-const Toast = memo(function Toast(props: StoredToast) {
-  const { id, message, onCloseComplete, onRequestRemove, requestClose = false, position, duration = 5000, containerStyle } = props
-  const [delay, setDelay] = useState<number | null>(duration)
-  const isPresent = useIsPresent()
-  const mounted = useRef(false)
-
-  // Removed from the store and its exit animation finished.
-  useEffect(() => {
-    if (mounted.current && !isPresent) onCloseComplete?.()
-  }, [isPresent, onCloseComplete])
-  useEffect(() => {
-    if (mounted.current) setDelay(duration)
-  }, [duration])
-  useEffect(() => {
-    mounted.current = true
-  }, [])
-
-  const close = () => {
-    if (isPresent) onRequestRemove()
-  }
-  useEffect(() => {
-    if (isPresent && requestClose) onRequestRemove()
-  }, [isPresent, requestClose, onRequestRemove])
-  // Auto-dismiss; paused (null) while hovered, a `null` duration never dismisses.
-  const closeRef = useRef(close)
-  closeRef.current = close
-  useEffect(() => {
-    if (delay === null || delay === undefined) return
-    const timer = window.setTimeout(() => closeRef.current(), delay)
-    return () => window.clearTimeout(timer)
-  }, [delay])
-
-  const inner = useMemo(() => ({ pointerEvents: 'auto' as const, maxWidth: 560, minWidth: 300, margin: '0.5rem', ...containerStyle }), [containerStyle])
-  const stack = useMemo(() => toastStackStyle(position) as CSSProperties, [position])
-
+/** The live regions with their toasts (the host's content, without the portal). */
+export function ToastRegions() {
+  const state = useSyncExternalStore(subscribeToToasts, getState, getState)
   return (
-    <m.div
-      layout
-      className="chakra-toast"
-      variants={variants}
-      initial="initial"
-      animate="animate"
-      exit="exit"
-      custom={{ position }}
-      onHoverStart={() => setDelay(null)}
-      onHoverEnd={() => setDelay(duration)}
-      style={stack}
-    >
-      <chakra.div role="status" aria-atomic="true" className="chakra-toast__inner" __css={inner}>
-        {typeof message === 'function' ? message({ id, onClose: close }) : message}
-      </chakra.div>
-    </m.div>
-  )
-})
-
-export default function ToastHost() {
-  const state = useSyncExternalStore(
-    subscribeToToasts,
-    () => toastStore.getState() as unknown as StoreState,
-    () => toastStore.getState() as unknown as StoreState,
-  )
-  return (
-    <Portal>
+    <>
       {(Object.keys(state) as ToastPlacement[]).map((position) => (
         <div
           key={position}
@@ -125,11 +46,19 @@ export default function ToastHost() {
         >
           <AnimatePresence initial={false}>
             {state[position].map((toast) => (
-              <Toast key={toast.id} {...toast} />
+              <UnifiedToast key={toast.id} {...toast} />
             ))}
           </AnimatePresence>
         </div>
       ))}
+    </>
+  )
+}
+
+export default function ToastHost() {
+  return (
+    <Portal>
+      <ToastRegions />
     </Portal>
   )
 }

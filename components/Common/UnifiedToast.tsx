@@ -1,12 +1,14 @@
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, type CSSProperties } from 'react'
 import { chakra, type ToastOptions } from '@chakra-ui/react'
 import { m, useIsPresent, type Variants } from 'framer-motion'
 import { createPausableClock, toastDuration, toastRole } from '../../lib/notify'
 import { motionTransition } from '../../theme/tokens'
+import { toastStackStyle, type ToastPlacement } from '../Chrome/toastWatch'
 
 /**
- * The element of every toast (ChakraProvider toastOptions.component, set in
- * pages/_app): Chakra's own toast frame with one timing policy (lib/notify)
+ * The element of every toast (rendered for each toast of Chakra's store by
+ * the site's toast host, components/Chrome/ToastHost, in the host's chunk):
+ * Chakra's own toast frame with one timing policy (lib/notify)
  * — errors stay until dismissed, successes and notes stay long enough to
  * read — and a timer that pauses while the pointer is over the toast, while
  * focus is inside it and while the page is hidden, then resumes with the
@@ -24,11 +26,6 @@ const variants: Variants = {
   },
   animate: { opacity: 1, y: 0, x: 0, scale: 1, transition: motionTransition('base') },
   exit: { opacity: 0, scale: 0.95, transition: motionTransition('fast') },
-}
-
-function alignFor(position: string) {
-  const alignItems = position.includes('right') ? 'flex-end' : position.includes('left') ? 'flex-start' : 'center'
-  return { display: 'flex', flexDirection: 'column' as const, alignItems }
 }
 
 type Props = ToastOptions & { motionVariants?: Variants }
@@ -119,7 +116,7 @@ function UnifiedToastImpl(props: Props) {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) resume('focus')
       }}
       custom={{ position }}
-      style={alignFor(position)}
+      style={toastStackStyle(position as ToastPlacement) as CSSProperties}
       data-toast-status={status || 'default'}
       data-toast-persistent={duration === null ? '' : undefined}
     >

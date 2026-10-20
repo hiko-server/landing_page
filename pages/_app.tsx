@@ -171,15 +171,14 @@ const AdminThemeScope = dynamic(() => import('../components/Admin/AdminThemeScop
 const PAGE_TRANSITION = motionTransition('base')
 
 // Every toast: the elevated v6 Alert (theme/chakra.js), bottom centre, with a
-// close button, timed by one policy (lib/notify via components/Common/
-// UnifiedToast): successes and notes stay long enough to read, errors until
-// dismissed; the timer pauses on hover, focus and while the tab is hidden.
-// The toast component loads with the first toast, never in the first-load JS (perf budget: pages/_app).
-const UnifiedToast = dynamic(() => import('../components/Common/UnifiedToast'), { ssr: false, loading: () => null })
-
+// close button. Its frame and timing come with the toast host
+// (components/Chrome/ToastHost renders components/Common/UnifiedToast, one
+// policy from lib/notify): successes and notes stay long enough to read,
+// errors until dismissed; the timer pauses on hover, focus and while the tab
+// is hidden. Host and frame load in one chunk, never in the first-load JS
+// (perf budget: pages/_app).
 const TOAST_OPTIONS = {
   defaultOptions: { variant: 'v6', position: 'bottom', isClosable: true },
-  component: UnifiedToast,
 } as const
 
 const App = ({ Component, pageProps, router }: AppProps) => {

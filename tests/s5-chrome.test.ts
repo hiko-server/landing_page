@@ -503,10 +503,12 @@ test('theme: one accent focus ring, press feedback, v6 toasts, no body colour fa
   assert.match(theme, /v6:\s*\(props\)/)
   assert.match(theme, /transitionProperty:\s*'none'/)
   const app = read('pages/_app.tsx')
-  // Every toast closable; its timing comes from one policy (lib/notify via UnifiedToast, H11).
+  // Every toast closable; its timing comes from one policy (lib/notify via
+  // UnifiedToast, H11), which the toast host renders for every toast
+  // (rendered: tests/review-fixes-2b-toast.test.ts, CORR-1).
   assert.match(app, /variant:\s*'v6',\s*position:\s*'bottom',\s*isClosable:\s*true/)
-  assert.match(app, /component:\s*UnifiedToast/)
   assert.match(app, /toastOptions=\{TOAST_OPTIONS\}/)
+  assert.match(read('components/Chrome/ToastHost.tsx'), /<UnifiedToast key=\{toast\.id\} \{\.\.\.toast\} \/>/)
 })
 
 // ── manifest + icons ────────────────────────────────────────────────────────
