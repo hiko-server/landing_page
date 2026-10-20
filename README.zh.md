@@ -796,7 +796,7 @@ IndexNow（密钥文件位于站点根目录 `/<INDEXNOW_KEY>.txt`：密钥文�
 |---|---|
 | `yarn run check`、`yarn build`、`node scripts/perf-budget.mjs` | `tsc`、零警告的 ESLint、单元测试、`next build --webpack`，以及性能预算（共享与逐页首屏 JS、共享 CSS、预加载字体的数量与体积） |
 | `yarn audit:deps` | `scripts/check-audit.mjs`：生产依赖中不得有高危 / 严重漏洞，除非在 `security/audit-allowlist.json` 中写明理由与到期日；过期条目同样失败 |
-| `scripts/check-container.sh` | 合并后的 compose 配置只暴露回环地址，并保留加固项与静态资源归档卷；镜像能构建、在只含 git 种子的全新数据目录上启动、提供服务、预热 ISR 页面，以 uid 1001 运行、没有任何 capability 且 `NoNewPrivs` 为 1；针对该容器运行的 Playwright + axe 测试（含 `@admin` 用例，使用一次性的管理员账号）全部通过；8 秒内优雅停止。需要 Docker、`jq` 与 `curl`；修改 Dockerfile、`docker-entrypoint.sh` 或 compose 文件时必须运行，`--no-e2e` 可跳过端到端测试 |
+| `scripts/check-container.sh` | 合并后的 compose 配置只暴露回环地址，并保留加固项与静态资源归档卷；镜像能构建、在只含 git 种子的全新数据目录上启动、提供服务、预热 ISR 页面，以 uid 1001 运行、没有任何 capability 且 `NoNewPrivs` 为 1；针对该容器运行的 Playwright + axe 测试在 Chromium（桌面、平板、手机、减少动态效果）与 WebKit（iPhone）中全部通过，随后是 `@admin` 用例（使用一次性的管理员账号；Firefox 与视觉基线在 `scripts/check-fixture-gates.sh` 中运行）；8 秒内优雅停止。需要 Docker、`jq` 与 `curl`；修改 Dockerfile、`docker-entrypoint.sh` 或 compose 文件时必须运行，`--no-e2e` 可跳过端到端测试 |
 | `scripts/check-fixture-gates.sh` | 在固定版本的 Playwright 镜像（视觉基线即在其中生成）中构建并运行合成测试数据（`e2e/fixtures/store`：*Example Person* 与程序生成的图片，绝不取自线上内容）：在校准过的手机配置下 CLS ≤ 0.05、TBT ≤ 200 ms；Chromium、WebKit（iPhone）与 Firefox 在 375 / 768 / 1440 下无横向滚动；图片不超过 200 KB；文章页 axe 检查；以及首页、文章、案例、简历与联系页（深 / 浅色 × 手机 / 平板 / 桌面）的视觉基线。`--update-snapshots` 在有意的改动后重新生成基线 |
 
 要针对其他服务器运行测试，把 `E2E_BASE_URL` 指向它（本地 `yarn start` 监听

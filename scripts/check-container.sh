@@ -20,8 +20,12 @@
 #   4. smoke      /api/health and key pages answer 200, warm-isr regenerates,
 #                 non-root user, no capabilities, NoNewPrivs, content.db built
 #                 from the seeds, /_next/image answers 404
-#   5. e2e        the Playwright + axe suite, @admin specs included, against
-#                 that container (skipped with --no-e2e)
+#   5. e2e        the Playwright + axe suite against that container, in the
+#                 engines that run on macOS and Linux alike: Chromium (desktop,
+#                 tablet, phone, reduced motion) and WebKit (iPhone), then the
+#                 @admin specs (skipped with --no-e2e). Firefox and the visual
+#                 baselines run in the pinned Linux image
+#                 (scripts/check-fixture-gates.sh)
 #   6. stop       SIGTERM reaches the server: the container stops in < 8 s
 #
 # The container, image tag and scratch directory are removed on exit; the
@@ -159,9 +163,13 @@ test "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/_next/image?url=%2Ffavicon
 echo "ok"
 
 if [ "$RUN_E2E" = 1 ]; then
-  step "e2e (Playwright + axe, @admin included)"
-  npx playwright install chromium
-  E2E_BASE_URL="$BASE" yarn e2e
+  step "e2e (Playwright + axe: Chromium, WebKit, then @admin)"
+  # An explicit project list: the config's firefox and visual projects belong
+  # to scripts/check-fixture-gates.sh (Linux image; Firefox does not start on
+  # every macOS host), and the admin project would otherwise wait for them.
+  npx playwright install chromium webkit
+  E2E_BASE_URL="$BASE" yarn -s e2e --project=chromium --project=tablet --project=mobile --project=reduced --project=webkit
+  E2E_BASE_URL="$BASE" yarn -s e2e --project=admin --no-deps
 fi
 
 step "graceful stop"
