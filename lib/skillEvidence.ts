@@ -1,15 +1,17 @@
 /**
  * Skill traceability: for every skill the public CV lists, where it is
- * evidenced — the roles, projects, awards and patents on the same CV page,
- * the published case studies and the published posts. Pure; unit-tested.
+ * evidenced — the roles, projects, awards, patents and papers on the same CV
+ * page, the published case studies and the published posts. Pure;
+ * unit-tested.
  *
  * Skills come from the CV's own Skills section (core skills, technical
  * groups) and the roles' related skills, de-duplicated ignoring case and
  * parenthesised notes ("MongoDB (NoSQL)" = "MongoDB").
  *
  * Matching is deliberately strict:
- *   - tags (a role's related skills, a case study's `tech`, a post's `tags`)
- *     match by the same normalised key or an alias ("React.js" = "React");
+ *   - tags (a role's related skills, a paper's keywords, a case study's
+ *     `tech`, a post's `tags`) match by the same normalised key or an alias
+ *     ("React.js" = "React");
  *   - free text (titles, descriptions, highlights) matches a skill's terms at
  *     word boundaries only: "C" never matches "CUHK" or "C++", "Java" never
  *     matches "JavaScript", "Git" never matches "GitHub". Terms of up to three
@@ -17,13 +19,22 @@
  *     ambiguous names ("Go", "R", "C") are matched as tags only;
  *   - Chinese terms match as substrings (Chinese has no word spaces).
  * Certificates and education are never counted as evidence. Input is the
- * page's public, CV-audience data, so a hidden entry can never be cited.
+ * page's public, CV-audience data, so a hidden entry can never be cited; a
+ * paper counts only when it renders on the page (a title and a real status,
+ * lib/publications), with its visible keywords, title and abstract.
  */
 
 import type { CvLang, CvSectionLike } from './cvVisibility'
 import { bullets, cvEntryAnchor, field, indexedList, list } from '../components/CVViewerPage/fields'
+import { publicPublications } from './publications/normalize'
+import { PUBLICATIONS_SECTION } from './publications/types'
 
-export type EvidenceKind = 'role' | 'project' | 'award' | 'patent' | 'caseStudy' | 'post'
+import type { EvidenceKind } from './skillEvidenceLabels'
+
+// The kinds and their labels live in a module of their own, so the page
+// component that prints them does not ship the matcher (and the
+// publications code it reads papers with).
+export { EVIDENCE_KIND_LABELS, type EvidenceKind } from './skillEvidenceLabels'
 
 export type EvidenceItem = {
   kind: EvidenceKind
@@ -46,7 +57,7 @@ export type SkillEvidence = {
 /** A published post or case study as evidence needs it. */
 export type EvidenceDoc = { slug: string; title: string; description?: string; tags?: readonly string[] }
 
-const KIND_ORDER: EvidenceKind[] = ['role', 'project', 'award', 'patent', 'caseStudy', 'post']
+const KIND_ORDER: EvidenceKind[] = ['role', 'project', 'award', 'patent', 'paper', 'caseStudy', 'post']
 
 /** Alias groups (normalised keys). Any member names the same skill. */
 const ALIASES: readonly (readonly string[])[] = [
@@ -216,6 +227,10 @@ function cvSources(sections: readonly CvSectionLike[], lang: CvLang): Source[] {
     if (!title) continue
     out.push({ kind: 'patent', label: title, href: `#${cvEntryAnchor('patents', index)}`, tags: [], text: [title, ...bullets(p, 'patents')] })
   }
+  // Papers at the anchors the sheet gives them (the index among visible papers).
+  for (const p of publicPublications(sections)) {
+    out.push({ kind: 'paper', label: p.title, href: `#${cvEntryAnchor(PUBLICATIONS_SECTION, p.index)}`, tags: p.keywords, text: [p.title, p.abstract] })
+  }
   return out
 }
 
@@ -280,11 +295,6 @@ export function evidenceIdIndex(evidence: readonly SkillEvidence[] | null | unde
 export function evidenceIdFor(name: unknown, index: Map<string, string>): string {
   const key = skillKey(name)
   return (key && index.get(key)) || ''
-}
-
-export const EVIDENCE_KIND_LABELS: Record<CvLang, Record<EvidenceKind, string>> = {
-  en: { role: 'Role', project: 'Project', award: 'Award', patent: 'Patent', caseStudy: 'Case study', post: 'Writing' },
-  zh: { role: '职位', project: '项目', award: '奖项', patent: '专利', caseStudy: '案例', post: '文章' },
 }
 
 /**
