@@ -65,6 +65,16 @@ const RichEditor = dynamic(() => import('../RichEditor'), {
 type ItemFm = Record<string, unknown> & { draft: boolean; title: string; description: string; cover: string }
 type Ed<F extends ItemFm> = ReturnType<typeof useMdxItemEditor<F>>
 
+/** The words a button drops on a phone (from sm up it reads in full: "Save changes", "Publish changes…"). */
+function ShortOnPhones({ children }: { children: React.ReactNode }) {
+  return (
+    <Box as="span" display={{ base: 'none', sm: 'inline' }} whiteSpace="pre">
+      {' '}
+      {children}
+    </Box>
+  )
+}
+
 const todayISO = () => new Date().toISOString().slice(0, 10)
 const textField = (fm: Record<string, unknown>, key: string) => (typeof fm[key] === 'string' ? (fm[key] as string) : '')
 
@@ -163,7 +173,8 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
       title={ed.isNew ? newTitle : String(fm.title || '') || ed.slugParam}
       maxW="1440px"
       status={
-        <HStack spacing={2} flexWrap="wrap" rowGap={1}>
+        // Phones: the state is a row of its own above the actions.
+        <HStack spacing={2} flexWrap="wrap" rowGap={1} w={{ base: '100%', md: 'auto' }}>
           {ready && !ed.isNew ? (
             <Badge colorScheme={published ? 'green' : 'yellow'} variant="subtle" fontSize="10px">
               {published ? 'published' : 'draft'}
@@ -231,7 +242,9 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
               aria-keyshortcuts={saveKeys[0] === '⌘' ? 'Meta+S' : 'Control+S'}
               title={published ? 'Saved as unpublished changes — visitors keep seeing the published version' : undefined}
             >
-              {published ? 'Save changes' : 'Save draft'}
+              Save
+              {/* Phones: "Save" / "Publish…", so the actions fit on one row. */}
+              <ShortOnPhones>{published ? 'changes' : 'draft'}</ShortOnPhones>
             </Button>
             {published ? (
               <Button
@@ -241,7 +254,8 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
                 isDisabled={!ready || ed.saving || !changesReady}
                 title={changesReady ? undefined : 'Nothing to publish — the live version matches the editor'}
               >
-                Publish changes…
+                Publish
+                <ShortOnPhones>changes</ShortOnPhones>…
               </Button>
             ) : (
               <Button size="sm" {...primaryButtonProps} onClick={() => setPublishOpen(true)} isDisabled={!ready || ed.saving}>

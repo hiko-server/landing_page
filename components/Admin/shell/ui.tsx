@@ -479,7 +479,10 @@ export function AdminTitleBar({
           </Box>
           {children}
         </Flex>
-        <HStack spacing={{ base: 2, md: 3 }} flexShrink={1} minW={0} maxW="100%" flexWrap="wrap" justify="flex-end">
+        {/* Beside the title the row's space-between puts this group at the far
+            end; once it wraps (a phone, a long title, a long save state) its
+            rows start under the title instead of hanging off the right edge. */}
+        <HStack spacing={{ base: 2, md: 3 }} rowGap={2} flexShrink={1} minW={0} maxW="100%" flexWrap="wrap" justify="flex-start">
           {status}
           {actions}
           <ShortcutsOverlay />

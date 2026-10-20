@@ -141,7 +141,8 @@ export default function ShortcutsOverlay({ showTrigger = true }: { showTrigger?:
         <Button
           size="sm"
           variant="ghost"
-          display={{ base: 'none', md: 'inline-flex' }}
+          // From lg up, where the header has room for it (it never wraps onto a row of its own); "?" opens it everywhere.
+          display={{ base: 'none', lg: 'inline-flex' }}
           color="page.fg-secondary"
           _hover={{ color: 'page.fg', bg: 'page.bg-overlay' }}
           onClick={() => setOpen(true)}
