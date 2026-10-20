@@ -762,6 +762,51 @@ a:focus-visible .nudge-ne {
  * reduced motion makes all of it instant.
  * ──────────────────────────────────────────────────────────────────────── */
 
+/* Sticky header (components/Header/Header.tsx `.site-header`): borderless
+   while it sits at the top of the page; its hairline and a soft shadow fade
+   in once it is stuck over scrolled content — a scroll-state container
+   query on the sticky wrapper (SiteChrome `.site-header-sticky`), no script.
+   Engines without scroll-state queries keep the hairline throughout. */
+:root {
+  --header-stuck-shadow: 0 6px 18px -14px rgba(0, 0, 0, 0.35);
+}
+[data-theme='dark'],
+.chakra-ui-dark {
+  --header-stuck-shadow: 0 8px 22px -12px rgba(0, 0, 0, 0.9);
+}
+@supports (container-type: scroll-state) {
+  .site-header-sticky {
+    container-type: scroll-state;
+  }
+  /* html …: above the header's own (Emotion) border colour. */
+  html .site-header {
+    border-bottom-color: transparent;
+    transition:
+      border-color var(--duration-base) var(--ease-standard),
+      box-shadow var(--duration-base) var(--ease-standard);
+  }
+  @container scroll-state(stuck: top) {
+    html .site-header {
+      border-bottom-color: var(--chakra-colors-page-border);
+      box-shadow: var(--header-stuck-shadow);
+    }
+  }
+}
+
+/* Long articles on small screens (components/Article/useAutoHideHeader.ts
+   sets data-header-hidden while reading down): the header slides away and
+   comes back on the first scroll up — never while a dialog or the article's
+   outline is open, a slow navigation is loading, or focus is inside it. */
+.site-header-sticky {
+  transition: transform var(--duration-base) var(--ease-standard);
+}
+@media screen and (max-width: 61.99em) {
+  html[data-header-hidden]:not(:has([aria-modal='true'], .nav-progress[data-state='loading'], [data-toc-open='true']))
+    .site-header-sticky:not(:focus-within) {
+    transform: translateY(-100%);
+  }
+}
+
 /* Touch press feedback (touch screens only; a mouse has hover instead).
    No grey tap flash; cards and list rows (`.pressable`) tint and sink a
    little while pressed — after 40ms, so a touch that turns into a scroll
@@ -815,6 +860,30 @@ html .scroll-top[data-visible='true'] {
 }
 html .scroll-top[data-visible='true']:active {
   transform: scale(0.94);
+}
+
+/* Table of contents: one marker glides to the current section
+   (components/Article/TableOfContents.tsx writes --toc-y / --toc-h). */
+.toc-marker {
+  position: absolute;
+  top: 0;
+  left: -1px;
+  width: 2px;
+  height: var(--toc-h, 0px);
+  border-radius: 1px;
+  background: var(--accent);
+  transform: translateY(var(--toc-y, 0px));
+  opacity: 0;
+  pointer-events: none;
+}
+.toc-marker[data-on] {
+  opacity: 1;
+}
+.toc-marker[data-ready] {
+  transition:
+    transform var(--duration-base) var(--ease-standard),
+    height var(--duration-base) var(--ease-standard),
+    opacity var(--duration-fast) var(--ease-standard);
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -912,6 +981,10 @@ html .scroll-top[data-visible='true']:active {
   .eyebrow-rule::after {
     forced-color-adjust: none;
     background: CanvasText !important;
+  }
+  .toc-marker {
+    forced-color-adjust: none;
+    background: Highlight !important;
   }
 }
 
