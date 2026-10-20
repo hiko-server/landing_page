@@ -49,7 +49,7 @@ import {
   type CvPath,
   type CvSurface,
 } from '../../lib/cvVisibility'
-import { withSectionUids } from '../../lib/cvEntryUid'
+import { withSectionUidsBeside } from '../../lib/cvEntryUid'
 import { syncLanguage } from '../../lib/cvSync'
 import { ownerNamesFromSections } from '../../lib/publications/names'
 import { errorFocusPath, validateCvDoc, type CvValidationError } from '../../lib/cvValidate'
@@ -859,10 +859,14 @@ export default function CVEditorStudio() {
       let after: Doc
       if (Array.isArray(j)) {
         if (!valid(j)) throw new Error('Every section needs a "sessionName"')
-        // Every entry gets its stable uid (lib/cvEntryUid), duplicates repaired.
-        after = apply((d) => ({ ...d, [lang]: withSectionUids(j) }))
+        // Every entry gets its stable uid (lib/cvEntryUid), paired with the other language only
+        // where the lists line up, duplicates repaired.
+        after = apply((d) => ({ ...d, [lang]: withSectionUidsBeside(j, lang, lang === 'en' ? d.zh : d.en) }))
       } else if (j && (valid(j.en) || valid(j.zh))) {
-        after = apply((d) => ({ en: valid(j.en) ? withSectionUids(j.en) : d.en, zh: valid(j.zh) ? withSectionUids(j.zh) : d.zh }))
+        after = apply((d) => {
+          const en: Doc['en'] = valid(j.en) ? withSectionUidsBeside(j.en, 'en', valid(j.zh) ? j.zh : d.zh) : d.en
+          return { en, zh: valid(j.zh) ? withSectionUidsBeside<Doc['zh'][number]>(j.zh, 'zh', en) : d.zh }
+        })
       } else {
         throw new Error('Expected { en: [...], zh: [...] } or an array of sections')
       }

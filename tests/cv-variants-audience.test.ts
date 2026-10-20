@@ -20,7 +20,8 @@ import {
   withNodeAudience,
   type CvSurface,
 } from '../lib/cvVisibility'
-import { isEntryUid, newEntryUid, withEntryUids, withListUids } from '../lib/cvEntryUid'
+import { isEntryUid, newEntryUid, withEntryUids, withListUids, withSectionUidsBeside } from '../lib/cvEntryUid'
+import { applyVariant } from '../lib/cvVariants'
 import { validateCvDoc } from '../lib/cvValidate'
 import { syncLanguage } from '../lib/cvSync'
 import { appendEntries, hasContent, listOp, previewText, setFieldAudience, setNodeAudience, type Doc } from '../components/Admin/cvStudio/docOps'
@@ -178,6 +179,51 @@ test('uids: deterministic for a stored CV without them, kept once stored, unique
   assert.deepEqual(fixed.map((e) => e.uid), ['x', 'x-1-2', 'x-1'])
   assert.deepEqual(withListUids(dup, 'k'), fixed)
   assert.ok(isEntryUid(newEntryUid()) && newEntryUid() !== newEntryUid())
+})
+
+test('CV-L-1 uids: EN and 中文 pair by position only where the lists line up; a variant never selects the wrong 中文 entry', () => {
+  const role = (t: string) => ({ jobTitle: t, companyName: `${t} Co` })
+  // The 中文 CV lacks role A: positions do not pair.
+  const misaligned = {
+    en: [{ sessionName: 'workExperience', experiences: [role('A'), role('B'), role('C'), role('D')] }],
+    zh: [{ sessionName: 'workExperience', experiences: [role('B-zh'), role('C-zh'), role('D-zh-NOT-SELECTED')] }],
+  }
+  const filled = withEntryUids(misaligned)
+  assert.deepEqual(withEntryUids(JSON.parse(JSON.stringify(misaligned))), filled, 'deterministic')
+  const enUids = filled.en[0].experiences.map((e: any) => e.uid)
+  const zhUids = filled.zh[0].experiences.map((e: any) => e.uid)
+  assert.deepEqual(enUids, ['experiences-0', 'experiences-1', 'experiences-2', 'experiences-3'])
+  assert.deepEqual(zhUids, ['zh-experiences-0', 'zh-experiences-1', 'zh-experiences-2'])
+  assert.equal(enUids.filter((u: string) => zhUids.includes(u)).length, 0, 'no uid shared across unpaired lists')
+  // A variant ticking C (EN) prints C in English and nothing wrong in Chinese.
+  const variant = { sections: [{ name: 'workExperience', entries: { experiences: [enUids[2]] } }] }
+  assert.deepEqual(applyVariant(filled.en, variant)[0].experiences.map((e: any) => e.jobTitle), ['C'])
+  assert.deepEqual(applyVariant(filled.zh, variant)[0].experiences, [], 'never D-zh, which the owner left out')
+
+  // Lined up (same length): twins share — the stored uid of the one that has it.
+  const aligned = withEntryUids({
+    en: [{ sessionName: 'workExperience', experiences: [{ uid: 'u-a', ...role('A') }, role('B')] }],
+    zh: [{ sessionName: 'workExperience', experiences: [role('A-zh'), { uid: 'u-b', ...role('B-zh') }] }],
+  })
+  assert.deepEqual(aligned.en[0].experiences.map((e: any) => e.uid), ['u-a', 'u-b'])
+  assert.deepEqual(aligned.zh[0].experiences.map((e: any) => e.uid), ['u-a', 'u-b'])
+
+  // An entry added without a uid after an EN-only delete never takes the uid a different 中文 entry holds.
+  const stored = withEntryUids({
+    en: [{ sessionName: 'education', educationExperience: [{ schoolName: 'A' }, { schoolName: 'B' }, { schoolName: 'C' }] }],
+    zh: [{ sessionName: 'education', educationExperience: [{ schoolName: '甲' }, { schoolName: '乙' }, { schoolName: '丙' }] }],
+  })
+  const enAfter = [{ ...stored.en[0], educationExperience: [stored.en[0].educationExperience[0], { schoolName: 'D' }] }]
+  const zhAfter = [{ ...stored.zh[0], educationExperience: [...stored.zh[0].educationExperience, { schoolName: '丁' }] }]
+  const next = withEntryUids({ en: enAfter, zh: zhAfter })
+  const nextEn = next.en[0].educationExperience.map((e: any) => e.uid)
+  const nextZh = next.zh[0].educationExperience.map((e: any) => e.uid)
+  assert.equal(nextEn[0], 'educationExperience-0')
+  assert.ok(!nextZh.slice(1).includes(nextEn[1]), `D (${nextEn[1]}) shares no uid with 乙 / 丙 / 丁 (${nextZh.join(', ')})`)
+
+  // A one-language import is filled against the other language as it is: no rebinding by position when it does not line up.
+  const imported = withSectionUidsBeside([{ sessionName: 'workExperience', experiences: [role('New'), role('B'), role('C'), role('D'), role('E')] }], 'en', filled.zh)
+  assert.ok(imported[0].experiences.every((e: any) => !zhUids.includes(e.uid)))
 })
 
 test('sync EN → 中文: the twin takes EN’s uid; audiences merge to what both languages allow', () => {
