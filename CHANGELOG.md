@@ -8,6 +8,83 @@ portfolio CMS, no public package). Entries are grouped by release date.
 
 ## [Unreleased]
 
+### editor-parity
+
+The visual editor holds everything the site renders (H2).
+
+- **A Markdown bridge built on the site's own parser.** The visual editor
+  reads bodies with remark-parse + remark-mdx + remark-gfm — exactly what
+  `lib/mdx.ts` compiles — and writes them with mdast-util-to-markdown
+  (`remark-stringify`, `-` bullets, `*` emphasis, fenced code, `[text](url)`
+  links, unpadded GFM tables). It replaces tiptap-markdown's markdown-it and
+  HTML round trip: no DOM parsing, so the same code runs in Node tests; `{`
+  and `<` typed as text are escaped and stay text.
+- **Lossless MDX → editor → MDX.** Every construct the editor does not model
+  as a block — JSX components, `{expressions}` and `{/* notes */}`, import /
+  export, footnotes, reference links and definitions — is an **MDX island**
+  read by position from the source and written back byte for byte (shown as
+  a labelled source block or chip; Edit / Enter opens the source in place,
+  ⌘↵ applies, invalid MDX names its line, source that became plain
+  Markdown turns into ordinary content, "/mdx" adds one). Code keeps its
+  meta (`title="…"`, `{1,3}`), lists their start number, spacing and task
+  boxes, links their title, inline code may sit inside links and bold.
+  Tests compile the CI fixtures, every post / case study / page of a local
+  content store and the synthetic corpus before and after a round trip and
+  compare the pages, and a seeded property test writes and reads 1,000
+  random documents full of Markdown and MDX syntax characters per run
+  (200,000 checked once).
+- **A fidelity guard instead of the old MDX gate.** Before the visual tab
+  shows a body it is parsed, written and parsed again
+  (`editor/markdown` `visualFidelity`): JSX, `{/* notes */}` (the
+  case-study template's too), tables and footnotes no longer force the MDX
+  tab; a body that does not parse opens there with the error,
+  its line and *Go to line*, and the check follows MDX typing.
+- **Tables** (GFM, built on prosemirror-tables from `@tiptap/pm`): "/table"
+  or the toolbar inserts 3 × 3 with a header row; Tab / Shift+Tab move
+  between cells (Tab in the last adds a row), Enter goes to the cell below,
+  Alt+↑ / ↓ move the row (the header row stays first); a toolbar above the
+  table adds and deletes rows and columns, aligns the column (written to
+  the delimiter row), turns the header row off (an empty header row) and
+  deletes the table; Alt+F10 reaches it from the keyboard. Cells hold one
+  line of inline content — what a GFM cell can hold — and never span. The
+  article's tables now honour column alignment.
+- **Callouts** are blocks drawn like the site's (tint, rule, icon, label);
+  the label is a menu (Note, Tip, Important, Warning, Caution, remove).
+  "/note" … "/caution" make one, and a quote that starts with `[!TIP]`
+  becomes one, as the page reads it.
+- **Videos** look like the click-to-load player, with the poster this site
+  stored (`GET /api/admin/video-poster`, read-only; never fetched from
+  YouTube or Vimeo by the editor), an editable title and *Change link*. A
+  YouTube / Vimeo URL pasted on an empty line becomes one.
+- **Figures**: the caption is typed under the image (the image title), a
+  missing alt text opens a prompt, a toolbar sets text / wide / full width
+  (previewed: the editor sets text in a 680 px column on wide screens),
+  replaces or removes the image. Inline images and rows of images (galleries)
+  keep their own bubble.
+- **Blocks move**: a handle beside the block under the pointer (or with the
+  caret on touch screens) drags it, and its menu moves up / down,
+  duplicates or deletes it (the single-pointer alternative); Alt+↑ / ↓ move
+  the block, the list item or the table row from the keyboard. Moves are
+  announced in a polite live region.
+- **Markdown paste**: Markdown text (and text from a code editor, whose HTML
+  is only colouring) becomes headings, lists, quotes, code, tables and
+  links; prose that merely contains a `*` stays text; a URL pasted over
+  selected text links it. Copying writes Markdown as the plain text.
+- **Slash menu**: Table, Important, Caution and MDX block join the list.
+- **Cover focal point for posts**: the post's cover field has the focal
+  point picker (in the 420 × 486 crop of the social card), and the signed
+  `/api/og` card — of posts and case studies — crops the cover around it
+  (`focus`, signed only when set, so earlier card URLs still verify).
+- Typing over a selected inline island or image no longer deletes it (the
+  text goes after it). Underline is gone from the editor (Markdown has
+  none). The admin's "Live now" links are a proper list.
+- Dependencies: `remark-stringify` and `@tiptap/extension-code` (the
+  inline-code mark, made combinable) become direct — both were already
+  installed and locked; `tiptap-markdown` and what only it pulled in
+  (prosemirror-markdown, markdown-it-task-lists, the markdown-it types) are
+  removed (markdown-it stays pinned in `resolutions`).
+  `components/Admin/shell/mdxRisk.ts` is removed.
+
 ### admin-editorial
 
 Editorial tools in the post and case-study editors (wave 2B: H1, H3, H4, H6, H16).
