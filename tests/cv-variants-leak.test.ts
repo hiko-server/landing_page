@@ -225,10 +225,10 @@ test('a value kept off a surface reaches none of its outputs; the surfaces it is
       }
     }
   }
-  assert.ok(cases > 1500, `exercised ${cases} audience cases`)
+  assert.ok(cases > 2500, `exercised ${cases} audience cases`)
   // Many slots never print on a given surface (a project's role is /work-only, the abstract is never printed…),
   // but every surface must really show restricted values that are allowed there.
-  for (const s of CV_SURFACES) assert.ok(controls[s] > 50, `${s}: an allowed value reaches its outputs (${controls[s]})`)
+  for (const s of CV_SURFACES) assert.ok(controls[s] > 1000, `${s}: an allowed value reaches its outputs (${controls[s]})`)
 })
 
 test('hidden always wins: an audience that names every surface brings nothing hidden back', () => {
@@ -248,7 +248,7 @@ test('hidden always wins: an audience that names every surface brings nothing hi
       }
     }
   }
-  assert.ok(cases > 900, `exercised ${cases} cases`)
+  assert.ok(cases > 1200, `exercised ${cases} cases`)
 })
 
 test('the PDF draws nothing kept off its surface (sampled: one slot per section and kind; downloads and share links)', async () => {

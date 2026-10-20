@@ -317,6 +317,13 @@ test('the PDF: the variant, privately; 404 for anything else', async () => {
   assert.equal(miss.statusCode, 404)
 })
 
+test('the content export carries the variants (never a link)', async () => {
+  const { buildContentExport } = await import('../lib/contentExport')
+  const out = await buildContentExport()
+  assert.ok(out.zip.includes(Buffer.from('cv-variants.json')))
+  assert.ok(!out.zip.includes(Buffer.from('cv_share_links')))
+})
+
 test('deleting a variant revokes its links at once', async () => {
   const made = await createLink()
   const etag = (await h.call(routes.variants)).headers.etag

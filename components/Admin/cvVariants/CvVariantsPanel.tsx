@@ -395,6 +395,8 @@ export default function CvVariantsPanel() {
                   aria-pressed={on}
                   onClick={() => update({ ...current, pageTarget: t })}
                   fontFamily={MONO}
+                  minW="28px"
+                  h="28px"
                   borderColor={on ? 'var(--accent)' : 'page.border-strong'}
                   bg={on ? 'var(--accent-soft)' : undefined}
                   color={on ? 'accent.text' : undefined}
@@ -484,7 +486,18 @@ export default function CvVariantsPanel() {
           </Box>
         </Tooltip>
       </Flex>
-      <Box flex={1} minH={0} overflow="auto" p={{ base: 3, md: 5 }} bg={canvas}>
+      <Box
+        flex={1}
+        minH={0}
+        overflow="auto"
+        p={{ base: 3, md: 5 }}
+        bg={canvas}
+        // A scroll area keyboard users can reach (the sheet may hold no link).
+        tabIndex={0}
+        role="region"
+        aria-label={`A4 preview, ${lang === 'en' ? 'English' : 'Chinese'}`}
+        _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '-2px' }}
+      >
         {previewSections.length ? (
           <ScaledSheet pageGuides>
             <CVResult cvData={previewSections as never} lang={lang} ownerNames={ownerNames} />
