@@ -216,7 +216,7 @@ export default function PopMenu({ label, items, placement = 'bottom-start', trig
                     borderRadius="md"
                     fontSize="13px"
                     cursor={it.disabled ? 'default' : 'pointer'}
-                    color={it.disabled ? 'page.fg-subtle' : it.danger ? 'red.400' : 'page.fg'}
+                    color={it.disabled ? 'page.fg-subtle' : it.danger ? 'status.error' : 'page.fg'}
                     bg={active === i ? 'page.bg-overlay' : 'transparent'}
                     outline="none"
                     _focusVisible={{ boxShadow: 'inset 0 0 0 2px var(--accent-ring)' }}

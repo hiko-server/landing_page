@@ -4,7 +4,7 @@ import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react'
 import { PlayIcon } from '../../../Icons/ui/content'
 import { VIDEO_PLAYER_HOST, VIDEO_PROVIDER_LABEL, parseVideoUrl, videoWatchUrl, type VideoRef } from '../../../../lib/videoUrl'
 import { videoLinkUrl } from '../slashItems'
-import { MONO } from '../../shell/ui'
+import { MONO, primaryButtonProps } from '../../shell/ui'
 import { tabStop, useEditorUi } from './editorUi'
 
 /**
@@ -65,7 +65,7 @@ export default function VideoView({ node, updateAttributes, selected, editor }: 
   if (!ref) {
     return (
       <NodeViewWrapper className="tt-video" data-selected={selected || undefined}>
-        <Text fontSize="13px" color="red.400" contentEditable={false}>
+        <Text fontSize="13px" color="status.error" contentEditable={false}>
           Not a YouTube or Vimeo link: {url}
         </Text>
       </NodeViewWrapper>
@@ -186,7 +186,8 @@ export default function VideoView({ node, updateAttributes, selected, editor }: 
             {ref.start ? ` · starts at ${formatStart(ref.start)}` : ''}
             {poster ? '' : ' · poster added when saved'}
           </span>
-          <Link href={watch} isExternal color="accent.text" tabIndex={tabStop(active)}>
+          {/* 24px targets (WCAG 2.2 SC 2.5.8): the editable text around them is a target too. */}
+          <Link href={watch} isExternal color="accent.text" tabIndex={tabStop(active)} display="inline-flex" alignItems="center" minH="24px">
             Open on {provider} ↗
           </Link>
           <Button
@@ -195,6 +196,7 @@ export default function VideoView({ node, updateAttributes, selected, editor }: 
             color="page.fg-secondary"
             fontFamily={MONO}
             fontWeight={400}
+            minH="24px"
             onClick={() => {
               setDraftUrl(url)
               setUrlError('')
@@ -240,12 +242,12 @@ export default function VideoView({ node, updateAttributes, selected, editor }: 
                 borderColor="page.border-strong"
                 autoComplete="off"
               />
-              <Button size="sm" colorScheme="accent" onClick={applyUrl} flexShrink={0}>
+              <Button size="sm" {...primaryButtonProps} onClick={applyUrl} flexShrink={0}>
                 Apply
               </Button>
             </Flex>
             {urlError ? (
-              <Text id={`${id}-url-err`} role="alert" fontSize="12px" color="red.400" mt={1}>
+              <Text id={`${id}-url-err`} role="alert" fontSize="12px" color="status.error" mt={1}>
                 {urlError}
               </Text>
             ) : null}

@@ -90,8 +90,8 @@ export default function ImageBubble({ editor }: { editor: Editor }) {
         <Flex as="label" htmlFor={inputId} align="center" gap={1.5} mb={1.5} fontSize="12px" color="page.fg-secondary">
           Alt text
           {missing ? (
-            <Flex as="span" align="center" gap={1} color="red.400" fontWeight={500}>
-              <Box as="span" w="6px" h="6px" borderRadius="full" bg="red.400" aria-hidden />
+            <Flex as="span" align="center" gap={1} color="status.error" fontWeight={500}>
+              <Box as="span" w="6px" h="6px" borderRadius="full" bg="status.error" aria-hidden />
               Alt missing
             </Flex>
           ) : null}
@@ -112,7 +112,7 @@ export default function ImageBubble({ editor }: { editor: Editor }) {
           aria-describedby={`${inputId}-hint`}
           autoComplete="off"
         />
-        <Text id={`${inputId}-hint`} fontSize="11px" color={fileName ? 'orange.400' : 'page.fg-secondary'} mt={1.5}>
+        <Text id={`${inputId}-hint`} fontSize="11px" color={fileName ? 'status.warning' : 'page.fg-secondary'} mt={1.5}>
           {fileName ? 'That looks like a file name — describe the picture instead.' : 'Read aloud by screen readers; shown if the image fails to load.'}
         </Text>
         {gallery ? (

@@ -191,7 +191,7 @@ export default function LinkBubble({ editor, handleRef }: Props) {
               </Button>
             </Flex>
             {error ? (
-              <Text id={`${inputId}-err`} role="alert" fontSize="12px" color="red.400" mt={1}>
+              <Text id={`${inputId}-err`} role="alert" fontSize="12px" color="status.error" mt={1}>
                 {error}
               </Text>
             ) : null}

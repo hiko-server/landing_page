@@ -3,7 +3,7 @@ import { Box, Button, Flex, Popover, PopoverAnchor, PopoverContent, Portal, Text
 import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react'
 import { NodeSelection, TextSelection } from '@tiptap/pm/state'
 import { describeIsland, readBlockIsland, readInlineIsland, type IslandEdit } from '../markdown/islands'
-import { MONO } from '../../shell/ui'
+import { MONO, isMacPlatform, primaryButtonProps } from '../../shell/ui'
 import { tabStop, useEditorUi } from './editorUi'
 
 /**
@@ -85,6 +85,7 @@ function useIslandEditor({ node, editor, getPos, inline }: Props) {
 
 function SourceEditor({
   id,
+  label,
   draft,
   setDraft,
   error,
@@ -93,6 +94,8 @@ function SourceEditor({
   rows,
 }: {
   id: string
+  /** The textarea's accessible name, when no <label> names it (the block view). */
+  label?: string
   draft: string
   setDraft: (v: string) => void
   error: string
@@ -101,6 +104,8 @@ function SourceEditor({
   rows: number
 }) {
   const ref = useRef<HTMLTextAreaElement>(null)
+  // Client-only (node views never render on the server): the platform's own shortcut.
+  const [mac] = useState(isMacPlatform)
   useEffect(() => {
     const ta = ref.current
     if (!ta) return
@@ -112,6 +117,8 @@ function SourceEditor({
       <Textarea
         ref={ref}
         id={id}
+        aria-label={label}
+        aria-keyshortcuts={mac ? 'Meta+Enter Escape' : 'Control+Enter Escape'}
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => {
@@ -138,19 +145,19 @@ function SourceEditor({
         resize="vertical"
       />
       {error ? (
-        <Text id={`${id}-err`} role="alert" fontSize="12px" color="red.400" mt={1.5}>
+        <Text id={`${id}-err`} role="alert" fontSize="12px" color="status.error" mt={1.5}>
           {error}
         </Text>
       ) : (
         <Text id={`${id}-hint`} fontSize="11px" fontFamily={MONO} color="page.fg-secondary" mt={1.5}>
-          ⌘↵ apply · Esc cancel
+          {mac ? '⌘↵' : 'Ctrl+↵'} apply · Esc cancel
         </Text>
       )}
       <Flex justify="flex-end" gap={2} mt={1.5}>
         <Button size="xs" variant="ghost" onClick={() => close(true)}>
           Cancel
         </Button>
-        <Button size="xs" colorScheme="accent" onClick={apply}>
+        <Button size="xs" {...primaryButtonProps} onClick={apply}>
           Done
         </Button>
       </Flex>
@@ -201,7 +208,16 @@ export function MdxBlockView(props: NodeViewProps) {
       </Flex>
       <Box contentEditable={false} suppressContentEditableWarning px={3} py={2}>
         {editing ? (
-          <SourceEditor id={id} draft={draft} setDraft={setDraft} error={error} apply={apply} close={close} rows={lines} />
+          <SourceEditor
+            id={id}
+            label={info.label === 'MDX' ? 'MDX source' : `MDX source: ${info.label}`}
+            draft={draft}
+            setDraft={setDraft}
+            error={error}
+            apply={apply}
+            close={close}
+            rows={lines}
+          />
         ) : (
           <Box as="pre" className="tt-mdx-source" onDoubleClick={open} m={0} fontFamily={MONO} fontSize="12.5px" lineHeight={1.55} whiteSpace="pre-wrap" overflowWrap="anywhere" color="page.fg-secondary">
             {source}

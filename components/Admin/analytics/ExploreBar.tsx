@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type RefObject } from 'react'
 import {
   Box,
   Button,
@@ -40,6 +40,7 @@ import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from '@chakra-ui/i
 import { FaDownload, FaFilter, FaSync, FaTimes } from 'react-icons/fa'
 import { MONO, inputProps, outlineButtonProps, primaryButtonProps } from '../shell/ui'
 import { readJsonObject } from '../shell/http'
+import { useStickyRef } from '../shell/stickyRef'
 import { formatCount } from '../../../lib/analytics/format'
 import { utcDay } from '../../../lib/analytics/shared'
 import {
@@ -81,7 +82,20 @@ const today = () => utcDay(Date.now())
 
 // ── Custom range ───────────────────────────────────────────────────────────
 
-function CustomRangeModal({ isOpen, onClose, query, onApply }: { isOpen: boolean; onClose: () => void; query: ExploreQuery; onApply: (from: string, to: string) => void }) {
+function CustomRangeModal({
+  isOpen,
+  onClose,
+  query,
+  onApply,
+  finalFocusRef,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  query: ExploreQuery
+  onApply: (from: string, to: string) => void
+  /** The Period button: the menu item that opened the dialog is gone by the time it closes. */
+  finalFocusRef: RefObject<HTMLButtonElement>
+}) {
   const ids = useId()
   const fromRef = useRef<HTMLInputElement>(null)
   const t = today()
@@ -102,7 +116,7 @@ function CustomRangeModal({ isOpen, onClose, query, onApply }: { isOpen: boolean
     onClose()
   }
   return (
-    <Modal isOpen={isOpen} onClose={onClose} initialFocusRef={fromRef} isCentered size="md">
+    <Modal isOpen={isOpen} onClose={onClose} initialFocusRef={fromRef} finalFocusRef={finalFocusRef} isCentered size="md">
       <ModalOverlay />
       <ModalContent bg="page.bg-elevated" border="1px solid" borderColor="page.border" mx={4}>
         <ModalHeader fontSize="md" pb={1} pr={12}>
@@ -156,6 +170,8 @@ function CustomRangeModal({ isOpen, onClose, query, onApply }: { isOpen: boolean
 
 function PeriodControl({ query, onChange }: { query: ExploreQuery; onChange: (q: ExploreQuery) => void }) {
   const [customOpen, setCustomOpen] = useState(false)
+  // Sticky: the dialog reads it as it closes, when the menu button's re-merged ref may be briefly null.
+  const [periodRef, setPeriodRef] = useStickyRef<HTMLButtonElement>()
   const t = today()
   const span = resolvePeriod(query, t)
   const before = shiftSpan(span, -1)
@@ -171,6 +187,7 @@ function PeriodControl({ query, onChange }: { query: ExploreQuery; onChange: (q:
       <IconButton {...navProps} icon={<ChevronLeftIcon boxSize={5} />} aria-label={`Previous period: ${formatSpanWithYear(before)}`} title={formatSpanWithYear(before)} isDisabled={!canBack} onClick={() => go(before)} />
       <Menu placement="bottom-start" isLazy>
         <MenuButton
+          ref={setPeriodRef}
           as={Button}
           size="sm"
           h="32px"
@@ -210,7 +227,13 @@ function PeriodControl({ query, onChange }: { query: ExploreQuery; onChange: (q:
         </MenuList>
       </Menu>
       <IconButton {...navProps} icon={<ChevronRightIcon boxSize={5} />} aria-label={`Next period: ${formatSpanWithYear({ from: after.from, to: after.to > t ? t : after.to })}`} isDisabled={!canForward} onClick={() => go(after)} />
-      <CustomRangeModal isOpen={customOpen} onClose={() => setCustomOpen(false)} query={query} onApply={(from, to) => onChange({ ...query, period: 'custom', from, to })} />
+      <CustomRangeModal
+        isOpen={customOpen}
+        onClose={() => setCustomOpen(false)}
+        query={query}
+        onApply={(from, to) => onChange({ ...query, period: 'custom', from, to })}
+        finalFocusRef={periodRef}
+      />
     </HStack>
   )
 }
@@ -323,7 +346,7 @@ function FilterPicker({ query, onChange }: { query: ExploreQuery; onChange: (q: 
       closeOnBlur={false}
     >
       <PopoverTrigger>
-        <Button ref={triggerRef} size="sm" h="34px" {...outlineButtonProps} leftIcon={<Icon as={FaFilter} boxSize="11px" aria-hidden />}>
+        <Button ref={triggerRef} size="sm" h="34px" {...outlineButtonProps} leftIcon={<Icon as={FaFilter} boxSize="11px" aria-hidden />} data-filter-trigger="">
           Filter
         </Button>
       </PopoverTrigger>
@@ -455,10 +478,22 @@ export default function ExploreBar({
   exportExtra: Array<[string, string]>
 }) {
   const compareId = useId()
+  const barRef = useRef<HTMLDivElement>(null)
+  // A removed chip takes its button (and the focus) with it: on to the chip
+  // now in its place, the one before it, or — none left — the Filter button.
+  const refocusChip = useRef<number | null>(null)
+  useEffect(() => {
+    const at = refocusChip.current
+    if (at === null) return
+    refocusChip.current = null
+    const removes = barRef.current?.querySelectorAll<HTMLButtonElement>('[data-filter-chip] button')
+    const next = removes && removes.length ? removes[Math.min(at, removes.length - 1)] : barRef.current?.querySelector<HTMLButtonElement>('[data-filter-trigger]')
+    next?.focus()
+  }, [query.filters])
   const exportHref = useMemo(() => (table: string) => `/api/admin/analytics/export?${exploreSearch(query, [...exportExtra, ['table', table]])}`, [query, exportExtra])
 
   return (
-    <Box mb={4} data-explore-bar="">
+    <Box ref={barRef} mb={4} data-explore-bar="">
       <Flex gap={2} align="center" flexWrap="wrap" rowGap={2}>
         <PeriodControl query={query} onChange={onChange} />
         <Flex align="center" px={2.5} h="38px" border="1px solid" borderColor="page.border" borderRadius="lg" bg="page.bg-elevated">
@@ -501,7 +536,7 @@ export default function ExploreBar({
       </Flex>
       {query.filters.length ? (
         <Flex as="ul" listStyleType="none" m={0} p={0} mt={3} gap={2} flexWrap="wrap" align="center" aria-label="Active filters">
-          {query.filters.map((f) => {
+          {query.filters.map((f, index) => {
             const text = describeFilter(f)
             return (
               <Flex as="li" key={f.dim} align="center" gap={1} pl={2.5} pr={1} h="28px" borderRadius="full" border="1px solid" borderColor="accent.500" bg="var(--accent-soft)" fontSize="xs" maxW="100%" minW={0} data-filter-chip="">
@@ -519,7 +554,10 @@ export default function ExploreBar({
                   h="24px"
                   icon={<Icon as={FaTimes} boxSize="10px" aria-hidden />}
                   aria-label={`Remove filter: ${text}`}
-                  onClick={() => onChange({ ...query, filters: withoutFilter(query.filters, f.dim) })}
+                  onClick={() => {
+                    refocusChip.current = index
+                    onChange({ ...query, filters: withoutFilter(query.filters, f.dim) })
+                  }}
                   _hover={{ bg: 'page.hover' }}
                 />
               </Flex>
@@ -527,7 +565,15 @@ export default function ExploreBar({
           })}
           {query.filters.length > 1 ? (
             <Box as="li">
-              <Button size="xs" variant="link" color="page.fg-secondary" onClick={() => onChange({ ...query, filters: [] })}>
+              <Button
+                size="xs"
+                variant="link"
+                color="page.fg-secondary"
+                onClick={() => {
+                  refocusChip.current = 0
+                  onChange({ ...query, filters: [] })
+                }}
+              >
                 Clear all
               </Button>
             </Box>

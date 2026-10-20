@@ -52,3 +52,47 @@ export const ADMIN_COMPONENT_STYLES = {
   Tag,
   Tooltip,
 }
+
+type SolidProps = { colorScheme?: string; colorMode?: 'light' | 'dark' } & Record<string, unknown>
+type StyleObject = Record<string, any>
+type SolidStyle = StyleObject | ((props: SolidProps) => StyleObject)
+
+/**
+ * Hues whose stock solid button stays as Chakra ships it: gray (dark text on
+ * a light grey), yellow and cyan (Chakra already gives them black text), the
+ * alpha scales (no 600–800 steps of their own colour).
+ */
+const STOCK_SOLID = new Set(['gray', 'yellow', 'cyan', 'whiteAlpha', 'blackAlpha'])
+
+/**
+ * Chakra's solid button puts white text on the 500 shade in light mode:
+ * 4.1:1 on red.500 (every destructive "Confirm — …" step), 4.47:1 on
+ * accent.500, under WCAG 1.4.3's 4.5:1 for 12–14px labels. In light mode a
+ * solid button takes the 600 shade instead (hover 700, pressed 800; ≥ 4.5:1
+ * with white for every hue — tests/review-r3-ux.test.ts); dark mode keeps
+ * Chakra's 200 shade with dark text (≥ 9:1).
+ */
+export function contrastSafeSolid(solid: SolidStyle): (props: SolidProps) => StyleObject {
+  return (props) => {
+    const base = typeof solid === 'function' ? solid(props) : solid
+    const c = props.colorScheme || 'gray'
+    if (props.colorMode === 'dark' || STOCK_SOLID.has(c)) return base
+    return {
+      ...base,
+      bg: `${c}.600`,
+      _hover: { ...base._hover, bg: `${c}.700`, _disabled: { ...base._hover?._disabled, bg: `${c}.600` } },
+      _active: { ...base._active, bg: `${c}.800` },
+    }
+  }
+}
+
+/**
+ * The app theme's Button with contrast-safe solid colours. Only admin
+ * screens render solid coloured buttons, so this joins the theme in
+ * components/Admin/AdminThemeScope and never reaches the public bundle.
+ */
+export function withContrastSafeSolidButton<T extends { variants?: Record<string, unknown> }>(button: T): T {
+  const solid = button.variants?.solid as SolidStyle | undefined
+  if (!solid) return button
+  return { ...button, variants: { ...button.variants, solid: contrastSafeSolid(solid) } }
+}

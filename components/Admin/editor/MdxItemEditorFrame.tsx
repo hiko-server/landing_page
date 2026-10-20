@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import {
   Badge,
   Box,
@@ -40,6 +40,7 @@ import WritingBar, { useWritingModes } from './WritingBar'
 import SeoSection from './SeoSection'
 import ScheduleBanner from './ScheduleBanner'
 import { isScheduled, scheduleSummary } from '../shell/itemSchedule'
+import { useStickyRef } from '../shell/stickyRef'
 
 // Opened on demand: scheduling (H5) and review links (H5) load with their dialogs.
 const ScheduleDialog = dynamic(() => import('./ScheduleDialog'), { ssr: false })
@@ -96,6 +97,8 @@ function PhoneLabel({ short, full }: { short: string; full: string }) {
 }
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
+/** The first of these controls that is on the page and enabled (focus() on a disabled one does nothing). */
+const firstUsable = (...els: Array<HTMLElement | null>) => els.find((el) => !!el && el.isConnected && !(el as HTMLButtonElement).disabled) ?? null
 const textField = (fm: Record<string, unknown>, key: string) => (typeof fm[key] === 'string' ? (fm[key] as string) : '')
 
 export default function MdxItemEditorFrame<F extends ItemFm>({
@@ -132,6 +135,32 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
   const [markUpdated, setMarkUpdated] = useState(false)
   const [scheduleOpen, setScheduleOpen] = useState(false)
   const [reviewOpen, setReviewOpen] = useState(false)
+  // Keyboard focus never falls to the top of the page when a control goes
+  // away under it: the publish sheet's "Schedule…" (the sheet closes as the
+  // dialog opens) or the schedule banner (gone once unscheduled).
+  // Sticky: read while the dialog unmounts, when a re-merged menu-button ref is briefly null.
+  const [publishBtnRef, setPublishBtn] = useStickyRef<HTMLButtonElement>()
+  const [moreBtnRef, setMoreBtn] = useStickyRef<HTMLButtonElement>()
+  const [bannerChangeRef, setBannerChange] = useStickyRef<HTMLButtonElement>()
+  const scheduleFrom = useRef<'sheet' | 'menu' | 'banner'>('menu')
+  const refocusAfterUnschedule = useRef(false)
+  // Read as the dialog closes: back to the opener, else the next sensible control.
+  const scheduleReturn = useMemo<RefObject<HTMLElement>>(
+    () => ({
+      get current() {
+        const publish = publishBtnRef.current
+        const more = moreBtnRef.current
+        if (scheduleFrom.current === 'banner') return firstUsable(bannerChangeRef.current, publish, more)
+        if (scheduleFrom.current === 'sheet') return firstUsable(publish, more)
+        return firstUsable(more, publish)
+      },
+    }),
+    [publishBtnRef, moreBtnRef, bannerChangeRef],
+  )
+  const openSchedule = (from: 'sheet' | 'menu' | 'banner') => {
+    scheduleFrom.current = from
+    setScheduleOpen(true)
+  }
   const { fm } = ed
   const published = ed.mode === 'published'
   const hasPending = !!ed.pending
@@ -142,6 +171,13 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
   const changesReady = canPublishChanges({ mode: ed.mode, hasPending, dirty: ed.dirty })
   const scheduled = isScheduled(ed.schedule) ? ed.schedule : null
   const scheduledLine = scheduled ? scheduleSummary(scheduled, Date.now()) : null
+
+  // Unscheduled from the banner: the banner (and its focused button) is gone.
+  useEffect(() => {
+    if (scheduled || !refocusAfterUnschedule.current) return
+    refocusAfterUnschedule.current = false
+    firstUsable(publishBtnRef.current, moreBtnRef.current)?.focus()
+  }, [scheduled, publishBtnRef, moreBtnRef])
 
   // "Mark as updated today" starts unticked every time the sheet opens.
   useEffect(() => {
@@ -223,7 +259,7 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
           <BackLink href={backHref}>{backLabel}</BackLink>
           {!ed.isNew && ready ? (
             <Menu placement="bottom-end" isLazy>
-              <MenuButton as={IconButton} size="sm" variant="ghost" icon={<FaEllipsisH />} aria-label="More actions" color="page.fg-secondary" />
+              <MenuButton ref={setMoreBtn} as={IconButton} size="sm" variant="ghost" icon={<FaEllipsisH />} aria-label="More actions" color="page.fg-secondary" />
               <MenuList bg="page.bg-elevated" borderColor="page.border" fontSize="sm" zIndex={40}>
                 {published ? (
                   <>
@@ -247,7 +283,7 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
                 <MenuItem onClick={() => setHistoryOpen(true)} bg="transparent">
                   History…
                 </MenuItem>
-                <MenuItem onClick={() => setScheduleOpen(true)} bg="transparent">
+                <MenuItem onClick={() => openSchedule('menu')} bg="transparent">
                   {scheduled ? 'Change schedule…' : 'Schedule…'}
                 </MenuItem>
                 <MenuItem onClick={() => setReviewOpen(true)} bg="transparent">
@@ -286,6 +322,7 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
             </Button>
             {published ? (
               <Button
+                ref={setPublishBtn}
                 size="sm"
                 {...primaryButtonProps}
                 onClick={() => setPublishOpen(true)}
@@ -295,7 +332,7 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
                 <PhoneLabel short="Publish…" full="Publish changes…" />
               </Button>
             ) : (
-              <Button size="sm" {...primaryButtonProps} onClick={() => setPublishOpen(true)} isDisabled={!ready || ed.saving}>
+              <Button ref={setPublishBtn} size="sm" {...primaryButtonProps} onClick={() => setPublishOpen(true)} isDisabled={!ready || ed.saving}>
                 Publish…
               </Button>
             )}
@@ -314,11 +351,15 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
             schedule={scheduled}
             noun={noun}
             busy={ed.saving}
-            onChange={() => setScheduleOpen(true)}
+            changeRef={setBannerChange}
+            onChange={() => openSchedule('banner')}
             onClear={async () => {
+              refocusAfterUnschedule.current = true
               const out = await ed.setSchedule({ publishAt: null, unpublishAt: null })
-              if (!out.ok) toast({ status: 'error', title: 'Couldn’t unschedule', description: out.error, position: 'bottom-right' })
-              else toast({ status: 'success', title: 'Unscheduled', description: `Nothing happens to this ${noun} on its own any more.`, position: 'bottom-right' })
+              if (!out.ok) {
+                refocusAfterUnschedule.current = false
+                toast({ status: 'error', title: 'Couldn’t unschedule', description: out.error, position: 'bottom-right' })
+              } else toast({ status: 'success', title: 'Unscheduled', description: `Nothing happens to this ${noun} on its own any more.`, position: 'bottom-right' })
               return out.ok
             }}
           />
@@ -444,7 +485,7 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
               ? undefined
               : () => {
                   setPublishOpen(false)
-                  setScheduleOpen(true)
+                  openSchedule('sheet')
                 }
           }
         />
@@ -453,6 +494,7 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
         <ScheduleDialog
           isOpen={scheduleOpen}
           onClose={() => setScheduleOpen(false)}
+          finalFocusRef={scheduleReturn}
           collection={collection}
           mode={published ? 'published' : 'draft'}
           hasChanges={hasPending || ed.dirty}

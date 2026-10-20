@@ -78,6 +78,8 @@ export const editorNodeSx = {
     borderRadius: 'sm',
     _hover: { bg: 'page.bg-overlay' },
     w: '100%',
+    // A 24px target (WCAG 2.2 SC 2.5.8): the editable text around it is a target too.
+    minH: '24px',
     mt: 2,
     px: 1,
     textAlign: 'center',
@@ -109,6 +111,7 @@ export const editorNodeSx = {
   '.tt-video[data-selected] .tt-video-frame': accentOutline,
   '.tt-video-title': {
     textAlign: 'center',
+    minH: '24px',
     borderRadius: 'sm',
     _hover: { bg: 'page.bg-overlay' },
     fontSize: '14px',
@@ -212,6 +215,13 @@ export const editorNodeSx = {
   '.tt-prose li[data-checked="true"] > p': { color: 'page.fg-secondary' },
 
   // ── Selection, drop cursor, the block handle's gutter ─────────────────
+  // A node or cell selection (a figure, a video, an island, a callout,
+  // table cells) hides the native highlight: ProseMirror clears its
+  // background, but the site's ::selection also paints the text white, so a
+  // selected caption, title or island vanished on paper. The text keeps its
+  // own colour instead — currentColor, not inherit: a highlight pseudo
+  // inherits from its parent's ::selection, which is the white one.
+  '.tt-prose.ProseMirror-hideselection *::selection': { color: 'currentColor', background: 'transparent' },
   '.tt-prose .ProseMirror-selectednode:not(.react-renderer)': accentOutline,
   '.tt-prose .ProseMirror-gapcursor:after': { borderTopColor: 'page.fg' },
   '.tt-dropcursor': { bg: 'var(--accent)', borderRadius: 'full' },

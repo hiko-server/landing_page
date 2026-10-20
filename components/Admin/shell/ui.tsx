@@ -568,14 +568,21 @@ export function useSaveShortcut(enabled: boolean, onSave: () => void) {
   }, [enabled])
 }
 
+/**
+ * macOS / iOS (⌘ shortcuts) or not (Ctrl). Reads the browser, so only call
+ * it on the client: components that also render on the server use useIsMac.
+ */
+export function isMacPlatform(): boolean {
+  if (typeof navigator === 'undefined') return false
+  const nav = navigator as Navigator & { userAgentData?: { platform?: string } }
+  const platform = nav.userAgentData?.platform || nav.platform || nav.userAgent
+  return /mac|iphone|ipad|ipod/i.test(platform)
+}
+
 /** macOS / iOS detection after mount (SSR renders the non-Mac labels). */
 export function useIsMac(): boolean {
   const [isMac, setIsMac] = useState(false)
-  useEffect(() => {
-    const nav = navigator as Navigator & { userAgentData?: { platform?: string } }
-    const platform = nav.userAgentData?.platform || nav.platform || nav.userAgent
-    setIsMac(/mac|iphone|ipad|ipod/i.test(platform))
-  }, [])
+  useEffect(() => setIsMac(isMacPlatform()), [])
   return isMac
 }
 

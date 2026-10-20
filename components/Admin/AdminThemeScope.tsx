@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from 'react'
 import { Global, ThemeProvider as EmotionThemeProvider } from '@emotion/react'
 import { useTheme } from '@chakra-ui/react'
-import { ADMIN_COMPONENT_STYLES, ADMIN_GLOBAL_CSS } from '../../theme/adminComponents'
+import { ADMIN_COMPONENT_STYLES, ADMIN_GLOBAL_CSS, withContrastSafeSolidButton } from '../../theme/adminComponents'
 
 /**
  * The app theme plus the component styles only the admin uses (accordions,
@@ -14,10 +14,15 @@ import { ADMIN_COMPONENT_STYLES, ADMIN_GLOBAL_CSS } from '../../theme/adminCompo
  * styles: the colour mode, CSS variables and global styles stay those of the
  * root provider. The admin's own CSS variables (the control border) are
  * added here as global styles, so public pages never carry them either.
+ * Solid coloured buttons — only the admin has them — take the 600 shade in
+ * light mode (white text ≥ 4.5:1; Chakra's 500 is 4.1:1 on red).
  */
 export default function AdminThemeScope({ children }: { children: ReactNode }) {
   const theme = useTheme()
-  const extended = useMemo(() => ({ ...theme, components: { ...ADMIN_COMPONENT_STYLES, ...theme.components } }), [theme])
+  const extended = useMemo(
+    () => ({ ...theme, components: { ...ADMIN_COMPONENT_STYLES, ...theme.components, Button: withContrastSafeSolidButton(theme.components.Button) } }),
+    [theme],
+  )
   return (
     <EmotionThemeProvider theme={extended}>
       <Global styles={ADMIN_GLOBAL_CSS} />

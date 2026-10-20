@@ -173,7 +173,7 @@ export default function ImageView({ node, editor, getPos, updateAttributes, dele
             tabIndex={tabStop(showTools)}
             gap={1}
           >
-            {missingAlt ? <Box as="span" w="6px" h="6px" borderRadius="full" bg="red.400" aria-hidden /> : null}
+            {missingAlt ? <Box as="span" w="6px" h="6px" borderRadius="full" bg="status.error" aria-hidden /> : null}
             Alt
           </Button>
           <Tooltip label="Replace the image" openDelay={400} hasArrow placement="top">
@@ -226,8 +226,8 @@ export default function ImageView({ node, editor, getPos, updateAttributes, dele
             <Flex as="label" htmlFor={`${id}-alt-input`} align="center" gap={1.5} fontSize="12px" color="page.fg-secondary" mb={1}>
               Alt text
               {missingAlt ? (
-                <Flex as="span" align="center" gap={1} color="red.400" fontWeight={500}>
-                  <Box as="span" w="6px" h="6px" borderRadius="full" bg="red.400" aria-hidden />
+                <Flex as="span" align="center" gap={1} color="status.error" fontWeight={500}>
+                  <Box as="span" w="6px" h="6px" borderRadius="full" bg="status.error" aria-hidden />
                   Missing — describe what the image shows
                 </Flex>
               ) : null}
@@ -256,7 +256,7 @@ export default function ImageView({ node, editor, getPos, updateAttributes, dele
               bg="page.bg"
               borderColor="page.border-strong"
             />
-            <Text id={`${id}-alt-hint`} fontSize="11px" color={fileNameAlt ? 'orange.400' : 'page.fg-secondary'} mt={1}>
+            <Text id={`${id}-alt-hint`} fontSize="11px" color={fileNameAlt ? 'status.warning' : 'page.fg-secondary'} mt={1}>
               {fileNameAlt ? 'That looks like a file name — describe the picture instead.' : 'Read aloud by screen readers; shown if the image cannot load.'}
             </Text>
           </Box>
