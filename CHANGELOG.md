@@ -8,6 +8,68 @@ portfolio CMS, no public package). Entries are grouped by release date.
 
 ## [Unreleased]
 
+### analytics-explore
+
+Analytics explore in the admin (final batch: H10).
+
+- **Period and comparison**: a period menu (today, yesterday, the last 7 / 28
+  / 30 / 90 days, this month, last month, the last 12 months, a custom range
+  in a dialog), ‹ › to step back and forth by the period's own length, and
+  **Compare** to draw the previous period on the chart as a muted line with
+  a legend (and in the tooltip). Long periods chart by ISO week or month.
+  The KPI tiles choose the chart's metric (visitors or views); the y axis
+  has whole-number ticks; the days a post or case study was published are
+  marked under the axis.
+- **Filters that every number follows**: page, referrer, country, device,
+  browser and page language — *is* or *is not*, one per dimension — from a
+  Filter picker (with this period's values as suggestions; a malformed value
+  is refused in place) or by clicking any row of a breakdown. The cards,
+  goals, conversion, paths and searches follow; the Web Vitals follow the page
+  and device filters only and say why. A referrer filter keeps the whole
+  visitor-day (what visitors from linkedin.com read, not only where they
+  landed). Filters need the raw rows (35 days), so a filtered view is
+  clipped to them with a note, and compares only when the period before it
+  is inside them too; without filters the whole period comes from the daily
+  totals as before. The view lives in the URL (`period`, `from`, `to`,
+  `compare`, `f=<dim>:<is|not>:<value>`), so reloads, bookmarks and Back
+  keep it; other dashboard tabs drop those parameters.
+- **One page in detail**: filtering to a single page shows its title and
+  kind, read-to-the-end (and its share of the page's visitors), e-mail link
+  clicks, outbound clicks put on the page viewed last before them that day
+  (the click itself stores only the host), CV prints on /cv, and the page's
+  LCP / INP / CLS p75 — with links to the page and its editor. The post and
+  case-study editors' ⋯ menu opens it ("Analytics for this page ↗").
+- **Paths to a goal**: for any goal, the most common ways visitor-days
+  reached it — the first referrer, then the pages opened up to the goal
+  (repeats merged, long paths shortened), next to the Source → CV →
+  Download conversion, which now honours the filters too.
+- **CSV export**: one table or every table in a .zip (summary, visitors over
+  time with the comparison, pages with titles, referrers, countries,
+  devices, browsers, page languages, goals, goal details, conversion,
+  paths) — full lists, UTF-8 with a BOM, formula-safe cells. The texts of
+  searches with no results are never exported (they are kept 35 days only).
+- **Weekly digest**: an opt-in e-mail on Mondays (01:00 UTC; the card shows
+  your local time) to `NOTIFY_EMAIL` / `ADMIN_EMAIL` with last week's views
+  and visitor-days and their change, top pages, referrers and countries,
+  goals, the conversion, how many searches found nothing (never what), posts
+  published and Web Vitals — plain text and simple HTML, no images or
+  tracking. The week is claimed in the store before it is sent (never
+  twice); a failure is retried hourly, three times at most, and shown on the
+  card. Without SMTP the card explains the settings instead of offering a
+  switch; "Send a preview now" mails last week's digest at once. Switching
+  and previews are in the activity log.
+- **Analytics migration 7 (`explore`)**: indexes `hits (day, visitor, ts)`
+  and `hits (day, ref_host, visitor)` for the visitor-day lookups of filters,
+  paths and the page detail (unit-tested query plans; a 45 000-row filtered
+  report stays well under a second), and `langs_daily`, a daily
+  page-language total rolled up with the others (filled from the raw rows
+  still kept). Nothing new about visitors is stored; expand-only.
+- APIs: `/api/admin/analytics` and `/api/admin/goals` take the explore
+  parameters (the earlier `range=` still works; `?values=<dim>` lists filter
+  suggestions); new `/api/admin/analytics/export` and
+  `/api/admin/analytics/digest`. ⌘K gains "compare", "clear the filters" and
+  "export this view" while the Analytics tab is open.
+
 ### admin-editorial
 
 Editorial tools in the post and case-study editors (wave 2B: H1, H3, H4, H6, H16).
