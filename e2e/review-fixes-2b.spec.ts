@@ -1,3 +1,4 @@
+import { devices } from '@playwright/test'
 import { test, expect } from './fixtures'
 
 /**
@@ -5,6 +6,8 @@ import { test, expect } from './fixtures'
  *   - CORR-1: every toast follows the one toast policy (lib/notify via
  *     components/Common/UnifiedToast) — an error is an alert and stays until
  *     dismissed — including a toast raised before the toast host has loaded
+ *   - CORR-2: on a touch screen (no hover), a keyboard still opens the hints
+ *     whose :focus-visible rule shares a selector list with :hover
  *
  * Production-safe without @admin: only GETs and in-page actions.
  */
@@ -69,5 +72,37 @@ test.describe('one toast policy (CORR-1)', () => {
 
     await alert.getByRole('button', { name: /close/i }).click()
     await expect(page.locator('.chakra-toast')).toHaveCount(0)
+  })
+})
+
+test.describe('focus reveals on touch screens (CORR-2)', () => {
+  test('a keyboard on a phone opens the hint of a focused link (its rule shares a list with :hover)', async ({ browser, baseURL }, testInfo) => {
+    test.skip(chromiumOnly(testInfo.project.name), 'emulates its own phone')
+    const context = await browser.newContext({ ...devices['Pixel 7'], baseURL })
+    try {
+      const page = await context.newPage()
+      await page.goto('/')
+      expect(await page.evaluate(() => matchMedia('(hover: hover)').matches), 'a device without hover').toBe(false)
+      // Tab to the first control whose hint follows it (Hint.tsx: `& > :focus-visible ~ .hint`).
+      let found = false
+      for (let i = 0; i < 60 && !found; i++) {
+        await page.keyboard.press('Tab')
+        found = await page.evaluate(() => {
+          const el = document.activeElement
+          return !!el && !!el.parentElement?.querySelector(':scope > .hint') && el.matches(':focus-visible')
+        })
+      }
+      expect(found, 'a hinted control is reachable by Tab').toBe(true)
+      await expect
+        .poll(() =>
+          page.evaluate(() => {
+            const hint = document.activeElement?.parentElement?.querySelector(':scope > .hint')
+            return hint ? getComputedStyle(hint).display : 'missing'
+          }),
+        )
+        .toBe('block')
+    } finally {
+      await context.close()
+    }
   })
 })

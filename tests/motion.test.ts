@@ -36,7 +36,7 @@ import {
   type PageMember,
 } from '../components/General-UI/paletteModel'
 import { OPEN_PALETTE_EVENT, normalizePalettePage, openCommandPalette, type OpenPaletteDetail } from '../components/Chrome/paletteEvents'
-import { HOVER_MEDIA, createSiteEmotionCache, guardHover } from '../lib/hoverMedia'
+import { HOVER_MEDIA, createSiteEmotionCache, guardHover, guardHoverRules, splitSelectorList } from '../lib/hoverMedia'
 
 const ROOT = process.cwd()
 const read = (rel: string) => readFileSync(path.join(ROOT, rel), 'utf8')
@@ -409,6 +409,45 @@ test('hover rules move into @media (hover:hover), once; everything else is untou
   assert.equal(guardHover('.i:hover::after{content:"{:hover}";}'), `${HOVER_MEDIA}{.i:hover::after{content:"{:hover}";}}`, 'braces in strings')
   assert.equal(guardHover('.j{content:"a:hover";}'), '.j{content:"a:hover";}', ':hover in a value is not a selector')
   assert.equal(guardHover(''), '')
+})
+
+test('CORR-2: only the hover selectors of a list move into the query; focus reveals beside them stay for keyboards on touch screens', () => {
+  // Hint.tsx, MDXContent heading anchors, CodeBlock, PublicationItem: a :hover reveal and its keyboard twin in one rule.
+  assert.equal(
+    guardHover('.a:hover > .hint, .a > :focus-visible ~ .hint{display:block;}'),
+    `.a > :focus-visible ~ .hint{display:block;}${HOVER_MEDIA}{.a:hover > .hint{display:block;}}`,
+  )
+  assert.deepEqual(guardHoverRules('.c:hover .code-copy,.c:focus-within .code-copy{opacity:1;}'), [
+    '.c:focus-within .code-copy{opacity:1;}',
+    `${HOVER_MEDIA}{.c:hover .code-copy{opacity:1;}}`,
+  ], 'two rules, one each (insertRule takes exactly one)')
+  // Chakra's _hover is `&:hover, &[data-hover]`: both are hover states and stay together in the query.
+  assert.equal(guardHover('.b:hover,.b[data-hover],.b:focus-visible{x:y;}'), `.b:focus-visible{x:y;}${HOVER_MEDIA}{.b:hover,.b[data-hover]{x:y;}}`)
+  // Commas inside :is() / :not() / attribute values / strings do not split a selector.
+  assert.deepEqual(splitSelectorList(' .a:is(.b, .c):hover , [data-x="1,2"]:focus-visible,.d::after '), ['.a:is(.b, .c):hover', '[data-x="1,2"]:focus-visible', '.d::after'])
+  assert.equal(guardHover('.e:is(:hover, :focus-visible) .f{a:b;}'), `${HOVER_MEDIA}{.e:is(:hover, :focus-visible) .f{a:b;}}`, 'one selector: guarded whole')
+  // Inside a group rule the split stays inside it.
+  assert.equal(
+    guardHover('@media (min-width:48em){.g:hover::after,.g:focus-visible::after{opacity:1;}}'),
+    `@media (min-width:48em){.g:focus-visible::after{opacity:1;}${HOVER_MEDIA}{.g:hover::after{opacity:1;}}}`,
+  )
+  assert.deepEqual(guardHoverRules('.h{a:b;}'), ['.h{a:b;}'])
+  assert.deepEqual(guardHoverRules(''), [])
+})
+
+test('CORR-2: real Emotion output — the site cache keeps a focus-visible reveal outside the query, and a browser sheet gets one rule per insert', () => {
+  const cache = createSiteEmotionCache()
+  const styles = (s: string) => ({ name: s.length.toString(36), styles: s, next: undefined, map: undefined }) as never
+  // components/General-UI/Hint.tsx OPEN rule.
+  const rules = cache.insert('.css-h', styles('&:hover > .hint, & > :focus-visible ~ .hint{display:block;}'), cache.sheet, true)
+  assert.equal(rules, `.css-h>:focus-visible~.hint{display:block;}${HOVER_MEDIA}{.css-h:hover>.hint{display:block;}}`)
+  // In the browser Emotion inserts stylis' rules one by one (MDXContent's heading self-link rule here).
+  const inserted: string[] = []
+  const sheet = { insert: (rule: string) => inserted.push(rule) }
+  const wrapped = cache.insert as unknown as (sel: string, ser: unknown, sh: unknown, cacheIt: boolean) => unknown
+  wrapped('.css-z', styles('a:b;'), sheet, false)
+  sheet.insert('.css-m .heading-anchor:hover::after,.css-m .heading-anchor:focus-visible::after{opacity:1;}')
+  assert.deepEqual(inserted, ['.css-m .heading-anchor:focus-visible::after{opacity:1;}', `${HOVER_MEDIA}{.css-m .heading-anchor:hover::after{opacity:1;}}`])
 })
 
 test('the site Emotion cache renders hover styles inside the media query (server render and browser sheets)', () => {
