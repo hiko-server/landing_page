@@ -154,6 +154,10 @@ export function adminShortcutGroups(isMac: boolean, tabCount: number): ShortcutG
         { keys: [mod, 'F'], label: 'Find & replace in the body' },
         { keys: ['Enter', '⇧ Enter'], label: 'Next / previous match' },
         { keys: [mod, 'Enter'], label: 'Replace all (in the replace field)' },
+        { keys: [alt, '↑ / ↓'], label: 'Move the block, list item or table row (Visual tab)' },
+        { keys: ['Tab', `${isMac ? '⇧' : 'Shift'} Tab`], label: 'Next / previous table cell (Tab in the last cell adds a row)' },
+        { keys: [alt, 'F10'], label: 'Table toolbar (caret in a table)' },
+        { keys: ['Enter'], label: 'Edit the selected MDX block’s source' },
       ],
     },
   ]

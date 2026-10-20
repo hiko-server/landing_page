@@ -207,7 +207,8 @@ test('D4 slash menu inserts callouts and the case-study outline', () => {
   assert.match(outline, /^## The problem\n\n\{\/\* Case-study template: /)
   assert.equal((outline.match(/\|/g) || []).length, 1, 'one caret marker')
   assert.match(outline, /## What I learned/)
-  assert.equal(filterSlashItems('callout').slice(0, 3).map((i) => i.id).sort().join(','), 'note,tip,warning')
+  // editor-parity (H2): every callout type the site renders has a command.
+  assert.equal(filterSlashItems('callout').slice(0, 5).map((i) => i.id).sort().join(','), 'caution,important,note,tip,warning')
 })
 
 test('D4 the visual editor keeps callouts and image widths: its Markdown compiles back to a callout and a wide figure', async () => {
@@ -219,7 +220,10 @@ test('D4 the visual editor keeps callouts and image widths: its Markdown compile
     content: {
       type: 'doc',
       content: [
-        { type: 'blockquote', content: [{ type: 'paragraph', content: [{ type: 'text', text: '[!TIP] Keep the servo on its own supply.' }] }] },
+        // editor-parity (H2): a callout is a node of its own, written as the GitHub alert.
+        { type: 'callout', attrs: { type: 'tip' }, content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Keep the servo on its own supply.' }] }] },
+        // A quote that merely starts with the marker text still reads as a callout.
+        { type: 'blockquote', content: [{ type: 'paragraph', content: [{ type: 'text', text: '[!WARNING] Mains voltage.' }] }] },
         { type: 'image', attrs: { src: '/uploads/lrig.jpg#wide', alt: 'The test rig' } },
       ],
     },
@@ -230,12 +234,15 @@ test('D4 the visual editor keeps callouts and image widths: its Markdown compile
   } finally {
     editor.destroy()
   }
-  assert.match(md, /^> \\\[!TIP\\\] Keep the servo/, 'the marker is written escaped')
+  assert.match(md, /^> \[!TIP\]\n> Keep the servo/, 'the alert marker on its own line, unescaped')
   assert.match(md, /!\[The test rig\]\(\/uploads\/lrig\.jpg#wide\)/)
   const { tree } = await compile(md)
-  const [callout] = byClass(tree, 'callout')
-  assert.equal(callout?.properties.dataCallout, 'tip')
-  assert.equal(textOf(callout).trim(), 'Keep the servo on its own supply.')
+  const callouts = byClass(tree, 'callout')
+  assert.deepEqual(
+    callouts.map((c) => c.properties.dataCallout),
+    ['tip', 'warning'],
+  )
+  assert.equal(textOf(callouts[0]).trim(), 'Keep the servo on its own supply.')
   assert.equal(all(tree, (n) => isElement(n, 'figure'))[0]?.properties.dataWidth, 'wide')
 })
 

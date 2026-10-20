@@ -15,8 +15,8 @@ import { InfoIcon, LightbulbIcon, MessageSquareWarningIcon, OctagonAlertIcon, Tr
 
 type CalloutType = 'note' | 'tip' | 'important' | 'warning' | 'caution'
 
-/** CSS colour of each type: semantic tokens (theme/color.ts), violet for "important". */
-const COLOR: Record<CalloutType, string> = {
+/** CSS colour of each type: semantic tokens (theme/color.ts), violet for "important" (the admin editor's callouts use the same). */
+export const COLOR: Record<CalloutType, string> = {
   note: 'var(--chakra-colors-accent-text)',
   tip: 'var(--chakra-colors-status-open)',
   important: 'var(--callout-violet)',
@@ -29,7 +29,7 @@ const COLOR: Record<CalloutType, string> = {
  * page background, and the tint takes a little contrast away — green and
  * amber get their -800 shade there (≥ 6:1). Dark mode uses COLOR as is.
  */
-const INK_LIGHT: Record<CalloutType, string> = {
+export const INK_LIGHT: Record<CalloutType, string> = {
   note: COLOR.note,
   tip: '#166534',
   important: COLOR.important,
@@ -39,7 +39,7 @@ const INK_LIGHT: Record<CalloutType, string> = {
 
 // One Lucide icon per type (components/Icons/ui/content): info, lightbulb,
 // speech bubble with "!", triangle, octagon.
-const ICON: Record<CalloutType, typeof InfoIcon> = {
+export const ICON: Record<CalloutType, typeof InfoIcon> = {
   note: InfoIcon,
   tip: LightbulbIcon,
   important: MessageSquareWarningIcon,

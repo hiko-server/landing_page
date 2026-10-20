@@ -8,8 +8,8 @@ import { MONO, outlineButtonProps } from '../shell/ui'
  *   - Empty body: a card offering the outline (Problem → Role → Approach →
  *     Architecture → Outcomes → What I learned) with what goes in each part;
  *     "Use the template" fills the body with the headings and a guidance
- *     note under each — MDX comments, never shown on the page (the editor
- *     switches to the MDX tab for them).
+ *     note under each — MDX comments, never shown on the page (the visual
+ *     editor shows them as note blocks).
  *   - Otherwise: the same guide, folded, next to the body.
  * The publish checklist warns about notes left behind and empty sections.
  */

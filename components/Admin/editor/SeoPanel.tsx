@@ -57,6 +57,8 @@ export type SeoPanelProps = {
   tags: string[]
   cover: string
   coverAlt: string
+  /** The cover's focal point "x% y%" (the card is cropped around it). */
+  coverFocus?: string
   /** Posts: publication date (YYYY-MM-DD) and "Mark as updated". */
   date?: string
   updated?: string
@@ -90,7 +92,7 @@ function useTitleMeasure(): (text: string) => number {
 type CardState = { status: 'loading' } | { status: 'ready'; src: string } | { status: 'error'; reason: string }
 
 /** The signed card for the current state, refreshed 800 ms after the last change. */
-function useCardPreview(input: { collection: 'blog' | 'work'; title: string; lang: 'en' | 'zh'; date?: string; mins: number; tags: string[]; cover: string }): CardState {
+function useCardPreview(input: { collection: 'blog' | 'work'; title: string; lang: 'en' | 'zh'; date?: string; mins: number; tags: string[]; cover: string; coverFocus?: string }): CardState {
   const [state, setState] = useState<CardState>({ status: 'loading' })
   const key = JSON.stringify(input)
   useEffect(() => {
@@ -199,6 +201,7 @@ export default function SeoPanel(p: SeoPanelProps) {
     mins,
     tags: p.tags.slice(0, 3),
     cover: p.cover,
+    coverFocus: p.coverFocus || undefined,
   })
   const alt = cardImageAlt(p.title || 'Untitled', p.cover, p.coverAlt)
   const seoLen = Array.from(p.seoTitle.trim()).length

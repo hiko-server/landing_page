@@ -7,8 +7,8 @@ import Suggestion, { type SuggestionProps } from '@tiptap/suggestion'
  *
  * The extension only detects the trigger and forwards its lifecycle to a
  * bridge the React editor owns (it renders components/Admin/editor/
- * SlashMenu and runs the chosen command). Not offered inside code blocks or
- * inline code. "/" must start the text or follow a space, so URLs and
+ * SlashMenu and runs the chosen command). Not offered inside code blocks,
+ * inline code or table cells. "/" must start the text or follow a space, so URLs and
  * fractions never open the menu.
  */
 
@@ -40,6 +40,8 @@ export function createSlashCommand(bridge: { current: SlashBridge | null }) {
           allow: ({ state, range }) => {
             const $from = state.doc.resolve(range.from)
             if ($from.parent.type.name === 'codeBlock') return false
+            // Table cells hold a line of text only: no blocks there.
+            if ($from.parent.type.spec.tableRole) return false
             return !$from.marks().some((m) => m.type.name === 'code')
           },
           items: () => [],

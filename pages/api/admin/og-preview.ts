@@ -5,7 +5,7 @@ import { signedOgImageUrl } from '../../../lib/og/sign'
 import type { OgImageOptions } from '../../../lib/schema'
 
 /**
- * POST /api/admin/og-preview { collection, title, lang?, date?, mins?, tags?, cover? }
+ * POST /api/admin/og-preview { collection, title, lang?, date?, mins?, tags?, cover?, coverFocus? }
  *   → 200 { card, square } — same-origin paths of the signed /api/og social
  *     card for the editor's UNSAVED state (H1's share previews).
  *
@@ -40,6 +40,7 @@ export default withApi('admin/og-preview', async (req, res) => {
     mins: typeof b.mins === 'number' && Number.isFinite(b.mins) ? b.mins : undefined,
     tags: Array.isArray(b.tags) ? b.tags.filter((t): t is string => typeof t === 'string').slice(0, 3) : [],
     cover: typeof b.cover === 'string' ? b.cover : undefined,
+    coverFocus: typeof b.coverFocus === 'string' ? b.coverFocus : undefined,
   }
   const local = (abs: string) => {
     const u = new URL(abs)

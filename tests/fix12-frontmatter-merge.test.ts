@@ -59,8 +59,9 @@ function workSave(stored: Record<string, any>, edit: (fm: ReturnType<typeof work
 
 test('modelledKeys: the keys of the empty form and of what toServer writes', () => {
   // reading-work D8 added the post's case study (`project`); i18n-content F2 the language and
-  // translation key; admin-editorial H1 the search title, "Mark as updated" and the post cover alt.
-  assert.deepEqual([...BLOG_KEYS].sort(), ['cover', 'coverAlt', 'date', 'description', 'draft', 'lang', 'project', 'seoTitle', 'tags', 'title', 'translationKey', 'updated'])
+  // translation key; admin-editorial H1 the search title, "Mark as updated" and the post cover alt;
+  // editor-parity H2 the post cover's focal point (the social card crops around it).
+  assert.deepEqual([...BLOG_KEYS].sort(), ['cover', 'coverAlt', 'coverFocus', 'date', 'description', 'draft', 'lang', 'project', 'seoTitle', 'tags', 'title', 'translationKey', 'updated'])
   assert.ok(WORK_KEYS.has('coverAlt') && WORK_KEYS.has('status') && WORK_KEYS.has('seoTitle') && WORK_KEYS.has('lang') && WORK_KEYS.has('translationKey') && !WORK_KEYS.has('updated'))
   assert.deepEqual([...PAGE_MODELLED_KEYS].sort(), ['description', 'title', 'updated'])
   assert.deepEqual([...modelledKeys(null, undefined, { a: undefined })], ['a'])

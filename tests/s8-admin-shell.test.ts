@@ -1,6 +1,5 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { detectMdxRisks, summarizeMdxRisks } from '../components/Admin/shell/mdxRisk'
 import { diffJson, formatDiffValue } from '../components/Admin/shell/jsonDiff'
 import {
   isSaveShortcut,
@@ -19,84 +18,10 @@ import {
   resetRequestErrorMessage,
 } from '../components/Admin/shell/authMessages'
 
-const kinds = (src: string) => detectMdxRisks(src).map((r) => r.kind)
-
-test('plain markdown is safe for the visual editor', () => {
-  const md = [
-    '# Title',
-    '',
-    'Some **bold** text with a [link](https://x.y) and <https://auto.link>.',
-    '',
-    '- a < b and c > d',
-    '- mail <me@example.com>',
-    '',
-    '---',
-    '',
-    '> quote',
-  ].join('\n')
-  assert.deepEqual(detectMdxRisks(md), [])
-  assert.deepEqual(detectMdxRisks(''), [])
-})
-
-test('detects JSX, ESM, expressions, tables and footnotes', () => {
-  const md = [
-    "import Chart from '../components/Chart'",
-    'export const meta = { a: 1 }',
-    '',
-    '<Callout type="info">',
-    'Hello',
-    '</Callout>',
-    '',
-    'Year {new Date().getFullYear()}',
-    '',
-    '| a | b |',
-    '| --- | :-: |',
-    '| 1 | 2 |',
-    '',
-    'A claim.[^1]',
-    '',
-    '[^1]: Source.',
-    '<br/>',
-    '<>fragment</>',
-  ].join('\n')
-  const risks = detectMdxRisks(md)
-  assert.deepEqual(
-    risks.map((r) => r.kind),
-    ['jsx', 'esm', 'expression', 'table', 'footnote']
-  )
-  const jsx = risks.find((r) => r.kind === 'jsx')!
-  assert.equal(jsx.count, 4)
-  assert.deepEqual(jsx.lines, [4, 6, 17])
-  assert.equal(risks.find((r) => r.kind === 'table')!.lines[0], 10)
-  assert.equal(risks.find((r) => r.kind === 'footnote')!.count, 2)
-  assert.match(summarizeMdxRisks(risks), /^JSX \/ HTML tags \(4\), import \/ export lines \(2\)/)
-})
-
-test('ignores constructs inside fenced and inline code', () => {
-  const md = [
-    'Use `<Callout>` and `{x}` inline.',
-    '',
-    '```tsx',
-    "import x from 'y'",
-    '<Foo bar={1} />',
-    '| a | b |',
-    '| - | - |',
-    '```',
-    '',
-    '~~~~',
-    '<Bar/>',
-    '```',
-    '~~~~',
-    'after',
-  ].join('\n')
-  assert.deepEqual(kinds(md), [])
-})
-
-test('a table needs a delimiter row under a piped header', () => {
-  assert.deepEqual(kinds('a | b\n--- | ---\n1 | 2'), ['table'])
-  assert.deepEqual(kinds('Heading\n---'), [])
-  assert.deepEqual(kinds('just | a pipe'), [])
-})
+// The visual editor's MDX gate (shell/mdxRisk) was replaced by the Markdown
+// bridge's fidelity check (editor-parity, H2): JSX, ESM, expressions, tables
+// and footnotes are now kept exactly — tests/editor-parity-roundtrip.test.ts
+// and tests/editor-parity.test.ts.
 
 test('diffJson reports added, removed and changed paths', () => {
   const before = { hero: { brand: 'A', tags: ['x', 'y'] }, 'odd key': 1, gone: true }
@@ -291,8 +216,10 @@ import { headingIndexAt, offsetOfLineColumn, slashTriggerAt } from '../component
 
 test('slash menu: filtering, YouTube ids, link validation and raw snippets', () => {
   // reading-work added the Note / Tip / Warning callouts and the case-study outline;
-  // the media library (H7) "Image from library".
-  assert.equal(filterSlashItems('').length, 15)
+  // editor-parity (H2) Important / Caution, Table and the Visual-only MDX block; the media library (H7) "Image from library".
+  assert.equal(filterSlashItems('').length, 19)
+  assert.equal(filterSlashItems('', undefined, 'raw').length, 18)
+  assert.equal(filterSlashItems('', undefined, 'visual').length, 19)
   assert.equal(filterSlashItems('library')[0].id, 'library')
   assert.equal(filterSlashItems('h2')[0].id, 'h2')
   assert.equal(filterSlashItems('vid')[0].id, 'youtube')

@@ -185,7 +185,14 @@ async function renderCard(p: OgParams): Promise<Buffer> {
               }}
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={cover} alt="" width={square ? 1024 : 420} height={square ? 460 : 486} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <img
+                src={cover}
+                alt=""
+                width={square ? 1024 : 420}
+                height={square ? 460 : 486}
+                // Cropped around the owner's focal point (the cover field's picker), else the centre.
+                style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: p.focus || 'center' }}
+              />
             </div>
           ) : null}
         </div>

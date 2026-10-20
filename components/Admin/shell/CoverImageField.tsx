@@ -25,17 +25,32 @@ import { cleanFocus, COVER_RECOMMENDED_MIN as COVER_RECOMMENDED, COVER_SHARP_MIN
  * The preview reports the image's real size (onMeasure, for the publish
  * checklist) and says when it is too small: under COVER_SHARP px the site
  * draws it at its own size on a panel instead of stretching it (D2).
- * With `onFocusChange` the preview is the 16:10 crop the site uses, and a
- * click — or the arrow keys on the marker — sets the focal point the crop
- * keeps in view ("x% y%"). "Library…" picks an uploaded image from the
- * media library (H7, loaded on demand) with the alt text chosen there.
+ * With `onFocusChange` the preview is the crop the site uses (16:10 on a case
+ * study; a post's social card shows the cover in a 420 × 486 panel —
+ * `focusAspect`), and a click — or the arrow keys on the marker — sets the
+ * focal point the crop keeps in view ("x% y%"). "Library…" picks an uploaded
+ * image from the media library (H7, loaded on demand) with the alt text chosen there.
  */
 
 const MediaPicker = dynamic(() => import('../media/MediaPicker'), { ssr: false })
 
 export type CoverSize = { width: number; height: number }
 
-function FocusPicker({ src, focus, onChange, onMeasure }: { src: string; focus: string; onChange: (f: string) => void; onMeasure: (s: CoverSize | null) => void }) {
+function FocusPicker({
+  src,
+  focus,
+  onChange,
+  onMeasure,
+  aspect = '16 / 10',
+  hint,
+}: {
+  src: string
+  focus: string
+  onChange: (f: string) => void
+  onMeasure: (s: CoverSize | null) => void
+  aspect?: string
+  hint?: string
+}) {
   const box = useRef<HTMLDivElement>(null)
   const { x, y } = focusPoint(focus)
   const set = (nx: number, ny: number) => {
@@ -66,7 +81,7 @@ function FocusPicker({ src, focus, onChange, onMeasure }: { src: string; focus: 
         borderColor="page.border"
         bg="page.bg-elevated"
         cursor="crosshair"
-        sx={{ aspectRatio: '16 / 10', touchAction: 'none' }}
+        sx={{ aspectRatio: aspect, touchAction: 'none' }}
         onPointerDown={onPointer}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -105,6 +120,11 @@ function FocusPicker({ src, focus, onChange, onMeasure }: { src: string; focus: 
           Centre
         </Button>
       </Flex>
+      {hint ? (
+        <Text fontSize="11px" color="page.fg-secondary" mt={1}>
+          {hint}
+        </Text>
+      ) : null}
     </Box>
   )
 }
@@ -141,6 +161,8 @@ export default function CoverImageField({
   onAltChange,
   focus,
   onFocusChange,
+  focusAspect,
+  focusHint,
   onMeasure,
 }: {
   value: string
@@ -153,6 +175,10 @@ export default function CoverImageField({
   /** Focal point ("x% y%"), when the collection stores one. */
   focus?: string
   onFocusChange?: (focus: string) => void
+  /** CSS aspect ratio of the crop the focal point is picked in (default 16 / 10, a case study's cover). */
+  focusAspect?: string
+  /** A line under the picker saying where the crop is used. */
+  focusHint?: string
   /** The loaded preview's real size (null while unknown or when it fails to load). */
   onMeasure?: (size: CoverSize | null) => void
 }) {
@@ -210,7 +236,7 @@ export default function CoverImageField({
       </FormLabel>
       <Flex gap={4} align="flex-start" direction={{ base: 'column', sm: 'row' }}>
         {value && onFocusChange ? (
-          <FocusPicker src={value} focus={focus || ''} onChange={onFocusChange} onMeasure={measure} />
+          <FocusPicker src={value} focus={focus || ''} onChange={onFocusChange} onMeasure={measure} aspect={focusAspect} hint={focusHint} />
         ) : value ? (
           <Image
             src={value}

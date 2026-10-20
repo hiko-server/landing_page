@@ -72,6 +72,8 @@ export type PostFrontmatter = {
   draft?: boolean
   cover?: string
   coverAlt?: string
+  /** Focal point of the cover, "x% y%" (the social card crops the cover around it). */
+  coverFocus?: string
   /** BCP-47 language of the post (e.g. "zh-Hans"); detected when absent. */
   lang?: string
   /** Slug of the case study this post is about (work/<slug>): linked both ways. */

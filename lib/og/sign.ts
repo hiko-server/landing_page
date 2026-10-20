@@ -10,7 +10,8 @@ import { parseOgParams, type OgParams } from '../security/ogParams'
  * parseOgParams() reads back, in a fixed order — truncated to 128 bits,
  * base64url. Signing the parsed values (not the raw query) means harmless
  * re-encodings still verify, while any change to what the card would show
- * (title, subtitle, date, minutes, tags, cover, language, size, cache-buster)
+ * (title, subtitle, date, minutes, tags, cover, language, size, cache-buster,
+ * the cover's focal point)
  * breaks it. The endpoint compares in constant time and renders the generic
  * default card for a missing or wrong signature.
  *
@@ -38,7 +39,11 @@ export function ogSigningKey(secret: string | undefined = process.env.JWT_SECRET
   return key
 }
 
-/** The parameters a card shows, in a fixed order (version-tagged). */
+/**
+ * The parameters a card shows, in a fixed order (version-tagged). The focal
+ * point is appended only when set, so every URL signed before it existed
+ * still verifies.
+ */
 export function canonicalOgString(p: OgParams): string {
   return JSON.stringify([
     'v1',
@@ -52,6 +57,7 @@ export function canonicalOgString(p: OgParams): string {
     p.lang,
     p.size,
     p.v,
+    ...(p.focus ? [p.focus] : []),
   ])
 }
 

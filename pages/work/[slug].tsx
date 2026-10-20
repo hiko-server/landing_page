@@ -312,6 +312,7 @@ export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
     mins: w.readingMinutes,
     tags: Array.isArray(w.frontmatter.tech) ? w.frontmatter.tech : [],
     cover: cover?.src,
+    coverFocus: w.frontmatter.coverFocus,
     v: w.updatedAt,
   }
 

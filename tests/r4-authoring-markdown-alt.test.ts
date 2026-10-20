@@ -1,5 +1,5 @@
 /**
- * The visual editor's Markdown serializer (tiptap-markdown) keeps image alt
+ * The visual editor's Markdown serializer (editor/markdown) keeps image alt
  * text, keeps a block image on its own paragraph, and never writes the
  * display-only width / height into the Markdown. Runs a headless TipTap
  * Editor (no DOM: content is given as ProseMirror JSON).

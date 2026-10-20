@@ -1,6 +1,7 @@
 import { element, isElement, type HastElement, type HastNode } from './hast'
 import { uiText } from '../uiStrings'
 import { COMPILE_UI } from '../uiStrings/compile'
+import { CALLOUT_MARKER_RE, CALLOUT_TYPES, type CalloutType } from './calloutMarker'
 
 /**
  * rehype plugin: GitHub-style alerts become callouts.
@@ -23,15 +24,12 @@ import { COMPILE_UI } from '../uiStrings/compile'
  * callout as a quote that starts with its label (lib/feedHtml.ts).
  */
 
-export const CALLOUT_TYPES = ['note', 'tip', 'important', 'warning', 'caution'] as const
-export type CalloutType = (typeof CALLOUT_TYPES)[number]
+export { CALLOUT_TYPES, type CalloutType }
 
 /** The label of a callout type in an article language (BCP-47; words from lib/uiStrings/compile). */
 export function calloutLabel(type: CalloutType, lang?: string): string {
   return uiText(COMPILE_UI, lang).callout[type]
 }
-
-const MARKER_RE = /^\s*\[!(note|tip|important|warning|caution)\]/i
 
 const isBlank = (node: HastNode) => node.type === 'text' && !(node.value ?? '').trim()
 
@@ -57,7 +55,7 @@ export function calloutFor(quote: HastElement, lang?: string): HastElement | nul
   if (!isElement(first, 'p')) return null
   const lead = first.children[0]
   if (!lead || lead.type !== 'text') return null
-  const m = MARKER_RE.exec(lead.value ?? '')
+  const m = CALLOUT_MARKER_RE.exec(lead.value ?? '')
   if (!m) return null
   const type = m[1].toLowerCase() as CalloutType
   const rest = trimStart([{ ...lead, value: (lead.value ?? '').slice(m[0].length) }, ...first.children.slice(1)])

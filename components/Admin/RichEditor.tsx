@@ -14,7 +14,6 @@ import {
   Button,
   HStack,
   IconButton,
-  ListItem,
   Tab,
   TabList,
   TabPanel,
@@ -23,7 +22,6 @@ import {
   Text,
   Textarea,
   Tooltip,
-  UnorderedList,
   usePrefersReducedMotion,
   useToast,
 } from '@chakra-ui/react'
@@ -45,16 +43,23 @@ import {
   FaUndo,
   FaRedo,
 } from 'react-icons/fa'
-import { detectMdxRisks, type MdxRisk } from './shell/mdxRisk'
+import { TbInfoCircle, TbTable } from 'react-icons/tb'
 import { MONO, outlineButtonProps, primaryButtonProps } from './shell/ui'
 import { baseExtensions } from './editor/extensions'
+import { withNodeViews } from './editor/views/nodeViews'
+import type { BlockMove } from './editor/nodes/blockMove'
+import { EditorUiContext, type EditorUi } from './editor/views/editorUi'
+import { markdownToDoc, visualFidelity, type VisualFidelity } from './editor/markdown/index'
 import { createSlashCommand, type SlashBridge } from './editor/SlashCommand'
 import SlashMenu, { type SlashResult } from './editor/SlashMenu'
 import LinkBubble, { type LinkBubbleHandle } from './editor/LinkBubble'
 import ImageBubble from './editor/ImageBubble'
+import TableMenu from './editor/TableMenu'
+import BlockHandle from './editor/BlockHandle'
 import { UPLOAD_ACCEPT, altFromFileName, uploadImage, type UploadedImage } from './editor/upload'
-import { CALLOUT_MARKERS, markdownLink, rawCodeFence, rawSnippet, videoLine } from './editor/slashItems'
-import { CASE_STUDY_SECTIONS } from './editor/caseStudyTemplate'
+import { CARET_MARK, markdownLink, rawCodeFence, rawSnippet, videoLine } from './editor/slashItems'
+import { editorNodeSx } from './editor/editorStyles'
+import { caseStudyTemplate } from './editor/caseStudyTemplate'
 import { headingIndexAt, offsetOfLineColumn, slashTriggerAt, textareaCaretRect } from './editor/textareaCaret'
 import { flushSync } from 'react-dom'
 import { cssTransition } from '../../theme/tokens'
@@ -78,19 +83,23 @@ import {
  *
  * Architecture:
  *   - Single source of truth is the markdown string the parent owns (`value`).
- *   - The Visual tab is TipTap with `tiptap-markdown` (md ⇆ ProseMirror):
- *     "/" opens the block menu, selecting text shows the formatting / link
- *     bubble, selecting an image shows its alt-text bubble, ⌘K edits links.
- *   - The MDX tab is a plain textarea — the escape hatch for JSX / MDX that
- *     TipTap can't model. "/" opens the same block menu there (it inserts
- *     Markdown / MDX text, e.g. a <YouTube /> tag).
+ *   - The Visual tab is TipTap with the Markdown bridge (editor/markdown:
+ *     MDX ⇄ ProseMirror with the site's own parser): "/" opens the block
+ *     menu, selecting text shows the formatting / link bubble, figures,
+ *     videos, callouts and MDX blocks edit in place (editor/views), a table
+ *     gets its toolbar (editor/TableMenu), every block a drag handle
+ *     (editor/BlockHandle; Alt+↑ / ↓ from the keyboard), ⌘K edits links,
+ *     pasted Markdown becomes structure.
+ *   - The MDX tab is a plain textarea — the source itself. "/" opens the
+ *     same block menu there (it inserts Markdown / MDX text).
  *
- * MDX safety: TipTap re-serialises the whole document on the first edit, so
- * JSX components, import/export lines, {expressions}, GFM tables and
- * footnotes would be dropped or escaped. Whenever content arrives from
- * outside (load, reload) it is scanned first; if any of those constructs are
- * present the editor opens on the MDX tab with a warning that lists what the
- * visual editor would rewrite, and switching to Visual asks first.
+ * MDX safety: the Visual tab holds every construct exactly — what it does
+ * not model as a block (JSX, {expressions}, import / export, footnotes,
+ * reference links) is an MDX island kept verbatim. Before a body is shown
+ * there it is checked (editor/markdown visualFidelity: parsed, written back
+ * and compared). A body that does not parse opens on the MDX tab with the
+ * error and its line; one the visual editor would rewrite (none are known)
+ * opens there too and switching asks first.
  *
  * Image upload: toolbar, "/image", drag-and-drop and clipboard paste all go
  * to /api/admin/upload-image (resized, WebP variants); the image node keeps
@@ -187,6 +196,8 @@ function ToolbarButton({
         aria-pressed={isActive === undefined ? undefined : isActive}
         icon={icon}
         size="sm"
+        minW="30px"
+        h="30px"
         variant="ghost"
         onClick={onClick}
         isDisabled={isDisabled}
@@ -200,7 +211,7 @@ function ToolbarButton({
 }
 
 function Divider() {
-  return <Box w="1px" h="20px" bg="page.border" mx={1} aria-hidden />
+  return <Box w="1px" h="20px" bg="page.border" mx={0.5} aria-hidden />
 }
 
 function toolbarStateOf(ed: Editor): ToolbarState {
@@ -215,6 +226,8 @@ function toolbarStateOf(ed: Editor): ToolbarState {
     blockquote: ed.isActive('blockquote'),
     codeBlock: ed.isActive('codeBlock'),
     link: ed.isActive('link'),
+    table: ed.isActive('table'),
+    callout: ed.isActive('callout'),
     canUndo: ed.can().undo(),
     canRedo: ed.can().redo(),
   }
@@ -237,7 +250,7 @@ const Toolbar = React.memo(function Toolbar({
     <HStack
       role="toolbar"
       aria-label="Formatting"
-      spacing={1}
+      spacing={0.5}
       p={1.5}
       borderBottom="1px solid"
       borderColor="page.border"
@@ -294,6 +307,19 @@ const Toolbar = React.memo(function Toolbar({
         isActive={state.codeBlock}
       />
       <ToolbarButton label="Horizontal rule" icon={<FaMinus size={12} />} onClick={() => editor.chain().focus().setHorizontalRule().run()} />
+      <ToolbarButton
+        label="Callout"
+        icon={<TbInfoCircle size={15} />}
+        onClick={() => (state.callout ? editor.chain().focus().unsetCallout().run() : editor.chain().focus().setCallout('note').run())}
+        isActive={state.callout}
+      />
+      <ToolbarButton
+        label="Table"
+        icon={<TbTable size={15} />}
+        onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3 }).run()}
+        isActive={state.table}
+        isDisabled={state.table}
+      />
       <Divider />
       <ToolbarButton label="Link (⌘K)" icon={<FaLink size={12} />} onClick={onLink} isActive={state.link} />
       <ToolbarButton label="Insert image" icon={<FaImage size={12} />} onClick={onPickImage} />
@@ -319,9 +345,11 @@ const Toolbar = React.memo(function Toolbar({
 const EditorBubbles = React.memo(function EditorBubbles({
   editor,
   linkHandle,
+  announce,
 }: {
   editor: Editor
   linkHandle: React.MutableRefObject<LinkBubbleHandle | null>
+  announce: (message: string) => void
 }) {
   useEditorState({
     editor,
@@ -332,26 +360,40 @@ const EditorBubbles = React.memo(function EditorBubbles({
     <>
       <LinkBubble editor={editor} handleRef={linkHandle} />
       <ImageBubble editor={editor} />
+      <TableMenu editor={editor} announce={announce} />
     </>
   )
 })
 
-function RiskList({ risks }: { risks: MdxRisk[] }) {
+/** Why the visual editor cannot take this body, in words. */
+function FidelityNote({ fidelity, onJump }: { fidelity: VisualFidelity; onJump: (line: number, column?: number) => void }) {
+  if (fidelity.ok) return null
+  if (fidelity.reason === 'parse') {
+    const { message, line, column } = fidelity.problem
+    return (
+      <>
+        This body is not valid MDX, so the visual editor cannot open it:{' '}
+        <Text as="span" fontFamily={MONO} fontSize="12px">
+          {message}
+        </Text>
+        {line ? (
+          <Button size="xs" variant="link" ml={2} color="accent.text" onClick={() => onJump(line, column)}>
+            Go to line {line}
+          </Button>
+        ) : null}
+      </>
+    )
+  }
   return (
-    <UnorderedList spacing={1} mt={1.5} ml={4} fontSize="xs">
-      {risks.map((r) => (
-        <ListItem key={r.kind}>
-          <Text as="span" fontWeight={600}>
-            {r.label}
-          </Text>{' '}
-          ({r.count}) — {r.effect}.{' '}
-          <Text as="span" fontFamily={MONO} color="page.fg-secondary">
-            line{r.lines.length > 1 ? 's' : ''} {r.lines.join(', ')}
-            {r.count > r.lines.length ? ', …' : ''}
-          </Text>
-        </ListItem>
-      ))}
-    </UnorderedList>
+    <>
+      The visual editor would rewrite part of this body{fidelity.line ? ` (from line ${fidelity.line})` : ''}, so it opens here. Opening the visual editor
+      is harmless until you type.
+      {fidelity.line ? (
+        <Button size="xs" variant="link" ml={2} color="accent.text" onClick={() => onJump(fidelity.line as number)}>
+          Go to line {fidelity.line}
+        </Button>
+      ) : null}
+    </>
   )
 }
 
@@ -392,12 +434,20 @@ export default function RichEditor({
   const cancelRef = useRef<HTMLButtonElement>(null)
   const linkHandle = useRef<LinkBubbleHandle | null>(null)
 
-  const risks = useMemo(() => detectMdxRisks(value), [value])
-  // Content with constructs the visual editor would destroy opens on MDX.
-  const [tabIndex, setTabIndex] = useState(() => (detectMdxRisks(value).length ? RAW : VISUAL))
+  // Can the visual editor hold this body exactly? Checked on load, for
+  // values from outside, after MDX typing (debounced) and before switching.
+  const [fidelity, setFidelity] = useState<VisualFidelity>(() => visualFidelity(value))
+  // A body the visual editor cannot hold exactly opens on MDX.
+  const [tabIndex, setTabIndex] = useState(() => (fidelity.ok ? VISUAL : RAW))
   const tabRef = useRef(tabIndex)
   tabRef.current = tabIndex
   const [confirmVisual, setConfirmVisual] = useState(false)
+  // Polite announcements (block moves, table and node edits).
+  const [live, setLive] = useState('')
+  const announce = useCallback((message: string) => {
+    setLive('')
+    requestAnimationFrame(() => setLive(message))
+  }, [])
   // The last markdown string this component produced (either surface).
   // Anything else arriving through `value` came from outside (load, reload).
   const lastEmitted = useRef<string>(value)
@@ -486,8 +536,16 @@ export default function RichEditor({
 
   // useEditor compares these options on every render and reconfigures the
   // editor when one changed, so they must keep their identity.
+  const announceRef = useRef(announce)
+  announceRef.current = announce
   const extensions = useMemo(
-    () => [...baseExtensions({ placeholder: placeholder || 'Write something… Type / for blocks.' }), slashExtension, FindReplace, FocusBlock],
+    () =>
+      withNodeViews(
+        [...baseExtensions({ placeholder: placeholder || 'Write something… Type / for blocks.' }), slashExtension, FindReplace, FocusBlock].map((ext) =>
+          // Alt+↑ / ↓ moves are announced in the live region.
+          ext.name === 'blockMove' ? (ext as typeof BlockMove).configure({ onMove: (m: string) => announceRef.current(m) }) : ext,
+        ),
+      ),
     [placeholder, slashExtension],
   )
   const editorProps = useMemo<EditorProps>(
@@ -610,13 +668,22 @@ export default function RichEditor({
   }, [editor, typewriter])
 
   // Values from outside (load, reload, draft restore) — anything but this
-  // component's own echo: re-check for MDX constructs.
+  // component's own echo: check them before the visual editor takes them.
   useEffect(() => {
     if (value === lastEmitted.current) return
     lastEmitted.current = value
-    externalPending.current = true
-    if (detectMdxRisks(value).length) setTabIndex(RAW)
+    const check = visualFidelity(value)
+    setFidelity(check)
+    externalPending.current = check.ok
+    if (!check.ok) setTabIndex(RAW)
   }, [value])
+
+  // MDX typing: the check follows (debounced), so a fixed error clears.
+  useEffect(() => {
+    if (tabIndex !== RAW) return
+    const t = window.setTimeout(() => setFidelity(visualFidelity(valueRef.current)), 450)
+    return () => window.clearTimeout(t)
+  }, [value, tabIndex])
 
   // Bring TipTap's document up to date: outside values at once, raw MDX
   // typing when the Visual tab opens. Content set here never emits an update,
@@ -644,9 +711,13 @@ export default function RichEditor({
   }, [tabIndex])
 
   const onTabChange = (i: number) => {
-    if (i === VISUAL && risks.length) {
-      setConfirmVisual(true)
-      return
+    if (i === VISUAL) {
+      const check = visualFidelity(valueRef.current)
+      setFidelity(check)
+      if (!check.ok) {
+        setConfirmVisual(true)
+        return
+      }
     }
     setTabIndex(i)
   }
@@ -668,8 +739,9 @@ export default function RichEditor({
       // Blocks start on their own paragraph: a blank line after any text before them.
       let glue = ''
       if (block && before.trim()) glue = before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n'
-      const caretInSnippet = snippet.includes('|') ? snippet.indexOf('|') : snippet.length
-      const text = snippet.replace('|', '')
+      const mark = snippet.includes(CARET_MARK) ? CARET_MARK : '|'
+      const caretInSnippet = snippet.includes(mark) ? snippet.indexOf(mark) : snippet.length
+      const text = snippet.replace(mark, '')
       const tail = block && after && !after.startsWith('\n') ? '\n\n' : ''
       emit(`${before}${glue}${text}${tail}${after}`)
       const pos = before.length + glue.length + caretInSnippet
@@ -799,6 +871,8 @@ export default function RichEditor({
             else onPickImage()
             return
           }
+          // The MDX tab is source already: "MDX block" is a Visual-tab command.
+          if (result.id === 'mdx') return
           insertRaw(from, to, rawSnippet(result.id), true)
         } else if (result.kind === 'code') insertRaw(from, to, rawCodeFence(result.language), true)
         else if (result.kind === 'video') insertRaw(from, to, `${videoLine(result.url, result.title)}|`, true)
@@ -838,19 +912,23 @@ export default function RichEditor({
             break
           case 'note':
           case 'tip':
+          case 'important':
           case 'warning':
-            // `> [!NOTE] …`: the compiler turns the quote into a callout (lib/rehype/alerts.ts).
-            chain().toggleBlockquote().insertContent(`${CALLOUT_MARKERS[result.id]} `).run()
+          case 'caution':
+            // Written as `> [!NOTE] …`: the compiler turns it into a callout (lib/rehype/alerts.ts).
+            chain().setCallout(result.id).run()
+            break
+          case 'table':
+            chain().insertTable({ rows: 3, cols: 3 }).run()
+            announce('Table inserted: 3 columns, a header row and 2 rows. Tab moves between cells.')
+            break
+          case 'mdx':
+            chain().insertMdxBlock('').run()
             break
           case 'outline':
-            // Headings only: the visual editor cannot hold the outline's MDX notes.
+            // The whole outline: its guidance notes (MDX comments) are MDX blocks here.
             chain()
-              .insertContent(
-                CASE_STUDY_SECTIONS.flatMap((s) => [
-                  { type: 'heading', attrs: { level: 2 }, content: [{ type: 'text', text: s.heading }] },
-                  { type: 'paragraph' },
-                ]),
-              )
+              .insertContent(markdownToDoc(caseStudyTemplate()).content ?? [])
               .run()
             break
         }
@@ -860,11 +938,9 @@ export default function RichEditor({
           .setCodeBlock(lang ? { language: lang } : undefined)
           .run()
       } else if (result.kind === 'video') {
-        // A link alone in its paragraph compiles to the click-to-load player; the URL as
-        // text means "no title" (the player is then named after the site).
-        const text = result.title.trim() || result.url
+        // The video block: a link alone in its paragraph, which compiles to the click-to-load player.
         chain()
-          .insertContent({ type: 'paragraph', content: [{ type: 'text', text, marks: [{ type: 'link', attrs: { href: result.url } }] }] })
+          .insertVideo({ url: result.url, title: result.title.trim() || null })
           .run()
       } else {
         chain()
@@ -875,7 +951,7 @@ export default function RichEditor({
           .run()
       }
     },
-    [slash, editor, emit, insertRaw, onPickImage, onPickLibrary],
+    [slash, editor, emit, insertRaw, onPickImage, onPickLibrary, announce],
   )
 
   // Raw textarea: "/" trigger detection, keyboard forwarding, heading tracking.
@@ -908,33 +984,58 @@ export default function RichEditor({
   const onRawSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>) =>
     reportHeading(headingIndexAt(e.currentTarget.value, e.currentTarget.selectionStart))
 
+  const jumpToLine = useCallback(
+    (line: number, column = 1) => {
+      setTabIndex(RAW)
+      // The MDX panel must be visible before it can take focus.
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          const ta = mdxRef.current
+          if (!ta) return
+          const offset = offsetOfLineColumn(valueRef.current, line, column)
+          ta.focus()
+          ta.setSelectionRange(offset, offset)
+          const lineHeight = Number.parseFloat(window.getComputedStyle(ta).lineHeight) || 22
+          ta.scrollTop = Math.max(0, (Math.max(1, line) - 1) * lineHeight - ta.clientHeight / 3)
+          ta.scrollIntoView({ block: 'center', behavior: reducedMotion ? 'auto' : 'smooth' })
+        }),
+      )
+    },
+    [reducedMotion],
+  )
+
   useImperativeHandle(
     handleRef,
     () => ({
-      jumpToLine: (line: number, column = 1) => {
-        setTabIndex(RAW)
-        // The MDX panel must be visible before it can take focus.
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() => {
-            const ta = mdxRef.current
-            if (!ta) return
-            const offset = offsetOfLineColumn(valueRef.current, line, column)
-            ta.focus()
-            ta.setSelectionRange(offset, offset)
-            const lineHeight = Number.parseFloat(window.getComputedStyle(ta).lineHeight) || 22
-            ta.scrollTop = Math.max(0, (Math.max(1, line) - 1) * lineHeight - ta.clientHeight / 3)
-            ta.scrollIntoView({ block: 'center', behavior: reducedMotion ? 'auto' : 'smooth' })
-          }),
-        )
-      },
+      jumpToLine,
       focus: () => {
         if (tabRef.current === RAW) mdxRef.current?.focus()
         else editor?.commands.focus()
       },
       openFind,
     }),
-    [editor, reducedMotion, openFind],
+    [editor, jumpToLine, openFind],
   )
+
+  // Node views reach the upload pipeline and the live region through this.
+  const editorUi = useMemo<EditorUi>(
+    () => ({
+      upload: async (file: File) => {
+        try {
+          const img = await uploadImage(file)
+          if (img.warning) toast({ status: 'warning', title: 'Image uploaded', description: img.warning, position: 'bottom-right' })
+          return img
+        } catch (err) {
+          notifyRef.current(err)
+          return null
+        }
+      },
+      announce,
+    }),
+    [announce, toast],
+  )
+
+  const surfaceRef = useRef<HTMLDivElement>(null)
 
   const slashAnchorRect = useCallback(() => slashAnchor.current(), [])
   const slashController = slash?.source === 'raw' ? mdxRef.current : editor ? (editor.view.dom as HTMLElement) : null
@@ -957,22 +1058,20 @@ export default function RichEditor({
           <Tab {...tabStyle}>MDX</Tab>
         </TabList>
 
-        {risks.length ? (
+        {!fidelity.ok ? (
           <Alert
-            status="warning"
+            status={fidelity.reason === 'parse' ? 'error' : 'warning'}
             variant="left-accent"
             borderRadius="md"
             mb={3}
             alignItems="flex-start"
             bg="page.bg-elevated"
             fontSize="sm"
+            data-testid="visual-fidelity"
           >
             <AlertIcon mt={0.5} />
             <AlertDescription>
-              {tabIndex === RAW
-                ? 'This body uses MDX the visual editor can’t represent — keep editing it here. Editing it visually would rewrite:'
-                : 'Typing in the visual editor will re-save the whole body and rewrite:'}
-              <RiskList risks={risks} />
+              <FidelityNote fidelity={fidelity} onJump={jumpToLine} />
             </AlertDescription>
           </Alert>
         ) : null}
@@ -995,13 +1094,17 @@ export default function RichEditor({
             <Box border="1px solid" borderColor="page.border-strong" borderRadius="lg" bg="page.bg">
               {editor ? <Toolbar editor={editor} onPickImage={onPickImage} onPickLibrary={onPickLibrary} onLink={openLink} /> : null}
               <Box
-                px={4}
+                ref={surfaceRef}
+                position="relative"
+                pl={{ base: 9, md: 10 }}
+                pr={{ base: 4, md: 6 }}
                 py={3}
                 minH={minH}
                 onClick={(e: React.MouseEvent) => {
                   if (e.target === e.currentTarget) editor?.commands.focus()
                 }}
                 sx={{
+                  ...editorNodeSx,
                   '.tt-prose': { minHeight: minH, outline: 'none' },
                   '.tt-prose p.is-editor-empty:first-of-type::before': {
                     content: 'attr(data-placeholder)',
@@ -1069,8 +1172,11 @@ export default function RichEditor({
                   ...(typewriter ? { '.tt-prose': { minHeight: minH, outline: 'none', paddingBottom: '45vh' } } : {}),
                 }}
               >
-                <EditorContent editor={editor} />
-                {editor ? <EditorBubbles editor={editor} linkHandle={linkHandle} /> : null}
+                <EditorUiContext.Provider value={editorUi}>
+                  <EditorContent editor={editor} />
+                </EditorUiContext.Provider>
+                {editor ? <EditorBubbles editor={editor} linkHandle={linkHandle} announce={announce} /> : null}
+                {editor && tabIndex === VISUAL ? <BlockHandle editor={editor} surface={surfaceRef} announce={announce} /> : null}
               </Box>
             </Box>
           </TabPanel>
@@ -1104,7 +1210,7 @@ export default function RichEditor({
                 Insert from library…
               </Button>
               <Text fontSize="11px" color="page.fg-secondary" fontFamily={MONO}>
-                Raw MDX — JSX components, tables and footnotes are safe here. Type / for blocks.
+                The MDX source. Type / for blocks.
               </Text>
             </HStack>
           </TabPanel>
@@ -1114,6 +1220,7 @@ export default function RichEditor({
       <SlashMenu
         open={!!slash}
         query={slash?.query ?? ''}
+        surface={slash?.source === 'raw' ? 'raw' : 'visual'}
         anchor={slashAnchorRect}
         anchorKey={slash?.key ?? 0}
         controller={slashController}
@@ -1136,31 +1243,45 @@ export default function RichEditor({
         />
       ) : null}
 
-      <AlertDialog isOpen={confirmVisual} leastDestructiveRef={cancelRef} onClose={() => setConfirmVisual(false)} isCentered>
+      <Box aria-live="polite" role="status" srOnly data-testid="editor-live">
+        {live}
+      </Box>
+
+      <AlertDialog isOpen={confirmVisual} leastDestructiveRef={cancelRef} finalFocusRef={mdxRef} onClose={() => setConfirmVisual(false)} isCentered>
         <AlertDialogOverlay>
           <AlertDialogContent bg="page.bg-elevated" border="1px solid" borderColor="page.border" mx={4}>
-            <AlertDialogHeader fontSize="md">Open the visual editor?</AlertDialogHeader>
+            <AlertDialogHeader fontSize="md">{!fidelity.ok && fidelity.reason === 'parse' ? 'Fix the MDX first' : 'Open the visual editor?'}</AlertDialogHeader>
             <AlertDialogBody fontSize="sm">
-              The first edit there re-saves the whole body in plain Markdown, which rewrites:
-              <RiskList risks={risks} />
-              <Text mt={3} color="page.fg-secondary">
-                Viewing is harmless; nothing changes until you type.
-              </Text>
+              <FidelityNote
+                fidelity={fidelity}
+                onJump={(line, column) => {
+                  setConfirmVisual(false)
+                  jumpToLine(line, column)
+                }}
+              />
+              {!fidelity.ok && fidelity.reason === 'lossy' ? (
+                <Text mt={3} color="page.fg-secondary">
+                  Viewing is harmless; the first edit there writes the whole body again.
+                </Text>
+              ) : null}
             </AlertDialogBody>
             <AlertDialogFooter gap={2}>
               <Button ref={cancelRef} size="sm" {...outlineButtonProps} onClick={() => setConfirmVisual(false)}>
                 Stay in MDX
               </Button>
-              <Button
-                size="sm"
-                {...primaryButtonProps}
-                onClick={() => {
-                  setConfirmVisual(false)
-                  setTabIndex(VISUAL)
-                }}
-              >
-                Open visual editor
-              </Button>
+              {!fidelity.ok && fidelity.reason === 'lossy' ? (
+                <Button
+                  size="sm"
+                  {...primaryButtonProps}
+                  onClick={() => {
+                    setConfirmVisual(false)
+                    externalPending.current = true
+                    setTabIndex(VISUAL)
+                  }}
+                >
+                  Open visual editor
+                </Button>
+              ) : null}
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialogOverlay>

@@ -311,7 +311,7 @@ Bodies are Markdown (GFM) with a small, eval-free set of MDX components
 |---|---|
 | A YouTube or Vimeo link alone in its paragraph (`https://youtu.be/…`, `[Demo](https://vimeo.com/…)`) | A click-to-load player. Its poster is copied once into `/uploads` when you save; nothing loads from YouTube / Vimeo until the reader presses play |
 | `> [!NOTE]` (or `TIP`, `IMPORTANT`, `WARNING`, `CAUTION`) as the first line of a quote | A callout, labelled in the article's language |
-| `![alt](/uploads/x.webp#wide)` / `#full`, or `<Figure … size="wide" />` | A figure wider than the text column (full: edge to edge on phones). The image bubble in the visual editor sets it |
+| `![alt](/uploads/x.webp#wide)` / `#full`, or `<Figure … size="wide" />` | A figure wider than the text column (full: edge to edge on phones). The figure's toolbar in the visual editor sets it |
 | Two or more images in a row (blank lines between them, or one per line) | A gallery laid out by the images' shapes; identical captions are shown once |
 | `[^1]` footnotes, `<details><summary>…</summary>…</details>` | Styled endnotes and a "deep dive" disclosure |
 
@@ -324,6 +324,18 @@ checklist points at any left behind. A post can name its case study
 (*Case study* field) — both pages then link to each other. Tags and stacks
 link to `/blog?tag=…` and `/work?tag=…`; `/work` ends with every public CV
 project (*All projects*), linked to its case study when there is one.
+
+**The visual editor holds all of it.** Tables (rows, columns, column
+alignment, header row; Tab / Enter between cells), callouts (their type is a
+menu), videos (paste a YouTube / Vimeo link on an empty line), figures
+(caption under the image, an alt-text prompt, text / wide / full width) and
+anything else MDX — JSX components, notes, footnotes — which stays exactly
+as written, shown as an editable source block. Blocks move by their handle
+(drag, or its menu) and with Alt+↑ / ↓; pasted Markdown becomes structure.
+MDX → editor → MDX is lossless: the CI fixtures, every post of a local
+content store and 1,000 random documents per test run compile to the same
+page after a round trip.
+A post's cover gets a focal point too: social cards crop around it.
 
 **Chinese and translations.** A post or case study in Chinese (detected,
 or set under *Language & translations* in the editor) gets Chinese

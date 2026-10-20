@@ -4,7 +4,7 @@ import { Box, Button, Flex, Input, Spinner, Text } from '@chakra-ui/react'
 import { computePosition, flip, offset, shift } from '@floating-ui/dom'
 import { rankItems } from '../../Article/fuzzyMatch'
 import { MONO } from '../shell/ui'
-import { CODE_LANGUAGES, filterSlashItems, videoLinkUrl, type SlashItem, type SlashItemId } from './slashItems'
+import { CODE_LANGUAGES, filterSlashItems, videoLinkUrl, type SlashItem, type SlashItemId, type SlashSurface } from './slashItems'
 
 /**
  * The "/" command menu shared by the visual editor (TipTap Suggestion) and
@@ -34,6 +34,8 @@ type LinkTarget = { title: string; href: string; kind: 'Post' | 'Case study'; sl
 type Props = {
   open: boolean
   query: string
+  /** The surface the menu belongs to (some commands are visual-only). */
+  surface: SlashSurface
   /** Viewport rectangle to anchor to (the caret / trigger). */
   anchor: () => DOMRect | null
   /** Changes whenever the anchor moved (re-positions the menu). */
@@ -77,7 +79,7 @@ async function loadLinkTargets(signal: AbortSignal): Promise<LinkTarget[]> {
   return [...posts, ...work]
 }
 
-export default function SlashMenu({ open, query, anchor, anchorKey, controller, keyRef, onBegin, onResult, onClose }: Props) {
+export default function SlashMenu({ open, query, surface, anchor, anchorKey, controller, keyRef, onBegin, onResult, onClose }: Props) {
   const uid = useId().replace(/:/g, '')
   const listId = `slash-${uid}`
   const floating = useRef<HTMLDivElement>(null)
@@ -92,7 +94,7 @@ export default function SlashMenu({ open, query, anchor, anchorKey, controller, 
   const [targetsError, setTargetsError] = useState('')
   const firstInput = useRef<HTMLInputElement>(null)
 
-  const items = useMemo(() => filterSlashItems(query), [query])
+  const items = useMemo(() => filterSlashItems(query, undefined, surface), [query, surface])
   const links = useMemo(() => {
     if (!targets) return []
     const q = search.trim()
@@ -362,7 +364,7 @@ export default function SlashMenu({ open, query, anchor, anchorKey, controller, 
             }}
             onKeyDown={(e) => formKeys(e, submitYoutube)}
             placeholder="https://youtu.be/… or https://vimeo.com/…"
-            aria-invalid={!!ytError}
+            isInvalid={!!ytError}
             aria-describedby={ytError ? `${listId}-yt-err` : undefined}
             autoComplete="off"
           />
