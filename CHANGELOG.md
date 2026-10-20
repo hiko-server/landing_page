@@ -28,6 +28,12 @@ https://lucian-dev.com).
   (`components/General-UI/paletteModel.ts` `askRowPlacement`,
   `resolveEnter`; `tests/patch-2b1-palette-enter.test.ts`,
   `e2e/patch-2b1.spec.ts` with the index held back and CPU throttling).
+- **E2E: "a fast navigation never shows it" (C2) holds over any network.**
+  It relied on a prefetch to make the navigation to /now fast, which a
+  server a few hundred milliseconds away (production behind Cloudflare)
+  does not guarantee. Every request for /now's data is now answered from
+  memory (fetched once, as a navigation asks for it) and the page's code is
+  loaded beforehand, so no server round trip is left inside the 150 ms.
 
 ### admin-editorial
 

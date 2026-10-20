@@ -1,4 +1,4 @@
-import { devices, type Page } from '@playwright/test'
+import { devices, type APIResponse, type Page } from '@playwright/test'
 import { test, expect, settle } from './fixtures'
 
 /**
@@ -204,10 +204,30 @@ test.describe('C2 slow-navigation feedback', () => {
   })
 
   test('a fast navigation never shows it', async ({ page }) => {
+    // As fast as the browser can render it, over any network: every request
+    // for the next page's data (the header link's own prefetch included) is
+    // answered from memory — fetched from the server once, as a navigation
+    // asks for it — and the page's code is loaded and run beforehand. No
+    // server round trip is left inside the 150 ms, whatever the latency
+    // (production behind Cloudflare is a few hundred milliseconds away).
+    let nowData: Promise<APIResponse> | undefined
+    await page.route(
+      (url) => /^\/_next\/data\/[^/]+\/now\.json$/.test(url.pathname),
+      async (route) => {
+        const response = await (nowData ??= page.request.get(route.request().url(), { headers: { 'x-nextjs-data': '1' } }))
+        const headers = Object.fromEntries(Object.entries(response.headers()).filter(([name]) => !/^(content-encoding|content-length|transfer-encoding|connection)$/i.test(name)))
+        await route.fulfill({ status: response.status(), headers, body: await response.body() })
+      },
+    )
     await page.goto('/about')
     await settle(page)
-    // Warm the next page so the navigation is instant.
-    await page.evaluate(() => (window as unknown as { next: { router: { prefetch(u: string): Promise<void> } } }).next.router.prefetch('/now'))
+    await page.evaluate(async () => {
+      const { router } = (window as unknown as { next: { router: { prefetch(url: string): Promise<void>; pageLoader: { loadPage(route: string): Promise<unknown> } } } }).next
+      await router.prefetch('/now')
+      await router.pageLoader.loadPage('/now')
+    })
+    expect(nowData, 'the prefetch asked for the data').toBeDefined()
+    expect((await nowData!).ok()).toBe(true)
     await watchProgress(page)
     await page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Now', exact: true }).click()
     await page.waitForURL('**/now')
