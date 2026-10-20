@@ -38,21 +38,39 @@ export function migrateAuditDb(db: Database.Database, backupDir?: string): Migra
   return report
 }
 
+/** audit.db and its -wal / -shm files owner-only (0600); a missing file or another owner (a bind mount) is fine. */
+export function restrictAuditDbFiles(file: string): void {
+  for (const p of [file, `${file}-wal`, `${file}-shm`]) {
+    try {
+      fs.chmodSync(p, 0o600)
+    } catch {
+      // ENOENT (no sidecar yet) or EPERM (not the owner): keep going.
+    }
+  }
+}
+
 export function getAuditDb(): Database.Database {
   const cached = g.__auditDb
   if (cached && cached.open) return cached
   const file = auditDbPath()
   fs.mkdirSync(path.dirname(file), { recursive: true })
+  // Created owner-only BEFORE SQLite opens it: the -wal and -shm files SQLite
+  // makes inherit the main file's mode, so the activity log (who did what,
+  // from which network) is never world-readable, not even for an instant
+  // (the same rule as auth.db, SECU-4).
+  if (!fs.existsSync(file)) {
+    try {
+      fs.closeSync(fs.openSync(file, 'a', 0o600))
+    } catch {
+      // A read-only or foreign-owned directory: SQLite reports the real problem below.
+    }
+  }
   const db = new Database(file, { timeout: 5000 })
   try {
     ensureWal(db, 5000)
     db.pragma('synchronous = NORMAL')
     migrateAuditDb(db)
-    try {
-      fs.chmodSync(file, 0o600)
-    } catch {
-      // Not the owner (a bind mount with other ownership): keep going.
-    }
+    restrictAuditDbFiles(file)
   } catch (err) {
     db.close()
     throw err

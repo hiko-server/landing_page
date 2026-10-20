@@ -32,7 +32,6 @@ import { RestoreScrollOnMount, useDeferredScrollRestore } from '../components/Co
 import { ClockProvider } from '../lib/clock'
 import { motionTransition } from '../theme/tokens'
 import { createSiteEmotionCache } from '../lib/hoverMedia'
-import UnifiedToast from '../components/Common/UnifiedToast'
 
 // v6 typography — Geist (SIL OFL, public/fonts/OFL-Geist.txt), self-hosted
 // variable fonts so the build never depends on a font CDN. Each face is two
@@ -175,6 +174,9 @@ const PAGE_TRANSITION = motionTransition('base')
 // close button, timed by one policy (lib/notify via components/Common/
 // UnifiedToast): successes and notes stay long enough to read, errors until
 // dismissed; the timer pauses on hover, focus and while the tab is hidden.
+// The toast component loads with the first toast, never in the first-load JS (perf budget: pages/_app).
+const UnifiedToast = dynamic(() => import('../components/Common/UnifiedToast'), { ssr: false, loading: () => null })
+
 const TOAST_OPTIONS = {
   defaultOptions: { variant: 'v6', position: 'bottom', isClosable: true },
   component: UnifiedToast,
