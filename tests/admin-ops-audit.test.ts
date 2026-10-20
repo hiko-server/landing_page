@@ -62,6 +62,10 @@ test('H13 describe: pages, CV, home, versions, inbox, storage and security', asy
   assert.equal(d('admin/inbox', 'POST', { action: 'archive', ids: ['a', 'b'] }), 'Archived 2 messages')
   assert.equal(d('admin/inbox', 'POST', { action: 'delete', ids: ['a'] }), 'Deleted 1 message')
   assert.equal(d('admin/inbox', 'POST', { action: 'nope', ids: ['a'] }), null)
+  // Opening a message marks it read: a view, not a change — not in the log.
+  assert.equal(d('admin/inbox', 'POST', { action: 'read', ids: ['a'] }), null)
+  assert.equal(d('admin/inbox', 'POST', { action: 'unread', ids: ['a'] }), null)
+  assert.equal(d('admin/inbox', 'POST', { action: 'replied', ids: ['a'] }), 'Marked 1 message as replied')
   assert.equal(d('admin/import-image', 'POST', { url: 'https://www.example.com/a.png' }), 'Imported an image from example.com')
   assert.equal(d('admin/storage/pull', 'POST', {}), 'Restored the site from the latest R2 backup')
   assert.equal(d('admin/security/passkeys', 'POST', { action: 'options' }), null)
@@ -226,6 +230,103 @@ test('H13 capture: failed writes, reads and requests without a session leave no 
   } finally {
     getAuditDb().exec('ALTER TABLE audit_log_away RENAME TO audit_log')
   }
+})
+
+test('H13 recordAdminAudit: other routes record their own writes with the signed-in browser; never throws', async () => {
+  const { recordAdminAudit, cleanAuditEntry, routeFromUrl } = await import('../lib/audit/record')
+  const { listAudit } = await import('../lib/audit/store')
+  const { getAuditDb } = await import('../lib/audit/db')
+  getAuditDb().exec('DELETE FROM audit_log; DELETE FROM audit_snapshots;')
+
+  assert.equal(routeFromUrl('/api/admin/redirects?x=1'), 'admin/redirects')
+  assert.equal(cleanAuditEntry({ action: 'Bad Action', area: 'page', summary: 'x' }), null)
+  assert.equal(cleanAuditEntry({ action: 'redirect.create', area: 'nowhere' as any, summary: 'x' }), null)
+  assert.equal(cleanAuditEntry({ action: 'redirect.create', area: 'page', summary: '  ' }), null)
+
+  const req = { ...(await adminReq('POST', {})), url: '/api/admin/redirects' }
+  const { res } = mockRes()
+  res.setHeader('X-Request-Id', 'req-12345678')
+  assert.equal(recordAdminAudit(req as any, res, { action: 'redirect.create', area: 'page', target: '/old\npath', summary: 'Added a redirect from /old' }), true)
+  const [entry] = listAudit({}).entries
+  assert.deepEqual(
+    { action: entry.action, area: entry.area, target: entry.target, summary: entry.summary, route: entry.route, device: entry.device, method: entry.method },
+    // Line breaks never reach a log line.
+    { action: 'redirect.create', area: 'page', target: '/old path', summary: 'Added a redirect from /old', route: 'admin/redirects', device: 'Chrome on macOS', method: 'POST' },
+  )
+
+  // Without a session, for an automatically recorded route, or with a broken store: false, no throw.
+  assert.equal(recordAdminAudit((await adminReq('POST', {}, {}, false)) as any, mockRes().res, { action: 'redirect.create', area: 'page', summary: 'x' }), false)
+  assert.equal(recordAdminAudit({ ...(await adminReq('PUT', {})), url: '/api/home' } as any, mockRes().res, { action: 'home.save', area: 'home', summary: 'x' }), false)
+  getAuditDb().exec('ALTER TABLE audit_log RENAME TO audit_log_away')
+  try {
+    assert.equal(recordAdminAudit(req as any, mockRes().res, { action: 'redirect.create', area: 'page', summary: 'x' }), false)
+  } finally {
+    getAuditDb().exec('ALTER TABLE audit_log_away RENAME TO audit_log')
+  }
+  assert.equal(listAudit({}).entries.length, 1)
+})
+
+/**
+ * Every API route that accepts a write is either recorded in the activity
+ * log (describeAdminWrite / AUDITED_ROUTES, or recordAdminAudit in the
+ * route) or listed here with the reason it is not an admin write.
+ */
+const NOT_ADMIN_WRITES: Record<string, string> = {
+  a: 'public analytics beacon',
+  g: 'public goal-event beacon',
+  e: 'public error / CSP report',
+  contact: 'visitor contact form (lands in the Inbox)',
+  'contact/nonce': 'visitor challenge',
+  'auth/email-login': 'sign-in — the sign-in history records it; Activity shows it',
+  'auth/passkey/options': 'sign-in challenge — changes nothing',
+  'auth/passkey/verify': 'sign-in — the sign-in history records it; Activity shows it',
+  'auth/reset-password': 'password reset — the sign-in history records it; Activity shows it',
+  'admin/preview': 'compiles an unsaved draft — stores nothing',
+  'admin/security/confirm': 'step-up check — changes nothing',
+  'admin/security/verify': 'step-up check — changes nothing',
+  'internal/restore-drill': 'the server’s own scheduled job (loopback only)',
+  'internal/content-health': 'the server’s own daily link check (loopback only)',
+}
+
+test('H13 coverage: every route that writes is recorded or explicitly not an admin write', async () => {
+  const { AUDITED_ROUTES } = await import('../lib/audit/describe')
+  const root = path.join(prevCwd, 'pages', 'api')
+  const files: string[] = []
+  const walk = (dir: string) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (e.isDirectory()) walk(path.join(dir, e.name))
+      else if (/\.(ts|tsx)$/.test(e.name)) files.push(path.join(dir, e.name))
+    }
+  }
+  walk(root)
+  const unrecorded: string[] = []
+  for (const file of files) {
+    const src = fs.readFileSync(file, 'utf8')
+    const route = /withApi\(\s*'([^']+)'/.exec(src)?.[1]
+    if (!route) continue
+    const writes = /'(POST|PUT|PATCH|DELETE)'/.test(src) || /createCollectionApi\(/.test(src)
+    if (!writes) continue
+    if (AUDITED_ROUTES.has(route) || /recordAdminAudit\(/.test(src) || NOT_ADMIN_WRITES[route]) continue
+    unrecorded.push(`${route} (${path.relative(prevCwd, file)})`)
+  }
+  assert.deepEqual(unrecorded, [], 'add a describeAdminWrite case, call recordAdminAudit, or list the route in NOT_ADMIN_WRITES with a reason')
+})
+
+test('H13 activity: password resets by e-mail link appear under Security', async () => {
+  const { recordAuthEvent } = await import('../lib/adminAuth/store')
+  const { activityPage } = await import('../lib/audit/activity')
+  const now = Date.now()
+  recordAuthEvent({ type: 'password-reset', detail: '2 session(s) signed out', device: 'Safari on iOS' }, now - 1000)
+  recordAuthEvent({ type: 'step-up', device: 'Safari on iOS' }, now - 500)
+  const all = activityPage({ now })
+  const reset = all.items.find((i) => i.action === 'security.password-reset')
+  assert.ok(reset, 'shown in everything')
+  assert.equal(reset!.area, 'security')
+  assert.equal(reset!.summary, 'Reset the password with an e-mailed link (2 session(s) signed out)')
+  assert.ok(!all.items.some((i) => i.summary.includes('step-up')), 'step-ups are not shown')
+  assert.ok(activityPage({ area: 'security', now }).items.some((i) => i.action === 'security.password-reset'))
+  assert.ok(!activityPage({ area: 'session', now }).items.some((i) => i.action === 'security.password-reset'))
+  assert.ok((all.areas.security || 0) >= 1)
 })
 
 test('H13 migrations: audit.db has its own ordered, idempotent list', async () => {

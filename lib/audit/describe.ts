@@ -168,9 +168,12 @@ function versionsWrite(req: AuditRequest): AuditDescription | null {
   return null
 }
 
+/**
+ * Inbox changes worth a line in the log. Read / unread are left out on
+ * purpose: opening a message marks it read, so they would record every
+ * message the owner looked at (a view, not a change) and drown the rest.
+ */
 const INBOX_VERBS: Record<string, string> = {
-  read: 'Marked {n} read',
-  unread: 'Marked {n} unread',
   star: 'Starred {n}',
   unstar: 'Unstarred {n}',
   archive: 'Archived {n}',
@@ -220,6 +223,12 @@ export function describeAdminWrite(route: string, req: AuditRequest, facts: Audi
       return method === 'POST' ? versionsWrite(r) : null
     case 'admin/inbox': {
       if (method !== 'POST') return null
+      if (b.action === 'template' && (b.lang === 'en' || b.lang === 'zh')) {
+        const which = b.lang === 'zh' ? '中文' : 'English'
+        return str(b.text, 10)
+          ? { action: 'inbox.template', area: 'inbox', target: b.lang, summary: `Saved the ${which} reply template` }
+          : { action: 'inbox.template', area: 'inbox', target: b.lang, summary: `Removed the ${which} reply template` }
+      }
       const verb = INBOX_VERBS[str(b.action, 16)]
       const n = count(b.ids)
       if (!verb || !n) return null

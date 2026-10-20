@@ -5,10 +5,11 @@ import { auditTargetHref, isAuditArea } from './describe'
 
 /**
  * The Activity view (GET /api/admin/activity): the admin's own writes from
- * the activity log, merged by time with the sign-ins and failed sign-ins of
- * the sign-in history (auth.db, which records them already — they are not
- * copied). Security changes are in both stores; the view takes them from the
- * activity log only.
+ * the activity log, merged by time with the sign-ins, failed sign-ins and
+ * password resets of the sign-in history (auth.db, which records them
+ * already — they are not copied; a reset by e-mail link has no admin session,
+ * so the activity log never sees it). Other security changes are in both
+ * stores; the view takes them from the activity log only.
  */
 
 export type ActivityItem = {
@@ -64,7 +65,7 @@ function fromAudit(e: AuditEntry): ActivityItem {
 type SignInRow = {
   id: number
   at: number
-  type: 'signin' | 'signin-failed'
+  type: 'signin' | 'signin-failed' | 'password-reset'
   method: AuthMethod | null
   session_id: string | null
   device: string | null
@@ -73,9 +74,41 @@ type SignInRow = {
   detail: string | null
 }
 
-function signIns(before: number | null, since: number | null, limit: number, q: string): ActivityItem[] {
-  const where = ["type IN ('signin', 'signin-failed')"]
-  const params: unknown[] = []
+/** Which auth.db events a filter shows: sign-ins under "session", password resets under "security". */
+function authTypesFor(area: string | null): string[] {
+  if (!area) return ['signin', 'signin-failed', 'password-reset']
+  if (area === 'session') return ['signin', 'signin-failed']
+  if (area === 'security') return ['password-reset']
+  return []
+}
+
+function fromAuthEvent(r: SignInRow): ActivityItem {
+  const base = { id: `s:${r.id}`, ts: r.at, target: null, href: '/admin/security', device: r.device, ipPrefix: r.ip_prefix, country: r.country, sessionId: r.session_id }
+  if (r.type === 'password-reset') {
+    return {
+      ...base,
+      kind: 'write',
+      area: 'security',
+      action: 'security.password-reset',
+      summary: `Reset the password with an e-mailed link${r.detail ? ` (${r.detail})` : ''}`,
+    }
+  }
+  return {
+    ...base,
+    kind: r.type,
+    area: 'session',
+    action: r.type === 'signin' ? 'session.signin' : 'session.signin-failed',
+    summary:
+      r.type === 'signin'
+        ? SIGNIN_LABEL[r.method ?? 'password'] ?? 'Signed in'
+        : `Failed sign-in${r.method ? ` (${r.method})` : ''}${r.detail ? `: ${r.detail}` : ''}`,
+  }
+}
+
+function authEvents(types: string[], before: number | null, since: number | null, limit: number, q: string): ActivityItem[] {
+  if (!types.length) return []
+  const where = [`type IN (${types.map(() => '?').join(', ')})`]
+  const params: unknown[] = [...types]
   if (before) {
     where.push('at < ?')
     params.push(before)
@@ -87,25 +120,7 @@ function signIns(before: number | null, since: number | null, limit: number, q: 
   const rows = getAuthDb()
     .prepare(`SELECT id, at, type, method, session_id, device, ip_prefix, country, detail FROM auth_events WHERE ${where.join(' AND ')} ORDER BY at DESC, id DESC LIMIT ?`)
     .all(...params, limit) as SignInRow[]
-  const items = rows.map(
-    (r): ActivityItem => ({
-      id: `s:${r.id}`,
-      ts: r.at,
-      kind: r.type,
-      area: 'session',
-      action: r.type === 'signin' ? 'session.signin' : 'session.signin-failed',
-      summary:
-        r.type === 'signin'
-          ? SIGNIN_LABEL[r.method ?? 'password'] ?? 'Signed in'
-          : `Failed sign-in${r.method ? ` (${r.method})` : ''}${r.detail ? `: ${r.detail}` : ''}`,
-      target: null,
-      href: '/admin/security',
-      device: r.device,
-      ipPrefix: r.ip_prefix,
-      country: r.country,
-      sessionId: r.session_id,
-    }),
-  )
+  const items = rows.map(fromAuthEvent)
   if (!q) return items
   return items.filter((i) => `${i.summary} ${i.device || ''}`.toLowerCase().includes(q))
 }
@@ -122,22 +137,23 @@ export function activityPage(query: ActivityQuery = {}): ActivityPage {
 
   const writes = listAudit({ area, q, before, since, limit: limit + 1 }).entries.map(fromAudit)
   let logins: ActivityItem[] = []
-  if (!area || area === 'session') {
-    try {
-      logins = signIns(before, since, limit + 1, q)
-    } catch {
-      // auth.db unreadable: the writes still show.
-    }
+  try {
+    logins = authEvents(authTypesFor(area), before, since, limit + 1, q)
+  } catch {
+    // auth.db unreadable: the writes still show.
   }
   const merged = [...writes, ...logins].sort((a, b) => b.ts - a.ts || (a.id < b.id ? 1 : -1))
   const items = merged.slice(0, limit)
   const more = merged.length > limit
   const areas = auditAreaCounts(now)
   try {
-    const n = (getAuthDb()
-      .prepare("SELECT count(*) AS n FROM auth_events WHERE type IN ('signin', 'signin-failed') AND at >= ?")
-      .get(now - 30 * 86_400_000) as { n: number }).n
-    areas.session = (areas.session || 0) + (Number(n) || 0)
+    const rows = getAuthDb()
+      .prepare("SELECT type, count(*) AS n FROM auth_events WHERE type IN ('signin', 'signin-failed', 'password-reset') AND at >= ? GROUP BY type")
+      .all(now - 30 * 86_400_000) as Array<{ type: string; n: number }>
+    for (const r of rows) {
+      const key = r.type === 'password-reset' ? 'security' : 'session'
+      areas[key] = (areas[key] || 0) + (Number(r.n) || 0)
+    }
   } catch {
     // Counts are a convenience.
   }
