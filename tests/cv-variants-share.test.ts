@@ -352,3 +352,24 @@ test('every response under /cv/r/ is private, unindexed and sends no Referer (th
   const cv = applySecurityHeaders({ headers: new Headers() }, { pathname: '/cv', adminContext: false })
   assert.equal(cv.headers.get('x-robots-tag'), null)
 })
+
+test('the PDF photo belongs to the header: a variant that leaves Personal Info out prints no photo', async () => {
+  const sharp = (await import('sharp')).default
+  fs.mkdirSync(path.join(h.tmp, 'public', 'uploads'), { recursive: true })
+  const png = await sharp({ create: { width: 240, height: 320, channels: 3, background: '#335577' } }).png().toBuffer()
+  fs.writeFileSync(path.join(h.tmp, 'public', 'uploads', 'zz-variant-photo.png'), png)
+  const { writeCvData } = await import('../lib/cvdata')
+  const doc = cv()
+  Object.assign(doc.en[0], { photo: '/uploads/zz-variant-photo.png', photoOnPdf: true })
+  assert.equal((await writeCvData(doc)).ok, true)
+  const { loadShareSource } = await import('../lib/cvShare/page')
+  const { getCvExport, clearCvExportCache } = await import('../lib/cvExport/service')
+  clearCvExportCache()
+  const pdfOf = async (sections: Array<{ name: string }>) => {
+    const r = await getCvExport('en', 'pdf', await loadShareSource({ ...variant(), sections } as any, 'en'))
+    assert.ok(r.ok)
+    return r.file.body.toString('latin1')
+  }
+  assert.match(await pdfOf([{ name: 'personalInformation' }, { name: 'workExperience' }]), /\/Subtype \/Image/, 'with Personal Info: the photo')
+  assert.doesNotMatch(await pdfOf([{ name: 'workExperience' }]), /\/Subtype \/Image/, 'without it: no photo')
+})

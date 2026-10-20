@@ -101,7 +101,9 @@ export async function getCvExport(lang: CvLang, format: ExportFormat, source?: C
 
   const accent = accentOf(src)
   const { loadCvPdfPhoto } = await import('./photo')
-  const photo = await loadCvPdfPhoto(lang)
+  // The photo belongs to the header: only a file that prints Personal Info
+  // (after the surface's audiences and a CV variant's selection) carries it.
+  const photo = src.sections.some((s) => s.sessionName === 'personalInformation') ? await loadCvPdfPhoto(lang) : null
   const key = fingerprint([EXPORT_VERSION, build, 'pdf', model, accent, src.updatedAt, photo?.hash ?? null])
   const hit = cache.get(key)
   if (hit) {
