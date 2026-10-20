@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type SyntheticEvent } from 'react'
+import { useCallback, useMemo, useRef, useState, type SyntheticEvent } from 'react'
 import { Box, Grid } from '@chakra-ui/react'
 import type { Root as HastRoot } from 'hast'
 import MDXContent from '../MDX/MDXContent'
@@ -26,7 +26,9 @@ const MIN_TOC_ENTRIES = 2
  * collected once from the tree, so every image can open the shared
  * Lightbox and step through all images of the article. The viewer loads on
  * demand: when a pointer reaches an image or an image button is focused
- * (components/Common/LazyLightbox.tsx).
+ * (components/Common/LazyLightbox.tsx). It grows out of the frame of the
+ * image pressed and closes into the frame of the image it shows, when that
+ * one is on screen (`originOf`).
  *
  * The prose column starts on the same left edge as the page title and the
  * meta grid (no inner padding); paragraphs are capped at 68ch.
@@ -45,10 +47,30 @@ export default function ArticleBody({ tree, toc }: { tree: HastRoot; toc: TocEnt
 
   const images = useMemo(() => collectImages(tree as unknown as HastNode), [tree])
   const [index, setIndex] = useState<number | null>(null)
+  const bodyRef = useRef<HTMLDivElement>(null)
+  /** The image button pressed: the same picture may appear twice, this is the one that opened. */
+  const pressed = useRef<HTMLElement | null>(null)
   const open = useCallback(
-    (src: string) => {
+    (src: string, from?: HTMLElement | null) => {
       const i = images.findIndex((img) => img.src === src)
-      if (i >= 0) setIndex(i)
+      if (i < 0) return
+      pressed.current = from ?? null
+      setIndex(i)
+    },
+    [images],
+  )
+  // The frame of image `i` in the text (the button pressed for its own picture).
+  const originOf = useCallback(
+    (i: number): HTMLElement | null => {
+      const src = images[i]?.src
+      if (!src) return null
+      const from = pressed.current
+      if (from?.isConnected && from.getAttribute('data-zoom-src') === src) return from.querySelector<HTMLElement>('[data-zoom-frame]')
+      const buttons = bodyRef.current?.querySelectorAll<HTMLElement>('.zoomable[data-zoom-src]') ?? []
+      for (const button of Array.from(buttons)) {
+        if (button.getAttribute('data-zoom-src') === src) return button.querySelector<HTMLElement>('[data-zoom-frame]')
+      }
+      return null
     },
     [images],
   )
@@ -70,7 +92,7 @@ export default function ArticleBody({ tree, toc }: { tree: HastRoot; toc: TocEnt
             <TocDisclosure toc={toc} activeId={activeId} />
           </Box>
         )}
-        <Box id="article-body" onPointerOver={images.length ? onImageIntent : undefined} onFocus={images.length ? onImageIntent : undefined}>
+        <Box id="article-body" ref={bodyRef} onPointerOver={images.length ? onImageIntent : undefined} onFocus={images.length ? onImageIntent : undefined}>
           <ArticleImagesContext.Provider value={zoom}>
             <MDXContent tree={tree} as="div" />
           </ArticleImagesContext.Provider>
@@ -78,7 +100,7 @@ export default function ArticleBody({ tree, toc }: { tree: HastRoot; toc: TocEnt
         <Box id="article-end" aria-hidden h="1px" />
         {images.length > 0 && (
           <ErrorBoundary name="article-lightbox" fallback={null}>
-            <LazyLightbox items={images} index={index} onIndexChange={setIndex} />
+            <LazyLightbox items={images} index={index} onIndexChange={setIndex} originOf={originOf} />
           </ErrorBoundary>
         )}
       </Box>

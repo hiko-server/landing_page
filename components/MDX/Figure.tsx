@@ -21,7 +21,9 @@ import { useImageReveal } from '../Common/useImageReveal'
  *     components/Article/ArticleBody.tsx) each image becomes a button that
  *     opens the shared Lightbox. The button is a progressive wrapper added
  *     after mount — the server HTML (and no-JS visitors) get a plain <img>,
- *     and hydration never sees a different tree.
+ *     and hydration never sees a different tree. The button names its image
+ *     (`data-zoom-src`) and its frame (`data-zoom-frame`): the viewer grows
+ *     out of that frame and flies back into it (components/Common/Lightbox).
  *   - `<Figure src alt caption />` in MDX compiles to the same
  *     `figure.article-figure > img + figcaption` shape as a lone markdown
  *     image, so both render through ArticleFigure + MdxImage.
@@ -42,8 +44,8 @@ import { useImageReveal } from '../Common/useImageReveal'
  *     images share one height and the layout exists before any file loads.
  */
 
-/** Opens the article lightbox on the image with this src. */
-export const ArticleImagesContext = createContext<{ open: (src: string) => void } | null>(null)
+/** Opens the article lightbox on the image with this src (`from`: the button pressed, the morph's origin). */
+export const ArticleImagesContext = createContext<{ open: (src: string, from?: HTMLElement | null) => void } | null>(null)
 
 /** True inside a link: an image there is navigation, never a zoom button. */
 export const InsideLinkContext = createContext(false)
@@ -130,6 +132,7 @@ export function MdxImage({ alt, width, height, src, srcSet, sizes, title, classN
   const framed = (
     <Box
       as="span"
+      data-zoom-frame={zoom && !inLink && mounted ? '' : undefined}
       sx={{
         ...frameSx,
         overflow: 'hidden',
@@ -157,7 +160,8 @@ export function MdxImage({ alt, width, height, src, srcSet, sizes, title, classN
       className="zoomable"
       aria-label={altText ? fillUi(ui.enlargeImageAlt, { alt: altText }) : ui.enlargeImage}
       aria-haspopup="dialog"
-      onClick={() => zoom.open(src)}
+      data-zoom-src={src}
+      onClick={(e: React.MouseEvent<HTMLElement>) => zoom.open(src, e.currentTarget)}
       display="block"
       w="100%"
       my={6}

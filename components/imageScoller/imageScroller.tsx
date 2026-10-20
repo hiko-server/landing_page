@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Box, Flex, HStack, IconButton, Link, Text } from '@chakra-ui/react'
-import { LayoutGroup, m, useReducedMotion } from 'framer-motion'
+import { useReducedMotion } from 'framer-motion'
 import { ArrowLeftIcon, ArrowRightIcon, PauseIcon, PlayIcon } from '../Icons/ui/content'
 
 import LazyLightbox, { preloadLightbox } from '../Common/LazyLightbox'
@@ -39,16 +39,14 @@ type TileImage = { url: string; width?: number; height?: number; srcSet?: string
 
 /**
  * One photo's 4:3 tile: WebP / AVIF candidates over the blurred placeholder
- * until the photo has loaded (components/Common/useImageReveal). The tile is
- * the shared element the Lightbox morphs out of (`layoutId`; none under
- * reduced motion).
+ * until the photo has loaded (components/Common/useImageReveal). The tile's
+ * box is where the Lightbox grows out of and flies back into (`originOf`).
  */
-function FieldNoteTile({ img, layoutId }: { img: TileImage; layoutId?: string }) {
+const FieldNoteTile = forwardRef<HTMLDivElement, { img: TileImage }>(function FieldNoteTile({ img }, ref) {
   const reveal = useImageReveal(img.placeholder, { width: img.width, height: img.height, fit: 'cover' })
   return (
-    <m.div
-      layoutId={layoutId}
-      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+    <div
+      ref={ref}
       style={{
         position: 'relative',
         aspectRatio: '4 / 3',
@@ -60,10 +58,10 @@ function FieldNoteTile({ img, layoutId }: { img: TileImage; layoutId?: string })
       }}
     >
       <Picture avifSrcSet={img.avifSrcSet} sizes={TILE_SIZES}>
-        <m.img
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
           ref={reveal.ref}
           {...reveal.imgProps}
-          layout={layoutId ? true : undefined}
           src={img.url}
           srcSet={img.srcSet}
           sizes={img.srcSet ? TILE_SIZES : undefined}
@@ -76,17 +74,19 @@ function FieldNoteTile({ img, layoutId }: { img: TileImage; layoutId?: string })
           style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover', maxWidth: 'none' }}
         />
       </Picture>
-    </m.div>
+    </div>
   )
-}
+})
 
 /**
  * "Field notes" — a full-width, horizontally scroll-snapping photo strip.
  *
  *   - 83% / 48% / 32% wide 4:3 tiles (phone / tablet / desktop), lazy images
  *     with intrinsic width/height, soft fade at both edges.
- *   - Each photo is a button that opens the shared-element Lightbox; an
- *     optional link from the Home editor sits in the caption.
+ *   - Each photo is a button that opens the Lightbox, which grows out of
+ *     the tile; stepping through photos in the viewer keeps the strip on
+ *     the photo shown, so closing flies back into its tile. An optional link
+ *     from the Home editor sits in the caption.
  *   - Prev / next scroll by one tile (wrapping at the ends); the dots are the
  *     strip's snap positions (24×24 hit areas, transform-only active pill).
  *   - Autoplay advances every 6 s, paused on hover, focus, a hidden tab, while
@@ -115,10 +115,11 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
   )
   const count = data.length
   const reduce = useReducedMotion()
-  const layoutPrefix = `field-notes-${useId().replace(/:/g, '')}`
 
   const scrollerRef = useRef<HTMLDivElement | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
+  const tileRefs = useRef<(HTMLDivElement | null)[]>([])
+  const originOf = useCallback((i: number) => tileRefs.current[i] ?? null, [])
   const programmaticAt = useRef(0)
   const frame = useRef(0)
 
@@ -166,13 +167,13 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
   )
 
   const scrollToPosition = useCallback(
-    (pos: number, userAction: boolean) => {
+    (pos: number, userAction: boolean, instant = false) => {
       const el = scrollerRef.current
       const step = stepPx()
       if (!el || !step) return
       const target = ((pos % positions) + positions) % positions
       programmaticAt.current = Date.now()
-      const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      const smooth = !instant && !window.matchMedia('(prefers-reduced-motion: reduce)').matches
       el.scrollTo({ left: target * step, behavior: smooth ? 'smooth' : 'auto' })
       setPosition(target)
       if (userAction) setAnnounce(describePosition(target, positions))
@@ -181,6 +182,21 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
   )
 
   const go = useCallback((delta: number, userAction: boolean) => scrollToPosition(position + delta, userAction), [position, scrollToPosition])
+
+  // The viewer moved to another photo: bring its tile into the strip (behind
+  // the backdrop, at once), so the viewer can close into it.
+  useEffect(() => {
+    if (viewer === null) return
+    const el = scrollerRef.current
+    const tile = tileRefs.current[viewer]
+    if (!el || !tile) return
+    const box = el.getBoundingClientRect()
+    const r = tile.getBoundingClientRect()
+    if (r.left >= box.left && r.right <= box.right) return
+    scrollToPosition(Math.min(viewer, positions - 1), false, true)
+    // Only the photo shown decides; the strip's own position follows.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewer])
 
   // Measure on mount, on resize and when the photo list changes.
   useEffect(() => {
@@ -235,10 +251,11 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
     caption: img.describe || undefined,
     width: img.width,
     height: img.height,
+    placeholder: img.placeholder,
   }))
 
   return (
-    <LayoutGroup id={layoutPrefix}>
+    <>
       <Box
         ref={rootRef}
         role="region"
@@ -265,9 +282,8 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
           if (!rootRef.current?.contains(e.relatedTarget as Node)) setFocused(false)
         }}
       >
-        <m.div
+        <div
           ref={scrollerRef}
-          layoutScroll
           tabIndex={0}
           aria-label="Photos (scrolls horizontally)"
           onScroll={onScroll}
@@ -320,7 +336,12 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
                   cursor="zoom-in"
                   _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
                 >
-                  <FieldNoteTile img={img} layoutId={reduce ? undefined : `${layoutPrefix}-${i}`} />
+                  <FieldNoteTile
+                    img={img}
+                    ref={(el) => {
+                      tileRefs.current[i] = el
+                    }}
+                  />
                 </Box>
                 {(img.describe || img.redirectTo) && (
                   <Flex as="figcaption" mt={2.5} gap={3} align="baseline" justify="space-between" fontSize="13px" color="page.fg-secondary" lineHeight="1.5">
@@ -355,7 +376,7 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
               </Box>
             )
           })}
-        </m.div>
+        </div>
 
         <Text className="sr-only" aria-live="polite" aria-atomic="true">
           {announce}
@@ -413,8 +434,8 @@ const ImageScroller = ({ images }: { images?: ScrollerImage[] }) => {
         ) : null}
       </Box>
 
-      <LazyLightbox items={items} index={viewer} onIndexChange={setViewer} layoutIdPrefix={reduce ? undefined : layoutPrefix} />
-    </LayoutGroup>
+      <LazyLightbox items={items} index={viewer} onIndexChange={setViewer} originOf={originOf} />
+    </>
   )
 }
 
