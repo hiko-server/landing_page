@@ -279,7 +279,7 @@ test('SECU-2: migration 2 moves the failures already in the history into the cou
     insert.run(t + 2000, 'signin-failed', 'passkey', 'US', 'challenge')
     insert.run(t + 3000, 'signin-failed', 'password', null, null)
     insert.run(t + 4000, 'step-up-failed', 'password', 'HK', null)
-    const report = runMigrations(db, AUTH_MIGRATIONS, { label: 'auth' })
+    const report = runMigrations(db, AUTH_MIGRATIONS.slice(0, 2), { label: 'auth' })
     assert.deepEqual([report.from, report.to], [1, 2])
     const events = db.prepare('SELECT type FROM auth_events').all() as Array<{ type: string }>
     assert.deepEqual(
@@ -645,7 +645,8 @@ test('SECU-4: the migration CLI keeps an auth.db it migrates owner-only (sidecar
   const out = execFileSync(process.execPath, [cli, '--db', 'auth', '--file', file], {
     encoding: 'utf8',
   })
-  assert.match(out, /auth: migrated v1 → v2/)
+  // v1 → the newest auth.db migration (v2 when this was written; v3 adds the CV share links).
+  assert.match(out, /auth: migrated v1 → v\d+ \(2-failure-counts/)
   for (const p of sidecars(file)) if (fs.existsSync(p)) assert.equal(modeOf(p), 0o600, p)
   const copies = fs.readdirSync(path.join(dir, 'backups', 'pre-migration'))
   assert.equal(copies.length, 1)

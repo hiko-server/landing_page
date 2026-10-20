@@ -1,6 +1,7 @@
 import { buildCsp, buildReportOnlyCsp, REPORTING_ENDPOINTS } from '../csp.js'
 import { crossOriginResourcePolicy, STATIC_SECURITY_HEADERS } from '../securityHeaders.js'
 import { INLINE_SCRIPT_HASHES } from './inlineScripts'
+import { isSharePath } from '../cvShare/links'
 
 /**
  * The security headers proxy.ts puts on every response it handles: the
@@ -38,6 +39,14 @@ export function applySecurityHeaders<T extends HeaderTarget>(res: T, opts: { pat
     res.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive')
     // Caches between us and the user shouldn't store admin responses.
     res.headers.set('Cache-Control', 'no-store, max-age=0, must-revalidate')
+  }
+  // Private share links of CV variants (/cv/r/<token>…, lib/cvShare): the
+  // token is in the address, so no response — a 404, an error, a redirect —
+  // may be indexed, kept by a cache or quoted in a Referer header.
+  if (isSharePath(opts.pathname)) {
+    res.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet')
+    res.headers.set('Cache-Control', 'private, no-store, max-age=0')
+    res.headers.set('Referrer-Policy', 'no-referrer')
   }
   return res
 }

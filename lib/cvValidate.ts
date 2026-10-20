@@ -11,7 +11,11 @@
  *     bullets / tags hold string arrays; registry lists hold arrays of
  *     objects and are checked recursively
  *   - visibility metadata: `isVisible` / `showOnWebsite` booleans,
- *     `hiddenFields` string[], `hiddenItems` { [field]: non-negative int[] }
+ *     `hiddenFields` string[], `hiddenItems` { [field]: non-negative int[] },
+ *     audiences (E4): `onlyIn` a list of surfaces ('web', 'download',
+ *     'private'), `fieldsOnlyIn` { [field]: surfaces[] }
+ *   - entry identity: a top-level list entry's `uid` (lib/cvEntryUid) is a
+ *     short [A-Za-z0-9_-] string, unique within its list
  *   - select fields hold one of their options (or nothing); yearMonth fields
  *     hold `YYYY` or `YYYY-MM`; `format: 'doi'` text must be a DOI,
  *     `format: 'https-link'` text an https:// address or a same-site path
@@ -32,6 +36,8 @@ import { isCvImageRef } from './url'
 import { normalizeDoi } from './publications/doi'
 import { PUB_DATE_RE, publicationHref } from './publications/normalize'
 import { ORCID_MESSAGES, orcidIdProblem } from './orcid/id'
+import { CV_SURFACES, ENTRY_UID_KEY, FIELDS_ONLY_IN_KEY, ONLY_IN_KEY, isCvSurface } from './cvVisibility'
+import { isEntryUid } from './cvEntryUid'
 
 export type CvLangKey = 'en' | 'zh'
 export type CvErrorPath = [CvLangKey, number, ...(string | number)[]]
@@ -140,6 +146,20 @@ function checkVisibility(node: Record<string, unknown>, path: Path, out: Collect
   if (!absent(hf) && (!Array.isArray(hf) || hf.some((x) => typeof x !== 'string'))) {
     out.add([...path, 'hiddenFields'], 'hiddenFields must be a list of field names.')
   }
+  const surfaces = CV_SURFACES.join(', ')
+  const isSurfaceList = (v: unknown) => Array.isArray(v) && v.every(isCvSurface)
+  if (!absent(node[ONLY_IN_KEY]) && !isSurfaceList(node[ONLY_IN_KEY])) {
+    out.add([...path, ONLY_IN_KEY], `${ONLY_IN_KEY} must be a list of: ${surfaces}.`)
+  }
+  const fo = node[FIELDS_ONLY_IN_KEY]
+  if (!absent(fo)) {
+    if (!isObject(fo)) out.add([...path, FIELDS_ONLY_IN_KEY], `${FIELDS_ONLY_IN_KEY} must map field names to lists of: ${surfaces}.`)
+    else {
+      for (const [field, list] of Object.entries(fo)) {
+        if (!isSurfaceList(list)) out.add([...path, FIELDS_ONLY_IN_KEY, field], `${FIELDS_ONLY_IN_KEY}.${field} must be a list of: ${surfaces}.`)
+      }
+    }
+  }
   const hi = node.hiddenItems
   if (absent(hi)) return
   if (!isObject(hi)) {
@@ -154,7 +174,14 @@ function checkVisibility(node: Record<string, unknown>, path: Path, out: Collect
 }
 
 /** Check a node (section or list entry) whose shape is described by `fields` / `lists`. */
-function checkNode(node: Record<string, unknown>, fields: FieldDef[] | undefined, lists: ListDef[] | undefined, path: Path, out: Collector) {
+function checkNode(
+  node: Record<string, unknown>,
+  fields: FieldDef[] | undefined,
+  lists: ListDef[] | undefined,
+  path: Path,
+  out: Collector,
+  topLevel = false,
+) {
   checkVisibility(node, path, out)
   for (const f of fields || []) {
     if (out.full) return
@@ -172,12 +199,20 @@ function checkNode(node: Record<string, unknown>, fields: FieldDef[] | undefined
       out.add([...path, l.key], `${l.label} must be a list.`)
       continue
     }
+    const uids = new Set<string>()
     value.forEach((entry, i) => {
       if (out.full) return
       const entryPath = [...path, l.key, i]
       if (!isObject(entry)) {
         out.add(entryPath, `${l.label} #${i + 1} must be an object.`)
         return
+      }
+      // A section's top-level entries carry their stable uid (lib/cvEntryUid).
+      const uid = entry[ENTRY_UID_KEY]
+      if (topLevel && !absent(uid)) {
+        if (!isEntryUid(uid)) out.add([...entryPath, ENTRY_UID_KEY], `${l.label} #${i + 1} has a malformed uid (letters, digits, - and _ only).`)
+        else if (uids.has(uid)) out.add([...entryPath, ENTRY_UID_KEY], `${l.label} #${i + 1} repeats the uid of another entry in this list.`)
+        else uids.add(uid)
       }
       checkNode(entry, l.fields, l.lists, entryPath, out)
     })
@@ -213,13 +248,13 @@ export function validateCvDoc(input: unknown): CvValidation {
       if (!absent(section.headerName) && typeof section.headerName !== 'string') {
         out.add([lang, i, 'headerName'], 'The section heading must be text.')
       }
-      checkNode(section, def.fields, def.lists, [lang, i], out)
+      checkNode(section, def.fields, def.lists, [lang, i], out, true)
     })
   }
   return out.errors.length ? { ok: false, errors: out.errors } : { ok: true, doc }
 }
 
-const VISIBILITY_SEGMENTS = new Set(['isVisible', 'showOnWebsite', 'hiddenFields', 'hiddenItems', 'headerName'])
+const VISIBILITY_SEGMENTS = new Set(['isVisible', 'showOnWebsite', 'hiddenFields', 'hiddenItems', 'headerName', ONLY_IN_KEY, FIELDS_ONLY_IN_KEY, ENTRY_UID_KEY])
 
 /**
  * Where an editor should jump for an error: the language, the section index

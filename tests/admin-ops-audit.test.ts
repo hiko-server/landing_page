@@ -287,6 +287,7 @@ const NOT_ADMIN_WRITES: Record<string, string> = {
   'admin/security/verify': 'step-up check — changes nothing',
   'internal/restore-drill': 'the server’s own scheduled job (loopback only)',
   'internal/content-health': 'the server’s own daily link check (loopback only)',
+  'cv/share': 'a visitor of a private CV link: its PDF, and the open count beacon (lib/cvShare)',
 }
 
 test('H13 coverage: every route that writes is recorded or explicitly not an admin write', async () => {

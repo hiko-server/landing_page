@@ -108,7 +108,13 @@ export type PdfRenderOptions = {
   photo?: PdfPhoto | null
 }
 
-export type PdfResult = { buffer: Buffer; pages: number; missing: string[] }
+export type PdfResult = {
+  buffer: Buffer
+  pages: number
+  missing: string[]
+  /** How much of the last page the content fills (0–1): how far over a page target a CV variant is (E4). */
+  lastPageFill: number
+}
 
 const STRINGS = {
   en: { cv: 'CV', subject: 'Curriculum vitae', skills: 'Skills', photo: (name: string) => (name ? `Photo of ${name}` : 'Photo') },
@@ -686,10 +692,11 @@ export async function renderCvPdf(model: CvDocModel, opts: PdfRenderOptions): Pr
   const w = new Writer(doc, opts.fonts, model, opts)
   w.header()
   for (const s of model.sections) w.section(s)
+  const lastPageFill = Math.min(1, Math.max(0, (w.y - MARGIN.top) / (BOTTOM - MARGIN.top)))
   w.footers()
   w.root.end()
   const pages = doc.bufferedPageRange().count
   doc.end()
   const buffer = await done
-  return { buffer, pages, missing: Array.from(w.missing) }
+  return { buffer, pages, missing: Array.from(w.missing), lastPageFill: Math.round(lastPageFill * 100) / 100 }
 }

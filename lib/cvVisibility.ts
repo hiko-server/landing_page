@@ -20,6 +20,31 @@
  *   String bullet (an element of a string[] field)
  *     parent.hiddenItems?: { [field]: number[] }  indices hidden everywhere
  *
+ * Audiences (E4) — WHERE something visible appears, on top of the above:
+ *
+ *   Section or entry
+ *     onlyIn?: CvSurface[]                   shown only in these surfaces
+ *   Any node
+ *     fieldsOnlyIn?: { [field]: CvSurface[] } a field (or a nested list)
+ *                                            shown only in these surfaces
+ *
+ *   Surfaces (CV_SURFACES):
+ *     'web'       public pages and what they carry: /cv, /about, home,
+ *                 /publications, /work, /api/cvdata, search, JSON-LD
+ *     'download'  the downloadable files: /cv.pdf, /cv.txt, /cv.json (and
+ *                 the 中文 twins) and the vCard
+ *     'private'   private share links (CV variants, lib/cvVariants)
+ *
+ *   Absent = every surface (today's behaviour, the default). An empty or
+ *   unreadable list means no surface at all — the safe reading. A surface
+ *   added later is NOT implied by an existing list. Hidden always wins: an
+ *   audience never brings back anything a hide flag or a section switch
+ *   removed (the CV / Website switches still choose /cv vs /about + home).
+ *
+ * Entry identity: entries of a section's top-level lists carry a stable
+ * `uid` (lib/cvEntryUid) that CV variants select by; it never reaches a
+ * public view either.
+ *
  * Hidden fields and entries are *removed from public payloads* (not just
  * visually suppressed), so a hidden phone number or GPA never reaches the
  * page HTML, the __NEXT_DATA__ blob or the public JSON API.
@@ -35,12 +60,61 @@
 import { isPublicationStatus } from './publications/types'
 import { ORCID_AUTH_FIELD, publicOrcidAuth } from './orcid/marker'
 
+const isPlainObject = (v: unknown): v is Record<string, any> =>
+  !!v && typeof v === 'object' && !Array.isArray(v)
+
 export type CvSectionLike = { sessionName?: string; [k: string]: any }
 export type CvDoc = { en: CvSectionLike[]; zh: CvSectionLike[] }
 export type CvLang = 'en' | 'zh'
 
 /** Keys that carry visibility metadata rather than content. */
-export const VISIBILITY_KEYS = ['isVisible', 'showOnWebsite', 'hiddenFields', 'hiddenItems'] as const
+export const VISIBILITY_KEYS = ['isVisible', 'showOnWebsite', 'hiddenFields', 'hiddenItems', 'onlyIn', 'fieldsOnlyIn'] as const
+
+/** Where a public view goes (see the module comment). Order = the Studio's order. */
+export const CV_SURFACES = ['web', 'download', 'private'] as const
+export type CvSurface = (typeof CV_SURFACES)[number]
+
+/** Section / entry audience list. */
+export const ONLY_IN_KEY = 'onlyIn' as const
+/** Per-field audience lists of a node. */
+export const FIELDS_ONLY_IN_KEY = 'fieldsOnlyIn' as const
+/** Stable identity of a top-level list entry (lib/cvEntryUid) — editor and variant bookkeeping, never public. */
+export const ENTRY_UID_KEY = 'uid' as const
+
+export function isCvSurface(v: unknown): v is CvSurface {
+  return typeof v === 'string' && (CV_SURFACES as readonly string[]).includes(v)
+}
+
+/**
+ * The surfaces an audience list allows: null when unrestricted (no list),
+ * else the known surfaces it names, in CV_SURFACES order (an empty or
+ * malformed list allows none).
+ */
+export function audienceOf(list: unknown): CvSurface[] | null {
+  if (list === undefined || list === null) return null
+  if (!Array.isArray(list)) return []
+  return CV_SURFACES.filter((s) => list.includes(s))
+}
+
+/** Whether a node (section or entry) is shown in `surface` by its own audience list. */
+export function nodeShownIn(node: any, surface: CvSurface): boolean {
+  const allowed = audienceOf(node?.[ONLY_IN_KEY])
+  return allowed === null || allowed.includes(surface)
+}
+
+/** The audience list of `field` on `node` (null = unrestricted). */
+export function fieldAudience(node: any, field: string): CvSurface[] | null {
+  const map = node?.[FIELDS_ONLY_IN_KEY]
+  if (map === undefined || map === null) return null
+  if (!isPlainObject(map)) return []
+  return audienceOf(map[field])
+}
+
+/** Whether `field` of `node` is shown in `surface` by its audience list (hide flags are separate). */
+export function fieldShownIn(node: any, field: string, surface: CvSurface): boolean {
+  const allowed = fieldAudience(node, field)
+  return allowed === null || allowed.includes(surface)
+}
 
 /** Key added by pruning to public nodes; lists the names of hidden fields. */
 export const REDACTED_KEY = 'redacted' as const
@@ -94,9 +168,6 @@ export function isRedacted(node: any, field: string): boolean {
   return Array.isArray(node?.hiddenFields) && node.hiddenFields.includes(field)
 }
 
-const isPlainObject = (v: unknown): v is Record<string, any> =>
-  !!v && typeof v === 'object' && !Array.isArray(v)
-
 /** Empty value of the same type, so renderers that expect a string/array keep working. */
 function blankOf(v: unknown): unknown {
   if (typeof v === 'string') return ''
@@ -137,17 +208,24 @@ export function isSectionOnWebsite(section: any): boolean {
  * Visibility metadata is removed from the output; hidden fields are blanked
  * (type-preserving) so callers never crash on a missing string/array.
  */
-function pruneNode(node: any): any {
+function pruneNode(node: any, surface: CvSurface): any {
   if (Array.isArray(node)) {
-    return node.filter((item) => !isEntryHidden(item)).map(pruneNode)
+    return node.filter((item) => !isEntryHidden(item) && !(isPlainObject(item) && !nodeShownIn(item, surface))).map((item) => pruneNode(item, surface))
   }
   if (!isPlainObject(node)) return node
 
+  // A field outside this surface's audience is treated exactly like a hidden one.
   const hidden = new Set<string>(Array.isArray(node.hiddenFields) ? node.hiddenFields : [])
+  const audiences = node[FIELDS_ONLY_IN_KEY]
+  if (audiences !== undefined && audiences !== null) {
+    if (isPlainObject(audiences)) {
+      for (const name of Object.keys(audiences)) if (!fieldShownIn(node, name, surface)) hidden.add(name)
+    }
+  }
   const out: Record<string, any> = {}
   const redacted: string[] = []
   for (const [key, value] of Object.entries(node)) {
-    if ((VISIBILITY_KEYS as readonly string[]).includes(key) || key === REDACTED_KEY) continue
+    if ((VISIBILITY_KEYS as readonly string[]).includes(key) || key === REDACTED_KEY || key === ENTRY_UID_KEY) continue
     if ((EDITOR_META_KEYS as readonly string[]).includes(key)) continue
     if (hidden.has(key)) {
       out[key] = blankOf(value)
@@ -161,10 +239,10 @@ function pruneNode(node: any): any {
         : POSITIONAL_ITEM_FIELDS.includes(key)
           ? value.map((v, i) => (skip.has(i) ? HIDDEN_ITEM_MARK : v))
           : value.filter((_, i) => !skip.has(i))
-      out[key] = pruneNode(kept)
+      out[key] = pruneNode(kept, surface)
       continue
     }
-    out[key] = pruneNode(value)
+    out[key] = pruneNode(value, surface)
   }
   // A field hidden before it ever had a value (no key stored yet) is still
   // "hidden", not "empty": renderers that fill an empty field from another
@@ -188,7 +266,7 @@ function isRenderablePaper(paper: unknown): paper is Record<string, any> {
 }
 
 /** Prune one section's body while keeping its section-level switches for the renderer. */
-function pruneSection(section: CvSectionLike): CvSectionLike {
+function pruneSection(section: CvSectionLike, surface: CvSurface): CvSectionLike {
   const name = String(section.sessionName || '')
   const consent = CONSENT_LISTS[name]
   // An entry without consent is treated as hidden (positions stay intact, so
@@ -202,7 +280,7 @@ function pruneSection(section: CvSectionLike): CvSectionLike {
           ),
         }
       : section
-  const body = pruneNode(source)
+  const body = pruneNode(source, surface)
   // Papers: public data never carries what no view renders. A paper without
   // a title or without a valid status (empty, hidden, unknown) is shown
   // nowhere (lib/publications toPublication), so it is left out whole; a
@@ -227,7 +305,11 @@ function pruneSection(section: CvSectionLike): CvSectionLike {
   // only while the iD itself is public and still the confirmed one; the
   // connection time never leaves the editor.
   if (name === 'personalInformation' && ORCID_AUTH_FIELD in body) {
-    const hidden = isFieldHidden(section, 'orcid') || isFieldHidden(section, ORCID_AUTH_FIELD)
+    const hidden =
+      isFieldHidden(section, 'orcid') ||
+      isFieldHidden(section, ORCID_AUTH_FIELD) ||
+      !fieldShownIn(section, 'orcid', surface) ||
+      !fieldShownIn(section, ORCID_AUTH_FIELD, surface)
     const marker = publicOrcidAuth(section, hidden)
     if (marker) body[ORCID_AUTH_FIELD] = marker
     else delete body[ORCID_AUTH_FIELD]
@@ -281,30 +363,39 @@ export function withPublishedCaseStudies(sections: readonly CvSectionLike[], pub
   })
 }
 
+/**
+ * Which placement switch a view follows (the section's CV / Website
+ * switches). Kept under its historical name; WHERE the view goes is the
+ * separate CvSurface.
+ */
 export type CvAudience = 'cv' | 'website' | 'any'
 
 /**
  * Public view of one language's sections.
- *   'cv'      → only sections on the A4 CV
- *   'website' → only sections shown on the website
- *   'any'     → sections shown in at least one place (used by the public API)
+ *   audience 'cv'      → only sections on the A4 CV
+ *            'website' → only sections shown on the website
+ *            'any'     → sections shown in at least one place (the public API)
+ *   surface  'web' (default) | 'download' | 'private' → sections, entries
+ *            and fields whose audience list leaves this surface out are
+ *            removed like hidden ones (see the module comment)
  */
-export function publicSections(sections: unknown, audience: CvAudience = 'any'): CvSectionLike[] {
+export function publicSections(sections: unknown, audience: CvAudience = 'any', surface: CvSurface = 'web'): CvSectionLike[] {
   if (!Array.isArray(sections)) return []
   return sections
     .filter((s): s is CvSectionLike => isPlainObject(s))
     .filter((s) => {
+      if (!nodeShownIn(s, surface)) return false
       if (audience === 'cv') return isSectionOnCv(s)
       if (audience === 'website') return isSectionOnWebsite(s)
       return isSectionOnCv(s) || isSectionOnWebsite(s)
     })
-    .map(pruneSection)
+    .map((s) => pruneSection(s, surface))
 }
 
-export function publicCvDoc(doc: { en?: unknown; zh?: unknown }, audience: CvAudience = 'any'): CvDoc {
+export function publicCvDoc(doc: { en?: unknown; zh?: unknown }, audience: CvAudience = 'any', surface: CvSurface = 'web'): CvDoc {
   return {
-    en: publicSections(doc?.en, audience),
-    zh: publicSections(doc?.zh, audience),
+    en: publicSections(doc?.en, audience, surface),
+    zh: publicSections(doc?.zh, audience, surface),
   }
 }
 
@@ -404,4 +495,50 @@ function revealNode(node: any, isRoot: boolean): any {
 /** Remove every entry/field/bullet hide inside a section (section switches untouched). */
 export function revealAll(section: any): any {
   return revealNode(section, true)
+}
+
+// ── Audience helpers (editor side, immutable) ────────────────────────────
+
+/**
+ * A normalised audience list for storage: null (= every surface, the key is
+ * removed) when it names every surface, else the known surfaces in
+ * CV_SURFACES order. An empty list is kept: it means "nowhere".
+ */
+export function normalizeAudience(list: readonly unknown[] | null | undefined): CvSurface[] | null {
+  if (!list) return null
+  const picked = CV_SURFACES.filter((s) => list.includes(s))
+  return picked.length === CV_SURFACES.length ? null : picked
+}
+
+/** Set (or clear, with null / every surface) the node's own audience list (section or entry). */
+export function withNodeAudience<T extends Record<string, any>>(node: T, list: readonly CvSurface[] | null): T {
+  const next = normalizeAudience(list)
+  const out: any = { ...node }
+  if (next === null) delete out[ONLY_IN_KEY]
+  else out[ONLY_IN_KEY] = next
+  return out
+}
+
+/** Set (or clear) the audience list of one field of a node. */
+export function withFieldAudience<T extends Record<string, any>>(node: T, field: string, list: readonly CvSurface[] | null): T {
+  const next = normalizeAudience(list)
+  const cur = isPlainObject(node[FIELDS_ONLY_IN_KEY]) ? { ...node[FIELDS_ONLY_IN_KEY] } : {}
+  if (next === null) delete cur[field]
+  else cur[field] = next
+  const out: any = { ...node, [FIELDS_ONLY_IN_KEY]: cur }
+  if (Object.keys(cur).length === 0) delete out[FIELDS_ONLY_IN_KEY]
+  return out
+}
+
+/** Every audience restriction inside a node (its own, its fields', its entries' at any depth). */
+export function countAudienceLimits(node: any): number {
+  if (Array.isArray(node)) return node.reduce((n, x) => n + countAudienceLimits(x), 0)
+  if (!isPlainObject(node)) return 0
+  let n = audienceOf(node[ONLY_IN_KEY]) === null ? 0 : 1
+  if (isPlainObject(node[FIELDS_ONLY_IN_KEY])) n += Object.keys(node[FIELDS_ONLY_IN_KEY]).length
+  for (const [k, v] of Object.entries(node)) {
+    if ((VISIBILITY_KEYS as readonly string[]).includes(k)) continue
+    if (Array.isArray(v) || isPlainObject(v)) n += countAudienceLimits(v)
+  }
+  return n
 }
