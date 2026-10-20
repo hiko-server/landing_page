@@ -55,6 +55,7 @@ import {
   type ContactValues,
 } from '../Common/contactForm'
 import { CONTACT_DRAFT_KEY, CONTACT_FORM_ID, CONTACT_PREFILL_EVENT, prefillMessage } from '../../lib/contactPrefill'
+import { focusUntilItSticks } from '../../lib/focusAfterDialog'
 import { clearOfHeader } from '../../lib/anchorOffset'
 
 /** Nonces live 30 min server-side; refresh a little before that. */
@@ -423,14 +424,35 @@ export default function ContactPro({
   }, [])
 
   // "Ask Lucian directly" (lib/contactPrefill): a question "Ask" could not
-  // answer fills an empty message while the form is on the page.
+  // answer fills an empty message while the form is on the page. The form
+  // takes the hand-off (preventDefault: the palette leaves the scrolling to
+  // it), focuses the message once the palette's focus trap has let go
+  // (lib/focusAfterDialog — focused at once, the trap pulled it back and
+  // focus was lost to <body>), brings it into view and says what happened.
   const messageRef = useRef<HTMLTextAreaElement | null>(null)
+  const messageValueRef = useRef(values.message)
+  messageValueRef.current = values.message
+  const [prefillNote, setPrefillNote] = useState('')
   useEffect(() => {
     const onPrefill = (e: Event) => {
       const message = prefillMessage((e as CustomEvent<{ message?: unknown }>).detail?.message)
-      if (!message) return
-      setValues((v) => (v.message.trim() ? v : { ...v, message: message.slice(0, MESSAGE_MAX) }))
-      window.requestAnimationFrame(() => messageRef.current?.focus({ preventScroll: false }))
+      if (!message || !messageRef.current) return
+      e.preventDefault()
+      const kept = !!messageValueRef.current.trim()
+      if (!kept) setValues((v) => (v.message.trim() ? v : { ...v, message: message.slice(0, MESSAGE_MAX) }))
+      setPrefillNote(kept ? 'Your earlier message is kept in the Message field; the question was not added.' : 'Your question is in the Message field. Edit it or send it as it is.')
+      const behavior: ScrollBehavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+      focusUntilItSticks(messageRef.current, {
+        preventScroll: true,
+        onSettled: (stuck) => {
+          const el = messageRef.current
+          if (!el) return
+          // Centred, clear of the sticky header (the controls' scroll margins, styles/globals.css).
+          el.scrollIntoView({ block: 'center', behavior })
+          // The caret after the question, ready to add to it.
+          if (stuck && !kept) el.setSelectionRange(el.value.length, el.value.length)
+        },
+      })
     }
     window.addEventListener(CONTACT_PREFILL_EVENT, onPrefill)
     return () => window.removeEventListener(CONTACT_PREFILL_EVENT, onPrefill)
@@ -815,6 +837,10 @@ export default function ContactPro({
                 {/* Progressive disclosure: the reason's kind adds a few optional fields. */}
                 <Box aria-live="polite" className="sr-only">
                   {disclosureNote}
+                </Box>
+                {/* "Ask Lucian directly": where the question went. */}
+                <Box aria-live="polite" className="sr-only" data-prefill-note="">
+                  {prefillNote}
                 </Box>
                 {copy && shownIntent !== 'other' ? (
                   <MotionBox

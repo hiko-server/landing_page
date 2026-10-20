@@ -7,8 +7,9 @@
  * question is merged into the form's own draft in this browser
  * (localStorage, the key components/Contact/ContactPro autosaves to) before
  * /contact opens, and the form restores the draft as it mounts. When the
- * form is already on the page, CONTACT_PREFILL_EVENT fills it directly. An
- * existing draft message is never overwritten. Plain text only, length-capped.
+ * form is already on the page, CONTACT_PREFILL_EVENT fills it directly, and
+ * the form moves focus to its message and says so. An existing draft
+ * message is never overwritten. Plain text only, length-capped.
  */
 
 /** The contact form's draft (components/Contact/ContactPro). */
@@ -47,10 +48,15 @@ export function draftWithQuestion(raw: string | null, question: string): Record<
 }
 
 /**
- * Hand the question to the contact form: store it in the draft and tell a
- * mounted form. Returns false when there was nothing to hand over.
+ * Where a handed-over question went: `'form'` — a contact form on the page
+ * took it (it fills, scrolls to and focuses its message itself; it claims the
+ * event with preventDefault), `'draft'` — kept in the draft for the form to
+ * restore when /contact opens, `false` — nothing to hand over.
  */
-export function stashContactQuestion(question: string): boolean {
+export type ContactHandOff = 'form' | 'draft' | false
+
+/** Hand the question to the contact form: store it in the draft and tell a mounted form. */
+export function stashContactQuestion(question: string): ContactHandOff {
   if (typeof window === 'undefined') return false
   const message = prefillMessage(question)
   if (!message) return false
@@ -60,6 +66,6 @@ export function stashContactQuestion(question: string): boolean {
   } catch {
     /* storage unavailable: the event below still fills a mounted form */
   }
-  window.dispatchEvent(new CustomEvent<{ message: string }>(CONTACT_PREFILL_EVENT, { detail: { message } }))
-  return true
+  const taken = !window.dispatchEvent(new CustomEvent<{ message: string }>(CONTACT_PREFILL_EVENT, { detail: { message }, cancelable: true }))
+  return taken ? 'form' : 'draft'
 }

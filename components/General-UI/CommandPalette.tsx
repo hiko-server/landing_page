@@ -1087,9 +1087,10 @@ export default function CommandPalette({
       const question = (ask.state.question || query).trim()
       pending.current = () => {
         // Into the contact form's draft (and a mounted form) — never into the URL.
-        stashContactQuestion(question)
+        const handed = stashContactQuestion(question)
         if (router.pathname === '/contact') {
-          document.getElementById(CONTACT_FORM_ID)?.scrollIntoView({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' })
+          // A form that took the question brings its message into view and focuses it itself.
+          if (handed !== 'form') document.getElementById(CONTACT_FORM_ID)?.scrollIntoView({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' })
         } else void router.push(`/contact#${CONTACT_FORM_ID}`)
       }
     } else {

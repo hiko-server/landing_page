@@ -14,6 +14,7 @@
  *                  cannot be found, the source's anchor is scrolled to.
  */
 
+import { focusUntilItSticks } from '../../lib/focusAfterDialog'
 import { flatten, locateQuote } from '../../lib/search/quoteLocate'
 
 const HIGHLIGHT = 'cited-quote'
@@ -113,17 +114,16 @@ function mark(range: Range): void {
  * once the palette's focus trap has let go (it is released as the dialog
  * unmounts, just after its exit).
  */
-function focusBlock(el: HTMLElement | null, attempts = 8): void {
+function focusBlock(el: HTMLElement | null): void {
   if (!el || !el.isConnected) return
-  if (!el.hasAttribute('tabindex')) {
+  // A block without a tabindex gets one while it holds the focus.
+  const prepare = () => {
+    if (el.hasAttribute('tabindex')) return
     el.setAttribute('tabindex', '-1')
     el.addEventListener('blur', () => el.removeAttribute('tabindex'), { once: true })
   }
-  el.focus({ preventScroll: true })
   // The trap may still pull focus back for a frame or two: try again until it stays.
-  window.requestAnimationFrame(() => {
-    if (document.activeElement !== el && attempts > 1) focusBlock(el, attempts - 1)
-  })
+  focusUntilItSticks(el, { preventScroll: true, prepare })
 }
 
 /** Scroll, mark and focus a quote on the current page; false when neither it nor its anchor is there. */
