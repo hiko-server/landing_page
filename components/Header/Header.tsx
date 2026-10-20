@@ -21,6 +21,7 @@ import { useChromeToast } from '../Chrome/useChromeToast'
 import { useChromeUi } from '../Chrome/chromeLang'
 import { fillUi } from '../../lib/uiStrings'
 import LanguageSwitch from './LanguageSwitch'
+import { ZH_LANG } from '../../lib/zhRoutes'
 import { useShortcutsEnabled } from '../Chrome/useShortcutsEnabled'
 import { HIDE_ON_COARSE_POINTER, isApplePlatform, paletteKeyShortcuts, paletteShortcutLabel } from '../Chrome/platform'
 import {
@@ -43,6 +44,8 @@ import ThemeControl from './ThemeControl'
  * client-side navigations).
  *
  * Layout (lg+):      [logo · live-status]  [primary nav]  [中文 · ⌘K · theme ▾ · admin]
+ *                    (a 1fr · auto · 1fr grid: the nav is centred and never
+ *                    moves when a side changes width from page to page)
  * Layout (< lg):     [logo]                [中文 · ⌘K · theme ▾ · hamburger → drawer]
  *
  * Every word comes from the chrome's dictionary (lib/uiStrings/chrome,
@@ -109,7 +112,7 @@ const Header = ({
   const router = useRouter()
   const toast = useChromeToast()
   // The chrome's words (F3: Chinese on a Chinese page) and the page's other-language versions.
-  const { t, links: langLinks } = useChromeUi()
+  const { t, lang: uiLang, links: langLinks } = useChromeUi()
   const [isAdmin, setIsAdmin] = useState(false)
   const { isOpen, onOpen, onClose } = useDisclosure()
   const { isOpen: cmdkOpen, onOpen: openCmdk, onClose: closeCmdk } = useDisclosure()
@@ -311,9 +314,17 @@ const Header = ({
           alignItems="center"
           justifyContent="space-between"
           gap={4}
+          // lg+: three columns with the nav in the middle one, so the nav
+          // sits at the same place on every page — whether this page has a
+          // language switch, the live status has loaded, or the labels are
+          // Chinese (it then narrows about its centre). The side columns
+          // share what is left; a side wider than its share (the signed-in
+          // admin's buttons) takes what it needs.
+          display={{ base: 'flex', lg: 'grid' }}
+          gridTemplateColumns={{ lg: '1fr auto 1fr' }}
         >
           {/* Left: brand + live status */}
-          <Flex alignItems="center" gap={5} minW={0}>
+          <Flex alignItems="center" gap={5} minW={0} justifySelf="start">
             <Link
               as={NextLink}
               href="/"
@@ -325,6 +336,8 @@ const Header = ({
               fontSize="13px"
               fontWeight={600}
               letterSpacing="-0.01em"
+              // The domain is always Latin: it keeps its tracking on a Chinese page (globals.css).
+              data-script="latin"
               color="page.fg"
               _hover={{ textDecoration: 'none' }}
               whiteSpace="nowrap"
@@ -391,9 +404,12 @@ const Header = ({
           </Flex>
 
           {/* Right: utility */}
-          <Flex alignItems="center" gap={2}>
-            {/* This page in the other language, when it has one (F3). */}
-            <LanguageSwitch links={langLinks} />
+          <Flex alignItems="center" gap={2} justifySelf="end">
+            {/* This page in the other language, when it has one (F3). From
+                lg up its place is kept on a page without one, so the nav does
+                not move from page to page — signed out only: the admin's
+                buttons already fill the row at lg. */}
+            <LanguageSwitch links={langLinks} reserveFor={isAdmin ? undefined : uiLang === 'en' ? ZH_LANG : 'en'} />
 
             {/* ⌘K search trigger — opens the full CommandPalette */}
             <Button
