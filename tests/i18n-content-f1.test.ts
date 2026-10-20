@@ -341,8 +341,8 @@ test('globals.css: the Chinese typesetting layer', () => {
 })
 
 test('the article pages provide their language to the pieces inside (outline, image viewer, code copy)', () => {
-  for (const f of ['pages/blog/[slug].tsx', 'pages/work/[slug].tsx']) assert.match(read(f), /<ArticleRoot ui=\{articleUi\} lang=\{lang\}>/, f)
-  assert.match(read('components/Article/articleUi.tsx'), /<Box as="article" lang=\{lang\} className="article-page">/)
+  for (const f of ['pages/blog/[slug].tsx', 'pages/work/[slug].tsx']) assert.match(read(f), /<ArticleRoot ui=\{articleUi\} lang=\{lang\}[^>]*>/, f)
+  assert.match(read('components/Article/articleUi.tsx'), /<Box as="article" lang=\{lang\} className="article-page"[^>]*>/)
   for (const f of ['components/Article/ArticleBody.tsx', 'components/Article/TableOfContents.tsx', 'components/Article/ArticleProgress.tsx', 'components/Article/ArticleEnd.tsx', 'components/Article/ArticleNav.tsx', 'components/Article/AtAGlance.tsx']) {
     assert.match(read(f), /useArticleUi\(\)/, f)
   }
