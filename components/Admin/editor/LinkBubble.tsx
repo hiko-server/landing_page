@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useId, useRef, useState } from 'react'
 import { Box, Button, Flex, IconButton, Input, Text, Tooltip } from '@chakra-ui/react'
 import type { Editor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
+import { NodeSelection } from '@tiptap/pm/state'
+import { CellSelection } from '@tiptap/pm/tables'
 import { FaBold, FaCode, FaItalic, FaLink } from 'react-icons/fa'
 import { normalizeLinkHref } from './slashItems'
 
@@ -138,6 +140,8 @@ export default function LinkBubble({ editor, handleRef }: Props) {
         if (editingRef.current) return true
         if (!view.hasFocus() || !ed.isEditable) return false
         if (ed.isActive('image') || ed.isActive('codeBlock')) return false
+        // A selected block (figure, video, MDX) or a cell selection has its own toolbar.
+        if (state.selection instanceof NodeSelection || state.selection instanceof CellSelection) return false
         return from !== to && state.doc.textBetween(from, to).trim().length > 0
       }}
     >
@@ -179,7 +183,7 @@ export default function LinkBubble({ editor, handleRef }: Props) {
                 inputMode="url"
                 autoComplete="off"
                 spellCheck={false}
-                aria-invalid={!!error}
+                isInvalid={!!error}
                 aria-describedby={error ? `${inputId}-err` : undefined}
               />
               <Button size="sm" colorScheme="accent" onClick={apply} flexShrink={0}>

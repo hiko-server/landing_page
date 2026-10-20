@@ -9,9 +9,9 @@
  * page even if it is forgotten. The publish checklist warns about notes
  * still in the body and about sections that are still empty.
  *
- * The visual editor cannot hold MDX comments (they would be escaped), so
- * there the outline is inserted as headings only; the editor shows the same
- * guidance next to the body.
+ * The visual editor shows each note as an MDX block (editor/markdown keeps
+ * MDX it does not model verbatim), so both editor tabs insert the same
+ * outline.
  */
 
 export type TemplateSection = { heading: string; guide: string }

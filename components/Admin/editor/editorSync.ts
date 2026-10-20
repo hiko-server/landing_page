@@ -89,6 +89,8 @@ export type ToolbarState = {
   blockquote: boolean
   codeBlock: boolean
   link: boolean
+  table: boolean
+  callout: boolean
   canUndo: boolean
   canRedo: boolean
 }
@@ -104,6 +106,8 @@ export const EMPTY_TOOLBAR_STATE: ToolbarState = {
   blockquote: false,
   codeBlock: false,
   link: false,
+  table: false,
+  callout: false,
   canUndo: false,
   canRedo: false,
 }

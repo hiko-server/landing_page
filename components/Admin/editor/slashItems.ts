@@ -23,7 +23,11 @@ export type SlashItemId =
   | 'link'
   | 'note'
   | 'tip'
+  | 'important'
   | 'warning'
+  | 'caution'
+  | 'table'
+  | 'mdx'
   | 'outline'
 
 export type SlashItem = {
@@ -33,7 +37,11 @@ export type SlashItem = {
   keywords: string
   /** Needs a second step in the menu (an input) before it inserts anything. */
   step?: 'code' | 'youtube' | 'link'
+  /** Offered on this surface only (default: both). */
+  surface?: 'visual' | 'raw'
 }
+
+export type SlashSurface = 'visual' | 'raw'
 
 export const SLASH_ITEMS: SlashItem[] = [
   { id: 'h2', label: 'Heading 2', hint: 'Section title', keywords: 'h2 title section' },
@@ -43,18 +51,23 @@ export const SLASH_ITEMS: SlashItem[] = [
   { id: 'quote', label: 'Quote', hint: 'Block quote', keywords: 'blockquote citation' },
   { id: 'note', label: 'Note', hint: 'Callout', keywords: 'callout alert info aside admonition' },
   { id: 'tip', label: 'Tip', hint: 'Callout', keywords: 'callout alert hint advice admonition' },
+  { id: 'important', label: 'Important', hint: 'Callout', keywords: 'callout alert key crucial admonition' },
   { id: 'warning', label: 'Warning', hint: 'Callout', keywords: 'callout alert caution danger admonition' },
+  { id: 'caution', label: 'Caution', hint: 'Callout', keywords: 'callout alert danger risk stop admonition' },
+  { id: 'table', label: 'Table', hint: '3 × 3, header row', keywords: 'grid rows columns gfm spreadsheet' },
   { id: 'code', label: 'Code block', hint: 'With a language', keywords: 'pre fence snippet', step: 'code' },
   { id: 'divider', label: 'Divider', hint: 'Horizontal rule', keywords: 'hr rule separator line' },
   { id: 'image', label: 'Image', hint: 'Upload a picture', keywords: 'picture photo upload img' },
   { id: 'youtube', label: 'Video', hint: 'YouTube or Vimeo', keywords: 'video embed youtube vimeo movie player', step: 'youtube' },
   { id: 'link', label: 'Link to post / case study…', hint: 'Search your writing', keywords: 'internal link blog work', step: 'link' },
   { id: 'outline', label: 'Case-study outline', hint: 'Problem → lessons', keywords: 'template scaffold sections case study skeleton' },
+  { id: 'mdx', label: 'MDX block', hint: 'JSX / component', keywords: 'jsx component raw source html details figure', surface: 'visual' },
 ]
 
-/** Commands matching the text typed after "/" (all of them for an empty query). */
-export function filterSlashItems(query: string, items: readonly SlashItem[] = SLASH_ITEMS): SlashItem[] {
+/** Commands matching the text typed after "/" (all of them for an empty query), for one surface. */
+export function filterSlashItems(query: string, items: readonly SlashItem[] = SLASH_ITEMS, surface?: SlashSurface): SlashItem[] {
   const q = query.trim()
+  if (surface) items = items.filter((it) => !it.surface || it.surface === surface)
   if (!q) return [...items]
   return rankItems(
     items.map((it) => ({ ...it, label: it.label, keywords: `${it.keywords} ${it.hint}` })),
@@ -122,15 +135,23 @@ export function normalizeLinkHref(input: string): string | null {
 }
 
 /** GitHub alert marker of a callout command. */
-export const CALLOUT_MARKERS = { note: '[!NOTE]', tip: '[!TIP]', warning: '[!WARNING]' } as const
+export const CALLOUT_MARKERS = { note: '[!NOTE]', tip: '[!TIP]', important: '[!IMPORTANT]', warning: '[!WARNING]', caution: '[!CAUTION]' } as const
 
-/** Raw-MDX text a block command inserts at the caret (`|` marks where the caret goes). */
-export function rawSnippet(id: Exclude<SlashItemId, 'image' | 'youtube' | 'link' | 'code'>): string {
+/** Caret marker of snippets that contain `|` themselves (tables). */
+export const CARET_MARK = '\u2038'
+
+/** Raw-MDX text a block command inserts at the caret (`|` — or CARET_MARK in a table — marks where the caret goes). */
+export function rawSnippet(id: Exclude<SlashItemId, 'image' | 'youtube' | 'link' | 'code' | 'mdx'>): string {
   switch (id) {
     case 'note':
     case 'tip':
+    case 'important':
     case 'warning':
+    case 'caution':
       return `> ${CALLOUT_MARKERS[id]}\n> |`
+    case 'table':
+      // A GFM table: header row and one row, the caret in the first header cell.
+      return `| ${CARET_MARK} |  |\n| --- | --- |\n|  |  |`
     case 'outline': {
       // The caret lands at the end of the first guidance note's line.
       const t = caseStudyTemplate()
