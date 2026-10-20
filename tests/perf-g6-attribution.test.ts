@@ -130,9 +130,11 @@ test('migration 5 adds the nullable vitals.attr column, idempotently', () => {
   const db = analyticsDb()
   const cols = (db.prepare(`PRAGMA table_info(vitals)`).all() as Array<{ name: string; notnull: number }>).map((c) => [c.name, c.notnull])
   assert.deepEqual(cols.find(([n]) => n === 'attr'), ['attr', 0])
-  const last = ANALYTICS_MIGRATIONS[ANALYTICS_MIGRATIONS.length - 1]
-  assert.equal(last.name, 'vitals-attribution')
-  assert.doesNotThrow(() => last.up(db))
+  // Found by name: later migrations (admin-ops' events, 006) follow it in the list.
+  const attribution = ANALYTICS_MIGRATIONS.find((m) => m.name === 'vitals-attribution')
+  assert.ok(attribution, 'the vitals-attribution migration is registered')
+  assert.equal(ANALYTICS_MIGRATIONS.indexOf(attribution!), 4, 'it is migration 5')
+  assert.doesNotThrow(() => attribution!.up(db))
 })
 
 test('vitalAttributionSince groups per metric × page × element, worst first, with phase p75s', () => {

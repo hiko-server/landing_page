@@ -1,4 +1,4 @@
-import { Accordion, Badge, Checkbox, List, Menu, NumberInput, Progress, Switch, Table, Tabs, Tag, Tooltip } from '@chakra-ui/theme/components'
+import { Accordion, Badge, Checkbox, List, Menu, NumberInput, Popover, Progress, Switch, Table, Tabs, Tag, Tooltip } from '@chakra-ui/theme/components'
 
 /**
  * Chakra's default styles for the themed components only the admin renders.
@@ -13,6 +13,7 @@ export const ADMIN_COMPONENT_STYLES = {
   List,
   Menu,
   NumberInput,
+  Popover,
   Progress,
   Switch,
   Table,

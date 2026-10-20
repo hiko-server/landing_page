@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
 import { chakra, type ToastOptions } from '@chakra-ui/react'
-import { motion, useIsPresent, type Variants } from 'framer-motion'
+import { m, useIsPresent, type Variants } from 'framer-motion'
 import { createPausableClock, toastDuration, toastRole } from '../../lib/notify'
 import { motionTransition } from '../../theme/tokens'
 
@@ -105,7 +105,7 @@ function UnifiedToastImpl(props: Props) {
   )
 
   return (
-    <motion.div
+    <m.div
       layout
       className="chakra-toast"
       variants={motionVariants}
@@ -126,7 +126,7 @@ function UnifiedToastImpl(props: Props) {
       <chakra.div role={toastRole(status)} aria-atomic="true" className="chakra-toast__inner" __css={containerStyles}>
         {typeof message === 'function' ? message({ id, onClose: close }) : message}
       </chakra.div>
-    </motion.div>
+    </m.div>
   )
 }
 
