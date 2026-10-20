@@ -6,8 +6,11 @@ import { test, expect, settle, seriousA11yViolations, ADMIN, loginAsAdmin } from
  * Content). Every test is @admin and creates its own synthetic, published
  * post ("Example health check post") through the admin API, then deletes it.
  * Nothing here needs the network: the link checker is never started (it would
- * request example.com), so only rules that read the content itself are used —
- * a tracking parameter (with its one-click fix) and a second h1.
+ * request example.org), so only rules that read the content itself are used —
+ * a tracking parameter (with its one-click fix) and a second h1. The link's
+ * host is example.org, never example.com: the container gate builds the site
+ * as example.com (NEXT_PUBLIC_SITE_HOST), and a link to the site's own host
+ * is internal, where tracking parameters are not flagged.
  */
 
 async function adminJson(
@@ -39,7 +42,7 @@ async function createPost(page: Page, slug: string) {
       description:
         'Created by the end-to-end suite to exercise the content health center; deleted afterwards.',
     },
-    body: '# Example big heading\n\nRead [the example guide](https://example.com/guide?utm_source=e2e&utm_medium=test&id=7).\n',
+    body: '# Example big heading\n\nRead [the example guide](https://example.org/guide?utm_source=e2e&utm_medium=test&id=7).\n',
   })
   expect(created.status, JSON.stringify(created.json)).toBe(200)
 }
@@ -122,7 +125,7 @@ test.describe('admin-ops: content health', { tag: '@admin' }, () => {
       await expect(group.locator('[data-check="tracking"]')).toHaveCount(0)
       await expect(group.locator('[data-check="heading"]')).toHaveCount(1)
       const stored = await adminJson(page, 'GET', `/api/admin/posts?slug=${slug}`)
-      expect(stored.json.body).toContain('(https://example.com/guide?id=7)')
+      expect(stored.json.body).toContain('(https://example.org/guide?id=7)')
       expect(stored.json.body).not.toContain('utm_')
     } finally {
       await adminJson(page, 'DELETE', `/api/admin/posts?slug=${slug}`)
