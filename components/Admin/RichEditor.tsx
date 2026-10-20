@@ -685,6 +685,28 @@ export default function RichEditor({
     return () => window.clearTimeout(t)
   }, [value, tabIndex])
 
+  // The banner below the tabs is not a live region: its parser message
+  // changes at every pause while a component is typed, and re-reading it
+  // each time would talk over the typing. Only its coming and going is
+  // announced (politely); the words are in the banner, and in the dialog a
+  // switch to Visual opens.
+  const fidelityState = fidelity.ok ? 'ok' : fidelity.reason
+  const announcedFidelity = useRef(fidelityState)
+  useEffect(() => {
+    const was = announcedFidelity.current
+    if (was === fidelityState) return
+    announcedFidelity.current = fidelityState
+    announce(
+      fidelityState === 'parse'
+        ? 'This body is not valid MDX yet, so the visual editor cannot open it.'
+        : fidelityState === 'lossy'
+          ? 'The visual editor would rewrite part of this body.'
+          : was === 'parse'
+            ? 'The MDX is valid again.'
+            : 'The visual editor can open this body again.',
+    )
+  }, [fidelityState, announce])
+
   // Bring TipTap's document up to date: outside values at once, raw MDX
   // typing when the Visual tab opens. Content set here never emits an update,
   // and identical content (as Markdown) is not set again.
@@ -1060,6 +1082,8 @@ export default function RichEditor({
 
         {!fidelity.ok ? (
           <Alert
+            // Not role="alert": see the announcement effect above.
+            addRole={false}
             status={fidelity.reason === 'parse' ? 'error' : 'warning'}
             variant="left-accent"
             borderRadius="md"

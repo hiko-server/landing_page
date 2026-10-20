@@ -206,7 +206,9 @@ function PreviewPane({
           fontSize="12px"
           fontFamily={MONO}
           color="page.fg"
-          role="alert"
+          // Not an alert: it changes with every compile while typing; the
+          // status line above ("Not compiling") already says so politely.
+          data-testid="preview-problem"
         >
           {problemText(state.problem)}
           {state.result ? (
