@@ -12,6 +12,10 @@ const BOTTOM = 'calc(var(--bottom-bar-h, calc(8px + env(safe-area-inset-bottom, 
 /**
  * Floating "back to top" control (all routes).
  *
+ * - Fades and rises in once the visitor is SHOW_AFTER px down, fades out
+ *   near the top (`.scroll-top`, globals.css; instant under reduced motion).
+ *   While hidden it is `visibility: hidden`: out of the tab order and the
+ *   accessibility tree.
  * - Smooth scroll, or an instant jump under prefers-reduced-motion.
  * - Focus moves to the top of the page (the <main> landmark when present) so
  *   keyboard and screen-reader users land where the viewport did, instead of
@@ -69,11 +73,11 @@ const ScrollToTop: React.FC = () => {
       boxShadow="0 8px 28px rgba(0,0,0,0.12)"
       _hover={{ color: 'page.fg', borderColor: 'page.border-strong', bg: 'page.float-bg' }}
       _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
-      className="no-print glass"
+      className="no-print glass scroll-top"
+      data-visible={isVisible}
       aria-label="Scroll to top"
       lang={chromeLang}
       title="Scroll to top"
-      display={isVisible ? 'inline-flex' : 'none'}
     />
   )
 }

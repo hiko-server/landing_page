@@ -3,6 +3,7 @@ import type { AppProps } from 'next/app'
 import Head from 'next/head'
 import localFont from 'next/font/local'
 import { ChakraProvider } from '@chakra-ui/react'
+import { CacheProvider } from '@emotion/react'
 import { AnimatePresence, MotionConfig, motion } from 'framer-motion'
 
 // v6 global design layer (CSS variables, dot grid, helper classes,
@@ -30,6 +31,7 @@ import { installErrorCapture } from '../lib/errors/capture'
 import { RestoreScrollOnMount, useDeferredScrollRestore } from '../components/Common/scrollRestore'
 import { ClockProvider } from '../lib/clock'
 import { motionTransition } from '../theme/tokens'
+import { createSiteEmotionCache } from '../lib/hoverMedia'
 
 // v6 typography — Geist (SIL OFL, public/fonts/OFL-Geist.txt), self-hosted
 // variable fonts so the build never depends on a font CDN. Exactly two files
@@ -195,4 +197,18 @@ const App = ({ Component, pageProps, router }: AppProps) => {
   )
 }
 
-export default App
+/**
+ * The site's Emotion cache around everything Chakra renders: hover styles
+ * apply only where a pointer can hover (lib/hoverMedia.ts). One cache per
+ * server render, one for the browser's lifetime.
+ */
+const SiteApp = (props: AppProps) => {
+  const [emotionCache] = useState(createSiteEmotionCache)
+  return (
+    <CacheProvider value={emotionCache}>
+      <App {...props} />
+    </CacheProvider>
+  )
+}
+
+export default SiteApp

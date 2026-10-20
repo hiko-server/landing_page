@@ -231,11 +231,18 @@ h3,
   background-position: 0 100%;
   transition: background-size var(--duration-base) var(--ease-standard);
 }
-.link-underline:hover,
 .link-underline:focus-visible,
-a:hover > .link-underline,
 a:focus-visible > .link-underline {
   background-size: 100% 1px;
+}
+/* Hover effects only where a pointer can hover: on a touch screen a tapped
+   element would otherwise keep its hover look until the next tap elsewhere.
+   (Chakra hover styles get the same guard from lib/hoverMedia.ts.) */
+@media (hover: hover) {
+  .link-underline:hover,
+  a:hover > .link-underline {
+    background-size: 100% 1px;
+  }
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -464,15 +471,21 @@ html:active-view-transition-type(prev, back)::view-transition-new(root) {
   display: inline-block;
   transition: transform var(--duration-fast) var(--ease-standard);
 }
-a:hover .nudge,
-a:focus-visible .nudge,
-button:hover .nudge {
+a:focus-visible .nudge {
   transform: translateX(3px);
 }
-a:hover .nudge-ne,
-a:focus-visible .nudge-ne,
-button:hover .nudge-ne {
+a:focus-visible .nudge-ne {
   transform: translate(2px, -2px);
+}
+@media (hover: hover) {
+  a:hover .nudge,
+  button:hover .nudge {
+    transform: translateX(3px);
+  }
+  a:hover .nudge-ne,
+  button:hover .nudge-ne {
+    transform: translate(2px, -2px);
+  }
 }
 
 /* Whole-card link: the ::after covers the nearest positioned ancestor. */
@@ -526,11 +539,17 @@ button:hover .nudge-ne {
   top: 50%;
   translate: 0 -50%;
 }
-.hint-wrap:hover .hint,
 .hint-wrap:focus-within .hint {
   opacity: 1;
   transform: none;
   transition-delay: var(--hint-delay, 300ms);
+}
+@media (hover: hover) {
+  .hint-wrap:hover .hint {
+    opacity: 1;
+    transform: none;
+    transition-delay: var(--hint-delay, 300ms);
+  }
 }
 [data-hint-instant] .hint {
   --hint-delay: 0ms;
@@ -655,6 +674,67 @@ button:hover .nudge-ne {
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
+ * Interaction motion — the sticky header, slow navigations, touch presses,
+ * reading aids and the keyboard layer. Every duration is a motion token, so
+ * reduced motion makes all of it instant.
+ * ──────────────────────────────────────────────────────────────────────── */
+
+/* Touch press feedback (touch screens only; a mouse has hover instead).
+   No grey tap flash; cards and list rows (`.pressable`) tint and sink a
+   little while pressed — after 40ms, so a touch that turns into a scroll
+   does not flash; plain links dim. Buttons press in through the theme. */
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+@media (hover: none) and (pointer: coarse) {
+  html .pressable {
+    transition:
+      transform var(--duration-fast) var(--ease-standard),
+      box-shadow var(--duration-fast) var(--ease-standard);
+  }
+  html .pressable:active {
+    transform: scale(0.985);
+    box-shadow: inset 0 0 0 100vmax var(--chakra-colors-page-hover);
+    transition-delay: 40ms;
+  }
+  html :where(a[href]):active:not(.pressable, .pressable *) {
+    opacity: 0.6;
+    transition: opacity var(--duration-fast) var(--ease-standard) 40ms;
+  }
+}
+@media (hover: none) and (pointer: coarse) and (prefers-reduced-motion: reduce) {
+  html .pressable:active {
+    transform: none;
+  }
+}
+
+/* Scroll-to-top (components/ScrollToTop): fades and rises in, fades out —
+   hidden it is out of the tab order and the accessibility tree. */
+html .scroll-top {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(8px) scale(0.96);
+  transition:
+    opacity var(--duration-base) var(--ease-standard),
+    transform var(--duration-base) var(--ease-standard),
+    visibility 0s linear var(--duration-base);
+}
+html .scroll-top[data-visible='true'] {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+  transition:
+    opacity var(--duration-base) var(--ease-standard),
+    transform var(--duration-base) var(--ease-standard),
+    visibility 0s;
+}
+html .scroll-top[data-visible='true']:active {
+  transform: scale(0.94);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
  * Reduced motion — respect user preference everywhere.
  * ──────────────────────────────────────────────────────────────────────── */
 /* The reduced-motion zero of the duration tokens (theme/tokens.ts). */
@@ -734,11 +814,15 @@ button:hover .nudge-ne {
     color: MarkText;
   }
   /* The animated underline is a background gradient; use a real underline. */
-  .link-underline:hover,
   .link-underline:focus-visible,
-  a:hover > .link-underline,
   a:focus-visible > .link-underline {
     text-decoration: underline;
+  }
+  @media (hover: hover) {
+    .link-underline:hover,
+    a:hover > .link-underline {
+      text-decoration: underline;
+    }
   }
   .rail-fill,
   .rail-dot,
