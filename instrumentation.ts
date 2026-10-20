@@ -9,8 +9,9 @@
 //   - starts the scheduled, change-aware backups (lib/backupSchedule), the
 //     weekly restore drill (lib/restoreDrill), the nightly expiry of
 //     contact messages (lib/inboxRetention) and the daily external-link check
-//     of the content health center (lib/contentHealth/schedule) and the
-//     daily roll-up / retention of goal events (lib/analytics/events) — never
+//     of the content health center (lib/contentHealth/schedule), the
+//     daily roll-up / retention of goal events (lib/analytics/events) and the
+//     weekly analytics digest (lib/analytics/digestSchedule) — never
 //     during `next build`, and only once per process;
 //   - warns in the log when mail would be sent From a domain whose DMARC
 //     policy the SMTP account cannot pass (lib/mailAlignment);
@@ -36,6 +37,7 @@ type InstrumentationGlobal = typeof globalThis & {
   __inboxRetentionStarted?: boolean
   __contentHealthScheduleStarted?: boolean
   __eventsMaintenanceStarted?: boolean
+  __analyticsDigestStarted?: boolean
 }
 
 export async function register() {
@@ -113,6 +115,18 @@ export async function register() {
       } catch (err) {
         const { log } = await import('./lib/log')
         log.error('could not start the goal-event retention', { err })
+      }
+    }
+    if (!building && !g.__analyticsDigestStarted) {
+      // The weekly analytics digest e-mail, when switched on and SMTP is set
+      // (lib/analytics/digestSchedule): checked hourly, sent Mondays.
+      g.__analyticsDigestStarted = true
+      try {
+        const { startDigestSchedule } = await import('./lib/analytics/digestSchedule')
+        startDigestSchedule()
+      } catch (err) {
+        const { log } = await import('./lib/log')
+        log.error('could not start the analytics digest schedule', { err })
       }
     }
     if (!building) {

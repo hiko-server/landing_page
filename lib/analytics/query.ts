@@ -28,7 +28,7 @@ import {
  */
 
 const RANGE_DAYS: Record<AnalyticsRange, number> = { '7d': 7, '30d': 30, '12m': 365 }
-const TOP_N = 10
+export const TOP_N = 10
 /**
  * The report names up to TOP_N referrer hosts that look like real public
  * names; implausible hosts (IP literals, single labels, legacy junk) and the
@@ -39,26 +39,27 @@ const TOP_N = 10
  * per-network budgets in lib/analytics/limits).
  */
 const MIN_REFERRER_VISITORS = 1
-const LIVE_WINDOW_MS = 5 * 60_000
+export const LIVE_WINDOW_MS = 5 * 60_000
 
-type Db = ReturnType<typeof getAnalyticsDb>
-type Span = { from: string; to: string }
+export type Db = ReturnType<typeof getAnalyticsDb>
+export type Span = { from: string; to: string }
 
-function rolledThrough(db: Db): string | null {
+export function rolledThrough(db: Db): string | null {
   const row = db.prepare("SELECT value FROM meta WHERE key = 'rolled_through'").get() as { value: string } | undefined
   return row?.value ?? null
 }
 
 /** Split [from, to] into the rolled-up part and the part still read from raw hits. */
-function split(span: Span, rolled: string | null): { rolled: Span | null; raw: Span | null } {
+export function split(span: Span, rolled: string | null): { rolled: Span | null; raw: Span | null } {
+  if (span.from > span.to) return { rolled: null, raw: null }
   if (!rolled || rolled < span.from) return { rolled: null, raw: span }
   if (rolled >= span.to) return { rolled: span, raw: null }
   return { rolled: { from: span.from, to: rolled }, raw: { from: dayMinus(rolled, -1), to: span.to } }
 }
 
-type DayTotals = Map<string, { views: number; visitors: number }>
+export type DayTotals = Map<string, { views: number; visitors: number }>
 
-function siteByDay(db: Db, span: Span, rolled: string | null): DayTotals {
+export function siteByDay(db: Db, span: Span, rolled: string | null): DayTotals {
   const out: DayTotals = new Map()
   const parts = split(span, rolled)
   if (parts.rolled) {
@@ -78,7 +79,7 @@ function siteByDay(db: Db, span: Span, rolled: string | null): DayTotals {
   return out
 }
 
-function sumTotals(t: DayTotals): { views: number; visitors: number } {
+export function sumTotals(t: DayTotals): { views: number; visitors: number } {
   let views = 0
   let visitors = 0
   for (const v of t.values()) {
@@ -88,12 +89,12 @@ function sumTotals(t: DayTotals): { views: number; visitors: number } {
   return { views, visitors }
 }
 
-function kpi(value: number, previous: number, comparable: boolean): Kpi {
+export function kpi(value: number, previous: number, comparable: boolean): Kpi {
   return { value, previous, delta: comparable && previous > 0 ? (value - previous) / previous : null }
 }
 
 /** Merge per-key counts from the rolled and raw parts, sorted by visitors (then views, then key). */
-function merge(rows: Array<{ key: string; visitors: number; views?: number }>, withViews: boolean): CountRow[] {
+export function merge(rows: Array<{ key: string; visitors: number; views?: number }>, withViews: boolean): CountRow[] {
   const acc = new Map<string, CountRow>()
   for (const r of rows) {
     const cur = acc.get(r.key) || (withViews ? { key: r.key, visitors: 0, views: 0 } : { key: r.key, visitors: 0 })
@@ -106,10 +107,10 @@ function merge(rows: Array<{ key: string; visitors: number; views?: number }>, w
   )
 }
 
-const mergeTop = (rows: Array<{ key: string; visitors: number; views?: number }>, withViews: boolean): CountRow[] =>
-  merge(rows, withViews).slice(0, TOP_N)
+const mergeTop = (rows: Array<{ key: string; visitors: number; views?: number }>, withViews: boolean, limit = TOP_N): CountRow[] =>
+  merge(rows, withViews).slice(0, limit)
 
-function topPages(db: Db, span: Span, rolled: string | null): CountRow[] {
+export function topPages(db: Db, span: Span, rolled: string | null, limit = TOP_N): CountRow[] {
   const parts = split(span, rolled)
   const rows: Array<{ key: string; visitors: number; views: number }> = []
   if (parts.rolled) {
@@ -129,10 +130,24 @@ function topPages(db: Db, span: Span, rolled: string | null): CountRow[] {
         .all(parts.raw.from, parts.raw.to) as typeof rows),
     )
   }
-  return mergeTop(rows, true)
+  return mergeTop(rows, true, limit)
 }
 
-function topReferrers(db: Db, span: Span, rolled: string | null): CountRow[] {
+/**
+ * Name up to `limit` plausible referrer hosts (by visitors) and sum the
+ * rest — implausible hosts and the tail — into one OTHER_KEY row.
+ */
+export function nameReferrers(rows: Array<{ key: string; visitors: number }>, limit = TOP_N): CountRow[] {
+  const named: CountRow[] = []
+  let other = 0
+  for (const r of merge(rows, false)) {
+    if (named.length < limit && r.visitors >= MIN_REFERRER_VISITORS && isPlausibleHost(r.key)) named.push(r)
+    else other += r.visitors
+  }
+  return other > 0 ? [...named, { key: OTHER_KEY, visitors: other }] : named
+}
+
+export function topReferrers(db: Db, span: Span, rolled: string | null, limit = TOP_N): CountRow[] {
   const parts = split(span, rolled)
   const rows: Array<{ key: string; visitors: number }> = []
   if (parts.rolled) {
@@ -152,19 +167,13 @@ function topReferrers(db: Db, span: Span, rolled: string | null): CountRow[] {
         .all(parts.raw.from, parts.raw.to) as typeof rows),
     )
   }
-  const named: CountRow[] = []
-  let other = 0
-  for (const r of merge(rows, false)) {
-    if (named.length < TOP_N && r.visitors >= MIN_REFERRER_VISITORS && isPlausibleHost(r.key)) named.push(r)
-    else other += r.visitors
-  }
-  return other > 0 ? [...named, { key: OTHER_KEY, visitors: other }] : named
+  return nameReferrers(rows, limit)
 }
 
 const DIMENSION_COLUMN = { country: 'country', device: 'device', browser: 'browser' } as const
-type Dimension = keyof typeof DIMENSION_COLUMN
+export type Dimension = keyof typeof DIMENSION_COLUMN
 
-function topDimension(db: Db, kind: Dimension, span: Span, rolled: string | null): CountRow[] {
+export function topDimension(db: Db, kind: Dimension, span: Span, rolled: string | null, limit = TOP_N): CountRow[] {
   const parts = split(span, rolled)
   const column = DIMENSION_COLUMN[kind]
   const rows: Array<{ key: string; visitors: number; views: number }> = []
@@ -188,7 +197,7 @@ function topDimension(db: Db, kind: Dimension, span: Span, rolled: string | null
         .all(parts.raw.from, parts.raw.to) as typeof rows),
     )
   }
-  return mergeTop(rows, true)
+  return mergeTop(rows, true, limit)
 }
 
 function buildSeries(byDay: DayTotals, span: Span, bucket: 'day' | 'month'): SeriesPoint[] {
@@ -212,10 +221,32 @@ export function p75(sorted: number[]): number {
   return sorted[Math.max(0, Math.ceil(sorted.length * 0.75) - 1)]
 }
 
-function vitalsSince(db: Db, fromDay: string): VitalP75[] {
+/**
+ * Which Web Vitals samples a filtered view covers: vitals carry the page
+ * (route) and the device class, nothing that links them to a visitor, so
+ * only page and device filters apply to them.
+ */
+export type VitalsScope = {
+  route?: { op: 'is' | 'not'; value: string }
+  device?: { op: 'is' | 'not'; value: string }
+}
+
+function scopeSql(scope: VitalsScope | undefined): { sql: string; params: string[] } {
+  const parts: string[] = []
+  const params: string[] = []
+  for (const [col, f] of [['route', scope?.route], ['device', scope?.device]] as const) {
+    if (!f) continue
+    parts.push(f.op === 'is' ? `${col} = ?` : `(${col} IS NULL OR ${col} <> ?)`)
+    params.push(f.value)
+  }
+  return { sql: parts.length ? ` AND ${parts.join(' AND ')}` : '', params }
+}
+
+export function vitalsSince(db: Db, fromDay: string, scope?: VitalsScope): VitalP75[] {
+  const where = scopeSql(scope)
   const rows = db
-    .prepare('SELECT route, name, value FROM vitals WHERE day >= ? ORDER BY name, route, value')
-    .all(fromDay) as Array<{ route: string; name: string; value: number }>
+    .prepare(`SELECT route, name, value FROM vitals WHERE day >= ?${where.sql} ORDER BY name, route, value`)
+    .all(fromDay, ...where.params) as Array<{ route: string; name: string; value: number }>
   const groups = new Map<string, { route: string; name: VitalName; values: number[] }>()
   const add = (route: string, name: VitalName, value: number) => {
     const k = `${name}\u0000${route}`
@@ -269,10 +300,11 @@ function mostFrequent<T>(values: Array<T | null>): T | null {
  * ATTRIBUTION_ROWS_PER_METRIC each. Stored attribution is re-validated, so a
  * malformed row is skipped rather than shown.
  */
-export function vitalAttributionSince(db: Db, fromDay: string): VitalAttributionRow[] {
+export function vitalAttributionSince(db: Db, fromDay: string, scope?: VitalsScope): VitalAttributionRow[] {
+  const where = scopeSql(scope)
   const rows = db
-    .prepare(`SELECT route, name, value, attr FROM vitals WHERE day >= ? AND attr IS NOT NULL AND name IN ('LCP', 'INP', 'CLS')`)
-    .all(fromDay) as Array<{ route: string; name: string; value: number; attr: string }>
+    .prepare(`SELECT route, name, value, attr FROM vitals WHERE day >= ? AND attr IS NOT NULL AND name IN ('LCP', 'INP', 'CLS')${where.sql}`)
+    .all(fromDay, ...where.params) as Array<{ route: string; name: string; value: number; attr: string }>
   type Group = { name: AttributedVital; route: string; el: string | null; values: number[]; poor: number; phases: Record<string, number[]>; images: number; types: Array<'pointer' | 'keyboard' | null>; states: Array<LoadState | null> }
   const groups = new Map<string, Group>()
   for (const r of rows) {
@@ -323,7 +355,7 @@ export function vitalAttributionSince(db: Db, fromDay: string): VitalAttribution
   })
 }
 
-function oldestDay(db: Db): string | null {
+export function oldestDay(db: Db): string | null {
   const row = db
     .prepare(
       `SELECT min(d) AS d FROM (

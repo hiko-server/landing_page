@@ -1,8 +1,11 @@
+import { EXPLORE_PARAM_KEYS } from '../../../lib/analytics/exploreShared'
+
 /**
  * Dashboard tab ⇆ URL query mapping (pure — unit tested).
  *
  *   ?tab=home | cv | versions | storage | inbox | analytics   (legacy alias: history → versions)
  *   ?view=raw                             (CV tab only: the raw JSON editor)
+ *   ?period=…&f=…                         (Analytics only: the explore view, lib/analytics/exploreShared)
  */
 
 // Order = Alt/⌃+1…6 shortcuts; new tabs go at the end so existing ones keep their keys.
@@ -28,10 +31,11 @@ export function parseDashboardQuery(query: Query): { tab: DashboardTab; view: Cv
   return { tab, view }
 }
 
-/** Query for a tab / view, keeping unrelated params and dropping a stale ?view=. */
+/** Query for a tab / view, keeping unrelated params and dropping a stale ?view= (and the Analytics view's own parameters on other tabs). */
 export function dashboardQuery(query: Query, tab: DashboardTab, view: CvView = 'studio'): Query {
   const next: Query = { ...query, tab }
   if (tab === 'cv' && view === 'raw') next.view = 'raw'
   else delete next.view
+  if (tab !== 'analytics') for (const k of EXPLORE_PARAM_KEYS) delete next[k]
   return next
 }

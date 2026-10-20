@@ -1,14 +1,22 @@
 import { withApi } from '../../../lib/apiHandler'
 import { isAdminRequest } from '../../../lib/auth'
-import { getAnalyticsReport } from '../../../lib/analytics/query'
-import { parseRange } from '../../../lib/analytics/shared'
+import { getDimensionValues, getExploreReport } from '../../../lib/analytics/explore'
+import { isExploreDimension, parseExploreQuery } from '../../../lib/analytics/exploreShared'
 
 /**
- * GET /api/admin/analytics?range=7d|30d|12m (default 30d) — the admin
- * Analytics report (lib/analytics/query): KPIs with deltas vs the previous
- * period, a daily (monthly for 12m) series, top pages / referrers /
- * countries / devices / browsers, live visitors (last 5 min) and Web Vitals
- * p75 per route × metric over 7 and 28 days. Admin only, never cached.
+ * GET /api/admin/analytics — the admin Analytics explore report
+ * (lib/analytics/explore): KPIs with deltas vs the previous period, the
+ * series (and the previous period's with compare=1), top pages / referrers /
+ * countries / devices / browsers / page languages, publish marks, live
+ * visitors, Web Vitals p75 and their attribution over 7 and 28 days, and —
+ * with one page chosen — that page's goals.
+ *
+ *   ?period=7d|30d|…|custom&from=&to=&compare=1&f=<dim>:<is|not>:<value>
+ *   ?range=7d|30d|12m                 the earlier form (still answered)
+ *   ?values=<dimension>               the values to offer in the filter
+ *                                     picker for the same view: { dim, values }
+ *
+ * Admin only, never cached.
  */
 export default withApi('admin/analytics', (req, res) => {
   res.setHeader('Cache-Control', 'no-store')
@@ -17,6 +25,11 @@ export default withApi('admin/analytics', (req, res) => {
     res.setHeader('Allow', 'GET')
     return res.status(405).json({ error: 'Method not allowed' })
   }
-  const range = parseRange(Array.isArray(req.query.range) ? req.query.range[0] : req.query.range)
-  return res.status(200).json(getAnalyticsReport(range))
+  const query = parseExploreQuery(req.query)
+  const values = Array.isArray(req.query.values) ? req.query.values[0] : req.query.values
+  if (values !== undefined) {
+    if (!isExploreDimension(values)) return res.status(400).json({ error: 'Unknown dimension' })
+    return res.status(200).json({ dim: values, values: getDimensionValues(query, values) })
+  }
+  return res.status(200).json(getExploreReport(query))
 })
