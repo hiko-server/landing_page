@@ -105,35 +105,36 @@ test.describe('head', () => {
   })
 })
 
-test.describe('language of the English chrome', () => {
-  test('/cv/zh: header, footer, skip link, palette, its toasts and the drawer are lang="en"; the CV stays zh-Hans', async ({ page, context }) => {
+test.describe('language of the chrome', () => {
+  test('/cv/zh (F3): header, footer, skip link, palette, its toasts and the drawer speak Chinese and inherit lang="zh-Hans"', async ({ page, context }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write'])
     await page.goto('/cv/zh')
     await settle(page)
     await expect(page.locator('html')).toHaveAttribute('lang', 'zh-Hans')
-    expect(await page.locator('header').first().evaluate(nearestLang)).toBe('en')
-    expect(await page.locator('footer.glass').evaluate(nearestLang)).toBe('en')
-    expect(await page.locator('a.skip-nav').evaluate(nearestLang)).toBe('en')
+    for (const el of [page.locator('header').first(), page.locator('footer.glass'), page.locator('a.skip-nav')]) {
+      expect(await el.evaluate((n) => n.closest('[lang]')?.tagName)).toBe('HTML')
+    }
+    await expect(page.locator('a.skip-nav')).toHaveText('跳到正文')
     expect(await page.locator('main h1').first().evaluate(nearestLang)).toBe('zh-Hans')
     if (await page.locator('#A4Paper').count()) expect(await page.locator('#A4Paper').evaluate(nearestLang)).toBe('zh-Hans')
 
     // ⌘K palette (portaled to <body>) and a toast raised from it.
     await page.keyboard.press('ControlOrMeta+KeyK')
-    const palette = page.getByRole('dialog', { name: 'Command palette' })
+    const palette = page.getByRole('dialog', { name: '命令面板' })
     await expect(palette).toBeVisible()
-    expect(await palette.evaluate(nearestLang)).toBe('en')
-    await page.getByRole('combobox', { name: /search/i }).fill('copy link')
+    expect(await palette.evaluate(nearestLang)).toBe('zh-Hans')
+    await page.getByRole('combobox', { name: /搜索/ }).fill('复制页面链接')
     await page.getByRole('option').first().click()
     const toast = page.locator('.chakra-toast [role="status"]').first()
     await expect(toast).toBeVisible()
-    expect(await toast.getByText('Link copied').evaluate(nearestLang)).toBe('en')
+    expect(await toast.getByText('链接已复制').evaluate(nearestLang)).toBe('zh-Hans')
 
     // Mobile drawer (below lg).
     await page.setViewportSize({ width: 800, height: 900 })
-    await page.getByRole('button', { name: 'Open menu' }).click()
-    const drawer = page.locator('.chakra-modal__content').filter({ hasText: 'Navigate' })
+    await page.getByRole('button', { name: '打开菜单' }).click()
+    const drawer = page.locator('.chakra-modal__content').filter({ hasText: '导航' })
     await expect(drawer).toBeVisible()
-    expect(await drawer.evaluate(nearestLang)).toBe('en')
+    expect(await drawer.evaluate(nearestLang)).toBe('zh-Hans')
   })
 
   test('/cv (English): the chrome simply inherits <html lang="en">', async ({ page }) => {

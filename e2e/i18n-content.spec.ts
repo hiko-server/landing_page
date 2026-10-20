@@ -65,7 +65,7 @@ test.describe('i18n-content: machine-readable outputs (G9)', () => {
 })
 
 test.describe('i18n-content: Chinese articles (F1)', () => {
-  test('a Chinese post reads in Chinese: labels, dates, typesetting; the chrome stays English', async ({ page }) => {
+  test('a Chinese post reads in Chinese: labels, dates, typesetting, and the chrome too (F3)', async ({ page }) => {
     const zh = (await list(page, 'blog')).find((p) => isZh(p.lang))
     test.skip(!zh, 'no Chinese post in the store')
     await page.goto(zh!.permalink)
@@ -96,8 +96,9 @@ test.describe('i18n-content: Chinese articles (F1)', () => {
     expect(style.lineHeightRatio).toBeLessThan(1.9)
     expect(style.measureEm).toBeLessThanOrEqual(34.01)
     expect(style.family).toMatch(/^"?CJK punctuation SC"?, .*PingFang SC/)
-    // The site chrome is English and says so (language of parts).
-    expect(await page.evaluate(() => document.querySelector('header')?.closest('[lang]')?.getAttribute('lang'))).toBe('en')
+    // F3: the site chrome speaks the article's language, so it simply inherits <html lang>.
+    expect(await page.evaluate(() => document.querySelector('header')?.closest('[lang]')?.tagName)).toBe('HTML')
+    await expect(page.locator('a.skip-nav')).toHaveText('跳到正文')
     expect(await seriousA11yViolations(page)).toEqual([])
   })
 
