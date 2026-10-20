@@ -55,10 +55,14 @@ What the code actually does today, and where its limits are.
 - **Session cookie** — `cv_admin_token`, an HS256 JWT (algorithm pinned on
   verify) valid for 7 days; `httpOnly`, `SameSite=Strict`, `Secure` in
   production, `path=/`.
-- **Two-layer gate** — the edge middleware does a fast signature check for
-  every `/admin/*` page (guests → `302 /admin/login?next=…`) and
-  `/api/admin/*` route (guests → JSON `401`). Every API handler then calls
-  `lib/auth.ts`, which additionally enforces session revocation.
+- **Two-layer gate** — the proxy (`proxy.ts`, Next.js 16's proxy on the
+  Node.js runtime) checks the session before every `/admin/*` page
+  (guests → `307 /admin/login?next=…`) and `/api/admin/*` route (guests →
+  JSON `401`): signature, expiry, role, session version and session row
+  (`lib/adminAuth/proxyGate.ts`; read-only, fail-closed when `admin.json`
+  or `auth.db` cannot be read). Every API handler then calls `lib/auth.ts`,
+  the authoritative check, which also refreshes the session's last-seen
+  time.
 - **Sessions** (`lib/adminAuth/sessions.ts`, `data/auth.db`) — every sign-in
   creates a session row; the JWT carries its id (`sid`) and is honoured only
   while the row exists, is not revoked and has not expired. Admin → Security
@@ -72,10 +76,9 @@ What the code actually does today, and where its limits are.
   bumped by "Sign out everywhere" and by a **password reset** (which also
   burns all outstanding reset links and revokes every session row). A token
   minted before sessions existed (no `sid`) still needs a matching `sv`; the
-  first page view swaps it for one bound to a new row. Because the edge
-  middleware cannot read the filesystem, a revoked token can still load an
-  admin page shell until it expires, but every admin API it calls answers
-  `401` and `/api/admin/session` reports `authenticated: false`.
+  first page view swaps it for one bound to a new row. A revoked or
+  signed-out token loads neither an admin page shell (the proxy sends it
+  to the sign-in page) nor any admin API (`401`).
 - **Passkeys** (`lib/adminAuth/passkeys.ts`, @simplewebauthn/server) — sign
   in with a passkey (button, or the e-mail field's autofill) instead of the
   password. The relying-party id is the configured public host (a request's
@@ -178,7 +181,7 @@ cannot be turned into a lock-out weapon against the owner:
 - The edge `/api/og` route cannot see the TCP peer and uses the header as
   is; it only applies a coarse render limit (60/min).
 
-### CSRF (`middleware.ts`, `lib/security/csrf.ts`)
+### CSRF (`proxy.ts`, `lib/security/csrf.ts`)
 
 For `POST` / `PUT` / `PATCH` / `DELETE` to `/api/admin/*`, `/api/auth/*`,
 `/api/cvdata`, `/api/home`, `/api/versions` and `/api/mongo`:
@@ -235,12 +238,20 @@ For `POST` / `PUT` / `PATCH` / `DELETE` to `/api/admin/*`, `/api/auth/*`,
   clamped by code point, the cover is a same-site upload only, per-IP render
   limit (60/min), `Cache-Control: public, max-age=86400, s-maxage=31536000,
   immutable` for real cards.
-- **`/api/e`** (error reports) — browser error reports and CSP violation
-  reports (`report-uri`, same origin). 8 KB bodies, per-client and
+- **`/api/e`** (error reports) — browser error reports and CSP / Trusted
+  Types violation reports (the policies' `report-to` endpoint and
+  `report-uri`, same origin). 8 KB browser error reports; report uploads
+  up to 64 KB (the Reporting API batches a minute of reports), at most 20
+  reports kept per upload with enforced violations first; per-client and
   per-network minute budgets, 500 fingerprints and 20 000 events a day at
-  most; DNT / GPC, bots and cross-site posts are dropped. Query strings,
-  e-mail and IP addresses, tokens and ID-like numbers are scrubbed before
-  storage; no address, user agent, cookie or body is kept. Always `204`.
+  most. Report-only (Trusted Types) groups are sampled before those
+  budgets: at most 50 events per group and 200 groups per UTC day, and
+  only the sink name ("Element innerHTML") is kept, never the sample text.
+  DNT / GPC, bots and cross-site posts are dropped. Query strings, e-mail
+  and IP addresses, tokens and ID-like numbers are scrubbed before storage;
+  chunk hashes are removed from script URLs so one problem keeps one group
+  across deploys; no address, user agent, cookie or body is kept. Always
+  `204`.
 - **`/api/internal/restore-drill`** — loopback peers with the per-process
   in-memory token only (`lib/internalJobs.ts`); everyone else gets `404`.
 - **`/api/health`** — anonymous callers get only `{"status": …}` (`200`, or
@@ -258,22 +269,99 @@ For `POST` / `PUT` / `PATCH` / `DELETE` to `/api/admin/*`, `/api/auth/*`,
   the CV and home documents; the full documents are served to the admin
   only, with `Cache-Control: no-store`.
 
-### HTTP headers (`middleware.ts`, `next.config.js`, `lib/csp.js`)
+### HTTP headers (`proxy.ts`, `lib/csp.js`, `lib/securityHeaders.js`)
 
-`Strict-Transport-Security` (2 years, preload), `X-Frame-Options: DENY`,
-`X-Content-Type-Options: nosniff`, `Referrer-Policy:
-strict-origin-when-cross-origin`, `Permissions-Policy`, and one shared CSP.
-Admin responses add `X-Robots-Tag: noindex, nofollow, noarchive` and
-`Cache-Control: no-store`.
+The proxy sets every header on every response it handles
+(`lib/security/responseHeaders.ts`: all routes but the fingerprinted
+`/_next/static/*` files and `/favicon.ico`, which get the
+page-independent ones from `next.config.js`):
 
-Known CSP loosening (documented in `lib/csp.js`): `script-src` includes
-`'unsafe-inline'` (Next/Chakra inline bootstrap and styles). It does **not**
-include `'unsafe-eval'` in production (since 2.2.0): MDX articles are
-compiled to a plain tree on the server and rendered without evaluating
-code in the browser; only the development server adds `'unsafe-eval'`, for
-Fast Refresh. Because of `'unsafe-inline'`, XSS defence still rests on
-React escaping and on the link sanitiser (`lib/cvFormat.ts` `safeHref`)
-rather than on the CSP.
+- `Strict-Transport-Security` (2 years, preload), `X-Frame-Options: DENY`,
+  `X-Content-Type-Options: nosniff`, `Referrer-Policy:
+  strict-origin-when-cross-origin`, `X-Permitted-Cross-Domain-Policies:
+  none`.
+- `Cross-Origin-Opener-Policy: same-origin` — no window handle across
+  origins (external links open with `noopener`; there is no pop-up
+  sign-in).
+- `Cross-Origin-Resource-Policy: same-origin`, except what other sites may
+  legitimately show: `/uploads/*`, `/images/*`, `/icons/*`, `/icon.svg`,
+  `/favicon.ico` and the social cards (`/api/og`) are `cross-origin`.
+  No `Cross-Origin-Embedder-Policy`: articles embed remote images and the
+  video players, which do not opt in, and nothing here needs
+  cross-origin isolation.
+- `Permissions-Policy` — every powerful feature the site does not use is
+  off for the page and every frame (camera, microphone, geolocation,
+  payment, USB, serial, HID, Bluetooth, MIDI, sensors, screen capture,
+  idle detection, local fonts, interest-based ad topics, …); passkeys
+  (`publickey-credentials-get/create`) and the clipboard are `self`
+  (the site only writes to it; the E2E suites read back what the copy
+  buttons wrote); autoplay, encrypted media, full screen and picture-in-picture
+  go to `self` and the three video-player origins only.
+- Admin responses add `X-Robots-Tag: noindex, nofollow, noarchive` and
+  `Cache-Control: no-store`.
+
+**Content-Security-Policy** (enforced; `lib/csp.js` documents every
+directive):
+
+- `script-src 'self'` plus the SHA-256 of each inline script the pages
+  render (the Trusted Types default policy, the theme and theme-colour
+  pre-paint scripts, the tag filter's pre-paint) — no `'unsafe-inline'`
+  and no scheme or host source. It does **not**
+  include `'unsafe-eval'` in production either: articles are compiled to a
+  tree on the server and rendered without evaluating code (only `next dev`
+  adds it, for Fast Refresh).
+  `lib/security/inlineScripts.ts` hashes the very constants the pages
+  render, so a script and its hash cannot drift; a unit test fails when a
+  page or component renders an inline script that is not listed, and when
+  `'unsafe-inline'` or a scheme source reappears in `script-src`. Next's
+  `__NEXT_DATA__` and the JSON-LD blocks are JSON data blocks, never
+  executed. `script-src-attr 'none'`: inline event handlers never run.
+- Why `'self'` and not nonces with `'strict-dynamic'`: static and ISR
+  pages are one cached HTML file for every visitor and cannot carry a
+  per-response nonce, and `'strict-dynamic'` would refuse Next's own
+  `<script src>` tags. Nothing same-origin can be turned into a script:
+  there is no JSONP endpoint, and uploads are images only, served with
+  `nosniff` and a sandboxing CSP.
+- `style-src 'self' 'unsafe-inline'` — Chakra UI renders through Emotion,
+  which writes each page's styles into inline `<style>` elements on the
+  server and inserts more at run time; next/font adds inline `@font-face`
+  blocks and React renders `style` attributes. Their content differs per
+  page and state, so hashes cannot list them, and static pages cannot
+  carry nonces. CSS cannot run script.
+- `img-src 'self' data: blob: https:` — a published article still embeds
+  images from another host (checked against the live content store on
+  2026-10-20: one post, four images on the project's own media host). The
+  publish checklist offers to import remote images into `/uploads`; once
+  none is left, `https:` can go. `media-src 'self'`, `font-src 'self'
+  data:`, `connect-src 'self'`, `worker-src 'self'`, `manifest-src
+  'self'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`,
+  `frame-ancestors 'none'`, `frame-src` the three video-player origins
+  only, `upgrade-insecure-requests`.
+- Violations are reported to the site's own Errors panel (Admin → System
+  → Errors): `report-to csp` with `Reporting-Endpoints: csp="/api/e"`
+  (batched by the browser), and `report-uri /api/e` for browsers without
+  the Reporting API. No third party receives them.
+
+**Trusted Types, report-only** (`Content-Security-Policy-Report-Only:
+require-trusted-types-for 'script'; trusted-types default nextjs
+nextjs#bundler`): a plain string reaching a DOM-XSS sink (innerHTML,
+script text or URL, `DOMParser` …) is reported and nothing is blocked. A
+narrow default policy (`lib/trustedTypesDefault.ts`, the first inline
+script) approves only what is safe by construction — HTML without `<`
+(text cannot create elements), the same text between Cloudflare's
+`email_off` comments, React's empty inert `<script>`, JSON as script text,
+and this origin's `/_next/static/` chunk URLs — so the public pages report
+nothing (an E2E test checks page loads, client-side navigations and the QR
+panels; QR codes are drawn as SVG elements, not markup). What is still
+reported is the work list before Trusted Types can be enforced: today the
+admin rich-text editor (TipTap / ProseMirror) parsing the owner's own HTML
+with `DOMParser` and `innerHTML`.
+
+Not sent on purpose: `Clear-Site-Data` on logout. The session cookie is
+already cleared by `Set-Cookie`, admin responses are `no-store` (nothing
+to purge), `"cookies"` would also clear every cookie of the registrable
+domain's other subdomains, and `"storage"` would delete the editors'
+unsent drafts.
 
 ### Container runtime (`Dockerfile`, `docker-compose.yml`)
 

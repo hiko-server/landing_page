@@ -8,6 +8,47 @@ portfolio CMS, no public package). Entries are grouped by release date.
 
 ## [Unreleased]
 
+### security-b
+
+Strict CSP and the Next.js 16 proxy.
+
+- **Scripts by hash only**: the Content-Security-Policy no longer allows
+  `'unsafe-inline'` scripts. `script-src` lists this origin and the SHA-256 of
+  the four inline scripts the pages render, computed from the same constants
+  the pages print (`lib/security/inlineScripts.ts`), so a script and its hash
+  cannot drift; inline event handlers never run (`script-src-attr 'none'`).
+  The real HTML of every page type (public, admin, 404, 500, Draft Mode) was
+  checked, and a real browser found nothing blocked on any public or admin page,
+  the rich-text editor, the PDF and QR features, the theme pre-paint, the
+  analytics beacon or view transitions included. Unit tests fail if
+  `'unsafe-inline'` or a scheme source comes back.
+- Tighter sources: no `https:` in styles or fonts, media and workers from
+  this origin only. Images keep `https:` while a published article still
+  embeds remote images (documented in `lib/csp.js` and SECURITY.md).
+- **Violation reports** go to the site's own Errors panel through both the
+  Reporting API (`report-to`, `Reporting-Endpoints`) and `report-uri`;
+  `/api/e` accepts the browser's batched uploads (up to 64 KB, enforced
+  violations first) and still stores no address or user agent.
+- **Trusted Types, report-only**, with a narrow default policy that approves
+  only what is safe by construction (text without markup, JSON, this build's
+  own chunk URLs), so public pages report nothing and the panel lists only
+  real work: today the admin editor's HTML parsing. Reports keep the sink
+  name, never the sample text, and are sampled (50 a group a day). QR codes
+  are drawn as SVG elements instead of injected markup.
+- **More headers**: `Cross-Origin-Opener-Policy: same-origin`,
+  `Cross-Origin-Resource-Policy` (same-origin; images and icons other sites
+  may show stay cross-origin), a complete `Permissions-Policy` (every powerful
+  feature the site does not use is off; passkeys, the clipboard and the video
+  players keep what they need) and `X-Permitted-Cross-Domain-Policies: none`.
+- **`middleware.ts` → `proxy.ts`** (Next.js 16's proxy, Node.js runtime):
+  redirects, the IndexNow rewrite, CSRF, headers and the admin gate behave as
+  before, and the gate now also checks revocation — a browser that was signed
+  out (or every browser, after "Sign out everywhere" or a password reset) can
+  no longer load an admin page shell with its old cookie. The Edge-runtime
+  build warning and the webpack hook that hid it are gone; the gate's check
+  costs about 0.1 ms per admin request, and public routes are as fast as
+  before.
+
 ### security-a
 
 Security and reliability foundation.

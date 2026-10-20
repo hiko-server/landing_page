@@ -34,7 +34,7 @@
 - [ ] I manually exercised the affected pages in `yarn dev`.
 - [ ] No `.env`, `data/admin.json`, or other gitignored content is in
       this diff.
-- [ ] If this touches `middleware.ts`, `lib/admin.ts`, or any
+- [ ] If this touches `proxy.ts`, `lib/csp.js`, `lib/admin.ts`, or any
       `/api/auth/*` endpoint, I've re-read SECURITY.md and confirmed
       the change doesn't widen the attack surface.
 - [ ] If this changes the `HomeData` shape, I updated

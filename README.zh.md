@@ -62,9 +62,9 @@ English → [README.md](./README.md)
   即使没有配置 SMTP，也能在后台阅读并回复。
 - **工业级后台认证**：scrypt + 16 字节随机盐；按（邮箱，IP）锁定，遭受攻击时
   全站限制尝试速率；按 IP 限流；`httpOnly` + `SameSite=Strict`
-  + `Secure` Cookie；通过 `jose` 在 Edge Middleware 校验 JWT，未登录
-  访客**完全无法看到**任何 admin 页面；统一下发 HSTS / CSP / X-Frame /
-  X-Robots。
+  + `Secure` Cookie；Next.js 代理（`proxy.ts`）校验会话——签名与吊销状态，
+  未登录或已登出的访客**完全无法看到**任何 admin 页面；每个响应都带基于哈希的
+  严格 CSP、HSTS、COOP / CORP、Permissions-Policy 与 X-Robots。
 
 <table>
 <tr>
@@ -149,8 +149,9 @@ English → [README.md](./README.md)
 **安全与交付**
 
 - Next.js 16.3（以 webpack 构建）；图片优化器已禁用（`/_next/image` 返回 404 —
-  GHSA-2xp9-vwfh-vxw4）；生产环境 CSP 不含 `'unsafe-eval'`。
-- 中间件对公开域名做 HTTP → HTTPS（308）跳转并处理旧 CV 地址；服务端抓取由
+  GHSA-2xp9-vwfh-vxw4）；生产环境 CSP 只按哈希放行脚本（不含 `'unsafe-inline'`
+  与 `'unsafe-eval'`），不允许任何第三方脚本域名。
+- 代理（`proxy.ts`）对公开域名做 HTTP → HTTPS（308）跳转并处理旧 CV 地址；服务端抓取由
   内容或后台提供的 URL 时一律经过 `lib/security/safeFetch.ts`。
 - 服务器上的 compose 覆盖文件不再纳入版本库（提供只绑定回环地址的示例），
   容器日志轮转，基础镜像按 digest 固定，发布镜像只包含追踪出的运行时文件。
@@ -166,7 +167,7 @@ English → [README.md](./README.md)
 
 | 层 | 选型 | 取舍说明 |
 |---|---|---|
-| 框架 | **Next.js 16（Pages Router，webpack 构建）** + **React 18** | 成熟的 SSR/ISR、文件式 API、Edge Middleware |
+| 框架 | **Next.js 16（Pages Router，webpack 构建）** + **React 18** | 成熟的 SSR/ISR、文件式 API、Node.js 请求代理（proxy） |
 | UI | **Chakra UI 2** | 可组合原语，开箱即用的深色模式 |
 | 动效 | **Framer Motion** | Hero 入场、分节 reveal |
 | 内容存储 | **better-sqlite3** + **Cloudflare R2** | 本地优先 + 廉价异地副本 |
@@ -223,7 +224,7 @@ English → [README.md](./README.md)
 ├── e2e/                 # Playwright + axe 端到端测试
 ├── security/            # audit-allowlist.json（已审阅、带到期日的豁免）
 ├── tests/               # node:test 单元测试
-├── middleware.ts        # Edge 跳转、安全响应头、CSRF、后台鉴权门
+├── proxy.ts             # 跳转、安全响应头、CSRF、后台鉴权门（Node.js）
 └── public/              # 静态资源
 ```
 
@@ -378,7 +379,9 @@ uploads/*
 后台 → 系统，失败或过期的演练会出现在 `/api/health` 警告中。
 
 **错误监控与系统健康**：完全自建，数据不离开服务器——浏览器未捕获错误、未处理的
-Promise 拒绝、错误边界捕获、CSP 违规（`report-uri /api/e`）与服务端错误按指纹归组
+Promise 拒绝、错误边界捕获、CSP 违规与 Trusted Types 报告（`report-to` / `report-uri` →
+`/api/e`；仅报告模式的 Trusted Types 分组按每组每天最多 50 条抽样，只保留接收点名称、
+不存样本文本）与服务端错误按指纹归组
 存入 `data/analytics.db`，去除查询字符串、邮箱/IP、令牌和类 ID 数字，不存地址、
 UA 或 Cookie；在 后台 → 系统 → 错误 中处理（已解决的错误再次出现会自动重开）。
 系统健康页显示部署版本、运行时长、内存、磁盘余量、各数据库大小/WAL/版本、备份、
@@ -390,11 +393,13 @@ UA 或 Cookie；在 后台 → 系统 → 错误 中处理（已解决的错误�
 
 ### 后台安全
 
-- **Edge Middleware**（`middleware.ts`）：在任何 `/admin/*` 页面或
-  `/api/admin/*` 接口渲染**之前**用 `jose` 校验 `cv_admin_token` JWT。
-  未登录访问 → 页面 302 到 `/admin/login?next=<原路径>`；接口直接返
-  JSON 401。公开白名单：`/admin/{login,forgot,reset}` 与
-  `/api/admin/{session,logout}`。
+- **代理鉴权门**（`proxy.ts`，Next.js 16 的 proxy，运行在 Node.js 上）：在任何
+  `/admin/*` 页面或 `/api/admin/*` 接口渲染**之前**校验 `cv_admin_token`：
+  JWT 签名（`jose`，固定 HS256）以及吊销状态——`data/admin.json` 中的会话版本与
+  `data/auth.db` 中该浏览器的会话记录，因此已登出或被吊销的浏览器也看不到后台页面
+  外壳。未登录访问 → 页面跳到 `/admin/login?next=<原路径>`；接口直接返 JSON 401。
+  公开白名单：`/admin/{login,forgot,reset}` 与 `/api/admin/{session,logout}`。
+  每个接口自身仍会再校验一次会话。
 - **scrypt** 密码哈希（N=16384、r=8、p=1、64 字节 key，异步计算），每账户
   独立的 16 字节随机盐。比较一律走 `crypto.timingSafeEqual` 且两侧 buffer 等长。
 - **登录限速**：按（规范化邮箱，客户端 IP）锁定并逐步退避；持续失败时，
@@ -403,7 +408,7 @@ UA 或 Cookie；在 后台 → 系统 → 错误 中处理（已解决的错误�
 - **按路由的 IP 限流**（IPv6 按 /64 与 /48 归并）。只信任来自本机回环和
   容器默认网关的 `cf-connecting-ip`（即 Cloudflare Tunnel 经 Docker 端口
   映射到达的方式），除非设置了 `TRUSTED_PROXY_IPS`。
-- **CSRF**：中间件拒绝所有跨站（`Origin` / `Sec-Fetch-Site`）以及非 JSON 的
+- **CSRF**：代理拒绝所有跨站（`Origin` / `Sec-Fetch-Site`）以及非 JSON 的
   后台与内容写入请求，作为 `SameSite=Strict` 之上的纵深防御。
 - **通行密钥（Passkey）**：基于 WebAuthn（`@simplewebauthn/server`），可用
   Face ID / Touch ID / Windows Hello / 安全密钥登录（按钮或邮箱输入框的自动
@@ -423,14 +428,22 @@ UA 或 Cookie；在 后台 → 系统 → 错误 中处理（已解决的错误�
   每次读取自动清理过期项。
 - **后台页面**：统一下发 `X-Robots-Tag: noindex, nofollow, noarchive`
   和 `Cache-Control: no-store`，让搜索引擎与中间缓存都收不到。
-- **Edge 跳转**（中间件，GET/HEAD，308）：对已配置的公开域名
+- **跳转**（代理，GET/HEAD，308）：对已配置的公开域名
   （`SITE_URL` / `NEXT_PUBLIC_SITE_HOST`，绝不包括回环地址）的明文 HTTP 请求
   跳转到 HTTPS——访客使用的协议取自 Cloudflare 的 `cf-visitor`，否则取
   `X-Forwarded-Proto`；`/api/health` 不跳转。旧地址 `/cv?lang=zh|cn` 跳到
   `/cv/zh`。
 - **没有图片优化器**：`images.unoptimized`——`/_next/image` 返回 404，任何
   请求都到不了 sharp/libheif（GHSA-2xp9-vwfh-vxw4）。图片只在上传时处理一次。
-- **CSP**：生产环境不含 `'unsafe-eval'`（MDX 由服务端生成的树渲染）。
+- **严格 CSP**：脚本只能来自本站，以及页面渲染的四段内联脚本——按 SHA-256 放行
+  （哈希由同一批常量计算，不会走样）；脚本不允许 `'unsafe-inline'` 与 `'unsafe-eval'`
+  （MDX 由服务端生成的树渲染），内联事件处理器一律不执行，连接、字体与媒体只限本站。
+  违规报告发到站点自己的错误面板（`report-to` / `report-uri` → `/api/e`）。Trusted
+  Types 以仅报告模式运行，配一个范围很窄的默认策略，用来找出将来强制执行前还要处理的
+  DOM 接收点。另有 `Cross-Origin-Opener-Policy: same-origin`、
+  `Cross-Origin-Resource-Policy`（同源；其他网站可能展示的图片和图标除外），以及关闭
+  所有未用到的强大功能的 Permissions-Policy。细节与有据可查的例外见
+  [SECURITY.md](SECURITY.md)。
 - **SSRF**：服务端抓取任何来自内容或后台的 URL 都经过
   `lib/security/safeFetch.ts`（只允许公网地址，限制大小、跳转次数与时长）。
 
@@ -620,7 +633,7 @@ Analytics:Edit（没有它时，脚本会打印在控制台中手动关闭 Web A
 每次按需重新生成页面都会以每批 30 个清除刷新过的 URL——文章或案例变化时还会
 清除订阅源、站点地图与搜索索引；设置 `INDEXNOW_KEY` 后，页面 URL 会推送给
 IndexNow（密钥文件位于站点根目录 `/<INDEXNOW_KEY>.txt`：密钥文件只对其所在
-目录及以下的 URL 有效；中间件只把这一个路径改写到 `/api/indexnow-key`）。两者都是发出即不等待、3 秒
+目录及以下的 URL 有效；代理只把这一个路径改写到 `/api/indexnow-key`）。两者都是发出即不等待、3 秒
 超时、记录日志，且绝不会导致保存失败；未设置环境变量时什么都不发送。
 
 ---
@@ -669,7 +682,7 @@ CI（`.github/workflows/ci.yml`）在每次推送和 Pull Request 时运行：
 | `/api/health` | 健康状态：所有人只看到 `{"status":"ok"\|"empty"\|"degraded"}`；存储、内容、备份时长、待同步的 R2 写入仅对管理员或携带 `Authorization: Bearer <HEALTH_TOKEN>` 的请求返回 |
 | `/.well-known/security.txt` | RFC 9116 安全联系方式（公开简历中的邮箱，有效期滚动 180 天；邮箱隐藏时返回 404） |
 
-API 在 `/api/*`；`/api/admin/*` 全部需要鉴权（Middleware 把关）。
+API 在 `/api/*`；`/api/admin/*` 全部需要鉴权（代理 `proxy.ts` 把关）。
 
 ---
 
