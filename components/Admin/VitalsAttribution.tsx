@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Box, Button, Flex, HStack, Table, TableContainer, Tbody, Td, Text, Th, Thead, Tr } from '@chakra-ui/react'
 import { MONO } from './shell/ui'
+import { SCROLL_REGION_FOCUS, useScrollRegion } from './shell/scrollRegion'
 import { rateVital, type VitalRating } from '../../lib/analytics/shared'
 import { formatVital, ratingLabel } from '../../lib/analytics/format'
 import {
@@ -166,6 +167,9 @@ export default function VitalsAttribution({ rows, windowLabel }: { rows: VitalAt
   const [metric, setMetric] = useState<AttributedVital>('LCP')
   const shown = rows.filter((r) => r.name === metric)
   const counts = Object.fromEntries(ATTRIBUTED_VITALS.map((m) => [m, rows.filter((r) => r.name === m).length])) as Record<AttributedVital, number>
+  const caption = `${metric} by page and element, worst first (${windowLabel})`
+  // Wider than a phone: a focusable, labelled region the keyboard can scroll.
+  const [tableRef, scrollRegion] = useScrollRegion(caption)
 
   return (
     <Box mt={6} pt={5} borderTop="1px solid" borderColor="page.border" data-testid="vitals-attribution">
@@ -214,7 +218,7 @@ export default function VitalsAttribution({ rows, windowLabel }: { rows: VitalAt
       {shown.length ? (
         <>
           <Legend metric={metric} />
-          <TableContainer border="1px solid" borderColor="page.border" borderRadius="md">
+          <TableContainer ref={tableRef} {...scrollRegion} border="1px solid" borderColor="page.border" borderRadius="md" _focusVisible={SCROLL_REGION_FOCUS}>
             <Table
               size="sm"
               variant="simple"
@@ -226,7 +230,7 @@ export default function VitalsAttribution({ rows, windowLabel }: { rows: VitalAt
               }}
             >
               <caption style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
-                {`${metric} by page and element, worst first (${windowLabel})`}
+                {caption}
               </caption>
               <Thead>
                 <Tr>

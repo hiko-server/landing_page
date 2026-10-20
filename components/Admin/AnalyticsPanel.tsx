@@ -23,6 +23,7 @@ import { FaSync } from 'react-icons/fa'
 import { readJsonObject } from './shell/http'
 import VitalsAttribution from './VitalsAttribution'
 import { Eyebrow, MONO, Panel } from './shell/ui'
+import { SCROLL_REGION_FOCUS, useScrollRegion } from './shell/scrollRegion'
 import {
   ANALYTICS_RANGES,
   VITAL_NAMES,
@@ -387,8 +388,9 @@ function AreaChart({ series, bucket }: { series: SeriesPoint[]; bucket: 'day' | 
 // ── Tables ────────────────────────────────────────────────────────────────
 
 function HairlineTable({ caption, children }: { caption: string; children: React.ReactNode }) {
+  const [ref, region] = useScrollRegion(caption)
   return (
-    <TableContainer border="1px solid" borderColor="page.border" borderRadius="md">
+    <TableContainer ref={ref} {...region} border="1px solid" borderColor="page.border" borderRadius="md" _focusVisible={SCROLL_REGION_FOCUS}>
       <Table
         size="sm"
         variant="simple"

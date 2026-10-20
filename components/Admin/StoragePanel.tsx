@@ -59,6 +59,7 @@ import {
   outlineButtonProps,
   primaryButtonProps,
 } from './shell/ui'
+import { SCROLL_REGION_FOCUS, useScrollRegion } from './shell/scrollRegion'
 
 type DbRow = {
   name?: string
@@ -175,9 +176,11 @@ function Stat({
   )
 }
 
-function HairlineTable({ children, mb = 4 }: { children: React.ReactNode; mb?: number }) {
+/** `label` names the table for a screen reader when it scrolls sideways (a focusable region then). */
+function HairlineTable({ label, children, mb = 4 }: { label: string; children: React.ReactNode; mb?: number }) {
+  const [ref, region] = useScrollRegion(label)
   return (
-    <TableContainer border="1px solid" borderColor="page.border" borderRadius="md" mb={mb}>
+    <TableContainer ref={ref} {...region} border="1px solid" borderColor="page.border" borderRadius="md" mb={mb} _focusVisible={SCROLL_REGION_FOCUS}>
       <Table
         size="sm"
         variant="simple"
@@ -590,7 +593,7 @@ export default function StoragePanel() {
             </SimpleGrid>
 
             {data.backups.local.length > 0 ? (
-              <HairlineTable>
+              <HairlineTable label="Local backups">
                 <Thead>
                   <Tr>
                     <Th>Local file</Th>
@@ -621,7 +624,7 @@ export default function StoragePanel() {
             )}
 
             {data.r2.configured && data.r2.snapshots.length > 0 ? (
-              <HairlineTable mb={0}>
+              <HairlineTable label="R2 snapshots" mb={0}>
                 <Thead>
                   <Tr>
                     <Th>R2 key</Th>
@@ -673,7 +676,7 @@ export default function StoragePanel() {
               </SimpleGrid>
 
               <Eyebrow mb={2}>Pages</Eyebrow>
-              <HairlineTable>
+              <HairlineTable label="Pages">
                 <Thead>
                   <Tr>
                     <Th>Name</Th>
@@ -699,7 +702,7 @@ export default function StoragePanel() {
               </HairlineTable>
 
               <Eyebrow mb={2}>Collection items</Eyebrow>
-              <HairlineTable>
+              <HairlineTable label="Collection items">
                 <Thead>
                   <Tr>
                     <Th>Collection</Th>
@@ -729,7 +732,7 @@ export default function StoragePanel() {
               </HairlineTable>
 
               <Eyebrow mb={2}>Key / value</Eyebrow>
-              <HairlineTable mb={0}>
+              <HairlineTable label="Key / value" mb={0}>
                 <Thead>
                   <Tr>
                     <Th>Key</Th>
@@ -847,7 +850,7 @@ export default function StoragePanel() {
                       {objs.length} object{objs.length === 1 ? '' : 's'}
                     </Text>
                   </HStack>
-                  <HairlineTable>
+                  <HairlineTable label={`R2 objects under ${prefix}/`}>
                     <Thead>
                       <Tr>
                         <Th>Key</Th>

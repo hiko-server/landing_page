@@ -1,6 +1,7 @@
 import React from 'react'
 import { Box, Flex, Table, TableContainer, Text } from '@chakra-ui/react'
 import { MONO } from '../shell/ui'
+import { SCROLL_REGION_FOCUS, useScrollRegion } from '../shell/scrollRegion'
 
 /**
  * Small building blocks of the Analytics panel's goal sections, matching
@@ -9,8 +10,9 @@ import { MONO } from '../shell/ui'
 
 /** Hairline table with a screen-reader caption; cells may wrap (`wrap`) instead of scrolling sideways. */
 export function HairTable({ caption, children, wrap = false }: { caption: string; children: React.ReactNode; wrap?: boolean }) {
+  const [ref, region] = useScrollRegion(caption)
   return (
-    <TableContainer border="1px solid" borderColor="page.border" borderRadius="md" whiteSpace={wrap ? 'normal' : undefined}>
+    <TableContainer ref={ref} {...region} border="1px solid" borderColor="page.border" borderRadius="md" whiteSpace={wrap ? 'normal' : undefined} _focusVisible={SCROLL_REGION_FOCUS}>
       <Table
         size="sm"
         variant="simple"
