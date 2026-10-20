@@ -163,6 +163,7 @@ function FieldRenderer({ def, node, nodePath }: { def: FieldDef; node: any; node
                 value={itemAudience(node, def.key, i)}
                 onChange={(l) => api.setItemAudience(nodePath, def.key, i, l, text.trim() || `${singular} ${i + 1}`)}
                 label={name}
+                compactOnPhones
               />
             )
           }}

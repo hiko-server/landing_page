@@ -421,6 +421,21 @@ function SortableBulletRow({
     el.style.height = 'auto'
     el.style.height = `${el.scrollHeight + 2}px`
   }, [value])
+  // A narrower field (the "Shows on" chip appeared, a phone turned) wraps the
+  // text again: the height follows the width as well as the text.
+  useEffect(() => {
+    const el = taRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    let width = el.clientWidth
+    const ro = new ResizeObserver(() => {
+      if (el.clientWidth === width) return
+      width = el.clientWidth
+      el.style.height = 'auto'
+      el.style.height = `${el.scrollHeight + 2}px`
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
   const name = `${itemLabel} ${index + 1} of ${count}`
   return (
     <Flex

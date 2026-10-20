@@ -447,7 +447,7 @@ test.describe('CV: an audience per bullet', { tag: '@admin' }, () => {
   test.use({ actionTimeout: 15_000, navigationTimeout: 30_000 })
 
   test('a bullet kept to downloads and private links: off /cv and the API, in the text and PDF; its chip, the preview and Hidden items in CV Studio @admin', async ({ page, request }) => {
-    test.setTimeout(180_000)
+    test.setTimeout(SHOTS ? 360_000 : 180_000)
     page.on('dialog', (d) => void d.accept())
     await page.setViewportSize({ width: 1440, height: 1000 })
     await loginAsAdmin(page)
@@ -509,6 +509,22 @@ test.describe('CV: an audience per bullet', { tag: '@admin' }, () => {
       await page.keyboard.press('ControlOrMeta+KeyZ')
       await expect(chip).toBeVisible()
       await expect(preview).not.toContainText(LIMITED_POINT)
+
+      await shots(page, 'cv-bullet-audience', async () => {
+        await page.goto('/admin/dashboard?tab=cv')
+        await page.getByRole('navigation', { name: 'CV sections' }).getByText('Languages', { exact: true }).first().click()
+        await page.getByRole('button', { name: `Where “${LIMITED_POINT}” shows: Files · Links (Downloads + Private links)` }).scrollIntoViewIfNeeded()
+      })
+      await shots(page, 'cv-bullet-audience-menu', async () => {
+        await page.goto('/admin/dashboard?tab=cv')
+        await page.getByRole('navigation', { name: 'CV sections' }).getByText('Languages', { exact: true }).first().click()
+        await page.getByRole('button', { name: `Where “${LIMITED_POINT}” shows: Files · Links (Downloads + Private links)` }).click()
+        await expect(page.getByRole('menuitemcheckbox', { name: /Public pages/ })).toBeVisible()
+      })
+      if (SHOTS) {
+        await page.goto('/admin/dashboard?tab=cv')
+        await page.getByRole('navigation', { name: 'CV sections' }).getByText('Languages', { exact: true }).first().click()
+      }
 
       // ── Hidden items lists it; "Everywhere" resets it ──────────────────
       await page.getByRole('button', { name: /hidden items$/ }).click()
