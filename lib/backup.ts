@@ -903,6 +903,22 @@ async function restoreFromBuffer(buf: Buffer, source: 'r2' | 'local', key: strin
       filesRestored++
     }
 
+    // 5b. The media library's trash: its rows came with the DB, its folders did not (lib/media/trash).
+    if (dbReplaced) {
+      try {
+        const { reconcileTrashAfterRestore } = await import('./media/trash')
+        const back = await reconcileTrashAfterRestore()
+        if (back.length) {
+          warnings.push(
+            `${back.length} image${back.length === 1 ? ' was' : 's were'} in the restored trash although the restored files have ${back.length === 1 ? 'it' : 'them'}: ` +
+              `back in the media library (${back.slice(0, 5).join(', ')}${back.length > 5 ? ', …' : ''}).`,
+          )
+        }
+      } catch (err) {
+        warnings.push(`The media library's trash could not be checked against the restored files (${errMsg(err)}).`)
+      }
+    }
+
     // 6. Contact inbox: merge, so messages received after the snapshot survive.
     const stagedInbox = path.join(stageDir, 'data', 'inbox', 'contact-inbox.jsonl')
     if (fs.existsSync(stagedInbox)) {

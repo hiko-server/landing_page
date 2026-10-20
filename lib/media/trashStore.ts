@@ -32,6 +32,20 @@ export const parseList = (raw: string | null | undefined): string[] => {
   }
 }
 
+/**
+ * True when the media library's trash has a row for `name` — with or
+ * without its folder (after a content restore the row can come back without
+ * the files: it still keeps R2 from serving the old upload, so no new file
+ * may take the name). A store without the media tables has none.
+ */
+export function isTrashedName(name: string): boolean {
+  try {
+    return !!getDb().prepare('SELECT 1 FROM media_trash WHERE name = ?').get(name)
+  } catch {
+    return false
+  }
+}
+
 /** Remove a trashed upload for good (its R2 copies were deleted when it was trashed). */
 export function purgeFromTrash(name: string): boolean {
   if (!isValidUploadName(name)) return false

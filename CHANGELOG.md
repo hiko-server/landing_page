@@ -62,6 +62,12 @@ Fixes for defects the final review found in the final batch before it shipped.
 - **CV download names on /cv follow the web view (CV-L-2)**: a name kept
   to the downloads no longer appears in the /cv and /cv/zh page data,
   download links or JSON-LD; the files themselves are still named in full.
+- **Media trash after a content restore (OPS-2)**: a new upload never takes
+  the name of a trashed image whose row alone came back with a restore; a
+  restore drops trash rows whose file the restored content has live (the
+  image is back in the library, with its texts); and the boot sync no
+  longer deletes R2's copies of a trashed name whose file is on disk — it
+  warns instead.
 - **Container gate (OPS-1)**: every end-to-end test is its own client (a
   TEST-NET address in cf-connecting-ip), so the full suite against one
   server no longer runs out of per-client budgets (post saves, contact

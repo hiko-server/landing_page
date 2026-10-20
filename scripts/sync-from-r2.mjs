@@ -571,7 +571,8 @@ async function repairPendingUploads(trashed) {
  * Runs after the DB commit, so a single failed image is a warning, not a
  * reason to report the whole sync as failed. A name in the media library's
  * trash is never pulled back: R2's copies of it are deleted (the app could
- * not delete them when it trashed the file).
+ * not delete them when it trashed the file) — unless its file is on disk
+ * (main() leaves such a name out of `trashed` and warns).
  */
 async function pullUploads(trashed) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true })
@@ -624,7 +625,15 @@ async function main() {
   applyWrites({ writes, stamps, orphanPending })
   await pushBack(pushes)
   await deleteStale(deletes)
+  // A trash row whose file is on disk (a content restore brought the row back
+  // beside a live upload) is not acted on: deleting R2's copies would strip a
+  // file the site serves. Warned instead; the app's restore reconciles it.
   const trashed = trashedUploads(db)
+  for (const name of [...trashed]) {
+    if (!fs.existsSync(path.join(UPLOADS_DIR, name))) continue
+    trashed.delete(name)
+    warn(`uploads/${name} is in the media library's trash but its file is on disk: R2's copies are kept (Media → Trash: Delete now, or restore a snapshot again)`)
+  }
   await repairPendingUploads(trashed)
   await pullUploads(trashed)
 

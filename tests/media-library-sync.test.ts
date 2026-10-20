@@ -161,6 +161,31 @@ test('H7 boot sync: a trashed upload is never pulled back and its R2 copies go; 
   }
 })
 
+test('OPS-2 boot sync: a trash row beside a file on disk (left by a content restore) never strips R2 — it warns instead', async () => {
+  const img = await png(40, 30)
+  const now = Date.now()
+  objects.set('uploads/restored.png', { body: img, at: now })
+  objects.set('uploads/restored.png.w32.webp', { body: Buffer.from('RIFFxxxxWEBP'), at: now })
+  fs.writeFileSync(path.join(root, 'public', 'uploads', 'restored.png'), img)
+  const dbPath = path.join(root, 'data', 'content.db')
+  const helpers = await import(path.join(root, 'scripts', 'content-helpers.mjs'))
+  const db0 = helpers.openContentDb(dbPath) as Database.Database
+  db0.prepare("INSERT INTO media_trash (name, files, deleted_at) VALUES ('restored.png', '[\"restored.png\"]', ?)").run(now)
+  db0.close()
+  const { code, out } = await runSync()
+  assert.equal(code, 0, out)
+  assert.ok(objects.has('uploads/restored.png') && objects.has('uploads/restored.png.w32.webp'), `R2 keeps the copies of a file the site serves\n${out}`)
+  assert.match(out, /uploads\/restored\.png is in the media library's trash but its file is on disk/)
+  assert.ok(fs.existsSync(path.join(root, 'public', 'uploads', 'restored.png')))
+  const db = new Database(dbPath)
+  try {
+    db.prepare("DELETE FROM media_trash WHERE name = 'restored.png'").run()
+  } finally {
+    db.close()
+  }
+  fs.rmSync(path.join(root, 'public', 'uploads', 'restored.png'))
+})
+
 test('H7 R2 index: listing records what R2 holds, an R2-only upload is listed with its size; mirror and pull repair', async () => {
   objects.clear()
   const uploads = path.join(libRoot, 'public', 'uploads')

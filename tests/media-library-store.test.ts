@@ -414,6 +414,13 @@ test('H7 a new upload never takes the name of one in the trash; the content expo
   assert.ok(out.ok)
   const second = await upload('same-name.png', 300, 200)
   assert.notEqual(second.name, first.name, 'gets a hash suffix instead')
+  // OPS-2: a trash row without its folder (a content restore brings rows back, not folders) still holds the name.
+  const { getDb } = await import('../lib/db')
+  getDb().prepare("INSERT INTO media_trash (name, files, deleted_at) VALUES ('row-only.png', '[\"row-only.png\"]', ?)").run(Date.now())
+  const third = await upload('row-only.png', 300, 200)
+  assert.notEqual(third.name, 'row-only.png', 'never the name of a trashed upload whose row alone came back')
+  assert.ok(list.listLibrary().items.some((i) => i.name === third.name), 'so it is never hidden from the library')
+  getDb().prepare("DELETE FROM media_trash WHERE name = 'row-only.png'").run()
   assert.ok((await trash.restoreFromTrash(first.name, { r2: fakeR2(new Set()).ops })).ok)
 })
 
