@@ -18,12 +18,13 @@ import { CV_SECTIONS } from '../lib/cvSections'
 import { PAPERS_KEY } from '../lib/publications/types'
 import { appendEntries, type Doc } from '../components/Admin/cvStudio/docOps'
 import { ORCID_WORKS_URL, defaultSelection, importErrorMessage, type OrcidWorksBody } from '../lib/orcid/importClient'
+import { EXAMPLE_ORCID_ID, EXAMPLE_ORCID_TYPO } from './fixtures/orcid'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const fixture = (name: string) => JSON.parse(fs.readFileSync(path.join(here, 'fixtures', name), 'utf8'))
 const WORKS = fixture('orcid-works.json')
 const BULK = fixture('orcid-works-bulk.json')
-const ID = '0000-0002-1825-0097'
+const ID = EXAMPLE_ORCID_ID
 
 test('mapOrcidWorks: one candidate per group, summaries merged, DOI / type / date / URL mapped, the untitled work skipped', () => {
   const list = mapOrcidWorks(WORKS)!
@@ -175,7 +176,7 @@ test('fetchOrcidWorks: the works, then one bulk read of their details; JSON aske
 
 test('fetchOrcidWorks: an invalid iD never reaches the network; an empty record is ok with no candidates; failed details keep the summaries', async () => {
   const bad = transport(() => answer(200, WORKS))
-  assert.deepEqual(await fetchOrcidWorks('0000-0002-1825-0098', bad.fetcher), { kind: 'not-found' })
+  assert.deepEqual(await fetchOrcidWorks(EXAMPLE_ORCID_TYPO, bad.fetcher), { kind: 'not-found' })
   assert.equal(bad.calls.length, 0)
 
   const empty = transport(() => answer(200, { group: [] }))

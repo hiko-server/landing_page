@@ -28,8 +28,11 @@ import { toPublication } from '../lib/publications/normalize'
 import { ownerNamesFromSections } from '../lib/publications/names'
 import { buildLlmsTxt, type LlmsInput } from '../lib/markdownTwin'
 import { CHECK_LABEL, CHECK_SEVERITY, runReadinessChecks } from '../lib/cvReadiness'
+import { EXAMPLE_ORCID_ID, EXAMPLE_ORCID_TYPO } from './fixtures/orcid'
 
-const ID = '0000-0002-1825-0097'
+const ID = EXAMPLE_ORCID_ID
+const COMPACT = ID.replace(/-/g, '')
+const TYPO = EXAMPLE_ORCID_TYPO
 const URL = `https://orcid.org/${ID}`
 const NOW = '2026-10'
 
@@ -69,11 +72,11 @@ const doc = (extra: Record<string, unknown> = {}, papers?: unknown[]) => ({
 // ── lib/orcid/id ──────────────────────────────────────────────────────────
 
 test('MOD 11-2: the documented example checks out; a typo is caught; X is a valid check character', () => {
-  assert.equal(orcidChecksum('000000021825009'), '7')
+  assert.equal(orcidChecksum(COMPACT.slice(0, 15)), COMPACT[15])
   assert.equal(isValidOrcidId(ID), true)
-  assert.equal(isValidOrcidId('0000-0002-1825-0098'), false)
-  assert.equal(orcidIdProblem('0000-0002-1825-0098'), 'checksum')
-  assert.equal(orcidIdProblem('0000-0002-1825-009'), 'format')
+  assert.equal(isValidOrcidId(TYPO), false)
+  assert.equal(orcidIdProblem(TYPO), 'checksum')
+  assert.equal(orcidIdProblem(ID.slice(0, -1)), 'format')
   assert.equal(orcidIdProblem('not an id'), 'format')
   assert.equal(orcidIdProblem(''), '', 'blank is "no iD", not a problem')
   // Find a base whose check character is X and make sure it round-trips in either case.
@@ -89,14 +92,14 @@ test('MOD 11-2: the documented example checks out; a typo is caught; X is a vali
 })
 
 test('every pasted shape normalises to the bare iD; the URI is https://orcid.org/<iD>', () => {
-  for (const v of [ID, ` ${ID} `, '0000000218250097', URL, `${URL}/`, `http://orcid.org/${ID}`, `orcid.org/${ID}`, `ORCID: ${ID}`, `orcid:${ID}`, `https://orcid.org/${ID}?lang=en`, `0000–0002–1825–0097`]) {
+  for (const v of [ID, ` ${ID} `, COMPACT, URL, `${URL}/`, `http://orcid.org/${ID}`, `orcid.org/${ID}`, `ORCID: ${ID}`, `orcid:${ID}`, `https://orcid.org/${ID}?lang=en`, ID.replace(/-/g, '–')]) {
     assert.equal(normalizeOrcidId(v), ID, v)
   }
   assert.equal(orcidUrl(ID), URL)
   assert.equal(orcidUrl(URL), URL)
-  assert.equal(orcidUrl('0000-0002-1825-0098'), '')
+  assert.equal(orcidUrl(TYPO), '')
   assert.equal(normalizeOrcidId(undefined), '')
-  assert.equal(normalizeOrcidId('https://example.com/0000-0002-1825-0097'), '', 'another host is not an ORCID link')
+  assert.equal(normalizeOrcidId(`https://example.com/${ID}`), '', 'another host is not an ORCID link')
 })
 
 test('the light check for page code: canonical iDs and URIs only, checksum included; pasted shapes are the server\'s job', () => {
@@ -104,12 +107,12 @@ test('the light check for page code: canonical iDs and URIs only, checksum inclu
   assert.equal(canonicalOrcid(URL), ID)
   assert.equal(orcidRecordUrl(ID), URL)
   assert.equal(orcidRecordUrl(URL), URL)
-  for (const v of ['0000-0002-1825-0098', '0000000218250097', `http://orcid.org/${ID}`, `${URL}/`, ` ${ID}`, '0000-0002-1825-009x', '', null, 7]) {
+  for (const v of [TYPO, COMPACT, `http://orcid.org/${ID}`, `${URL}/`, ` ${ID}`, `${ID.slice(0, -1)}x`, '', null, 7]) {
     assert.equal(canonicalOrcid(v), '', String(v))
     assert.equal(orcidRecordUrl(v), '', String(v))
   }
   // Every canonical form the full normaliser produces passes the light check.
-  for (const v of [ID, URL, `orcid:${ID}`, '0000000218250097']) assert.equal(canonicalOrcid(normalizeOrcidId(v)), ID)
+  for (const v of [ID, URL, `orcid:${ID}`, COMPACT]) assert.equal(canonicalOrcid(normalizeOrcidId(v)), ID)
 })
 
 test('saving stores the bare iD: a pasted link is rewritten, anything else (blank, a typo, other sections) is left alone', () => {
@@ -118,7 +121,7 @@ test('saving stores the bare iD: a pasted link is rewritten, anything else (blan
   assert.equal(stored[0].orcid, ID)
   assert.equal(stored[1], sections[1], 'other sections are the same objects')
   assert.equal(sections[0].orcid, `${URL}/`, 'the input is not mutated')
-  for (const orcid of [ID, '', '0000-0002-1825-0098', undefined]) {
+  for (const orcid of [ID, '', TYPO, undefined]) {
     const same = [pi({ orcid })]
     assert.equal(withBareOrcid(same), same, String(orcid))
   }
@@ -143,7 +146,7 @@ test('the validator accepts the iD and its link, refuses a bad checksum with its
   assert.equal(validateCvDoc({ en: [pi()], zh: [] }).ok, true)
   assert.equal(validateCvDoc({ en: [pi({ orcid: URL })], zh: [] }).ok, true)
   assert.equal(validateCvDoc({ en: [pi({ orcid: '' })], zh: [] }).ok, true)
-  const typo = validateCvDoc({ en: [pi({ orcid: '0000-0002-1825-0098' })], zh: [] })
+  const typo = validateCvDoc({ en: [pi({ orcid: TYPO })], zh: [] })
   assert.equal(typo.ok, false)
   if (!typo.ok) {
     assert.deepEqual(typo.errors[0].path, ['en', 0, 'orcid'])
@@ -170,7 +173,7 @@ test('profileLinks: the ORCID iD comes after GitHub / LinkedIn with its full URI
     ],
   )
   assert.equal(orcidOf(decorated), ID)
-  assert.equal(orcidOf(pi({ orcid: '0000-0002-1825-0098' })), '', 'a typo never becomes a link')
+  assert.equal(orcidOf(pi({ orcid: TYPO })), '', 'a typo never becomes a link')
   assert.equal(orcidOf(null), '')
 })
 
@@ -243,7 +246,7 @@ test('the Person node lists the record in sameAs and as an ORCID identifier; the
   assert.equal(bare.identifier, undefined)
   assert.ok(!JSON.stringify(bare).includes(ID))
   assert.deepEqual(bare.sameAs, [...DEFAULT_SAME_AS])
-  assert.equal((personNode({ orcid: '0000-0002-1825-0098' }) as any).identifier, undefined, 'a typo is not an identifier')
+  assert.equal((personNode({ orcid: TYPO }) as any).identifier, undefined, 'a typo is not an identifier')
 })
 
 test('ScholarlyArticle: with an ORCID the owner is identified by the record URI; co-authors and the no-iD case are unchanged', () => {

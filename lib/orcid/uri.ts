@@ -21,7 +21,7 @@ export function orcidChecksum(digits15: string): string {
 }
 
 /**
- * `value` when it is already a canonical iD ("0000-0002-1825-0097") or its
+ * `value` when it is already a canonical iD ("NNNN-NNNN-NNNN-NNNC") or its
  * record URI, with a correct check character: the bare iD; '' otherwise.
  * (Anything an owner might paste is lib/orcid/id normalizeOrcidId's job.)
  */

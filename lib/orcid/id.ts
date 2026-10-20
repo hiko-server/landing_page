@@ -1,11 +1,11 @@
 /**
  * ORCID iD — the owner's researcher identifier (https://orcid.org).
  *
- * An iD is 16 characters in four groups, `0000-0002-1825-0097`: 15 digits and
+ * An iD is 16 characters in four groups, `NNNN-NNNN-NNNN-NNNC`: 15 digits and
  * a check character (a digit or `X`) computed with ISO 7064 MOD 11-2 over the
  * 15 digits. Owners paste it in many shapes, all accepted here:
  *
- *   0000-0002-1825-0097             0000000218250097
+ *   NNNN-NNNN-NNNN-NNNC             NNNNNNNNNNNNNNNC
  *   https://orcid.org/0000-…        http://orcid.org/0000-…   orcid.org/0000-…
  *   ORCID: 0000-…                   orcid:0000-…              https://orcid.org/0000-…/
  *
@@ -52,7 +52,7 @@ export function orcidIdProblem(value: unknown): OrcidIdProblem {
   return orcidChecksum(compact.slice(0, 15)) === compact[15] ? '' : 'checksum'
 }
 
-/** The canonical iD ("0000-0002-1825-0097") of any accepted shape; '' when `value` is not a valid iD. */
+/** The canonical iD ("NNNN-NNNN-NNNN-NNNC") of any accepted shape; '' when `value` is not a valid iD. */
 export function normalizeOrcidId(value: unknown): string {
   const compact = compactOf(value)
   if (!compact || orcidChecksum(compact.slice(0, 15)) !== compact[15]) return ''
@@ -64,7 +64,7 @@ export function isValidOrcidId(value: unknown): boolean {
   return normalizeOrcidId(value) !== ''
 }
 
-/** The record's URI, `https://orcid.org/0000-0002-1825-0097`; '' when `value` is not a valid iD. */
+/** The record's URI, `https://orcid.org/NNNN-NNNN-NNNN-NNNC`; '' when `value` is not a valid iD. */
 export function orcidUrl(value: unknown): string {
   const id = normalizeOrcidId(value)
   return id ? `${ORCID_URL_PREFIX}${id}` : ''

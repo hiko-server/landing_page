@@ -10,13 +10,14 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { EXAMPLE_ORCID_ID, EXAMPLE_ORCID_TYPO } from './fixtures/orcid'
 
 for (const k of ['R2_ENDPOINT', 'R2_BUCKET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'SMTP_HOST', 'SMTP_USER', 'SMTP_PASS']) {
   delete process.env[k]
 }
 process.env.JWT_SECRET = 'orcid-store-secret'
 
-const ID = '0000-0002-1825-0097'
+const ID = EXAMPLE_ORCID_ID
 const URL = `https://orcid.org/${ID}`
 
 const originalCwd = process.cwd()
@@ -94,7 +95,7 @@ test('hidden (the field) or off the website (the section): the iD reaches none o
     ['hidden field', cv({ hiddenFields: ['orcid'] })],
     ['Personal Info off the website', cv({ showOnWebsite: false })],
     // The API refuses a typo on save; the store itself does not validate, so the readers must ignore one that got in (the raw JSON editor, an old backup).
-    ['a typo', cv({ orcid: '0000-0002-1825-0098' })],
+    ['a typo', cv({ orcid: EXAMPLE_ORCID_TYPO })],
   ] as const) {
     assert.equal((await writeCvData(document)).ok, true, label)
     const page = data.buildPublicationsPage()!

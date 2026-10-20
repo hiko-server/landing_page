@@ -16,12 +16,13 @@ import { fileURLToPath } from 'node:url'
 import { editorialHarness } from './editorialHarness'
 import { SafeFetchError, type SafeFetchResult } from '../lib/security/safeFetch'
 import type { Fetcher } from '../lib/orcid/fetch'
+import { EXAMPLE_ORCID_ID, EXAMPLE_ORCID_TYPO } from './fixtures/orcid'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const fixture = (name: string) => JSON.parse(fs.readFileSync(path.join(here, 'fixtures', name), 'utf8'))
 const WORKS = fixture('orcid-works.json')
 const BULK = fixture('orcid-works-bulk.json')
-const ID = '0000-0002-1825-0097'
+const ID = EXAMPLE_ORCID_ID
 
 const h = editorialHarness('orcid-route')
 before(h.setup)
@@ -61,7 +62,7 @@ test('admin only and POST only; a missing or mistyped iD is refused before anyth
   const get = await post(t.fetcher, undefined, { method: 'GET' })
   assert.equal(get.statusCode, 405)
   assert.equal(get.headers.allow, 'POST')
-  for (const body of [{}, { orcid: '' }, { orcid: '0000-0002-1825-0098' }, { orcid: 42 }, 'nope']) {
+  for (const body of [{}, { orcid: '' }, { orcid: EXAMPLE_ORCID_TYPO }, { orcid: 42 }, 'nope']) {
     const r = await post(t.fetcher, body)
     assert.equal(r.statusCode, 400, JSON.stringify(body))
     assert.equal(r.body.code, 'BAD_ORCID')

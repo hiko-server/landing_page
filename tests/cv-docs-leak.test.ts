@@ -26,14 +26,15 @@ import { buildSkillEvidence } from '../lib/skillEvidence'
 import { personExtrasFromCv } from '../lib/personExtras'
 import { personNode } from '../lib/schema'
 import { buildVcard, currentRoleFrom } from '../lib/vcard'
+import { EXAMPLE_ORCID_ID } from './fixtures/orcid'
 
 const TEXT = 'ZZ-LEAK-SENTINEL-ZZ'
 const URL_SENTINEL = 'https://zz-leak-sentinel.example/zz'
 const URL_NEEDLE = 'zz-leak-sentinel'
 const SLUG_SENTINEL = 'zz-leak-sentinel'
-// ORCID's documented example iD (a fictitious record ORCID publishes for
-// testing) — a valid checksum, so the slot really renders when visible.
-const ORCID_FIXTURE = '0000-0002-1825-0097'
+// ORCID's documented example iD (tests/fixtures/orcid) — a valid checksum,
+// so the slot really renders when visible.
+const ORCID_FIXTURE = EXAMPLE_ORCID_ID
 const DATE = '1907-07'
 const DATE_NEEDLES = ['1907', 'Jul 1907', '1907.07']
 const NOW = '2026-10'

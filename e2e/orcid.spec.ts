@@ -1,6 +1,7 @@
 import type { APIRequestContext, Page } from '@playwright/test'
 import { test, expect, ADMIN, loginAsAdmin, seriousA11yViolations, settle } from './fixtures'
 import { pdfText, squashSpace } from './pdfText'
+import { EXAMPLE_ORCID_ID, EXAMPLE_ORCID_TYPO, EXAMPLE_ORCID_URI } from '../tests/fixtures/orcid'
 
 /**
  * ORCID (stream "orcid"): nothing ORCID is public until the owner enters an
@@ -13,8 +14,8 @@ import { pdfText, squashSpace } from './pdfText'
  * The stored CV is restored afterwards.
  */
 
-const ID = '0000-0002-1825-0097'
-const URI = `https://orcid.org/${ID}`
+const ID = EXAMPLE_ORCID_ID
+const URI = EXAMPLE_ORCID_URI
 const LINK_NAME = `ORCID iD: ${URI} (opens in a new tab)`
 
 type CvDoc = { en: any[]; zh: any[] }
@@ -125,7 +126,7 @@ test.describe('ORCID iD in CV Studio', { tag: '@admin' }, () => {
       const input = page.getByRole('textbox', { name: 'ORCID iD', exact: true })
       await expect(input).toBeFocused()
       // A typo in the last character is caught by the checksum, with its own message.
-      await input.fill('0000-0002-1825-0098')
+      await input.fill(EXAMPLE_ORCID_TYPO)
       await expect(page.getByText(/This ORCID iD has a typo/)).toBeVisible()
       // A pasted record link is stored as the bare iD.
       await input.fill(URI)
