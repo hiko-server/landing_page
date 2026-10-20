@@ -482,6 +482,27 @@ export function insertMany(
   return { doc: next, reached }
 }
 
+/**
+ * Append several object entries (the ORCID import's papers) to the list at
+ * `listPath` as ONE edit. Each entry is inserted at the end; when linked and
+ * the twin list lines up, the other language receives a copy of the same
+ * entry (a paper's title, venue and ids read the same in both CVs until the
+ * owner translates them). `reached` is true only when every insert was
+ * mirrored.
+ */
+export function appendEntries(doc: Doc, lang: CvLang, listPath: CvPath, entries: readonly Record<string, any>[], linked: boolean): LinkedResult {
+  let next = doc
+  let reached = linked && entries.length > 0
+  for (const entry of entries) {
+    const cur = getAt(next[lang], listPath)
+    const at = Array.isArray(cur) ? cur.length : 0
+    const r = listOp(next, lang, listPath, { type: 'insert', index: at, item: clone(entry), twinItem: clone(entry) }, linked)
+    next = r.doc
+    if (!r.reached) reached = false
+  }
+  return { doc: next, reached }
+}
+
 // ── Sections ──────────────────────────────────────────────────────────────
 
 export function moveSection(doc: Doc, lang: CvLang, from: number, to: number, linked: boolean): Doc {

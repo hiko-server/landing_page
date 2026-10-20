@@ -30,6 +30,7 @@ import { cvLabels } from '../../../lib/cvFormat'
 import { defaultSpan, isFieldHideable, type FieldDef, type ListDef, type SectionDef } from '../../../lib/cvSections'
 import { normalizeDoi } from '../../../lib/publications/doi'
 import { PUB_DATE_RE, publicationHref } from '../../../lib/publications/normalize'
+import { ORCID_MESSAGES, normalizeOrcidId, orcidIdProblem } from '../../../lib/orcid/id'
 import {
   AutoTextarea,
   BulletList,
@@ -45,6 +46,8 @@ import {
 } from './fields'
 import { cvPathAttr, pathStartsWith, useStudio } from './StudioContext'
 import PhotoField from './PhotoField'
+import OrcidImport from './OrcidImport'
+import { PUBLICATIONS_SECTION } from '../../../lib/publications/types'
 import { entryKey, type ListOp } from './docOps'
 
 const langName = (l: 'en' | 'zh') => (l === 'en' ? 'EN' : '中文')
@@ -65,6 +68,7 @@ function FieldRenderer({ def, node, nodePath }: { def: FieldDef; node: any; node
   const missing = !!def.required && !str.trim() && def.kind !== 'bullets' && def.kind !== 'tags'
   const malformed = !!str.trim() && !wellFormed(def, str.trim())
   const invalid = missing || malformed
+  const hint = malformed ? formatHint(def, str.trim()) : def.help
   const singular = def.label.replace(/s$/, '')
 
   let control: React.ReactNode
@@ -174,7 +178,10 @@ function FieldRenderer({ def, node, nodePath }: { def: FieldDef; node: any; node
           inputMode={def.kind === 'url' ? 'url' : undefined}
           value={str}
           placeholder={def.placeholder}
-          onChange={(e) => set(e.target.value)}
+          // An ORCID iD pasted as its https://orcid.org/… link (or without hyphens) becomes the bare iD the CV stores.
+          onChange={(e) => set(def.format === 'orcid' ? normalizeOrcidId(e.target.value) || e.target.value : e.target.value)}
+          spellCheck={def.format === 'orcid' ? false : undefined}
+          autoComplete={def.format === 'orcid' ? 'off' : undefined}
         />
       )
   }
@@ -187,7 +194,7 @@ function FieldRenderer({ def, node, nodePath }: { def: FieldDef; node: any; node
       hidden={hidden}
       hideable={isFieldHideable(def)}
       onToggleHidden={() => api.toggleField(nodePath, def.key, def.label)}
-      help={malformed ? formatHint(def) : def.help}
+      help={hint}
       invalid={invalid}
       gridColumn={gridColumn}
       group={def.kind === 'bullets' || def.kind === 'image' || def.kind === 'switch'}
@@ -204,13 +211,19 @@ function wellFormed(def: FieldDef, value: string): boolean {
   if (def.kind === 'select') return (def.options || []).some((o) => o.value === value)
   if (def.format === 'doi') return !!normalizeDoi(value)
   if (def.format === 'https-link') return !!publicationHref(value)
+  if (def.format === 'orcid') return !orcidIdProblem(value)
   return true
 }
 
-function formatHint(def: FieldDef): string {
+/** What is wrong with a malformed value (an ORCID iD with a typo gets the checksum message, not the format one). */
+function formatHint(def: FieldDef, value = ''): string {
   if (def.kind === 'yearMonth') return 'Use a year (2026) or a year and month (2026-03).'
   if (def.format === 'doi') return 'Not a DOI yet: it should look like 10.1234/abcd (a doi.org link works too).'
   if (def.format === 'https-link') return 'Use an https:// address or a path on this site such as /uploads/paper.pdf.'
+  if (def.format === 'orcid') {
+    const problem = orcidIdProblem(value)
+    return problem ? ORCID_MESSAGES[problem] : def.help || ''
+  }
   return def.help || ''
 }
 
@@ -610,6 +623,7 @@ export function SectionEditor({ def, section, sectionIdx }: { def?: SectionDef; 
         />
       </FieldShell>
       {def.fields?.length ? <FieldGrid fields={def.fields} node={section} nodePath={[sectionIdx]} /> : null}
+      {def.sessionName === PUBLICATIONS_SECTION ? <OrcidImport section={section} sectionIdx={sectionIdx} /> : null}
       {(def.lists || []).map((l) => (
         <EntryList key={l.key} def={l} parent={section} parentPath={[sectionIdx]} />
       ))}

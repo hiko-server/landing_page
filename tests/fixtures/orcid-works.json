@@ -1,0 +1,237 @@
+{
+  "_comment": "Synthetic fixture in the shape of ORCID public API v3.0 GET /{orcid}/works (application/json). Fictional works of a fictional 'Example Person'; the iD is ORCID's documented example record. Not a real person's data.",
+  "last-modified-date": { "value": 1760000000000 },
+  "group": [
+    {
+      "last-modified-date": { "value": 1750000000000 },
+      "external-ids": {
+        "external-id": [
+          {
+            "external-id-type": "doi",
+            "external-id-value": "10.5555/example.2025.001",
+            "external-id-normalized": { "value": "10.5555/example.2025.001", "transient": true },
+            "external-id-url": { "value": "https://doi.org/10.5555/example.2025.001" },
+            "external-id-relationship": "self"
+          },
+          {
+            "external-id-type": "issn",
+            "external-id-value": "0000-0000",
+            "external-id-url": null,
+            "external-id-relationship": "part-of"
+          }
+        ]
+      },
+      "work-summary": [
+        {
+          "put-code": 1001,
+          "created-date": { "value": 1740000000000 },
+          "last-modified-date": { "value": 1750000000000 },
+          "source": {
+            "source-orcid": null,
+            "source-client-id": { "uri": "https://orcid.org/client/0000-0001-0000-0000", "path": "0000-0001-0000-0000", "host": "orcid.org" },
+            "source-name": { "value": "Crossref" },
+            "assertion-origin-orcid": null,
+            "assertion-origin-client-id": null,
+            "assertion-origin-name": null
+          },
+          "title": {
+            "title": { "value": "Measuring example effects in synthetic journals" },
+            "subtitle": null,
+            "translated-title": null
+          },
+          "external-ids": {
+            "external-id": [
+              {
+                "external-id-type": "doi",
+                "external-id-value": "10.5555/example.2025.001",
+                "external-id-normalized": { "value": "10.5555/example.2025.001", "transient": true },
+                "external-id-url": { "value": "https://doi.org/10.5555/example.2025.001" },
+                "external-id-relationship": "self"
+              }
+            ]
+          },
+          "url": { "value": "https://doi.org/10.5555/example.2025.001" },
+          "type": "journal-article",
+          "publication-date": { "year": { "value": "2025" }, "month": { "value": "03" }, "day": null },
+          "journal-title": { "value": "Journal of Synthetic Examples" },
+          "visibility": "public",
+          "path": "/0000-0002-1825-0097/work/1001",
+          "display-index": "0"
+        },
+        {
+          "put-code": 1002,
+          "created-date": { "value": 1741000000000 },
+          "last-modified-date": { "value": 1741000000000 },
+          "source": {
+            "source-orcid": { "uri": "https://orcid.org/0000-0002-1825-0097", "path": "0000-0002-1825-0097", "host": "orcid.org" },
+            "source-client-id": null,
+            "source-name": { "value": "Example Person" },
+            "assertion-origin-orcid": null,
+            "assertion-origin-client-id": null,
+            "assertion-origin-name": null
+          },
+          "title": {
+            "title": { "value": "Measuring Example Effects in Synthetic Journals" },
+            "subtitle": null,
+            "translated-title": null
+          },
+          "external-ids": {
+            "external-id": [
+              {
+                "external-id-type": "doi",
+                "external-id-value": "10.5555/EXAMPLE.2025.001",
+                "external-id-normalized": { "value": "10.5555/example.2025.001", "transient": true },
+                "external-id-url": null,
+                "external-id-relationship": "self"
+              }
+            ]
+          },
+          "url": null,
+          "type": "journal-article",
+          "publication-date": { "year": { "value": "2025" }, "month": null, "day": null },
+          "journal-title": null,
+          "visibility": "public",
+          "path": "/0000-0002-1825-0097/work/1002",
+          "display-index": "1"
+        }
+      ]
+    },
+    {
+      "last-modified-date": { "value": 1700000000000 },
+      "external-ids": {
+        "external-id": [
+          {
+            "external-id-type": "doi",
+            "external-id-value": "10.5555/examplecon.2024.17",
+            "external-id-normalized": { "value": "10.5555/examplecon.2024.17", "transient": true },
+            "external-id-url": { "value": "https://doi.org/10.5555/examplecon.2024.17" },
+            "external-id-relationship": "self"
+          }
+        ]
+      },
+      "work-summary": [
+        {
+          "put-code": 1003,
+          "created-date": { "value": 1700000000000 },
+          "last-modified-date": { "value": 1700000000000 },
+          "source": { "source-orcid": null, "source-client-id": null, "source-name": { "value": "Crossref" } },
+          "title": {
+            "title": { "value": "A conference paper about nothing in particular" },
+            "subtitle": { "value": "Extended abstract" },
+            "translated-title": null
+          },
+          "external-ids": { "external-id": [] },
+          "url": { "value": "http://proceedings.example.org/2024/17" },
+          "type": "conference-paper",
+          "publication-date": { "year": { "value": "2024" }, "month": null, "day": null },
+          "journal-title": { "value": "Proceedings of the Example Conference (EXCON 2024)" },
+          "visibility": "public",
+          "path": "/0000-0002-1825-0097/work/1003",
+          "display-index": "0"
+        }
+      ]
+    },
+    {
+      "last-modified-date": { "value": 1690000000000 },
+      "external-ids": {
+        "external-id": [
+          {
+            "external-id-type": "arxiv",
+            "external-id-value": "2301.00001",
+            "external-id-normalized": { "value": "arXiv:2301.00001", "transient": true },
+            "external-id-url": { "value": "https://arxiv.org/abs/2301.00001" },
+            "external-id-relationship": "self"
+          }
+        ]
+      },
+      "work-summary": [
+        {
+          "put-code": 1004,
+          "created-date": { "value": 1690000000000 },
+          "last-modified-date": { "value": 1690000000000 },
+          "source": { "source-orcid": null, "source-client-id": null, "source-name": { "value": "arXiv" } },
+          "title": { "title": { "value": "Preliminary notes on synthetic preprints" }, "subtitle": null, "translated-title": null },
+          "external-ids": { "external-id": [] },
+          "url": null,
+          "type": "preprint",
+          "publication-date": { "year": { "value": "2023" }, "month": { "value": "1" }, "day": { "value": "2" } },
+          "journal-title": null,
+          "visibility": "public",
+          "path": "/0000-0002-1825-0097/work/1004",
+          "display-index": "0"
+        }
+      ]
+    },
+    {
+      "last-modified-date": { "value": 1680000000000 },
+      "external-ids": {
+        "external-id": [
+          {
+            "external-id-type": "pat",
+            "external-id-value": "US00000000A1",
+            "external-id-url": null,
+            "external-id-relationship": "self"
+          }
+        ]
+      },
+      "work-summary": [
+        {
+          "put-code": 1005,
+          "created-date": { "value": 1680000000000 },
+          "last-modified-date": { "value": 1680000000000 },
+          "source": { "source-orcid": null, "source-client-id": null, "source-name": { "value": "Example Person" } },
+          "title": { "title": { "value": "Apparatus for generating example data" }, "subtitle": null, "translated-title": null },
+          "external-ids": { "external-id": [] },
+          "url": null,
+          "type": "patent",
+          "publication-date": { "year": { "value": "2022" }, "month": null, "day": null },
+          "journal-title": null,
+          "visibility": "public",
+          "path": "/0000-0002-1825-0097/work/1005",
+          "display-index": "0"
+        }
+      ]
+    },
+    {
+      "last-modified-date": { "value": 1670000000000 },
+      "external-ids": { "external-id": [] },
+      "work-summary": [
+        {
+          "put-code": 1006,
+          "created-date": { "value": 1670000000000 },
+          "last-modified-date": { "value": 1670000000000 },
+          "source": { "source-orcid": null, "source-client-id": null, "source-name": { "value": "Example Person" } },
+          "title": { "title": { "value": "Synthetic methods for example research" }, "subtitle": null, "translated-title": null },
+          "external-ids": { "external-id": [] },
+          "url": null,
+          "type": "dissertation-thesis",
+          "publication-date": null,
+          "journal-title": { "value": "Example University" },
+          "visibility": "public",
+          "path": "/0000-0002-1825-0097/work/1006",
+          "display-index": "0"
+        }
+      ]
+    },
+    {
+      "last-modified-date": { "value": 1660000000000 },
+      "external-ids": { "external-id": [] },
+      "work-summary": [
+        {
+          "put-code": 1007,
+          "source": { "source-orcid": null, "source-client-id": null, "source-name": { "value": "Example Person" } },
+          "title": { "title": { "value": "   " }, "subtitle": null, "translated-title": null },
+          "external-ids": { "external-id": [] },
+          "url": null,
+          "type": "other",
+          "publication-date": null,
+          "journal-title": null,
+          "visibility": "public",
+          "path": "/0000-0002-1825-0097/work/1007",
+          "display-index": "0"
+        }
+      ]
+    }
+  ],
+  "path": "/0000-0002-1825-0097/works"
+}

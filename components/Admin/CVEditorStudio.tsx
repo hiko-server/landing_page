@@ -56,6 +56,7 @@ import {
   addSection,
   duplicatesHidden,
   hasContent,
+  appendEntries,
   insertMany,
   listOp,
   moveSection,
@@ -96,6 +97,7 @@ import {
   type ReadinessFinding,
 } from '../../lib/cvReadiness'
 import { referenceMonth } from '../../lib/clock'
+import { normalizeOrcidId } from '../../lib/orcid/id'
 
 // The readiness drawer only loads when it is first opened.
 const ReadinessPanel = dynamic(() => import('./cvStudio/ReadinessPanel'), { ssr: false })
@@ -423,6 +425,15 @@ export default function CVEditorStudio() {
     [run, lang, linked, unlinkedReason, sectionNameAt, notifyUndoable, scope, announce],
   )
 
+  // The ORCID iD the Publications import reads (this language first; the field is shared, so usually both agree).
+  const orcid = useMemo(() => {
+    for (const l of [lang, other]) {
+      const id = normalizeOrcidId(doc[l].find((s) => s.sessionName === 'personalInformation')?.orcid)
+      if (id) return id
+    }
+    return ''
+  }, [doc, lang, other])
+
   // ── Edit API (context for every form control) ──────────────────────────
   const api: StudioApi = useMemo(
     () => ({
@@ -468,6 +479,23 @@ export default function CVEditorStudio() {
           announce(`Pasted into ${LANG_LABEL[lang]} only`, unlinkedReason(sectionNameAt(listPath)))
         }
       },
+      appendEntries: (listPath: CvPath, entries: readonly Record<string, any>[], label: string) => {
+        if (!entries.length) return
+        const r = run((d) => appendEntries(d, lang, listPath, entries, linked))
+        notifyUndoable(`${label}${scope(r.reached)}`, r.doc)
+        if (linked && !r.reached) announce(`Added to ${LANG_LABEL[lang]} only`, unlinkedReason(sectionNameAt(listPath)))
+      },
+      goToField: (sectionName: string, field: string) => {
+        const idx = getDoc()[lang].findIndex((s) => s.sessionName === sectionName)
+        if (idx < 0) {
+          announce(`Add the “${SECTION_BY_NAME[sectionName]?.label || sectionName}” section first`)
+          return
+        }
+        setSelected(sectionName)
+        setMobilePane('edit')
+        setFocus({ lang, path: [idx, field], nonce: Date.now(), control: true })
+      },
+      orcid,
       twinLength: (listPath: CvPath) => twinListLength(getDoc(), lang, listPath),
       twinValue: (path: CvPath) => {
         const d = getDoc()
@@ -476,7 +504,7 @@ export default function CVEditorStudio() {
         return at < 0 ? undefined : getAt(d[other], [at, ...path.slice(1)])
       },
     }),
-    [apply, run, getDoc, lang, other, linked, focus, reportVisibility, applyListOp, announce, unlinkedReason, sectionNameAt],
+    [apply, run, getDoc, lang, other, linked, focus, orcid, reportVisibility, applyListOp, announce, unlinkedReason, sectionNameAt, notifyUndoable, scope],
   )
 
   const confirmPendingRemove = (both: boolean) => {
@@ -616,7 +644,8 @@ export default function CVEditorStudio() {
         return
       }
       const behavior: ScrollBehavior = prefersReducedMotion() ? 'auto' : 'smooth'
-      const target = el.querySelector<HTMLElement>('[data-vis-toggle]') || el.querySelector<HTMLElement>('input, textarea, button')
+      const control = focus.control ? el.querySelector<HTMLElement>('input, textarea, select') : null
+      const target = control || el.querySelector<HTMLElement>('[data-vis-toggle]') || el.querySelector<HTMLElement>('input, textarea, button')
       const reveal = () => {
         el.scrollIntoView({ block: 'center', behavior })
         if (target && !el.contains(document.activeElement)) target.focus({ preventScroll: true })

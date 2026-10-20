@@ -1,0 +1,89 @@
+{
+  "_comment": "Synthetic fixture in the shape of ORCID public API v3.0 GET /{orcid}/works/{put-codes} (bulk, application/json): full works with contributors and short descriptions, plus one error entry. Fictional data.",
+  "bulk": [
+    {
+      "work": {
+        "created-date": { "value": 1740000000000 },
+        "last-modified-date": { "value": 1750000000000 },
+        "source": { "source-orcid": null, "source-client-id": null, "source-name": { "value": "Crossref" } },
+        "put-code": 1002,
+        "path": "/0000-0002-1825-0097/work/1002",
+        "title": { "title": { "value": "Measuring Example Effects in Synthetic Journals" }, "subtitle": null, "translated-title": null },
+        "journal-title": { "value": "Journal of Synthetic Examples" },
+        "short-description": "We measure example effects.\r\n\r\nResults are illustrative.",
+        "citation": { "citation-type": "bibtex", "citation-value": "@article{person2025, title={Measuring Example Effects in Synthetic Journals}}" },
+        "type": "journal-article",
+        "publication-date": { "year": { "value": "2025" }, "month": { "value": "03" }, "day": null },
+        "external-ids": { "external-id": [] },
+        "url": null,
+        "contributors": {
+          "contributor": [
+            {
+              "contributor-orcid": null,
+              "credit-name": { "value": "Jane Doe" },
+              "contributor-email": null,
+              "contributor-attributes": { "contributor-sequence": "additional", "contributor-role": "author" }
+            },
+            {
+              "contributor-orcid": { "uri": "https://orcid.org/0000-0002-1825-0097", "path": "0000-0002-1825-0097", "host": "orcid.org" },
+              "credit-name": { "value": "Example Person" },
+              "contributor-email": null,
+              "contributor-attributes": { "contributor-sequence": "first", "contributor-role": "author" }
+            },
+            {
+              "contributor-orcid": null,
+              "credit-name": { "value": "Ed Itor" },
+              "contributor-email": null,
+              "contributor-attributes": { "contributor-sequence": null, "contributor-role": "editor" }
+            },
+            {
+              "contributor-orcid": null,
+              "credit-name": { "value": "Jane Doe" },
+              "contributor-email": null,
+              "contributor-attributes": { "contributor-sequence": null, "contributor-role": null }
+            },
+            {
+              "contributor-orcid": null,
+              "credit-name": { "value": "Sam Example" },
+              "contributor-email": null,
+              "contributor-attributes": { "contributor-sequence": "additional", "contributor-role": "http://credit.niso.org/contributor-roles/methodology/" }
+            },
+            {
+              "contributor-orcid": null,
+              "credit-name": { "value": "Tran S. Lator" },
+              "contributor-email": null,
+              "contributor-attributes": { "contributor-sequence": null, "contributor-role": "chair-or-translator" }
+            }
+          ]
+        },
+        "language-code": "en",
+        "country": null,
+        "visibility": "public"
+      }
+    },
+    {
+      "work": {
+        "put-code": 1004,
+        "path": "/0000-0002-1825-0097/work/1004",
+        "title": { "title": { "value": "Preliminary notes on synthetic preprints" }, "subtitle": null, "translated-title": null },
+        "journal-title": null,
+        "short-description": null,
+        "type": "preprint",
+        "publication-date": { "year": { "value": "2023" }, "month": { "value": "01" }, "day": null },
+        "external-ids": { "external-id": [] },
+        "url": { "value": "https://arxiv.org/abs/2301.00001v2" },
+        "contributors": { "contributor": [] },
+        "visibility": "public"
+      }
+    },
+    {
+      "error": {
+        "response-code": 404,
+        "developer-message": "404 Not Found: The resource was not found.",
+        "user-message": "The resource was not found.",
+        "error-code": 9016,
+        "more-info": "https://members.orcid.org/api/resources/troubleshooting"
+      }
+    }
+  ]
+}
