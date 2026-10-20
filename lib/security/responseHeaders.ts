@@ -39,5 +39,18 @@ export function applySecurityHeaders<T extends HeaderTarget>(res: T, opts: { pat
     // Caches between us and the user shouldn't store admin responses.
     res.headers.set('Cache-Control', 'no-store, max-age=0, must-revalidate')
   }
+  // Review links (H5, pages/review/[token]): a private draft behind a token in
+  // the path — never indexed, never cached by Cloudflare, and the token never
+  // leaves in a Referer header. The page sets the same; this covers every answer.
+  if (isReviewPath(opts.pathname)) {
+    res.headers.set('X-Robots-Tag', 'noindex, nofollow, noarchive')
+    res.headers.set('Cache-Control', 'private, no-store, max-age=0')
+    res.headers.set('Referrer-Policy', 'no-referrer')
+  }
   return res
+}
+
+/** /review/<token> and its Next data route. */
+export function isReviewPath(pathname: string): boolean {
+  return pathname.startsWith('/review/') || /^\/_next\/data\/[^/]+\/review\//.test(pathname)
 }

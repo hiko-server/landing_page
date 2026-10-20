@@ -25,6 +25,7 @@ import { articleUiFor, type ArticleUi } from '../../lib/uiStrings/article'
 import { ArticleRoot } from '../../components/Article/articleUi'
 import type { SwitchLink } from '../../lib/translations'
 import { markdownTwinPath } from '../../lib/markdownTwinPaths'
+import { reviewReadOptions, reviewRenderOf } from '../../lib/review/render'
 import { tagHref } from '../../lib/tagFilter'
 import type { AuthorCardData } from '../../lib/authorCard'
 import { articleImageUrls, breadcrumb, absUrl, cardImageAlt, caseStudyNode, ogLangOf, PERSON_NAME, type Alternate, type ArticleCards, type OgImageOptions } from '../../lib/schema'
@@ -66,6 +67,8 @@ type Props = {
   alternates: Alternate[]
   /** Draft Mode is showing the case study's unpublished changes, not its live version (H4). */
   pendingPreview: boolean
+  /** Rendered for a review link (H5, pages/review/[token]): kept out of search indexes. */
+  review?: boolean
 }
 
 const MONO = 'var(--font-geist-mono), monospace'
@@ -94,6 +97,7 @@ export default function WorkCase({
   alternates,
   ui: articleUi,
   pendingPreview,
+  review = false,
 }: Props) {
   const path = `/work/${slug}`
   const url = absUrl(path)
@@ -174,7 +178,7 @@ export default function WorkCase({
         imageAlt={cardImageAlt(frontmatter.title, cover?.src, frontmatter.coverAlt)}
         type="article"
         lang={lang}
-        noindex={draftMode}
+        noindex={draftMode || review}
         alternates={alternates}
         publishedTime={frontmatter.published || undefined}
         modifiedTime={updatedAt ? new Date(updatedAt).toISOString() : undefined}
@@ -270,9 +274,12 @@ export const getStaticPaths: GetStaticPaths = async () => ({
 
 export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
   const slug = String(ctx.params?.slug || '')
-  const draftMode = ctx.draftMode === true
+  // A review link (H5) renders this one draft or these unpublished changes, and nothing else unpublished.
+  const review = reviewRenderOf(ctx)
+  const draftMode = ctx.draftMode === true && !review
   // Draft Mode shows drafts, and a live case study's unpublished changes (H4).
-  const w = await getWork(slug, { includeDrafts: draftMode, pending: draftMode })
+  const w = await getWork(slug, review ? reviewReadOptions(review) : { includeDrafts: draftMode, pending: draftMode })
+  if (!w && review) return { notFound: true }
   // No item: a renamed case study's old address redirects permanently (308) to the new one (H6), else 404.
   if (!w) return (await import('../../lib/redirects')).missingItemProps('work', slug, draftMode)
 
@@ -331,6 +338,7 @@ export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
       alternates,
       ui: articleUiFor(w.lang),
       pendingPreview: draftMode && !!(await import('../../lib/pendingRevisions')).getPendingRevision('work', w.slug),
+      ...(review ? { review: true } : {}),
       // Whether /publications exists, for the nav link (lib/publicationsData).
       ...(await import('../../lib/publicationsData')).chromePublicationsProp(),
     },
