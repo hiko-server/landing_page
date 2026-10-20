@@ -34,7 +34,10 @@ export function articleSiblings(kind: 'blog' | 'work', self: Self, opts: { draft
   const work = listWorkInDisplayOrder()
 
   const own = kind === 'blog' ? (opts.draftMode ? listPosts({ includeDrafts: true }) : posts) : opts.draftMode ? listWorkInDisplayOrder({ includeDrafts: true }) : work
-  const pool = own.some((e) => e.slug === self.slug) ? own : [...own, self]
+  // The page's own entry is the one being rendered: in Draft Mode that may be
+  // a pending revision (a changed translationKey), so it replaces the stored
+  // row instead of the stored row standing in for it.
+  const pool = own.some((e) => e.slug === self.slug) ? own.map((e) => (e.slug === self.slug ? self : e)) : [...own, self]
   const versions = translationGroups(pool).get(self.slug) || []
   const alternates = opts.draftMode || self.frontmatter.draft ? [] : hreflangAlternates(self, versions)
   const translations = switchLinks(versions)
