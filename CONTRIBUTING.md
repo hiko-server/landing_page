@@ -88,8 +88,9 @@ yarn build             # full build, ~30s
 ```
 
 There is no hosted CI, so these checks are the gate: run them (plus
-`yarn test`) before every push to `main`. README → *Quality gates* lists
-the full set.
+`yarn test`) before every push to `main`, and `scripts/check-container.sh`
+too when the Dockerfile, `docker-entrypoint.sh` or a compose file changes.
+README → *Quality gates* lists the full set.
 
 ## Branch + commit conventions
 
