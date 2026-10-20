@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { getShortcutsEnabled } from '../../lib/keyboardShortcuts'
 import { layerKeyOf } from '../../lib/keyboardLayer'
 import { openCommandPalette } from './paletteEvents'
-import { noteKeyboardUse } from './platform'
+import { noteKeyboardUse } from './hardwareKeyboard'
 
 /** An open modal dialog (the palette, the menu, the lightbox) owns the keyboard. */
 const OPEN_MODAL = '[aria-modal="true"]'

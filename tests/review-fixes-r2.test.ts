@@ -23,10 +23,11 @@ import { TOAST_BOTTOM, TOAST_STACK_VAR, toastListStyle } from '../components/Chr
 import { ASK_COPY, askCopyFor } from '../lib/ask/copy'
 import { focusUntilItSticks, type FocusEnv } from '../lib/focusAfterDialog'
 import { CONTACT_PREFILL_EVENT, stashContactQuestion } from '../lib/contactPrefill'
-import { HIDE_ON_COARSE_POINTER, KEYBOARD_ATTR, isHardwareKeyEvent } from '../components/Chrome/platform'
+import { HIDE_ON_COARSE_POINTER, KEYBOARD_ATTR } from '../components/Chrome/platform'
+import { isHardwareKeyEvent } from '../components/Chrome/hardwareKeyboard'
 import { isNowhereTarget } from '../components/Admin/shell/listKeys'
 import { semanticColors } from '../theme/color'
-import { ADMIN_COMPONENT_STYLES } from '../theme/adminComponents'
+import { ADMIN_COMPONENT_STYLES, ADMIN_GLOBAL_CSS, CONTROL_BORDER } from '../theme/adminComponents'
 import { overflowsX, scrollRegionProps } from '../components/Admin/shell/scrollRegion'
 import { MORPH_PARTS, MORPH_PART_ATTR, morphName, nameMorphTarget, MORPH_ATTR, type MorphElement } from '../lib/viewTransitionMorph'
 import { ImageQueueFullError, JobQueue, envInt, imageJobs } from '../lib/imageJobs'
@@ -216,17 +217,19 @@ const contrast = (a: string, b: string) => {
   return (x + 0.05) / (y + 0.05)
 }
 
-test('UX-A-6: page.control-border is ≥ 3:1 on every page and row background; admin checkboxes use it', () => {
-  const token = semanticColors['page.control-border']
+test('UX-A-6: the control border is ≥ 3:1 on every page and row background; admin checkboxes use it (admin-only CSS)', () => {
   for (const mode of ['light', 'dark'] as const)
     for (const bg of ['page.bg', 'page.bg-elevated', 'page.bg-overlay'] as const) {
-      const ratio = contrast(token[mode], semanticColors[bg][mode])
+      const ratio = contrast(CONTROL_BORDER[mode], semanticColors[bg][mode])
       assert.ok(ratio >= 3, `control border on ${bg} (${mode}) = ${ratio.toFixed(2)}`)
     }
+  assert.equal(ADMIN_GLOBAL_CSS, ":root{--control-border:#858585}[data-theme='dark'],.chakra-ui-dark{--control-border:#6b6b6b}")
   const checkbox = ADMIN_COMPONENT_STYLES.Checkbox as unknown as { baseStyle: (p: Record<string, unknown>) => { control: Record<string, unknown> } }
   const style = checkbox.baseStyle({ colorScheme: 'purple', colorMode: 'light', theme: {} })
-  assert.equal(style.control.borderColor, 'page.control-border')
+  assert.equal(style.control.borderColor, 'var(--control-border)')
   assert.ok(style.control._checked, 'checked colours stay Chakra’s')
+  assert.match(read('components/Admin/AdminThemeScope.tsx'), /<Global styles=\{ADMIN_GLOBAL_CSS\} \/>/)
+  assert.ok(!('page.control-border' in semanticColors), 'not in the public theme')
 })
 
 test('UX-A-7 / VISU-5: the decorative page.muted never colours admin text or a control’s only cue', () => {
