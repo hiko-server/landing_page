@@ -156,3 +156,32 @@ test('admin lists take j / k from the page body before the visitor keyboard laye
   const layer = fs.readFileSync(path.join(root, 'lib/keyboardLayer.ts'), 'utf8')
   assert.match(layer, /e\.defaultPrevented\) return null/, 'the layer leaves a key the list handled alone')
 })
+
+test('a "G" pressed while the page changes still counts: the chord state outlives the listener being re-attached', async () => {
+  const { handleChordKey, CHORD_WINDOW_MS } = await import('../components/Admin/shell/useAdminCommands')
+  const g = globalThis as Record<string, unknown>
+  const hadDocument = 'document' in g
+  const previous = g.document
+  g.document = { querySelector: () => null }
+  try {
+    const pushed: string[] = []
+    const nav = { asPath: () => '/admin/system', push: (href: string) => void pushed.push(href) }
+    const key = (k: string) =>
+      ({ key: k, shiftKey: false, metaKey: false, ctrlKey: false, altKey: false, repeat: false, target: null, isComposing: false, keyCode: 0, preventDefault() {}, stopPropagation() {} }) as never
+    handleChordKey(key('g'), nav, 1_000)
+    // Here the old page's overlay detaches the listener and the new page's attaches it again.
+    handleChordKey(key('l'), nav, 1_300)
+    assert.deepEqual(pushed, ['/admin/system?view=activity'])
+    // The window still closes.
+    handleChordKey(key('g'), nav, 5_000)
+    handleChordKey(key('l'), nav, 5_000 + CHORD_WINDOW_MS + 1)
+    assert.deepEqual(pushed, ['/admin/system?view=activity'])
+    // A chord to the page already shown does nothing.
+    handleChordKey(key('g'), nav, 9_000)
+    handleChordKey(key('s'), nav, 9_100)
+    assert.deepEqual(pushed, ['/admin/system?view=activity'])
+  } finally {
+    if (hadDocument) g.document = previous
+    else delete g.document
+  }
+})

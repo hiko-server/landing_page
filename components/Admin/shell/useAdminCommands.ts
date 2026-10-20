@@ -18,28 +18,44 @@ export const CHORD_WINDOW_MS = 1200
 let chordUsers = 0
 let detachChords: (() => void) | null = null
 
-function attachChords(): () => void {
-  let armedUntil = 0
-  const onKey = (e: KeyboardEvent) => {
-    if (isImeComposing(e) || e.repeat) return
-    if (e.metaKey || e.ctrlKey || e.altKey) {
-      armedUntil = 0
-      return
-    }
-    if (isTextEntryTarget(e.target) || !getShortcutsEnabled()) return
-    if (document.querySelector('[role="dialog"][aria-modal="true"], [role="alertdialog"]')) return
-    const k = e.key.toLowerCase()
-    if (Date.now() < armedUntil) {
-      armedUntil = 0
-      const target = chordTarget(k)
-      if (!target) return
-      e.preventDefault()
-      e.stopPropagation()
-      if (!isCurrentHref(target, Router.asPath)) void Router.push(target)
-      return
-    }
-    armedUntil = k === 'g' && !e.shiftKey ? Date.now() + CHORD_WINDOW_MS : 0
+/**
+ * Until when a "G" waits for its second key. Module state, not the
+ * listener's: during a page change the old page's overlay detaches the
+ * listener and the new one attaches it again (the URL has already changed
+ * by then), and a "G" pressed in between must still count.
+ */
+let armedUntil = 0
+
+export type ChordKeyEvent = Pick<KeyboardEvent, 'key' | 'shiftKey' | 'metaKey' | 'ctrlKey' | 'altKey' | 'repeat' | 'target' | 'isComposing' | 'keyCode' | 'preventDefault' | 'stopPropagation'>
+
+export type ChordNavigation = { asPath: () => string; push: (href: string) => void }
+
+const routerNavigation: ChordNavigation = { asPath: () => Router.asPath, push: (href) => void Router.push(href) }
+
+/** One keydown for the "G then <key>" chords (exported for tests). */
+export function handleChordKey(e: ChordKeyEvent, nav: ChordNavigation = routerNavigation, now = Date.now()): void {
+  if (isImeComposing(e) || e.repeat) return
+  if (e.metaKey || e.ctrlKey || e.altKey) {
+    armedUntil = 0
+    return
   }
+  if (isTextEntryTarget(e.target) || !getShortcutsEnabled()) return
+  if (document.querySelector('[role="dialog"][aria-modal="true"], [role="alertdialog"]')) return
+  const k = e.key.toLowerCase()
+  if (now < armedUntil) {
+    armedUntil = 0
+    const target = chordTarget(k)
+    if (!target) return
+    e.preventDefault()
+    e.stopPropagation()
+    if (!isCurrentHref(target, nav.asPath())) nav.push(target)
+    return
+  }
+  armedUntil = k === 'g' && !e.shiftKey ? now + CHORD_WINDOW_MS : 0
+}
+
+function attachChords(): () => void {
+  const onKey = (e: KeyboardEvent) => handleChordKey(e)
   window.addEventListener('keydown', onKey, true)
   return () => window.removeEventListener('keydown', onKey, true)
 }
