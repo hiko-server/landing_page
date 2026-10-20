@@ -342,12 +342,17 @@ test.describe('review-r3 accessibility fixes', { tag: '@admin' }, () => {
         await expect(dialog).toBeHidden()
         await expect(publish, `closed with ${close}`).toBeFocused()
       }
-      await more.click()
-      await page.getByRole('menuitem', { name: 'Schedule…' }).click()
-      await expect(dialog).toBeVisible()
-      await page.keyboard.press('Escape')
-      await expect(dialog).toBeHidden()
-      await expect(more).toBeFocused()
+      // From the ⋯ menu → back on ⋯. The pause lets the closed menu's own refocus run first: the
+      // dialog then closes in a commit that re-merges the menu button's ref (a plain ref is null there).
+      for (const pause of [0, 400]) {
+        await more.click()
+        await page.getByRole('menuitem', { name: 'Schedule…' }).click()
+        await expect(dialog).toBeVisible()
+        await page.waitForTimeout(pause)
+        await page.keyboard.press('Escape')
+        await expect(dialog).toBeHidden()
+        await expect(more, `after a ${pause}ms pause`).toBeFocused()
+      }
     } finally {
       await adminCleanup(page, 'DELETE', `/api/admin/posts?slug=${slug}`)
     }
@@ -595,6 +600,7 @@ test.describe('review-r3 accessibility fixes', { tag: '@admin' }, () => {
     await page.getByRole('menuitem', { name: 'Custom range…' }).click()
     const dialog = page.getByRole('dialog', { name: 'Custom range' })
     await expect(dialog).toBeVisible()
+    await page.waitForTimeout(400)
     await page.keyboard.press('Escape')
     await expect(dialog).toBeHidden()
     await expect(period).toBeFocused()

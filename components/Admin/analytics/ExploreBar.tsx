@@ -40,6 +40,7 @@ import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from '@chakra-ui/i
 import { FaDownload, FaFilter, FaSync, FaTimes } from 'react-icons/fa'
 import { MONO, inputProps, outlineButtonProps, primaryButtonProps } from '../shell/ui'
 import { readJsonObject } from '../shell/http'
+import { useStickyRef } from '../shell/stickyRef'
 import { formatCount } from '../../../lib/analytics/format'
 import { utcDay } from '../../../lib/analytics/shared'
 import {
@@ -169,7 +170,8 @@ function CustomRangeModal({
 
 function PeriodControl({ query, onChange }: { query: ExploreQuery; onChange: (q: ExploreQuery) => void }) {
   const [customOpen, setCustomOpen] = useState(false)
-  const periodRef = useRef<HTMLButtonElement>(null)
+  // Sticky: the dialog reads it as it closes, when the menu button's re-merged ref may be briefly null.
+  const [periodRef, setPeriodRef] = useStickyRef<HTMLButtonElement>()
   const t = today()
   const span = resolvePeriod(query, t)
   const before = shiftSpan(span, -1)
@@ -185,7 +187,7 @@ function PeriodControl({ query, onChange }: { query: ExploreQuery; onChange: (q:
       <IconButton {...navProps} icon={<ChevronLeftIcon boxSize={5} />} aria-label={`Previous period: ${formatSpanWithYear(before)}`} title={formatSpanWithYear(before)} isDisabled={!canBack} onClick={() => go(before)} />
       <Menu placement="bottom-start" isLazy>
         <MenuButton
-          ref={periodRef}
+          ref={setPeriodRef}
           as={Button}
           size="sm"
           h="32px"

@@ -177,3 +177,20 @@ test('UX-A-12: the fidelity banner and the preview’s compile error are not ass
   assert.doesNotMatch(box, /role="alert"/)
   assert.match(preview, /role="status" aria-live="polite">\s*\{status\}/)
 })
+
+// ── UX-A-7 / UX-A-8 ────────────────────────────────────────────────────────
+
+test('UX-A-7 / UX-A-8: dialog return targets on menu buttons are sticky refs (a re-merged ref is null mid-commit)', () => {
+  const sticky = read('components/Admin/shell/stickyRef.ts')
+  assert.match(sticky, /if \(el\) ref\.current = el/, 'null never overwrites the last element')
+  const frame = read('components/Admin/editor/MdxItemEditorFrame.tsx')
+  assert.match(frame, /<MenuButton ref=\{setMoreBtn\}/)
+  assert.match(frame, /finalFocusRef=\{scheduleReturn\}/)
+  // The return target is read as the dialog closes and must still be in the page and enabled.
+  assert.match(frame, /el\.isConnected && !\(el as HTMLButtonElement\)\.disabled/)
+  assert.match(frame, /if \(scheduleFrom\.current === 'sheet'\) return firstUsable\(publish, more\)/)
+  const explore = read('components/Admin/analytics/ExploreBar.tsx')
+  assert.match(explore, /ref=\{setPeriodRef\}/)
+  assert.match(explore, /finalFocusRef=\{periodRef\}/)
+  assert.match(read('components/Admin/editor/ScheduleDialog.tsx'), /finalFocusRef=\{finalFocusRef\}/)
+})
