@@ -37,6 +37,7 @@ import { systemPrefersDark, type ThemePreference } from '../../lib/themePreferen
 import { motionTransition } from '../../theme/tokens'
 import { HIDE_ON_COARSE_POINTER, isApplePlatform } from '../Chrome/platform'
 import { setShortcutsEnabled } from '../../lib/keyboardShortcuts'
+import { noteSearchResults } from '../../lib/analytics/searchEmpty'
 
 /**
  * ⌘K command palette (loaded on demand by CommandPaletteLazy).
@@ -665,6 +666,9 @@ export default function CommandPalette({
   }, [query, items, sections, recentItems, recent, index])
 
   useEffect(() => setActiveIdx(0), [query])
+
+  // Searches that find nothing (lib/analytics/searchEmpty: settled, normalised, no identifiers).
+  useEffect(() => noteSearchResults(query, total, isOpen && !!index), [query, total, isOpen, index])
 
   useEffect(() => {
     if (!isOpen) return

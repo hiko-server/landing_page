@@ -4,6 +4,8 @@ import { sendNotModified, sendVersionedBody } from '../../../lib/http'
 import { absUrl } from '../../../lib/schema'
 import { inlineDisposition, isExportFormat } from '../../../lib/cvExport/files'
 import { getCvExport } from '../../../lib/cvExport/service'
+import { recordServerGoal } from '../../../lib/analytics/events'
+import { cvFileProp } from '../../../lib/analytics/eventsShared'
 
 /**
  * GET|HEAD /api/cv/export?lang=en|zh&format=pdf|txt|json — the downloadable
@@ -17,6 +19,10 @@ import { getCvExport } from '../../../lib/cvExport/service'
  *   - `Cache-Control: public, max-age=0, must-revalidate`: browsers and
  *     Cloudflare revalidate every time (a 304 when nothing changed); the
  *     edge purge on a CV save also lists these paths (lib/revalidate).
+ *     Because every open reaches this route, a GET answered 200 or 304
+ *     counts one cv_download goal event (lib/analytics/events: language +
+ *     format only, the daily visitor hash, the page-view exclusions; never
+ *     HEAD or a prefetch).
  * `Content-Disposition: inline` with the dated name: opening the URL views
  * the file, the page's download links save it as "Li-Yanpei-CV-2026-10.pdf".
  * `Link: rel=canonical` points search engines at the HTML CV; the text and
@@ -44,6 +50,7 @@ export default withApi('cv/export', async (req: NextApiRequest, res: NextApiResp
   res.setHeader('Link', `<${absUrl(lang === 'zh' ? '/cv/zh' : '/cv')}>; rel="canonical"`)
   if (format !== 'pdf') res.setHeader('X-Robots-Tag', 'noindex')
 
+  if (req.method === 'GET') recordServerGoal(req, 'cv_download', cvFileProp(lang, format) ?? '')
   const inm = req.headers['if-none-match']
   const tags = (Array.isArray(inm) ? inm.join(',') : inm || '').split(',').map((t) => t.trim().replace(/^W\//, ''))
   if (tags.includes(file.etag) || tags.includes('*')) return sendNotModified(res, file.etag)

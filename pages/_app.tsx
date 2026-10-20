@@ -12,6 +12,7 @@ import '../styles/globals.css'
 import theme from '../theme/chakra'
 import { useReportWebVitals } from 'next/web-vitals'
 import { reportWebVital, useAnalytics } from '../lib/analytics/client'
+import { installGoalClicks } from '../lib/analytics/goalBeacon'
 import { pageKeyOf } from '../lib/viewTransition'
 import SiteChrome from '../components/Chrome/SiteChrome'
 import ThemeColorMeta from '../components/Chrome/ThemeColorMeta'
@@ -136,6 +137,9 @@ const App = ({ Component, pageProps, router }: AppProps) => {
   // First-party error monitor: uncaught errors and unhandled rejections are
   // reported to /api/e (the reporter loads only once something fails).
   useEffect(() => installErrorCapture(), [])
+
+  // Goal events: e-mail and outbound link clicks (lib/analytics/goalBeacon).
+  useEffect(() => installGoalClicks(), [])
 
   // Browsers with the View Transitions API animate route changes natively
   // (see components/Chrome/RouteTransitions.tsx), so the framer-motion wrapper

@@ -10,6 +10,7 @@ import { collectImages, type HastNode } from '../../lib/rehype/hast'
 import { TocDisclosure, TocRail } from './TableOfContents'
 import ArticleProgress from './ArticleProgress'
 import { useActiveHeading } from './useActiveHeading'
+import { useReadThrough } from '../../lib/analytics/readThrough'
 
 /** A table of contents is only worth showing for two or more sections. */
 const MIN_TOC_ENTRIES = 2
@@ -29,6 +30,8 @@ const MIN_TOC_ENTRIES = 2
 export default function ArticleBody({ tree, toc }: { tree: HastRoot; toc: TocEntry[] }) {
   const showToc = toc.length >= MIN_TOC_ENTRIES
   const activeId = useActiveHeading(showToc ? toc.map((t) => t.id) : [])
+  // Reaching #article-end after reading: one read_through goal event (lib/analytics/readThrough).
+  useReadThrough()
 
   const images = useMemo(() => collectImages(tree as unknown as HastNode), [tree])
   const [index, setIndex] = useState<number | null>(null)

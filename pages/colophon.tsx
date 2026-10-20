@@ -563,8 +563,9 @@ export default function ColophonPage({ releases, stack, buildSha, builtAt }: Pro
 
               <Section id="privacy" title="Privacy & analytics">
                 <Para>
-                  The site counts visits with its own first-party analytics. There are no cookies,
-                  no identifiers stored in your browser and no third-party analytics scripts.
+                  The site counts visits, and a few actions such as CV downloads, with its own
+                  first-party analytics. There are no cookies, no identifiers stored in your browser
+                  and no third-party analytics scripts.
                 </Para>
                 <Bullets
                   items={[
@@ -580,9 +581,29 @@ export default function ColophonPage({ releases, stack, buildSha, builtAt }: Pro
                       day. <strong>Your IP address and user agent are never stored.</strong>
                     </>,
                     <>
+                      A few actions are counted as events, each with at most one detail from a fixed
+                      list: downloading the CV (its language and format) or printing it (its
+                      language), saving the vCard, clicking an e-mail link (the page it was on, never
+                      the address), clicking a link to another site (that site&rsquo;s host name
+                      only, never the full address), sending the contact form (only the topic you
+                      picked &mdash; role, freelance project, collaboration or other &mdash; never what
+                      you wrote) and reaching the end of a post or case study after scrolling through
+                      it (its path). An event also records the day and the visitor ID above, which
+                      links a visit to a download on the same day and on no other. CV downloads,
+                      vCard saves and sent messages are counted by the server as it answers; the
+                      others are sent by a few lines of script on the page.
+                    </>,
+                    <>
+                      When a search in the <Code>⌘K</Code> palette finds nothing, the search text is
+                      recorded so I can see what people look for and do not find: lowercased, cut to
+                      40 characters, and only when it contains no <Code>@</Code> and fewer than six
+                      digits, so e-mail addresses and phone, ID or order numbers are never kept.
+                      These searches and their daily totals are deleted after 35 days.
+                    </>,
+                    <>
                       If your browser sends Do Not Track (<Code>DNT: 1</Code>) or Global Privacy
-                      Control (<Code>Sec-GPC: 1</Code>), nothing is recorded. Bots and my own visits
-                      are not counted either.
+                      Control (<Code>Sec-GPC: 1</Code>), nothing is recorded &mdash; no page views and
+                      no events. Bots, automated browsers and my own visits are not counted either.
                     </>,
                     <>
                       Real-user performance timings (Core Web Vitals: LCP, INP, CLS, FCP, TTFB) are
@@ -596,8 +617,10 @@ export default function ColophonPage({ releases, stack, buildSha, builtAt }: Pro
                       visitor ID. Reports are deleted after at most 90 days.
                     </>,
                     <>
-                      The data stays in a separate database file on the server, is never part of the
-                      content backups or the R2 mirror, and is deleted after at most 400 days.
+                      The data stays in a separate database file on the server and is never part of
+                      the content backups or the R2 mirror. Page views and events &mdash; the only
+                      records with a visitor ID &mdash; are deleted after 35 days; the daily totals
+                      counted from them, after at most 400 days.
                     </>,
                   ]}
                 />

@@ -23,7 +23,14 @@ import { logMigrationReport } from '../dbMigrations'
  *   refs_daily per day × referrer host: unique visitors   │ raw rows once a UTC
  *   dims_daily per day × (site | country | device |       │ day is over; kept
  *              browser) value: views, unique visitors     ┘ 400 days
- *   meta       key/value bookkeeping (rolled_through = last rolled-up day)
+ *   events     raw goal events, kept 35 days (lib/analytics/events): an
+ *              allow-listed name, at most one bounded property, the same
+ *              daily visitor hash as `hits`
+ *   events_daily, event_props_daily   per day × name (× property): events,
+ *              unique visitors; kept 400 days — search_empty 35 days, raw
+ *              and rolled up
+ *   meta       key/value bookkeeping (rolled_through = last rolled-up day;
+ *              events_rolled_through, events_since for the goal events)
  *   errors, error_daily   first-party error monitoring (lib/errors)
  *   restore_drills        restore drill results (lib/restoreDrill)
  *

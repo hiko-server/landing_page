@@ -8,6 +8,7 @@ import { sharedReplayGuard } from '../../lib/security/replayGuard'
 import { verifyChallenge } from '../../lib/security/contactChallenge'
 import { withApi } from '../../lib/apiHandler'
 import { inquiryRows, normalizeInquiry } from '../../lib/inquiry'
+import { recordServerGoal } from '../../lib/analytics/events'
 
 /**
  * Contact endpoint.
@@ -198,5 +199,7 @@ export default withApi('contact', async (req, res, { log }) => {
     return paused ? refuse(paused.retryAfterMs, BUSY) : refuse(null, UNAVAILABLE)
   }
 
+  // A goal event with the intent only (lib/analytics/events; never the message or its sender).
+  recordServerGoal(req, 'contact_sent', meta.intent ?? '')
   return res.status(200).json({ ok: true })
 })
