@@ -546,18 +546,27 @@ function loadNextConfig(env: Record<string, string>) {
     process.execPath,
     [
       '-e',
-      // `sentry` reports whether any @sentry package was loaded at all.
-      "const c = require('./next.config.js'); const sentry = Object.keys(require.cache).some((k) => /[\\\\/]@sentry[\\\\/]/.test(k)); process.stdout.write(JSON.stringify({ webpack: typeof c.webpack, output: c.output, headers: typeof c.headers, sentry, scrollRestoration: c.experimental && c.experimental.scrollRestoration }))",
+      // `sentry` reports whether any @sentry package was loaded at all;
+      // `webpack` what the hook does to an empty client / server config.
+      "const path = require('path'); const c = require('./next.config.js'); const sentry = Object.keys(require.cache).some((k) => /[\\\\/]@sentry[\\\\/]/.test(k)); const hook = (isServer) => { if (typeof c.webpack !== 'function') return null; const out = c.webpack({ resolve: { alias: {} } }, { isServer }); return { keys: Object.keys(out).sort(), alias: Object.fromEntries(Object.entries(out.resolve.alias).map(([k, v]) => [k, String(v).split(path.sep).slice(-3).join('/')])) } }; process.stdout.write(JSON.stringify({ webpack: { client: hook(false), server: hook(true) }, output: c.output, headers: typeof c.headers, sentry, scrollRestoration: c.experimental && c.experimental.scrollRestoration }))",
     ],
     { cwd: ROOT, env: { PATH: process.env.PATH ?? '', NODE_ENV: 'production', ...env }, encoding: 'utf8' },
   )
-  return JSON.parse(out) as { webpack: string; output: string; headers: string; sentry: boolean; scrollRestoration: boolean }
+  return JSON.parse(out) as { webpack: unknown; output: string; headers: string; sentry: boolean; scrollRestoration: boolean }
 }
 
 test('next.config is the plain config object: no Sentry wrap (removed), even with a DSN in the environment', () => {
-  // No webpack hook: the one it had silenced an Edge-runtime warning of the old
-  // middleware.ts; proxy.ts runs on Node.js, and the build has no warning to hide.
-  const expected = { webpack: 'undefined', output: 'standalone', headers: 'function', sentry: false, scrollRestoration: true }
+  // The webpack hook hides no warning (the one it had silenced an Edge-runtime
+  // warning of the old middleware.ts; proxy.ts runs on Node.js, and the build
+  // has none to hide). It only points the browser's `acorn` at its ES module,
+  // so the admin editor's lazy chunk holds one acorn (H2); servers keep theirs.
+  const expected = {
+    webpack: { client: { keys: ['resolve'], alias: { acorn$: 'acorn/dist/acorn.mjs' } }, server: { keys: ['resolve'], alias: {} } },
+    output: 'standalone',
+    headers: 'function',
+    sentry: false,
+    scrollRestoration: true,
+  }
   assert.deepEqual(loadNextConfig({}), expected)
   assert.deepEqual(loadNextConfig({ NEXT_PUBLIC_SENTRY_DSN: 'https://public@o0.ingest.sentry.io/0' }), expected)
 })
