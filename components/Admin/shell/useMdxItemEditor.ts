@@ -8,6 +8,7 @@ import { mergeFrontmatter, modelledKeys, unmodelledFrontmatter, type Frontmatter
 import { loginHref, parseRevalidated, readJsonObject, saveToastCopy } from './http'
 import { slugFromTitle } from './publishChecks'
 import { editorMode, isPendingStale, saveTarget, type PendingMeta, type SaveTarget } from './pendingChanges'
+import { parseItemSchedule, type ItemScheduleView, type ScheduleChange } from './itemSchedule'
 import { useLeaveSaver } from './useLeaveSaver'
 import { useLocalDraft } from './useLocalDraft'
 import { useSaveShortcut, type SaveState } from './ui'
@@ -32,6 +33,10 @@ import { useSaveShortcut, type SaveState } from './ui'
  *     live version for the diff, and can discard the pending changes
  *   - slug rename (H6): renameTo() moves the item (the old address
  *     redirects) and reopens the editor on the new slug
+ *   - scheduled publishing (H5): `schedule` is when the draft / the pending
+ *     changes go live and when the live item unpublishes; setSchedule()
+ *     saves unsaved edits first, then sets it (POST { action: 'schedule' })
+ *     and takes the stored item back from the answer
  *   - new items derive their slug from the title until the slug is edited
  *   - frontmatter keys the form does not model (anything added later) are
  *     kept as loaded and saved with the form's fields (./frontmatterMerge);
@@ -102,6 +107,13 @@ const slugsOf = (v: unknown): string[] => (Array.isArray(v) ? v.filter((s): s is
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
+/** The schedule after a direct save: publishing ends publishAt, unpublishing by hand ends both (mirrors the server). */
+function afterLiveSave(s: ItemScheduleView, nowDraft: boolean, wasLive: boolean): ItemScheduleView {
+  if (nowDraft) return wasLive ? { publishAt: null, unpublishAt: null, publishes: null } : s
+  const end = s.unpublishAt !== null && s.unpublishAt > Date.now() ? s.unpublishAt : null
+  return { publishAt: null, unpublishAt: end, publishes: null }
+}
+
 const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 
 const isPendingMeta = (v: unknown): v is PendingMeta =>
@@ -132,7 +144,15 @@ export function useMdxItemEditor<F extends Record<string, unknown> & { draft: bo
   const [revalidated, setRevalidated] = useState<string[]>([])
   const [baseline, setBaseline] = useState<string | null>(null)
   const [reloadKey, setReloadKey] = useState(0)
-  const [etag, setEtag] = useState<string | null>(null)
+  const [etag, setEtagState] = useState<string | null>(null)
+  // The latest version, readable right after a save resolves (before a re-render).
+  const etagRef = useRef<string | null>(null)
+  const setEtag = useCallback((v: string | null) => {
+    etagRef.current = v
+    setEtagState(v)
+  }, [])
+  // H5: the item's schedule as stored (null for a new item).
+  const [schedule, setScheduleState] = useState<ItemScheduleView | null>(null)
   const [savedAt, setSavedAt] = useState<number | undefined>(undefined)
   const [conflict, setConflict] = useState(false)
   const [mdxError, setMdxError] = useState<MdxProblem | null>(null)
@@ -148,6 +168,31 @@ export function useMdxItemEditor<F extends Record<string, unknown> & { draft: bo
   const conflictOptions = useRef<SaveOptions<F>>({})
 
   const livePublished = !!live && !live.frontmatter.draft
+
+  /** Take a stored item (GET ?slug, or the answer of a schedule change) into the editor. */
+  const applyItem = (data: Record<string, any>, tag: string | null) => {
+    const liveFm = (data.frontmatter as Record<string, any>) || {}
+    const liveBody = typeof data.body === 'string' ? data.body : ''
+    const liveAt = typeof data.updatedAt === 'number' && data.updatedAt > 0 ? data.updatedAt : 0
+    const rev = data.pending && typeof data.pending === 'object' ? (data.pending as Record<string, any>) : null
+    // The editor works on the pending version when there is one.
+    const stored = rev && rev.frontmatter && typeof rev.frontmatter === 'object' ? (rev.frontmatter as Record<string, any>) : liveFm
+    const storedBody = rev && typeof rev.body === 'string' ? rev.body : liveBody
+    const next = fromServer(stored)
+    const list = next[listField]
+    setSlugState(String(data.slug || slugParam))
+    setSlugTouched(true)
+    setFm(next)
+    setExtra(unmodelledFrontmatter(stored, modelled))
+    setListText(Array.isArray(list) ? list.join(', ') : '')
+    setBody(storedBody)
+    setEtag(tag)
+    setLive({ frontmatter: liveFm, body: liveBody, updatedAt: liveAt })
+    setPending(rev && isPendingMeta(rev) ? { updatedAt: rev.updatedAt, baseUpdatedAt: rev.baseUpdatedAt } : null)
+    setRedirectsFrom(slugsOf(data.redirectsFrom))
+    setScheduleState(parseItemSchedule(data.schedule))
+    setSavedAt(rev && typeof rev.updatedAt === 'number' ? rev.updatedAt : liveAt || undefined)
+  }
 
   useEffect(() => {
     if (!router.isReady) return
@@ -172,6 +217,7 @@ export function useMdxItemEditor<F extends Record<string, unknown> & { draft: bo
       setLive(null)
       setPending(null)
       setRedirectsFrom([])
+      setScheduleState(null)
       setLoadState('ready')
       return
     }
@@ -194,26 +240,7 @@ export function useMdxItemEditor<F extends Record<string, unknown> & { draft: bo
           )
         }
         if (!alive) return
-        const liveFm = (data.frontmatter as Record<string, any>) || {}
-        const liveBody = typeof data.body === 'string' ? data.body : ''
-        const liveAt = typeof data.updatedAt === 'number' && data.updatedAt > 0 ? data.updatedAt : 0
-        const rev = data.pending && typeof data.pending === 'object' ? (data.pending as Record<string, any>) : null
-        // The editor works on the pending version when there is one.
-        const stored = rev && rev.frontmatter && typeof rev.frontmatter === 'object' ? (rev.frontmatter as Record<string, any>) : liveFm
-        const storedBody = rev && typeof rev.body === 'string' ? rev.body : liveBody
-        const next = fromServer(stored)
-        const list = next[listField]
-        setSlugState(String(data.slug || slugParam))
-        setSlugTouched(true)
-        setFm(next)
-        setExtra(unmodelledFrontmatter(stored, modelled))
-        setListText(Array.isArray(list) ? list.join(', ') : '')
-        setBody(storedBody)
-        setEtag(res.headers.get('ETag'))
-        setLive({ frontmatter: liveFm, body: liveBody, updatedAt: liveAt })
-        setPending(rev && isPendingMeta(rev) ? { updatedAt: rev.updatedAt, baseUpdatedAt: rev.baseUpdatedAt } : null)
-        setRedirectsFrom(slugsOf(data.redirectsFrom))
-        setSavedAt(rev && typeof rev.updatedAt === 'number' ? rev.updatedAt : liveAt || undefined)
+        applyItem(data, res.headers.get('ETag'))
         setLoadState('ready')
       } catch (e: any) {
         if (!alive) return
@@ -372,6 +399,7 @@ export function useMdxItemEditor<F extends Record<string, unknown> & { draft: bo
           clearDraft()
           if (target === 'pending') {
             setPending(isPendingMeta(data.pending) ? data.pending : { updatedAt: Date.now(), baseUpdatedAt: live?.updatedAt ?? 0 })
+            // The changes' publish time travels with them (the server keeps it).
             setRevalidated([])
             toast({
               status: 'success',
@@ -384,6 +412,8 @@ export function useMdxItemEditor<F extends Record<string, unknown> & { draft: bo
             const liveAt = Number(/^"(\d+)/.exec(tag)?.[1]) || Date.now()
             setLive({ frontmatter: frontmatterOut, body, updatedAt: liveAt })
             setPending(null)
+            // What the server keeps of a schedule after a direct save (lib/schedule/fields carryScheduleOnSave).
+            setScheduleState((s) => (s ? afterLiveSave(s, !!nextFm.draft, !!live && !live.frontmatter.draft) : s))
             setRevalidated(parseRevalidated(data))
             const verb =
               options.draft === false
@@ -408,7 +438,7 @@ export function useMdxItemEditor<F extends Record<string, unknown> & { draft: bo
         })(),
       )
     },
-    [loadState, slug, fm, extra, modelled, listText, body, snapshotOf, isNew, etag, endpoint, toServer, noun, listField, toast, collection, router, flushDraft, clearDraft, track, livePublished, live],
+    [loadState, slug, fm, extra, modelled, listText, body, snapshotOf, isNew, etag, setEtag, endpoint, toServer, noun, listField, toast, collection, router, flushDraft, clearDraft, track, livePublished, live],
   )
 
   // "Save and leave": true only once the edits are stored; a 409 / 422 / 401,
@@ -557,6 +587,39 @@ export function useMdxItemEditor<F extends Record<string, unknown> & { draft: bo
     [save],
   )
 
+  /**
+   * H5: set (or clear, with nulls) when the item publishes / unpublishes.
+   * Unsaved edits are saved first (where an ordinary save would put them),
+   * so the schedule always applies to what the editor shows.
+   */
+  const setSchedule = useCallback(
+    async (change: ScheduleChange): Promise<{ ok: true } | { ok: false; error: string; code?: string }> => {
+      if (!slugParam) return { ok: false, error: 'Save the item first' }
+      if (dirty && !(await save())) return { ok: false, error: 'Your edits could not be saved — nothing was scheduled.' }
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (etagRef.current) headers['If-Match'] = etagRef.current
+      let res: Response
+      try {
+        res = await fetch(endpoint, { method: 'POST', headers, body: JSON.stringify({ action: 'schedule', slug: slugParam, ...change }) })
+      } catch {
+        return { ok: false, error: 'Network error — nothing changed' }
+      }
+      const data = await readJsonObject(res)
+      if (!res.ok) {
+        if (res.status === 409 && data.code === 'VERSION_CONFLICT') return { ok: false, code: data.code, error: 'This was changed elsewhere since you loaded it — reload, then schedule.' }
+        if (res.status === 401) setSessionExpired(true)
+        return { ok: false, code: data.code, error: res.status === 401 ? 'Your session has expired — sign in again.' : data.error || `HTTP ${res.status}` }
+      }
+      clearDraft()
+      applyItem(data, typeof data.etag === 'string' ? data.etag : res.headers.get('ETag'))
+      setBaseline(null)
+      return { ok: true }
+    },
+    // applyItem reads only stable setters and the page's static options.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [slugParam, dirty, save, endpoint, clearDraft],
+  )
+
   const list = useMemo(() => parseList(listText), [listText])
 
   const saveState: SaveState =
@@ -611,6 +674,9 @@ export function useMdxItemEditor<F extends Record<string, unknown> & { draft: bo
     pendingStale: isPendingStale(pending, live?.updatedAt),
     discardPending,
     publishChanges,
+    // H5
+    schedule,
+    setSchedule,
     // H6
     redirectsFrom,
     planRename,

@@ -12,6 +12,7 @@ import {
   MenuList,
   Skeleton,
   Stack,
+  useToast,
 } from '@chakra-ui/react'
 import dynamic from 'next/dynamic'
 import { FaEllipsisH } from 'react-icons/fa'
@@ -37,6 +38,12 @@ import { ConflictDialog, DraftBanner, MdxErrorBanner } from './EditorNotices'
 import { DiscardChangesDialog, PendingChangesBanner } from './PendingChanges'
 import WritingBar, { useWritingModes } from './WritingBar'
 import SeoSection from './SeoSection'
+import ScheduleBanner from './ScheduleBanner'
+import { isScheduled, scheduleSummary } from '../shell/itemSchedule'
+
+// Opened on demand: scheduling (H5) and review links (H5) load with their dialogs.
+const ScheduleDialog = dynamic(() => import('./ScheduleDialog'), { ssr: false })
+const ReviewLinksDialog = dynamic(() => import('./ReviewLinksDialog'), { ssr: false })
 
 // TipTap touches the DOM during init — client-side only.
 const RichEditor = dynamic(() => import('../RichEditor'), {
@@ -60,6 +67,11 @@ const RichEditor = dynamic(() => import('../RichEditor'), {
  *                Publish changes… (a diff against the live version, then
  *                live). A banner shows saved, unpublished changes with
  *                Preview ↗ (Draft Mode) and Discard….
+ *
+ * Scheduling (H5): "Schedule…" (in the publish sheet and the ⋯ menu) sets
+ * when the draft or the saved changes go live and when the item unpublishes;
+ * a banner shows it with Change… / Unschedule. "Share for review…" makes
+ * private, expiring preview links of the draft or the changes.
  */
 
 type ItemFm = Record<string, unknown> & { draft: boolean; title: string; description: string; cover: string }
@@ -112,11 +124,14 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
 }) {
   const saveKeys = useSaveKeys()
   const modes = useWritingModes()
+  const toast = useToast()
   const [headingIndex, setHeadingIndex] = useState(-1)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
   const [discardOpen, setDiscardOpen] = useState(false)
   const [markUpdated, setMarkUpdated] = useState(false)
+  const [scheduleOpen, setScheduleOpen] = useState(false)
+  const [reviewOpen, setReviewOpen] = useState(false)
   const { fm } = ed
   const published = ed.mode === 'published'
   const hasPending = !!ed.pending
@@ -125,6 +140,8 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
   const previewHref = `/api/admin/draft?path=${encodeURIComponent(livePath)}`
   const bodyLabelId = `${collection}-body-label`
   const changesReady = canPublishChanges({ mode: ed.mode, hasPending, dirty: ed.dirty })
+  const scheduled = isScheduled(ed.schedule) ? ed.schedule : null
+  const scheduledLine = scheduled ? scheduleSummary(scheduled, Date.now()) : null
 
   // "Mark as updated today" starts unticked every time the sheet opens.
   useEffect(() => {
@@ -193,6 +210,11 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
               changes not live
             </Badge>
           ) : null}
+          {ready && scheduled ? (
+            <Badge colorScheme="blue" variant="subtle" fontSize="10px" data-testid="schedule-badge" title={scheduledLine ?? undefined}>
+              scheduled
+            </Badge>
+          ) : null}
           <SaveStatus state={ed.saveState} savedAt={ed.savedAt} label={statusLabel} />
         </HStack>
       }
@@ -221,6 +243,12 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
                 )}
                 <MenuItem onClick={() => setHistoryOpen(true)} bg="transparent">
                   History…
+                </MenuItem>
+                <MenuItem onClick={() => setScheduleOpen(true)} bg="transparent">
+                  {scheduled ? 'Change schedule…' : 'Schedule…'}
+                </MenuItem>
+                <MenuItem onClick={() => setReviewOpen(true)} bg="transparent">
+                  Share for review…
                 </MenuItem>
                 {published ? (
                   <>
@@ -277,6 +305,20 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
         {ed.sessionExpired ? <SessionExpiredNotice returnPath={backHref} keepEdits /> : null}
         {ready && ed.localDraft ? (
           <DraftBanner at={ed.localDraft.at} stale={ed.localDraftStale} onRestore={ed.restoreDraft} onDiscard={ed.discardDraft} />
+        ) : null}
+        {ready && scheduled ? (
+          <ScheduleBanner
+            schedule={scheduled}
+            noun={noun}
+            busy={ed.saving}
+            onChange={() => setScheduleOpen(true)}
+            onClear={async () => {
+              const out = await ed.setSchedule({ publishAt: null, unpublishAt: null })
+              if (!out.ok) toast({ status: 'error', title: 'Couldn’t unschedule', description: out.error, position: 'bottom-right' })
+              else toast({ status: 'success', title: 'Unscheduled', description: `Nothing happens to this ${noun} on its own any more.`, position: 'bottom-right' })
+              return out.ok
+            }}
+          />
         ) : null}
         {ready && published && ed.pending ? (
           <PendingChangesBanner
@@ -393,7 +435,43 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
           diff={changesDiff}
           markUpdated={published && collection === 'blog' ? { checked: markUpdated, onChange: setMarkUpdated } : undefined}
           stale={ed.pendingStale}
+          onSchedule={
+            ed.isNew
+              ? undefined
+              : () => {
+                  setPublishOpen(false)
+                  setScheduleOpen(true)
+                }
+          }
         />
+      ) : null}
+      {!ed.isNew && ready && scheduleOpen ? (
+        <ScheduleDialog
+          isOpen={scheduleOpen}
+          onClose={() => setScheduleOpen(false)}
+          collection={collection}
+          mode={published ? 'published' : 'draft'}
+          hasChanges={hasPending || ed.dirty}
+          dirty={ed.dirty}
+          schedule={ed.schedule}
+          itemDate={collection === 'blog' ? textField(fm, 'date') : textField(fm, 'published')}
+          setSchedule={async (change) => {
+            const out = await ed.setSchedule(change)
+            if (out.ok) {
+              const cleared = change.publishAt === null && change.unpublishAt === null
+              toast({
+                status: 'success',
+                title: cleared ? 'Unscheduled' : 'Scheduled',
+                description: cleared ? undefined : 'The site does it on time — you don’t need to be online.',
+                position: 'bottom-right',
+              })
+            }
+            return out
+          }}
+        />
+      ) : null}
+      {!ed.isNew && ready && reviewOpen ? (
+        <ReviewLinksDialog isOpen={reviewOpen} onClose={() => setReviewOpen(false)} collection={collection} slug={ed.slugParam} noun={noun} dirty={ed.dirty} />
       ) : null}
       {published ? (
         <DiscardChangesDialog isOpen={discardOpen} noun={noun} dirty={ed.dirty} onCancel={() => setDiscardOpen(false)} onConfirm={ed.discardPending} />

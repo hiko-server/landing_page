@@ -24,6 +24,7 @@ export const ADMIN_CHORDS: readonly AdminChord[] = [
   { key: 'e', href: '/admin/dashboard?tab=home', label: 'Home editor', keywords: 'landing edit home' },
   { key: 'p', href: '/admin/blog', label: 'Posts', keywords: 'writing blog articles' },
   { key: 'o', href: '/admin/work', label: 'Case studies', keywords: 'work portfolio projects' },
+  { key: 'y', href: '/admin/publishing', label: 'Scheduled & review links', keywords: 'schedule publish later unpublish review link share preview calendar' },
   { key: 't', href: '/admin/dashboard?tab=analytics', label: 'Analytics', keywords: 'traffic visitors goals stats' },
   { key: 'v', href: '/admin/dashboard?tab=versions', label: 'Versions', keywords: 'history snapshots restore' },
   { key: 'f', href: '/admin/dashboard?tab=storage', label: 'Storage', keywords: 'backups files r2 restore' },

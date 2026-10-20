@@ -11,6 +11,8 @@ import { isPasskeyRequired } from '../../../lib/adminAuth/store'
 import { errorTotals } from '../../../lib/errors/store'
 import { latestRestoreDrill } from '../../../lib/restoreDrill'
 import { readinessCounts } from '../../../lib/cvReadinessServer'
+import { scheduledEntries } from '../../../lib/schedule/store'
+import { listReviewLinks } from '../../../lib/review/store'
 
 /**
  * GET /api/admin/overview — the admin status hub's numbers (admin only,
@@ -36,6 +38,8 @@ export type AdminOverview = {
   restoreDrill: { status: 'passed' | 'failed' | 'skipped'; ranAt: number } | null
   /** CV readiness checks (lib/cvReadiness, without the page-length check); null when they could not run. */
   cvReadiness?: { open: number; high: number; dismissed: number } | null
+  /** Scheduled publishing (H5): how many actions are scheduled and the soonest (null when unreadable). */
+  scheduled?: { count: number; nextAt: number | null; activeReviewLinks: number } | null
 }
 
 const LAST_EDITS = 5
@@ -108,6 +112,10 @@ export function readOverview(): AdminOverview {
       return d ? { status: d.status, ranAt: d.ranAt } : null
     }),
     cvReadiness: readinessCounts(),
+    scheduled: safely(() => {
+      const all = scheduledEntries()
+      return { count: all.length, nextAt: all[0]?.at ?? null, activeReviewLinks: listReviewLinks().length }
+    }),
   }
 }
 
