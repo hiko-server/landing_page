@@ -3,12 +3,15 @@ import { ingestErrorReport } from '../../lib/errors/ingest'
 
 /**
  * POST /api/e — first-party error reports: browser errors (lib/errors/client
- * sends JSON as text/plain, no CORS preflight) and Content-Security-Policy
- * violation reports (the CSP `report-uri`). Always 204: a dropped report is
- * indistinguishable from a recorded one. Privacy rules and budgets:
- * lib/errors/ingest.ts.
+ * sends JSON as text/plain, no CORS preflight) and Content-Security-Policy /
+ * Trusted Types violation reports (the policies' `report-to` endpoint —
+ * the Reporting API's batched uploads — and `report-uri`, lib/csp.js).
+ * Always 204: a dropped report is indistinguishable from a recorded one.
+ * Privacy rules and budgets: lib/errors/ingest.ts, which also holds browser
+ * error reports to 8 KB; the 64 KB limit here is for report batches
+ * (MAX_REPORTS_BODY).
  */
-export const config = { api: { bodyParser: { sizeLimit: '8kb' } } }
+export const config = { api: { bodyParser: { sizeLimit: '64kb' } } }
 
 export default withApi('e', (req, res, ctx) => {
   res.setHeader('Cache-Control', 'no-store')
