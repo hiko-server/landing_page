@@ -8,9 +8,9 @@ import { isTrashed, rebuildUsage, uploadsDir } from './library'
 import { readMediaMeta, giveMediaMeta } from './metaStore'
 import { rewriteUploadDocument, rewriteUploadJson, type VariantExists } from './rewrite'
 import { moveToTrash, type R2Ops } from './trash'
-import { rewriteDocuments, type RewrittenDoc } from './docRewrite'
+import { rewriteDocuments, type RewrittenDoc, type SkippedDoc } from './docRewrite'
 
-export type { RewrittenDoc }
+export type { RewrittenDoc, SkippedDoc }
 
 /**
  * Replacing an upload's file (H7) — SERVER-ONLY.
@@ -54,6 +54,8 @@ export type ReplaceOutcome =
       /** Public pages to regenerate. */
       paths: string[]
       warnings: string[]
+      /** Documents left pointing at the old address (it redirects): their new text would not render. */
+      skipped: SkippedDoc[]
     }
   | { ok: false; status: 400 | 404 | 409; code: 'INVALID' | 'NOT_FOUND' | 'TRASHED'; error: string }
 
@@ -113,5 +115,5 @@ export async function replaceUpload(req: ReplaceRequest, opts: ReplaceOptions = 
   else if (trashed.r2Warning) warnings.push(trashed.r2Warning)
   rebuildUsage(true)
 
-  return { ok: true, from: name, upload, rewrites: run.rewrites, paths: run.paths, warnings }
+  return { ok: true, from: name, upload, rewrites: run.rewrites, paths: run.paths, warnings, skipped: run.skipped }
 }

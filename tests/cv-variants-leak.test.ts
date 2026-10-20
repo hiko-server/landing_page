@@ -29,6 +29,7 @@ import { withEntryUids } from '../lib/cvEntryUid'
 import { applyVariant, variantFromCv } from '../lib/cvVariants'
 import { allEvidenceLinks, profileLinks, withEvidenceLinks } from '../lib/cvLinks'
 import { buildCvModel } from '../lib/cvExport/model'
+import { cvFileName, webFileBase } from '../lib/cvExport/files'
 import { renderCvText } from '../lib/cvExport/text'
 import { buildJsonResume } from '../lib/cvExport/jsonResume'
 import { loadPdfFonts, renderCvPdf } from '../lib/cvExport/pdf'
@@ -152,12 +153,25 @@ function sentinelFor(slot: Slot): { value: string; needles: string[] } {
   return { value: TEXT, needles: [TEXT] }
 }
 
+/**
+ * The download names /cv and /cv/zh show (page data, `download` attributes,
+ * CreativeWork JSON-LD encoding names) — computed like lib/cvPage from the
+ * web view and the download view of the English Personal Info (CV-L-2).
+ */
+function webFileNames(doc: CvDoc): string {
+  const pi = (sections: any[]) => sections.find((s) => s?.sessionName === 'personalInformation') ?? null
+  const web = pi(publicCvDoc(doc, 'cv', 'web').en)
+  const files = pi(publicCvDoc(doc, 'cv', 'download').en)
+  return (['en', 'zh'] as const).flatMap((lang) => (['pdf', 'txt', 'json'] as const).map((f) => cvFileName(webFileBase(web, files, lang, NOW), f))).join('\n')
+}
+
 /** Everything the 'web' surface publishes from the CV. */
 function webOutputs(doc: CvDoc): string {
   const any = publicCvDoc(doc, 'any', 'web')
   const cv = publicCvDoc(doc, 'cv', 'web')
   const site = publicCvDoc(doc, 'website', 'web')
   return [
+    webFileNames(doc),
     JSON.stringify(any),
     JSON.stringify(withEvidenceLinks(cv.en, { works, socials })),
     JSON.stringify(withEvidenceLinks(cv.zh, { works, socials })),

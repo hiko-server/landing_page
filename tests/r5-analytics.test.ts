@@ -107,6 +107,35 @@ test('unknown /blog and /work slugs are dropped, published ones and other pages 
   assert.deepEqual(routes, ['/work/case-study'])
 })
 
+test('CORR-4: the Chinese pages are measured while they exist; every public ISR page is trackable', async () => {
+  const { STATIC_CONTENT_PATHS } = await import('../lib/revalidate')
+  for (const p of STATIC_CONTENT_PATHS) assert.equal(shared.normalizeTrackedPath(p), p, `${p} is measured`)
+  for (const p of ['/zh', '/zh/', '/zh/about', '/zh/work?x=1', '/zh/blog#top', '/zh/contact']) assert.ok(shared.normalizeTrackedPath(p), p)
+  assert.equal(shared.normalizeTrackedPath('/zh/blog/a-post'), null, 'Chinese posts live at /blog/<slug>')
+  assert.equal(shared.normalizeTrackedPath('/zh/other'), null)
+
+  // /zh/blog and /zh/work exist (a Chinese post and case study); /zh/about does not yet: its 404 is not a page view.
+  published.setPublishedSlugSource(() => ({ blog: ['hello-world'], work: [], zh: ['/zh/blog', '/zh/work'] }))
+  const now = Date.parse('2026-10-16T08:00:00Z')
+  const ip = '198.18.0.40'
+  assert.deepEqual(ingestMod.ingest(beacon(pv('/zh/blog', { l: 'zh-Hans' }), ip), now), { accepted: 1, dropped: null })
+  assert.deepEqual(ingestMod.ingest(beacon(pv('/zh/work/', { l: 'zh-Hans' }), ip), now), { accepted: 1, dropped: null })
+  assert.deepEqual(ingestMod.ingest(beacon(pv('/zh/about', { l: 'zh-Hans' }), ip), now), { accepted: 0, dropped: 'unpublished' })
+  assert.deepEqual(ingestMod.ingest(beacon([{ t: 'v', route: '/zh/blog', name: 'LCP', value: 900 }], ip), now), { accepted: 1, dropped: null })
+  ingestMod.flushNow(now)
+  const db = getAnalyticsDb()
+  const rows = db.prepare("SELECT path, lang FROM hits WHERE day = '2026-10-16' ORDER BY path").all() as Array<{ path: string; lang: string }>
+  assert.deepEqual(rows.map((r) => r.path), ['/zh/blog', '/zh/work'])
+  assert.deepEqual(
+    (db.prepare("SELECT route FROM vitals WHERE day = '2026-10-16'").all() as Array<{ route: string }>).map((r) => r.route),
+    ['/zh/blog'],
+  )
+  // A source that does not say which Chinese pages exist accepts them all (never drop real traffic on a guess).
+  published.setPublishedSlugSource(() => ({ blog: [], work: [] }))
+  assert.equal(published.isRecordablePath('/zh/about', now), true)
+  published.setPublishedSlugSource(null)
+})
+
 test('the slug set is cached for a minute, re-read early (at most every 5 s) on a miss', () => {
   let calls = 0
   let blog = ['old-post']

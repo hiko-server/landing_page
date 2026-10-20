@@ -163,6 +163,31 @@ test('legacy /cv?lang=zh answers 308 → /cv/zh keeping other parameters', async
   }
 })
 
+test('a trailing slash answers 308 without it, with the security headers; share and review links stay private (SECU-3)', async ({ request }, testInfo) => {
+  test.skip(testInfo.project.name !== 'chromium', 'HTTP-level check: once is enough')
+  const token = 'Abcdefghijklmnopqrstuv'
+  const cases: Array<[string, string, boolean]> = [
+    ['/about/', '/about', false],
+    ['/blog/?ref=x', '/blog?ref=x', false],
+    [`/cv/r/${token}/`, `/cv/r/${token}`, true],
+    [`/cv/r/${token}/en.pdf/`, `/cv/r/${token}/en.pdf`, true],
+    [`/review/${token}/`, `/review/${token}`, true],
+  ]
+  for (const [from, to, isPrivate] of cases) {
+    const res = await request.get(from, { maxRedirects: 0 })
+    expect(res.status(), from).toBe(308)
+    const h = res.headers()
+    const location = new URL(h['location'] || '', 'http://placeholder.invalid')
+    expect(location.pathname + location.search, from).toBe(to)
+    expect(h['content-security-policy'], `${from}: CSP on the redirect`).toBeTruthy()
+    if (!isPrivate) continue
+    expect(h['cache-control'], from).toMatch(/private, no-store/)
+    expect(h['x-robots-tag'], from).toMatch(/noindex/)
+    expect(h['referrer-policy'], from).toBe('no-referrer')
+  }
+  expect((await request.get('/about/')).url()).toMatch(/\/about$/)
+})
+
 test('the image optimizer is disabled', async ({ request }, testInfo) => {
   test.skip(testInfo.project.name !== 'chromium', 'HTTP-level check: once is enough')
   const res = await request.get('/_next/image?url=%2Ffavicon.ico&w=64&q=75', { maxRedirects: 0 })

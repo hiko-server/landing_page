@@ -9,6 +9,7 @@ import { isR2Configured, r2PutBuffer } from './r2'
 import { uploadR2Key } from './contentStore'
 import { imageSizeFromBytes } from './rehype/imageSize'
 import { isValidUploadName, sanitizeUploadName, withHashSuffix } from './security/uploadName'
+import { isTrashedName } from './media/trashStore'
 import {
   MAX_VARIANT_WIDTH,
   PLACEHOLDER_WIDTH,
@@ -469,12 +470,20 @@ export type StoreUploadOptions = {
 /**
  * True when `name` is taken in `dir`, or any variant file of that name
  * exists (a stale one would be served for the new image), or it waits in the
- * media library's trash (data/media-trash/<name>, lib/media/trashStore): a
- * new file must never take the name a restore would bring back — nor the
- * tombstone that keeps R2 from serving the old one.
+ * media library's trash — its folder (data/media-trash/<name>) or only its
+ * row (a content restore brings rows back without their folders;
+ * lib/media/trashStore): a new file must never take the name a restore
+ * would bring back — nor the tombstone that keeps R2 from serving the old
+ * one, which would hide the new file from the library and strip its R2
+ * copies at every boot.
  */
 function nameInUse(dir: string, name: string): boolean {
-  return fs.existsSync(path.join(dir, name)) || variantFilesOf(dir, name).length > 0 || fs.existsSync(path.join(process.cwd(), 'data', 'media-trash', name))
+  return (
+    fs.existsSync(path.join(dir, name)) ||
+    variantFilesOf(dir, name).length > 0 ||
+    fs.existsSync(path.join(process.cwd(), 'data', 'media-trash', name)) ||
+    isTrashedName(name)
+  )
 }
 
 /**

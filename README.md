@@ -718,7 +718,8 @@ word-level (Chinese segmented with `Intl.Segmenter`).
   browser still signed in from before the passkey update has no session
   row: it is listed after its next page view, and signing out any browser
   (this one included) ends every such browser at once.
-- **Step-up**: restoring a backup, deleting a post or case study, MongoDB
+- **Step-up**: restoring a backup, deleting a post or case study, deleting
+  an image from the media trash for good, MongoDB
   restore / target changes and every passkey, code, policy or other-browser
   change need a sign-in or a re-check within `ADMIN_RECENT_AUTH_MINUTES`
   (default 10) — a "Confirm it's you" dialog asks for a passkey or the

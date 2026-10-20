@@ -48,6 +48,24 @@ export function cvFileBase(enPersonal: unknown, lang: CvLang, month: string): st
   return parts.join('-')
 }
 
+/**
+ * The file name stem a WEB page may show (/cv and /cv/zh: the download
+ * links' `download` attribute, the page data and the CreativeWork JSON-LD):
+ * only the name parts the web view AND the download view both show
+ * (lib/cvVisibility audiences). A name kept to the downloads stays off the
+ * page — the saved file is still named in full by the server's
+ * Content-Disposition, which wins over the attribute — and a name kept to
+ * the web pages is not claimed for files that do not carry it.
+ */
+export function webFileBase(webPersonal: unknown, filePersonal: unknown, lang: CvLang, month: string): string {
+  const shared: Record<string, string> = {}
+  for (const key of ['lastName', 'firstName']) {
+    const value = field(webPersonal, key)
+    if (value && value === field(filePersonal, key)) shared[key] = value
+  }
+  return cvFileBase(shared, lang, month)
+}
+
 export function cvFileName(base: string, format: ExportFormat): string {
   return `${base}.${format}`
 }

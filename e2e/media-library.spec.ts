@@ -364,6 +364,49 @@ test.describe('media library', { tag: '@admin' }, () => {
       await removeUploads(page, created)
     }
   })
+
+  test('Delete now asks to confirm it is you when the sign-in is not recent; closing the dialog deletes nothing @admin', async ({ page }) => {
+    await loginAsAdmin(page)
+    const name = await apiUpload(page, `e2e-purge-${stamp}.png`, await png(320, 200, '#495057', '#ced4da'))
+    try {
+      const trashed = await adminFetch(page, 'POST', '/api/admin/media', { action: 'delete', names: [name] })
+      expect(trashed.status, trashed.text).toBe(200)
+      // As if this browser signed in more than the recent-auth window ago (SECU-2): the
+      // pre-check says so, and the "Confirm it's you" dialog must come before the purge.
+      await page.route('**/api/admin/security/recent', (route) =>
+        route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ recent: false, methods: ['password'], recoveryRequired: false, windowMinutes: 10 }) }),
+      )
+      const purges: string[] = []
+      page.on('request', (r) => {
+        if (r.method() === 'POST' && new URL(r.url()).pathname === '/api/admin/media' && /"purge"/.test(r.postData() || '')) purges.push(r.url())
+      })
+      await page.goto('/admin/media?view=trash')
+      const row = page.locator(`[data-testid="trash-row"][data-name="${name}"]`)
+      await row.getByRole('button', { name: `Delete ${name} now` }).click()
+      await page.getByRole('alertdialog').getByRole('button', { name: 'Delete for good' }).click()
+      const dialog = page.getByRole('dialog', { name: /Confirm it’s you/ })
+      await expect(dialog).toBeVisible()
+      await expect(dialog).toContainText(`Deleting “${name}” for good cannot be undone.`)
+      await page.keyboard.press('Escape')
+      await expect(dialog).toBeHidden()
+      await expect(row).toBeVisible()
+      await expect(page.getByText('Not deleted')).toHaveCount(0)
+      expect(purges, 'nothing was sent').toEqual([])
+
+      await row.getByRole('button', { name: `Delete ${name} now` }).click()
+      await page.getByRole('alertdialog').getByRole('button', { name: 'Delete for good' }).click()
+      await expect(dialog).toBeVisible()
+      await dialog.getByLabel(/^Password/).fill(ADMIN.password)
+      await dialog.getByRole('button', { name: 'Confirm with password' }).click()
+      await expect(dialog).toBeHidden()
+      await expect(row).toHaveCount(0)
+      expect(purges).toHaveLength(1)
+      expect((await library(page)).trash.some((t) => t.name === name)).toBe(false)
+    } finally {
+      await page.unroute('**/api/admin/security/recent')
+      await removeUploads(page, [name])
+    }
+  })
 })
 
 test('the media API and the trash preview are admin only', async ({ request }) => {

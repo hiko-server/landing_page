@@ -1,7 +1,7 @@
 import { getAuthDb } from '../adminAuth/db'
 import { getItem } from '../contentStore'
 import { getPendingRevision } from '../pendingRevisions'
-import { redirectTarget } from '../redirects'
+import { redirectTarget, redirectsTo } from '../redirects'
 import { newLinkId, reviewLinkKey, tokenFor, tokenHash, verifyToken, TOKEN_RE, type ReviewScope } from './token'
 
 /**
@@ -12,6 +12,14 @@ import { newLinkId, reviewLinkKey, tokenFor, tokenHash, verifyToken, TOKEN_RE, t
  * content backup), tokens are signed and stored only as hashes
  * (lib/review/token). Views are counted (a number and a time — never who).
  * Server-only.
+ *
+ * A link names an address (collection, slug — signed into its token), not
+ * an item: the content store has no item identity. So a link is turned off
+ * whenever its address stops belonging to the item it was made for —
+ * when the item is deleted (revokeItemLinks over its slug and old slugs),
+ * and when an address changes hands (revokeLinksAt: an item created or
+ * restored there, another item renamed onto it, an old address dropped) —
+ * and never follows an address to whatever arrives there next.
  */
 
 export type ReviewCollection = 'blog' | 'work'
@@ -136,7 +144,11 @@ export type ReviewTarget =
   | { kind: 'render'; collection: ReviewCollection; slug: string; variant: ReviewVariant }
   /** It is public now (published, or the changes went live / were dropped): its public page. */
   | { kind: 'public'; path: string }
-  /** Deleted, or unpublished again: nothing to show. */
+  /**
+   * Deleted, or — for a link to a live item's changes — unpublished again:
+   * nothing to show. (A link to a draft follows its item: published, it
+   * leads to the public page; unpublished again, it shows the draft.)
+   */
   | { kind: 'gone' }
 
 /** Where an active link leads now. */
@@ -246,6 +258,22 @@ export function revokeItemLinks(collection: ReviewCollection, slugs: readonly st
   return getAuthDb()
     .prepare(`UPDATE review_links SET revoked_at = ? WHERE revoked_at IS NULL AND collection = ? AND slug IN (${slugs.map(() => '?').join(', ')})`)
     .run(now, collection, ...slugs).changes
+}
+
+/** The addresses whose links lead to `slug`: the slug itself and the old slugs that redirect to it. */
+export function linkSlugsOf(collection: ReviewCollection, slug: string): string[] {
+  return Array.from(new Set([slug, ...redirectsTo(collection, slug)]))
+}
+
+/**
+ * An address changes hands — an item is created or restored at `slug`, or
+ * another item is renamed onto it: every link that would now lead there
+ * (made for `slug`, or for an old address redirecting to it) was made for
+ * whatever was there before, never for the item arriving. Turn them off.
+ * Call it in the write's transaction, before the new item can be read.
+ */
+export function revokeLinksAt(collection: ReviewCollection, slug: string, now = Date.now()): number {
+  return revokeItemLinks(collection, linkSlugsOf(collection, slug), now)
 }
 
 export type ResolveResult =

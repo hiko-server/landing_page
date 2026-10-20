@@ -115,7 +115,9 @@ export type SaveRows = {
  *   published by hand now       → publishAt ends (it is live); a future
  *                                 unpublishAt stays (the window's end)
  *   unpublished by hand         → both end
- *   live item saved live        → a future unpublishAt stays
+ *   live item saved live        → unpublishAt stays — even one that has just
+ *                                 passed and the scheduler has not acted on
+ *                                 yet, so the item still comes down
  */
 export function carryScheduleOnSave({ target, live, pending, incoming, now }: SaveRows): Frontmatter {
   const base = withoutSchedule(incoming)
@@ -132,7 +134,9 @@ export function carryScheduleOnSave({ target, live, pending, incoming, now }: Sa
     const start = parseInstant(live[PUBLISH_AT])
     return withSchedule(base, { publishAt: start, unpublishAt: start !== null ? end : null })
   }
-  return withSchedule(base, { unpublishAt: end !== null && end > now ? end : null })
+  // Published by hand now: a window end that has passed would take it straight down again.
+  if (wasDraft) return withSchedule(base, { unpublishAt: end !== null && end > now ? end : null })
+  return withSchedule(base, { unpublishAt: end })
 }
 
 // ── Changing a schedule (POST { action: 'schedule' }) ─────────────────────

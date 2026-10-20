@@ -6,6 +6,7 @@ import { getItem, getItemFromDb, listItems, renameItem } from './contentStore'
 import { applyRename, redirectTarget, type RedirectCollection } from './redirects'
 import { rewriteDocument, rewriteJsonLinks, type LinkCollection } from './linkRewrite'
 import { getPendingRevision, listPendingRevisions, movePendingRevision, putPendingRevision, rebasedPendingBase } from './pendingRevisions'
+import { revokeItemLinks, revokeLinksAt } from './review/store'
 import { COLLECTION_EXTRA_PATHS, CV_DOCUMENT_PATHS, CV_PAGE_PATHS, HOME_PAGE_PATHS, collectionPaths, pageRevalidatePaths } from './revalidate'
 
 /**
@@ -223,12 +224,20 @@ export async function renameSlug(req: RenameRequest): Promise<RenameOutcome | Re
   const keep = req.redirect !== false
   const hosts = siteHosts()
   const takesOverRedirectTo = takenOverRedirect(req)
+  // Renaming back to one of its own old addresses: the links made there are this item's.
+  const backToOwnAddress = redirectTarget(collection, to) === from
   const source = getItem(collection, from)
   const sourceAt = source ? Math.trunc(source.updated_at) : 0
   const project = collection === 'blog' && typeof source?.frontmatter?.project === 'string' ? source.frontmatter.project.trim() : ''
 
   const moved = await renameItem(collection, from, to, {
     inTransaction: () => {
+      // Review links (SECU-1): the new address changes hands — links made there before (for a
+      // deleted item, or one renamed away whose old address this takes over) end; without a
+      // redirect the old address no longer leads to this item, so its links end too. Links of
+      // this item's own old addresses keep following it (their redirects are re-pointed below).
+      if (!backToOwnAddress) revokeLinksAt(collection, to)
+      if (!keep) revokeItemLinks(collection, [from])
       applyRename(collection, from, to, keep)
       movePendingRevision(collection, from, to, sourceAt, Math.trunc(getItemFromDb(collection, to)?.updated_at ?? 0))
     },

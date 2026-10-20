@@ -107,10 +107,14 @@ const slugsOf = (v: unknown): string[] => (Array.isArray(v) ? v.filter((s): s is
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
-/** The schedule after a direct save: publishing ends publishAt, unpublishing by hand ends both (mirrors the server). */
+/**
+ * The schedule after a direct save (mirrors the server, lib/schedule/fields
+ * carryScheduleOnSave): publishing ends publishAt and a passed window end,
+ * unpublishing by hand ends both, a live save keeps the unpublish time.
+ */
 function afterLiveSave(s: ItemScheduleView, nowDraft: boolean, wasLive: boolean): ItemScheduleView {
   if (nowDraft) return wasLive ? { publishAt: null, unpublishAt: null, publishes: null } : s
-  const end = s.unpublishAt !== null && s.unpublishAt > Date.now() ? s.unpublishAt : null
+  const end = wasLive || (s.unpublishAt !== null && s.unpublishAt > Date.now()) ? s.unpublishAt : null
   return { publishAt: null, unpublishAt: end, publishes: null }
 }
 

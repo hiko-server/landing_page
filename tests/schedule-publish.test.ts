@@ -299,19 +299,124 @@ test('a revision that keeps changing is left for the next pass; the publish only
   assert.equal(deletePendingRevisionVersion('blog', 'restless', rev.updatedAt), true)
 })
 
-test('changes scheduled for an item that is no longer live are kept, unscheduled, and logged', async () => {
+test('changes scheduled for an item that is no longer live are kept as its draft, unscheduled, and logged', async () => {
   const { runDueSchedules } = await import('../lib/schedule/run')
   const { putPendingRevision, getPendingRevision } = await import('../lib/pendingRevisions')
-  const { putItem } = await import('../lib/contentStore')
-  await putItem('work', 'went-draft', { title: 'Went draft', draft: true }, 'Draft body.')
+  const { putItem, getItem } = await import('../lib/contentStore')
+  const later = Date.now() + 5 * HOUR
+  await putItem('work', 'went-draft', { title: 'Went draft', draft: true, publishAt: iso(later) }, 'Draft body.')
   putPendingRevision('work', 'went-draft', { title: 'Went draft v2', publishAt: iso(Date.now() - 5000) }, 'v2', 1)
   const d = deps(Date.now())
   const out = await runDueSchedules(d.run)
   assert.deepEqual(out.actions.map((a) => [a.slug, a.outcome]), [['went-draft', 'not-live']])
-  const rev = getPendingRevision('work', 'went-draft')
-  assert.equal(rev?.body, 'v2', 'the changes are kept')
-  assert.equal(rev?.frontmatter.publishAt, undefined)
+  assert.equal(getPendingRevision('work', 'went-draft'), null, 'a draft never holds a pending revision')
+  const row = getItem('work', 'went-draft')
+  assert.equal(row?.body, 'v2', 'the changes are kept — as the draft')
+  assert.equal(row?.frontmatter.title, 'Went draft v2')
+  assert.equal(row?.frontmatter.draft, true)
+  assert.equal(row?.frontmatter.publishAt, iso(later), "the draft's own schedule stays")
   assert.equal(d.recorded[0].action, 'work.schedule-skipped')
+  assert.match(d.recorded[0].summary, /kept as its draft/)
+  assert.equal(d.recorded[0].snapshots, 1, 'the draft it replaced is in the history')
+})
+
+test('CORR-2: scheduled changes and the unpublish both overdue in one pass — the item still comes down, nothing is lost silently', async () => {
+  const { runDueSchedules } = await import('../lib/schedule/run')
+  const { scheduledEntries } = await import('../lib/schedule/store')
+  const { getPendingRevision } = await import('../lib/pendingRevisions')
+  const { getItem } = await import('../lib/contentStore')
+  await create(posts, 'both-due', { title: 'Both due' }, 'Live words.')
+  const live = await one(posts, 'both-due')
+  const pend = await h.call(posts, {
+    method: 'PUT',
+    body: { slug: 'both-due', frontmatter: { ...live.body.frontmatter, title: 'Both due v2' }, body: 'Changed words.', target: 'pending' },
+    headers: { 'if-match': live.headers.etag },
+  })
+  assert.equal(pend.statusCode, 200)
+  const at = Date.now() + HOUR
+  const end = at + 2 * 60_000
+  const s = await schedule(posts, 'both-due', { publishAt: iso(at), unpublishAt: iso(end) }, pend.body.etag)
+  assert.equal(s.statusCode, 200, JSON.stringify(s.body))
+
+  // The server was down across both times: one pass sees both.
+  const d = deps(end + 30_000)
+  const out = await runDueSchedules(d.run)
+  assert.deepEqual(
+    out.actions.map((a) => [a.slug, a.kind, a.outcome]),
+    [
+      ['both-due', 'publish-changes', 'missed'],
+      ['both-due', 'unpublish', 'unpublished'],
+    ],
+  )
+  const row = getItem('blog', 'both-due')!
+  assert.equal(row.frontmatter.draft, true, 'off the public site, as scheduled')
+  assert.equal(row.body, 'Changed words.', 'the changes are kept, as the draft')
+  assert.equal(row.frontmatter.unpublishAt, undefined)
+  assert.equal(getPendingRevision('blog', 'both-due'), null)
+  assert.deepEqual(scheduledEntries().filter((e) => e.slug === 'both-due'), [])
+  assert.deepEqual(d.recorded.map((r) => r.action), ['post.schedule-missed', 'post.unpublish'])
+  assert.match(d.recorded[0].summary, /Did not publish the scheduled changes to post “Both due” .* unpublish time .* passed too/)
+  const { getPost } = await import('../lib/mdx')
+  assert.equal(await getPost('both-due'), null)
+  assert.deepEqual((await runDueSchedules(deps(end + HOUR).run)).actions, [], 'nothing left to do')
+})
+
+test('CORR-2: a live save after the unpublish time keeps it, so the next pass still takes the item down', async () => {
+  const { runDueSchedules } = await import('../lib/schedule/run')
+  const { getItem, putItem } = await import('../lib/contentStore')
+  const end = Date.now() - 5000
+  await putItem('blog', 'save-late', { title: 'Save late', date: '2026-05-01', unpublishAt: iso(end) }, 'Live.')
+  const cur = await one(posts, 'save-late')
+  const saved = await h.call(posts, {
+    method: 'PUT',
+    body: { slug: 'save-late', frontmatter: { ...cur.body.frontmatter, title: 'Save late (edited)' }, body: 'Live, edited.' },
+    headers: { 'if-match': cur.headers.etag },
+  })
+  assert.equal(saved.statusCode, 200, JSON.stringify(saved.body))
+  assert.equal(getItem('blog', 'save-late')?.frontmatter.unpublishAt, iso(end), 'the overdue end is not dropped by the save')
+  const d = deps(Date.now())
+  const out = await runDueSchedules(d.run)
+  assert.deepEqual(out.actions.map((a) => [a.slug, a.outcome]), [['save-late', 'unpublished']])
+  assert.equal(getItem('blog', 'save-late')?.frontmatter.draft, true)
+})
+
+test('CORR-3: a scheduled unpublish folds unpublished changes into the draft, so a later scheduled publish shows what the editor showed', async () => {
+  const { runDueSchedules } = await import('../lib/schedule/run')
+  const { getPendingRevision } = await import('../lib/pendingRevisions')
+  const { getItem } = await import('../lib/contentStore')
+  await create(posts, 'fold-in', { title: 'Fold in' }, 'Old public words.')
+  const live = await one(posts, 'fold-in')
+  const pend = await h.call(posts, {
+    method: 'PUT',
+    body: { slug: 'fold-in', frontmatter: { ...live.body.frontmatter, title: 'Fold in v2' }, body: 'NEWER-PENDING-MARKER words.', target: 'pending' },
+    headers: { 'if-match': live.headers.etag },
+  })
+  assert.equal(pend.statusCode, 200)
+  const end = Date.now() + HOUR
+  const s = await schedule(posts, 'fold-in', { unpublishAt: iso(end) }, pend.body.etag)
+  assert.equal(s.statusCode, 200, JSON.stringify(s.body))
+
+  const d = deps(end + 1000)
+  const out = await runDueSchedules(d.run)
+  assert.deepEqual(out.actions.map((a) => [a.slug, a.outcome]), [['fold-in', 'unpublished']])
+  assert.match(d.recorded[0].summary, /its unpublished changes are now the draft/)
+  assert.equal(d.recorded[0].snapshots, 1, 'the formerly live version is in the history')
+  const editor = await one(posts, 'fold-in')
+  assert.equal(editor.body.frontmatter.draft, true)
+  assert.equal(editor.body.pending, null, 'a draft never holds a pending revision')
+  assert.equal(editor.body.body, 'NEWER-PENDING-MARKER words.', 'the draft is what the editor showed')
+  assert.equal(getPendingRevision('blog', 'fold-in'), null)
+
+  // Scheduling the draft without editing it publishes exactly that.
+  const at = Date.now() + 2 * HOUR
+  const again = await schedule(posts, 'fold-in', { publishAt: iso(at) }, editor.headers.etag)
+  assert.equal(again.statusCode, 200, JSON.stringify(again.body))
+  const p = deps(at + 1000)
+  assert.deepEqual((await runDueSchedules(p.run)).actions.map((a) => [a.slug, a.outcome]), [['fold-in', 'published']])
+  const after = getItem('blog', 'fold-in')!
+  assert.equal(after.frontmatter.draft, undefined)
+  assert.equal(after.body, 'NEWER-PENDING-MARKER words.')
+  assert.equal(after.frontmatter.title, 'Fold in v2')
 })
 
 test('one pass at a time; the internal job answers 404 to outsiders, 409 while busy, and logs as the scheduler', async () => {

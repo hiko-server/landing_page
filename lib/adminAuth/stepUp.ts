@@ -5,8 +5,9 @@ import { isPasskeyRequired } from './store'
 
 /**
  * Recent verification ("step-up") for dangerous actions: restoring a backup,
- * deleting a post or case study, MongoDB restore and target changes, and
- * every passkey / recovery-code / session change. The owner must have signed
+ * deleting a post or case study, deleting an image from the media trash for
+ * good, MongoDB restore and target changes, and every passkey /
+ * recovery-code / session change. The owner must have signed
  * in or re-verified on this browser recently (recentAuthWindowMs: 10 minutes
  * unless ADMIN_RECENT_AUTH_MINUTES says otherwise); otherwise the
  * route answers 403 STEP_UP_REQUIRED with the ways to verify, the admin UI

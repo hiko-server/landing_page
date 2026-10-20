@@ -1,5 +1,8 @@
 import type { BodyScan } from '../contentHealth/mdxScan'
 import { altState, originalOfRef } from './usage'
+import { markdownAlt } from './view'
+
+export { markdownAlt }
 
 /**
  * "Use the default alt text where it is missing" (H7) — the pure part,
@@ -14,11 +17,6 @@ import { altState, originalOfRef } from './usage'
  */
 
 const MD_ALT_RE = /^!\[([^\]]*)\]/
-
-/** Markdown alt text: brackets and backslashes escaped, one line. */
-export function markdownAlt(alt: string): string {
-  return alt.replace(/\s+/g, ' ').trim().replace(/[[\]\\]/g, '\\$&')
-}
 
 /** A JSX attribute for `alt` (null when the text holds both quote kinds — left for the owner). */
 export function jsxAltAttribute(alt: string): string | null {

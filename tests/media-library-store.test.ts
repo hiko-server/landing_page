@@ -327,6 +327,83 @@ test('H7 fill in alt: English and Chinese documents get their own default; snaps
   assert.ok(lib.usageOf(img.name).filter((u) => u.doc.startsWith('blog/')).every((u) => u.alt === 'ok'))
 })
 
+test('CORR-1 media rewrites: a document whose new text would not compile is left unchanged and reported', async () => {
+  const img = await upload('compile-check.png', 400, 300)
+  // The default alt itself is escaped, so filling it in keeps the body compiling.
+  await metaStore.saveMediaMeta(img.name, { alt: 'The <Award> certificate, x<3 and {draft' })
+  const { applyDefaultAlt } = await import('../lib/media/applyAltServer')
+  const { mdxProblem } = await import('../lib/mdx-admin')
+  await store.putItem('blog', 'compile-ok', { title: 'Compiles' }, `Intro.\n\n![](${img.url})\n`)
+  const filled = await applyDefaultAlt(img.name)
+  assert.ok(filled.ok)
+  assert.deepEqual(filled.skipped, [])
+  assert.equal(await mdxProblem(store.getItem('blog', 'compile-ok')?.body ?? ''), null, 'the rewritten body compiles')
+  assert.ok(store.getItem('blog', 'compile-ok')?.body.includes('![The \\<Award\\> certificate, x\\<3 and \\{draft]('))
+
+  // Whatever a transform produces, a body that would not compile is never stored:
+  // live versions, unpublished changes and pages alike.
+  const { rewriteDocuments } = await import('../lib/media/docRewrite')
+  const { putPendingRevision, getPendingRevision } = await import('../lib/pendingRevisions')
+  const live = store.getItem('blog', 'compile-ok')
+  putPendingRevision('blog', 'compile-ok', { title: 'Compiles v2' }, `Pending ![x](${img.url})`, Math.trunc(live?.updated_at ?? 0))
+  await store.putPage('uses', {}, `Gear ![x](${img.url})\n`)
+  const before = { live: store.getItem('blog', 'compile-ok')?.body, pending: getPendingRevision('blog', 'compile-ok')?.body, page: store.getPage('uses')?.body }
+  const run = await rewriteDocuments((doc) =>
+    doc.body.includes(img.url) ? { value: { ...doc, body: doc.body.replace(img.url, `${img.url}) <Broken`) }, count: 1 } : { value: doc, count: 0 },
+  )
+  assert.deepEqual(run.rewrites, [])
+  assert.deepEqual(run.paths, [])
+  assert.deepEqual(run.skipped.map((d) => `${d.kind}:${d.ref}`).sort(), ['page:uses', 'post:compile-ok'])
+  assert.ok(run.skipped.every((d) => /^Line \d+/.test(d.reason)), 'with the first error, for the owner')
+  assert.equal(store.getItem('blog', 'compile-ok')?.body, before.live)
+  assert.equal(getPendingRevision('blog', 'compile-ok')?.body, before.pending)
+  assert.equal(store.getPage('uses')?.body, before.page)
+
+  // A good live version with broken unpublished changes: the whole document waits for the owner.
+  const half = await rewriteDocuments((doc) =>
+    !doc.body.includes(img.url)
+      ? { value: doc, count: 0 }
+      : { value: doc.body.startsWith('Pending') ? { ...doc, body: `${doc.body} {unclosed` } : doc, count: 1 },
+  )
+  assert.deepEqual(half.skipped.map((d) => d.ref), ['compile-ok'])
+  assert.equal(store.getItem('blog', 'compile-ok')?.body, before.live)
+
+  // "Replace file" goes through the same check: a body stored before the editors checked
+  // it (an import, an old version) keeps the old address, which redirects.
+  const broken = `Intro <Unclosed\n\n![](${img.url})\n`
+  await store.putItem('blog', 'compile-broken', { title: 'Broken body' }, broken)
+  const replaced = await replace.replaceUpload(
+    { name: img.name, raw: await gradient(420, 300).png().toBuffer(), mime: 'image/png', filename: '1790000000002-compile-new.png' },
+    { r2: fakeR2(new Set()).ops, purge: noPurge },
+  )
+  assert.ok(replaced.ok)
+  assert.deepEqual(replaced.skipped.map((d) => `${d.kind}:${d.ref}:${d.title}`), ['post:compile-broken:Broken body'])
+  assert.equal(store.getItem('blog', 'compile-broken')?.body, broken)
+  assert.ok(store.getItem('blog', 'compile-ok')?.body.includes(`/uploads/${replaced.upload.name}`))
+  assert.ok(!replaced.paths.includes('/blog/compile-broken'))
+  await store.removeItem('blog', 'compile-ok')
+  await store.removeItem('blog', 'compile-broken')
+  await store.putPage('uses', {}, '')
+})
+
+test('CORR-5 the Chinese bio: named, linked and refreshed at /zh/about; its Chinese default even when its text is mostly English', async () => {
+  const img = await upload('bio-zh.png', 400, 300)
+  await metaStore.saveMediaMeta(img.name, { alt: 'A desk', altZh: '一张书桌' })
+  await store.putPage('about-zh', {}, `I build ML systems with PyTorch, CUDA and Kubernetes on edge GPUs.\n\n![](${img.url})\n`)
+  const usage = lib.usageOf(img.name, { fresh: true }).find((u) => u.doc === 'page/about-zh')
+  assert.ok(usage, 'listed under the Chinese bio')
+  assert.equal(usage?.docTitle, 'About bio (中文)')
+  assert.equal(usage?.editHref, '/admin/about?lang=zh')
+  assert.equal(usage?.publicHref, '/zh/about')
+  const { applyDefaultAlt } = await import('../lib/media/applyAltServer')
+  const out = await applyDefaultAlt(img.name)
+  assert.ok(out.ok)
+  assert.deepEqual(out.rewrites.map((r) => `${r.kind}:${r.ref}:${r.title}`), ['page:about-zh:About bio (中文)'])
+  assert.ok(out.paths.includes('/zh/about'))
+  assert.ok(!out.paths.includes('/about-zh'))
+  assert.ok(store.getPage('about-zh')?.body.includes(`![一张书桌](${img.url})`), 'the Chinese default, by the page name')
+})
+
 test('H7 a new upload never takes the name of one in the trash; the content export carries the texts', async () => {
   const first = await upload('same-name.png', 300, 200)
   await metaStore.saveMediaMeta(first.name, { alt: 'Exported alt' })
@@ -337,6 +414,13 @@ test('H7 a new upload never takes the name of one in the trash; the content expo
   assert.ok(out.ok)
   const second = await upload('same-name.png', 300, 200)
   assert.notEqual(second.name, first.name, 'gets a hash suffix instead')
+  // OPS-2: a trash row without its folder (a content restore brings rows back, not folders) still holds the name.
+  const { getDb } = await import('../lib/db')
+  getDb().prepare("INSERT INTO media_trash (name, files, deleted_at) VALUES ('row-only.png', '[\"row-only.png\"]', ?)").run(Date.now())
+  const third = await upload('row-only.png', 300, 200)
+  assert.notEqual(third.name, 'row-only.png', 'never the name of a trashed upload whose row alone came back')
+  assert.ok(list.listLibrary().items.some((i) => i.name === third.name), 'so it is never hidden from the library')
+  getDb().prepare("DELETE FROM media_trash WHERE name = 'row-only.png'").run()
   assert.ok((await trash.restoreFromTrash(first.name, { r2: fakeR2(new Set()).ops })).ok)
 })
 
@@ -379,9 +463,9 @@ function mockRes(out: Out) {
   return res
 }
 
-async function call(route: string, method: string, body?: unknown, admin = true, query: Record<string, string> = {}): Promise<Out> {
+async function call(route: string, method: string, body?: unknown, admin = true, query: Record<string, string> = {}, sid?: string): Promise<Out> {
   const handler = (await import(route)).default as (req: unknown, res: unknown) => Promise<unknown>
-  const token = jwt.sign({ role: 'admin', email: 'owner@example.com' }, process.env.JWT_SECRET as string, { algorithm: 'HS256' })
+  const token = jwt.sign({ role: 'admin', email: 'owner@example.com', ...(sid ? { sid } : {}) }, process.env.JWT_SECRET as string, { algorithm: 'HS256' })
   const out: Out = { statusCode: 200, body: undefined, headers: {} }
   await handler(
     {
@@ -434,7 +518,10 @@ test('H7 API: admin only; the listing; texts and deletes answer clearly and land
   assert.equal((await call('../pages/api/admin/media/preview', 'GET', undefined, false, { name: target.name })).statusCode, 401)
   assert.equal((await call('../pages/api/admin/media/preview', 'GET', undefined, true, { name: used.name })).statusCode, 404)
 
-  const purge = await call('../pages/api/admin/media/index', 'POST', { action: 'purge', names: [target.name] })
+  // Deleting for good needs a recent sign-in (SECU-2): a session verified just now.
+  const { createSession } = await import('../lib/adminAuth/sessions')
+  const recent = createSession({ method: 'password', ttlMs: 3_600_000, device: null, ipPrefix: null, country: null }).id
+  const purge = await call('../pages/api/admin/media/index', 'POST', { action: 'purge', names: [target.name] }, true, {}, recent)
   assert.deepEqual(purge.body.done, [target.name])
   assert.equal((await call('../pages/api/admin/media/index', 'POST', { action: 'delete', names: [] })).statusCode, 400)
   assert.equal((await call('../pages/api/admin/media/index', 'POST', { action: 'delete', names: ['a.png.w640.webp'] })).statusCode, 400)
@@ -446,6 +533,29 @@ test('H7 API: admin only; the listing; texts and deletes answer clearly and land
   assert.ok(summaries.includes(`Updated the default alt text and caption of image “${target.name}”`))
   assert.ok(summaries.includes(`Moved image “${target.name}” to the trash`))
   assert.ok(summaries.includes(`Deleted image “${target.name}” for good`))
+})
+
+test('SECU-2 API: deleting from the trash for good needs a recent sign-in (403 STEP_UP_REQUIRED); the trash itself does not', async () => {
+  const img = await upload('purge-step-up.png', 200, 150)
+  const { createSession } = await import('../lib/adminAuth/sessions')
+  const origin = { device: null, ipPrefix: null, country: null }
+  const stale = createSession({ method: 'password', ttlMs: 3_600_000, verifiedAt: Date.now() - 30 * 60_000, ...origin }).id
+  const fresh = createSession({ method: 'password', ttlMs: 3_600_000, ...origin }).id
+  const route = '../pages/api/admin/media/index'
+  const trashed = await call(route, 'POST', { action: 'delete', names: [img.name] }, true, {}, stale)
+  assert.equal(trashed.statusCode, 200, 'moving to the trash can be undone for 30 days')
+  assert.deepEqual(trashed.body.done, [img.name])
+  for (const sid of [stale, undefined]) {
+    const blocked = await call(route, 'POST', { action: 'purge', names: [img.name] }, true, {}, sid)
+    assert.equal(blocked.statusCode, 403)
+    assert.equal(blocked.body.code, 'STEP_UP_REQUIRED')
+    assert.ok(blocked.body.methods.includes('password'))
+    assert.ok(list.listLibrary().trash.some((t) => t.name === img.name), 'still in the trash')
+  }
+  const purged = await call(route, 'POST', { action: 'purge', names: [img.name] }, true, {}, fresh)
+  assert.equal(purged.statusCode, 200, JSON.stringify(purged.body))
+  assert.deepEqual(purged.body.done, [img.name])
+  assert.ok(!list.listLibrary().trash.some((t) => t.name === img.name), 'gone for good')
 })
 
 test('H7 API: replace checks the body like an upload and reports what changed', async () => {

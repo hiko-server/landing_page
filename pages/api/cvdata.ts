@@ -21,7 +21,7 @@ import { trackPublicationsNav } from '../../lib/publicationsNav'
 import { validateCvDoc, type CvValidationError } from '../../lib/cvValidate'
 import { withBareOrcid } from '../../lib/orcid/id'
 import { reconcileOrcidAuth } from '../../lib/orcid/connection'
-import { withEntryUids } from '../../lib/cvEntryUid'
+import { withEntryUids, withSectionUidsBeside } from '../../lib/cvEntryUid'
 import { withApi } from '../../lib/apiHandler'
 import type { Logger } from '../../lib/log'
 
@@ -255,11 +255,13 @@ export default withApi('cvdata', async (req: NextApiRequest, res: NextApiRespons
       }
       enIn = withBareOrcid(enIn)
       zhIn = withBareOrcid(zhIn)
-      if (enIn) enIn = withEntryUids({ en: enIn, zh: [] }).en
-      if (zhIn) zhIn = withEntryUids({ en: [], zh: zhIn }).zh
+      const current = readCvData()
+      // Entries without a uid are filled against the other language as it will be, with the
+      // twin rule (lib/cvEntryUid): a variant never ends up selecting the wrong entry.
+      if (enIn) enIn = withSectionUidsBeside(enIn, 'en', zhIn ?? current.zh)
+      if (zhIn) zhIn = withSectionUidsBeside(zhIn, 'zh', enIn ?? current.en)
       const checkedImport = validateCvDoc({ en: enIn, zh: zhIn })
       if (!checkedImport.ok) return sendInvalid(res, checkedImport.errors)
-      const current = readCvData()
       const newEn = enIn ?? current.en
       const newZh = zhIn ? syncLanguage(newEn, zhIn) : current.zh
       snapshotQuietly(ctx.log, 'import')

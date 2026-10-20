@@ -72,6 +72,71 @@ The gaps the final batch left (before release).
   they fail on the previous build —, the pickers and the bullet audience
   @admin).
 
+### Review fixes
+
+Fixes for defects the final review found in the final batch before it shipped.
+
+- **Media library alt text (CORR-1)**: "Use the default alt text" escapes
+  every Markdown / MDX character, so an alt such as `x<y`, `<Award>` or
+  `{draft` stays literal instead of breaking the post, the RSS feed and the
+  Markdown twin. Replace and fill-in now compile every rewritten body first;
+  a document that would not render is left unchanged and named in the
+  toast, which also lists pages that could not be refreshed. "Copy
+  Markdown" and the editor's image insert use the same escaping.
+- **Chinese bio in the media library (CORR-5)**: "Used in" links to
+  /admin/about?lang=zh and /zh/about (not dead /about-zh links), replace and
+  fill-in refresh /zh/about, and the Chinese bio gets the Chinese default
+  alt even when its text is mostly English.
+- **Scheduled publishing catch-up (CORR-2)**: when scheduled changes and the
+  item's unpublish time both passed while the server was down, the item now
+  still comes down (with the changes kept as its draft) and the log says
+  the changes were not published; before, the end time was dropped and the
+  item stayed public with nothing logged. A live save made after the end
+  time no longer cancels it.
+- **Scheduled unpublish keeps what the editor shows (CORR-3)**: like an
+  unpublish by hand, saved but unpublished changes become the draft, so a
+  later scheduled publish (or a review link) shows them instead of the
+  older version.
+- **Analytics on the Chinese pages (CORR-4)**: /zh, /zh/about, /zh/work,
+  /zh/blog and /zh/contact are now measured (page views, vitals, goals) and
+  named in Explore; a Chinese page that does not exist yet (404) is not
+  counted.
+- **Edge cache for the Chinese pages (OPS-3)**: the versioned Cloudflare
+  cache rule lists the five Chinese pages by exact path, like their English
+  pairs (apply with `scripts/cloudflare-config.mjs`).
+- **Review links follow their item's lifecycle (SECU-1)**: deleting a post
+  or case study turns off its review links (old slugs included), and an
+  address that changes hands — a new or restored item there, another item
+  renamed onto it, an old address dropped — turns off the links left there,
+  so a link can never show an item that was not shared.
+- **Deleting media for good asks to confirm it's you (SECU-2)**: "Delete
+  now" in the media trash needs a recent sign-in, like deleting a post; the
+  library opens the "Confirm it's you" dialog first, and closing it deletes
+  nothing.
+- **Trailing-slash redirects carry the security headers (SECU-3)**:
+  `/path/` → `/path` (308, query kept) now happens in the proxy instead of
+  Next's router, which answered first and dropped every header — so the
+  slash form of a CV share link or review link is private, uncached,
+  unindexed and sends no Referer, and every slash redirect has the CSP.
+- **CV variants pair EN and 中文 entries safely (CV-L-1)**: entries without
+  a stored uid share one across languages only when the two lists line up
+  (the Studio's twin rule); otherwise a 中文 entry gets its own, so a
+  variant prints nothing there instead of an entry the owner left out. A
+  one-language import keeps the pairing with the other language.
+- **CV download names on /cv follow the web view (CV-L-2)**: a name kept
+  to the downloads no longer appears in the /cv and /cv/zh page data,
+  download links or JSON-LD; the files themselves are still named in full.
+- **Media trash after a content restore (OPS-2)**: a new upload never takes
+  the name of a trashed image whose row alone came back with a restore; a
+  restore drops trash rows whose file the restored content has live (the
+  image is back in the library, with its texts); and the boot sync no
+  longer deletes R2's copies of a trashed name whose file is on disk — it
+  warns instead.
+- **Container gate (OPS-1)**: every end-to-end test is its own client (a
+  TEST-NET address in cf-connecting-ip), so the full suite against one
+  server no longer runs out of per-client budgets (post saves, contact
+  nonces) and fails with 429s.
+
 ### patch-2b1
 
 Fixes after the wave 2B deploy (the post-deploy end-to-end run against

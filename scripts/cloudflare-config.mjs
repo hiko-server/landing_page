@@ -39,7 +39,13 @@ import { pathToFileURL } from 'node:url'
 const API = 'https://api.cloudflare.com/client/v4'
 export const REF_PREFIX = 'lp_'
 
-/** Public routes whose responses may be cached at the edge (TTL from the origin). */
+/**
+ * Public routes whose responses may be cached at the edge (TTL from the
+ * origin). Every ISR page of lib/revalidate STATIC_CONTENT_PATHS is here
+ * (tests/r4-ops-cloudflare.test.ts keeps them in step), the Chinese pages
+ * (F3, lib/zhRoutes ZH_PATHS) by their exact paths — not a '/zh/' prefix, so
+ * an unknown /zh/… address stays uncached.
+ */
 export const CACHEABLE_EXACT_PATHS = [
   '/',
   '/about',
@@ -52,6 +58,11 @@ export const CACHEABLE_EXACT_PATHS = [
   '/uses',
   '/colophon',
   '/publications',
+  '/zh',
+  '/zh/about',
+  '/zh/work',
+  '/zh/blog',
+  '/zh/contact',
   '/api/og',
   '/api/stack',
   '/api/search-index',

@@ -217,3 +217,29 @@ test('local retention keeps the newest 20 snapshots and never touches other arch
   assert.ok(left.includes('snapshot-20200101-000024.tgz'))
   assert.equal(snap.pruned.local.length, 6)
 })
+
+test('OPS-2: a trash row the restore brings back beside a live file is dropped (the file is back in the library); a tombstone without its file stays', async () => {
+  seed()
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  fs.writeFileSync(path.join(uploadsDir, 'probe.png'), png)
+  const db = getDb()
+  db.exec('DELETE FROM media_trash; DELETE FROM media_redirects;')
+  // A snapshot taken while probe.png waited in the trash (its folder is never in a snapshot) …
+  db.prepare("INSERT INTO media_trash (name, files, deleted_at, meta) VALUES ('probe.png', '[\"probe.png\"]', ?, ?)").run(Date.now(), JSON.stringify({ alt: 'A probe card', altZh: '', caption: '', captionZh: '' }))
+  db.prepare("INSERT INTO media_trash (name, files, deleted_at) VALUES ('tomb.png', '[\"tomb.png\"]', ?)").run(Date.now())
+  db.prepare("INSERT INTO media_redirects (from_name, to_name, created_at) VALUES ('probe.png', 'newer.png', 1)").run()
+  const snap = await backup.createSnapshot()
+  // … then probe.png was restored from the trash and is live: restoring that snapshot must not hide it again.
+  db.prepare("DELETE FROM media_trash WHERE name = 'probe.png'").run()
+
+  const result = await backup.restoreLocalSnapshot(snap.filename)
+  const live = getDb()
+  assert.deepEqual(live.prepare('SELECT name FROM media_trash ORDER BY name').all(), [{ name: 'tomb.png' }], 'the tombstone (no file) stays')
+  assert.deepEqual(live.prepare("SELECT * FROM media_redirects WHERE from_name = 'probe.png'").all(), [], 'its own address serves it again')
+  const { readMediaMeta } = await import('../lib/media/metaStore')
+  assert.equal(readMediaMeta().doc.items['probe.png']?.alt, 'A probe card', 'its texts come back')
+  assert.ok(result.report.warnings.some((w) => /back in the media library \(probe\.png\)/.test(w)), result.report.warnings.join(' | '))
+  const { listLibrary } = await import('../lib/media/list')
+  assert.ok(listLibrary().items.some((i) => i.name === 'probe.png'), 'listed in the library')
+  fs.rmSync(path.join(uploadsDir, 'probe.png'))
+})

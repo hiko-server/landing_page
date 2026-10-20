@@ -52,6 +52,7 @@ import { getShortcutsEnabled, isImeComposing } from '../../../lib/keyboardShortc
 import { isTextEntryTarget } from '../shell/listKeys'
 import SegmentedTabs, { tabPanelProps, type SegmentedItem } from '../shell/SegmentedTabs'
 import { AdminPageShell, BackLink, LoadErrorNotice, MONO, SessionExpiredNotice, inputProps, outlineButtonProps, primaryButtonProps } from '../shell/ui'
+import { useStepUp } from '../security/useStepUp'
 import { ACCEPT, fetchLibrary, postMedia, type BatchBody, type OptimizeBody } from './api'
 import MediaCollection from './MediaCollection'
 import MediaDrawer from './MediaDrawer'
@@ -95,6 +96,7 @@ const first = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v
 export default function MediaLibrary() {
   const router = useRouter()
   const toast = useToast()
+  const { fetchWithStepUp, stepUpElement } = useStepUp()
   const [data, setData] = useState<MediaLibraryResponse | null>(null)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'expired'>('loading')
   const [loadError, setLoadError] = useState('')
@@ -361,8 +363,12 @@ export default function MediaLibrary() {
 
   const purge = async (name: string) => {
     setBusy(`purge:${name}`)
-    const out = await postMedia<BatchBody>({ action: 'purge', names: [name] })
+    // Deleting for good needs a recent sign-in: the "Confirm it's you" dialog asks first when it is not.
+    const out = await postMedia<BatchBody>({ action: 'purge', names: [name] }, (input, init) =>
+      fetchWithStepUp(input, init, `Deleting “${name}” for good cannot be undone.`),
+    )
     setBusy(null)
+    if (!out.ok && out.cancelled) return
     if (out.ok && out.body.library) apply(out.body.library)
     toast({ status: out.ok && out.body.done.length ? 'success' : 'error', title: out.ok && out.body.done.length ? `Deleted ${name} for good` : 'Not deleted', description: out.ok ? undefined : out.error, position: 'bottom-right', duration: 3000 })
   }
@@ -783,6 +789,7 @@ export default function MediaLibrary() {
 
       <DropOverlay show={dragging} label="Drop to upload to the media library" />
       <UploadPanel items={queue.items} summary={queue.summary} onRetry={queue.retry} onClear={queue.clearFinished} />
+      {stepUpElement}
     </AdminPageShell>
   )
 }

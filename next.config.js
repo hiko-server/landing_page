@@ -67,6 +67,12 @@ const nextConfig = {
   // Don't publish full client source (incl. the admin UI) as .map files.
   productionBrowserSourceMaps: false,
   poweredByHeader: false,
+  // `/path/` → `/path` happens in proxy.ts (trailingSlashRedirect), not in
+  // Next's router: Next answers its own redirect before the proxy runs and
+  // drops every header on it — the CSP, and the private / no-store,
+  // noindex and no-referrer headers of share and review links
+  // (/cv/r/<token>/, /review/<token>/) never reached their slash form.
+  skipTrailingSlashRedirect: true,
   // No on-request image optimization: /_next/image runs sharp/libheif on
   // arbitrary requests (the AVIF RCE GHSA-2xp9-vwfh-vxw4 and memory-DoS
   // advisories). Images are resized and converted at upload time instead, so

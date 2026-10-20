@@ -1,6 +1,7 @@
 import type { MediaLibraryResponse, MediaMeta, MediaUsage } from '../../../lib/media/types'
 import { fileToDataUrl, readJsonObject, uploadFilename } from '../shell/http'
 import { UPLOAD_ACCEPT, UPLOAD_MAX_BYTES, uploadErrorMessage } from '../editor/upload'
+import { wasStepUpCancelled } from '../security/stepUpClient'
 
 /**
  * Client calls of the media library (H7): GET / POST /api/admin/media, the
@@ -9,7 +10,8 @@ import { UPLOAD_ACCEPT, UPLOAD_MAX_BYTES, uploadErrorMessage } from '../editor/u
  * a message ready for a toast — never an unhandled rejection.
  */
 
-export type ApiResult<T> = { ok: true; status: number; body: T } | { ok: false; status: number; error: string; body: Record<string, any> }
+/** `cancelled`: the owner closed the "Confirm it's you" dialog — show nothing. */
+export type ApiResult<T> = { ok: true; status: number; body: T } | { ok: false; status: number; error: string; body: Record<string, any>; cancelled?: true }
 
 const NETWORK = 'Network error — check your connection and try again.'
 
@@ -46,21 +48,32 @@ export type BatchBody = {
 }
 
 export type MetaBody = { ok: true; meta: MediaMeta | null; r2Warning?: string }
+export type RewrittenDocBody = { kind: string; ref: string; title: string; references: number }
+/** A document the server left unchanged because its new text would not render (lib/media/docRewrite). */
+export type SkippedDocBody = RewrittenDocBody & { reason: string }
 export type ApplyAltBody = {
   ok: true
   places: number
-  rewrites: Array<{ kind: string; ref: string; title: string; references: number }>
+  rewrites: RewrittenDocBody[]
   revalidated: string[]
   revalidateFailed?: string[]
   warnings?: string[]
+  skipped?: SkippedDocBody[]
   library: MediaLibraryResponse
 }
 export type OptimizeBody = { ok: true; processed: number; skipped: number; errors: Array<{ name: string; error: string }>; remaining: number; revalidated: string[]; library?: MediaLibraryResponse }
 
-export async function postMedia<T = Record<string, any>>(payload: MediaAction): Promise<ApiResult<T>> {
+/**
+ * POST /api/admin/media. `send` replaces `fetch` — a step-up fetch (useStepUp)
+ * for the actions that need a recent sign-in ('purge').
+ */
+export async function postMedia<T = Record<string, any>>(
+  payload: MediaAction,
+  send: (input: string, init: RequestInit) => Promise<Response> = (input, init) => fetch(input, init),
+): Promise<ApiResult<T>> {
   let res: Response
   try {
-    res = await fetch('/api/admin/media', {
+    res = await send('/api/admin/media', {
       method: 'POST',
       credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
@@ -69,6 +82,7 @@ export async function postMedia<T = Record<string, any>>(payload: MediaAction): 
   } catch {
     return { ok: false, status: 0, error: NETWORK, body: {} }
   }
+  if (wasStepUpCancelled(res)) return { ok: false, status: res.status, error: '', body: {}, cancelled: true }
   const body = await readJsonObject(res)
   if (!res.ok) return { ok: false, status: res.status, error: errorText(res.status, body), body }
   return { ok: true, status: res.status, body: body as T }
@@ -133,10 +147,11 @@ export type ReplaceBody = {
   from: string
   name: string
   url: string
-  rewrites: Array<{ kind: string; ref: string; title: string; references: number }>
+  rewrites: RewrittenDocBody[]
   revalidated: string[]
   revalidateFailed?: string[]
   warnings?: string[]
+  skipped?: SkippedDocBody[]
   library: MediaLibraryResponse
 }
 
