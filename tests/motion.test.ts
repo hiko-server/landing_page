@@ -360,8 +360,10 @@ test('the palette opens instantly from the keyboard, defers its rows, and has no
   assert.match(src, /instant \|\| reduceMotion\s*\?\s*undefined/)
   assert.match(src, /useDeferredValue\(query\)/)
   assert.match(src, /listReady \? computeRows\(q, subpage\) : \{ rows: \[\], total: 0 \}/)
-  // Enter never opens a stale row: a lagging ranking is redone for the field's text.
-  assert.match(src, /if \(live !== q \|\| !listReady\) runItem\(computeRows\(live, subpage\)\.rows\[0\]\?\.item\)/)
+  // Enter never opens a stale row: a lagging ranking is redone for the field's text
+  // (and resolveEnter picks its first row — tests/patch-2b1-palette-enter.test.ts).
+  assert.match(src, /const current = live === q && listReady/)
+  assert.match(src, /rows: current \? rows : computeRows\(live, subpage\)\.rows,\s*active: current \? active : null,/)
   assert.match(src, /'@media \(hover: hover\) and \(pointer: fine\)': \{ backdropFilter: 'blur\(12px\)' \}/)
   assert.doesNotMatch(src, /<ModalOverlay backdropFilter=/)
   const header = read('components/Header/Header.tsx')

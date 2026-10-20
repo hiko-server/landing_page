@@ -45,16 +45,17 @@ import { useAsk } from '../Search/useAsk'
 import { openCitation } from '../Search/citation'
 import { askCopyFor, ASK_COPY } from '../../lib/ask/copy'
 import { askStatusText, type AskOption } from '../../lib/ask/view'
-import { isExplicitQuestion } from '../../lib/search/text'
 import { onEmptyResult } from '../../lib/search/emptyResult'
 import { CONTACT_FORM_ID, stashContactQuestion } from '../../lib/contactPrefill'
 import {
   LAYER_SHORTCUT_ROWS,
   PAGE_TITLES,
   PREFETCH_DELAY_MS,
+  askRowPlacement,
   browseItems,
   isPrefetchableHref,
   pageKeyAction,
+  resolveEnter,
   searchableItems,
   type PageMember,
   type PalettePage,
@@ -92,8 +93,11 @@ import { listenSearchEmpty } from '../../lib/analytics/searchEmpty'
  *     answered only with quotes from the site's public pages, each linked to
  *     where it appears (components/Search/AskView, lib/ask). A search phrased
  *     as a question (a question word or mark) offers "Ask" as its first row,
- *     any other search as its last — Enter on a typed title still opens the
- *     title's page; `initialMode`
+ *     any other search as its last — once the posts and projects are in, so
+ *     Enter on a typed title opens the title's page, never Ask: Enter acts on
+ *     the highlighted row, on the first row for the field's text while the
+ *     (deferred) list lags, and waits for the content index when there is
+ *     nothing to act on yet (paletteModel.ts resolveEnter); `initialMode`
  *     opens the palette in Ask mode (the entry on /about and /contact). Ask
  *     is a view of the top level: the nested pages and the shortcut sheet
  *     belong to Search; Backspace in an empty question returns to Search.
@@ -178,6 +182,7 @@ const KIND_LABEL: Record<SearchDocLike['kind'], string> = { post: 'Post', work: 
 /** The "Ask: …" row of a search, and the browse view's "Ask Lucian a question" action. */
 const ASK_ROW_ID = 'ask:question'
 const ASK_ACTION_ID = 'action:ask'
+const isAskRow = (row: Row) => row.item.id === ASK_ROW_ID
 /** A query that finds nothing is reported (onEmptyResult) once it has rested this long. */
 const EMPTY_SETTLE_MS = 1200
 const MONO = 'var(--font-geist-mono), monospace'
@@ -385,6 +390,8 @@ export default function CommandPalette({
   const [index, setIndex] = useState<SearchIndex | null>(null)
   const [loading, setLoading] = useState(false)
   const [indexFailed, setIndexFailed] = useState(false)
+  // An Enter pressed while the posts and projects were loading (the field's text then), carried out once they are in.
+  const [queuedEnter, setQueuedEnter] = useState<string | null>(null)
   const [sections, setSections] = useState<Item[]>([])
   const [recent, setRecent] = useState<RecentRecord[]>([])
   const [restoreFocus, setRestoreFocus] = useState(true)
@@ -423,6 +430,7 @@ export default function CommandPalette({
     setSubpage(initialModeRef.current === 'ask' ? null : initialPageRef.current)
     selectOnFocus.current = initialQueryRef.current !== ''
     setActiveIdx(0)
+    setQueuedEnter(null)
     setRestoreFocus(true)
   }, [isOpen])
 
@@ -870,8 +878,10 @@ export default function CommandPalette({
       // The "Ask Lucian a question" action is replaced by the "Ask: …" row below.
       const found = view ? ranked : ranked.filter((r) => r.row.item.id !== ASK_ACTION_ID)
       const out = found.slice(0, RESULT_LIMIT).map((r) => r.row)
-      if (!view) {
-        // "Ask: …" — first when the query is phrased as a question, otherwise after the results (or alone).
+      // "Ask: …" — first when the query is phrased as a question, otherwise
+      // after the results (or alone) once the posts and projects are in.
+      const askAt = view ? 'none' : askRowPlacement(q, !index && !indexFailed)
+      if (askAt !== 'none') {
         const copy = askCopyFor(q, 'en')
         const askRow: Row = {
           // The row speaks the question's language: label, hint and badge alike.
@@ -879,16 +889,18 @@ export default function CommandPalette({
           group: 'Actions',
           indices: [],
         }
-        if (isExplicitQuestion(q)) out.unshift(askRow)
+        if (askAt === 'first') out.unshift(askRow)
         else out.push(askRow)
       }
       return { rows: out, total: found.length }
     },
-    [browseRows, items, sections, recent, index],
+    [browseRows, items, sections, recent, index, indexFailed],
   )
 
   const q = deferredQuery.trim()
   const searching = q !== ''
+  // The content index (posts, projects, pages, the CV) is on its way.
+  const contentLoading = !index && !indexFailed
   // Search, or Ask (the answer view replaces the rows; the field is shared).
   const asking = mode === 'ask'
   // The rows of the search view; none while a question is typed (Ask ranks passages instead).
@@ -1109,6 +1121,18 @@ export default function CommandPalette({
     run?.()
   }
 
+  // An Enter pressed while the posts and projects were loading is carried out
+  // once they are in (or failed to come): the first result for the text it was
+  // pressed on — if that text is still in the field, in Search, at the top level.
+  useEffect(() => {
+    if (queuedEnter === null || (!index && !indexFailed)) return
+    setQueuedEnter(null)
+    if (!isOpen || asking || subpage || query.trim() !== queuedEnter) return
+    const choice = resolveEnter({ query: queuedEnter, rows: computeRows(queuedEnter, null).rows, active: null, contentLoading: false, isAskRow, queued: true })
+    if (choice.kind === 'run') runItem(choice.row.item)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- runs when the index settles; reads this render's state
+  }, [queuedEnter, index, indexFailed])
+
   const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.nativeEvent.isComposing) return
     if (asking && e.key === 'Backspace' && query === '') {
@@ -1135,11 +1159,21 @@ export default function CommandPalette({
         else runAsk(askOpts[active])
         return
       }
-      // Typed faster than the deferred ranking (or before the first rows):
-      // rank the field's text now, so Enter never opens a stale row.
+      // What the visitor sees — or would see — for the field's text: typed
+      // faster than the deferred ranking (or before the first rows), the text
+      // is ranked now, so Enter never opens a stale row; nothing to act on
+      // while the posts and projects load, it waits for them.
       const live = query.trim()
-      if (live !== q || !listReady) runItem(computeRows(live, subpage).rows[0]?.item)
-      else runItem(activeItem)
+      const current = live === q && listReady
+      const choice = resolveEnter({
+        query: live,
+        rows: current ? rows : computeRows(live, subpage).rows,
+        active: current ? active : null,
+        contentLoading: !subpage && live !== '' && contentLoading,
+        isAskRow,
+      })
+      if (choice.kind === 'run') runItem(choice.row.item)
+      else setQueuedEnter(choice.kind === 'wait' ? live : null)
     }
   }
 
@@ -1337,9 +1371,11 @@ export default function CommandPalette({
       ? askStatusText(ask.state, askCopy)
       : `${subpage ? `${PAGE_TITLES[subpage]}: ` : ''}${
           searching
-            ? total > matchCount
-              ? `Showing ${matchCount} of ${total} results`
-              : `${total} result${total === 1 ? '' : 's'}`
+            ? matchCount === 0 && contentLoading && !subpage
+              ? 'Loading posts and projects…'
+              : total > matchCount
+                ? `Showing ${matchCount} of ${total} results`
+                : `${total} result${total === 1 ? '' : 's'}`
             : `${rows.length} command${rows.length === 1 ? '' : 's'}`
         }`
 
@@ -1429,6 +1465,7 @@ export default function CommandPalette({
             onChange={(e) => {
               setQuery(e.target.value)
               setActiveIdx(0)
+              setQueuedEnter(null)
             }}
             onFocus={(e) => {
               if (!selectOnFocus.current) return
@@ -1503,10 +1540,10 @@ export default function CommandPalette({
             ) : (
               <>
                 {listReady && searching && matchCount === 0 && (
-                  // Above the list: the "Ask: …" row follows at the top level.
-                  <Flex direction="column" align="center" justify="center" pt={8} pb={subpage ? 8 : 4} color="page.fg-secondary" fontFamily={MONO} fontSize="12px" gap={1}>
+                  // Above the list: the "Ask: …" row follows at the top level (once the posts and projects are in).
+                  <Flex direction="column" align="center" justify="center" pt={8} pb={rows.length ? 4 : 8} color="page.fg-secondary" fontFamily={MONO} fontSize="12px" gap={1}>
                     <Text>no matches</Text>
-                    <Text>{loading && !subpage ? 'still loading posts and projects…' : 'try fewer or different letters'}</Text>
+                    <Text>{contentLoading && !subpage ? 'still loading posts and projects…' : 'try fewer or different letters'}</Text>
                   </Flex>
                 )}
                 <Box id={listId} role="listbox" aria-label={subpage ? PAGE_TITLES[subpage] : 'Commands'}>

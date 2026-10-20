@@ -8,6 +8,27 @@ portfolio CMS, no public package). Entries are grouped by release date.
 
 ## [Unreleased]
 
+### patch-2b1
+
+Fixes after the wave 2B deploy (the post-deploy end-to-end run against
+https://lucian-dev.com).
+
+- **⌘K: Enter on a typed title opens its page, never Ask.** The palette
+  fetches its content index when it first opens (a few hundred milliseconds
+  on the live site). Until it arrived, a typed title had one row — "Ask: …"
+  — and Enter switched the palette to Ask instead of opening the post. Now a
+  search that is not phrased as a question gets its "Ask: …" row only once
+  the posts and projects are in (a question still gets it first, at once),
+  the status says "Loading posts and projects…", and an Enter pressed with
+  nothing to act on yet waits for them and then opens the first result for
+  the text still in the field (editing the text drops it; text that finds
+  nothing stays in Search, where the "Ask: …" row is then the next Enter).
+  Enter otherwise acts on the highlighted row, or on the first row ranked
+  for the field's text while the deferred list lags behind
+  (`components/General-UI/paletteModel.ts` `askRowPlacement`,
+  `resolveEnter`; `tests/patch-2b1-palette-enter.test.ts`,
+  `e2e/patch-2b1.spec.ts` with the index held back and CPU throttling).
+
 ### admin-editorial
 
 Editorial tools in the post and case-study editors (wave 2B: H1, H3, H4, H6, H16).
