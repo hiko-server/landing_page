@@ -381,7 +381,7 @@ export default function SlashMenu({ open, query, surface, anchor, anchorKey, con
             autoComplete="off"
           />
           {ytError ? (
-            <Text id={`${listId}-yt-err`} role="alert" fontSize="12px" color="red.400" mt={1.5}>
+            <Text id={`${listId}-yt-err`} role="alert" fontSize="12px" color="status.error" mt={1.5}>
               {ytError}
             </Text>
           ) : null}
@@ -427,7 +427,7 @@ export default function SlashMenu({ open, query, surface, anchor, anchorKey, con
           />
           <Box id={`${listId}-links`} role="listbox" aria-label="Posts and case studies" mt={1.5} maxH="240px" overflowY="auto">
             {targetsError ? (
-              <Text role="alert" fontSize="12px" color="red.400" px={1} py={1.5}>
+              <Text role="alert" fontSize="12px" color="status.error" px={1} py={1.5}>
                 Couldn’t load your posts ({targetsError}).
               </Text>
             ) : !targets ? (

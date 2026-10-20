@@ -5,6 +5,9 @@ import { CV_SURFACES, isCvSurface, normalizeAudience, type CvSurface } from '../
 import { SURFACE_HINT, SURFACE_LABEL, audienceChip, audienceSummary } from './audience'
 import { monoFont, useStudioTokens } from './fields'
 
+/** Rows on the admin's menu surface: the hover / focus wash is page.bg-overlay, never Chakra's grey. */
+const ITEM_SURFACE = { bg: 'transparent', _hover: { bg: 'page.bg-overlay' }, _focus: { bg: 'page.bg-overlay' } } as const
+
 /**
  * "Shows on" — the audience of a field, an entry, a list or a section (E4,
  * lib/cvVisibility): Public pages, Downloads, Private links. A menu of
@@ -70,7 +73,8 @@ export default function AudienceMenu({
           </Box>
         </MenuButton>
       </Tooltip>
-      <MenuList fontSize="13px" minW="290px" maxW="calc(100vw - 32px)" zIndex={40} onClick={(e) => e.stopPropagation()}>
+      {/* The admin's menu surface (as every other admin menu): the 11px hints keep ≥ 4.5:1 on the focused row in both themes. */}
+      <MenuList bg="page.bg-elevated" borderColor="page.border-strong" fontSize="13px" minW="290px" maxW="calc(100vw - 32px)" zIndex={40} onClick={(e) => e.stopPropagation()}>
         <Text px={3} pt={1} pb={1.5} fontFamily={monoFont} fontSize="10px" letterSpacing="0.1em" textTransform="uppercase" color={dim}>
           {label} shows on
         </Text>
@@ -86,7 +90,7 @@ export default function AudienceMenu({
           {CV_SURFACES.map((s) => {
             const last = checked.length === 1 && checked[0] === s
             return (
-              <MenuItemOption key={s} value={s} isDisabled={last} title={last ? 'To keep it off everything, hide it with the eye' : undefined}>
+              <MenuItemOption key={s} value={s} isDisabled={last} title={last ? 'To keep it off everything, hide it with the eye' : undefined} {...ITEM_SURFACE}>
                 <Box>
                   <Text as="span" display="block" fontWeight={500}>
                     {SURFACE_LABEL[s]}
@@ -100,7 +104,7 @@ export default function AudienceMenu({
           })}
         </MenuOptionGroup>
         <MenuDivider />
-        <MenuItem isDisabled={!restricted} closeOnSelect onClick={() => onChange(null)}>
+        <MenuItem isDisabled={!restricted} closeOnSelect onClick={() => onChange(null)} {...ITEM_SURFACE}>
           Show everywhere
         </MenuItem>
         <Text px={3} pt={1} pb={1} fontSize="11px" color={dim} maxW="290px">
