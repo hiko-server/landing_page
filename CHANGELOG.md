@@ -147,6 +147,14 @@ quoted from the site itself (J1).
   `tests/search-ask-store-leak.test.ts`).
 - **Publications** — paper documents in the index (`kind: 'publication'`)
   are searched and quoted as soon as they exist.
+- **With the palette's nested pages (motion, C5)**: Ask is a view of the
+  top level — Theme ›, CV ›, Contact › and Keyboard shortcuts › belong to
+  Search; opening in Ask mode (the entries on /about and /contact) lands
+  there directly, Backspace in an empty question returns to Search and
+  Escape closes. The "Ask: …" row is offered at the top level only, first
+  for a query phrased as a question (a question word or mark, 他有…吗) and
+  after the results otherwise — Enter on a typed title still opens the
+  title's page.
 - **`onEmptyResult(query, mode)`** (`lib/search/emptyResult.ts`) is the one
   place a search or question that found nothing is reported, once per
   settled query: the query is normalised and capped at 40 characters, and

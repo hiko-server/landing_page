@@ -350,7 +350,10 @@ test('single-key shortcuts can be turned off from the ⌘K palette (WCAG 2.1.4)'
     const input = page.getByRole('combobox', { name: /search/i })
     await expect(input).toBeVisible()
     await input.fill('keyboard shortcuts')
-    await page.getByRole('option', { name: new RegExp(`Keyboard shortcuts: ${state}`) }).click()
+    // The results replace the browse view (where a Recent repeats the toggle) once the deferred ranking lands.
+    const row = page.getByRole('option', { name: new RegExp(`Keyboard shortcuts: ${state}`) })
+    await expect(row).toHaveCount(1)
+    await row.click()
     await expect(page.getByRole('dialog', { name: /command palette/i })).toBeHidden()
   }
 

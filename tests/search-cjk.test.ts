@@ -7,7 +7,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { bigrams, cjkWords, foldText, looksLikeQuestion, stem, tokenize } from '../lib/search/text'
+import { bigrams, cjkWords, foldText, isExplicitQuestion, looksLikeQuestion, stem, tokenize } from '../lib/search/text'
 import { analyzeQuery, findAlt, fieldIndex, requiredMatchesFor, strongConcepts, windowSegments } from '../lib/search/query'
 import { SYNONYM_GROUPS } from '../lib/search/synonyms'
 import { EMPTY_QUERY_MAX, normalizeEmptyQuery, onEmptyResult } from '../lib/search/emptyResult'
@@ -39,6 +39,12 @@ test('text: Chinese question words and particles are dropped from queries', () =
   assert.equal(looksLikeQuestion('Does he have patents?'), true)
   assert.equal(looksLikeQuestion('他有专利吗'), true)
   assert.equal(looksLikeQuestion('react hooks'), false)
+  // A long phrase reads as a question for the analysis, but only a phrased one puts "Ask: …" first in the palette.
+  assert.equal(looksLikeQuestion('building a tiny model at the edge'), true)
+  assert.equal(isExplicitQuestion('building a tiny model at the edge'), false)
+  assert.equal(isExplicitQuestion('Does he have patents'), true)
+  assert.equal(isExplicitQuestion('他有专利吗'), true)
+  assert.equal(isExplicitQuestion('机器学习 实习'), false)
 })
 
 test('query: question words, the owner\'s names and stop words go; synonyms and topics come in', () => {
