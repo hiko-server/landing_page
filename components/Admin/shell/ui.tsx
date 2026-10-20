@@ -481,11 +481,15 @@ export function AdminTitleBar({
         </Flex>
         {/* Beside the title the row's space-between puts this group at the far
             end; once it wraps (a phone, a long title, a long save state) its
-            rows start under the title instead of hanging off the right edge. */}
+            rows start under the title instead of hanging off the right edge.
+            The actions move as one group: they split over two rows only when
+            they alone are wider than the bar. */}
         <HStack spacing={{ base: 2, md: 3 }} rowGap={2} flexShrink={1} minW={0} maxW="100%" flexWrap="wrap" justify="flex-start">
           {status}
-          {actions}
-          <ShortcutsOverlay />
+          <HStack spacing={{ base: 2, md: 3 }} rowGap={2} flexShrink={1} minW={0} maxW="100%" flexWrap="wrap">
+            {actions}
+            <ShortcutsOverlay />
+          </HStack>
         </HStack>
       </Flex>
     </Box>
