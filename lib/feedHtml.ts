@@ -126,6 +126,8 @@ function transform(parent: HastNode, ctx: FeedSite): void {
       continue
     }
     const anchorClasses = classList(child)
+    // Chinese articles' empty spacing marks (lib/rehype/autospace) mean nothing without the site's CSS.
+    if (child.tagName === 'span' && anchorClasses.includes('autospace')) continue
     if (child.tagName === 'a' && anchorClasses.includes('heading-anchor-icon')) continue
     if (child.tagName === 'a' && anchorClasses.includes('heading-anchor')) {
       // Heading self-link: keep the heading text, drop the link.

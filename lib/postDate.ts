@@ -18,13 +18,16 @@ function toDate(value: unknown): Date | null {
 }
 
 /**
- * Display a frontmatter date as "May 1, 2024". Unparseable input is shown
- * as-is; empty input returns ''.
+ * Display a frontmatter date as "May 1, 2024" — or "2024年5月1日" for a
+ * Chinese page (`lang` "zh-Hans" / "zh-Hant"; written out by hand, so the
+ * server and every browser print the same string). Unparseable input is
+ * shown as-is; empty input returns ''.
  */
-export function formatPostDate(value: unknown): string {
+export function formatPostDate(value: unknown, lang?: string): string {
   if (value === null || value === undefined || value === '') return ''
   const d = toDate(value)
   if (!d) return String(value).trim()
+  if (/^zh(-|$)/i.test(lang || '')) return `${d.getUTCFullYear()}年${d.getUTCMonth() + 1}月${d.getUTCDate()}日`
   return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' })
 }
 

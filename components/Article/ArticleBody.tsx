@@ -10,6 +10,7 @@ import { collectImages, type HastNode } from '../../lib/rehype/hast'
 import { TocDisclosure, TocRail } from './TableOfContents'
 import ArticleProgress from './ArticleProgress'
 import { useActiveHeading } from './useActiveHeading'
+import { useArticleUi } from './articleUi'
 
 /** A table of contents is only worth showing for two or more sections. */
 const MIN_TOC_ENTRIES = 2
@@ -27,6 +28,8 @@ const MIN_TOC_ENTRIES = 2
  * meta grid (no inner padding); paragraphs are capped at 68ch.
  */
 export default function ArticleBody({ tree, toc }: { tree: HastRoot; toc: TocEntry[] }) {
+  // The article's words, in its language (the page provides them: ./articleUi).
+  const ui = useArticleUi().t
   const showToc = toc.length >= MIN_TOC_ENTRIES
   const activeId = useActiveHeading(showToc ? toc.map((t) => t.id) : [])
 
@@ -68,7 +71,7 @@ export default function ArticleBody({ tree, toc }: { tree: HastRoot; toc: TocEnt
       {showToc && (
         <Box
           as="aside"
-          aria-label="Article outline"
+          aria-label={ui.articleOutline}
           display={{ base: 'none', xl: 'block' }}
           position="sticky"
           top="96px"

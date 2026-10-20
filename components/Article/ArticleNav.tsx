@@ -2,6 +2,7 @@ import NextLink from 'next/link'
 import { Box, Flex, SimpleGrid, Text } from '@chakra-ui/react'
 import type { ArticleLink } from './collectionNav'
 import { formatPostDate } from '../../lib/postDate'
+import { useArticleUi } from './articleUi'
 import { setPendingDirection } from '../../lib/viewTransition'
 
 const MONO = 'var(--font-geist-mono), monospace'
@@ -22,12 +23,16 @@ const linkSx = {
   _focusVisible: { outline: '2px solid var(--accent)', outlineOffset: '2px' },
 } as const
 
-function metaOf(item: ArticleLink): string {
+function metaOf(item: ArticleLink, lang: string): string {
   if (!item.meta) return ''
-  return item.kind === 'blog' ? formatPostDate(item.meta) : item.meta
+  return item.kind === 'blog' ? formatPostDate(item.meta, lang) : item.meta
 }
 
+/** `lang` of another piece's title on this page: only when it differs from the page's. */
+const langIn = (itemLang: string, pageLang: string) => (itemLang === pageLang ? undefined : itemLang)
+
 function PagerCard({ side, align }: { side: PagerSide; align: 'left' | 'right' }) {
+  const { pageLang } = useArticleUi()
   const { item } = side
   const direction = align === 'left' ? 'prev' : 'next'
   return (
@@ -45,7 +50,7 @@ function PagerCard({ side, align }: { side: PagerSide; align: 'left' | 'right' }
         {side.label}
         {align === 'right' ? ' →' : ''}
       </Text>
-      <Text as="span" display="block" fontWeight={500} fontSize="16px" color="page.fg" lang={item.lang === 'en' ? undefined : item.lang}>
+      <Text as="span" display="block" fontWeight={500} fontSize="16px" color="page.fg" lang={langIn(item.lang, pageLang)}>
         {item.title}
       </Text>
     </Box>
@@ -56,7 +61,8 @@ function PagerCard({ side, align }: { side: PagerSide; align: 'left' | 'right' }
  * End-of-article navigation: previous / next within the collection and
  * related pieces (any collection) that share tags. Related rows use
  * `data-group` (not role="group", which would rename the link for screen
- * readers) for the hover colour.
+ * readers) for the hover colour. Labels and dates follow the article's
+ * language (./articleUi); a title in another language is marked.
  */
 export default function ArticleNav({
   before,
@@ -67,11 +73,12 @@ export default function ArticleNav({
   after: PagerSide | null
   related: ArticleLink[]
 }) {
+  const { t, pageLang } = useArticleUi()
   if (!before && !after && related.length === 0) return null
   return (
     <Box as="footer" mt={16} pt={10} borderTop="1px solid" borderColor="page.border" className="no-print">
       {(before || after) && (
-        <Box as="nav" aria-label="More in this collection">
+        <Box as="nav" aria-label={t.moreInCollection}>
           <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
             {before ? <PagerCard side={before} align="left" /> : <Box display={{ base: 'none', md: 'block' }} />}
             {after && <PagerCard side={after} align="right" />}
@@ -91,7 +98,7 @@ export default function ArticleNav({
             color="page.fg-secondary"
             mb={4}
           >
-            Related
+            {t.related}
           </Text>
           <Box as="ul" listStyleType="none" m={0} p={0} borderTop="1px solid" borderColor="page.border">
             {related.map((item) => (
@@ -116,7 +123,7 @@ export default function ArticleNav({
                       textTransform="uppercase"
                       color="page.fg-secondary"
                     >
-                      {item.kind === 'blog' ? 'Writing' : 'Case study'}
+                      {item.kind === 'blog' ? t.writing : t.caseStudy}
                     </Text>
                     <Box flex={1} minW={0}>
                       <Text
@@ -126,19 +133,19 @@ export default function ArticleNav({
                         color="page.fg"
                         _groupHover={{ color: 'accent.text' }}
                         transition="color 150ms var(--ease-out-quart)"
-                        lang={item.lang === 'en' ? undefined : item.lang}
+                        lang={langIn(item.lang, pageLang)}
                       >
                         {item.title}
                       </Text>
                       {item.description && (
-                        <Text as="span" display="block" color="page.fg-secondary" fontSize="14px" mt={1} noOfLines={2}>
+                        <Text as="span" display="block" color="page.fg-secondary" fontSize="14px" mt={1} noOfLines={2} lang={langIn(item.lang, pageLang)}>
                           {item.description}
                         </Text>
                       )}
                     </Box>
-                    {metaOf(item) && (
+                    {metaOf(item, pageLang) && (
                       <Text as="span" flexShrink={0} fontFamily={MONO} fontSize="11px" color="page.fg-secondary">
-                        {metaOf(item)}
+                        {metaOf(item, pageLang)}
                       </Text>
                     )}
                   </Flex>

@@ -1,4 +1,6 @@
 import { element, isElement, type HastElement, type HastNode } from './hast'
+import { uiText } from '../uiStrings'
+import { COMPILE_UI } from '../uiStrings/compile'
 
 /**
  * rehype plugin: GitHub-style alerts become callouts.
@@ -24,17 +26,9 @@ import { element, isElement, type HastElement, type HastNode } from './hast'
 export const CALLOUT_TYPES = ['note', 'tip', 'important', 'warning', 'caution'] as const
 export type CalloutType = (typeof CALLOUT_TYPES)[number]
 
-const LABELS: Record<'en' | 'zh-hans' | 'zh-hant', Record<CalloutType, string>> = {
-  en: { note: 'Note', tip: 'Tip', important: 'Important', warning: 'Warning', caution: 'Caution' },
-  'zh-hans': { note: '备注', tip: '提示', important: '重要', warning: '警告', caution: '注意' },
-  'zh-hant': { note: '備註', tip: '提示', important: '重要', warning: '警告', caution: '注意' },
-}
-
-/** The label of a callout type in an article language (BCP-47). */
+/** The label of a callout type in an article language (BCP-47; words from lib/uiStrings/compile). */
 export function calloutLabel(type: CalloutType, lang?: string): string {
-  const tag = String(lang || '').toLowerCase()
-  if (!/^zh(-|$)/.test(tag)) return LABELS.en[type]
-  return /^zh-(hant|tw|hk|mo)(-|$)/.test(tag) ? LABELS['zh-hant'][type] : LABELS['zh-hans'][type]
+  return uiText(COMPILE_UI, lang).callout[type]
 }
 
 const MARKER_RE = /^\s*\[!(note|tip|important|warning|caution)\]/i

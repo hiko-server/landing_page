@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Box, Flex, Text } from '@chakra-ui/react'
 import { HEADING_OFFSET } from './useActiveHeading'
+import { fillUi } from '../../lib/uiStrings'
+import { useArticleUi } from './articleUi'
 
 const MONO = 'var(--font-geist-mono), monospace'
 
@@ -12,6 +14,7 @@ const MONO = 'var(--font-geist-mono), monospace'
  */
 export default function ArticleProgress({ targetId = 'article-body' }: { targetId?: string }) {
   const [pct, setPct] = useState(0)
+  const { t } = useArticleUi()
 
   useEffect(() => {
     const el = document.getElementById(targetId)
@@ -41,15 +44,15 @@ export default function ArticleProgress({ targetId = 'article-body' }: { targetI
   return (
     <Box
       role="progressbar"
-      aria-label="Reading progress"
+      aria-label={t.readingProgress}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={pct}
-      aria-valuetext={`${pct}% read`}
+      aria-valuetext={fillUi(t.percentRead, { pct })}
     >
       <Flex justify="space-between" fontFamily={MONO} fontSize="11px" color="page.fg-secondary" mb={2}>
         <Text as="span" letterSpacing="0.12em" textTransform="uppercase">
-          Progress
+          {t.progress}
         </Text>
         <Text as="span" sx={{ fontVariantNumeric: 'tabular-nums' }}>
           {pct}%

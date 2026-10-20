@@ -4,6 +4,9 @@ import { printableLinkUrl } from '../../lib/print'
 import { PlayIcon } from '../Icons/ui/content'
 import { cssTransition } from '../../theme/tokens'
 import { VIDEO_PLAYER_HOST, VIDEO_PROVIDER_LABEL, videoPlayerUrl, videoRefFromProps, videoWatchUrl } from '../../lib/videoUrl'
+import { fillUi } from '../../lib/uiStrings'
+import { CONTENT_UI } from '../../lib/uiStrings/content'
+import { useUiLang } from '../Common/uiLang'
 
 /**
  * Click-to-load video player for `youtube-embed` / `vimeo-embed` elements
@@ -40,21 +43,6 @@ const MONO = 'var(--font-geist-mono), monospace'
 /** Same column as article images (lib/rehype/images.ts ARTICLE_IMAGE_SIZES). */
 const POSTER_SIZES = '(min-width: 768px) 720px, 100vw'
 
-const COPY = {
-  en: {
-    fallback: (p: string) => `${p} video`,
-    play: (t: string) => `Play video: ${t}`,
-    note: (p: string, host: string) => `Loads from ${host} (${p}) only when you press play.`,
-    watch: (p: string) => `Watch on ${p}`,
-  },
-  zh: {
-    fallback: (p: string) => `${p} 视频`,
-    play: (t: string) => `播放视频：${t}`,
-    note: (p: string, host: string) => `按下播放后才会从 ${host}（${p}）加载。`,
-    watch: (p: string) => `在 ${p} 观看`,
-  },
-} as const
-
 const num = (v: unknown): number | undefined => {
   const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN
   return Number.isFinite(n) && n > 0 ? n : undefined
@@ -63,6 +51,8 @@ const num = (v: unknown): number | undefined => {
 export default function VideoEmbed(props: Props) {
   const video = videoRefFromProps(props as Record<string, unknown>)
   const [playing, setPlaying] = useState(false)
+  // The article's interface language (its context), else the compiled `data-ui-lang`.
+  const uiLang = useUiLang(props['data-ui-lang'])
   const frame = useRef<HTMLIFrameElement | null>(null)
 
   // The play button is replaced by the player: keep keyboard focus with it.
@@ -72,10 +62,10 @@ export default function VideoEmbed(props: Props) {
 
   if (!video) return null
 
-  const copy = props['data-ui-lang'] === 'zh' ? COPY.zh : COPY.en
+  const copy = CONTENT_UI[uiLang]
   const provider = VIDEO_PROVIDER_LABEL[video.provider]
   const title = (props.title || '').trim()
-  const name = title || copy.fallback(provider)
+  const name = title || fillUi(copy.videoFallback, { provider })
   const poster = typeof props['data-poster'] === 'string' && /^\/(?!\/)/.test(props['data-poster']) ? props['data-poster'] : ''
   const posterW = num(props['data-poster-width'])
   const posterH = num(props['data-poster-height'])
@@ -113,7 +103,7 @@ export default function VideoEmbed(props: Props) {
             as="button"
             type="button"
             onClick={() => setPlaying(true)}
-            aria-label={copy.play(name)}
+            aria-label={fillUi(copy.playVideo, { title: name })}
             position="absolute"
             inset={0}
             w="100%"
@@ -220,9 +210,9 @@ export default function VideoEmbed(props: Props) {
         lineHeight="1.5"
         color="page.fg-secondary"
       >
-        <span>{copy.note(provider, VIDEO_PLAYER_HOST[video.provider])}</span>
-        <Link href={watch} isExternal color="accent.text" className="link-underline" data-print-url={printableLinkUrl(watch, copy.watch(provider))}>
-          {copy.watch(provider)}{' '}
+        <span>{fillUi(copy.videoNote, { provider, host: VIDEO_PLAYER_HOST[video.provider] })}</span>
+        <Link href={watch} isExternal color="accent.text" className="link-underline" data-print-url={printableLinkUrl(watch, fillUi(copy.watchOn, { provider }))}>
+          {fillUi(copy.watchOn, { provider })}{' '}
           <span className="nudge-ne" aria-hidden>
             ↗
           </span>

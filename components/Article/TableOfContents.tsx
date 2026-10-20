@@ -1,5 +1,6 @@
 import React, { useId, useState } from 'react'
 import { Box, Text } from '@chakra-ui/react'
+import { useArticleUi } from './articleUi'
 import type { TocEntry } from '../../lib/toc'
 import Collapse from '../General-UI/Collapse'
 import { jumpToSection } from './useActiveHeading'
@@ -66,6 +67,7 @@ function TocList({ toc, activeId, onNavigate }: Props & { onNavigate?: () => voi
 /** Sticky right-rail table of contents (xl and up). */
 export function TocRail({ toc, activeId }: Props) {
   const labelId = useId()
+  const { t } = useArticleUi()
   return (
     <Box as="nav" aria-labelledby={labelId}>
       <Text
@@ -77,7 +79,7 @@ export function TocRail({ toc, activeId }: Props) {
         color="page.fg-secondary"
         mb={3}
       >
-        On this page
+        {t.onThisPage}
       </Text>
       <TocList toc={toc} activeId={activeId} />
     </Box>
@@ -91,12 +93,13 @@ export function TocRail({ toc, activeId }: Props) {
  * closed.
  */
 export function TocDisclosure({ toc, activeId }: Props) {
+  const { t } = useArticleUi()
   const [open, setOpen] = useState(false)
   const panelId = useId()
   return (
     <Box
       as="nav"
-      aria-label="On this page"
+      aria-label={t.onThisPage}
       mb={10}
       border="1px solid"
       borderColor="page.border"
@@ -126,7 +129,7 @@ export function TocDisclosure({ toc, activeId }: Props) {
         _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
       >
         <span>
-          On this page <Text as="span" opacity={0.7}>({toc.length})</Text>
+          {t.onThisPage} <Text as="span" opacity={0.7}>({toc.length})</Text>
         </span>
         <Box
           as="span"

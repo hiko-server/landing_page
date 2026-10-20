@@ -133,6 +133,117 @@ h3,
   max-width: 68ch;
 }
 
+/* ──────────────────────────────────────────────────────────────────────────
+ * Chinese typesetting (F1; W3C "Requirements for Chinese Text Layout",
+ * clreq, and the Apple / Ant Design Chinese type guidelines).
+ *
+ * Posts and case studies only (`.article-page`, the <article> of
+ * pages/blog/[slug] and pages/work/[slug]), so the CV's A4 print layout and
+ * the rest of the site are untouched. Everything keys on the language of
+ * the text itself (`:lang`), so a Chinese passage inside an English article
+ * (lib/rehype/langSpans marks it) and an English label inside a Chinese
+ * one each get their own rules.
+ *
+ *   - Faces: Geist for Latin, then each platform's Chinese UI face for the
+ *     script — Simplified (PingFang SC, Noto Sans SC, Microsoft YaHei) or
+ *     Traditional (PingFang TC, Noto Sans TC, Microsoft JhengHei) — ahead
+ *     of system-ui, so a Windows or Japanese-locale system never draws
+ *     Chinese with Japanese glyphs. Quotation marks, dashes, the ellipsis
+ *     and the middle dot come from the Chinese face too (`CJK punctuation`,
+ *     local fonts only, nothing downloaded): Geist's narrow “” and — would
+ *     sit wrongly in Chinese text, and its two em dashes would not join.
+ *   - Tracking: none. Han characters fill the em box; the negative tracking
+ *     of the display titles and the wide tracking of the mono caps labels
+ *     would crowd or scatter them.
+ *   - Measure and leading: about 34 characters a line, 1.85 line height for
+ *     the body, 1.4 for headings and 1.25 for the title (clreq §3.1).
+ *   - Spacing between Han and Western letters or digits (clreq §3.2.2):
+ *     `text-autospace` where the browser has it (Safari's default is
+ *     `no-autospace`, so it is set explicitly); elsewhere the empty
+ *     `.autospace` marks the MDX pipeline puts at those boundaries get
+ *     1/8 em (lib/rehype/autospace.ts). The text itself is never changed.
+ *   - Emphasis: emphasis dots under the characters (着重号, clreq §3.3.2)
+ *     instead of a slanted fake italic; Latin words inside stay italic.
+ * ──────────────────────────────────────────────────────────────────────── */
+@font-face {
+  font-family: 'CJK punctuation SC';
+  src: local('PingFangSC-Regular'), local('PingFang SC Regular'), local('NotoSansCJKsc-Regular'),
+    local('Noto Sans CJK SC Regular'), local('NotoSansSC-Regular'), local('Noto Sans SC Regular'),
+    local('SourceHanSansSC-Regular'), local('Source Han Sans SC Regular'), local('MicrosoftYaHei'),
+    local('Microsoft YaHei');
+  unicode-range: U+00B7, U+2014, U+2018-2019, U+201C-201D, U+2026;
+}
+@font-face {
+  font-family: 'CJK punctuation TC';
+  src: local('PingFangTC-Regular'), local('PingFang TC Regular'), local('NotoSansCJKtc-Regular'),
+    local('Noto Sans CJK TC Regular'), local('NotoSansTC-Regular'), local('Noto Sans TC Regular'),
+    local('SourceHanSansTC-Regular'), local('Source Han Sans TC Regular'), local('MicrosoftJhengHeiRegular'),
+    local('Microsoft JhengHei');
+  unicode-range: U+00B7, U+2014, U+2018-2019, U+201C-201D, U+2026;
+}
+:root {
+  --font-zh-hans: 'CJK punctuation SC', var(--font-geist-sans-face, var(--font-geist-sans)), 'PingFang SC',
+    'Hiragino Sans GB', 'Noto Sans CJK SC', 'Noto Sans SC', 'Source Han Sans SC', 'Microsoft YaHei',
+    var(--font-geist-sans), sans-serif;
+  --font-zh-hant: 'CJK punctuation TC', var(--font-geist-sans-face, var(--font-geist-sans)), 'PingFang TC',
+    'PingFang HK', 'Noto Sans CJK TC', 'Noto Sans TC', 'Source Han Sans TC', 'Microsoft JhengHei',
+    var(--font-geist-sans), sans-serif;
+  --measure-zh: 34em;
+}
+.article-page:lang(zh-Hans),
+.article-page :is(h1, h2, h3, h4, h5, h6):lang(zh-Hans),
+.article-page span[lang='zh-Hans'] {
+  font-family: var(--font-zh-hans);
+}
+.article-page:lang(zh-Hant),
+.article-page :is(h1, h2, h3, h4, h5, h6):lang(zh-Hant),
+.article-page span[lang='zh-Hant'] {
+  font-family: var(--font-zh-hant);
+}
+/* English runs inside Chinese text keep Geist's own punctuation. */
+.article-page:lang(zh) span[lang|='en'] {
+  font-family: var(--font-geist-sans);
+}
+.article-page :lang(zh) {
+  letter-spacing: 0;
+}
+.article-page:is(:lang(zh), :lang(ja)),
+.article-page :is(:lang(zh), :lang(ja)) {
+  text-autospace: normal;
+}
+.article-page .article-prose:lang(zh) {
+  max-width: min(var(--measure), var(--measure-zh));
+  line-height: 1.85;
+}
+.article-page .article-prose :is(h1, h2, h3, h4, h5, h6):lang(zh) {
+  line-height: 1.4;
+}
+.article-page header h1:lang(zh) {
+  line-height: 1.25;
+}
+.article-page .lede:lang(zh) {
+  line-height: 1.75;
+}
+@supports not (text-autospace: normal) {
+  .article-page .autospace {
+    margin-inline-start: 0.125em;
+  }
+}
+.article-page :is(em, i):lang(zh):not([data-script='latin']) {
+  font-family: inherit;
+  font-style: normal;
+  -webkit-text-emphasis: filled dot;
+  text-emphasis: filled dot;
+  -webkit-text-emphasis-position: under right;
+  text-emphasis-position: under right;
+}
+.article-page :is(em, i):lang(zh) :lang(en) {
+  font-family: var(--font-geist-sans-italic), var(--font-geist-sans), system-ui, sans-serif;
+  font-style: italic;
+  -webkit-text-emphasis: none;
+  text-emphasis: none;
+}
+
 /* Lucide interface icons (components/Icons/ui): never squeezed by a flex
    row, and centred on the x-height when they sit in running text. */
 .ui-icon {

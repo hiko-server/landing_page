@@ -1,6 +1,8 @@
 import React from 'react'
 import { Box, Flex } from '@chakra-ui/react'
 import CopyButton from '../General-UI/CopyButton'
+import { CONTENT_UI } from '../../lib/uiStrings/content'
+import { useUiLang } from '../Common/uiLang'
 import { codeText, splitCodeFigure } from './codeFigure'
 
 export { codeText }
@@ -77,6 +79,7 @@ const preSx = {
 } as const
 
 export default function CodeBlock({ codeTitle, codeFigure, ...props }: CodeBlockProps) {
+  const ui = CONTENT_UI[useUiLang()]
   const language = props['data-language']
   const value = codeText(props.children).replace(/\n+$/, '')
   const title = (codeTitle || '').trim()
@@ -171,7 +174,7 @@ export default function CodeBlock({ codeTitle, codeFigure, ...props }: CodeBlock
       {after}
       {value && (
         <Box className="code-copy no-print" position="absolute" top={title ? 1 : 1.5} right={1.5}>
-          <CopyButton value={value} label="Copy code" srLabel="Code copied to clipboard" />
+          <CopyButton value={value} label={ui.copyCode} srLabel={ui.codeCopied} failedLabel={ui.copyFailed} />
         </Box>
       )}
     </Box>

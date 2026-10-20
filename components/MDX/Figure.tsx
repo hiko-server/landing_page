@@ -1,5 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { Box, Text } from '@chakra-ui/react'
+import { fillUi } from '../../lib/uiStrings'
+import { CONTENT_UI } from '../../lib/uiStrings/content'
+import { useUiLang } from '../Common/uiLang'
 
 /**
  * Article images and figures (rendered from the compiled hast tree).
@@ -69,6 +72,7 @@ const frameSx = {
 
 export function MdxImage({ alt, width, height, src, srcSet, sizes, title, className }: React.ImgHTMLAttributes<HTMLImageElement>) {
   const zoom = useContext(ArticleImagesContext)
+  const ui = CONTENT_UI[useUiLang()]
   const inLink = useContext(InsideLinkContext)
   const inCell = useContext(GalleryCellContext)
   const mounted = useMounted()
@@ -137,7 +141,7 @@ export function MdxImage({ alt, width, height, src, srcSet, sizes, title, classN
       as="button"
       type="button"
       className="zoomable"
-      aria-label={altText ? `Enlarge image: ${altText}` : 'Enlarge image'}
+      aria-label={altText ? fillUi(ui.enlargeImageAlt, { alt: altText }) : ui.enlargeImage}
       aria-haspopup="dialog"
       onClick={() => zoom.open(src)}
       display="block"
