@@ -719,7 +719,11 @@ third-party script and no cookie.
   class, page language. Web Vitals keep route, metric, value and rating,
   plus a hash of the browser's random per-page-load measurement id, so a
   CLS / INP reported again replaces its earlier value instead of counting
-  twice (it identifies a measurement, not a visitor).
+  twice (it identifies a measurement, not a visitor). LCP, INP and CLS also
+  keep their attribution — the element as a selector of the site's own
+  markup (tag, id, classes; never text, at most 120 characters) and the
+  phase timings — which the Web Vitals panel groups per page and element
+  (*What makes it slow*).
 - **Goal events** (`POST /api/g`, plus three counted on the server): a
   fixed allow-list of eight names, each with at most one bounded property —
   `cv_download` (language × format; counted when `/cv.pdf` & co. are
@@ -785,6 +789,9 @@ yarn audit:deps         # production-dependency audit gate (security/audit-allow
 yarn db:status          # schema version of each SQLite store (no writes)
 yarn db:migrate         # apply pending migrations (also happens on start)
 node scripts/perf-budget.mjs          # performance budget over the last `yarn build`
+node scripts/subset-fonts.mjs         # re-split the Geist fonts (needs fontTools + brotli)
+node --import ./tests/register.mjs scripts/bake-images.mjs           # variants of photos in public/images
+node --import ./tests/register.mjs scripts/ci/fixture-store.mjs      # install the CI fixture store into a fresh checkout
 node --env-file=.env scripts/cloudflare-config.mjs --dry-run   # Cloudflare zone config
 scripts/deploy.sh                     # deploy main to production
 ```
@@ -976,7 +983,8 @@ CI (`.github/workflows/ci.yml`) runs on every push and pull request:
 |---|---|
 | build | `tsc`, ESLint with zero warnings, unit tests, `next build --webpack`, and the performance budget (`scripts/perf-budget.mjs`: shared and per-page first-load JS, shared CSS, number and weight of preloaded fonts) |
 | audit | `scripts/check-audit.mjs`: no high/critical advisory in production dependencies unless allowlisted in `security/audit-allowlist.json` with a reason and an expiry date; expired entries fail too. The full report is kept as an artifact |
-| docker | the merged compose config publishes loopback only; the image builds, starts on an empty data volume, serves, warms its ISR pages and stops gracefully; then the Playwright + axe suite runs against that exact container |
+| docker | the merged compose config publishes loopback only; the image builds, starts on an empty data volume, serves, warms its ISR pages and stops gracefully; then the Playwright + axe suite runs against that exact container (Chromium, WebKit on an iPhone, Firefox) |
+| fixture-gates | the synthetic fixture store (`e2e/fixtures/store`: *Example Person*, generated images) is installed, built and served in the pinned Playwright image: CLS ≤ 0.05 and TBT ≤ 200 ms on a calibrated mid-range-phone profile (LCP reported), no horizontal scroll at 375 / 768 / 1440 px on Chromium, WebKit and Firefox, no image over 200 KB or decoded far larger than shown, axe on the article, and 30 visual baselines (`e2e/visual.spec.ts-snapshots`) compared pixel by pixel |
 
 The E2E suite (`e2e/`) checks every public page on desktop, tablet, phone
 and reduced-motion profiles: one visible `h1`, `lang` (`zh-Hans` on

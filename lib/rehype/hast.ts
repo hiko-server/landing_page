@@ -63,6 +63,8 @@ export function element(tagName: string, properties: Record<string, unknown>, ch
 export type TreeImage = {
   src: string
   srcSet?: string
+  /** The AVIF variants (lib/rehype/images.ts `data-avif-srcset`). */
+  avifSrcSet?: string
   alt: string
   caption?: string
   width?: number
@@ -88,6 +90,7 @@ export function collectImages(tree: HastNode): TreeImage[] {
       out.push({
         src: p.src,
         ...(typeof p.srcSet === 'string' && p.srcSet ? { srcSet: p.srcSet } : {}),
+        ...(typeof p.srcSet === 'string' && p.srcSet && typeof p.dataAvifSrcset === 'string' && p.dataAvifSrcset ? { avifSrcSet: p.dataAvifSrcset } : {}),
         alt: typeof p.alt === 'string' ? p.alt : '',
         ...(caption ? { caption } : {}),
         ...(num(p.width) && num(p.height) ? { width: num(p.width), height: num(p.height) } : {}),

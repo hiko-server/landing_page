@@ -49,6 +49,13 @@
                 "no-restricted-imports": [
                     "error",
                     {
+                        "paths": [
+                            {
+                                "name": "framer-motion",
+                                "importNames": ["motion"],
+                                "message": "Use `m` from framer-motion: pages/_app wraps the app in <LazyMotion> (components/Chrome/MotionProvider.tsx) and loads the animation features on demand (lib/motionFeatures.ts). A `motion` element brings the whole library back into first-load JavaScript."
+                            }
+                        ],
                         "patterns": [
                             {
                                 "group": ["react-icons/*"],
@@ -115,6 +122,13 @@
                 "no-restricted-imports": [
                     "error",
                     {
+                        "paths": [
+                            {
+                                "name": "framer-motion",
+                                "importNames": ["motion"],
+                                "message": "Use `m` from framer-motion: pages/_app wraps the app in <LazyMotion> (components/Chrome/MotionProvider.tsx) and loads the animation features on demand (lib/motionFeatures.ts). A `motion` element brings the whole library back into first-load JavaScript."
+                            }
+                        ],
                         "patterns": [
                             {
                                 "group": ["react-icons", "react-icons/*", "@chakra-ui/icons"],

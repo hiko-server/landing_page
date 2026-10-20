@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import NextLink from 'next/link'
 import { Box, Flex, Link, Text } from '@chakra-ui/react'
+import Picture from '../Common/Picture'
 import { copyText } from '../MDX/clipboard'
 import { LinkedInIcon } from '../Icons/brand'
 import { CopyIcon, QrCodeIcon, ShareIcon } from '../Icons/ui/content'
@@ -101,18 +102,20 @@ export function AuthorCard({ author }: { author: AuthorCardData }) {
         <Flex align="center" gap={4} flex={1} minW={0}>
           <Box position="relative" w="56px" h="56px" flexShrink={0} borderRadius="full" overflow="hidden" border="1px solid" borderColor="page.border" bg="page.bg-elevated">
             {author.avatar ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={author.avatar.src}
-                srcSet={author.avatar.srcSet || undefined}
-                sizes={author.avatar.srcSet ? '56px' : undefined}
-                alt=""
-                width={56}
-                height={56}
-                loading="lazy"
-                decoding="async"
-                style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover', objectPosition: author.avatar.position }}
-              />
+              <Picture avifSrcSet={author.avatar.srcSet ? author.avatar.avifSrcSet : null} sizes="56px">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={author.avatar.src}
+                  srcSet={author.avatar.srcSet || undefined}
+                  sizes={author.avatar.srcSet ? '56px' : undefined}
+                  alt=""
+                  width={56}
+                  height={56}
+                  loading="lazy"
+                  decoding="async"
+                  style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover', objectPosition: author.avatar.position }}
+                />
+              </Picture>
             ) : (
               <Flex aria-hidden w="100%" h="100%" align="center" justify="center" fontFamily={MONO} fontSize="15px" color="page.fg-secondary">
                 {initials(author.name)}

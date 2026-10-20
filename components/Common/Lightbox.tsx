@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Box, Flex, IconButton, Modal, ModalBody, ModalCloseButton, ModalContent, ModalHeader, ModalOverlay, Text } from '@chakra-ui/react'
-import { motion, useReducedMotion, type PanInfo } from 'framer-motion'
+import { m, useReducedMotion, type PanInfo } from 'framer-motion'
 import { ArrowLeftIcon, ArrowRightIcon } from '../Icons/ui/content'
+import Picture from './Picture'
 import { motionTransition } from '../../theme/tokens'
 import { fillUi } from '../../lib/uiStrings'
 import { CONTENT_UI } from '../../lib/uiStrings/content'
@@ -11,7 +12,7 @@ import { useUiLang } from './uiLang'
  * Full-screen image viewer shared by the home photo strip and article images.
  *
  *   <LayoutGroup>
- *     …tiles: <motion.div layoutId={`${prefix}-${i}`}><motion.img layout …/></motion.div>
+ *     …tiles: <m.div layoutId={`${prefix}-${i}`}><m.img layout …/></m.div>
  *     <Lightbox items={items} index={open} onIndexChange={setOpen} layoutIdPrefix={prefix} />
  *   </LayoutGroup>
  *
@@ -28,6 +29,8 @@ import { useUiLang } from './uiLang'
 export type LightboxItem = {
   src: string
   srcSet?: string
+  /** AVIF variants, offered in a <picture> source (G4). */
+  avifSrcSet?: string
   alt: string
   caption?: string
   width?: number
@@ -158,12 +161,12 @@ export default function Lightbox({
           }}
         >
           {current && (
-            <motion.div
+            <m.div
               // Fixed-position container: tells framer to measure from here.
               layoutRoot
               style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', maxWidth: '100%' }}
             >
-              <motion.div
+              <m.div
                 key={shared ? 'shared' : `fade-${index}`}
                 layoutId={shared ? `${layoutIdPrefix}-${index}` : undefined}
                 initial={shared ? false : { opacity: 0 }}
@@ -190,34 +193,36 @@ export default function Lightbox({
                     : null),
                 }}
               >
-                <motion.img
-                  layout={shared ? true : undefined}
-                  src={current.src}
-                  srcSet={current.srcSet}
-                  sizes="100vw"
-                  alt={current.alt}
-                  width={current.width}
-                  height={current.height}
-                  decoding="async"
-                  draggable={false}
-                  style={
-                    ratio
-                      ? { display: 'block', width: '100%', height: '100%', objectFit: 'cover', maxWidth: 'none' }
-                      : {
-                          display: 'block',
-                          width: 'auto',
-                          height: 'auto',
-                          maxWidth: '100%',
-                          maxHeight: `calc(100dvh - ${CHROME_PX}px)`,
-                          objectFit: 'contain',
-                        }
-                  }
-                />
-              </motion.div>
+                <Picture avifSrcSet={current.srcSet ? current.avifSrcSet : null} sizes="100vw">
+                  <m.img
+                    layout={shared ? true : undefined}
+                    src={current.src}
+                    srcSet={current.srcSet}
+                    sizes="100vw"
+                    alt={current.alt}
+                    width={current.width}
+                    height={current.height}
+                    decoding="async"
+                    draggable={false}
+                    style={
+                      ratio
+                        ? { display: 'block', width: '100%', height: '100%', objectFit: 'cover', maxWidth: 'none' }
+                        : {
+                            display: 'block',
+                            width: 'auto',
+                            height: 'auto',
+                            maxWidth: '100%',
+                            maxHeight: `calc(100dvh - ${CHROME_PX}px)`,
+                            objectFit: 'contain',
+                          }
+                    }
+                  />
+                </Picture>
+              </m.div>
 
               <Box minH="1.5em" mt={4} maxW="72ch" textAlign="center" aria-live="polite">
                 {current.caption ? (
-                  <motion.p
+                  <m.p
                     key={`caption-${index}`}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -225,10 +230,10 @@ export default function Lightbox({
                     style={{ fontSize: 14, lineHeight: 1.5, color: 'rgba(255,255,255,0.86)' }}
                   >
                     {current.caption}
-                  </motion.p>
+                  </m.p>
                 ) : null}
               </Box>
-            </motion.div>
+            </m.div>
           )}
         </ModalBody>
 

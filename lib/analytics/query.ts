@@ -1,4 +1,5 @@
 import { getAnalyticsDb } from './db'
+import { ATTRIBUTION_PHASES, ATTRIBUTED_VITALS, parseAttribution, type AttributedVital, type LoadState, type VitalAttributionRow } from './attribution'
 import {
   OTHER_KEY,
   VITAL_NAMES,
@@ -242,6 +243,86 @@ function vitalsSince(db: Db, fromDay: string): VitalP75[] {
   )
 }
 
+/** Groups of attributed samples shown per metric (the worst first). */
+export const ATTRIBUTION_ROWS_PER_METRIC = 8
+
+/** Most frequent non-null value of a list, ties broken by first appearance. */
+function mostFrequent<T>(values: Array<T | null>): T | null {
+  const counts = new Map<T, number>()
+  let best: T | null = null
+  for (const v of values) {
+    if (v === null) continue
+    const n = (counts.get(v) || 0) + 1
+    counts.set(v, n)
+    if (best === null || n > (counts.get(best) || 0)) best = v
+  }
+  return best
+}
+
+/**
+ * Where LCP / INP / CLS come from (G6): the attributed samples since
+ * `fromDay` grouped per metric × page × element, each with its p75, how
+ * many samples were rated poor and the p75 of every phase (LCP: server
+ * response, load delay, load time, render delay; INP: input delay,
+ * processing, presentation). Per metric, the groups with the most poor
+ * samples come first, then the highest p75; at most
+ * ATTRIBUTION_ROWS_PER_METRIC each. Stored attribution is re-validated, so a
+ * malformed row is skipped rather than shown.
+ */
+export function vitalAttributionSince(db: Db, fromDay: string): VitalAttributionRow[] {
+  const rows = db
+    .prepare(`SELECT route, name, value, attr FROM vitals WHERE day >= ? AND attr IS NOT NULL AND name IN ('LCP', 'INP', 'CLS')`)
+    .all(fromDay) as Array<{ route: string; name: string; value: number; attr: string }>
+  type Group = { name: AttributedVital; route: string; el: string | null; values: number[]; poor: number; phases: Record<string, number[]>; images: number; types: Array<'pointer' | 'keyboard' | null>; states: Array<LoadState | null> }
+  const groups = new Map<string, Group>()
+  for (const r of rows) {
+    if (!(ATTRIBUTED_VITALS as readonly string[]).includes(r.name)) continue
+    const name = r.name as AttributedVital
+    let raw: unknown
+    try {
+      raw = JSON.parse(r.attr)
+    } catch {
+      continue
+    }
+    const a = parseAttribution(name, raw)
+    if (!a) continue
+    const k = `${name}\u0000${r.route}\u0000${a.el ?? ''}`
+    const g: Group = groups.get(k) || { name, route: r.route, el: a.el, values: [], poor: 0, phases: {}, images: 0, types: [], states: [] }
+    g.values.push(r.value)
+    if (rateVital(name, r.value) === 'poor') g.poor++
+    if (name !== 'CLS') {
+      for (const phase of ATTRIBUTION_PHASES[name]) {
+        const v = (a as unknown as Record<string, number>)[phase]
+        ;(g.phases[phase] ||= []).push(v)
+      }
+    }
+    if ('kind' in a && a.kind === 'image') g.images++
+    if ('type' in a) g.types.push(a.type)
+    if ('state' in a) g.states.push(a.state)
+    groups.set(k, g)
+  }
+  const out: VitalAttributionRow[] = []
+  for (const g of groups.values()) {
+    g.values.sort((x, y) => x - y)
+    const row: VitalAttributionRow = { name: g.name, route: g.route, el: g.el, samples: g.values.length, p75: p75(g.values), poor: g.poor }
+    if (g.name !== 'CLS') {
+      row.phases = Object.fromEntries(Object.entries(g.phases).map(([phase, list]) => [phase, p75(list.sort((x, y) => x - y))]))
+    }
+    if (g.name === 'LCP') row.imageShare = Math.round((g.images / g.values.length) * 100) / 100
+    if (g.name === 'INP') row.type = mostFrequent(g.types)
+    if (g.name !== 'LCP') row.state = mostFrequent(g.states)
+    out.push(row)
+  }
+  const order = (n: AttributedVital) => ATTRIBUTED_VITALS.indexOf(n)
+  out.sort((x, y) => order(x.name) - order(y.name) || y.poor - x.poor || y.p75 - x.p75 || y.samples - x.samples || x.route.localeCompare(y.route))
+  const perMetric = new Map<AttributedVital, number>()
+  return out.filter((row) => {
+    const n = (perMetric.get(row.name) || 0) + 1
+    perMetric.set(row.name, n)
+    return n <= ATTRIBUTION_ROWS_PER_METRIC
+  })
+}
+
 function oldestDay(db: Db): string | null {
   const row = db
     .prepare(
@@ -290,6 +371,7 @@ export function getAnalyticsReport(range: AnalyticsRange, now: number = Date.now
     browsers: topDimension(db, 'browser', span, rolled),
     live,
     vitals: { '7d': vitalsSince(db, dayMinus(today, 6)), '28d': vitalsSince(db, dayMinus(today, 27)) },
+    attribution: { '7d': vitalAttributionSince(db, dayMinus(today, 6)), '28d': vitalAttributionSince(db, dayMinus(today, 27)) },
     generatedAt: now,
   }
 }

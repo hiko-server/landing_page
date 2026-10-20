@@ -238,7 +238,7 @@ test('D1/D2 publish checks: summary, complete sourced metrics, cover size, templ
 test('D2 covers: real size, small covers flagged, focal point, remote covers kept', async () => {
   const { resolveCover } = await import('../lib/coverImage')
   const tiny = resolveCover('/uploads/tiny.png', ' Logo ', '')
-  assert.deepEqual(tiny, { src: '/uploads/tiny.png', srcSet: null, alt: 'Logo', width: 142, height: 65, small: true, focus: '50% 50%' })
+  assert.deepEqual(tiny, { src: '/uploads/tiny.png', srcSet: null, avifSrcSet: null, placeholder: null, alt: 'Logo', width: 142, height: 65, small: true, focus: '50% 50%' })
   const big = resolveCover('/uploads/big.png', '', '20% 80%')
   assert.equal(big?.small, false)
   assert.equal(big?.width, 2400)

@@ -1,7 +1,7 @@
 import React, { useId, useMemo, useState } from 'react'
 import { Box, Flex, Text } from '@chakra-ui/react'
 import NextLink from 'next/link'
-import { motion, useReducedMotion } from 'framer-motion'
+import { m, useReducedMotion } from 'framer-motion'
 
 import Collapse from '../General-UI/Collapse'
 import { useScrollReveal } from '../General-UI/useScrollReveal'
@@ -107,7 +107,7 @@ export default function ExperienceTimeline({
         transformOrigin="top"
       />
 
-      <motion.ol
+      <m.ol
         ref={reveal.ref}
         data-reveal-list=""
         className="hover-list"
@@ -117,11 +117,11 @@ export default function ExperienceTimeline({
         style={{ listStyle: 'none', margin: 0, padding: 0 }}
       >
         {rows.map((r, idx) => (
-          <motion.li key={r.key} variants={row} data-reveal-item="" style={{ position: 'relative' }}>
+          <m.li key={r.key} variants={row} data-reveal-item="" style={{ position: 'relative' }}>
             <TimelineRow row={r} first={idx === 0} defaultExpanded={defaultExpanded} />
-          </motion.li>
+          </m.li>
         ))}
-      </motion.ol>
+      </m.ol>
     </Box>
   )
 }

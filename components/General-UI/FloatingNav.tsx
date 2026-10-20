@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Box, Flex } from '@chakra-ui/react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { m, AnimatePresence } from 'framer-motion'
 
 import Hint, { HintGroup } from './Hint'
 import { cssTransition, motionTransition } from '../../theme/tokens'
@@ -83,7 +83,7 @@ export default function FloatingNav() {
     >
       <AnimatePresence>
         {visible && (
-          <motion.nav
+          <m.nav
             aria-label="Page sections"
             initial={{ opacity: 0, x: 16 }}
             animate={{ opacity: 1, x: 0 }}
@@ -143,7 +143,7 @@ export default function FloatingNav() {
                 })}
               </Flex>
             </HintGroup>
-          </motion.nav>
+          </m.nav>
         )}
       </AnimatePresence>
     </Box>

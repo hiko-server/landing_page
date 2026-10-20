@@ -37,15 +37,22 @@ async function firstArticle(request: APIRequestContext): Promise<string | null> 
   return null
 }
 
-/** Path of the self-hosted Geist Mono file (next/font hashes its name), read from the page's stylesheets. */
+/**
+ * Path of the self-hosted Geist Mono Latin core (next/font hashes its name),
+ * read from the page's stylesheets: the `mono` @font-face that is preloaded
+ * (`.p.woff2`) — the extension file of the same family is not (G3).
+ */
 async function monoFontUrl(request: APIRequestContext, path: string): Promise<string> {
   const html = await request.get(path).then((r) => r.text())
   for (const href of html.match(/\/_next\/static\/css\/[^"]+\.css/g) || []) {
     const css = await request.get(href).then((r) => r.text())
-    const src = css.match(/@font-face\{font-family:mono;src:url\(([^)]+)\)/)?.[1]
-    if (src) return src
+    for (const face of css.match(/@font-face\{[^}]*\}/g) || []) {
+      if (!/font-family:\s*['"]?mono['"]?\s*;/.test(face)) continue
+      const src = face.match(/src:url\(([^)]+\.p\.woff2)\)/)?.[1]
+      if (src) return src
+    }
   }
-  throw new Error('no @font-face for the mono face')
+  throw new Error('no preloaded @font-face for the mono face')
 }
 
 /** The language an element is read in: its nearest lang attribute. */

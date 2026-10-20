@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import NextLink from 'next/link'
 import { Box, Button, Flex, Heading, IconButton, Text } from '@chakra-ui/react'
+import Picture from '../Common/Picture'
 import { keyframes } from '@emotion/react'
 
 import Hint, { HintGroup } from '../General-UI/Hint'
@@ -33,7 +34,7 @@ const entranceSx = {
 }
 
 /** Portrait as published: the Home editor's crop (object-position + scale), intrinsic size, upload srcset. */
-export type RailPortrait = { src: string; srcSet?: string; width?: number; height?: number; x: number; y: number; scale: number; alt: string }
+export type RailPortrait = { src: string; srcSet?: string; avifSrcSet?: string; width?: number; height?: number; x: number; y: number; scale: number; alt: string }
 
 /**
  * The section whose top most recently passed the upper third of the
@@ -128,28 +129,30 @@ export default function IdentityRail({
               borderColor="page.border-strong"
               bg="page.bg-elevated"
             >
-              <Box
-                as="img"
-                src={portrait.src}
-                srcSet={portrait.srcSet}
-                sizes={portrait.srcSet ? '88px' : undefined}
-                width={portrait.width}
-                height={portrait.height}
-                alt={portrait.alt}
-                decoding="async"
-                draggable={false}
-                position="absolute"
-                inset={0}
-                w="100%"
-                h="100%"
-                maxW="none"
-                style={{
-                  objectFit: 'cover',
-                  objectPosition: `${portrait.x}% ${portrait.y}%`,
-                  transform: `scale(${portrait.scale})`,
-                  transformOrigin: `${portrait.x}% ${portrait.y}%`,
-                }}
-              />
+              <Picture avifSrcSet={portrait.srcSet ? portrait.avifSrcSet : null} sizes="88px">
+                <Box
+                  as="img"
+                  src={portrait.src}
+                  srcSet={portrait.srcSet}
+                  sizes={portrait.srcSet ? '88px' : undefined}
+                  width={portrait.width}
+                  height={portrait.height}
+                  alt={portrait.alt}
+                  decoding="async"
+                  draggable={false}
+                  position="absolute"
+                  inset={0}
+                  w="100%"
+                  h="100%"
+                  maxW="none"
+                  style={{
+                    objectFit: 'cover',
+                    objectPosition: `${portrait.x}% ${portrait.y}%`,
+                    transform: `scale(${portrait.scale})`,
+                    transformOrigin: `${portrait.x}% ${portrait.y}%`,
+                  }}
+                />
+              </Picture>
             </Box>
           ) : null}
           <Box minW={0}>

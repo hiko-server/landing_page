@@ -1,7 +1,7 @@
 import { readCvData, readPublicCvSections } from './cvdata'
 import { readPublicHome } from './home'
 import { safeHref } from './cvFormat'
-import { variantSrcSet, variantUrl } from './uploadVariants'
+import { variantAvifSrcSet, variantSrcSet, variantUrl } from './uploadVariants'
 import { availabilityView } from '../components/Common/contactForm'
 import { heroCopy, heroIdentity, portraitAlt } from '../components/LandingPage/heroIdentity'
 import { PERSON_NAME } from './schema'
@@ -23,7 +23,7 @@ import { PERSON_NAME } from './schema'
 export type AuthorCardData = {
   name: string
   role: string
-  avatar: { src: string; srcSet: string | null; position: string } | null
+  avatar: { src: string; srcSet: string | null; avifSrcSet?: string | null; position: string } | null
   availability: { status: 'open' | 'limited' | 'closed'; label: string } | null
 }
 
@@ -55,9 +55,11 @@ export function loadAuthorCard(): AuthorCardData {
     const url = safeHref(home?.hero?.avatarUrl)
     if (url.startsWith('/')) {
       const t = home?.hero?.avatarTransform
+      const srcSet = variantSrcSet(url) || null
       avatar = {
         src: variantUrl(url, 640),
-        srcSet: variantSrcSet(url) || null,
+        srcSet,
+        avifSrcSet: srcSet ? variantAvifSrcSet(url) || null : null,
         position: `${clampPct(t?.x ?? 50)}% ${clampPct(t?.y ?? 50)}%`,
       }
     }

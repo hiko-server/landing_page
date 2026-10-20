@@ -18,6 +18,7 @@ import {
   type DailyShares,
 } from './limits'
 import { isRecordablePath } from './published'
+import { parseAttribution, type VitalAttribution } from './attribution'
 import {
   dayMinus,
   isPlausibleHost,
@@ -52,7 +53,9 @@ import {
  *     rating, coarse device, navigation type and vitalKey() — a hash of the
  *     browser's random per-page-load instance id, so a CLS / INP reported
  *     again replaces its earlier value (it names a measurement, not a
- *     visitor, and is never linked to a page view).
+ *     visitor, and is never linked to a page view) — and, for LCP / INP /
+ *     CLS, its attribution (lib/analytics/attribution): a selector of the
+ *     site's own markup and phase timings, re-validated here.
  *
  * Abuse budgets (lib/analytics/limits; in memory only, no new stored data):
  * events — not beacons — are counted per client (IPv4 address / IPv6 /64)
@@ -80,8 +83,12 @@ export const BOT_UA =
 // ── Pure parsing (unit-tested) ────────────────────────────────────────────
 
 export type PageviewEvent = { t: 'pv'; path: string; referrer: string | null; lang: string | null }
-/** `key`: the web-vitals instance id the browser sent (null when absent or malformed: the event is stored as a new row). */
-export type VitalEvent = { t: 'v'; route: string; name: VitalName; value: number; nav: NavType | null; key: string | null }
+/**
+ * `key`: the web-vitals instance id the browser sent (null when absent or
+ * malformed: the event is stored as a new row). `attr`: the validated
+ * attribution (null when absent or malformed — the measurement still counts).
+ */
+export type VitalEvent = { t: 'v'; route: string; name: VitalName; value: number; nav: NavType | null; key: string | null; attr: VitalAttribution | null }
 export type AnalyticsEvent = PageviewEvent | VitalEvent
 
 const LANG_RE = /^[a-z]{2,3}(?:-[a-z0-9]{2,8})?$/
@@ -103,7 +110,7 @@ function parseOne(raw: unknown): AnalyticsEvent | null {
     if (!route || !isVitalName(o.name) || !isVitalValueInRange(o.name, o.value)) return null
     const value = o.name === 'CLS' ? Math.round(o.value * 10_000) / 10_000 : Math.round(o.value)
     const key = typeof o.k === 'string' && VITAL_KEY_RE.test(o.k) ? o.k : null
-    return { t: 'v', route, name: o.name, value, nav: normalizeNavType(o.nav), key }
+    return { t: 'v', route, name: o.name, value, nav: normalizeNavType(o.nav), key, attr: parseAttribution(o.name, o.a) }
   }
   return null
 }
@@ -246,6 +253,8 @@ type VitalRow = {
   nav: string | null
   /** vitalKey() of the instance, or null (an event without one is always a new row). */
   vkey: string | null
+  /** JSON of the validated attribution, or null. */
+  attr: string | null
 }
 
 type IngestState = {
@@ -378,6 +387,7 @@ export function ingest(req: NextApiRequest, now: number = Date.now()): { accepte
         device,
         nav: e.nav,
         vkey: e.key ? vitalKey(e.route, e.name, e.key) : null,
+        attr: e.attr ? JSON.stringify(e.attr) : null,
       })
     }
   }
@@ -405,12 +415,14 @@ export function flushNow(now: number = Date.now()) {
          VALUES (@ts, @day, @path, @ref_host, @country, @device, @browser, @visitor, @lang)`,
       )
       // One row per measurement: a CLS / INP the browser reports again
-      // (same instance key) replaces its earlier value — the latest is final
-      // — instead of adding a second sample. Rows without a key never conflict.
+      // (same instance key) replaces its earlier value — the latest is final,
+      // with the attribution of that value when it carries one — instead of
+      // adding a second sample. Rows without a key never conflict.
       const insertVital = db.prepare(
-        `INSERT INTO vitals (ts, day, route, name, value, rating, device, nav, vkey)
-         VALUES (@ts, @day, @route, @name, @value, @rating, @device, @nav, @vkey)
-         ON CONFLICT(vkey) DO UPDATE SET value = excluded.value, rating = excluded.rating`,
+        `INSERT INTO vitals (ts, day, route, name, value, rating, device, nav, vkey, attr)
+         VALUES (@ts, @day, @route, @name, @value, @rating, @device, @nav, @vkey, @attr)
+         ON CONFLICT(vkey) DO UPDATE SET value = excluded.value, rating = excluded.rating,
+           attr = coalesce(excluded.attr, vitals.attr)`,
       )
       db.transaction(() => {
         for (const h of hits) insertHit.run(h)

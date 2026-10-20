@@ -21,6 +21,7 @@ import {
 } from '@chakra-ui/react'
 import { FaSync } from 'react-icons/fa'
 import { readJsonObject } from './shell/http'
+import VitalsAttribution from './VitalsAttribution'
 import { Eyebrow, MONO, Panel } from './shell/ui'
 import {
   ANALYTICS_RANGES,
@@ -711,6 +712,9 @@ export default function AnalyticsPanel() {
                 No Web Vitals measured in the last {vitalsWindow === '7d' ? '7' : '28'} days yet.
               </Text>
             )}
+            {vitals.length && report.attribution ? (
+              <VitalsAttribution rows={report.attribution[vitalsWindow]} windowLabel={vitalsWindow === '7d' ? '7 days' : '28 days'} />
+            ) : null}
           </Panel>
         </Box>
       ) : null}

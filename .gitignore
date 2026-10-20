@@ -59,6 +59,9 @@ docker-compose.override.yml
 
 # local data (persisted content, credentials)
 data/
+# …except the seeds of the synthetic CI fixture store (test data only:
+# "Example Person", scripts/ci/fixture-store.mjs).
+!/e2e/fixtures/store/data/
 
 # Personal photos never go into the public repository: uploads made through
 # the admin (served from the bind-mount + R2) and the home photo wall live on

@@ -1,3 +1,5 @@
+import type { VitalAttributionRow } from './attribution'
+
 /**
  * Pure analytics rules shared by the browser beacon (lib/analytics/client),
  * the ingest endpoint (lib/analytics/ingest), the report (lib/analytics/query)
@@ -161,5 +163,7 @@ export type AnalyticsReport = {
   /** Distinct visitors seen in the last 5 minutes. */
   live: number
   vitals: { '7d': VitalP75[]; '28d': VitalP75[] }
+  /** Where LCP / INP / CLS come from, per page and element (lib/analytics/attribution). */
+  attribution: { '7d': VitalAttributionRow[]; '28d': VitalAttributionRow[] }
   generatedAt: number
 }

@@ -6,17 +6,21 @@ import { readPublicHome } from './home'
 import { PAGE_NAMES } from './mdx-admin'
 import { pathsReferencingUploads, type ContentSource } from './revalidate'
 import { UPLOAD_NAME_RE, isValidUploadName } from './security/uploadName'
-import { isVariantName, variantName, variantWidthsFor } from './uploadVariants'
+import { expectedVariantNames, isVariantName } from './uploadVariants'
 import { MAX_INPUT_PIXELS, apngFrameCount, makeVariants, mirrorUpload, uploadsDir, writeVariantFile } from './imageVariants'
 
 /**
- * Responsive WebP variants for uploads made before the upload pipeline
- * existed (SERVER-ONLY): used by POST /api/admin/media-optimize (every
- * upload) and the content health center's "Generate sizes" fix (only the
- * uploads it names). Originals are never rewritten; one run at a time; a run
- * stops after RUN_BUDGET_MS. pagesUsingUploads() lists the published pages
- * whose srcsets changed, for revalidation (the compile memo in lib/mdx.ts is
- * keyed on the variant state).
+ * The responsive variants of uploads made before the current pipeline
+ * (SERVER-ONLY; lib/uploadVariants expectedVariantNames): the WebP and AVIF
+ * variants at every width the original should have (320 / 480 / 640 / 1280 /
+ * 1920 and its own width) and the blur placeholder — only the files it is
+ * missing. Used by POST /api/admin/media-optimize (every upload) and the
+ * content health center's "Generate sizes" fix (only the uploads it names).
+ * Originals are never rewritten; one run at a time; a run stops after
+ * RUN_BUDGET_MS (AVIF encoding is the slow part on a one-vCPU server, so the
+ * client calls again). pagesUsingUploads() lists the published pages whose
+ * srcsets and placeholders changed, for revalidation (the compile memo in
+ * lib/mdx.ts is keyed on the variant state).
  */
 
 const RUN_BUDGET_MS = 45_000
@@ -108,9 +112,7 @@ export async function optimizeUploads(opts: { only?: ReadonlySet<string> } = {})
         const buf = fs.readFileSync(path.join(dir, name))
         const meta = await sharp(buf, { limitInputPixels: MAX_INPUT_PIXELS }).metadata()
         const width = meta.autoOrient?.width ?? meta.width ?? 0
-        const missing = variantWidthsFor(width)
-          .map((w) => variantName(name, w))
-          .filter((v) => isValidUploadName(v) && !existing.has(v))
+        const missing = expectedVariantNames(name, width).filter((v) => isValidUploadName(v) && !existing.has(v))
         if ((meta.pages ?? 1) > 1 || apngFrameCount(buf) > 0 || !missing.length) {
           skipped++
           continue
@@ -123,7 +125,7 @@ export async function optimizeUploads(opts: { only?: ReadonlySet<string> } = {})
           if (!writeVariantFile(v)) continue
           existing.add(v.name)
           optimized.add(name)
-          await mirrorUpload(v.name, v.buf, 'image/webp')
+          await mirrorUpload(v.name, v.buf, v.contentType)
         }
         processed++
       } catch (err) {

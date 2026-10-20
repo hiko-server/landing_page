@@ -181,7 +181,7 @@ test('D7 author card data: public CV name, tagline role, cropped portrait, avail
   })
   const card = loadAuthorCard()
   assert.equal(card.role, 'Full-Stack Engineer')
-  assert.deepEqual(card.avatar, { src: '/uploads/me.jpg', srcSet: null, position: '12.3% 100%' })
+  assert.deepEqual(card.avatar, { src: '/uploads/me.jpg', srcSet: null, avifSrcSet: null, position: '12.3% 100%' })
   assert.deepEqual(card.availability, { status: 'open', label: 'Open to backend roles' })
 })
 

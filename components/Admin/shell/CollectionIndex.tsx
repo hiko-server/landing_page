@@ -335,7 +335,7 @@ export default function CollectionIndex({
             onClick={() => void optimize()}
             isLoading={optimizing}
             loadingText="Optimising"
-            title="Make resized WebP copies of uploaded images that don’t have them yet"
+            title="Make the resized WebP and AVIF copies and the blur placeholders of uploaded images that don’t have them yet"
           >
             Generate responsive versions
           </Button>

@@ -7,14 +7,17 @@ import { MediaOptimizeBusyError, optimizeUploads, pagesUsingUploads, type Optimi
  * POST /api/admin/media-optimize
  *   → { processed, skipped, errors, remaining, revalidated, revalidateFailed? }
  *
- * Backfills responsive WebP variants for uploads made before the upload
- * pipeline existed: every original in public/uploads wider than the smallest
- * variant width gets the variants it is missing (written locally and, only
- * when this run wrote them, mirrored to R2). Originals are never rewritten —
- * they are referenced by content and served `immutable`. GIFs and animated
- * images (WebP, APNG) are skipped.
+ * Backfills the responsive variants of uploads made before the current
+ * pipeline (lib/uploadVariants expectedVariantNames): the WebP and AVIF
+ * variants at every width the original should have (320 / 480 / 640 / 1280 /
+ * 1920 and its own width) and the blur placeholder — only the files it is
+ * missing, written locally and, only when this run wrote them, mirrored to
+ * R2. Originals are never rewritten — they are referenced by content and
+ * served `immutable`. GIFs and animated images (WebP, APNG) are skipped.
+ * AVIF encoding is the slow part on a one-vCPU server: the run budget below
+ * keeps each request short and the client calls again.
  *
- * Published pages embed an upload's srcset when they are generated, so every
+ * Published pages embed an upload's srcsets and placeholder when they are generated, so every
  * page whose content references an image that got new variants is
  * regenerated right away (`revalidated`); the compile memo in lib/mdx.ts is
  * keyed on the variant state, so the new tree carries the srcset.

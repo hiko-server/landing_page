@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { Box, Flex, Link, Text } from '@chakra-ui/react'
-import { motion, useReducedMotion } from 'framer-motion'
+import { m, useReducedMotion } from 'framer-motion'
 
 import { field, list } from '../CVViewerPage/fields'
 import { useScrollReveal } from '../General-UI/useScrollReveal'
@@ -50,9 +50,9 @@ export default function CertificationsPeek({ cvEn }: { cvEn?: CvSectionLike[] })
 
   return (
     <Box w="100%" maxW="1100px" mx="auto">
-      <motion.div ref={reveal.ref} data-reveal-list="" initial={false} animate={revealVariant(reveal.phase)} variants={stagger}>
+      <m.div ref={reveal.ref} data-reveal-list="" initial={false} animate={revealVariant(reveal.phase)} variants={stagger}>
         {orgs.map((org) => (
-          <motion.section key={org.key} aria-label={org.name || undefined} variants={row} data-reveal-item="" style={{ marginBottom: 24 }}>
+          <m.section key={org.key} aria-label={org.name || undefined} variants={row} data-reveal-item="" style={{ marginBottom: 24 }}>
             {org.name && (
               <Text as="h3" display="flex" alignItems="center" fontFamily={monoFont} fontSize="11px" letterSpacing="0.14em" textTransform="uppercase" color="page.fg-secondary" mb={3}>
                 <Box as="span" display="inline-flex" mr={1.5}>
@@ -102,9 +102,9 @@ export default function CertificationsPeek({ cvEn }: { cvEn?: CvSectionLike[] })
                 )
               })}
             </Flex>
-          </motion.section>
+          </m.section>
         ))}
-      </motion.div>
+      </m.div>
     </Box>
   )
 }

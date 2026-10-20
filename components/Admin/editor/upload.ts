@@ -10,8 +10,19 @@ export type UploadedImage = {
   url: string
   width: number | null
   height: number | null
+  /** WebP variant URLs (lib/uploadVariants), narrowest first. */
   variants: string[]
+  /** AVIF variant URLs, narrowest first. */
+  avifVariants: string[]
   warning?: string
+}
+
+/** "5 sizes · WebP + AVIF" for an upload toast, or undefined when no variant was made. */
+export function responsiveSummary(img: Pick<UploadedImage, 'variants' | 'avifVariants'>): string | undefined {
+  const sizes = Math.max(img.variants.length, img.avifVariants.length)
+  if (!sizes) return undefined
+  const formats = [img.variants.length ? 'WebP' : '', img.avifVariants.length ? 'AVIF' : ''].filter(Boolean).join(' + ')
+  return `Responsive sizes: ${sizes} · ${formats}`
 }
 
 /** Types the upload API accepts (also the file pickers' `accept`). */
@@ -36,6 +47,7 @@ function parseUploaded(body: Record<string, unknown>): UploadedImage {
     width: dim(body.width),
     height: dim(body.height),
     variants: Array.isArray(body.variants) ? body.variants.filter((v): v is string => typeof v === 'string') : [],
+    avifVariants: Array.isArray(body.avifVariants) ? body.avifVariants.filter((v): v is string => typeof v === 'string') : [],
     warning: typeof body.r2Warning === 'string' ? body.r2Warning : undefined,
   }
 }

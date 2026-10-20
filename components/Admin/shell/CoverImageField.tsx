@@ -11,7 +11,7 @@ import {
   Text,
   useToast,
 } from '@chakra-ui/react'
-import { UPLOAD_ACCEPT, altFromFileName, uploadImage } from '../editor/upload'
+import { UPLOAD_ACCEPT, altFromFileName, responsiveSummary, uploadImage } from '../editor/upload'
 import { inputProps, MONO, outlineButtonProps, warnTextProps } from './ui'
 import { cleanFocus, COVER_RECOMMENDED_MIN as COVER_RECOMMENDED, COVER_SHARP_MIN as COVER_SHARP, focusPoint } from '../../../lib/caseStudy'
 
@@ -183,7 +183,7 @@ export default function CoverImageField({
       toast({
         status: img.warning ? 'warning' : 'success',
         title: 'Cover uploaded',
-        description: img.warning || (img.variants.length ? `Responsive sizes: ${img.variants.length + 1}` : undefined),
+        description: img.warning || responsiveSummary(img),
         position: 'bottom-right',
       })
     } catch (err) {

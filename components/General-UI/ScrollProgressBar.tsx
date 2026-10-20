@@ -1,6 +1,6 @@
 import { Box } from '@chakra-ui/react'
 import { useRouter } from 'next/router'
-import { motion, useReducedMotion, useScroll, useSpring } from 'framer-motion'
+import { m, useReducedMotion, useScroll, useSpring } from 'framer-motion'
 
 /**
  * Reading-progress hairline in the brand accent. Shown on long-form pages
@@ -21,7 +21,7 @@ export default function ScrollProgressBar() {
 
   return (
     <Box position="fixed" top={0} left={0} right={0} h="2px" zIndex={9999} pointerEvents="none" className="no-print" aria-hidden>
-      <motion.div
+      <m.div
         style={{
           height: '100%',
           background: 'var(--accent)',

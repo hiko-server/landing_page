@@ -1,0 +1,37 @@
+{
+  "hero": {
+    "welcome": "Welcome",
+    "brand": "Example Lab",
+    "tagline": "Software Engineer | Fixture Data | Test Content",
+    "avatarUrl": "/uploads/example-portrait.jpg",
+    "phone": "",
+    "email": "",
+    "avatarTransform": { "x": 50, "y": 50, "scale": 1 },
+    "currentlyCoding": { "label": "currently testing", "project": "Example Lab · Fixture Store", "note": "synthetic content for CI" }
+  },
+  "socials": { "github": "", "gitlab": "", "linkedin": "", "whatsapp": "" },
+  "brands": [
+    { "name": "Example Lab", "href": "https://example.com/lab", "image": "/uploads/logo-example-lab.png" },
+    { "name": "Sample Institute", "href": "https://example.org/institute", "image": "/uploads/logo-sample-institute.png" }
+  ],
+  "quickAccess": [{ "label": "CV", "url": "/cv" }],
+  "photos": [
+    { "url": "/uploads/field-ridge.jpg", "describe": "Example ridge line (synthetic image)", "redirectTo": "", "visible": true },
+    { "url": "/uploads/field-meadow.jpg", "describe": "Example meadow (synthetic image)", "redirectTo": "", "visible": true },
+    { "url": "/uploads/field-dusk.jpg", "describe": "Example dusk (synthetic image)", "redirectTo": "", "visible": true }
+  ],
+  "sections": { "open-source": false, "activity": false },
+  "highlights": [
+    { "value": "3 releases", "label": "Example Sorting Station, a fixture case study", "href": "/work/example-sorting-station" },
+    { "value": "1st place", "label": "Example Robotics Challenge (fixture award)", "href": "/cv#competitionAwards" }
+  ],
+  "contact": {
+    "heading": "Write to Example Person",
+    "blurb": "Fixture copy: replies within two working days.",
+    "eyebrow": "contact",
+    "reasons": ["A role", "A project", "Something else"],
+    "intents": { "A role": "role", "A project": "freelance", "Something else": "other" }
+  },
+  "availability": { "status": "open", "label": "Open to example roles", "label_zh": "开放示例职位", "roles": ["Example Engineer"], "from": "2026-01" },
+  "site": { "name": "Example Person" }
+}

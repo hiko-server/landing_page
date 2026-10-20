@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Box, Link, Text } from '@chakra-ui/react'
+import Picture from '../Common/Picture'
 import { printableLinkUrl } from '../../lib/print'
 import { PlayIcon } from '../Icons/ui/content'
 import { cssTransition } from '../../theme/tokens'
@@ -33,6 +34,7 @@ type Props = {
   'data-start'?: string | number
   'data-poster'?: string
   'data-poster-srcset'?: string
+  'data-poster-avif-srcset'?: string
   'data-poster-width'?: string | number
   'data-poster-height'?: string | number
   'data-ui-lang'?: string
@@ -126,19 +128,21 @@ export default function VideoEmbed(props: Props) {
           >
             {poster ? (
               // A same-site copy of the thumbnail (never i.ytimg.com / vimeocdn.com).
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                className="video-poster"
-                src={poster}
-                srcSet={props['data-poster-srcset'] || undefined}
-                sizes={props['data-poster-srcset'] ? POSTER_SIZES : undefined}
-                alt=""
-                width={posterW}
-                height={posterH}
-                loading="lazy"
-                decoding="async"
-                style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }}
-              />
+              <Picture avifSrcSet={props['data-poster-srcset'] ? props['data-poster-avif-srcset'] : null} sizes={POSTER_SIZES}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  className="video-poster"
+                  src={poster}
+                  srcSet={props['data-poster-srcset'] || undefined}
+                  sizes={props['data-poster-srcset'] ? POSTER_SIZES : undefined}
+                  alt=""
+                  width={posterW}
+                  height={posterH}
+                  loading="lazy"
+                  decoding="async"
+                  style={{ display: 'block', width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              </Picture>
             ) : (
               <Box
                 aria-hidden

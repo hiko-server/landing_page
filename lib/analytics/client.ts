@@ -1,17 +1,20 @@
 import { useEffect } from 'react'
 import type { NextRouter } from 'next/router'
 import { isVitalName, normalizeNavType, normalizeTrackedPath, type NavType, type VitalName } from './shared'
+import { buildAttribution, type VitalAttribution } from './attribution'
 
 /**
  * Browser side of the first-party analytics (server: lib/analytics/ingest).
  *
  *   useAnalytics(router)          one page view on mount and after every
  *                                 client-side navigation to a new path
- *   useReportWebVitals(reportWebVital)
- *                                 in pages/_app (next/web-vitals): Core Web
- *                                 Vitals of the landing page, sent whenever
- *                                 the tab is hidden (latest value per metric
- *                                 instance) and on pagehide
+ *   installWebVitals()            once, from pages/_app, as the app hydrates:
+ *                                 the browser fetches web-vitals' attribution
+ *                                 build (a chunk of its own, ~4.5 KB) and
+ *                                 reports the landing page's Core Web
+ *                                 Vitals, sent whenever the tab is hidden
+ *                                 (latest value per metric instance) and on
+ *                                 pagehide
  *
  * Nothing is sent from /admin, from automated browsers (navigator.webdriver),
  * or when the browser asks not to be tracked (Do Not Track / Global Privacy
@@ -20,7 +23,10 @@ import { isVitalName, normalizeNavType, normalizeTrackedPath, type NavType, type
  * of the landing page and the page language; a vital carries the route, the
  * metric and the web-vitals instance id (`k`, random per page load and
  * metric — it names a measurement, not a visitor) so that a value reported
- * again replaces the earlier one on the server instead of counting twice.
+ * again replaces the earlier one on the server instead of counting twice,
+ * and for LCP / INP / CLS its attribution (`a`, lib/analytics/attribution):
+ * a selector of the site's own markup and phase timings, nothing typed or
+ * read on the page.
  */
 
 const ENDPOINT = '/api/a'
@@ -86,21 +92,29 @@ export function useAnalytics(router: Pick<NextRouter, 'events'>) {
 
 // ── Web Vitals ────────────────────────────────────────────────────────────
 //
-// Next 15 calls a legacy `export function reportWebVitals` in pages/_app only
+// Next calls a legacy `export function reportWebVitals` in pages/_app only
 // with its own User Timing measures (hydration, render), never with LCP, INP
-// or CLS. Real vitals come from the web-vitals library bundled with Next,
-// through `useReportWebVitals` (next/web-vitals), which pages/_app calls with
-// the module-level (therefore stable, subscribed once) `reportWebVital` below.
+// or CLS. Real vitals come from the web-vitals library Next bundles, in its
+// attribution build (next/dist/compiled/web-vitals-attribution), which
+// installWebVitals() requests as soon as the app hydrates — in a chunk of its
+// own, outside the shared bundle, fetched alongside the page's other
+// resources — and subscribes once with the module-level `reportWebVital`
+// below. web-vitals observes with `buffered: true`, so the LCP, CLS and FCP
+// of the load are still reported. It must not wait for the load event or an
+// idle moment: web-vitals discards every measurement from before the first
+// time it sees the tab hidden, so a visitor who switched tabs before a late
+// subscription would never be measured (and the data would lean towards
+// visitors who stay).
 
 /** The fields of a web-vitals `Metric` this module reads. */
-export type WebVitalMetric = { id: string; name: string; value: number; navigationType?: string }
+export type WebVitalMetric = { id: string; name: string; value: number; navigationType?: string; attribution?: unknown }
 
 /**
  * One `t: 'v'` event of the beacon (validated again by lib/analytics/ingest).
  * `k` is the web-vitals instance id: ingest keeps one row per instance and
  * replaces its value when the instance is reported again.
  */
-export type VitalBeaconEvent = { t: 'v'; route: string; name: VitalName; value: number; nav: NavType | null; k: string }
+export type VitalBeaconEvent = { t: 'v'; route: string; name: VitalName; value: number; nav: NavType | null; k: string; a?: VitalAttribution }
 
 /**
  * Turns web-vitals reports into beacon events for one measured `route`
@@ -124,14 +138,19 @@ export function createVitalsCollector(route: string | null) {
       if (!route || !metric || typeof metric.id !== 'string' || !metric.id) return false
       if (!isVitalName(metric.name) || typeof metric.value !== 'number' || !Number.isFinite(metric.value)) return false
       const known = latest.get(metric.id)
+      const a = buildAttribution(metric.name, metric.attribution)
       if (known) {
         if (known.event.name !== metric.name || known.event.value === metric.value) return false
         known.event = { ...known.event, value: metric.value }
+        // A grown CLS / INP has the attribution of its new value.
+        if (a) known.event.a = a
         known.sent = false
         return true
       }
       const nav = normalizeNavType(metric.navigationType) ?? fallbackNav()
-      latest.set(metric.id, { event: { t: 'v', route, name: metric.name, value: metric.value, nav, k: metric.id }, sent: false })
+      const event: VitalBeaconEvent = { t: 'v', route, name: metric.name, value: metric.value, nav, k: metric.id }
+      if (a) event.a = a
+      latest.set(metric.id, { event, sent: false })
       return true
     },
     /** The unsent latest values, in beacon-sized batches (at most MAX_PER_BEACON events each); they count as sent. */
@@ -173,7 +192,7 @@ function onVisibilityChange() {
 }
 
 /**
- * The `useReportWebVitals` callback (pages/_app): record the landing page's
+ * The web-vitals callback (installWebVitals): record the landing page's
  * LCP / INP / CLS / FCP / TTFB and send what changed whenever the tab is
  * hidden — the last moment a page is reliably alive on mobile, where
  * pagehide may never come — and on pagehide (Safari, unload, entering the
@@ -191,4 +210,32 @@ export function reportWebVital(metric: WebVitalMetric) {
   window.addEventListener('visibilitychange', onVisibilityChange)
   // Safari does not always fire visibilitychange on unload.
   window.addEventListener('pagehide', flushVitals)
+}
+
+/** The web-vitals (attribution build) entry points installWebVitals subscribes to. */
+type WebVitalsModule = Record<'onLCP' | 'onINP' | 'onCLS' | 'onFCP' | 'onTTFB', (cb: (metric: WebVitalMetric) => void) => void>
+
+let vitalsInstalled = false
+
+/**
+ * Start measuring the landing page's Core Web Vitals (call once, from
+ * pages/_app; later calls do nothing). Nothing is loaded when the page is
+ * not measured or the visitor opted out (Do Not Track, Global Privacy
+ * Control, automated browsers, /admin).
+ */
+export function installWebVitals(load: () => Promise<WebVitalsModule> = loadWebVitals): void {
+  if (typeof window === 'undefined' || vitalsInstalled) return
+  vitalsInstalled = true
+  if (!trackingAllowed(landingPath) || !normalizeTrackedPath(landingPath)) return
+  load()
+    .then((wv) => {
+      for (const on of [wv.onLCP, wv.onINP, wv.onCLS, wv.onFCP, wv.onTTFB]) on(reportWebVital)
+    })
+    .catch(() => {
+      // Analytics must never surface errors to the visitor.
+    })
+}
+
+function loadWebVitals(): Promise<WebVitalsModule> {
+  return import('next/dist/compiled/web-vitals-attribution') as Promise<WebVitalsModule>
 }

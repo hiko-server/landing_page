@@ -174,7 +174,10 @@ test('variantState changes when a variant of a referenced upload appears', async
   const before = variants.variantState(body)
   assert.equal(before, 'state.png:1:')
   await writeVariant('state.png', 640)
-  assert.equal(variants.variantState(body), 'state.png:1:640')
+  assert.equal(variants.variantState(body), 'state.png:1:state.png.w640.webp')
+  // G4 / C8: AVIF variants and the placeholder are part of the state too.
+  fs.writeFileSync(path.join(uploads, 'state.png.w16.webp'), new Uint8Array(await sharp(path.join(uploads, 'state.png')).resize({ width: 16 }).webp().toBuffer()))
+  assert.equal(variants.variantState(body), 'state.png:1:state.png.w16.webp,state.png.w640.webp')
   assert.equal(variants.variantState('No images here.'), '')
 })
 
@@ -229,17 +232,31 @@ test('media-optimize writes the variants and regenerates the published pages tha
   assert.equal(run.body.remaining, 0)
   assert.deepEqual(run.body.errors, [])
   assert.ok(run.body.processed >= 1)
-  for (const w of [640, 1280]) assert.ok(fs.existsSync(path.join(uploads, `hero.png.w${w}.webp`)), `hero.png.w${w}.webp written`)
-  assert.ok(!fs.existsSync(path.join(uploads, 'tiny.png.w640.webp')), 'nothing wider than a 300 px original')
+  // G4: WebP and AVIF at 320 / 480 / 640 / 1280 and the original's 1400; C8: the placeholder.
+  for (const w of [320, 480, 640, 1280, 1400]) {
+    for (const f of ['webp', 'avif']) assert.ok(fs.existsSync(path.join(uploads, `hero.png.w${w}.${f}`)), `hero.png.w${w}.${f} written`)
+  }
+  assert.ok(fs.existsSync(path.join(uploads, 'hero.png.w16.webp')), 'the blur placeholder')
+  assert.ok(!fs.existsSync(path.join(uploads, 'tiny.png.w320.webp')), 'nothing wider than a 300 px original…')
+  assert.ok(fs.existsSync(path.join(uploads, 'tiny.png.w300.avif')), '…but its own width in AVIF and WebP')
 
-  const expected = ['/blog/uses-hero', '/now', '/work', '/work/case']
-  assert.deepEqual([...run.body.revalidated].sort(), expected, 'published pages using hero.png, drafts and unrelated posts left alone')
+  const expected = ['/blog/other', '/blog/uses-hero', '/now', '/work', '/work/case']
+  assert.deepEqual([...run.body.revalidated].sort(), expected, 'published pages using the optimised uploads, drafts left alone')
   assert.deepEqual([...run.revalidated].sort(), expected, 'each one regenerated through res.revalidate')
 
-  // The regenerated page carries the srcset.
+  // The regenerated page carries the srcsets (the same-width WebP replaces the PNG) and the placeholder.
   const fresh = await mdx.getPost('uses-hero')
   assert.ok(fresh)
-  assert.equal(images(fresh.tree)[0].srcSet, '/uploads/hero.png.w640.webp 640w, /uploads/hero.png.w1280.webp 1280w, /uploads/hero.png 1400w')
+  const img = images(fresh.tree)[0]
+  assert.equal(
+    img.srcSet,
+    '/uploads/hero.png.w320.webp 320w, /uploads/hero.png.w480.webp 480w, /uploads/hero.png.w640.webp 640w, /uploads/hero.png.w1280.webp 1280w, /uploads/hero.png.w1400.webp 1400w',
+  )
+  assert.equal(
+    img.dataAvifSrcset,
+    '/uploads/hero.png.w320.avif 320w, /uploads/hero.png.w480.avif 480w, /uploads/hero.png.w640.avif 640w, /uploads/hero.png.w1280.avif 1280w, /uploads/hero.png.w1400.avif 1400w',
+  )
+  assert.match(String(img.dataLqip), /^data:image\/webp;base64,/)
 
   // Nothing new to write → nothing to regenerate.
   const again = await call(optimize)

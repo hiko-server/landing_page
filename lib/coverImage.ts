@@ -1,5 +1,5 @@
 import { localImageSize } from './rehype/imageSize'
-import { variantSrcSet } from './uploadVariants'
+import { imageSources } from './uploadVariants'
 import { cleanFocus, COVER_RECOMMENDED_MIN, COVER_SHARP_MIN } from './caseStudy'
 
 export { COVER_RECOMMENDED_MIN, COVER_SHARP_MIN }
@@ -12,7 +12,8 @@ export { COVER_RECOMMENDED_MIN, COVER_SHARP_MIN }
  *     so the <img> carries true width/height and the page can tell a cover
  *     that would be blown up: one narrower than COVER_SHARP_MIN is drawn at
  *     its own size on a tinted panel (`small`), never stretched into a blur;
- *   - the responsive srcset of the upload variants;
+ *   - the responsive srcsets of the upload variants (WebP, and AVIF once
+ *     complete — G4) and the blur placeholder (C8);
  *   - the owner's focal point ("x% y%", default centre) for object-position
  *     wherever the cover is cropped.
  *
@@ -22,6 +23,10 @@ export { COVER_RECOMMENDED_MIN, COVER_SHARP_MIN }
 export type CoverInfo = {
   src: string
   srcSet: string | null
+  /** AVIF variants for a <picture> source, or null. */
+  avifSrcSet: string | null
+  /** Blur placeholder data: URL, or null. */
+  placeholder: string | null
   alt: string
   width: number | null
   height: number | null
@@ -42,7 +47,7 @@ export function resolveCover(cover: unknown, alt?: unknown, focus?: unknown): Co
   const src = coverSrc(cover)
   if (!src) return null
   let size: { width: number; height: number } | null = null
-  let srcSet: string | null = null
+  let sources: { srcSet?: string; avifSrcSet?: string; placeholder?: string } = {}
   if (src.startsWith('/')) {
     try {
       size = localImageSize(src)
@@ -50,14 +55,16 @@ export function resolveCover(cover: unknown, alt?: unknown, focus?: unknown): Co
       size = null
     }
     try {
-      srcSet = variantSrcSet(src) || null
+      sources = imageSources(src)
     } catch {
-      srcSet = null
+      sources = {}
     }
   }
   return {
     src,
-    srcSet,
+    srcSet: sources.srcSet || null,
+    avifSrcSet: sources.srcSet ? sources.avifSrcSet || null : null,
+    placeholder: sources.placeholder || null,
     alt: typeof alt === 'string' ? alt.trim() : '',
     width: size?.width ?? null,
     height: size?.height ?? null,

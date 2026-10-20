@@ -238,6 +238,54 @@ Admin operations (wave 2B: H8, H9, H11, H13, H14, CORR-3).
   not fit is refused up front with "This link is too long — paste a shorter
   link to the same page." (the form and the API share `checkRoleUrl`).
 
+### perf
+
+Performance, measured (wave 2B: G3, G4, C8, G5, G6, G7 and cross-engine /
+visual CI).
+
+- **Less JavaScript on every page (G5)** — shared first-load JS 203.8 →
+  166.9 KiB gzip (`pages/_app` 115.3 → 78.2), home 251.6 → 215.9, case
+  studies 259.1 → 208.1, articles 257.3 → 206.1, /about 246.3 → 210.2 KiB.
+  framer-motion renders through `m` with its animation features in their own
+  chunk; the theme carries only the Chakra component styles public pages
+  use (the admin's load with the admin); the toast host, the image viewer,
+  the back-to-top button, the reading-progress bar and web-vitals load on
+  demand. The performance budget now also holds `_app` (≤ 80 KiB) and the
+  home page to budgets of their own.
+- **Half the font download (G3)** — each Geist face is a Latin core plus an
+  extension (Latin Extended, Vietnamese, Greek, Cyrillic, symbols) under one
+  family, split by `unicode-range`: the two preloaded files drop from 137.7
+  to 68.4 KiB and English pages never fetch the extension. No glyph, weight
+  or OpenType feature is lost; Chinese still uses the system fonts
+  (`scripts/subset-fonts.mjs`).
+- **AVIF and small image sizes (G4)** — uploads get WebP and AVIF at 320 /
+  480 / 640 / 1280 / 1920 px and at their own width, made at upload (or by
+  *Generate responsive versions* in the Writing / Work admin lists for older
+  uploads), never while a page renders. Article
+  images, covers, the home portrait and field notes, the /about portrait,
+  the author card, video posters and the lightbox serve AVIF through
+  `<picture>`; a 763 KB screenshot now reaches readers as a 21 KB AVIF. The
+  field-note photos that live in the repository are baked the same way
+  (`scripts/bake-images.mjs`).
+- **Blur-up placeholders (C8)** — every upload also gets a 16 px
+  placeholder, shown blurred in the image's box from the first paint (no
+  JavaScript, no layout shift); a still-loading image fades in over it, a
+  cached one appears at once, and nothing fades under reduced motion.
+- **Where Web Vitals come from (G6)** — Admin → Analytics → Web Vitals shows,
+  per page, the elements behind LCP, INP and CLS with their phases (server
+  response, load delay, load time, render delay; input delay, processing,
+  presentation). Elements are named by the site's own markup (tag, id,
+  classes, at most 120 characters, never text); nothing identifies a visitor.
+- **CI gates on realistic content (G7)** — a synthetic fixture store
+  (*Example Person*, generated images, never the live content) is built and
+  served in CI: CLS ≤ 0.05 and TBT ≤ 200 ms on a calibrated mid-range-phone
+  profile (LCP reported), no horizontal scroll at 375 / 768 / 1440 px, no
+  image over 200 KB or decoded far larger than shown, axe on the article.
+- **Safari and Firefox in CI, visual baselines** — the public checks also run
+  on WebKit (iPhone) and Firefox, and 30 screenshots (home, article, case
+  study, CV, contact × light / dark × phone / tablet / desktop) of the
+  fixture store are compared pixel by pixel in the pinned Playwright image.
+
 ### security-a
 
 Security and reliability foundation.

@@ -429,21 +429,23 @@ const read = (rel: string) => readFileSync(path.join(ROOT, rel), 'utf8')
 
 test('Geist is self-hosted: two preloaded faces, a lazily used italic, the old fonts gone', () => {
   const app = read('pages/_app.tsx')
-  assert.match(app, /Geist-Variable\.woff2/)
-  assert.match(app, /GeistMono-Variable\.woff2/)
-  assert.match(app, /Geist-Italic-Variable\.woff2[^)]*preload:\s*false/s, 'the italic is not preloaded')
+  // G3: each face is a Latin core plus an extension file (tests/perf-g3-fonts.test.ts).
+  assert.match(app, /Geist-Latin\.woff2/)
+  assert.match(app, /GeistMono-Latin\.woff2/)
+  assert.match(app, /Geist-Italic-Latin\.woff2[^)]*preload:\s*false/s, 'the italic is not preloaded')
   assert.equal((app.match(/preload:\s*true/g) || []).length, 2, 'exactly two preloaded faces')
   assert.match(app, /--font-geist-sans-italic/)
   assert.doesNotMatch(app, /InterVariable|JetBrainsMono/)
-  for (const f of ['Geist-Variable.woff2', 'Geist-Italic-Variable.woff2', 'GeistMono-Variable.woff2', 'OFL-Geist.txt']) {
-    assert.ok(readFileSync(path.join(ROOT, 'public/fonts', f)).length > 0, f)
+  assert.ok(readFileSync(path.join(ROOT, 'public/fonts/OFL-Geist.txt')).length > 0, 'the licence is served')
+  for (const f of ['Geist-Latin.woff2', 'Geist-Ext.woff2', 'Geist-Italic-Latin.woff2', 'Geist-Italic-Ext.woff2', 'GeistMono-Latin.woff2', 'GeistMono-Ext.woff2']) {
+    assert.ok(readFileSync(path.join(ROOT, 'assets/fonts', f)).length > 0, f)
   }
-  for (const f of ['InterVariable.woff2', 'InterVariable-Italic.woff2', 'JetBrainsMono-Variable.woff2']) {
+  for (const f of ['InterVariable.woff2', 'InterVariable-Italic.woff2', 'JetBrainsMono-Variable.woff2', 'Geist-Variable.woff2']) {
     assert.throws(() => readFileSync(path.join(ROOT, 'public/fonts', f)), f)
   }
-  // The two preloads stay under the 145 KB budget.
-  const preloaded = ['Geist-Variable.woff2', 'GeistMono-Variable.woff2'].reduce((n, f) => n + readFileSync(path.join(ROOT, 'public/fonts', f)).length, 0)
-  assert.ok(preloaded < 145 * 1024, `${preloaded} bytes`)
+  // The two preloads stay under the 75 KB budget (scripts/perf-budget.mjs).
+  const preloaded = ['Geist-Latin.woff2', 'GeistMono-Latin.woff2'].reduce((n, f) => n + readFileSync(path.join(ROOT, 'assets/fonts', f)).length, 0)
+  assert.ok(preloaded < 75 * 1024, `${preloaded} bytes`)
   const theme = read('theme/chakra.js')
   assert.doesNotMatch(theme, /\bInter\b/)
   assert.match(theme, /PingFang SC/)

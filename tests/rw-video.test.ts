@@ -314,7 +314,10 @@ test('D3 posterState (part of the compile cache key) changes once a poster is st
   const body = `https://youtu.be/${ID}\n\nText.`
   assert.equal(posterState(body, dir), `video-youtube-${ID}:0`)
   fs.writeFileSync(path.join(dir, `video-youtube-${ID}.jpg`), Buffer.from([0xff, 0xd8, 0xff]))
-  assert.equal(posterState(body, dir), `video-youtube-${ID}:1`)
+  // Stored; its AVIF variants (G4) and placeholder (C8) not yet backfilled.
+  assert.equal(posterState(body, dir), `video-youtube-${ID}:1:00`)
+  fs.writeFileSync(path.join(dir, `video-youtube-${ID}.jpg.w320.avif`), Buffer.from([0]))
+  assert.equal(posterState(body, dir), `video-youtube-${ID}:1:10`)
   assert.equal(posterState('no video', dir), '')
 })
 

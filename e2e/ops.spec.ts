@@ -11,7 +11,7 @@ import { test, expect } from './fixtures'
  * in the browser (it never reaches the server), everything else is a GET.
  */
 
-type BeaconEvent = { t: string; route?: string; name?: string; value?: number; nav?: string | null; k?: string }
+type BeaconEvent = { t: string; route?: string; name?: string; value?: number; nav?: string | null; k?: string; a?: Record<string, unknown> }
 
 /** A web-vitals metric instance id: "v<version>-<page load time>-<random>" — it names a measurement, not a visitor. */
 const INSTANCE_ID = /^v\d+-\d+-\d+$/
@@ -59,8 +59,10 @@ test('a page view sends LCP / FCP / TTFB in a vitals beacon when the tab is hidd
 
   const vitals = events.filter((e) => e.t === 'v')
   for (const v of vitals) {
-    // The only id is the web-vitals instance id (random per page load and metric).
-    expect(Object.keys(v).sort()).toEqual(['k', 'name', 'nav', 'route', 't', 'value'])
+    // The only id is the web-vitals instance id (random per page load and metric);
+    // LCP / INP / CLS may add their attribution (G6: e2e/perf.spec.ts checks it).
+    const keys = ['k', 'name', 'nav', 'route', 't', 'value', ...(v.a && ['LCP', 'INP', 'CLS'].includes(v.name || '') ? ['a'] : [])]
+    expect(Object.keys(v).sort()).toEqual(keys.sort())
     expect(v.k).toMatch(INSTANCE_ID)
     expect(v.route).toBe('/')
     expect(['LCP', 'INP', 'CLS', 'FCP', 'TTFB']).toContain(v.name)

@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react'
 import { Box, Grid, Link, Text, Flex, Skeleton } from '@chakra-ui/react'
-import { motion, useReducedMotion, type Variants } from 'framer-motion'
+import { m, useReducedMotion, type Variants } from 'framer-motion'
 import { GitForkIcon, StarIcon } from '../Icons/ui/content'
 import { motionTransition } from '../../theme/tokens'
 
@@ -33,8 +33,8 @@ const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 const COLUMNS = { base: '1fr', sm: 'repeat(2, minmax(0, 1fr))', md: 'repeat(3, minmax(0, 1fr))' }
 const CARD_H = '132px'
 
-const MotionGrid = motion(Grid)
-const MotionLi = motion(Box)
+const MotionGrid = m(Grid)
+const MotionLi = m(Box)
 /**
  * One parent stagger, played only when the grid scrolls up from below the
  * fold (lib/reveal.ts): the server, the first frame and a grid already on

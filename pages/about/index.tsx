@@ -280,12 +280,13 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
     const avatarUrl = safeHref(home?.hero?.avatarUrl)
     if (avatarUrl) {
       const t = home?.hero?.avatarTransform
-      let facts: { width?: number; height?: number; srcSet?: string } = {}
+      let facts: { width?: number; height?: number; srcSet?: string; avifSrcSet?: string } = {}
       if (avatarUrl.startsWith('/')) {
         try {
-          const [{ localImageSize }, { variantSrcSet }] = await Promise.all([import('../../lib/rehype/imageSize'), import('../../lib/uploadVariants')])
+          const [{ localImageSize }, { variantAvifSrcSet, variantSrcSet }] = await Promise.all([import('../../lib/rehype/imageSize'), import('../../lib/uploadVariants')])
           const size = localImageSize(avatarUrl)
-          facts = defined({ width: size?.width, height: size?.height, srcSet: variantSrcSet(avatarUrl) })
+          const srcSet = variantSrcSet(avatarUrl)
+          facts = defined({ width: size?.width, height: size?.height, srcSet, avifSrcSet: srcSet ? variantAvifSrcSet(avatarUrl) : undefined })
         } catch {
           /* the portrait renders without its size / variants */
         }

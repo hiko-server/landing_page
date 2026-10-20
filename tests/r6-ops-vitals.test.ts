@@ -2,8 +2,9 @@
  * FIX-07: real-user Web Vitals reach the analytics beacon.
  *
  * Next 15 hands a legacy `reportWebVitals` export in pages/_app only its own
- * User Timing measures, so vitals are collected through next/web-vitals'
- * useReportWebVitals with a stable callback (lib/analytics/client.ts).
+ * User Timing measures, so vitals are collected with a stable callback
+ * (lib/analytics/client.ts reportWebVital) — since G6 subscribed by
+ * installWebVitals to web-vitals' attribution build after the load event.
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -151,9 +152,11 @@ test('reportWebVital queues the landing page vitals and flushes them in one beac
   }
 })
 
-test('pages/_app subscribes through useReportWebVitals with the module-level callback (no legacy export)', () => {
+test('pages/_app installs the web-vitals observers once, after the load event (G6: attribution build, no legacy export)', () => {
   const app = fs.readFileSync(path.join(process.cwd(), 'pages/_app.tsx'), 'utf8')
-  assert.match(app, /import \{ useReportWebVitals \} from 'next\/web-vitals'/)
-  assert.match(app, /useReportWebVitals\(reportWebVital\)/)
+  // G6 replaced next/web-vitals' useReportWebVitals (web-vitals in the shared
+  // bundle) with installWebVitals: the attribution build, loaded on demand.
+  assert.doesNotMatch(app, /next\/web-vitals/)
+  assert.match(app, /useEffect\(\(\) => installWebVitals\(\), \[\]\)/)
   assert.doesNotMatch(app, /export \{ reportWebVitals \}|export function reportWebVitals/)
 })

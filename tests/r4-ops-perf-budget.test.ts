@@ -77,3 +77,30 @@ test('measure + check: over budget is reported once per problem', () => {
 test('a missing build is an error, not a pass', () => {
   assert.throws(() => measure(path.join(os.tmpdir(), 'definitely-not-a-next-dir')), /build-manifest/)
 })
+
+test('G5: the app’s own pages/_app chunk and the home page have budgets of their own', () => {
+  // _app just over its own budget but the whole shared bundle within its budget.
+  const appBytes = (BUDGETS.appJsKb + 2) * 1024
+  assert.ok(BUDGETS.appJsKb + 2 + 1 < BUDGETS.sharedJsKb, 'the fixture needs room under the shared budget')
+  const { root, next } = fakeBuild({ fontBytes: 10 * 1024, fonts: 1, appBytes })
+  try {
+    const m = measure(next, path.join(root, 'public'))
+    assert.equal(m.appJs.files.length, 1)
+    assert.ok(m.appJs.total >= appBytes)
+    const failures = check(m)
+    assert.ok(failures.some((f: string) => f.startsWith('pages/_app JS')), failures.join('\n'))
+    assert.ok(!failures.some((f: string) => f.startsWith('shared first-load JS')))
+    // The per-page budget is the tighter of the general and the page's own.
+    const tight = check(m, { ...BUDGETS, appJsKb: 1000, pageBudgetsKb: { '/': 1 } })
+    assert.deepEqual(tight.filter((f: string) => f.startsWith('/:')).length, 1)
+    assert.match(tight.find((f: string) => f.startsWith('/:')) || '', /> 1 KiB$/)
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('G5: budgets keep the measured diet (shared JS under the 2.2 baseline of 203.8 KiB, _app ≤ 80 KiB, home tighter than other pages)', () => {
+  assert.ok(BUDGETS.sharedJsKb < 203.8)
+  assert.ok(BUDGETS.appJsKb <= 80)
+  assert.ok(BUDGETS.pageBudgetsKb['/'] < BUDGETS.pageFirstLoadJsKb)
+})
