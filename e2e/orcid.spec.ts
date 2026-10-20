@@ -16,13 +16,9 @@ import { EXAMPLE_ORCID_ID, EXAMPLE_ORCID_TYPO, EXAMPLE_ORCID_URI } from '../test
 
 const ID = EXAMPLE_ORCID_ID
 const URI = EXAMPLE_ORCID_URI
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-/**
- * The iD link's accessible name. An iD typed in (as here — connecting needs
- * ORCID; e2e/orcid-connect.spec.ts) is followed by ORCID's "(unauthenticated)".
- */
-const linkName = (suffix = '(unauthenticated)') => new RegExp(`^ORCID iD: ${escapeRe(URI)}\\s*${escapeRe(suffix)}\\s*\\(opens in a new tab\\)$`)
-const LINK_NAME = linkName()
+const LINK_NAME = `ORCID iD: ${URI} (opens in a new tab)`
+/** An iD typed in (as here — connecting needs ORCID; e2e/orcid-connect.spec.ts) is followed by ORCID's "(unauthenticated)". */
+const UNAUTHENTICATED = { en: '(unauthenticated)', zh: '（未经认证）' } as const
 
 type CvDoc = { en: any[]; zh: any[] }
 
@@ -154,7 +150,7 @@ test.describe('ORCID iD in CV Studio', { tag: '@admin' }, () => {
       // ── Public surfaces ─────────────────────────────────────────────
       for (const path of ['/cv', '/cv/zh']) {
         await page.goto(path)
-        const link = page.getByRole('link', { name: linkName(path === '/cv/zh' ? '（未经认证）' : '(unauthenticated)') }).first()
+        const link = page.getByRole('link', { name: LINK_NAME }).first()
         await expect(link, path).toBeVisible()
         await expect(link).toHaveAttribute('href', URI)
         await expect(link).toHaveAttribute('target', '_blank')
@@ -162,6 +158,7 @@ test.describe('ORCID iD in CV Studio', { tag: '@admin' }, () => {
         // Typed in, so ORCID's unauthenticated iD icon (never the green disc).
         await expect(link.locator('svg.orcid-id-icon')).toHaveCount(1)
         await expect(link.locator('svg[data-orcid-icon="unauthenticated"]')).toHaveCount(1)
+        await expect(link.locator('xpath=following-sibling::*[1]'), `${path}: the suffix follows the link`).toHaveText(UNAUTHENTICATED[path === '/cv/zh' ? 'zh' : 'en'])
         await settle(page)
         expect(await seriousA11yViolations(page), `${path}: axe serious/critical`).toEqual([])
         const ld = (await page.locator('script[type="application/ld+json"]').allTextContents()).join('\n')
@@ -174,7 +171,7 @@ test.describe('ORCID iD in CV Studio', { tag: '@admin' }, () => {
       await expect(rail).toBeVisible()
       await expect(rail).toHaveAttribute('href', URI)
       await expect(rail.locator('svg[data-orcid-icon="unauthenticated"]')).toHaveCount(1)
-      await expect(rail).toContainText('(unauthenticated)')
+      await expect(rail.locator('xpath=..')).toContainText(UNAUTHENTICATED.en)
 
       const resume = (await (await request.get('/cv.json')).json()) as { basics?: { profiles?: Array<Record<string, string>> } }
       expect(resume.basics?.profiles).toContainEqual({ network: 'ORCID', username: ID, url: URI })

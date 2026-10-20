@@ -4,6 +4,7 @@ import { ORCID_GREEN, OrcidIdIcon } from '../../Icons/orcid'
 import {
   ORCID_CONNECTION_PATH,
   ORCID_CONNECT_PATH,
+  ORCID_DISCONNECT_CONFIRM_LINE,
   ORCID_SETUP_DOCS_URL,
   orcidConnectLine,
   orcidConnectPanel,
@@ -67,10 +68,11 @@ const orcidButton: ButtonProps = {
   boxShadow: '0 1px 2px rgba(0, 0, 0, 0.08)',
   iconSpacing: 2,
   transition: 'border-color var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard)',
-  _hover: { bg: 'gray.50', borderColor: ORCID_GREEN, textDecoration: 'none', _disabled: { bg: 'white', borderColor: 'gray.300' } },
+  _hover: { bg: 'gray.50', borderColor: ORCID_GREEN, textDecoration: 'none', _disabled: { bg: 'transparent', borderColor: 'page.border-strong' } },
   _active: { bg: 'gray.100' },
   _focusVisible: { outline: '2px solid var(--accent)', outlineOffset: '2px', boxShadow: 'none' },
-  _disabled: { opacity: 0.55, cursor: 'not-allowed', boxShadow: 'none' },
+  // Unavailable: a quiet outline — the iD icon itself stays as ORCID provides it (never dimmed).
+  _disabled: { opacity: 1, cursor: 'not-allowed', boxShadow: 'none', bg: 'transparent', color: 'page.fg-secondary', borderColor: 'page.border-strong', borderStyle: 'dashed' },
 }
 
 export default function OrcidConnect({ pi, children }: { pi: unknown; children: React.ReactNode }) {
@@ -156,7 +158,7 @@ export default function OrcidConnect({ pi, children }: { pi: unknown; children: 
   let action: React.ReactNode
   if (panel.kind === 'connected') {
     action = confirming ? (
-      <HStack spacing={2} role="group" aria-label="Disconnect your ORCID iD?" flexShrink={0}>
+      <HStack spacing={2} role="group" aria-label="Disconnect your ORCID iD?" aria-describedby={lineId} flexShrink={0}>
         <Button
           ref={confirmRef}
           size="sm"
@@ -225,7 +227,8 @@ export default function OrcidConnect({ pi, children }: { pi: unknown; children: 
     )
   }
 
-  const icon = panel.kind === 'connected' ? 'authenticated' : typedId ? 'unauthenticated' : null
+  // The line shows the iD as the site shows it, when the line is about the iD.
+  const icon = panel.kind === 'connected' ? 'authenticated' : panel.kind === 'unauthenticated' && typedId ? 'unauthenticated' : null
 
   return (
     <Box>
@@ -238,7 +241,7 @@ export default function OrcidConnect({ pi, children }: { pi: unknown; children: 
       <HStack mt={1.5} spacing={1.5} align="flex-start" data-testid="orcid-connect-status" data-state={panel.kind}>
         {icon ? <OrcidIdIcon size={16} authenticated={icon === 'authenticated'} style={{ flexShrink: 0, marginTop: 1 }} /> : null}
         <Text id={lineId} fontSize="12px" lineHeight="1.5" color={dim} minW={0}>
-          {orcidConnectLine(panel, formatDate)}
+          {confirming && panel.kind === 'connected' ? ORCID_DISCONNECT_CONFIRM_LINE : orcidConnectLine(panel, formatDate)}
           {panel.kind === 'unconfigured' && panel.problem !== 'unknown' ? (
             <>
               {' '}

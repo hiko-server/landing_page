@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test'
-import { test, expect, ADMIN, loginAsAdmin, seriousA11yViolations, settle } from './fixtures'
+import AxeBuilder from '@axe-core/playwright'
+import { test, expect, ADMIN, loginAsAdmin, settle } from './fixtures'
 
 /**
  * "Connect your ORCID iD" (stream "orcid-connect"). The suite never talks to
@@ -55,8 +56,13 @@ test.describe('Connect your ORCID iD', { tag: '@admin' }, () => {
     const guide = status.getByRole('link', { name: /Set-up guide/ })
     await expect(guide).toHaveAttribute('href', /#connect-your-orcid-id$/)
     await expect(guide).toHaveAttribute('target', '_blank')
+    // The iD field with its connect row (the dashboard around it is checked elsewhere).
     await settle(page)
-    expect(await seriousA11yViolations(page)).toEqual([])
+    const axe = await new AxeBuilder({ page })
+      .include('[data-cvpath$=".orcid"]')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+      .analyze()
+    expect(axe.violations.filter((v) => v.impact === 'serious' || v.impact === 'critical').map((v) => v.id)).toEqual([])
 
     // Someone opens the connect route anyway: back to the Studio, nothing changed, a toast says why.
     await page.goto('/api/admin/orcid/connect')
@@ -72,10 +78,27 @@ test.describe('Connect your ORCID iD', { tag: '@admin' }, () => {
     // The other loopback name is another site: navigating from there is cross-site, like coming back from orcid.org.
     const elsewhere = new URL(site.toString())
     elsewhere.hostname = site.hostname === '127.0.0.1' ? 'localhost' : '127.0.0.1'
+    // Every top-level navigation of the arrival, with whether it carried the session cookie.
+    const hops: { path: string; site: string; session: boolean }[] = []
+    page.on('request', async (r) => {
+      if (!r.isNavigationRequest() || r.frame() !== page.mainFrame()) return
+      const h = await r.allHeaders()
+      hops.push({ path: new URL(r.url()).pathname, site: h['sec-fetch-site'] || '', session: /(?:^|;\s*)cv_admin_token=/.test(h.cookie || '') })
+    })
     const comeBack = async (query: string) => {
       await page.goto(new URL('/api/health', elsewhere).toString())
+      hops.length = 0
       const target = new URL(`/api/admin/orcid/callback?${query}`, site).toString()
       await Promise.all([page.waitForURL(/\/admin\/dashboard\?tab=cv$/), page.evaluate((u) => window.location.assign(u), target)])
+      await expect.poll(() => hops.some((h) => h.path === '/admin/dashboard')).toBe(true)
+      // Cross-site, so the SameSite=Strict session cookie stays behind …
+      const callback = hops.find((h) => h.path === '/api/admin/orcid/callback')
+      expect(callback, 'the callback was reached').toBeTruthy()
+      expect(callback?.site).toBe('cross-site')
+      expect(callback?.session, 'no session cookie on the cross-site arrival').toBe(false)
+      // … yet the Studio opens straight away, never by way of the sign-in form.
+      expect(hops.map((h) => h.path)).not.toContain('/admin/login')
+      expect(hops.find((h) => h.path === '/admin/dashboard')?.session, 'the Studio request carries the session again').toBe(true)
     }
 
     // A state this browser never issued (no flow cookie).

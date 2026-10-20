@@ -22,6 +22,7 @@ import { orcidAuthenticatedOf } from '../lib/orcid/cv'
 import { connectOrcidInCv, disconnectOrcidInCv, dropStaleOrcidAuth, reconcileOrcidAuth, storedOrcidAuth } from '../lib/orcid/connection'
 import {
   ORCID_CONNECT_REASONS,
+  ORCID_DISCONNECT_CONFIRM_LINE,
   ORCID_SETUP_DOCS_URL,
   orcidConnectLine,
   orcidConnectNotice,
@@ -298,6 +299,7 @@ test('Studio row: without credentials the button is off and says why (with the s
   assert.deepEqual(on, { kind: 'connected', id: ID, at: AT, dirty: false })
   assert.match(orcidConnectLine(on, () => '21 Oct 2026'), /^Authenticated: you signed in to ORCID on 21 Oct 2026\./)
   assert.match(orcidConnectLine({ kind: 'connected', id: ID, at: AT, dirty: true }), /Save or undo your changes to disconnect/)
+  assert.match(ORCID_DISCONNECT_CONFIRM_LINE, /The iD stays on your CV, shown as “\(unauthenticated\)”/)
   // A marker for another iD (left by a raw JSON edit) is not a connection.
   assert.deepEqual(orcidConnectPanel({ status: configured, pi: marked({ orcid: OTHER }), dirty: false }), { kind: 'unauthenticated', hasId: true })
 })

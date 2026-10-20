@@ -191,6 +191,9 @@ export function orcidConnectPanel(input: { status: OrcidConnectStatus | null | '
   return { kind: 'unauthenticated', hasId: typeof raw === 'string' && !!raw.trim() }
 }
 
+/** The line while "Disconnect…" asks to confirm. */
+export const ORCID_DISCONNECT_CONFIRM_LINE = 'Disconnect? The iD stays on your CV, shown as “(unauthenticated)” until you connect again.'
+
 /** The one-line explanation under the iD field for a panel state. */
 export function orcidConnectLine(panel: OrcidConnectPanel, formatDate: (iso: string) => string = (iso) => iso.slice(0, 10)): string {
   switch (panel.kind) {

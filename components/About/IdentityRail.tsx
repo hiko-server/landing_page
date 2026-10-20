@@ -291,14 +291,14 @@ export default function IdentityRail({
         ) : null}
 
         {orcid ? (
-          <Box mt={publicationCount > 0 ? 1 : 3} sx={{ '@media print': { display: 'none' } }}>
+          // The link and, for a typed-in iD, ORCID's "(unauthenticated)" after it share the type size.
+          <Box mt={publicationCount > 0 ? 1 : 3} fontSize="14px" color="page.fg-secondary" sx={{ '@media print': { display: 'none' } }}>
             <OrcidIdLink
               id={orcid}
               authenticated={orcidAuthenticated}
               lang={cvLang}
               iconSize={16}
               minH="32px"
-              fontSize="14px"
               fontWeight={500}
               color="page.fg"
               borderRadius="md"
