@@ -290,8 +290,10 @@ import { filterSlashItems, normalizeLinkHref, rawCodeFence, youtubeId, youtubeTa
 import { headingIndexAt, offsetOfLineColumn, slashTriggerAt } from '../components/Admin/editor/textareaCaret'
 
 test('slash menu: filtering, YouTube ids, link validation and raw snippets', () => {
-  // reading-work added the Note / Tip / Warning callouts and the case-study outline.
-  assert.equal(filterSlashItems('').length, 14)
+  // reading-work added the Note / Tip / Warning callouts and the case-study outline;
+  // the media library (H7) "Image from library".
+  assert.equal(filterSlashItems('').length, 15)
+  assert.equal(filterSlashItems('library')[0].id, 'library')
   assert.equal(filterSlashItems('h2')[0].id, 'h2')
   assert.equal(filterSlashItems('vid')[0].id, 'youtube')
   assert.deepEqual(filterSlashItems('zzzz'), [])

@@ -41,6 +41,7 @@ import { useListKeyboard } from '../shell/useListKeyboard'
 import { useAdminCommands } from '../shell/useAdminCommands'
 import { relativeTime } from '../security/securityFormat'
 import { cssTransition } from '../../../theme/tokens'
+import { FaImages } from 'react-icons/fa'
 import {
   CHECK_LABEL,
   FIX_LABEL,
@@ -752,6 +753,8 @@ export default function ContentHealthPanel() {
                     const rowTabbable = kb.active === -1 ? i === 0 : active
                     const working = busy.has(issue.id)
                     const external = !!issue.url && /^https?:\/\//i.test(issue.url)
+                    // An upload's image issue opens it in the media library (H7): its alt text, sizes, where it is used.
+                    const upload = issue.check.startsWith('image') && issue.url ? /^\/uploads\/([^/?#]+)$/.exec(issue.url)?.[1] : undefined
                     return (
                       <Flex
                         key={issue.id}
@@ -855,7 +858,7 @@ export default function ContentHealthPanel() {
                           ) : null}
                           <VisuallyHidden>(opens the editor)</VisuallyHidden>
                         </Box>
-                        {external || issue.fix ? (
+                        {external || issue.fix || upload ? (
                           <Flex
                             align="flex-start"
                             pt={{ base: 0, sm: 2 }}
@@ -878,6 +881,20 @@ export default function ContentHealthPanel() {
                                 tabIndex={rowTabbable ? 0 : -1}
                                 icon={<ExternalLinkIcon />}
                                 aria-label={`Open ${shortUrl(issue.url as string, 48)} in a new tab`}
+                              />
+                            ) : null}
+                            {upload ? (
+                              <IconButton
+                                as={NextLink}
+                                href={`/admin/media?open=${upload}`}
+                                size="xs"
+                                variant="ghost"
+                                minW="28px"
+                                h="28px"
+                                tabIndex={rowTabbable ? 0 : -1}
+                                icon={<FaImages />}
+                                aria-label="Open in the media library"
+                                title="Open in the media library"
                               />
                             ) : null}
                             {issue.fix ? (

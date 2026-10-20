@@ -1,4 +1,5 @@
 import React, { useEffect, useId, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import {
   Box,
   Button,
@@ -26,8 +27,11 @@ import { cleanFocus, COVER_RECOMMENDED_MIN as COVER_RECOMMENDED, COVER_SHARP_MIN
  * draws it at its own size on a panel instead of stretching it (D2).
  * With `onFocusChange` the preview is the 16:10 crop the site uses, and a
  * click — or the arrow keys on the marker — sets the focal point the crop
- * keeps in view ("x% y%").
+ * keeps in view ("x% y%"). "Library…" picks an uploaded image from the
+ * media library (H7, loaded on demand) with the alt text chosen there.
  */
+
+const MediaPicker = dynamic(() => import('../media/MediaPicker'), { ssr: false })
 
 export type CoverSize = { width: number; height: number }
 
@@ -166,6 +170,7 @@ export default function CoverImageField({
   const toast = useToast()
   const fileRef = useRef<HTMLInputElement>(null)
   const [uploading, setUploading] = useState(false)
+  const [libraryOpen, setLibraryOpen] = useState(false)
   const helpId = useId()
   const autoId = useId()
   const altId = useId()
@@ -243,6 +248,9 @@ export default function CoverImageField({
             >
               Upload…
             </Button>
+            <Button size="xs" {...outlineButtonProps} onClick={() => setLibraryOpen(true)}>
+              Library…
+            </Button>
             {value ? (
               <Button size="xs" variant="ghost" color="page.fg-secondary" onClick={() => onChange('')}>
                 Remove
@@ -265,6 +273,18 @@ export default function CoverImageField({
             </Box>
           ) : null}
           <input ref={fileRef} type="file" accept={UPLOAD_ACCEPT} hidden onChange={onFile} aria-hidden tabIndex={-1} />
+          {libraryOpen ? (
+            <MediaPicker
+              isOpen
+              mode="cover"
+              onClose={() => setLibraryOpen(false)}
+              onPick={(img) => {
+                // The alt chosen in the picker describes this picture; an old cover's alt would not.
+                if (onAltChange && (img.alt || img.url !== value)) onAltChange(img.alt)
+                onChange(img.url)
+              }}
+            />
+          ) : null}
         </Box>
       </Flex>
     </FormControl>

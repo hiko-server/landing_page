@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
+import dynamic from 'next/dynamic'
 import {
   Alert,
   AlertDescription,
@@ -39,6 +40,7 @@ import {
   FaQuoteRight,
   FaLink,
   FaImage,
+  FaImages,
   FaMinus,
   FaUndo,
   FaRedo,
@@ -60,6 +62,8 @@ import { FindReplace } from './editor/findPlugin'
 import { FocusBlock } from './editor/focusBlock'
 import FindReplacePanel from './editor/FindReplacePanel'
 import { scrollCaretToCenter } from './editor/typewriter'
+import { imageMarkdown } from '../../lib/media/view'
+import type { PickedImage } from './media/MediaPicker'
 import {
   planVisualSync,
   sameToolbarState,
@@ -90,7 +94,10 @@ import {
  *
  * Image upload: toolbar, "/image", drag-and-drop and clipboard paste all go
  * to /api/admin/upload-image (resized, WebP variants); the image node keeps
- * the returned width / height. Failures become a toast.
+ * the returned width / height. Failures become a toast. "Insert from the
+ * media library" (toolbar, "/library", the MDX tab) opens the image picker
+ * (media/MediaPicker, loaded on demand) with each image's default alt text
+ * and caption (H7).
  *
  * Imperative handle (`handleRef`): `jumpToLine(line, column)` (opens the MDX
  * tab with the caret on a compile error), `focus()` and `openFind()`.
@@ -117,6 +124,9 @@ export type RichEditorHandle = {
   /** Open find & replace (the selection, when there is one, becomes the query). */
   openFind: () => void
 }
+
+// The media library's picker loads only when it is opened (H7).
+const MediaPicker = dynamic(() => import('./media/MediaPicker'), { ssr: false })
 
 type Props = {
   value: string
@@ -214,10 +224,12 @@ function toolbarStateOf(ed: Editor): ToolbarState {
 const Toolbar = React.memo(function Toolbar({
   editor,
   onPickImage,
+  onPickLibrary,
   onLink,
 }: {
   editor: Editor
   onPickImage: () => void
+  onPickLibrary: () => void
   onLink: () => void
 }) {
   const state = useEditorState({ editor, selector: ({ editor: ed }) => toolbarStateOf(ed), equalityFn: sameToolbarState })
@@ -285,6 +297,7 @@ const Toolbar = React.memo(function Toolbar({
       <Divider />
       <ToolbarButton label="Link (⌘K)" icon={<FaLink size={12} />} onClick={onLink} isActive={state.link} />
       <ToolbarButton label="Insert image" icon={<FaImage size={12} />} onClick={onPickImage} />
+      <ToolbarButton label="Insert from the media library" icon={<FaImages size={12} />} onClick={onPickLibrary} />
       <Divider />
       <ToolbarButton label="Undo (⌘Z)" icon={<FaUndo size={12} />} onClick={() => editor.chain().focus().undo().run()} isDisabled={!state.canUndo} />
       <ToolbarButton
@@ -463,6 +476,7 @@ export default function RichEditor({
   }
   const slashExtension = useMemo(() => createSlashCommand(bridge), [])
   const pendingImageInsert = useRef<number | null>(null)
+  const [libraryOpen, setLibraryOpen] = useState(false)
 
   // ── Find & replace (H3) ─────────────────────────────────────────────────
   const [find, setFind] = useState<{ key: number; query: string } | null>(null)
@@ -638,6 +652,7 @@ export default function RichEditor({
   }
 
   const onPickImage = useCallback(() => fileInputRef.current?.click(), [])
+  const onPickLibrary = useCallback(() => setLibraryOpen(true), [])
   const openLink = useCallback(() => {
     if (!editor) return
     editor.commands.focus()
@@ -679,6 +694,27 @@ export default function RichEditor({
         insertRaw(at, end, `${markdownLink(alt, img.url).replace(/^\[/, '![')}|`, true)
       } else if (editor) {
         editor.chain().focus().setImage({ src: img.url, alt, width: img.width ?? undefined, height: img.height ?? undefined }).run()
+      }
+      pendingImageInsert.current = null
+    },
+    [editor, insertRaw],
+  )
+
+  /** An image from the media library, with the alt text and caption chosen in the picker. */
+  const insertFromLibrary = useCallback(
+    (img: PickedImage) => {
+      if (tabRef.current === RAW) {
+        const ta = mdxRef.current
+        const cur = valueRef.current
+        const at = pendingImageInsert.current ?? (ta ? ta.selectionStart : cur.length)
+        const end = pendingImageInsert.current ?? (ta ? ta.selectionEnd : cur.length)
+        insertRaw(at, end, `${imageMarkdown(img.url, img.alt, img.caption)}|`, true)
+      } else if (editor) {
+        editor
+          .chain()
+          .focus()
+          .setImage({ src: img.url, alt: img.alt || undefined, title: img.caption || undefined, width: img.width ?? undefined, height: img.height ?? undefined })
+          .run()
       }
       pendingImageInsert.current = null
     },
@@ -755,11 +791,12 @@ export default function RichEditor({
         const to = range ? range.to : from
         rawInsertAt.current = null
         if (result.kind === 'block') {
-          if (result.id === 'image') {
+          if (result.id === 'image' || result.id === 'library') {
             const cur = valueRef.current
             emit(cur.slice(0, from) + cur.slice(to))
             pendingImageInsert.current = from
-            onPickImage()
+            if (result.id === 'library') onPickLibrary()
+            else onPickImage()
             return
           }
           insertRaw(from, to, rawSnippet(result.id), true)
@@ -794,6 +831,10 @@ export default function RichEditor({
           case 'image':
             chain().run()
             onPickImage()
+            break
+          case 'library':
+            chain().run()
+            onPickLibrary()
             break
           case 'note':
           case 'tip':
@@ -834,7 +875,7 @@ export default function RichEditor({
           .run()
       }
     },
-    [slash, editor, emit, insertRaw, onPickImage],
+    [slash, editor, emit, insertRaw, onPickImage, onPickLibrary],
   )
 
   // Raw textarea: "/" trigger detection, keyboard forwarding, heading tracking.
@@ -952,7 +993,7 @@ export default function RichEditor({
         <TabPanels>
           <TabPanel p={0}>
             <Box border="1px solid" borderColor="page.border-strong" borderRadius="lg" bg="page.bg">
-              {editor ? <Toolbar editor={editor} onPickImage={onPickImage} onLink={openLink} /> : null}
+              {editor ? <Toolbar editor={editor} onPickImage={onPickImage} onPickLibrary={onPickLibrary} onLink={openLink} /> : null}
               <Box
                 px={4}
                 py={3}
@@ -1059,6 +1100,9 @@ export default function RichEditor({
               <Button size="xs" {...outlineButtonProps} onClick={onPickImage}>
                 Upload image → insert ![]()
               </Button>
+              <Button size="xs" {...outlineButtonProps} onClick={onPickLibrary}>
+                Insert from library…
+              </Button>
               <Text fontSize="11px" color="page.fg-secondary" fontFamily={MONO}>
                 Raw MDX — JSX components, tables and footnotes are safe here. Type / for blocks.
               </Text>
@@ -1080,6 +1124,17 @@ export default function RichEditor({
       />
 
       <input ref={fileInputRef} type="file" accept={UPLOAD_ACCEPT} hidden onChange={onFileSelected} aria-hidden tabIndex={-1} />
+
+      {libraryOpen ? (
+        <MediaPicker
+          isOpen
+          onClose={() => {
+            setLibraryOpen(false)
+            pendingImageInsert.current = null
+          }}
+          onPick={insertFromLibrary}
+        />
+      ) : null}
 
       <AlertDialog isOpen={confirmVisual} leastDestructiveRef={cancelRef} onClose={() => setConfirmVisual(false)} isCentered>
         <AlertDialogOverlay>

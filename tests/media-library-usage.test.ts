@@ -22,6 +22,7 @@ import {
   usedInCount,
 } from '../lib/media/view'
 import type { MediaItem, MediaUsage } from '../lib/media/types'
+import { nextRunnable, nextWakeUp, queueHeading, summarize, waitLabel, type QueueItem } from '../components/Admin/media/uploadQueue'
 
 /**
  * H7 — the media library's pure parts: where content refers to uploads,
@@ -320,4 +321,21 @@ test('H7 fill in alt: covers without a real alt; the language picks the text', (
   assert.equal(altForLang('zh-Hans', meta), '书桌')
   assert.equal(altForLang('zh-Hant', { alt: 'A desk', altZh: '' }), '')
   assert.equal(altForLang('ja', meta), '')
+})
+
+test('H7 upload queue: one at a time, waiting rows resume on time, honest headings', () => {
+  const row = (id: string, status: QueueItem['status'], until?: number): QueueItem => ({ id, fileName: `${id}.png`, size: 1, preview: null, status, until })
+  const now = 1_000_000
+  assert.equal(nextRunnable([row('a', 'done'), row('b', 'queued'), row('c', 'queued')], now)?.id, 'b')
+  assert.equal(nextRunnable([row('a', 'waiting', now + 5000), row('b', 'error')], now), null)
+  assert.equal(nextRunnable([row('a', 'waiting', now - 1)], now)?.id, 'a')
+  assert.equal(nextWakeUp([row('a', 'waiting', now + 9000), row('b', 'waiting', now + 3000), row('c', 'done')]), now + 3000)
+  assert.equal(nextWakeUp([row('a', 'done')]), null)
+  const busy = summarize([row('a', 'done'), row('b', 'uploading'), row('c', 'queued')])
+  assert.deepEqual(busy, { total: 3, done: 1, failed: 0, active: true, waiting: false })
+  assert.equal(queueHeading(busy), 'Uploading 2 of 3')
+  assert.equal(queueHeading(summarize([row('a', 'waiting', now + 1)])), 'Waiting to continue…')
+  assert.equal(queueHeading(summarize([row('a', 'done'), row('b', 'error')])), '1 uploaded · 1 failed')
+  assert.equal(waitLabel(now + 12_400, now), 'continues in 13 s')
+  assert.equal(waitLabel(now + 125_000, now), 'continues in 3 min')
 })
