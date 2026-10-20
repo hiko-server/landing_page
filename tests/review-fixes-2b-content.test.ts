@@ -4,6 +4,9 @@
  *   - CORR-3: a Draft Mode preview of a pending revision computes the
  *     language switch from the PREVIEWED frontmatter (its translationKey),
  *     not from the live item's;
+ *   - CORR-4: after a slug rename the Markdown twin of the old address
+ *     (/blog/<old>.md, /work/<old>.md → GET /api/md) answers 308 to the twin
+ *     at the new address, like the HTML page — not 404.
  */
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
@@ -67,4 +70,77 @@ test('CORR-3: previewing a pending translationKey change shows the switch it wil
   } finally {
     pending.deletePendingRevision('blog', 'en-a')
   }
+})
+
+type MockRes = { statusCode: number; headers: Record<string, string>; body: string | undefined }
+
+/** GET|HEAD /api/md as the rewrite of /<collection>/<slug>.md calls it. */
+async function md(collection: string, slug: string, method = 'GET'): Promise<MockRes> {
+  const handler = (await import('../pages/api/md')).default
+  const out: MockRes = { statusCode: 200, headers: {}, body: undefined }
+  const res: any = {
+    get statusCode() {
+      return out.statusCode
+    },
+    set statusCode(c: number) {
+      out.statusCode = c
+    },
+    status(c: number) {
+      out.statusCode = c
+      return res
+    },
+    setHeader(k: string, v: unknown) {
+      out.headers[k.toLowerCase()] = String(v)
+      return res
+    },
+    getHeader: (k: string) => out.headers[k.toLowerCase()],
+    json(b: unknown) {
+      out.body = JSON.stringify(b)
+      return res
+    },
+    end(b?: Buffer | string) {
+      if (b !== undefined) out.body = Buffer.isBuffer(b) ? b.toString('utf8') : b
+      return res
+    },
+  }
+  await handler({ method, query: { collection, slug }, headers: {}, url: '/api/md', socket: {} } as never, res)
+  return out
+}
+
+test('CORR-4: a renamed post\'s and case study\'s old .md address answers 308 to the twin at the new address, as long as the item renders there', async () => {
+  const { renameSlug } = await import('../lib/slugRename')
+  const { missingItemProps } = await import('../lib/redirects')
+  await store.putItem('blog', 'twin-old', { title: 'A post that moves', date: '2026-06-01' }, en)
+  await store.putItem('work', 'case-old', { title: 'A case study that moves' }, en)
+  assert.equal((await md('blog', 'twin-old')).statusCode, 200)
+
+  for (const [collection, from, to] of [['blog', 'twin-old', 'twin-new'], ['work', 'case-old', 'case-new']] as const) {
+    const out = await renameSlug({ collection, from, to, redirect: true })
+    assert.equal(out.ok, true, JSON.stringify(out))
+    const old = await md(collection, from)
+    assert.equal(old.statusCode, 308, `${collection}: the old twin redirects`)
+    assert.equal(old.headers.location, `/${collection}/${to}.md`)
+    assert.equal(old.headers['cache-control'], 'public, max-age=0, s-maxage=60', 're-checked every minute, like the page')
+    assert.equal(old.headers['x-robots-tag'], 'noindex')
+    const head = await md(collection, from, 'HEAD')
+    assert.equal(head.statusCode, 308)
+    assert.equal(head.body, undefined)
+    // The HTML page answers the same way (lib/redirects missingItemProps).
+    assert.deepEqual(missingItemProps(collection, from), { redirect: { destination: `/${collection}/${to}`, permanent: true }, revalidate: 60 })
+    const now = await md(collection, to)
+    assert.equal(now.statusCode, 200)
+    assert.ok(now.body?.startsWith('# A '))
+  }
+
+  // The item no longer renders at the new address (unpublished): no redirect to it.
+  const moved = store.getItem('blog', 'twin-new')!
+  await store.putItem('blog', 'twin-new', { ...moved.frontmatter, draft: true }, moved.body)
+  assert.equal((await md('blog', 'twin-old')).statusCode, 404)
+  assert.ok('notFound' in missingItemProps('blog', 'twin-old'))
+
+  // A rename without keeping the old address: 404.
+  await store.putItem('blog', 'twin-plain', { title: 'Renamed without a redirect', date: '2026-06-02' }, en)
+  assert.equal((await renameSlug({ collection: 'blog', from: 'twin-plain', to: 'twin-plain-2', redirect: false })).ok, true)
+  assert.equal((await md('blog', 'twin-plain')).statusCode, 404)
+  assert.equal((await md('blog', 'nothing-here')).statusCode, 404)
 })

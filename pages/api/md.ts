@@ -4,7 +4,8 @@ import { withApi } from '../../lib/apiHandler'
 import { sendNotModified, sendVersionedBody } from '../../lib/http'
 import { absUrl } from '../../lib/schema'
 import { loadMarkdownTwin } from '../../lib/llms'
-import { MARKDOWN_CACHE_CONTROL } from '../../lib/markdownTwinPaths'
+import { MARKDOWN_CACHE_CONTROL, markdownTwinPath } from '../../lib/markdownTwinPaths'
+import { liveRedirectTarget } from '../../lib/redirects'
 
 /**
  * GET|HEAD /api/md?collection=blog|work&slug=<slug> — the Markdown twin of
@@ -12,6 +13,8 @@ import { MARKDOWN_CACHE_CONTROL } from '../../lib/markdownTwinPaths'
  * rewrites): /blog/<slug>.md and /work/<slug>.md.
  *
  *   - published items only: a draft, an unknown or a malformed slug is a 404;
+ *   - a renamed item's old address answers 308 to the twin at its current
+ *     address, like its HTML page (lib/redirects, H6);
  *   - `Link: <…/blog/<slug>>; rel="canonical"` and `X-Robots-Tag: noindex`:
  *     the HTML page stays the one search engines index;
  *   - `Content-Language` is the piece's language;
@@ -30,9 +33,17 @@ export default withApi('md', async (req: NextApiRequest, res: NextApiResponse) =
 
   const twin = loadMarkdownTwin(collection, slug)
   if (!twin) {
+    // Re-checked every minute at the edge, like the pages (a removed redirect or a restored item takes effect).
     res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=60')
     res.setHeader('Content-Type', 'text/plain; charset=utf-8')
     res.setHeader('X-Robots-Tag', 'noindex')
+    const target = liveRedirectTarget(collection, slug)
+    if (target) {
+      const location = markdownTwinPath(`/${collection}/${target}`)
+      res.setHeader('Location', location)
+      res.statusCode = 308
+      return res.end(req.method === 'HEAD' ? undefined : `Moved permanently: ${location}\n`)
+    }
     res.statusCode = 404
     return res.end(req.method === 'HEAD' ? undefined : 'Not found\n')
   }

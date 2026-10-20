@@ -139,19 +139,27 @@ function rendersAt(collection: RedirectCollection, slug: string, includeDrafts: 
 }
 
 /**
+ * Where a renamed post's / case study's old slug leads now — its current
+ * slug, when the item renders there (drafts too in Draft Mode) — or null.
+ */
+export function liveRedirectTarget(collection: RedirectCollection, slug: string, draftMode = false): string | null {
+  const target = redirectTarget(collection, slug)
+  return target && rendersAt(collection, target, draftMode) ? target : null
+}
+
+/**
  * getStaticProps' answer for a post / case-study slug that has no item: a
  * permanent (308) redirect to the item's current address when the slug was
  * renamed and the item renders there, else 404. Both re-checked every
- * minute (a removed redirect or a restored item takes effect).
+ * minute (a removed redirect or a restored item takes effect). The
+ * Markdown twins (/blog/<old>.md, pages/api/md.ts) follow the same rule.
  */
 export function missingItemProps(
   collection: RedirectCollection,
   slug: string,
   draftMode = false,
 ): { redirect: { destination: string; permanent: true }; revalidate: number } | { notFound: true; revalidate: number } {
-  const target = redirectTarget(collection, slug)
-  if (target && rendersAt(collection, target, draftMode)) {
-    return { redirect: { destination: `/${collection}/${target}`, permanent: true }, revalidate: 60 }
-  }
+  const target = liveRedirectTarget(collection, slug, draftMode)
+  if (target) return { redirect: { destination: `/${collection}/${target}`, permanent: true }, revalidate: 60 }
   return { notFound: true, revalidate: 60 }
 }
