@@ -136,9 +136,11 @@ test('saves keep the stored schedule — never the client’s — and end it whe
   // Unpublished by hand: everything ends.
   const liveRow = { title: 'L', unpublishAt: iso(T) }
   assert.deepEqual(carryScheduleOnSave({ target: 'live', live: liveRow, pending: null, incoming: { title: 'L', draft: true }, now }), { title: 'L', draft: true })
-  // A live save keeps a future unpublish, drops a past one.
+  // A live save keeps the unpublish — a past one too: the scheduler has not taken the item down yet (CORR-2).
   assert.deepEqual(carryScheduleOnSave({ target: 'live', live: liveRow, pending: null, incoming: { title: 'L' }, now }), { title: 'L', unpublishAt: iso(T) })
-  assert.deepEqual(carryScheduleOnSave({ target: 'live', live: liveRow, pending: null, incoming: { title: 'L' }, now: T + 1 }), { title: 'L' })
+  assert.deepEqual(carryScheduleOnSave({ target: 'live', live: liveRow, pending: null, incoming: { title: 'L' }, now: T + 1 }), { title: 'L', unpublishAt: iso(T) })
+  // Published by hand after its window ended: the passed end goes, or it would come straight down.
+  assert.deepEqual(carryScheduleOnSave({ target: 'live', live: draftRow, pending: null, incoming: { title: 'D' }, now: T + 8 * 86_400_000 }), { title: 'D' })
   // Pending saves keep the changes' publish time.
   assert.deepEqual(carryScheduleOnSave({ target: 'pending', live: liveRow, pending: { title: 'old', publishAt: iso(T) }, incoming: { title: 'new', unpublishAt: iso(T) }, now }), {
     title: 'new',

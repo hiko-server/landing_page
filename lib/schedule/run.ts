@@ -20,15 +20,22 @@ import { formatSiteTime, parseInstant, relativeInstant } from './time'
  *                    the stored revision: it is re-read after its body was
  *                    checked, then written and dropped in ONE transaction,
  *                    only while it is still that version
- *   unpublish        a live item goes back to draft (its pending revision
- *                    keeps its content but loses its publish time)
+ *   unpublish        a live item goes back to draft; like an unpublish by
+ *                    hand, its pending revision (if any) becomes the draft's
+ *                    content and is dropped in the same transaction — a
+ *                    draft never holds one, so the editor, a later scheduled
+ *                    publish and a review link all read the same row (the
+ *                    formerly live version is in the history)
  *
  * Idempotent: every action re-reads the item and checks that it is still
  * due before it writes, and the write removes the time it acted on, so a
  * second pass (or a pass after a restart) finds nothing to do. Missed slots
  * are caught up: anything due in the past runs on the next pass. A draft
  * whose whole window passed while the site was down is not published (its
- * times are cleared and the log says so); a body that no longer renders is
+ * times are cleared and the log says so); likewise a live item's scheduled
+ * changes whose item was due to come down too are not published for a
+ * moment — the log says so, and the unpublish (which keeps them as the
+ * draft) still runs; a body that no longer renders is
  * not published either (cleared and logged — a page must never break). One
  * pass at a time per process (ScheduleBusyError).
  */
@@ -211,12 +218,43 @@ async function runOne(entry: ScheduledEntry, deps: RunDeps, now: () => number): 
     const title = titleOf(live?.frontmatter ?? rev.frontmatter, slug)
     const lateMs = Math.max(0, t - at)
     if (!live || live.frontmatter?.draft) {
-      putPendingRevision(c, slug, withoutSchedule(rev.frontmatter), rev.body, rev.baseUpdatedAt)
+      let snapshots: AuditScope['snapshots'] = []
+      if (live) {
+        // A draft never holds a pending revision: the changes become the draft (its own schedule stays).
+        const own = itemSchedule(live.frontmatter, null)
+        const fm = withSchedule({ ...withoutSchedule(rev.frontmatter), draft: true }, { publishAt: own.publishAt, unpublishAt: own.unpublishAt })
+        snapshots = await replaceWithRevision(c, slug, live, fm, rev)
+      } else {
+        putPendingRevision(c, slug, withoutSchedule(rev.frontmatter), rev.body, rev.baseUpdatedAt)
+      }
       deps.record(
-        { action: `${area}.schedule-skipped`, area, target: slug, summary: `Did not publish the scheduled changes to ${noun} ${quote(title)}: it is no longer live (the changes are kept)` },
-        [],
+        {
+          action: `${area}.schedule-skipped`,
+          area,
+          target: slug,
+          summary: `Did not publish the scheduled changes to ${noun} ${quote(title)}: it is no longer live (the changes are kept${live ? ' as its draft' : ''})`,
+        },
+        snapshots,
       )
       return { ...base, title, outcome: 'not-live', lateMs }
+    }
+    const end = parseInstant(live.frontmatter?.[UNPUBLISH_AT])
+    if (end !== null && end <= t) {
+      // The changes' time and the item's end both passed before this pass ran (the server was
+      // down, or the scheduler was backing off). Like a draft's missed window, the changes do not
+      // go live for a moment: their time is cleared and the unpublish — due in this pass, or
+      // right after it — takes the item down with them as its draft.
+      putPendingRevision(c, slug, withoutSchedule(rev.frontmatter), rev.body, rev.baseUpdatedAt)
+      deps.record(
+        {
+          action: `${area}.schedule-missed`,
+          area,
+          target: slug,
+          summary: `Did not publish the scheduled changes to ${noun} ${quote(title)} (due ${formatSiteTime(at, { year: false })}): its unpublish time (${formatSiteTime(end, { year: false })}) passed too while the site was not running. It is unpublished as scheduled, with the changes as its draft`,
+        },
+        [],
+      )
+      return { ...base, title, outcome: 'missed', lateMs }
     }
     if (checked.invalid) {
       putPendingRevision(c, slug, withoutSchedule(rev.frontmatter), rev.body, rev.baseUpdatedAt)
@@ -231,8 +269,7 @@ async function runOne(entry: ScheduledEntry, deps: RunDeps, now: () => number): 
       )
       return { ...base, title, outcome: 'invalid', lateMs, error: checked.invalid }
     }
-    const end = parseInstant(live.frontmatter?.[UNPUBLISH_AT])
-    const fm = withSchedule(rev.frontmatter, { unpublishAt: end !== null && end > t ? end : null })
+    const fm = withSchedule(rev.frontmatter, { unpublishAt: end })
     delete fm.draft
     const version = rev.updatedAt
     const scope: AuditScope = { snapshots: [] }
@@ -266,20 +303,47 @@ async function runOne(entry: ScheduledEntry, deps: RunDeps, now: () => number): 
   const end = live ? parseInstant(live.frontmatter?.[UNPUBLISH_AT]) : null
   if (!live || live.frontmatter?.draft || end === null || end > t) return stale()
   const title = titleOf(live.frontmatter, slug)
-  const fm = { ...withoutSchedule(live.frontmatter), draft: true }
+  // Like an unpublish by hand (the editor saves what it shows as the draft): saved but
+  // unpublished changes become the draft's content, so a later publish shows what the editor shows.
+  const rev = getPendingRevision(c, slug)
+  const snapshots = rev
+    ? await replaceWithRevision(c, slug, live, { ...withoutSchedule(rev.frontmatter), draft: true }, rev)
+    : await replaceWithRevision(c, slug, live, { ...withoutSchedule(live.frontmatter), draft: true }, null)
+  await deps.refresh(c, slug, [live.frontmatter?.translationKey])
+  deps.record(
+    {
+      action: `${area}.unpublish`,
+      area,
+      target: slug,
+      summary: `Unpublished ${noun} ${quote(title)} on schedule${lateNote(end, t)}${rev ? ' (its unpublished changes are now the draft)' : ''}`,
+    },
+    snapshots,
+  )
+  return { ...base, title, outcome: 'unpublished', lateMs: Math.max(0, t - end) }
+}
+
+/**
+ * Write the item's row as `fm` with the revision's body (or its own body
+ * when `rev` is null) and drop that revision in the same transaction — only
+ * while it is still the version read, else nothing is written (the next
+ * pass tries again). writeOne snapshots the row it replaces first.
+ */
+async function replaceWithRevision(
+  c: Collection,
+  slug: string,
+  row: ItemRecord,
+  fm: Record<string, any>,
+  rev: PendingRevision | null,
+): Promise<AuditScope['snapshots']> {
   const scope: AuditScope = { snapshots: [] }
   const out = await runInAuditScope(scope, () =>
-    writeOne(c, slug, fm, live.body, {
-      minUpdatedAt: Math.trunc(live.updated_at) + 1,
+    writeOne(c, slug, fm, rev ? rev.body : row.body, {
+      minUpdatedAt: Math.trunc(row.updated_at) + 1,
       inTransaction: () => {
-        // Changes scheduled for a live item cannot go live once it is a draft: keep them, drop their time.
-        const rev = getPendingRevision(c, slug)
-        if (rev && rev.frontmatter[PUBLISH_AT] !== undefined) putPendingRevision(c, slug, withoutSchedule(rev.frontmatter), rev.body, rev.baseUpdatedAt)
+        if (rev && !deletePendingRevisionVersion(c, slug, rev.updatedAt)) throw new Error('the unpublished changes changed while the item was being updated')
       },
     }),
   )
   if (!out.ok) throw new Error(out.error)
-  await deps.refresh(c, slug, [live.frontmatter?.translationKey])
-  deps.record({ action: `${area}.unpublish`, area, target: slug, summary: `Unpublished ${noun} ${quote(title)} on schedule${lateNote(end, t)}` }, scope.snapshots)
-  return { ...base, title, outcome: 'unpublished', lateMs: Math.max(0, t - end) }
+  return scope.snapshots
 }

@@ -23,6 +23,16 @@ Fixes for defects the final review found in the final batch before it shipped.
   /admin/about?lang=zh and /zh/about (not dead /about-zh links), replace and
   fill-in refresh /zh/about, and the Chinese bio gets the Chinese default
   alt even when its text is mostly English.
+- **Scheduled publishing catch-up (CORR-2)**: when scheduled changes and the
+  item's unpublish time both passed while the server was down, the item now
+  still comes down (with the changes kept as its draft) and the log says
+  the changes were not published; before, the end time was dropped and the
+  item stayed public with nothing logged. A live save made after the end
+  time no longer cancels it.
+- **Scheduled unpublish keeps what the editor shows (CORR-3)**: like an
+  unpublish by hand, saved but unpublished changes become the draft, so a
+  later scheduled publish (or a review link) shows them instead of the
+  older version.
 - **Container gate (OPS-1)**: every end-to-end test is its own client (a
   TEST-NET address in cf-connecting-ip), so the full suite against one
   server no longer runs out of per-client budgets (post saves, contact
