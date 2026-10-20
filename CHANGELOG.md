@@ -968,7 +968,10 @@ Fixes for defects an adversarial review found in wave 2B before it shipped.
   unified frame (errors and loading toasts stay until dismissed, the timer
   pauses on hover, focus and a hidden tab, errors are alerts); frame and
   host load together, outside the first-load JS, and a toast raised before
-  they have loaded appears once, already in its final frame.
+  they have loaded appears once, already in its final frame. Toasts also
+  became visible again: the host rendered outside the app's LazyMotion, so
+  every toast stayed at opacity 0; it now brings its own LazyMotion and
+  honours reduced motion.
 - **Keyboard focus on touch screens (CORR-2)**: the hover guard moved whole
   selector lists behind `@media (hover:hover)`, taking the `:focus-visible`
   / `:focus-within` reveals written beside a `:hover` with them — hints on
@@ -1006,9 +1009,10 @@ Fixes for defects an adversarial review found in wave 2B before it shipped.
 - **CV Studio preview**: the A4 preview links a project's case study only
   when /cv does (a published one), so it no longer shows — and prefetches —
   a link to a case study that does not exist.
-- **Admin lists**: j / k from the page body move through the admin lists
-  again (Content health, posts); the visitor keyboard layer had been taking
-  the keys first.
+- **Admin keyboard**: j / k from the page body move through the admin lists
+  again (Content health, posts) — the visitor keyboard layer had been taking
+  the keys first — and a "G" pressed while a page changes still starts a
+  "G then …" chord.
 - **End-to-end suite**: admin clean-ups now really delete what the tests
   created when the suite runs over plain http.
 
