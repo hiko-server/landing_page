@@ -40,7 +40,7 @@ async function createPost(page: Page, slug: string, frontmatter: Record<string, 
   const out = await adminFetch(page, 'PUT', '/api/admin/posts', {
     slug,
     create: true,
-    frontmatter: { date: today(), description: 'Created by the admin-editorial end-to-end suite; deleted afterwards.', ...frontmatter },
+    frontmatter: { date: today(), description: 'Created by the admin-editorial end-to-end suite to exercise the editorial tools; deleted afterwards.', ...frontmatter },
     body,
   })
   expect(out.status, out.text).toBe(200)
@@ -167,7 +167,8 @@ test.describe('admin-editorial', { tag: '@admin' }, () => {
   test('Search & sharing previews the Google result and the real signed card; WeChat is shown honestly @admin', async ({ page }) => {
     await loginAsAdmin(page)
     const slug = `e2e-seo-${Date.now()}`
-    await createPost(page, slug, { title: 'E2E search and sharing', draft: true, tags: ['E2E'] }, 'An opening paragraph long enough to be the summary that link previews show under the title of this post.\n')
+    // A description under 70 characters: the page (and so the preview) sends the first paragraph instead.
+    await createPost(page, slug, { title: 'E2E search and sharing', draft: true, tags: ['E2E'], description: 'Too short.' }, 'An opening paragraph long enough to be the summary that link previews show under the title of this post.\n')
     try {
       await page.goto(`/admin/blog/edit?slug=${slug}`)
       const section = page.locator('#item-seo')
@@ -179,6 +180,7 @@ test.describe('admin-editorial', { tag: '@admin' }, () => {
       await seoTitle.fill('A shorter title for search results')
       await expect(section.getByTestId('serp-title')).toHaveText('A shorter title for search results · Li Yanpei')
       await expect(section.getByTestId('serp-description')).toContainText('An opening paragraph long enough')
+      await expect(section).toContainText('under 70, so the page sends the first paragraph instead')
       // The card is the real /api/og image, signed for the unsaved state.
       const card = section.locator('img[src^="/api/og?"]').first()
       await expect(card).toBeVisible({ timeout: 15_000 })
