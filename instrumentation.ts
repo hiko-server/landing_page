@@ -10,8 +10,10 @@
 //     weekly restore drill (lib/restoreDrill), the nightly expiry of
 //     contact messages (lib/inboxRetention) and the daily external-link check
 //     of the content health center (lib/contentHealth/schedule) and the
-//     daily roll-up / retention of goal events (lib/analytics/events) — never
-//     during `next build`, and only once per process;
+//     daily roll-up / retention of goal events (lib/analytics/events) and
+//     scheduled publishing (lib/schedule/scheduler: due drafts, pending
+//     changes and unpublishes, caught up at boot) — never during
+//     `next build`, and only once per process;
 //   - warns in the log when mail would be sent From a domain whose DMARC
 //     policy the SMTP account cannot pass (lib/mailAlignment);
 //   - adds `Cache-Control: no-transform` to HTML documents
@@ -36,6 +38,7 @@ type InstrumentationGlobal = typeof globalThis & {
   __inboxRetentionStarted?: boolean
   __contentHealthScheduleStarted?: boolean
   __eventsMaintenanceStarted?: boolean
+  __publishSchedulerStarted?: boolean
 }
 
 export async function register() {
@@ -113,6 +116,18 @@ export async function register() {
       } catch (err) {
         const { log } = await import('./lib/log')
         log.error('could not start the goal-event retention', { err })
+      }
+    }
+    if (!building && !g.__publishSchedulerStarted) {
+      // Scheduled publishing (H5): the schedule lives in the content store, so
+      // the first check after boot catches up every slot missed while down.
+      g.__publishSchedulerStarted = true
+      try {
+        const { startPublishScheduler } = await import('./lib/schedule/scheduler')
+        startPublishScheduler()
+      } catch (err) {
+        const { log } = await import('./lib/log')
+        log.error('could not start scheduled publishing', { err })
       }
     }
     if (!building) {

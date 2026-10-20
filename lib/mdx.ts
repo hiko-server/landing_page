@@ -28,6 +28,7 @@ import { classList, isElement, textOf, walk, type HastNode } from './rehype/hast
 import { clampAtBoundary } from './schema'
 import { cleanGlanceFields, type WorkLink, type WorkOutcome } from './caseStudy'
 import { normalizeTranslationKey } from './translations'
+import { withoutSchedule } from './schedule/fields'
 
 /**
  * MDX content loader (content store first, content/*.mdx as the seed — see
@@ -374,7 +375,8 @@ function cleanFrontmatter<T extends { title: string; description?: string; seoTi
   const seo = trimmed(fm.seoTitle)
   if (seo) out.seoTitle = seo.slice(0, 60)
   else delete out.seoTitle
-  return out
+  // When an item publishes or unpublishes (H5, lib/schedule) is admin metadata, never page data.
+  return withoutSchedule(out)
 }
 
 function langOf(frontmatter: { lang?: unknown; title?: unknown }, body: string): string {

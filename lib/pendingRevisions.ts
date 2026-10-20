@@ -109,6 +109,19 @@ export function deletePendingRevision(collection: 'blog' | 'work', slug: string)
 }
 
 /**
+ * Drop the pending revision only while it is still version `updatedAt` —
+ * the one a scheduled publish (H5, lib/schedule/run) just made live. A
+ * revision saved after it was read stays. True when it was dropped.
+ */
+export function deletePendingRevisionVersion(collection: 'blog' | 'work', slug: string, updatedAt: number): boolean {
+  return (
+    getDb()
+      .prepare('DELETE FROM pending_revisions WHERE collection = ? AND slug = ? AND updated_at = ?')
+      .run(collection, slug, Math.trunc(updatedAt)).changes > 0
+  )
+}
+
+/**
  * The base a pending revision keeps after its live item was rewritten by a
  * tool (a rename, link rewrite or tag change) from version `liveBefore` to
  * `liveAfter`: the new live version when the revision was based on the old

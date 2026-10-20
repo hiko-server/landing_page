@@ -12,6 +12,8 @@
  * targets are slugs, page names, snapshot dates, host names and counts.
  */
 
+import { formatSiteTime, parseInstant } from '../schedule/time'
+
 export const AUDIT_AREAS = [
   'post',
   'work',
@@ -69,7 +71,7 @@ export type AuditRequest = {
 
 /** Facts read from the store before the write runs (lib/audit/capture.ts). */
 export type AuditFacts = {
-  /** Posts / case studies: whether the item exists and is a draft right now (null = no such item). */
+  /** Posts / case studies (a save, or a schedule change): whether the item exists and is a draft right now (null = no such item). */
   existingDraft?: boolean | null
 }
 
@@ -132,7 +134,28 @@ function collectionWrite(area: 'post' | 'work', req: AuditRequest, facts: AuditF
     const slug = slugOf(first(req.query.slug))
     return slug ? { action: `${area}.delete`, area, target: slug, summary: `Deleted ${noun} ${quote(slug)}` } : null
   }
+  if (req.method === 'POST') return scheduleWrite(area, req, facts)
   return null
+}
+
+/** POST { action: 'schedule' } (H5): setting or clearing when an item publishes / unpublishes. */
+function scheduleWrite(area: 'post' | 'work', req: AuditRequest, facts: AuditFacts): AuditDescription | null {
+  const noun = COLLECTION_NOUN[area]
+  const b = obj(req.body)
+  if (str(b.action) !== 'schedule') return null
+  const slug = slugOf(b.slug)
+  if (!slug) return null
+  const publishAt = parseInstant(b.publishAt)
+  const unpublishAt = parseInstant(b.unpublishAt)
+  if (publishAt === null && unpublishAt === null) {
+    return { action: `${area}.unschedule`, area, target: slug, summary: `Cleared the schedule of ${noun} ${quote(slug)}` }
+  }
+  const parts: string[] = []
+  if (publishAt !== null) {
+    parts.push(facts.existingDraft === false ? `its changes to go live ${formatSiteTime(publishAt)}` : `to publish ${formatSiteTime(publishAt)}`)
+  }
+  if (unpublishAt !== null) parts.push(`to unpublish ${formatSiteTime(unpublishAt)}`)
+  return { action: `${area}.schedule`, area, target: slug, summary: `Scheduled ${noun} ${quote(slug)} ${parts.join(' and ')}` }
 }
 
 function versionsWrite(req: AuditRequest): AuditDescription | null {

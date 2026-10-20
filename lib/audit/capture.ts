@@ -29,8 +29,11 @@ export type AuditCapture = {
 }
 
 function factsFor(route: string, req: NextApiRequest): AuditFacts {
-  if (req.method !== 'PUT' || (route !== 'admin/posts' && route !== 'admin/work')) return {}
-  const slug = (req.body as { slug?: unknown } | undefined)?.slug
+  if (route !== 'admin/posts' && route !== 'admin/work') return {}
+  const body = req.body as { slug?: unknown; action?: unknown } | undefined
+  // A save, or a schedule change (H5: "to publish" for a draft, "its changes" for a live item).
+  if (req.method !== 'PUT' && !(req.method === 'POST' && body?.action === 'schedule')) return {}
+  const slug = body?.slug
   if (typeof slug !== 'string' || !slug) return {}
   const item = getItem(route === 'admin/posts' ? 'blog' : 'work', slug)
   return { existingDraft: item ? !!item.frontmatter?.draft : null }

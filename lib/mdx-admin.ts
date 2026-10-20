@@ -24,12 +24,16 @@ import {
   jsonSafeFrontmatter,
   kvEtag,
   ifMatchAllows,
+  type PutItemOptions,
   type StoreError,
 } from './contentStore'
 import { deletePendingRevision, getPendingRevision, pendingRevisionIndex, putPendingRevision } from './pendingRevisions'
 import { forgetRedirectFrom, redirectsTo, removeRedirect } from './redirects'
 import { planRename, renameSlug } from './slugRename'
 import { emitEditorialEvent } from './editorialEvents'
+import { carryScheduleOnSave, itemSchedule, parseScheduleBody, withoutSchedule } from './schedule/fields'
+import { applySchedule, collectionSchedules } from './schedule/store'
+import { rearmPublishScheduler } from './schedule/scheduler'
 
 /**
  * Admin-only operations for MDX collections and the single pages (/now,
@@ -263,10 +267,11 @@ export async function writeOne(
   slug: string,
   frontmatter: Record<string, any>,
   body: string,
+  opts: PutItemOptions = {},
 ): Promise<StoreError> {
   if (!isSafeSlug(slug)) return { ok: false, error: 'Invalid slug (use a-z, 0-9, -, _)' }
   snapshot(c, slug)
-  return await storePutItem(c, slug, frontmatter, body)
+  return await storePutItem(c, slug, frontmatter, body, opts)
 }
 
 export async function deleteOne(
@@ -322,8 +327,12 @@ export async function restoreItemSnapshot(
   if (!doc) return { ok: false, error: 'Snapshot not found', notFound: true }
   const pending = getPendingRevision(c, slug)
   if (pending) writeSnapshot(c, slug, pending.frontmatter, pending.body)
-  const out = await writeOne(c, slug, doc.frontmatter, doc.body)
+  // The schedule (H5) is not part of a version: the restored item keeps the current one, never the snapshot's.
+  const current = getItem(c, slug)
+  const frontmatter = carryScheduleOnSave({ target: 'live', live: current?.frontmatter ?? null, pending: null, incoming: doc.frontmatter, now: Date.now() })
+  const out = await writeOne(c, slug, frontmatter, doc.body)
   if (out.ok && pending) deletePendingRevision(c, slug)
+  if (out.ok) rearmPublishScheduler()
   return out
 }
 
@@ -500,13 +509,37 @@ function checkItemIfMatch(req: NextApiRequest, res: NextApiResponse, liveUpdated
   return false
 }
 
+/**
+ * The editor's view of one item (GET ?slug, and the answer of a schedule
+ * change): the live version, its pending revision, the old slugs that
+ * redirect to it and its schedule (H5) — the frontmatter without the
+ * schedule keys, which only the schedule action sets — with its ETag.
+ */
+export function itemPayload(c: Collection, slug: string): { body: Record<string, unknown>; etag: string } | null {
+  const one = readOne(c, slug)
+  if (!one) return null
+  const pending = getPendingRevision(c, slug)
+  return {
+    body: {
+      ...one,
+      frontmatter: withoutSchedule(one.frontmatter),
+      pending: pending
+        ? { frontmatter: withoutSchedule(pending.frontmatter), body: pending.body, updatedAt: pending.updatedAt, baseUpdatedAt: pending.baseUpdatedAt }
+        : null,
+      redirectsFrom: redirectsTo(c, slug),
+      schedule: itemSchedule(one.frontmatter, pending?.frontmatter),
+    },
+    etag: itemEtag(one.updatedAt, pending?.updatedAt),
+  }
+}
+
 /** A stored item counts as a draft when its `draft` flag is truthy (lib/mdx's rule). */
 export const isDraftFrontmatter = (fm: Record<string, any> | null | undefined) => Boolean(fm?.draft)
 
 /**
  * Admin CRUD for a collection (blog posts, case studies):
  *
- *   GET    ?slug=foo  → { slug, frontmatter, body, updatedAt, pending, redirectsFrom }
+ *   GET    ?slug=foo  → { slug, frontmatter, body, updatedAt, pending, redirectsFrom, schedule }
  *                       with ETag itemEtag(live, pending); `pending` is the
  *                       unpublished revision of a live item ({ frontmatter,
  *                       body, updatedAt, baseUpdatedAt }) or null;
@@ -523,6 +556,11 @@ export const isDraftFrontmatter = (fm: Record<string, any> | null | undefined) =
  *          → 409 { code:'VERSION_CONFLICT', etag } when If-Match is stale
  *          → 422 { code:'MDX_INVALID', line, column, reason } when the body
  *            does not compile (nothing is written)
+ *   POST   { action:'schedule', slug, publishAt, unpublishAt, setDate?, markUpdated? }
+ *          (H5, optional If-Match) set or clear when the draft / the pending
+ *          changes go live and when the live item unpublishes (ISO instants
+ *          or null; lib/schedule) → 200 with the GET ?slug payload and ETag;
+ *          400 BAD_TIME / IN_THE_PAST / WINDOW …, 409 NOTHING_TO_PUBLISH
  *   POST   { action:'discard-pending', slug } → drop the pending revision
  *   POST   { action:'rename', slug, to, redirect?, dryRun? } → move the item
  *          to a new slug (lib/slugRename): the old address redirects (308)
@@ -542,24 +580,20 @@ export function createCollectionApi(c: Collection, opts: { noun: string; require
       const slug = req.query.slug
       if (slug !== undefined) {
         if (typeof slug !== 'string' || !isSafeSlug(slug)) return res.status(400).json({ error: 'Invalid slug' })
-        const one = readOne(c, slug)
-        if (!one) return res.status(404).json({ error: 'Not found' })
-        const pending = getPendingRevision(c, slug)
-        return sendVersionedJson(
-          res,
-          200,
-          {
-            ...one,
-            pending: pending
-              ? { frontmatter: pending.frontmatter, body: pending.body, updatedAt: pending.updatedAt, baseUpdatedAt: pending.baseUpdatedAt }
-              : null,
-            redirectsFrom: redirectsTo(c, slug),
-          },
-          itemEtag(one.updatedAt, pending?.updatedAt),
-        )
+        const item = itemPayload(c, slug)
+        if (!item) return res.status(404).json({ error: 'Not found' })
+        return sendVersionedJson(res, 200, item.body, item.etag)
       }
       const pendingAt = pendingRevisionIndex(c)
-      return res.status(200).json({ items: listAll(c).map((i) => ({ ...i, pendingAt: pendingAt.get(i.slug) ?? null })) })
+      const schedules = collectionSchedules(c)
+      return res.status(200).json({
+        items: listAll(c).map((i) => ({
+          ...i,
+          frontmatter: withoutSchedule(i.frontmatter),
+          pendingAt: pendingAt.get(i.slug) ?? null,
+          schedule: schedules.get(i.slug) ?? null,
+        })),
+      })
     }
 
     if (req.method === 'PUT') {
@@ -599,17 +633,22 @@ export function createCollectionApi(c: Collection, opts: { noun: string; require
       const pendingNow = existing ? getPendingRevision(c, slug) : null
       if (!checkItemIfMatch(req, res, existing?.updatedAt ?? 0, pendingNow?.updatedAt)) return
 
+      // The schedule (H5) is server-owned: kept from the stored rows, never taken from the editor (lib/schedule/fields).
+      const scheduled = (to: 'live' | 'pending') =>
+        carryScheduleOnSave({ target: to, live: existing?.frontmatter ?? null, pending: pendingNow?.frontmatter ?? null, incoming: fm, now: Date.now() })
+
       if (target === 'pending') {
         if (!existing || isDraftFrontmatter(existing.frontmatter)) {
           return res.status(409).json({ code: 'NOT_PUBLISHED', error: `This ${opts.noun} is not published — save it directly` })
         }
         if (isDraftFrontmatter(fm)) return res.status(400).json({ error: 'Unpublishing is a direct save (target "live")' })
-        const rev = putPendingRevision(c, slug, fm, text, existing.updatedAt)
+        const rev = putPendingRevision(c, slug, scheduled('pending'), text, existing.updatedAt)
         const etag = itemEtag(existing.updatedAt, rev.updatedAt)
         return sendVersionedJson(res, 200, { ok: true, pending: { updatedAt: rev.updatedAt, baseUpdatedAt: rev.baseUpdatedAt }, etag }, etag)
       }
 
-      const result = await writeOne(c, slug, fm, text)
+      const before = itemSchedule(existing?.frontmatter, pendingNow?.frontmatter)
+      const result = await writeOne(c, slug, scheduled('live'), text)
       if (!result.ok) return res.status(400).json({ error: result.error })
       // The editor sent its whole state: a pending revision is superseded.
       const hadPending = deletePendingRevision(c, slug)
@@ -619,6 +658,8 @@ export function createCollectionApi(c: Collection, opts: { noun: string; require
         const markedUpdated = typeof fm.updated === 'string' && !!fm.updated && fm.updated !== existing.frontmatter.updated
         emitEditorialEvent({ action: 'publish-changes', collection: c, slug, markedUpdated }, { req })
       }
+      // A save that ends a schedule (publishing or unpublishing by hand) wakes the scheduler.
+      if (before.publishAt !== null || before.unpublishAt !== null) rearmPublishScheduler()
       const etag = itemEtag(readOne(c, slug)?.updatedAt ?? 0)
       return sendVersionedJson(res, 200, { ...result, etag, ...(await refreshCollection(res, c, slug, [existing?.frontmatter?.translationKey])) }, etag)
     }
@@ -627,12 +668,31 @@ export function createCollectionApi(c: Collection, opts: { noun: string; require
       const { action, slug } = (req.body || {}) as { action?: unknown; slug?: unknown }
       if (typeof slug !== 'string' || !isSafeSlug(slug)) return res.status(400).json({ error: 'Invalid slug' })
 
+      if (action === 'schedule') {
+        const rl = rateLimit(req, 30, 10 * 60 * 1000)
+        res.setHeader('X-RateLimit-Remaining', String(rl.remaining))
+        if (!rl.allowed) return res.status(429).json({ error: 'Too many writes, try later' })
+        const one = readOne(c, slug)
+        if (!one) return res.status(404).json({ error: 'Not found' })
+        if (!checkItemIfMatch(req, res, one.updatedAt, getPendingRevision(c, slug)?.updatedAt)) return
+        const request = parseScheduleBody(req.body as Record<string, unknown>)
+        if ('code' in request) return res.status(request.status).json({ code: request.code, error: request.error })
+        const out = await applySchedule(c, slug, request)
+        if (!out.ok) return res.status(out.status).json({ code: out.code, error: out.error })
+        rearmPublishScheduler()
+        const item = itemPayload(c, slug)
+        if (!item) return res.status(404).json({ error: 'Not found' })
+        return sendVersionedJson(res, 200, { ok: true, ...item.body, etag: item.etag, ...(out.r2Warning ? { r2Warning: out.r2Warning } : {}) }, item.etag)
+      }
+
       if (action === 'discard-pending') {
         const one = readOne(c, slug)
         if (!one) return res.status(404).json({ error: 'Not found' })
         const pending = getPendingRevision(c, slug)
         if (!checkItemIfMatch(req, res, one.updatedAt, pending?.updatedAt)) return
         const discarded = deletePendingRevision(c, slug)
+        // Changes scheduled to go live (H5) go with them.
+        if (discarded && pending?.frontmatter?.publishAt !== undefined) rearmPublishScheduler()
         if (discarded) emitEditorialEvent({ action: 'discard-changes', collection: c, slug }, { req })
         const etag = itemEtag(one.updatedAt)
         return sendVersionedJson(res, 200, { ok: true, discarded, etag }, etag)
@@ -705,6 +765,7 @@ export function createCollectionApi(c: Collection, opts: { noun: string; require
       const result = await deleteOne(c, slug)
       if (!result.ok) return res.status(result.error === 'Invalid slug' ? 400 : 404).json({ error: result.error })
       deletePendingRevision(c, slug)
+      rearmPublishScheduler()
       return res.status(200).json({ ...result, ...(await refreshCollection(res, c, slug, [previousKey])) })
     }
 
