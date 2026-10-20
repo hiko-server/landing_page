@@ -37,7 +37,15 @@ test('the signing key is derived (HKDF) from JWT_SECRET, never the secret itself
   assert.notDeepEqual(ogSigningKey('another-secret-for-og-signatures-012345'), KEY)
   assert.equal(ogSigningKey(''), null)
   assert.equal(ogSigningKey('change-me'), null)
-  assert.equal(ogSigningKey(undefined), null)
+  // `undefined` falls back to process.env.JWT_SECRET: assert the no-secret case with it unset,
+  // so the test holds in a shell that exported the app's real environment.
+  const saved = process.env.JWT_SECRET
+  delete process.env.JWT_SECRET
+  try {
+    assert.equal(ogSigningKey(undefined), null)
+  } finally {
+    if (saved !== undefined) process.env.JWT_SECRET = saved
+  }
 })
 
 test('a signed content card verifies; any change to what it shows breaks the signature', () => {
