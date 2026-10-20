@@ -223,10 +223,12 @@ test('auth.db migration 3 adds review_links on a v2 store, once', async () => {
   const db = new Database(':memory:')
   try {
     runMigrations(db, AUTH_MIGRATIONS.slice(0, 2), { label: 'auth' })
-    const report = runMigrations(db, AUTH_MIGRATIONS, { label: 'auth' })
+    // Up to migration 3 only (4, the CV share links, is tested on its own).
+    const report = runMigrations(db, AUTH_MIGRATIONS.slice(0, 3), { label: 'auth' })
     assert.deepEqual([report.from, report.to], [2, 3])
     assert.equal(currentVersion(db), 3)
-    assert.equal(runMigrations(db, AUTH_MIGRATIONS, { label: 'auth' }).applied.length, 0)
+    assert.equal(runMigrations(db, AUTH_MIGRATIONS.slice(0, 3), { label: 'auth' }).applied.length, 0)
+    assert.equal(AUTH_MIGRATIONS[2].name, 'review-links')
     const cols = (db.prepare("SELECT name FROM pragma_table_info('review_links')").all() as Array<{ name: string }>).map((c) => c.name)
     assert.deepEqual(cols, ['id', 'token_hash', 'collection', 'slug', 'variant', 'label', 'created_at', 'expires_at', 'revoked_at', 'view_count', 'last_viewed_at'])
     assert.throws(() => db.prepare("INSERT INTO review_links (id, token_hash, collection, slug, variant, created_at, expires_at) VALUES ('a', 'h', 'pages', 's', 'draft', 1, 2)").run(), /CHECK/)

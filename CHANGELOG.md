@@ -314,7 +314,7 @@ the critic's field-level correction).
   beacon after the page has been visible for 2.5 s in a browser that runs
   scripts (link previews and mail scanners do not count), never under DNT /
   GPC, from bots or the signed-in owner. The page and /colophon say so.
-- **auth.db migration 3** (`cv_share_links`): links live beside sessions so a
+- **auth.db migration 4** (`cv_share_links`, after the review links' 3): links live beside sessions so a
   content restore can never bring a revoked link back. Expand-only.
 - `lib/cvVisibility` (surfaces), `lib/cvEntryUid`, `lib/cvVariants`,
   `lib/cvVariantsStore`, `lib/cvShare/` (token, store, page, beacon);
