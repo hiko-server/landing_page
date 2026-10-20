@@ -10,7 +10,11 @@ import { pageKeyOf, settleWithin } from './viewTransition'
  * A card or list row that stands for a detail page carries that page's
  * pathname in `data-vt-morph`; so does the detail page's own <article>.
  * Inside, `data-vt-part` marks what morphs between the two: the title and,
- * where both sides show the same image, the cover.
+ * where both sides show the same image, the cover — a large cover as one
+ * picture (`cover`), a small one (a logo drawn at its own size on a tinted
+ * panel, components/Work/CoverFrame) as its panel (`panel`) and its logo
+ * (`logo`), so the logo travels at its own size instead of being scaled up
+ * as a bitmap behind the sharp one.
  *
  * Nothing carries a view-transition-name in the markup. A route transition
  * names the parts of exactly one source (the card that was activated, or the
@@ -21,15 +25,19 @@ import { pageKeyOf, settleWithin } from './viewTransition'
 export const MORPH_ATTR = 'data-vt-morph'
 export const MORPH_PART_ATTR = 'data-vt-part'
 
-export type MorphPart = 'title' | 'cover'
+export type MorphPart = 'title' | 'cover' | 'panel' | 'logo'
 
-export const MORPH_PARTS: readonly MorphPart[] = ['title', 'cover']
+export const MORPH_PARTS: readonly MorphPart[] = ['title', 'cover', 'panel', 'logo']
+
+/** Parts holding an image the update callback waits (briefly) to decode. */
+const IMAGE_PARTS: readonly MorphPart[] = ['cover', 'logo']
 
 /**
  * view-transition-name of a part while it morphs. globals.css styles each
  * name: the title is never stretched (each snapshot keeps its own size and
  * the two fade through), the cover scales with its box and the incoming
- * image fades in over the outgoing one.
+ * image fades in over the outgoing one, a small cover's panel grows as a box
+ * and its logo moves at its own size.
  */
 export function morphName(part: MorphPart): string {
   return `vt-morph-${part}`
@@ -229,9 +237,9 @@ export async function nameMorphTarget(root: MorphRoot | null | undefined, key: s
   if (!target || !oldParts.length) return null
   const parts = morphPartsOf(target, viewport)
   const named = nameMorphParts(parts, oldParts)
-  const cover = named.parts.includes('cover') ? parts.get('cover') : undefined
-  // The cover part is the image's frame; wait for the image inside it.
-  if (cover) await imageReady(firstImageIn(cover), COVER_DECODE_MS)
+  // The cover part is the image's frame, the logo the image itself; wait for the image.
+  const image = IMAGE_PARTS.map((kind) => (named.parts.includes(kind) ? parts.get(kind) : undefined)).find(Boolean)
+  if (image) await imageReady(firstImageIn(image), COVER_DECODE_MS)
   return named
 }
 

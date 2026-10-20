@@ -519,12 +519,16 @@ html:active-view-transition-type(prev, back)::view-transition-new(root) {
   animation: calc(var(--vt-route) * 0.7) var(--ease-standard) calc(var(--vt-route) * 0.3) both vt-in-left;
 }
 /* While a card morphs into its page (or flies back), the page itself only
-   fades through: a sliding page would compete with the moving title. */
+   fades through: a sliding page would compete with the moving title. The
+   old page is gone quickly (0.2) — before the title, which travels most of
+   its way early (ease-standard), crosses the text around it — and the new
+   page comes in over the second half, once the title has nearly landed, so
+   nothing is drawn over text that is still visible. */
 html:active-view-transition-type(morph)::view-transition-old(root) {
-  animation: calc(var(--vt-route) * 0.4) var(--ease-standard) both vt-fade-out;
+  animation: calc(var(--vt-route) * 0.2) var(--ease-standard) both vt-fade-out;
 }
 html:active-view-transition-type(morph)::view-transition-new(root) {
-  animation: calc(var(--vt-route) * 0.7) var(--ease-standard) calc(var(--vt-route) * 0.3) both vt-fade-in;
+  animation: calc(var(--vt-route) * 0.5) var(--ease-standard) calc(var(--vt-route) * 0.5) both vt-fade-in;
 }
 
 /* Morphing title (vt-morph-title): never stretched. Each snapshot keeps its
@@ -538,8 +542,9 @@ html:active-view-transition-type(morph)::view-transition-new(root) {
   object-fit: none;
   object-position: left top;
 }
+/* The outgoing title is gone within the first 0.15 of the move. */
 ::view-transition-old(vt-morph-title) {
-  animation: calc(var(--vt-route) * 0.35) var(--ease-standard) both vt-fade-out;
+  animation: calc(var(--vt-route) * 0.15) var(--ease-standard) both vt-fade-out;
 }
 ::view-transition-new(vt-morph-title) {
   animation: calc(var(--vt-route) * 0.6) var(--ease-standard) calc(var(--vt-route) * 0.2) both vt-fade-in;
@@ -560,15 +565,51 @@ html:active-view-transition-type(morph)::view-transition-new(root) {
   animation: var(--vt-route) var(--ease-standard) both vt-fade-in;
   mix-blend-mode: normal;
 }
+/* A small cover morphs in two parts (components/Work/CoverFrame): its
+   tinted panel grows or shrinks as a box — the incoming panel covers the
+   outgoing one within the first quarter, before a scaled snapshot of its
+   dot texture could show — and its logo (vt-morph-logo, lifted out of the
+   panel) travels at its own size on top: the same image on both sides, so
+   the outgoing copy simply stays under the incoming one. Never a doubled,
+   magnified logo. */
+::view-transition-old(vt-morph-panel),
+::view-transition-new(vt-morph-panel) {
+  height: 100%;
+  object-fit: cover;
+}
+::view-transition-old(vt-morph-panel) {
+  animation: none;
+}
+::view-transition-new(vt-morph-panel) {
+  animation: calc(var(--vt-route) * 0.25) var(--ease-standard) both vt-fade-in;
+  mix-blend-mode: normal;
+}
+::view-transition-old(vt-morph-logo),
+::view-transition-new(vt-morph-logo) {
+  height: 100%;
+  object-fit: contain;
+}
+::view-transition-old(vt-morph-logo) {
+  animation: none;
+}
+::view-transition-new(vt-morph-logo) {
+  animation: calc(var(--vt-route) * 0.25) var(--ease-standard) both vt-fade-in;
+  mix-blend-mode: normal;
+}
 /* A part without a partner on the other page (its card is off screen, the
-   list shows no cover) fades exactly like the page around it. */
+   list shows no cover) fades exactly like the page around it (the morph
+   timings of the root, above). */
 ::view-transition-old(vt-morph-title):only-child,
-::view-transition-old(vt-morph-cover):only-child {
-  animation: calc(var(--vt-route) * 0.4) var(--ease-standard) both vt-fade-out;
+::view-transition-old(vt-morph-cover):only-child,
+::view-transition-old(vt-morph-panel):only-child,
+::view-transition-old(vt-morph-logo):only-child {
+  animation: calc(var(--vt-route) * 0.2) var(--ease-standard) both vt-fade-out;
 }
 ::view-transition-new(vt-morph-title):only-child,
-::view-transition-new(vt-morph-cover):only-child {
-  animation: calc(var(--vt-route) * 0.7) var(--ease-standard) calc(var(--vt-route) * 0.3) both vt-fade-in;
+::view-transition-new(vt-morph-cover):only-child,
+::view-transition-new(vt-morph-panel):only-child,
+::view-transition-new(vt-morph-logo):only-child {
+  animation: calc(var(--vt-route) * 0.5) var(--ease-standard) calc(var(--vt-route) * 0.5) both vt-fade-in;
 }
 
 /* The sticky, blurred header (view-transition-name: site-header, set in
@@ -1042,6 +1083,19 @@ html .scroll-top[data-visible='true'] {
 html .scroll-top[data-visible='true']:active {
   transform: scale(0.94);
 }
+/* Narrow screens: a toast at the bottom (centred, up to 560px wide) reaches
+   the button's corner, so the button moves up above the toasts while any is
+   shown (--toast-stack-h, components/Chrome/ToastHost.tsx) — never covered
+   by one. `translate` composes with the reveal's `transform`. */
+@media (max-width: 47.99em) {
+  html .scroll-top {
+    translate: 0 calc(-1 * var(--toast-stack-h, 0px));
+  }
+  html .scroll-top,
+  html .scroll-top[data-visible='true'] {
+    transition-property: opacity, transform, visibility, translate;
+  }
+}
 
 /* Table of contents: one marker glides to the current section
    (components/Article/TableOfContents.tsx writes --toc-y / --toc-h). */
@@ -1083,19 +1137,6 @@ html .scroll-top[data-visible='true']:active {
   padding: 10px 14px;
   border: 1px solid var(--chakra-colors-page-border-strong);
   border-radius: 12px;
-/* Narrow screens: a toast at the bottom (centred, up to 560px wide) reaches
-   the button's corner, so the button moves up above the toasts while any is
-   shown (--toast-stack-h, components/Chrome/ToastHost.tsx) — never covered
-   by one. `translate` composes with the reveal's `transform`. */
-@media (max-width: 47.99em) {
-  html .scroll-top {
-    translate: 0 calc(-1 * var(--toast-stack-h, 0px));
-  }
-  html .scroll-top,
-  html .scroll-top[data-visible='true'] {
-    transition-property: opacity, transform, visibility, translate;
-  }
-}
   background: var(--chakra-colors-page-bg-elevated);
   color: var(--chakra-colors-page-fg-secondary);
   box-shadow: var(--elevation-md);

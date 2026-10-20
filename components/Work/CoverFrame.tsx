@@ -21,10 +21,12 @@ import { useImageReveal } from '../Common/useImageReveal'
  * shift). Uploads come as WebP with an AVIF <source> (G4), over their
  * blurred placeholder until they have loaded (C8; the likely LCP cover —
  * `eager` — paints over it as it arrives instead of fading in). `morph`
- * marks the image's frame as the part that morphs between the /work card
- * and the case-study page (lib/viewTransition.ts; its rounded corners and
- * border travel with it; only an image cover — the typographic one exists
- * on the card alone).
+ * marks what morphs between the /work card and the case-study page
+ * (lib/viewTransitionMorph.ts): a large cover's frame as one picture (its
+ * rounded corners and border travel with it); a small cover's panel and,
+ * apart from it, its logo — which moves at its own size and never doubles
+ * as a scaled-up, blurred copy behind itself. Small covers have no blur-up
+ * placeholder either. The typographic cover exists on the card alone.
  */
 
 export type CoverView = {
@@ -156,6 +158,7 @@ export default function CoverFrame({
         loading={eager ? 'eager' : 'lazy'}
         decoding="async"
         {...(eager ? { fetchpriority: 'high' } : {})}
+        data-vt-part={morph && cover.small ? 'logo' : undefined}
         style={
           cover.small
             ? ({
@@ -180,7 +183,7 @@ export default function CoverFrame({
 
   if (cover.small) {
     return (
-      <Box {...frame} data-cover="small" data-vt-part={morph ? 'cover' : undefined} display="flex" alignItems="center" justifyContent="center" p={{ base: 4, md: 6 }} style={PANEL_STYLE}>
+      <Box {...frame} data-cover="small" data-vt-part={morph ? 'panel' : undefined} display="flex" alignItems="center" justifyContent="center" p={{ base: 4, md: 6 }} style={PANEL_STYLE}>
         {img}
       </Box>
     )
