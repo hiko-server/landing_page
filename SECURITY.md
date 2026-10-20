@@ -59,8 +59,9 @@ What the code actually does today, and where its limits are.
   every `/admin/*` page (guests → `302 /admin/login?next=…`) and
   `/api/admin/*` route (guests → JSON `401`). Every API handler then calls
   `lib/auth.ts`, which additionally enforces session revocation.
-- **Sessions** (`lib/adminAuth/sessions.ts`, `data/auth.db`) — every sign-in
-  creates a session row; the JWT carries its id (`sid`) and is honoured only
+- **Sessions** (`lib/adminAuth/sessions.ts`, `data/auth.db`, owner-only:
+  the file, its `-wal` / `-shm` files and its pre-migration copies are
+  `0600`) — every sign-in creates a session row; the JWT carries its id (`sid`) and is honoured only
   while the row exists, is not revoked and has not expired. Admin → Security
   lists the signed-in browsers (browser · OS, an IPv4 /24 or IPv6 /48 prefix,
   the Cloudflare country — never a full address or user agent) and signs any

@@ -4,6 +4,9 @@ import Database from 'better-sqlite3'
 import {
   backupBeforeMigration,
   ensureWal,
+  PRIVATE_FILE_MODE,
+  preparePrivateDbFile,
+  restrictPrivateDbFiles,
   runMigrations,
   type MigrationReport,
 } from '../../scripts/db/migrate.mjs'
@@ -23,6 +26,12 @@ import { log } from '../log'
  * The connection lives on globalThis (one per process across Next's webpack
  * runtimes); the path is resolved when it is first opened, so tests can chdir
  * into a temp directory first.
+ *
+ * Owner-only on disk: auth.db is created 0600 before SQLite opens it (data/
+ * 0700 when it is created here), so the -wal and -shm files SQLite makes
+ * start 0600 too, and all three — plus a pre-migration copy — are chmodded
+ * 0600 after every open, which also repairs sidecars an earlier release left
+ * world-readable (wave 2A review, SECU-4).
  */
 
 export function authDbPath(): string {
@@ -38,7 +47,13 @@ export function migrateAuthDb(db: Database.Database, backupDir?: string): Migrat
     label: 'auth',
     beforeMigrate: ({ from }) => {
       const copy = backupBeforeMigration(db, { dir, label: 'auth', from })
-      if (copy) log.info('auth.db copied before migrating', { file: copy, from })
+      if (!copy) return
+      try {
+        fs.chmodSync(copy, PRIVATE_FILE_MODE)
+      } catch {
+        // Not the owner: the pre-migration directory itself is 0700.
+      }
+      log.info('auth.db copied before migrating', { file: copy, from })
     },
   })
   logMigrationReport(report)
@@ -49,17 +64,15 @@ export function getAuthDb(): Database.Database {
   const cached = g.__authDb
   if (cached && cached.open) return cached
   const file = authDbPath()
-  fs.mkdirSync(path.dirname(file), { recursive: true })
+  preparePrivateDbFile(file)
   const db = new Database(file, { timeout: 5000 })
   try {
     ensureWal(db, 5000)
     db.pragma('synchronous = NORMAL')
     migrateAuthDb(db)
-    try {
-      fs.chmodSync(file, 0o600)
-    } catch {
-      // Not the owner (a bind mount with other ownership): keep going.
-    }
+    // Files this process does not own (a bind mount) are skipped quietly.
+    for (const f of restrictPrivateDbFiles(file))
+      log.warn('could not make an auth.db file owner-only', { file: f.path, code: f.code })
   } catch (err) {
     db.close()
     throw err

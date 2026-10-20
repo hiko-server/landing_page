@@ -492,6 +492,13 @@ Fixes for defects an adversarial review found in wave 2A before it shipped.
   owner's own session is never affected — and the Security page says so,
   keeping "Sign out other browsers" available while such a browser may
   still exist (at most a week after the update).
+- **auth.db file permissions (SECU-4)**: `data/auth.db` was made `0600`
+  only after SQLite had already created its `-wal` and `-shm` files `0644`,
+  and those hold nearly all of its recent data (recovery-code hashes,
+  session ids, the sign-in history). The file is now created `0600` before
+  SQLite opens it (so the sidecars start `0600`), all three are made `0600`
+  on every open — repairing files left world-readable — and the
+  pre-migration copy and `scripts/migrate-db.mjs` follow the same rule.
 
 ### Changed
 

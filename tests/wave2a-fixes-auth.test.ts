@@ -8,6 +8,8 @@
  *   SECU-3  tokens minted before sessions existed (no `sid`) end as soon as
  *           the owner signs any browser out (Log out, one browser, the
  *           others), without ever signing the owner out.
+ *   SECU-4  auth.db, its -wal and -shm files (which hold most of the data)
+ *           and its pre-migration copy are owner-only (0600).
  *
  * Runs the real API handlers in a throw-away working directory.
  */
@@ -519,4 +521,133 @@ test('SECU-3: the cutoff compares issue times and only moves forward; the page f
     false,
     'every pre-session token has expired a week after auth.db was created'
   )
+})
+
+// ── SECU-4 ────────────────────────────────────────────────────────────────
+
+const modeOf = (p: string) => fs.statSync(p).mode & 0o777
+const sidecars = (file: string) => [file, `${file}-wal`, `${file}-shm`]
+
+/** Run `fn` under the usual server umask (022: new files 0644 unless asked otherwise). */
+function withUmask<T>(fn: () => T): T {
+  const prev = process.umask(0o022)
+  try {
+    return fn()
+  } finally {
+    process.umask(prev)
+  }
+}
+
+/** Open `file` like the app does (WAL) and write a few rows, so -wal and -shm exist. */
+function writeSome(file: string): Database.Database {
+  const db = new Database(file)
+  db.pragma('journal_mode = WAL')
+  db.exec('CREATE TABLE IF NOT EXISTS t (v TEXT)')
+  const insert = db.prepare('INSERT INTO t (v) VALUES (?)')
+  for (let i = 0; i < 50; i++) insert.run(`secret ${i}`)
+  return db
+}
+
+test('SECU-4: a new auth.db and the -wal / -shm files SQLite creates for it are 0600 (and a new data dir 0700)', async () => {
+  const { preparePrivateDbFile } = await import('../scripts/db/migrate.mjs')
+  const dir = path.join(tmp, 'fresh', 'data')
+  const file = path.join(dir, 'auth.db')
+  withUmask(() => {
+    preparePrivateDbFile(file)
+    assert.equal(modeOf(dir), 0o700)
+    assert.equal(modeOf(file), 0o600)
+    assert.equal(fs.statSync(file).size, 0)
+    const db = writeSome(file)
+    try {
+      for (const p of sidecars(file)) assert.equal(modeOf(p), 0o600, p)
+    } finally {
+      db.close()
+    }
+  })
+})
+
+test('SECU-4: an existing world-readable auth.db is repaired, before SQLite creates new sidecars and after', async () => {
+  const { preparePrivateDbFile, restrictPrivateDbFiles } = await import('../scripts/db/migrate.mjs')
+  const dir = path.join(tmp, 'older-release')
+  fs.mkdirSync(dir, { recursive: true })
+  const file = path.join(dir, 'auth.db')
+  withUmask(() => {
+    // What the earlier release left behind: everything 0644 while the server runs.
+    const db = writeSome(file)
+    for (const p of sidecars(file)) assert.equal(modeOf(p), 0o644, p)
+    assert.deepEqual(restrictPrivateDbFiles(file), [])
+    for (const p of sidecars(file)) assert.equal(modeOf(p), 0o600, p)
+    db.close()
+
+    // A 0644 main file without sidecars: fixed before opening, so new sidecars start 0600.
+    fs.chmodSync(file, 0o644)
+    for (const p of sidecars(file).slice(1)) fs.rmSync(p, { force: true })
+    preparePrivateDbFile(file)
+    const again = writeSome(file)
+    try {
+      for (const p of sidecars(file)) assert.equal(modeOf(p), 0o600, p)
+    } finally {
+      again.close()
+    }
+    // Missing files are not an error.
+    assert.deepEqual(restrictPrivateDbFiles(path.join(dir, 'missing.db')), [])
+  })
+})
+
+test('SECU-4: getAuthDb keeps data/auth.db, -wal and -shm owner-only, repairing 0644 files on open', () => {
+  withUmask(() => {
+    authDb.closeAuthDb()
+    const file = authDb.authDbPath()
+    for (const p of sidecars(file)) if (fs.existsSync(p)) fs.chmodSync(p, 0o644)
+    authDb.getAuthDb()
+    store.generateRecoveryCodes()
+    for (const p of sidecars(file)) assert.equal(modeOf(p), 0o600, p)
+  })
+})
+
+test('SECU-4: the pre-migration copy of auth.db is owner-only too', async () => {
+  const { runMigrations } = await import('../scripts/db/migrate.mjs')
+  const { AUTH_MIGRATIONS } = await import('../scripts/db/auth/index.mjs')
+  const dir = path.join(tmp, 'premigration')
+  fs.mkdirSync(dir, { recursive: true })
+  const backups = path.join(dir, 'copies')
+  withUmask(() => {
+    const db = new Database(path.join(dir, 'auth.db'))
+    try {
+      // A store at version 1: migrating it to version 2 copies it aside first.
+      runMigrations(db, AUTH_MIGRATIONS.slice(0, 1), { label: 'auth' })
+      authDb.migrateAuthDb(db, backups)
+    } finally {
+      db.close()
+    }
+  })
+  const copies = fs.readdirSync(backups)
+  assert.equal(copies.length, 1)
+  assert.match(copies[0], /^auth-v1-/)
+  assert.equal(modeOf(path.join(backups, copies[0])), 0o600)
+  assert.equal(modeOf(backups), 0o700)
+})
+
+test('SECU-4: the migration CLI keeps an auth.db it migrates owner-only (sidecars and copy included)', async () => {
+  const { execFileSync } = await import('node:child_process')
+  const { runMigrations } = await import('../scripts/db/migrate.mjs')
+  const { AUTH_MIGRATIONS } = await import('../scripts/db/auth/index.mjs')
+  const dir = path.join(tmp, 'cli')
+  fs.mkdirSync(dir, { recursive: true })
+  const file = path.join(dir, 'auth.db')
+  withUmask(() => {
+    const db = new Database(file)
+    runMigrations(db, AUTH_MIGRATIONS.slice(0, 1), { label: 'auth' })
+    db.close()
+  })
+  assert.equal(modeOf(file), 0o644, 'made the old way')
+  const cli = path.join(prevCwd, 'scripts', 'migrate-db.mjs')
+  const out = execFileSync(process.execPath, [cli, '--db', 'auth', '--file', file], {
+    encoding: 'utf8',
+  })
+  assert.match(out, /auth: migrated v1 → v2/)
+  for (const p of sidecars(file)) if (fs.existsSync(p)) assert.equal(modeOf(p), 0o600, p)
+  const copies = fs.readdirSync(path.join(dir, 'backups', 'pre-migration'))
+  assert.equal(copies.length, 1)
+  assert.equal(modeOf(path.join(dir, 'backups', 'pre-migration', copies[0])), 0o600)
 })

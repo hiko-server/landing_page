@@ -322,3 +322,49 @@ export function backupBeforeMigration(db, { dir, label, from, now = new Date() }
     fs.rmSync(path.join(dir, old.f), { force: true })
   return file
 }
+
+// ── Owner-only files (auth.db) ────────────────────────────────────────────
+
+/** Mode of a database file that holds secrets, and of its -wal / -shm sidecars. */
+export const PRIVATE_FILE_MODE = 0o600
+
+/**
+ * Make sure `file` is owner-only before SQLite opens it: create it empty with
+ * mode 0600 when it does not exist yet (its directory 0700 when that is
+ * created too), or chmod an existing one. SQLite gives the -wal and -shm
+ * files it creates the main file's mode, so they start owner-only as well —
+ * nearly all of a WAL database's recent data sits in the -wal file.
+ * A chmod that is not allowed (another owner, e.g. a bind mount) is skipped.
+ *
+ * @param {string} file
+ */
+export function preparePrivateDbFile(file) {
+  const dir = path.dirname(file)
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 })
+  // 'a' never truncates; the mode applies only when the file is created.
+  if (!fs.existsSync(file)) fs.closeSync(fs.openSync(file, 'a', PRIVATE_FILE_MODE))
+  else restrictPrivateDbFiles(file)
+}
+
+/**
+ * chmod `file` and its -wal / -shm sidecars to 0600 — also repairs sidecars
+ * an earlier release left world-readable. Missing files and files this
+ * process does not own are skipped; returns the paths that could not be
+ * changed for any other reason, with the error code.
+ *
+ * @param {string} file
+ * @returns {Array<{ path: string, code: string }>}
+ */
+export function restrictPrivateDbFiles(file) {
+  /** @type {Array<{ path: string, code: string }>} */
+  const failed = []
+  for (const p of [file, `${file}-wal`, `${file}-shm`]) {
+    try {
+      fs.chmodSync(p, PRIVATE_FILE_MODE)
+    } catch (err) {
+      const code = /** @type {NodeJS.ErrnoException} */ (err).code || 'ERROR'
+      if (code !== 'ENOENT' && code !== 'EPERM') failed.push({ path: p, code })
+    }
+  }
+  return failed
+}
