@@ -5,6 +5,7 @@ import { MONO, inputProps } from '../../../components/Admin/shell/ui'
 import CoverImageField, { type CoverSize } from '../../../components/Admin/shell/CoverImageField'
 import { LinksField, OutcomesField } from '../../../components/Admin/shell/GlanceFields'
 import { useMdxItemEditor } from '../../../components/Admin/shell/useMdxItemEditor'
+import TranslationField from '../../../components/Admin/shell/TranslationField'
 import MdxItemEditorFrame from '../../../components/Admin/editor/MdxItemEditorFrame'
 import CaseStudyTemplateCard from '../../../components/Admin/editor/CaseStudyTemplateCard'
 import { DESCRIPTION_MAX, TITLE_MAX } from '../../../components/Admin/shell/publishChecks'
@@ -251,6 +252,8 @@ function WorkEditor() {
             onFocusChange={(coverFocus) => setFm((f) => ({ ...f, coverFocus }))}
             onMeasure={setCoverSize}
           />
+
+          <TranslationField ed={ed} collection="work" />
         </Stack>
       }
     />

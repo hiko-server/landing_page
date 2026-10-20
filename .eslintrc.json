@@ -65,6 +65,7 @@
                 "components/General-UI/PageHeader.tsx",
                 "components/General-UI/PageGrid.tsx",
                 "components/Article/MetaGrid.tsx",
+                "components/Article/LanguageSwitch.tsx",
                 "components/GitHub/StatsBar.tsx",
                 "components/Icons/**",
                 "components/Header/ThemeControl.tsx",

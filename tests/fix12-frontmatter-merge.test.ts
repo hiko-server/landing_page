@@ -58,8 +58,8 @@ function workSave(stored: Record<string, any>, edit: (fm: ReturnType<typeof work
 // ── Merge ────────────────────────────────────────────────────────────────
 
 test('modelledKeys: the keys of the empty form and of what toServer writes', () => {
-  // reading-work D8 added the post's case study (`project`).
-  assert.deepEqual([...BLOG_KEYS].sort(), ['cover', 'date', 'description', 'draft', 'project', 'tags', 'title'])
+  // reading-work D8 added the post's case study (`project`); i18n-content F2 the language and translation key.
+  assert.deepEqual([...BLOG_KEYS].sort(), ['cover', 'date', 'description', 'draft', 'lang', 'project', 'tags', 'title', 'translationKey'])
   assert.ok(WORK_KEYS.has('coverAlt') && WORK_KEYS.has('status') && !WORK_KEYS.has('seoTitle'))
   assert.deepEqual([...PAGE_MODELLED_KEYS].sort(), ['description', 'title', 'updated'])
   assert.deepEqual([...modelledKeys(null, undefined, { a: undefined })], ['a'])

@@ -11,6 +11,8 @@ import { requireRecentAuth } from './adminAuth/stepUp'
 import { rateLimit } from './rateLimit'
 import { COLLECTION_EXTRA_PATHS, CV_DOCUMENT_PATHS, collectionPaths, revalidatePaths } from './revalidate'
 import { ensurePosters } from './videoPoster'
+import { detectContentLang } from './toc'
+import { normalizeTranslationKey } from './translations'
 import {
   getPage,
   putPage as storePutPage,
@@ -170,6 +172,8 @@ export function listAll(c: Collection): Array<{
   frontmatter: Record<string, any>
   size: number
   mtime: number
+  /** The item's language as the site uses it: frontmatter `lang`, else detected (lib/toc) — the editors' translation block. */
+  lang: string
 }> {
   return listItems(c).map((item) => {
     const yaml = matter.stringify(item.body || '\n', item.frontmatter)
@@ -178,8 +182,22 @@ export function listAll(c: Collection): Array<{
       frontmatter: item.frontmatter,
       size: Buffer.byteLength(yaml, 'utf-8'),
       mtime: item.updated_at,
+      lang: detectContentLang({ lang: item.frontmatter?.lang, title: item.frontmatter?.title, body: item.body }),
     }
   })
+}
+
+/**
+ * Slugs of the items that carry one of `keys` as their translation key
+ * (lib/translations): the other language versions of a piece, whose
+ * language switch, hreflang and index entry name it.
+ */
+export function translationPartners(c: Collection, keys: readonly unknown[]): string[] {
+  const wanted = new Set(keys.map(normalizeTranslationKey).filter(Boolean))
+  if (!wanted.size) return []
+  return listItems(c)
+    .filter((item) => wanted.has(normalizeTranslationKey(item.frontmatter?.translationKey)))
+    .map((item) => item.slug)
 }
 
 export type AdminItem = {
@@ -392,11 +410,16 @@ export async function mdxProblem(body: string): Promise<MdxProblem | null> {
  * collection that list or link it (COLLECTION_EXTRA_PATHS: the home page's
  * latest writing, case-study links on / and /about) and the CV pages (their
  * skill evidence cites posts and case studies, and projects link their case
- * study). A failed refresh never fails the write (the ISR window still
- * applies).
+ * study). Its translations (F2) come first among the siblings, so the cap
+ * never leaves out a page whose language switch names it: those of the
+ * item's key as stored now, and of `previousKeys` (the key before the write
+ * or delete — a version that left a group must vanish from its partners).
+ * A failed refresh never fails the write (the ISR window still applies).
  */
-export async function refreshCollection(res: NextApiResponse, c: Collection, slug: string) {
-  const paths = [...collectionPaths(c, slug, listAll(c).map((i) => i.slug)), ...COLLECTION_EXTRA_PATHS[c], ...CV_DOCUMENT_PATHS]
+export async function refreshCollection(res: NextApiResponse, c: Collection, slug: string, previousKeys: readonly unknown[] = []) {
+  const partners = translationPartners(c, [getItem(c, slug)?.frontmatter?.translationKey, ...previousKeys])
+  const siblings = [...partners, ...listItems(c).map((i) => i.slug)]
+  const paths = [...collectionPaths(c, slug, siblings), ...COLLECTION_EXTRA_PATHS[c], ...CV_DOCUMENT_PATHS]
   const failed = await revalidatePaths(res, paths)
   return {
     revalidated: paths.filter((p) => !failed.includes(p)),
@@ -470,7 +493,7 @@ export function createCollectionApi(c: Collection, opts: { noun: string; require
       const result = await writeOne(c, slug, fm, text)
       if (!result.ok) return res.status(400).json({ error: result.error })
       const etag = versionEtag(readOne(c, slug)?.updatedAt ?? 0)
-      return sendVersionedJson(res, 200, { ...result, etag, ...(await refreshCollection(res, c, slug)) }, etag)
+      return sendVersionedJson(res, 200, { ...result, etag, ...(await refreshCollection(res, c, slug, [existing?.frontmatter?.translationKey])) }, etag)
     }
 
     if (req.method === 'DELETE') {
@@ -478,9 +501,10 @@ export function createCollectionApi(c: Collection, opts: { noun: string; require
       if (!requireRecentAuth(req, res)) return
       const slug = req.query.slug
       if (typeof slug !== 'string' || !slug) return res.status(400).json({ error: 'Missing slug' })
+      const previousKey = isSafeSlug(slug) ? getItem(c, slug)?.frontmatter?.translationKey : undefined
       const result = await deleteOne(c, slug)
       if (!result.ok) return res.status(result.error === 'Invalid slug' ? 400 : 404).json({ error: result.error })
-      return res.status(200).json({ ...result, ...(await refreshCollection(res, c, slug)) })
+      return res.status(200).json({ ...result, ...(await refreshCollection(res, c, slug, [previousKey])) })
     }
 
     res.setHeader('Allow', 'GET,PUT,DELETE')

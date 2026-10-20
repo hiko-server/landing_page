@@ -5,13 +5,16 @@ import { getDb } from '../lib/db'
 import { latestDate } from '../lib/postDate'
 import { SITE_URL, CV_ALTERNATES, type Alternate } from '../lib/schema'
 import { hasPublicationsPage } from '../lib/publicationsData'
+import { hreflangAlternates, translationGroups } from '../lib/translations'
 
 /**
  * sitemap.xml with real <lastmod> values: items use the newest of their
  * frontmatter `updated` / `date` and the content-store write time; static
  * pages use the write time of the data they render (home, CV, now, uses).
  * The bilingual CV is listed in both languages (/cv and /cv/zh) with
- * reciprocal hreflang alternates. Drafts never appear (listPosts/listWork);
+ * reciprocal hreflang alternates, and so is every post or case study that
+ * has published translations (F2, lib/translations: each version lists all
+ * of them plus x-default). Drafts never appear (listPosts/listWork);
  * /publications is listed only while it has public papers (else it is a 404).
  */
 
@@ -42,11 +45,18 @@ function urlXml({ path, lastmod, alternates }: Entry): string {
 export const getServerSideProps: GetServerSideProps = async ({ res }) => {
   const posts = listPosts()
   const work = listWork()
+  const postGroups = translationGroups(posts)
+  const workGroups = translationGroups(work)
   const postEntries: Entry[] = posts.map((p) => ({
     path: p.permalink,
     lastmod: latestDate([p.frontmatter.updated, p.frontmatter.date, p.updatedAt]),
+    alternates: hreflangAlternates(p, postGroups.get(p.slug) || []),
   }))
-  const workEntries: Entry[] = work.map((w) => ({ path: w.permalink, lastmod: latestDate([w.updatedAt]) }))
+  const workEntries: Entry[] = work.map((w) => ({
+    path: w.permalink,
+    lastmod: latestDate([w.updatedAt]),
+    alternates: hreflangAlternates(w, workGroups.get(w.slug) || []),
+  }))
 
   const home = storedAt('kv', 'home')
   const cv = storedAt('kv', 'cvdata')

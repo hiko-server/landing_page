@@ -4,6 +4,7 @@ import { AdminDirtyProvider } from '../../../components/Admin/AdminDirtyContext'
 import { MONO, inputProps, warnTextProps } from '../../../components/Admin/shell/ui'
 import CoverImageField, { type CoverSize } from '../../../components/Admin/shell/CoverImageField'
 import { useMdxItemEditor } from '../../../components/Admin/shell/useMdxItemEditor'
+import TranslationField from '../../../components/Admin/shell/TranslationField'
 import MdxItemEditorFrame from '../../../components/Admin/editor/MdxItemEditorFrame'
 import { DESCRIPTION_MAX, TITLE_MAX } from '../../../components/Admin/shell/publishChecks'
 import { BLOG_EMPTY, blogFromServer, blogToServer, type BlogFrontmatter } from '../../../components/Admin/shell/itemFrontmatter'
@@ -151,6 +152,8 @@ function BlogEditor() {
           </FormControl>
 
           <CoverImageField inputId="item-cover" value={fm.cover} onChange={(cover) => setFm((f) => ({ ...f, cover }))} onMeasure={setCoverSize} />
+
+          <TranslationField ed={ed} collection="blog" />
         </Stack>
       }
     />

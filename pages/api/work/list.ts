@@ -1,5 +1,6 @@
 import { withApi } from '../../../lib/apiHandler'
 import { listWorkInDisplayOrder } from '../../../lib/mdx'
+import { collapseTranslations, translationGroups } from '../../../lib/translations'
 
 /**
  * Public list of published project case studies (in /work display order)
@@ -10,7 +11,12 @@ export default withApi('work/list', async (req, res) => {
     res.setHeader('Allow', 'GET, HEAD')
     return res.status(405).json({ error: 'Method not allowed' })
   }
-  const items = listWorkInDisplayOrder().map((w) => ({
+  const all = listWorkInDisplayOrder()
+  // Linked translations (F2): each item's other language versions, and whether the index lists it
+  // (one entry per piece, the English version where it exists).
+  const groups = translationGroups(all)
+  const listed = new Set(collapseTranslations(all, 'en', groups).map((c) => c.entry.slug))
+  const items = all.map((w) => ({
     slug: w.slug,
     title: w.frontmatter.title,
     description: w.frontmatter.description || null,
@@ -19,6 +25,8 @@ export default withApi('work/list', async (req, res) => {
     featured: w.frontmatter.featured || false,
     lang: w.lang,
     permalink: w.permalink,
+    translations: (groups.get(w.slug) || []).map((t) => ({ lang: t.lang, permalink: t.permalink })),
+    listed: listed.has(w.slug),
   }))
   res.setHeader('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
   return res.status(200).json({ items })

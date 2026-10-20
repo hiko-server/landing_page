@@ -19,6 +19,8 @@ import { absUrl, PERSON_NAME } from '../../lib/schema'
 import { ogPresetUrl } from '../../lib/og/presets'
 import { cssTransition, textStyleProps } from '../../theme/tokens'
 import { StarIcon } from '../../components/Icons/ui/content'
+import { alsoInOf, collapseTranslations, type AlsoIn } from '../../lib/translations'
+import { LIST_UI } from '../../lib/uiStrings/lists'
 
 /**
  * /work — case studies, featured first, then "All projects": every project
@@ -49,6 +51,8 @@ type WorkCardData = {
   wordmark: string
   /** "93.59% offline classifier accuracy" — the first of the owner's metrics; null when none. */
   metric: string | null
+  /** Languages the case study is also published in (F2); the card shows the English version where it exists. */
+  alsoIn: AlsoIn[]
 }
 
 type Props = {
@@ -139,6 +143,17 @@ function WorkCard({ w, featured, first }: { w: WorkCardData; featured: boolean; 
       {w.description && (
         <Text color="page.fg-secondary" fontSize="small" mb={4} noOfLines={featured ? 4 : 3} lang={titleLang(w)}>
           {w.description}
+        </Text>
+      )}
+      {w.alsoIn.length > 0 && (
+        <Text fontFamily="mono" fontSize="label" color="page.fg-secondary" mt={-2} mb={4} data-also-in="">
+          {LIST_UI.en.alsoIn}{' '}
+          {w.alsoIn.map((l, i) => (
+            <span key={l.lang}>
+              {i > 0 ? ', ' : ''}
+              <span lang={l.lang}>{l.name}</span>
+            </span>
+          ))}
         </Text>
       )}
       {w.metric ? (
@@ -316,7 +331,8 @@ const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? 
 export const getStaticProps: GetStaticProps<Props> = async () => {
   const [{ resolveCover }, { archiveRows }] = await Promise.all([import('../../lib/coverImage'), import('../../lib/projectArchive')])
   const works = listWorkInDisplayOrder()
-  const items: WorkCardData[] = works.map((w) => {
+  // One card per case study: a piece published in several languages shows its English version (F2).
+  const items: WorkCardData[] = collapseTranslations(works, 'en').map(({ entry: w, alsoIn }) => {
     const fm = w.frontmatter
     return {
       slug: w.slug,
@@ -331,6 +347,7 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
       cover: resolveCover(fm.cover, '', fm.coverFocus),
       wordmark: coverWordmark(fm.title),
       metric: primaryOutcome(fm.outcomes) || null,
+      alsoIn: alsoInOf(alsoIn),
     }
   })
 
