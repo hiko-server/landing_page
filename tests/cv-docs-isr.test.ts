@@ -197,3 +197,30 @@ test('bad requests', async () => {
   assert.equal(post.statusCode, 405)
   assert.equal(post.headers.allow, 'GET, HEAD')
 })
+
+test('CV-L-2: the page names its files only with what the web view AND the files show — a name kept to downloads stays off /cv', async () => {
+  const { writeCvData } = await import('../lib/cvdata')
+  const { loadCvPageProps } = await import('../lib/cvPage')
+  const withName = (fieldsOnlyIn: Record<string, string[]>) => {
+    const doc = cvDoc('Name check')
+    const pi = { sessionName: 'personalInformation', firstName: 'Zqfirst', lastName: 'Zqlast', email: 'person@example.test', fieldsOnlyIn }
+    return { en: [pi, ...doc.en.slice(1)], zh: [{ ...pi, firstName: '名', lastName: '姓' }, ...doc.zh.slice(1)] }
+  }
+  // Kept to the downloads: not in the page props (= __NEXT_DATA__, the download attributes, the JSON-LD encoding names) …
+  assert.equal((await writeCvData(withName({ firstName: ['download'], lastName: ['download'] }))).ok, true)
+  for (const lang of ['en', 'zh'] as const) {
+    const page: any = await loadCvPageProps(lang)
+    assert.match(page.props.fileBase, lang === 'en' ? /^CV-\d{4}-\d{2}$/ : /^CV-zh-\d{4}-\d{2}$/, `${lang}: ${page.props.fileBase}`)
+    assert.ok(!JSON.stringify(page.props).includes('Zqfirst') && !JSON.stringify(page.props).includes('Zqlast'), `${lang}: nowhere in the page data`)
+  }
+  // … while the file itself is still named in full (the download surface shows the name).
+  const pdf = await call({ lang: 'en', format: 'pdf' })
+  assert.match(pdf.headers['content-disposition'], /filename="Zqlast-Zqfirst-CV-\d{4}-\d{2}\.pdf"/)
+
+  // Kept to the web pages: the page does not claim a name the files do not carry.
+  assert.equal((await writeCvData(withName({ firstName: ['web'], lastName: ['web'] }))).ok, true)
+  assert.match((await loadCvPageProps('en') as any).props.fileBase, /^CV-\d{4}-\d{2}$/)
+  // Shown everywhere: the usual name.
+  assert.equal((await writeCvData(withName({}))).ok, true)
+  assert.match((await loadCvPageProps('en') as any).props.fileBase, /^Zqlast-Zqfirst-CV-\d{4}-\d{2}$/)
+})

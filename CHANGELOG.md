@@ -54,6 +54,14 @@ Fixes for defects the final review found in the final batch before it shipped.
   Next's router, which answered first and dropped every header — so the
   slash form of a CV share link or review link is private, uncached,
   unindexed and sends no Referer, and every slash redirect has the CSP.
+- **CV variants pair EN and 中文 entries safely (CV-L-1)**: entries without
+  a stored uid share one across languages only when the two lists line up
+  (the Studio's twin rule); otherwise a 中文 entry gets its own, so a
+  variant prints nothing there instead of an entry the owner left out. A
+  one-language import keeps the pairing with the other language.
+- **CV download names on /cv follow the web view (CV-L-2)**: a name kept
+  to the downloads no longer appears in the /cv and /cv/zh page data,
+  download links or JSON-LD; the files themselves are still named in full.
 - **Container gate (OPS-1)**: every end-to-end test is its own client (a
   TEST-NET address in cf-connecting-ip), so the full suite against one
   server no longer runs out of per-client budgets (post saves, contact

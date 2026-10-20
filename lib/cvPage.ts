@@ -107,14 +107,16 @@ export async function loadCvPageProps(lang: CvLang): Promise<{ props: CvPageData
   }
   try {
     const { buildCvModel, hasContent } = await import('./cvExport/model')
-    const { cvFileBase } = await import('./cvExport/files')
+    const { webFileBase } = await import('./cvExport/files')
     const model = buildCvModel(src.sections, { lang, now: clockMonth, updatedAt: src.updatedAt, canonical: '' })
     updatedMonth = model.updatedMonth
     // The files are the 'download' surface (lib/cvVisibility audiences): offer
-    // them when THAT view has something to print, named as the files are.
+    // them when THAT view has something to print. This page is the 'web'
+    // surface, so the names in it come only from what both views show
+    // (webFileBase) — a name kept to the downloads never reaches the page.
     const files = await loadCvSource(lang, clockMonth, { surface: 'download' })
     const fileModel = buildCvModel(files.sections, { lang, now: clockMonth, updatedAt: files.updatedAt, canonical: '' })
-    if (hasContent(fileModel)) fileBase = cvFileBase(files.enPersonal, lang, fileModel.updatedMonth)
+    if (hasContent(fileModel)) fileBase = webFileBase(src.enPersonal, files.enPersonal, lang, fileModel.updatedMonth)
   } catch {
     /* no downloads offered */
   }
