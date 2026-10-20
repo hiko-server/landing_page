@@ -4,6 +4,7 @@
  */
 import baseline from './001-baseline.mjs'
 import editorial from './002-editorial.mjs'
+import mediaLibrary from './003-media-library.mjs'
 
 /** @type {readonly import('../migrate.mjs').Migration[]} */
-export const CONTENT_MIGRATIONS = Object.freeze([baseline, editorial])
+export const CONTENT_MIGRATIONS = Object.freeze([baseline, editorial, mediaLibrary])

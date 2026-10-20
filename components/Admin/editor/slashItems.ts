@@ -19,6 +19,7 @@ export type SlashItemId =
   | 'code'
   | 'divider'
   | 'image'
+  | 'library'
   | 'youtube'
   | 'link'
   | 'note'
@@ -47,6 +48,7 @@ export const SLASH_ITEMS: SlashItem[] = [
   { id: 'code', label: 'Code block', hint: 'With a language', keywords: 'pre fence snippet', step: 'code' },
   { id: 'divider', label: 'Divider', hint: 'Horizontal rule', keywords: 'hr rule separator line' },
   { id: 'image', label: 'Image', hint: 'Upload a picture', keywords: 'picture photo upload img' },
+  { id: 'library', label: 'Image from library', hint: 'An uploaded picture', keywords: 'media library picture photo existing uploads gallery img' },
   { id: 'youtube', label: 'Video', hint: 'YouTube or Vimeo', keywords: 'video embed youtube vimeo movie player', step: 'youtube' },
   { id: 'link', label: 'Link to post / case study…', hint: 'Search your writing', keywords: 'internal link blog work', step: 'link' },
   { id: 'outline', label: 'Case-study outline', hint: 'Problem → lessons', keywords: 'template scaffold sections case study skeleton' },
@@ -125,7 +127,7 @@ export function normalizeLinkHref(input: string): string | null {
 export const CALLOUT_MARKERS = { note: '[!NOTE]', tip: '[!TIP]', warning: '[!WARNING]' } as const
 
 /** Raw-MDX text a block command inserts at the caret (`|` marks where the caret goes). */
-export function rawSnippet(id: Exclude<SlashItemId, 'image' | 'youtube' | 'link' | 'code'>): string {
+export function rawSnippet(id: Exclude<SlashItemId, 'image' | 'library' | 'youtube' | 'link' | 'code'>): string {
   switch (id) {
     case 'note':
     case 'tip':

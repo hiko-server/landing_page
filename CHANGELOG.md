@@ -189,6 +189,74 @@ Scheduled publishing and expiring review links (wave 3: H5).
   every active review link with Copy and Turn off. The overview card counts
   both.
 
+### media-library
+
+The media library (wave 3: H7) — Admin → Media (`/admin/media`, `G` then `M`).
+
+- **Every upload in one place**: a grid or a list (remembered in this
+  browser) of the originals on this server and — after an R2 check — the
+  ones only R2 holds, with their pixels, size, type, shape, responsive
+  versions and R2 state. Search covers names, alt texts, captions and the
+  titles of what uses them; filters for no alt text, unused, missing sizes,
+  large files (≥ 500 KB), not in R2, type and shape, and sorting all live in
+  the address (`?q=…&filter=unused&sort=largest`). Keyboard: `/` searches,
+  arrows move by rows and columns, Enter opens, X selects, Escape clears;
+  Shift-click selects a range.
+- **Where each image is used** — a usage index (content migration 3) of
+  every `/uploads/…` reference (variants count for their original) in posts
+  and case studies, drafts and unpublished changes included, `/now`,
+  `/uses`, the `/about` bio, the home page (hidden photos too), the CV (the
+  PDF-only photo) and other stored documents, with the editor and page
+  links and whether each place has an alt text. It is rebuilt whenever the
+  stored content changed (a fingerprint of every row), so saves, restores,
+  renames, imports and the boot sync all count.
+- **Default alt text and caption**, in English and 中文, per upload (the kv
+  row `media-library`, mirrored to R2 like home and the CV; ⌘S; a save from
+  a stale form gets *changed in another tab* with *Use theirs / Keep mine*).
+  The editor's new **image picker** — toolbar, `/library`, *Insert from
+  library…* in the MDX tab, and *Library…* on cover fields — offers them in
+  the page's language (never the other one), lets them be edited for that
+  place and optionally kept as the defaults, and inserts
+  `![alt](/uploads/… "caption")`. *Use the default alt text there* fills in
+  every post, case study and page that shows the image without an alt text
+  (or with a file name), English pages in English and Chinese ones in
+  Chinese, each snapshotted first. Content health links an upload's image
+  issues to the library, and the content export gains `image-texts.json`.
+- **Replace file**: uploads are served `immutable` for a year, so the new
+  file gets a new name through the upload pipeline (sizes, AVIF, blur
+  placeholder, R2) and every reference follows — posts, case studies (live
+  and unpublished), pages, the home page and the CV, snapshotted first —
+  with its texts. The old address answers 308 to the new file (a variant to
+  the new file's variant of the same width; chains collapse) and the old
+  file waits in the trash; the pages that show it are regenerated.
+- **Safe delete into a 30-day trash**: refused while anything uses the
+  image (re-checked from the store at that moment). Deleting moves the
+  original and its variants to `data/media-trash/`, deletes its R2 copies
+  (an upload only R2 holds is kept in the trash first), purges its URLs from
+  the Cloudflare cache and offers *Undo*. The trash view restores (files,
+  address, texts and R2 copies) or deletes for good; a nightly purge empties
+  what is older than 30 days. A trashed name is never served from R2, never
+  pulled back by the boot sync (which also removes R2 copies a failed
+  delete left behind and now repairs pending `uploads/` keys instead of
+  dropping them) and never taken by a new upload.
+- **Bulk actions and uploads**: *Generate responsive versions*, *Copy to R2*
+  and *Move to trash* on a selection; upload by button or by dropping images
+  anywhere on the page (or in the picker), one at a time through the
+  editors' pipeline, with a queue that waits out a busy server or the upload
+  limit by itself (429 on uploads now carries `Retry-After`).
+- **R2 index**: *Check now* (and a quiet check when the last one is over six
+  hours old) lists `uploads/` in R2; the drawer offers *Copy to R2* for an
+  image R2 lacks and *Download to this server* for one only R2 holds.
+- The admin overview card counts images, missing alt texts and unused
+  ones, and *needs attention* lists images without alt text. Every change
+  is in the activity log (*Images*).
+- **Content migration 3 (`media-library`)**: `media_assets`, `media_usage`,
+  `media_trash`, `media_redirects`, `media_index_state` (expand-only; an
+  older image keeps working on a v3 store).
+- Tests: `tests/media-library-usage.test.ts`,
+  `tests/media-library-store.test.ts`, `tests/media-library-sync.test.ts`,
+  `e2e/media-library.spec.ts`.
+
 ### admin-editorial
 
 Editorial tools in the post and case-study editors (wave 2B: H1, H3, H4, H6, H16).

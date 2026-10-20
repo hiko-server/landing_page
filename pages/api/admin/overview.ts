@@ -13,6 +13,7 @@ import { latestRestoreDrill } from '../../../lib/restoreDrill'
 import { readinessCounts } from '../../../lib/cvReadinessServer'
 import { scheduledEntries } from '../../../lib/schedule/store'
 import { listReviewLinks } from '../../../lib/review/store'
+import { librarySummary } from '../../../lib/media/list'
 
 /**
  * GET /api/admin/overview — the admin status hub's numbers (admin only,
@@ -40,6 +41,8 @@ export type AdminOverview = {
   cvReadiness?: { open: number; high: number; dismissed: number } | null
   /** Scheduled publishing (H5): how many actions are scheduled and the soonest (null when unreadable). */
   scheduled?: { count: number; nextAt: number | null; activeReviewLinks: number } | null
+  /** The media library (lib/media/list): uploads on this server, how many lack default alt text or are unused, and the trash. */
+  media?: { total: number; missingAlt: number; unused: number; trash: number } | null
 }
 
 const LAST_EDITS = 5
@@ -116,6 +119,7 @@ export function readOverview(): AdminOverview {
       const all = scheduledEntries()
       return { count: all.length, nextAt: all[0]?.at ?? null, activeReviewLinks: listReviewLinks().length }
     }),
+    media: safely(librarySummary),
   }
 }
 

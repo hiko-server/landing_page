@@ -11,9 +11,10 @@
 //     contact messages (lib/inboxRetention) and the daily external-link check
 //     of the content health center (lib/contentHealth/schedule), the
 //     daily roll-up / retention of goal events (lib/analytics/events), the
-//     weekly analytics digest (lib/analytics/digestSchedule) and
-//     scheduled publishing (lib/schedule/scheduler: due drafts, pending
-//     changes and unpublishes, caught up at boot) — never during
+//     weekly analytics digest (lib/analytics/digestSchedule), scheduled
+//     publishing (lib/schedule/scheduler: due drafts, pending changes and
+//     unpublishes, caught up at boot) and the nightly purge of the media
+//     library's 30-day trash (lib/media/trashSchedule) — never during
 //     `next build`, and only once per process;
 //   - warns in the log when mail would be sent From a domain whose DMARC
 //     policy the SMTP account cannot pass (lib/mailAlignment);
@@ -41,6 +42,7 @@ type InstrumentationGlobal = typeof globalThis & {
   __eventsMaintenanceStarted?: boolean
   __analyticsDigestStarted?: boolean
   __publishSchedulerStarted?: boolean
+  __mediaTrashPurgeStarted?: boolean
 }
 
 export async function register() {
@@ -142,6 +144,18 @@ export async function register() {
       } catch (err) {
         const { log } = await import('./lib/log')
         log.error('could not start scheduled publishing', { err })
+      }
+    }
+    if (!building && !g.__mediaTrashPurgeStarted) {
+      // Uploads deleted from the media library more than 30 days ago are
+      // removed for good (lib/media/trashSchedule).
+      g.__mediaTrashPurgeStarted = true
+      try {
+        const { startMediaTrashPurge } = await import('./lib/media/trashSchedule')
+        startMediaTrashPurge()
+      } catch (err) {
+        const { log } = await import('./lib/log')
+        log.error('could not start the media trash purge', { err })
       }
     }
     if (!building) {

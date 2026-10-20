@@ -20,6 +20,8 @@ import { buildZip, type ZipEntry } from './zip'
  *   images.json                        every image the content uses (uploads and
  *                                      external URLs) with the files that use it,
  *                                      plus uploads nothing uses
+ *   image-texts.json                   the media library's default alt texts and
+ *                                      captions per upload (H7), when there are any
  *
  * Image files are not inside (they can be large); the full-site snapshots
  * under Storage & backups carry them. Built on request by
@@ -166,6 +168,9 @@ images.json           Every image the content uses — uploads (/uploads/…)
                       the uploads nothing uses. The image files themselves
                       are not in this archive: the full-site snapshots under
                       Admin → Storage & backups include them.
+image-texts.json      The default alt text and caption (English and Chinese)
+                      of each upload, as the media library keeps them — only
+                      when some are written.
 manifest.json         Date, counts and the list of files.
 
 Each .mdx file is YAML frontmatter between --- lines followed by the MDX body.
@@ -175,7 +180,7 @@ export type ContentExport = { filename: string; zip: Buffer; files: number }
 
 /** Build the export from the content store (server-only). */
 export async function buildContentExport(now = new Date()): Promise<ContentExport> {
-  const [{ listItems }, { listPendingRevisions }, { readPage, PAGE_NAMES }, { readCvData }, { readHome }, { listRedirects }, { SITE_HOST }] =
+  const [{ listItems }, { listPendingRevisions }, { readPage, PAGE_NAMES }, { readCvData }, { readHome }, { listRedirects }, { SITE_HOST }, { readMediaMeta }] =
     await Promise.all([
       import('./contentStore'),
       import('./pendingRevisions'),
@@ -184,6 +189,7 @@ export async function buildContentExport(now = new Date()): Promise<ContentExpor
       import('./home'),
       import('./redirects'),
       import('./schema'),
+      import('./media/metaStore'),
     ])
   const entries: ZipEntry[] = []
   const uses: Array<{ file: string; urls: string[] }> = []
@@ -226,6 +232,12 @@ export async function buildContentExport(now = new Date()): Promise<ContentExpor
   const images = imageList(uses, storedUploads())
   counts.images = images.length
   add('images.json', `${JSON.stringify(images, null, 2)}\n`)
+  const texts = Object.fromEntries(
+    Object.entries(readMediaMeta().doc.items)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([name, m]) => [name, { alt: m.alt, altZh: m.altZh, caption: m.caption, captionZh: m.captionZh }]),
+  )
+  if (Object.keys(texts).length) add('image-texts.json', `${JSON.stringify(texts, null, 2)}\n`)
 
   const at = now.toISOString()
   entries.unshift({ name: 'README.txt', data: README(SITE_HOST, at), mtime: now })

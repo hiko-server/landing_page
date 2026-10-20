@@ -32,6 +32,7 @@ import {
   FaUser,
   FaTags,
   FaCalendarAlt,
+  FaImages,
 } from 'react-icons/fa'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
@@ -39,7 +40,7 @@ import { Eyebrow, MONO, outlineButtonProps } from '../../components/Admin/shell/
 import ShortcutsOverlay from '../../components/Admin/shell/ShortcutsOverlay'
 import type { AdminOverview } from '../api/admin/overview'
 
-type CardKey = 'inbox' | 'cv' | 'home' | 'about' | 'blog' | 'work' | 'now' | 'uses' | 'tags' | 'publishing' | 'analytics' | 'versions' | 'storage' | 'mongo' | 'security' | 'system'
+type CardKey = 'inbox' | 'cv' | 'home' | 'about' | 'blog' | 'work' | 'now' | 'uses' | 'tags' | 'publishing' | 'media' | 'analytics' | 'versions' | 'storage' | 'mongo' | 'security' | 'system'
 type Card = { key: CardKey; title: string; desc: string; href: string; icon: IconType }
 
 const GROUPS: Array<{ label: string; cards: Card[] }> = [
@@ -78,6 +79,7 @@ const GROUPS: Array<{ label: string; cards: Card[] }> = [
       { key: 'now', title: 'Now', desc: 'What you are focused on right now (/now).', href: '/admin/now', icon: FaClock },
       { key: 'uses', title: 'Uses', desc: 'Hardware, editor and stack (/uses).', href: '/admin/uses', icon: FaToolbox },
       { key: 'tags', title: 'Tags & export', desc: 'Rename and merge tags across posts and case studies; download all content as a .zip.', href: '/admin/tags', icon: FaTags },
+      { key: 'media', title: 'Media', desc: 'Every uploaded image: alt text, where it is used, sizes, replace and the trash.', href: '/admin/media', icon: FaImages },
       {
         key: 'publishing',
         title: 'Scheduled & review links',
@@ -155,6 +157,14 @@ function cardDetail(key: CardKey, o: AdminOverview, now: number): string | null 
       if (!sch) return null
       const parts = [sch.count ? `${plural(sch.count, 'scheduled change')}${sch.nextAt ? ` · next ${relTime(sch.nextAt, now)}` : ''}` : 'Nothing scheduled']
       if (sch.activeReviewLinks) parts.push(plural(sch.activeReviewLinks, 'active review link'))
+      return parts.join(' · ')
+    }
+    case 'media': {
+      if (!o.media) return null
+      if (!o.media.total) return 'No images yet'
+      const parts = [plural(o.media.total, 'image')]
+      if (o.media.missingAlt) parts.push(`${o.media.missingAlt} without alt text`)
+      if (o.media.unused) parts.push(`${o.media.unused} unused`)
       return parts.join(' · ')
     }
     case 'storage': {
@@ -330,6 +340,17 @@ export default function AdminIndex() {
         text: 'GitHub stats share the 60 req/h anonymous limit and the contribution graph uses a public mirror: set GITHUB_TOKEN in .env.',
       })
     }
+    if (o.media && o.media.missingAlt > 0) {
+      attention.push({
+        id: 'media-alt',
+        text: `${plural(o.media.missingAlt, 'image has', 'images have')} no alt text yet: screen readers can’t describe them.`,
+        action: (
+          <Button as={NextLink} href="/admin/media?filter=missingAlt" size="xs" {...outlineButtonProps}>
+            Media
+          </Button>
+        ),
+      })
+    }
     if (o.pages.nowEmpty) {
       attention.push({
         id: 'now',
@@ -503,7 +524,7 @@ export default function AdminIndex() {
                       <Text color="page.fg-secondary" fontSize="sm" lineHeight="1.55">
                         {c.desc}
                       </Text>
-                      {state === 'loading' && ['inbox', 'blog', 'work', 'now', 'uses', 'about', 'storage', 'cv', 'home', 'security', 'system'].includes(c.key) ? (
+                      {state === 'loading' && ['inbox', 'blog', 'work', 'now', 'uses', 'about', 'media', 'storage', 'cv', 'home', 'security', 'system'].includes(c.key) ? (
                         <Skeleton h="12px" w="55%" mt={3} />
                       ) : detail ? (
                         <Text mt={3} fontFamily={MONO} fontSize="11px" color="page.fg-secondary" className="tnum">

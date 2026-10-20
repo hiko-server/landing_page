@@ -391,7 +391,7 @@ export function auditTargetHref(area: string, target: string | null): string | n
     case 'inbox':
       return '/admin/dashboard?tab=inbox'
     case 'media':
-      return null
+      return '/admin/media'
     case 'storage':
       return '/admin/dashboard?tab=storage'
     case 'errors':

@@ -10,12 +10,16 @@
  *   blog/*.mdx, work/*.mdx   ↔ collection_items
  *   data/*.json              ↔ kv
  *   uploads/*                → public/uploads/<basename>
+ *                              (never a name in the media library's trash —
+ *                              content.db media_trash: R2's copies of those
+ *                              are removed instead)
  *
  * Keys in r2_pending (the app's upload or delete of them failed after every
  * retry) are reconciled first and unconditionally from the local side: the
  * row is pushed, or — when the row is gone — the R2 object is deleted. The
  * pending entry is cleared once that succeeds. R2 is known to be stale for
- * these keys, so their timestamps are not consulted.
+ * these keys, so their timestamps are not consulted. A pending uploads/ key
+ * is pushed when the file is on disk (and not trashed), else deleted.
  *
  * Every other key: the newer side wins — judged by real timestamps (R2
  * LastModified vs the row's updated_at), never by "which one did we read last":
@@ -67,6 +71,7 @@ import {
   SAFE_NAME,
   SAFE_UPLOAD,
   countContentRows,
+  inferMime,
   createS3,
   decideSync,
   itemKey,
@@ -84,6 +89,8 @@ import {
   sameMdx,
   serializeMdx,
   streamToBuffer,
+  trashedUploads,
+  uploadOriginalOf,
 } from './content-helpers.mjs'
 
 const EXIT_FATAL = 1
@@ -157,6 +164,10 @@ async function getBuffer(key) {
 }
 
 async function putText(key, body, contentType) {
+  await s3.send(new PutObjectCommand({ Bucket: cfg.bucket, Key: key, Body: body, ContentType: contentType }))
+}
+
+async function putBuffer(key, body, contentType) {
   await s3.send(new PutObjectCommand({ Bucket: cfg.bucket, Key: key, Body: body, ContentType: contentType }))
 }
 
@@ -367,7 +378,10 @@ async function collectEntities() {
   }
 
   const claimed = new Set(entities.map((e) => e.key))
-  const orphanPending = [...pending].filter(([key]) => !claimed.has(key)).map(([key, p]) => ({ key, ...p }))
+  // uploads/ keys are images, not rows: repairPendingUploads() reconciles them.
+  const orphanPending = [...pending]
+    .filter(([key]) => !claimed.has(key) && !key.startsWith('uploads/'))
+    .map(([key, p]) => ({ key, ...p }))
   return { entities, orphanPending }
 }
 
@@ -523,15 +537,59 @@ async function deleteStale(deletes) {
 }
 
 /**
+ * uploads/ keys whose app-side upload or delete failed (r2_pending): the file
+ * on disk is pushed when it is there and not in the media library's trash;
+ * otherwise R2's copy is deleted. Cleared once that succeeds.
+ */
+async function repairPendingUploads(trashed) {
+  const entries = [...readPending()].filter(([key]) => key.startsWith('uploads/'))
+  await mapLimit(entries, 4, async ([key, p]) => {
+    const name = key.slice('uploads/'.length)
+    if (!SAFE_UPLOAD.test(name) || name.startsWith('.')) {
+      clearPendingStmt.run(key, p.at)
+      return
+    }
+    const file = path.join(UPLOADS_DIR, name)
+    try {
+      if (fs.existsSync(file) && !trashed.has(uploadOriginalOf(name))) {
+        await putBuffer(key, fs.readFileSync(file), inferMime(name))
+        console.log(`  upload → ${key} (pending upload repaired)`)
+      } else {
+        await deleteKey(key)
+        stats.removed++
+        console.log(`  upload ✕ ${key} (pending delete repaired)`)
+      }
+      clearPendingStmt.run(key, p.at)
+    } catch (err) {
+      warn(`pending ${key} failed: ${err?.message || err}`)
+    }
+  })
+}
+
+/**
  * uploads/ — immutable names; skip files already present with the same size.
  * Runs after the DB commit, so a single failed image is a warning, not a
- * reason to report the whole sync as failed.
+ * reason to report the whole sync as failed. A name in the media library's
+ * trash is never pulled back: R2's copies of it are deleted (the app could
+ * not delete them when it trashed the file).
  */
-async function pullUploads() {
+async function pullUploads(trashed) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true })
-  const wanted = (await listAll('uploads/')).filter(({ key, size }) => {
+  const listed = await listAll('uploads/')
+  const stale = listed.filter(({ key }) => trashed.has(uploadOriginalOf(path.basename(key))))
+  await mapLimit(stale, 4, async ({ key }) => {
+    try {
+      await deleteKey(key)
+      stats.removed++
+      console.log(`  upload ✕ ${key} (in the media library's trash)`)
+    } catch (err) {
+      warn(`delete ${key} failed: ${err?.message || err}`)
+    }
+  })
+  const wanted = listed.filter(({ key, size }) => {
     const name = path.basename(key)
     if (!SAFE_UPLOAD.test(name) || name.startsWith('.')) return false
+    if (trashed.has(uploadOriginalOf(name))) return false
     try {
       const dest = path.join(UPLOADS_DIR, name)
       return !(fs.existsSync(dest) && fs.statSync(dest).size === size)
@@ -566,7 +624,9 @@ async function main() {
   applyWrites({ writes, stamps, orphanPending })
   await pushBack(pushes)
   await deleteStale(deletes)
-  await pullUploads()
+  const trashed = trashedUploads(db)
+  await repairPendingUploads(trashed)
+  await pullUploads(trashed)
 
   console.log(
     `${TAG} OK: pulled ${stats.pulled}, pushed ${stats.pushed}, unchanged ${stats.unchanged}, ` +
