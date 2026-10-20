@@ -33,6 +33,13 @@ Fixes for defects the final review found in the final batch before it shipped.
   unpublish by hand, saved but unpublished changes become the draft, so a
   later scheduled publish (or a review link) shows them instead of the
   older version.
+- **Analytics on the Chinese pages (CORR-4)**: /zh, /zh/about, /zh/work,
+  /zh/blog and /zh/contact are now measured (page views, vitals, goals) and
+  named in Explore; a Chinese page that does not exist yet (404) is not
+  counted.
+- **Edge cache for the Chinese pages (OPS-3)**: the versioned Cloudflare
+  cache rule lists the five Chinese pages by exact path, like their English
+  pairs (apply with `scripts/cloudflare-config.mjs`).
 - **Container gate (OPS-1)**: every end-to-end test is its own client (a
   TEST-NET address in cf-connecting-ip), so the full suite against one
   server no longer runs out of per-client budgets (post saves, contact

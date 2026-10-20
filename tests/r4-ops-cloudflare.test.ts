@@ -1,6 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  CACHEABLE_EXACT_PATHS,
+  CACHEABLE_PREFIXES,
   CloudflareError,
   applyConfig,
   createClient,
@@ -86,6 +88,15 @@ test('desired rules: www redirect, host-scoped cache rules, admin bypass last', 
 
   const config = rules.http_config_settings[0]
   assert.deepEqual(config.action_parameters, { email_obfuscation: false, disable_rum: true })
+})
+
+test('OPS-3: every public ISR page is cache-eligible at the edge, the Chinese pages included — by exact path only', async () => {
+  const { STATIC_CONTENT_PATHS } = await import('../lib/revalidate')
+  const { ZH_PATHS } = await import('../lib/zhRoutes')
+  const eligible = (p: string) => CACHEABLE_EXACT_PATHS.includes(p) || CACHEABLE_PREFIXES.some((prefix: string) => p.startsWith(prefix))
+  for (const p of STATIC_CONTENT_PATHS) assert.ok(eligible(p), `${p} is cache-eligible`)
+  for (const p of ZH_PATHS) assert.ok(desiredRules(HOST).http_request_cache_settings[0].expression.includes(JSON.stringify(p)), p)
+  assert.equal(eligible('/zh/unknown'), false, 'no /zh/ prefix: unknown Chinese addresses stay uncached')
 })
 
 test('mergeRules keeps dashboard rules, reuses ids and is a no-op when nothing changed', () => {
