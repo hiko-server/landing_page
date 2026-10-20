@@ -54,6 +54,12 @@ import { UPLOAD_ACCEPT, altFromFileName, uploadImage, type UploadedImage } from 
 import { CALLOUT_MARKERS, markdownLink, rawCodeFence, rawSnippet, videoLine } from './editor/slashItems'
 import { CASE_STUDY_SECTIONS } from './editor/caseStudyTemplate'
 import { headingIndexAt, offsetOfLineColumn, slashTriggerAt, textareaCaretRect } from './editor/textareaCaret'
+import { flushSync } from 'react-dom'
+import { cssTransition } from '../../theme/tokens'
+import { FindReplace } from './editor/findPlugin'
+import { FocusBlock } from './editor/focusBlock'
+import FindReplacePanel from './editor/FindReplacePanel'
+import { scrollCaretToCenter } from './editor/typewriter'
 import {
   planVisualSync,
   sameToolbarState,
@@ -87,7 +93,13 @@ import {
  * the returned width / height. Failures become a toast.
  *
  * Imperative handle (`handleRef`): `jumpToLine(line, column)` (opens the MDX
- * tab with the caret on a compile error) and `focus()`.
+ * tab with the caret on a compile error), `focus()` and `openFind()`.
+ *
+ * Writing environment (H3): ⌘F / Ctrl+F while the editor has focus opens
+ * find & replace on the active surface (editor/FindReplacePanel); with
+ * `focusMode` every block but the one being written is dimmed
+ * (editor/focusBlock); with `typewriter` the caret line stays at the same
+ * height while typing (editor/typewriter, always an instant scroll).
  *
  * Rendering contract (editor/editorSync.ts): this component does NOT
  * re-render on TipTap transactions. The toolbar and the bubble menus
@@ -102,6 +114,8 @@ import {
 export type RichEditorHandle = {
   jumpToLine: (line: number, column?: number) => void
   focus: () => void
+  /** Open find & replace (the selection, when there is one, becomes the query). */
+  openFind: () => void
 }
 
 type Props = {
@@ -118,6 +132,10 @@ type Props = {
    * also works through next/dynamic.
    */
   handleRef?: React.Ref<RichEditorHandle>
+  /** Focus mode: dim every block but the one with the caret. */
+  focusMode?: boolean
+  /** Typewriter scrolling: keep the caret line at a fixed height. */
+  typewriter?: boolean
 }
 
 const VISUAL = 0
@@ -351,6 +369,8 @@ export default function RichEditor({
   labelledBy,
   onHeadingIndex,
   handleRef,
+  focusMode = false,
+  typewriter = false,
 }: Props) {
   const toast = useToast()
   const reducedMotion = usePrefersReducedMotion()
@@ -444,10 +464,16 @@ export default function RichEditor({
   const slashExtension = useMemo(() => createSlashCommand(bridge), [])
   const pendingImageInsert = useRef<number | null>(null)
 
+  // ── Find & replace (H3) ─────────────────────────────────────────────────
+  const [find, setFind] = useState<{ key: number; query: string } | null>(null)
+  const openFindRef = useRef<() => void>(() => undefined)
+  const typewriterRef = useRef(typewriter)
+  typewriterRef.current = typewriter
+
   // useEditor compares these options on every render and reconfigures the
   // editor when one changed, so they must keep their identity.
   const extensions = useMemo(
-    () => [...baseExtensions({ placeholder: placeholder || 'Write something… Type / for blocks.' }), slashExtension],
+    () => [...baseExtensions({ placeholder: placeholder || 'Write something… Type / for blocks.' }), slashExtension, FindReplace, FocusBlock],
     [placeholder, slashExtension],
   )
   const editorProps = useMemo<EditorProps>(
@@ -459,6 +485,13 @@ export default function RichEditor({
         ...(labelledBy ? { 'aria-labelledby': labelledBy } : {}),
       },
       handleKeyDown(_view, event) {
+        // ⌘F / Ctrl+F inside the editor opens find & replace (the browser's find elsewhere).
+        if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 'f') {
+          event.preventDefault()
+          event.stopPropagation()
+          openFindRef.current()
+          return true
+        }
         // Inside the editor ⌘K edits the link; stopPropagation keeps it from also
         // reaching the site-wide command palette shortcut (a document keydown listener).
         if ((event.metaKey || event.ctrlKey) && !event.altKey && event.key.toLowerCase() === 'k') {
@@ -530,6 +563,37 @@ export default function RichEditor({
       if (!slashStepping.current) setSlash((s) => (s?.source === 'visual' ? null : s))
     },
   })
+
+  const openFind = useCallback(() => {
+    let query = ''
+    if (tabRef.current === RAW) {
+      const ta = mdxRef.current
+      if (ta && ta.selectionEnd > ta.selectionStart) query = ta.value.slice(ta.selectionStart, ta.selectionEnd)
+    } else if (editor && !editor.isDestroyed) {
+      const { from, to } = editor.state.selection
+      if (to > from) query = editor.state.doc.textBetween(from, to, ' ')
+    }
+    // A multi-line or very long selection is not a useful query.
+    if (query.includes('\n') || query.length > 200) query = ''
+    // Synchronously, so the bar has focus before the next keystroke arrives.
+    flushSync(() => setFind((f) => ({ key: (f?.key ?? 0) + 1, query })))
+  }, [editor])
+  openFindRef.current = openFind
+
+  // Typewriter scrolling in the visual editor.
+  useEffect(() => {
+    if (!editor || !typewriter) return
+    const center = () => {
+      if (editor.isDestroyed || !editor.view.hasFocus()) return
+      scrollCaretToCenter(editor.view.coordsAtPos(editor.state.selection.head), editor.view.dom as HTMLElement)
+    }
+    editor.on('selectionUpdate', center)
+    editor.on('update', center)
+    return () => {
+      editor.off('selectionUpdate', center)
+      editor.off('update', center)
+    }
+  }, [editor, typewriter])
 
   // Values from outside (load, reload, draft restore) — anything but this
   // component's own echo: re-check for MDX constructs.
@@ -779,6 +843,7 @@ export default function RichEditor({
     emit(next)
     const caret = e.target.selectionStart
     reportHeading(headingIndexAt(next, caret))
+    if (typewriterRef.current) scrollCaretToCenter(textareaCaretRect(e.target, caret), e.target, { self: true })
     const trigger = e.target.selectionEnd === caret ? slashTriggerAt(next, caret) : null
     if (trigger) {
       const ta = e.target
@@ -792,6 +857,11 @@ export default function RichEditor({
     }
   }
   const onRawKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'f') {
+      e.preventDefault()
+      openFind()
+      return
+    }
     if (slash?.source === 'raw' && !slashStepping.current && slashKeyRef.current?.(e.nativeEvent)) e.preventDefault()
   }
   const onRawSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>) =>
@@ -820,8 +890,9 @@ export default function RichEditor({
         if (tabRef.current === RAW) mdxRef.current?.focus()
         else editor?.commands.focus()
       },
+      openFind,
     }),
-    [editor, reducedMotion],
+    [editor, reducedMotion, openFind],
   )
 
   const slashAnchorRect = useCallback(() => slashAnchor.current(), [])
@@ -863,6 +934,19 @@ export default function RichEditor({
               <RiskList risks={risks} />
             </AlertDescription>
           </Alert>
+        ) : null}
+
+        {find ? (
+          <FindReplacePanel
+            mode={tabIndex === RAW ? 'raw' : 'visual'}
+            editor={editor}
+            textarea={mdxRef}
+            value={value}
+            onRawChange={emit}
+            initialQuery={find.query}
+            openKey={find.key}
+            onClose={() => setFind(null)}
+          />
         ) : null}
 
         <TabPanels>
@@ -917,6 +1001,31 @@ export default function RichEditor({
                   '.tt-prose a': { color: 'accent.text', textDecoration: 'underline', textUnderlineOffset: '2px' },
                   '.tt-prose hr': { my: 4, borderColor: 'page.border' },
                   '.tt-prose .suggestion': { color: 'accent.text' },
+                  // Find & replace highlights (editor/findPlugin): matches on a soft
+                  // yellow wash, the current one on the accent fill (white text, ≥ 4.5:1).
+                  '.tt-prose .tt-find-match': { bg: 'rgba(250, 204, 21, 0.3)', borderRadius: '2px' },
+                  '.tt-prose .tt-find-current': { bg: 'accent.solid', color: 'accent.fg', borderRadius: '2px' },
+                  '@media (forced-colors: active)': {
+                    '.tt-prose .tt-find-match': { outline: '1px solid CanvasText' },
+                    '.tt-prose .tt-find-current': { outline: '2px solid Highlight', forcedColorAdjust: 'none', bg: 'Highlight', color: 'HighlightText' },
+                  },
+                  // Focus mode (H3): while the editor has focus, every top-level block
+                  // but the one with the caret turns to the subtle text colour — still
+                  // AA (≥ 4.5:1) in both themes, so nothing becomes unreadable — and
+                  // images fade. The colour eases on the standard duration (0 ms under
+                  // reduced motion).
+                  ...(focusMode
+                    ? {
+                        '.tt-prose.ProseMirror-focused > :not(.tt-focus-block), .tt-prose.ProseMirror-focused > :not(.tt-focus-block) *': {
+                          color: 'page.fg-subtle',
+                          borderColor: 'page.border',
+                        },
+                        '.tt-prose.ProseMirror-focused > :not(.tt-focus-block) img': { opacity: 0.45 },
+                        '.tt-prose > *, .tt-prose > * *': { transition: cssTransition(['color', 'opacity'], 'base') },
+                      }
+                    : {}),
+                  // Typewriter scrolling: room under the last line, so it can rise to the typing line too.
+                  ...(typewriter ? { '.tt-prose': { minHeight: minH, outline: 'none', paddingBottom: '45vh' } } : {}),
                 }}
               >
                 <EditorContent editor={editor} />

@@ -319,7 +319,7 @@ export default function LivePreview({
             title={`${open ? 'Hide' : 'Show'} preview (${shortcut})`}
           >
             {open ? 'Hide preview' : 'Show preview'}
-            <Box as="span" fontFamily={MONO} fontSize="10px" color="page.muted" ml={2} aria-hidden>
+            <Box as="span" fontFamily={MONO} fontSize="10px" color="page.fg-subtle" ml={2} aria-hidden>
               {shortcut}
             </Box>
           </Button>

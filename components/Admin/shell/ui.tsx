@@ -450,6 +450,8 @@ export function AdminTitleBar({
       borderBottom="1px solid"
       borderColor="page.border"
       className="no-print"
+      // Measured by sticky bars below it (editor/FindReplacePanel).
+      data-admin-titlebar=""
     >
       <Flex
         maxW={maxW}
@@ -477,7 +479,7 @@ export function AdminTitleBar({
           </Box>
           {children}
         </Flex>
-        <HStack spacing={{ base: 2, md: 3 }} flexShrink={0} flexWrap="wrap" justify="flex-end">
+        <HStack spacing={{ base: 2, md: 3 }} flexShrink={1} minW={0} maxW="100%" flexWrap="wrap" justify="flex-end">
           {status}
           {actions}
           <ShortcutsOverlay />
