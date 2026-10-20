@@ -479,7 +479,9 @@ Analytics 标签页的数据由站点自己收集（`POST /api/a`）；没有第
   也会换新盐）。
 - 每次访问只保留：路径、来源域名（仅当来自其他站点）、国家（Cloudflare 的
   `cf-ipcountry`）、粗略的设备与浏览器类别、页面语言。Web Vitals 只保留
-  路由、指标、数值与评级。
+  路由、指标、数值与评级；LCP、INP 与 CLS 另附归因——用本站自己的标记写成的
+  元素选择器（标签、id、类名，绝不含文字，最多 120 个字符）和各阶段耗时，由
+  Web Vitals 面板按页面与元素汇总（*What makes it slow*）。
 - **存储与保留期**：独立的 `data/analytics.db`（不进入 `content.db`、R2 同步
   或恢复）。原始访问记录保留 35 天，原始 Web Vitals 保留 30 天，按日汇总
   保留 400 天。
@@ -633,7 +635,8 @@ CI（`.github/workflows/ci.yml`）在每次推送和 Pull Request 时运行：
 |---|---|
 | build | `tsc`、零警告的 ESLint、单元测试、`next build --webpack`，以及性能预算（`scripts/perf-budget.mjs`：共享与逐页首屏 JS、共享 CSS、预加载字体的数量与体积） |
 | audit | `scripts/check-audit.mjs`：生产依赖中不得有高危 / 严重漏洞，除非在 `security/audit-allowlist.json` 中写明理由与到期日；过期条目同样失败。完整报告作为构建产物保留 |
-| docker | 合并后的 compose 配置只暴露回环地址；镜像能构建、在空数据卷上启动、提供服务、预热 ISR 页面并优雅停止；随后针对该容器运行 Playwright + axe 测试 |
+| docker | 合并后的 compose 配置只暴露回环地址；镜像能构建、在空数据卷上启动、提供服务、预热 ISR 页面并优雅停止；随后针对该容器运行 Playwright + axe 测试（Chromium、iPhone 上的 WebKit、Firefox） |
+| fixture-gates | 在固定版本的 Playwright 镜像中安装、构建并运行合成测试数据（`e2e/fixtures/store`：*Example Person* 与程序生成的图片，绝不取自线上内容）：在校准过的中端手机配置下 CLS ≤ 0.05、TBT ≤ 200 ms（LCP 只报告），375 / 768 / 1440 px 在 Chromium、WebKit、Firefox 中都无横向滚动，图片不超过 200 KB 且不远大于显示尺寸，文章页通过 axe，以及 30 张视觉基线截图（`e2e/visual.spec.ts-snapshots`）逐像素比对 |
 
 端到端测试（`e2e/`）在桌面、平板、手机与减少动效四种配置下检查每个公开页面：
 恰好一个可见的 `h1`、`lang`（`/cv/zh` 为 `zh-Hans`）、标题与描述、无严重 /

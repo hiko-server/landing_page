@@ -586,7 +586,9 @@ export default function ColophonPage({ releases, stack, buildSha, builtAt }: Pro
                     </>,
                     <>
                       Real-user performance timings (Core Web Vitals: LCP, INP, CLS, FCP, TTFB) are
-                      recorded per page with the device class only — no visitor ID.
+                      recorded per page with the device class only — no visitor ID. For LCP, INP and
+                      CLS they also note which element of the page was involved (named by the site’s
+                      own markup, never by its text) and how long each step took.
                     </>,
                     <>
                       When a page fails with a script error, or your browser blocks something under
