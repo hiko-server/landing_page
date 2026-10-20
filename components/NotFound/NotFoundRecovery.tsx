@@ -1,16 +1,18 @@
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import NextLink from 'next/link'
 import { Box, Button, Flex, Kbd, Link, Text, chakra } from '@chakra-ui/react'
-import { parseSearchIndex } from '../Article/fuzzyMatch'
+import { highlightSegments, parseSearchIndex, type Segment } from '../Article/fuzzyMatch'
 import { HIDE_ON_COARSE_POINTER, isApplePlatform, paletteShortcutLabel } from '../Chrome/platform'
 import { openCommandPalette } from '../Chrome/paletteEvents'
-import { STATIC_CANDIDATES, candidatesFrom, queryFromPath, suggestPages, type Suggestion } from '../../lib/notFoundSuggest'
+import { STATIC_CANDIDATES, queryFromPath, suggestFromIndex, suggestPages, type Suggestion } from '../../lib/notFoundSuggest'
 import SectionHeading from '../General-UI/SectionHeading'
 
 /**
  * The 404 page's way back: Home, a search field that opens the ⌘K palette
  * already searching for the words of the missing address, and up to four
- * "Did you mean" pages (lib/notFoundSuggest.ts).
+ * "Did you mean" pages (lib/notFoundSuggest.ts) — each with the words of the
+ * address it matched marked, in its title or in a short snippet (English
+ * and Chinese, as the palette searches).
  *
  * Everything that depends on the address runs after mount (the 404 page is
  * static): the fixed pages are ranked at once, the posts, case studies and
@@ -23,7 +25,24 @@ import SectionHeading from '../General-UI/SectionHeading'
 
 const MONO = 'var(--font-geist-mono), ui-monospace, monospace'
 
-const KIND_LABEL: Record<Suggestion['kind'], string> = { page: 'Page', post: 'Post', work: 'Case study', cv: 'CV' }
+const KIND_LABEL: Record<Suggestion['kind'], string> = { page: 'Page', post: 'Post', work: 'Case study', cv: 'CV', publication: 'Paper' }
+
+/** Matched words: accent text and weight, never colour alone. */
+function Marked({ segments }: { segments: readonly Segment[] }) {
+  return (
+    <>
+      {segments.map((seg, i) =>
+        seg.match ? (
+          <Box as="mark" key={i} bg="transparent" color="accent.text" fontWeight={600}>
+            {seg.text}
+          </Box>
+        ) : (
+          <React.Fragment key={i}>{seg.text}</React.Fragment>
+        ),
+      )}
+    </>
+  )
+}
 
 export default function NotFoundRecovery() {
   const [query, setQuery] = useState('')
@@ -38,7 +57,10 @@ export default function NotFoundRecovery() {
     const ctrl = new AbortController()
     fetch('/api/search-index', { signal: ctrl.signal })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then((body) => setSuggestions(suggestPages(path, candidatesFrom(parseSearchIndex(body).docs))))
+      .then((body) => {
+        const index = parseSearchIndex(body)
+        setSuggestions(suggestFromIndex(path, index.docs, { subject: index.subject }))
+      })
       .catch(() => {
         // The fixed pages are still ranked; content suggestions are a bonus.
       })
@@ -131,8 +153,13 @@ export default function NotFoundRecovery() {
                 >
                   <Box minW={0}>
                     <Text as="span" display="block" fontSize="16px" fontWeight={500} color="page.fg" lang={s.lang} noOfLines={2}>
-                      {s.title}
+                      <Marked segments={highlightSegments(s.title, s.marks || [])} />
                     </Text>
+                    {s.snippet ? (
+                      <Text as="span" display="block" fontSize="13px" color="page.fg-secondary" mt={0.5} noOfLines={2} lang={s.lang}>
+                        <Marked segments={s.snippet} />
+                      </Text>
+                    ) : null}
                     <Text as="span" display="block" fontFamily={MONO} fontSize="12px" color="page.fg-secondary" mt={0.5} noOfLines={1}>
                       {s.href}
                     </Text>

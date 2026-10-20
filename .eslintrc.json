@@ -72,7 +72,8 @@
                 "components/Header/ThemeMenu.tsx",
                 "components/BrandShowcase/BrandShowcase.tsx",
                 "components/LandingPage/SelectedPublications.tsx",
-                "components/Publications/AuthorLine.tsx"
+                "components/Publications/AuthorLine.tsx",
+                "components/Search/**"
             ],
             "rules": {
                 "no-restricted-syntax": [

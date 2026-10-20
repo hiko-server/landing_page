@@ -77,7 +77,7 @@ after(() => {
 
 test('posts carry headings and body text without code; drafts are absent', () => {
   const index = search.buildSearchIndex()
-  assert.equal(index.v, 1)
+  assert.equal(index.v, 2)
   const post = index.docs.find((d) => d.href === '/blog/post')!
   assert.equal(post.kind, 'post')
   assert.deepEqual(post.headings, ['Where the time goes', 'Power integrity'])

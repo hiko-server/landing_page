@@ -99,6 +99,62 @@ Strict CSP and the Next.js 16 proxy.
   costs about 0.1 ms per admin request, and public routes are as fast as
   before.
 
+### search-ask
+
+Chinese and natural-language site search (F4), and "Ask Lucian" — answers
+quoted from the site itself (J1).
+
+- **Search reads Chinese.** The search index now carries the Chinese CV
+  (`/cv/zh#…` anchors) next to the English one. Words are matched the way
+  Pagefind does for CJK: overlapping character pairs in the text, dictionary
+  words (Intl.Segmenter) in the query, Chinese particles and question words
+  dropped — so 实习, 香港 and 专利 find their entries. Of an entry found in
+  both languages, the one in the query's language is shown.
+- **Questions search their meaning.** Question and function words and the
+  owner's own names are dropped ("Does Lucian have patents?" searches
+  *patents*), known phrases stay whole ("open to work", "machine learning",
+  编程语言), and a vocabulary of common recruiter terms links English and
+  Chinese (internship ↔ 实习, patent ↔ 专利, award ↔ 奖项 …) and asks for
+  the right CV section ("Has he won awards?" → Competitions & Awards).
+  Results show a snippet with every matched word marked, in the palette and
+  on the 404 page's *Did you mean*, which now also offers pages whose
+  content matches the address (/实习 → the internships).
+- **Ask Lucian / 问问 Lucian.** The ⌘K palette has a Search / Ask switch (and
+  an "Ask: …" first row when a search reads like a question); /about and
+  /contact open it in Ask mode. A question in English or Chinese is answered
+  **only with passages quoted from the site** — CV lines and facts, post and
+  page paragraphs, recommendations given with permission, the availability —
+  grouped by source as numbered citation chips, the matched words marked.
+  Every quote links to its page with a text fragment (`#:~:text=…`), so the
+  browser scrolls to it and highlights it; on the page it cites, the quote
+  is found and marked in place. It runs entirely in the browser (BM25 over a
+  passage index; no LLM, no request, no cost) and never invents: with no
+  matching passage it says so and offers "Ask Lucian directly", which puts
+  the question into the contact form's message (never into a URL). The
+  answer reveals source by source with a soft sweep (instantly under reduced
+  motion), is announced politely to screen readers, is fully keyboard
+  driven (↑ ↓ ↵, Backspace back to Search) and works in both themes and on
+  phones. Suggested questions are shown only when the site answers them.
+- **The passage index is public data only** and is built like an ISR page:
+  once per content version, from the same readers the pages use (the CV
+  audience with hidden fields, entries, bullets and sections removed, the
+  hidden summary, recommendations without consent, drafts and contact
+  details never included), shipped inside `/api/search-index` (v2). Every
+  content and CV save marks it stale (`lib/revalidate.ts`) and purges it at
+  the edge together with the CV pages, /contact and /publications; a
+  ten-minute time-based rebuild is the fallback. The leak tests cover the
+  search documents and the passages (`tests/search-ask-leak.test.ts`,
+  `tests/search-ask-store-leak.test.ts`).
+- **Publications** — paper documents in the index (`kind: 'publication'`)
+  are searched and quoted as soon as they exist.
+- **`onEmptyResult(query, mode)`** (`lib/search/emptyResult.ts`) is the one
+  place a search or question that found nothing is reported, once per
+  settled query: the query is normalised and capped at 40 characters, and
+  one with an e-mail address or a long number is dropped. It dispatches the
+  `site:search-empty` window event for the analytics client.
+- The cited-quote highlight uses the accent tint in both themes
+  (`::target-text`, `::highlight(cited-quote)`).
+
 ### security-a
 
 Security and reliability foundation.

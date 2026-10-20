@@ -12,10 +12,18 @@
  *   - words: each word of the path against the candidate's title, slug and
  *     keywords (an exact word, a word start, a typo, then the palette's
  *     fuzzy match) — /resume → CV, /projects/carboy → Carboy.
- * Pure (no DOM, no fetch), unit-tested in tests/chrome-identity.test.ts.
+ *
+ * suggestFromIndex then reads the path's words as a site search (the
+ * palette's ranking, lib/search: CJK words, synonyms in English and
+ * Chinese): it marks why each suggestion matches — the matched title
+ * letters and a snippet with the matched words — and fills free places with
+ * pages whose content matches every word (/实习 → the internships, /patents
+ * → the patent entry).
+ * Pure (no DOM, no fetch), unit-tested in tests/chrome-identity.test.ts and
+ * tests/search-ask.test.ts.
  */
 
-import { fuzzyMatch, type SearchDocLike } from '../components/Article/fuzzyMatch'
+import { fuzzyMatch, rankSearchDocs, type SearchDocLike, type Segment } from '../components/Article/fuzzyMatch'
 import { PRIMARY_LINKS } from '../components/Chrome/chrome'
 
 export type PageCandidate = {
@@ -26,7 +34,13 @@ export type PageCandidate = {
   lang?: string
 }
 
-export type Suggestion = PageCandidate & { score: number }
+export type Suggestion = PageCandidate & {
+  score: number
+  /** Title characters the words of the path matched (suggestFromIndex). */
+  marks?: number[]
+  /** Where else they matched: a short snippet with the matched words marked. */
+  snippet?: Segment[]
+}
 
 /** Below this a candidate is not offered. */
 export const SUGGESTION_THRESHOLD = 0.5
@@ -195,4 +209,41 @@ export function suggestPages(rawPath: string, candidates: readonly PageCandidate
 /** The words of the requested path, as the palette's prefilled query ("/work/swc" → "work swc"). */
 export function queryFromPath(rawPath: string): string {
   return wordsOf(normalizeRequestedPath(rawPath)).join(' ').slice(0, 60)
+}
+
+/**
+ * "Did you mean" from the search index: suggestPages over the fixed pages
+ * and the index, each annotated with what matched, then — while places are
+ * free — the documents whose content matches every word of the path, as
+ * the palette ranks them.
+ */
+export function suggestFromIndex(
+  rawPath: string,
+  docs: readonly SearchDocLike[] | null | undefined,
+  opts: { subject?: readonly string[]; limit?: number } = {},
+): Suggestion[] {
+  const limit = opts.limit ?? SUGGESTION_LIMIT
+  const list = Array.isArray(docs) ? docs : []
+  const byPath = suggestPages(rawPath, candidatesFrom(list), limit)
+  const q = queryFromPath(rawPath)
+  if (!q || normalizeRequestedPath(rawPath) === '/') return byPath
+  const hits = rankSearchDocs(list, q, undefined, { subject: opts.subject })
+  const best = new Map<string, (typeof hits)[number]>()
+  for (const h of hits) if (!best.has(h.doc.href)) best.set(h.doc.href, h)
+  const annotate = (h: (typeof hits)[number] | undefined) =>
+    h ? { ...(h.indices.length ? { marks: h.indices } : {}), ...(h.field !== 'title' && h.snippet?.length ? { snippet: h.snippet } : {}) } : {}
+  const out: Suggestion[] = byPath.map((s) => ({ ...s, ...annotate(best.get(s.href)) }))
+  for (const h of best.values()) {
+    if (out.length >= limit) break
+    if (h.coverage < 1 || out.some((o) => o.href === h.doc.href)) continue
+    out.push({
+      href: h.doc.href,
+      title: h.doc.title,
+      kind: h.doc.kind,
+      lang: h.doc.lang && h.doc.lang !== 'en' ? h.doc.lang : undefined,
+      score: SUGGESTION_THRESHOLD,
+      ...annotate(h),
+    })
+  }
+  return out
 }

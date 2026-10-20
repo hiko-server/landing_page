@@ -46,7 +46,7 @@ function loadTsx(abs: string): Record<string, unknown> {
 }
 
 type Icon = React.ComponentType<Record<string, unknown>>
-const GROUPS = ['chrome', 'theme', 'content'] as const
+const GROUPS = ['chrome', 'theme', 'content', 'ask'] as const
 const base = loadTsx(path.join(ROOT, 'components/Icons/ui/base.tsx')) as {
   ICON_SIZES: Record<string, number>
   ICON_STROKES: Record<string, number>

@@ -458,6 +458,8 @@ test('404: a real 404 with "Did you mean", a prefilled search and a platform-awa
   await expect(palette).toBeVisible()
   await expect(palette.getByRole('combobox')).toHaveValue('blgo')
   await page.keyboard.press('Escape')
+  // The page is checked once the dialog has left (a fading dialog has no settled contrast).
+  await expect(palette).toBeHidden()
   expect(await seriousA11yViolations(page)).toEqual([])
 
   // With content: a typo in a real slug finds it.

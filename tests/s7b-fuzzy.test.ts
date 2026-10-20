@@ -109,7 +109,7 @@ test('parseSearchIndex keeps only well-formed, same-site docs and an http(s) boo
   assert.equal(INDEX.bookingUrl, 'https://cal.com/lucian/intro')
   assert.equal(parseSearchIndex({ docs: [], availability: { bookingUrl: 'javascript:alert(1)' } }).bookingUrl, '')
   assert.equal(parseSearchIndex({ docs: [], availability: { bookingUrl: '/contact' } }).bookingUrl, '')
-  assert.deepEqual(parseSearchIndex(null), { docs: [], bookingUrl: '' })
+  assert.deepEqual(parseSearchIndex(null), { docs: [], bookingUrl: '', subject: [], ask: null })
   assert.deepEqual(parseSearchIndex({ docs: 'nope' }).docs, [])
 })
 

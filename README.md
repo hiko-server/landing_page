@@ -143,6 +143,21 @@ backup, and a hardened admin GUI for non-engineers.
   between articles, `T` for the theme and `G` then a letter to jump. Its
   *Keyboard shortcuts: on/off* action (also in the admin `?` sheet) turns
   every single-key shortcut off, per browser.
+  Search reads Chinese as well as English (the Chinese CV is indexed; CJK
+  words match by character pairs, so 实习, 香港 or 专利 find their entries)
+  and understands questions ("Does he have patents?" searches *patents*,
+  with English ↔ Chinese synonyms for common recruiter words); results and
+  the 404 page's *Did you mean* mark the words that matched.
+- **Ask Lucian / 问问 Lucian** — the palette's *Ask* mode (also opened from
+  /about and /contact) answers a question in English or Chinese **only with
+  quotes from this site** — CV lines, post and page paragraphs — each linked
+  to the exact passage (the browser highlights it). Nothing is generated and
+  nothing leaves the browser; when no passage matches it says so and offers
+  the contact form with the question already in the message. The passages
+  come from the public content only (hidden CV fields, entries and
+  sections, recommendations without permission and drafts never appear) and
+  are rebuilt on every save, so editing the CV is all it takes to change the
+  answers.
 - **Theme** — System / Light / Dark: a one-tap toggle in the header plus a
   menu beside it, the same three choices in ⌘K and in the mobile menu (one
   stored preference, so all of them agree); dark by default (`NEXT_PUBLIC_DEFAULT_THEME`),
@@ -935,7 +950,7 @@ overlay and follow a contact message into the Inbox.
 | `/sitemap.xml` | Sitemap with EN / 中 alternates for the CV and for translated posts and case studies |
 | `/llms.txt`, `/llms-full.txt` | Index for language models and agents (llmstxt.org) and every published post and case study in full, as Markdown |
 | `/blog/[slug].md`, `/work/[slug].md` | Markdown version of a published post or case study (canonical link to the page, `noindex`) |
-| `/api/search-index` | Public search documents for the command palette |
+| `/api/search-index` | Public search documents (EN + ZH) and the "Ask Lucian" passages for the command palette |
 | `/api/vcard` | vCard of the public contact details |
 | `/api/health` | Health: `{"status":"ok"\|"empty"\|"degraded"}` for everyone; store, content, backup age, the restore drill, open errors and pending R2 writes only for an admin or `Authorization: Bearer <HEALTH_TOKEN>` |
 | `/api/og` | Social cards: `?card=<id>` for the fixed pages, HMAC-signed parameters for articles; anything else gets the default card |

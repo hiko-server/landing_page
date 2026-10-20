@@ -13,6 +13,7 @@ import { heroIdentity, portraitAlt, taglinePhrases, type HeroIdentity } from '..
 import { ogPresetUrl } from '../../lib/og/presets'
 import AboutRecommendations from '../../components/About/Recommendations'
 import SectionHeading from '../../components/General-UI/SectionHeading'
+import AskEntry from '../../components/Search/AskEntry'
 import { recommendationsSection } from '../../components/CVViewerPage/recommendationView'
 import type { WorkIndexItem } from '../../components/LandingPage/projectMatch'
 import { availabilityView, type AvailabilityView } from '../../components/Common/contactForm'
@@ -61,7 +62,10 @@ const ANCHOR_SX = { scrollMarginTop: clearOfHeader('8px') } as const
  * /about — the narrative page (home = summary, /cv = the record):
  *
  *   identity rail │ the tagline's lead and focus areas
- *   (sticky, lg)  │ Bio      the owner's own words (admin → About bio);
+ *   (sticky, lg)  │ Ask Lucian  a question answered with quotes from the
+ *                 │          site (the ⌘K palette's Ask mode); shown once
+ *                 │          there is a bio or a CV section to quote
+ *                 │ Bio      the owner's own words (admin → About bio);
  *                 │          omitted while empty, never drafted from the CV
  *                 │ Recommendations  entries given with permission (CV Studio);
  *                 │          omitted while there is none
@@ -156,6 +160,8 @@ const About = ({ hero, identity, portrait, availability, bio, cv, work, personFa
                   ) : null}
                 </Box>
               ) : null}
+
+              {bio || cv.en.length || cv.zh.length ? <AskEntry mb={{ base: 14, md: 16 }} /> : null}
 
               {bio ? (
                 <Box as="section" id="about-bio" aria-labelledby="about-bio-heading" mb={{ base: 14, md: 16 }} sx={{ scrollMarginTop: clearOfHeader('8px') }}>

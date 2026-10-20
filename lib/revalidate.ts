@@ -3,6 +3,7 @@ import { getCloudflarePurgeConfig, getIndexNowKey, getPublicHost } from './env'
 import { log } from './log'
 import { uploadNamesIn } from './uploadVariants'
 import { LLMS_INDEX_PATH, LLMS_PATHS, markdownTwinPaths } from './markdownTwinPaths'
+import { invalidateSearchIndex } from './searchIndexCache'
 
 /**
  * On-demand ISR revalidation.
@@ -30,11 +31,17 @@ import { LLMS_INDEX_PATH, LLMS_PATHS, markdownTwinPaths } from './markdownTwinPa
  * (forgetVanishedPages below, lib/isrPages), so a deleted or unpublished
  * page can never come back from disk after a restart.
  *
+ * Every save also refreshes the search index (GET /api/search-index: the ⌘K
+ * documents and the "Ask" passages): the built copy is marked stale first
+ * (lib/searchIndexCache), so the next request rebuilds it from the saved
+ * content, and the edge copy is purged with the pages (derivedPurgePaths).
+ *
  * Every path that did refresh is then handed to the edge (`notifyEdge`):
  * purged from the Cloudflare cache when CF_ZONE_ID + CF_API_TOKEN are set and
  * pushed to IndexNow when INDEXNOW_KEY is set. Both are fire-and-forget.
  */
 export async function revalidatePaths(res: NextApiResponse, paths: string[], opts: { confirm?: readonly string[] } = {}): Promise<string[]> {
+  invalidateSearchIndex()
   const unique = Array.from(new Set(paths.filter((p) => typeof p === 'string' && p.startsWith('/'))))
   const failed: string[] = []
   const pass = (list: string[]) =>
@@ -250,6 +257,9 @@ const CV_FILE_PATHS: Record<string, readonly string[]> = {
   '/cv/zh': ['/cv/zh.pdf', '/cv/zh.txt', '/cv/zh.json'],
 }
 
+/** The search index (⌘K documents and "Ask" passages, lib/searchIndex.ts). */
+export const SEARCH_INDEX_PATH = '/api/search-index'
+
 /**
  * Edge-cached responses derived from the given pages that must be purged with
  * them:
@@ -258,11 +268,13 @@ const CV_FILE_PATHS: Record<string, readonly string[]> = {
  *     /llms-full.txt holds them), and each post or case study has its
  *     Markdown twin (/blog/<slug>.md, /work/<slug>.md);
  *   - the /now, /uses and /about (bio) bodies are part of the search index,
- *     and /llms.txt quotes the /now and /uses descriptions;
- *   - a CV page change alters its PDF, plain-text and JSON Resume files, and
- *     /llms.txt links each CV language only while it has public content;
+ *     /contact's availability is quoted by "Ask", and /llms.txt quotes the
+ *     /now and /uses descriptions;
+ *   - a CV page change alters its PDF, plain-text and JSON Resume files and
+ *     the search index (CV entries in both languages), and /llms.txt links
+ *     each CV language only while it has public content;
  *   - the sitemap and /llms.txt list /publications only while it has public
- *     papers.
+ *     papers, and its papers are search documents.
  */
 export function derivedPurgePaths(paths: readonly string[]): string[] {
   const out = new Set<string>()
@@ -271,10 +283,10 @@ export function derivedPurgePaths(paths: readonly string[]): string[] {
     if (/^\/(blog|work)(\/|$)/.test(p)) {
       add(COLLECTION_DERIVED_PATHS)
       add(markdownTwinPaths([p]))
-    } else if (p === '/now' || p === '/uses') add(['/api/search-index', LLMS_INDEX_PATH])
-    else if (p === '/about') add(['/api/search-index'])
-    else if (CV_FILE_PATHS[p]) add([...CV_FILE_PATHS[p], LLMS_INDEX_PATH])
-    else if (p === '/publications') add(['/sitemap.xml', LLMS_INDEX_PATH])
+    } else if (p === '/now' || p === '/uses') add([SEARCH_INDEX_PATH, LLMS_INDEX_PATH])
+    else if (p === '/about' || p === '/contact') add([SEARCH_INDEX_PATH])
+    else if (CV_FILE_PATHS[p]) add([...CV_FILE_PATHS[p], LLMS_INDEX_PATH, SEARCH_INDEX_PATH])
+    else if (p === '/publications') add(['/sitemap.xml', LLMS_INDEX_PATH, SEARCH_INDEX_PATH])
   }
   return Array.from(out)
 }

@@ -35,6 +35,16 @@ import { systemPrefersDark, type ThemePreference } from '../../lib/themePreferen
 import { motionTransition } from '../../theme/tokens'
 import { COARSE_POINTER_QUERY, HIDE_ON_COARSE_POINTER, isApplePlatform } from '../Chrome/platform'
 import { setShortcutsEnabled } from '../../lib/keyboardShortcuts'
+import { normalizePaletteMode, type PaletteMode } from '../Chrome/paletteEvents'
+import AskView from '../Search/AskView'
+import ModeToggle from '../Search/ModeToggle'
+import { useAsk } from '../Search/useAsk'
+import { openCitation } from '../Search/citation'
+import { askCopyFor, ASK_COPY } from '../../lib/ask/copy'
+import { askStatusText, type AskOption } from '../../lib/ask/view'
+import { isExplicitQuestion } from '../../lib/search/text'
+import { onEmptyResult } from '../../lib/search/emptyResult'
+import { CONTACT_FORM_ID, stashContactQuestion } from '../../lib/contactPrefill'
 import {
   LAYER_SHORTCUT_ROWS,
   PAGE_TITLES,
@@ -74,6 +84,17 @@ import {
  *     navigates at once — the closing dialog fades out on its own in the
  *     route transition (lib/viewTransition.ts liftDismissibleLayers).
  *   - `initialQuery` opens it already searching (the 404 page's search field).
+ *   - Two modes: Search (above) and Ask ("Ask Lucian", J1): a question is
+ *     answered only with quotes from the site's public pages, each linked to
+ *     where it appears (components/Search/AskView, lib/ask). A search phrased
+ *     as a question (a question word or mark) offers "Ask" as its first row,
+ *     any other search as its last — Enter on a typed title still opens the
+ *     title's page; `initialMode`
+ *     opens the palette in Ask mode (the entry on /about and /contact). Ask
+ *     is a view of the top level: the nested pages and the shortcut sheet
+ *     belong to Search; Backspace in an empty question returns to Search.
+ *   - A settled query that finds nothing is reported once to
+ *     onEmptyResult (lib/search/emptyResult: normalised, no personal data).
  *   - Keyboard hints (shortcut chips, ESC, the cheatsheet) are hidden on
  *     touch-first devices (components/Chrome/platform).
  *
@@ -135,6 +156,8 @@ export type CommandPaletteProps = {
   instant?: boolean
   /** The nested page it opens on ("?" opens Keyboard shortcuts); null = the top level. */
   initialPage?: PalettePage | null
+  /** The mode it opens in: 'search' (default) or 'ask'. */
+  initialMode?: PaletteMode
 }
 
 const HIKO_EMAIL = 'hi@lucian-dev.com'
@@ -144,8 +167,14 @@ const RESULT_LIMIT = 40
 const BROWSE_LIMIT = 6
 const GROUP_ORDER: Group[] = ['Recent', 'On this page', 'Admin', 'Pages', 'Actions', 'Writing', 'Work', 'Content']
 const GROUP_BOOST: Record<Item['group'], number> = { Pages: 6, Admin: 5, Actions: 4, 'On this page': 3, Writing: 2, Work: 2, Content: 2 }
-const KIND_LABEL: Record<SearchDocLike['kind'], string> = { post: 'Post', work: 'Case study', page: 'Page', cv: 'CV' }
+const KIND_LABEL: Record<SearchDocLike['kind'], string> = { post: 'Post', work: 'Case study', page: 'Page', cv: 'CV', publication: 'Paper' }
+/** The "Ask: …" row of a search, and the browse view's "Ask Lucian a question" action. */
+const ASK_ROW_ID = 'ask:question'
+const ASK_ACTION_ID = 'action:ask'
+/** A query that finds nothing is reported (onEmptyResult) once it has rested this long. */
+const EMPTY_SETTLE_MS = 1200
 const MONO = 'var(--font-geist-mono), monospace'
+const NO_ROWS: { rows: Row[]; total: number } = { rows: [], total: 0 }
 
 /** The theme preference actions, in menu order. */
 const THEME_ITEMS: readonly { value: ThemePreference; label: string; hint: string; keywords: string }[] = [
@@ -268,14 +297,16 @@ function Key({ children }: { children: React.ReactNode }) {
 }
 
 function docItem(doc: SearchDocLike, group: Item['group']): Item {
+  const zh = /^zh/i.test(doc.lang || '')
   return {
-    id: `doc:${doc.href}`,
+    // CV skill groups share their section's href: the title keeps ids unique.
+    id: doc.kind === 'cv' ? `doc:${doc.href}|${doc.title}` : `doc:${doc.href}`,
     group,
     kind: 'nav',
     label: doc.title,
     href: doc.href,
     hint: group === 'Content' ? undefined : doc.description ? truncate(doc.description) : undefined,
-    badge: KIND_LABEL[doc.kind],
+    badge: zh ? `${KIND_LABEL[doc.kind]} · 中文` : KIND_LABEL[doc.kind],
     lang: doc.lang && doc.lang !== 'en' ? doc.lang : undefined,
   }
 }
@@ -285,7 +316,7 @@ function docDetail(hit: DocHit<SearchDocLike>): Detail | undefined {
   if (hit.field === 'title') {
     return hit.doc.description ? { prefix: '', segments: [{ text: truncate(hit.doc.description), match: false }] } : undefined
   }
-  if (hit.field === 'body' && hit.snippet) return { prefix: 'in: ', segments: hit.snippet }
+  if (hit.snippet && hit.snippet.length) return { prefix: 'in: ', segments: hit.snippet }
   return { prefix: 'in: ', segments: [{ text: truncate(hit.value), match: false }] }
 }
 
@@ -324,6 +355,7 @@ export default function CommandPalette({
   returnFocusOnClose = true,
   instant = false,
   initialPage = null,
+  initialMode = 'search',
 }: CommandPaletteProps) {
   const router = useRouter()
   const toast = useChromeToast()
@@ -341,9 +373,11 @@ export default function CommandPalette({
   const deferredQuery = useDeferredValue(query)
   // The nested page on screen (null = the top level).
   const [subpage, setSubpage] = useState<PalettePage | null>(initialPage)
+  const [mode, setMode] = useState<PaletteMode>(normalizePaletteMode(initialMode))
   const [activeIdx, setActiveIdx] = useState(0)
   const [index, setIndex] = useState<SearchIndex | null>(null)
   const [loading, setLoading] = useState(false)
+  const [indexFailed, setIndexFailed] = useState(false)
   const [sections, setSections] = useState<Item[]>([])
   const [recent, setRecent] = useState<RecentRecord[]>([])
   const [restoreFocus, setRestoreFocus] = useState(true)
@@ -361,6 +395,8 @@ export default function CommandPalette({
   initialQueryRef.current = initialQuery
   const initialPageRef = useRef(initialPage)
   initialPageRef.current = initialPage
+  const initialModeRef = useRef<PaletteMode>(initialMode)
+  initialModeRef.current = normalizePaletteMode(initialMode)
   const selectOnFocus = useRef(false)
 
   useEffect(() => {
@@ -372,7 +408,9 @@ export default function CommandPalette({
   useEffect(() => {
     if (!isOpen) return
     setQuery(initialQueryRef.current)
-    setSubpage(initialPageRef.current)
+    // Ask is a view of the top level: opened in Ask mode, no nested page.
+    setMode(initialModeRef.current)
+    setSubpage(initialModeRef.current === 'ask' ? null : initialPageRef.current)
     selectOnFocus.current = initialQueryRef.current !== ''
     setActiveIdx(0)
     setRestoreFocus(true)
@@ -406,12 +444,14 @@ export default function CommandPalette({
     if (!isOpen || index) return
     let alive = true
     setLoading(true)
+    setIndexFailed(false)
     loadSearchIndex()
       .then((idx) => {
         if (alive) setIndex(idx)
       })
       .catch(() => {
         // Pages and actions still work; the next open retries.
+        if (alive) setIndexFailed(true)
       })
       .finally(() => {
         if (alive) setLoading(false)
@@ -583,6 +623,15 @@ export default function CommandPalette({
         label: PAGE_TITLES.contact,
         hint: 'email · vCard',
         keywords: 'email mail message hire vcard reach',
+      },
+      {
+        // Switches to Ask mode (runItem); the question is typed there.
+        id: ASK_ACTION_ID,
+        group: 'Actions',
+        kind: 'action',
+        label: ASK_COPY.en.askAction,
+        hint: ASK_COPY.en.askActionHint,
+        keywords: 'ask question answer quote faq 问问 提问 问题',
       },
       // CV ›
       {
@@ -793,7 +842,7 @@ export default function CommandPalette({
         boost(it.id, it.group),
       ).map(({ item, score, indices }) => ({ row: { item, group: item.group, indices }, score }))
       if (!view) {
-        for (const hit of rankSearchDocs(index?.docs || [], q, (doc) => boost(`doc:${doc.href}`, 'Content'))) {
+        for (const hit of rankSearchDocs(index?.docs || [], q, (doc) => boost(docItem(doc, 'Content').id, 'Content'), { subject: index?.subject })) {
           ranked.push({
             row: { item: docItem(hit.doc, 'Content'), group: 'Content', indices: hit.indices, detail: docDetail(hit) },
             score: hit.score,
@@ -801,27 +850,75 @@ export default function CommandPalette({
         }
       }
       ranked.sort((a, b) => b.score - a.score)
-      return { rows: ranked.slice(0, RESULT_LIMIT).map((r) => r.row), total: ranked.length }
+      // The "Ask Lucian a question" action is replaced by the "Ask: …" row below.
+      const found = view ? ranked : ranked.filter((r) => r.row.item.id !== ASK_ACTION_ID)
+      const out = found.slice(0, RESULT_LIMIT).map((r) => r.row)
+      if (!view) {
+        // "Ask: …" — first when the query is phrased as a question, otherwise after the results (or alone).
+        const copy = askCopyFor(q, 'en')
+        const askRow: Row = {
+          item: { id: ASK_ROW_ID, group: 'Actions', kind: 'action', label: copy.askRow(q), hint: copy.askRowHint, badge: copy.modeAsk, lang: /\p{Script=Han}/u.test(q) ? 'zh-Hans' : undefined },
+          group: 'Actions',
+          indices: [],
+        }
+        if (isExplicitQuestion(q)) out.unshift(askRow)
+        else out.push(askRow)
+      }
+      return { rows: out, total: found.length }
     },
     [browseRows, items, sections, recent, index],
   )
 
   const q = deferredQuery.trim()
   const searching = q !== ''
+  // Search, or Ask (the answer view replaces the rows; the field is shared).
+  const asking = mode === 'ask'
+  // The rows of the search view; none while a question is typed (Ask ranks passages instead).
   const { rows, total } = useMemo(
-    (): { rows: Row[]; total: number } => (listReady ? computeRows(q, subpage) : { rows: [], total: 0 }),
-    [listReady, q, subpage, computeRows],
+    (): { rows: Row[]; total: number } => (asking ? NO_ROWS : listReady ? computeRows(q, subpage) : { rows: [], total: 0 }),
+    [asking, listReady, q, subpage, computeRows],
   )
 
-  // The highlighted row (always one that exists).
-  const active = rows.length ? Math.min(activeIdx, rows.length - 1) : -1
-  const activeItem = active >= 0 ? rows[active].item : undefined
+  // ── Ask mode (J1): answers quoted from the site (components/Search) ─────
+  const ask = useAsk(index, query, isOpen && asking, { failed: indexFailed })
+  // The palette's chrome is English; the answer speaks the question's language.
+  const askCopy = askCopyFor(ask.state.question, 'en')
+  const askOpts = ask.options
+  // The search results without the "Ask: …" row (the counts, the empty state).
+  const matchCount = rows.filter((r) => r.item.id !== ASK_ROW_ID).length
+
+  // The highlighted option (always one that exists): a row, or an Ask option.
+  const optionCount = asking ? askOpts.length : rows.length
+  const active = optionCount ? Math.min(activeIdx, optionCount - 1) : -1
+  const activeItem = !asking && active >= 0 ? rows[active].item : undefined
+
+  // A new answer starts from its first option.
+  useEffect(() => setActiveIdx(0), [askOpts])
 
   useEffect(() => {
     if (!isOpen || active < 0) return
     const el = scrollRef.current?.querySelector<HTMLElement>(`[data-idx="${active}"]`)
     el?.scrollIntoView({ block: 'nearest' })
-  }, [active, isOpen])
+  }, [active, isOpen, asking])
+
+  // A settled query that found nothing is reported once per open (lib/search/emptyResult).
+  const reported = useRef(new Set<string>())
+  useEffect(() => {
+    if (isOpen) reported.current = new Set()
+  }, [isOpen])
+  const searchEmpty = !asking && !subpage && listReady && searching && !!index && matchCount === 0
+  const askEmpty = asking && ask.state.ready && !ask.pending && ask.state.result.status === 'none'
+  useEffect(() => {
+    if (!isOpen || !(searchEmpty || askEmpty)) return
+    const text = query.trim()
+    const key = `${mode}:${text.toLowerCase()}`
+    const id = window.setTimeout(() => {
+      if (reported.current.has(key)) return
+      reported.current.add(key)
+      onEmptyResult(text, mode)
+    }, EMPTY_SETTLE_MS)
+    return () => window.clearTimeout(id)
+  }, [isOpen, searchEmpty, askEmpty, query, mode])
 
   // A page that stays highlighted a moment is prefetched, so Enter opens it
   // at once; arrowing past rows costs nothing.
@@ -895,10 +992,23 @@ export default function CommandPalette({
     inputRef.current?.focus()
   }
 
+  /** Search ↔ Ask: the typed text stays (a search becomes a question and back); Ask leaves any nested page. */
+  const switchMode = (next: PaletteMode) => {
+    setMode(next)
+    if (next === 'ask') setSubpage(null)
+    setActiveIdx(0)
+    inputRef.current?.focus()
+  }
+
   const runItem = (item: Item | undefined) => {
     if (!item) return
     if (item.opens) {
       openSubpage(item.opens)
+      return
+    }
+    // "Ask: …" / "Ask Lucian a question": stay open, in Ask mode.
+    if (item.id === ASK_ROW_ID || item.id === ASK_ACTION_ID) {
+      switchMode('ask')
       return
     }
     remember(item)
@@ -920,6 +1030,37 @@ export default function CommandPalette({
     onClose()
   }
 
+  /** Run an Ask option (Enter, or a click — a modified click opens a quote's link natively, in a new tab). */
+  const runAsk = (option: AskOption | undefined, e?: React.MouseEvent) => {
+    if (!option) return
+    if (e && (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0)) return
+    e?.preventDefault()
+    if (option.kind === 'suggestion') {
+      setQuery(option.question)
+      inputRef.current?.focus()
+      return
+    }
+    if (option.kind === 'search') {
+      switchMode('search')
+      return
+    }
+    setRestoreFocus(false)
+    if (option.kind === 'contact') {
+      const question = (ask.state.question || query).trim()
+      pending.current = () => {
+        // Into the contact form's draft (and a mounted form) — never into the URL.
+        stashContactQuestion(question)
+        if (router.pathname === '/contact') {
+          document.getElementById(CONTACT_FORM_ID)?.scrollIntoView({ block: 'start', behavior: reduceMotion ? 'auto' : 'smooth' })
+        } else void router.push(`/contact#${CONTACT_FORM_ID}`)
+      }
+    } else {
+      const { href, passage } = option.quote
+      pending.current = () => openCitation(href, passage.terms)
+    }
+    onClose()
+  }
+
   // Run the chosen item once the dialog (and its focus trap) is gone.
   const onCloseComplete = () => {
     const run = pending.current
@@ -929,7 +1070,11 @@ export default function CommandPalette({
 
   const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.nativeEvent.isComposing) return
-    if (pageKeyAction(e.key, query, subpage) === 'back') {
+    if (asking && e.key === 'Backspace' && query === '') {
+      // Back to Search from an empty question (as in Raycast); Escape closes.
+      e.preventDefault()
+      switchMode('search')
+    } else if (!asking && pageKeyAction(e.key, query, subpage) === 'back') {
       // Escape / Backspace in an empty field leave the nested page; the
       // dialog stays open (its own Escape handler never sees the key).
       e.preventDefault()
@@ -937,12 +1082,18 @@ export default function CommandPalette({
       leaveSubpage()
     } else if (e.key === 'ArrowDown') {
       e.preventDefault()
-      setActiveIdx(rows.length ? (active + 1) % rows.length : 0)
+      setActiveIdx(optionCount ? (active + 1) % optionCount : 0)
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
-      setActiveIdx(rows.length ? (active - 1 + rows.length) % rows.length : 0)
+      setActiveIdx(optionCount ? (active - 1 + optionCount) % optionCount : 0)
     } else if (e.key === 'Enter') {
       e.preventDefault()
+      if (asking) {
+        // Still typing: answer the question first (Enter again opens a quote).
+        if (ask.pending) ask.flush()
+        else runAsk(askOpts[active])
+        return
+      }
       // Typed faster than the deferred ranking (or before the first rows):
       // rank the field's text now, so Enter never opens a stale row.
       const live = query.trim()
@@ -1139,13 +1290,15 @@ export default function CommandPalette({
 
   const resultText = !listReady
     ? ''
-    : `${subpage ? `${PAGE_TITLES[subpage]}: ` : ''}${
-        searching
-          ? total > rows.length
-            ? `Showing ${rows.length} of ${total} results`
-            : `${total} result${total === 1 ? '' : 's'}`
-          : `${rows.length} command${rows.length === 1 ? '' : 's'}`
-      }`
+    : asking
+      ? askStatusText(ask.state, askCopy)
+      : `${subpage ? `${PAGE_TITLES[subpage]}: ` : ''}${
+          searching
+            ? total > matchCount
+              ? `Showing ${matchCount} of ${total} results`
+              : `${total} result${total === 1 ? '' : 's'}`
+            : `${rows.length} command${rows.length === 1 ? '' : 's'}`
+        }`
 
   return (
     <Modal
@@ -1219,8 +1372,8 @@ export default function CommandPalette({
               {PAGE_TITLES[subpage]}
             </Box>
           ) : (
-            <Text as="span" aria-hidden color="page.fg-secondary" fontFamily={MONO} fontSize="13px" lineHeight={1}>
-              ›
+            <Text as="span" aria-hidden color={asking ? 'accent.text' : 'page.fg-secondary'} fontFamily={MONO} fontSize="13px" lineHeight={1}>
+              {asking ? '?' : '›'}
             </Text>
           )}
           <Input
@@ -1237,15 +1390,15 @@ export default function CommandPalette({
             }}
             onKeyDown={onKey}
             role="combobox"
-            aria-label={subpage ? `Search ${PAGE_TITLES[subpage]}` : 'Search pages, sections, actions, posts, case studies and the CV'}
-            aria-expanded={rows.length > 0}
+            aria-label={asking ? ASK_COPY.en.inputLabel : subpage ? `Search ${PAGE_TITLES[subpage]}` : 'Search pages, sections, actions, posts, case studies and the CV'}
+            aria-expanded={optionCount > 0}
             aria-controls={listId}
             aria-autocomplete="list"
             aria-activedescendant={active >= 0 ? optId(active) : undefined}
             autoComplete="off"
             autoCorrect="off"
             spellCheck={false}
-            placeholder={subpage ? `Search ${PAGE_TITLES[subpage].toLowerCase()}…` : 'Search or jump to…'}
+            placeholder={asking ? ASK_COPY.en.placeholder : subpage ? `Search ${PAGE_TITLES[subpage].toLowerCase()}…` : 'Search or jump to…'}
             variant="unstyled"
             fontSize="15px"
             color="page.fg"
@@ -1256,11 +1409,17 @@ export default function CommandPalette({
             flex={1}
           />
           {loading && <Spinner size="xs" color="page.fg-secondary" label="Loading the search index" />}
+          <ModeToggle mode={mode} onChange={switchMode} labels={{ group: ASK_COPY.en.modes, search: ASK_COPY.en.modeSearch, ask: ASK_COPY.en.modeAsk }} />
           <Key>ESC</Key>
         </Flex>
 
         <Box
           ref={scrollRef}
+          // Long answers scroll: the region is reachable by keyboard too (↑ ↓ in the field scroll it as well).
+          role="region"
+          aria-label={asking ? ASK_COPY.en.name : 'Results'}
+          tabIndex={0}
+          _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '-2px' }}
           maxH={['65vh', '60vh']}
           overflowY="auto"
           p={2}
@@ -1271,16 +1430,37 @@ export default function CommandPalette({
         >
           {/* Measured from the first frame that has rows, so opening never glides. */}
           <Box ref={listReady ? observeContent : undefined}>
-            <Box id={listId} role="listbox" aria-label={subpage ? PAGE_TITLES[subpage] : 'Commands'}>
-              {searching || subpage ? rows.map((row, i) => renderRow(row, i)) : renderGrouped()}
-            </Box>
-            {listReady && searching && rows.length === 0 && (
-              <Flex direction="column" align="center" justify="center" py={10} color="page.fg-secondary" fontFamily={MONO} fontSize="12px" gap={1}>
-                <Text>no matches</Text>
-                <Text>{loading && !subpage ? 'still loading posts and projects…' : 'try fewer or different letters'}</Text>
-              </Flex>
+            {asking ? (
+              listReady ? (
+                <AskView
+                  state={ask.state}
+                  options={askOpts}
+                  copy={askCopy}
+                  pending={ask.pending}
+                  activeIdx={active}
+                  optId={optId}
+                  listId={listId}
+                  onHover={setActiveIdx}
+                  onRun={runAsk}
+                />
+              ) : (
+                <Box id={listId} role="listbox" aria-label={ASK_COPY.en.name} />
+              )
+            ) : (
+              <>
+                {listReady && searching && matchCount === 0 && (
+                  // Above the list: the "Ask: …" row follows at the top level.
+                  <Flex direction="column" align="center" justify="center" pt={8} pb={subpage ? 8 : 4} color="page.fg-secondary" fontFamily={MONO} fontSize="12px" gap={1}>
+                    <Text>no matches</Text>
+                    <Text>{loading && !subpage ? 'still loading posts and projects…' : 'try fewer or different letters'}</Text>
+                  </Flex>
+                )}
+                <Box id={listId} role="listbox" aria-label={subpage ? PAGE_TITLES[subpage] : 'Commands'}>
+                  {searching || subpage ? rows.map((row, i) => renderRow(row, i)) : renderGrouped()}
+                </Box>
+                {listReady && !searching && (subpage === 'shortcuts' ? renderSheet(true) : subpage ? null : renderSheet(false))}
+              </>
             )}
-            {listReady && !searching && (subpage === 'shortcuts' ? renderSheet(true) : subpage ? null : renderSheet(false))}
           </Box>
         </Box>
 
@@ -1305,7 +1485,7 @@ export default function CommandPalette({
               <Key>↵</Key>
               <Text>open</Text>
             </Flex>
-            {subpage && (
+            {(subpage || asking) && (
               <Flex gap={1} alignItems="center">
                 <Key>⌫</Key>
                 <Text>back</Text>

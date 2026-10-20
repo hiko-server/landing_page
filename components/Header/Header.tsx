@@ -21,7 +21,15 @@ import { useBrandHost } from '../Chrome/useBrandHost'
 import { useChromeToast } from '../Chrome/useChromeToast'
 import { useShortcutsEnabled } from '../Chrome/useShortcutsEnabled'
 import { HIDE_ON_COARSE_POINTER, isApplePlatform, paletteKeyShortcuts, paletteShortcutLabel } from '../Chrome/platform'
-import { OPEN_PALETTE_EVENT, normalizePalettePage, normalizePaletteQuery, type OpenPaletteDetail, type OpenPaletteOptions } from '../Chrome/paletteEvents'
+import {
+  OPEN_PALETTE_EVENT,
+  normalizePaletteMode,
+  normalizePalettePage,
+  normalizePaletteQuery,
+  type OpenPaletteDetail,
+  type OpenPaletteOptions,
+  type PaletteMode,
+} from '../Chrome/paletteEvents'
 import type { PalettePage } from '../General-UI/paletteModel'
 import { useFetchJson } from '../Common/useFetchJson'
 import { MenuIcon, SearchIcon } from '../Icons/ui/chrome'
@@ -157,6 +165,8 @@ const Header = ({
   // was opened from the keyboard (it then appears at once, no entrance).
   const [palettePage, setPalettePage] = useState<PalettePage | null>(null)
   const [paletteInstant, setPaletteInstant] = useState(false)
+  // The mode it opens in ('ask' from the "Ask Lucian" entry on /about and /contact).
+  const [paletteMode, setPaletteMode] = useState<PaletteMode>('search')
   const [drawerRequested, setDrawerRequested] = useState(false)
   const brand = useBrandHost()
   const [brandHead, brandTail] = splitBrand(brand)
@@ -167,11 +177,12 @@ const Header = ({
   const [dialogsReturnFocus, setDialogsReturnFocus] = useState(true)
 
   const openPalette = useCallback(
-    (query = '', { page = null, instant = false }: OpenPaletteOptions = {}) => {
+    (query = '', { page = null, instant = false, mode = 'search' }: OpenPaletteOptions = {}) => {
       setDialogsReturnFocus(true)
       setPaletteQuery(query)
       setPalettePage(page)
       setPaletteInstant(instant)
+      setPaletteMode(mode)
       setPaletteRequested(true)
       openCmdk()
     },
@@ -183,7 +194,11 @@ const Header = ({
   useEffect(() => {
     const onOpen = (e: Event) => {
       const detail = (e as CustomEvent<OpenPaletteDetail>).detail
-      openPalette(normalizePaletteQuery(detail?.query), { page: normalizePalettePage(detail?.page), instant: detail?.instant === true })
+      openPalette(normalizePaletteQuery(detail?.query), {
+        page: normalizePalettePage(detail?.page),
+        instant: detail?.instant === true,
+        mode: normalizePaletteMode(detail?.mode),
+      })
     }
     window.addEventListener(OPEN_PALETTE_EVENT, onOpen)
     return () => window.removeEventListener(OPEN_PALETTE_EVENT, onOpen)
@@ -543,6 +558,7 @@ const Header = ({
           initialQuery={paletteQuery}
           initialPage={palettePage}
           instant={paletteInstant}
+          initialMode={paletteMode}
           publications={publications}
           returnFocusOnClose={dialogsReturnFocus}
         />

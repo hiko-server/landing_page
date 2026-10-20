@@ -49,6 +49,7 @@ test('ISR: bounded stale window; CV pages are regenerated on store restores and 
     assert.ok(CV_PAGE_PATHS.includes(p), `CV writes regenerate ${p}`)
     assert.ok(HOME_PAGE_PATHS.includes(p), `home writes regenerate ${p}`)
   }
-  // The CV files, and /llms.txt, which links each CV language only while it has public content (G9).
-  assert.deepEqual(derivedPurgePaths([...CV_DOCUMENT_PATHS]).sort(), [...ALL_EXPORT_PATHS, '/llms.txt'].sort())
+  // The CV files, /llms.txt (it links each CV language only while it has public content, G9)
+  // and the search index, which carries the CV entries of both languages (F4 / J1).
+  assert.deepEqual(derivedPurgePaths([...CV_DOCUMENT_PATHS]).sort(), [...ALL_EXPORT_PATHS, '/llms.txt', '/api/search-index'].sort())
 })

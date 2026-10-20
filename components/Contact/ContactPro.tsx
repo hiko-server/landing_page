@@ -54,10 +54,12 @@ import {
   type ContactField,
   type ContactValues,
 } from '../Common/contactForm'
+import { CONTACT_DRAFT_KEY, CONTACT_FORM_ID, CONTACT_PREFILL_EVENT, prefillMessage } from '../../lib/contactPrefill'
+import { clearOfHeader } from '../../lib/anchorOffset'
 
 /** Nonces live 30 min server-side; refresh a little before that. */
 const NONCE_MAX_AGE_MS = 25 * 60 * 1000
-const DRAFT_KEY = 'contact_draft'
+const DRAFT_KEY = CONTACT_DRAFT_KEY
 
 type HomeData = {
   hero?: { phone?: string; email?: string; avatarUrl?: string; brand?: string }
@@ -420,6 +422,20 @@ export default function ContactPro({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // "Ask Lucian directly" (lib/contactPrefill): a question "Ask" could not
+  // answer fills an empty message while the form is on the page.
+  const messageRef = useRef<HTMLTextAreaElement | null>(null)
+  useEffect(() => {
+    const onPrefill = (e: Event) => {
+      const message = prefillMessage((e as CustomEvent<{ message?: unknown }>).detail?.message)
+      if (!message) return
+      setValues((v) => (v.message.trim() ? v : { ...v, message: message.slice(0, MESSAGE_MAX) }))
+      window.requestAnimationFrame(() => messageRef.current?.focus({ preventScroll: false }))
+    }
+    window.addEventListener(CONTACT_PREFILL_EVENT, onPrefill)
+    return () => window.removeEventListener(CONTACT_PREFILL_EVENT, onPrefill)
+  }, [])
+
   const resetForm = () => {
     try {
       localStorage.removeItem(DRAFT_KEY)
@@ -736,11 +752,12 @@ export default function ContactPro({
 
             <chakra.form
               ref={formRef}
+              id={CONTACT_FORM_ID}
               onSubmit={onSubmit}
               onFocus={onFormFocus}
               noValidate
               aria-describedby={serverError ? 'contact-server-error' : undefined}
-              sx={{ containerType: 'inline-size' }}
+              sx={{ containerType: 'inline-size', scrollMarginTop: clearOfHeader('24px') }}
             >
               <VStack spacing={5} align="stretch">
                 <Flex gap={4} align="flex-start" sx={responsiveRow}>
@@ -892,6 +909,7 @@ export default function ContactPro({
                 <FormControl isRequired isInvalid={!!shown.message}>
                   <FormLabel {...labelProps}>Message</FormLabel>
                   <Textarea
+                    ref={messageRef}
                     value={values.message}
                     onChange={set('message')}
                     onBlur={touch('message')}
