@@ -15,7 +15,7 @@
  * display and ignored for matching; diacritics and case are ignored too.
  */
 
-import { HIDDEN_ITEM_MARK } from '../cvVisibility'
+import { HIDDEN_ITEM_MARK } from '../cvVisibilityRead'
 
 /** One language's name parts, as typed in Personal Info. */
 export type NameSource = { firstName?: string; lastName?: string; nickName?: string }

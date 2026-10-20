@@ -13,7 +13,7 @@
  * published work (the validator also refuses to save it).
  */
 
-import { HIDDEN_ITEM_MARK, hiddenIndices, isRedacted } from '../cvVisibility'
+import { HIDDEN_ITEM_MARK, hiddenIndices, isRedacted } from '../cvVisibilityRead'
 import { safeHref } from '../url'
 import { normalizeDoi } from './doi'
 import {

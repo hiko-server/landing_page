@@ -9,7 +9,7 @@ import CompetitionAwardsSection from '../PersonalInstruction/CompetitionAwards'
 import PatentsSection from '../PersonalInstruction/Patents'
 import ExtraSkillSection from '../PersonalInstruction/ExtraSkill'
 import { CVSectionsContext } from '../PersonalInstruction/_CVSectionShell'
-import { isSectionOnWebsite } from '../../lib/cvVisibility'
+import { isSectionOnWebsite } from '../../lib/cvVisibilityRead'
 import type { WorkIndexItem } from './projectMatch'
 
 /**

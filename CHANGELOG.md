@@ -161,6 +161,11 @@ Fixes for defects the final review found in the final batch before it shipped.
   width; **Scheduled & review links** has one rule under "Review links";
   the **analytics page card**'s "View page" lines up with the title on
   phones.
+- **Lighter CV, home and about pages (CV-BUNDLE)**: the public pages load
+  only the few CV visibility checks they use (`lib/cvVisibilityRead`), not
+  the whole model with the CV Studio's helpers — about 2.1–2.3 KiB gzip
+  less first-load JavaScript on /, /about, /cv, /cv/zh, private CV links,
+  /now, /publications, /zh and /zh/about. Nothing changes on screen.
 
 ### patch-2b1
 

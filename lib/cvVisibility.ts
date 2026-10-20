@@ -1,9 +1,12 @@
 /**
  * CV visibility model — one place that decides what is public.
  *
- * Pure (its one import, lib/publications/types, is dependency-free) so it
- * runs identically in API routes, getServerSideProps and the admin Studio
- * preview.
+ * Pure (its imports — lib/publications/types, lib/orcid/marker and the read
+ * side, ./cvVisibilityRead — are dependency-free) so it runs identically in
+ * API routes, getServerSideProps and the admin Studio preview. The public
+ * pages' renderers import ./cvVisibilityRead directly: its few checks are
+ * all they need, so this module (the pruning, the Studio's helpers) stays
+ * out of their bundles.
  *
  * Three levels, all optional and backwards compatible with existing data:
  *
@@ -68,13 +71,15 @@
 
 import { isPublicationStatus } from './publications/types'
 import { ORCID_AUTH_FIELD, publicOrcidAuth } from './orcid/marker'
+import { HIDDEN_ITEM_MARK, REDACTED_KEY, caseStudySlug, hiddenIndices, isSectionOnCv, isSectionOnWebsite, type CvDoc, type CvSectionLike } from './cvVisibilityRead'
+
+// The read side (what the public pages' renderers need) lives in
+// ./cvVisibilityRead so their bundles carry only that; one import here.
+export type { CvDoc, CvLang, CvSectionLike } from './cvVisibilityRead'
+export { HIDDEN_ITEM_MARK, REDACTED_KEY, caseStudySlug, hiddenIndices, isRedacted, isSectionOnCv, isSectionOnWebsite } from './cvVisibilityRead'
 
 const isPlainObject = (v: unknown): v is Record<string, any> =>
   !!v && typeof v === 'object' && !Array.isArray(v)
-
-export type CvSectionLike = { sessionName?: string; [k: string]: any }
-export type CvDoc = { en: CvSectionLike[]; zh: CvSectionLike[] }
-export type CvLang = 'en' | 'zh'
 
 /** Keys that carry visibility metadata rather than content. */
 export const VISIBILITY_KEYS = ['isVisible', 'showOnWebsite', 'hiddenFields', 'hiddenItems', 'onlyIn', 'fieldsOnlyIn', 'itemsOnlyIn'] as const
@@ -147,9 +152,6 @@ export function itemsOffSurface(node: any, field: string, surface: CvSurface): n
   return out
 }
 
-/** Key added by pruning to public nodes; lists the names of hidden fields. */
-export const REDACTED_KEY = 'redacted' as const
-
 /**
  * Editor-only bookkeeping that never reaches a public view: dismissed
  * readiness checks (CV Studio, lib/cvReadiness.ts).
@@ -187,17 +189,6 @@ export const POSITIONAL_ITEM_FIELDS: readonly string[] = ['authors']
 
 /** Paper fields no view shows while a manuscript is under review (lib/publications/citation showsVenue). */
 export const UNDER_REVIEW_WITHHELD: readonly string[] = ['venue', 'volume', 'issue', 'pages', 'publisher']
-export const HIDDEN_ITEM_MARK = '…'
-
-/**
- * True when `field` was hidden by the owner and blanked during pruning.
- * Works on public (pruned) nodes; on full editor documents it falls back to
- * the hiddenFields metadata, so the Studio preview behaves the same way.
- */
-export function isRedacted(node: any, field: string): boolean {
-  if (Array.isArray(node?.[REDACTED_KEY]) && node[REDACTED_KEY].includes(field)) return true
-  return Array.isArray(node?.hiddenFields) && node.hiddenFields.includes(field)
-}
 
 /** Empty value of the same type, so renderers that expect a string/array keep working. */
 function blankOf(v: unknown): unknown {
@@ -215,23 +206,8 @@ export function isEntryHidden(node: any): boolean {
   return isPlainObject(node) && node.isVisible === false
 }
 
-export function hiddenIndices(node: any, field: string): number[] {
-  const list = node?.hiddenItems?.[field]
-  return Array.isArray(list) ? list.filter((n: unknown) => Number.isInteger(n)) : []
-}
-
 export function isItemHidden(node: any, field: string, index: number): boolean {
   return hiddenIndices(node, field).includes(index)
-}
-
-/** A section is on the A4 CV unless explicitly switched off. */
-export function isSectionOnCv(section: any): boolean {
-  return section?.isVisible !== false
-}
-
-/** A section is on the website unless explicitly switched off (independent of the CV switch). */
-export function isSectionOnWebsite(section: any): boolean {
-  return section?.showOnWebsite !== false
 }
 
 /**
@@ -361,16 +337,6 @@ function pruneSection(section: CvSectionLike, surface: CvSurface): CvSectionLike
   if (section.isVisible === false) body.isVisible = false
   if (section.showOnWebsite === false) body.showOnWebsite = false
   return body
-}
-
-/** The slug part of an owner-entered case-study reference ("raku", "/work/raku", "/work/raku/"). */
-export function caseStudySlug(value: unknown): string {
-  if (typeof value !== 'string') return ''
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/^\/?work\//, '')
-    .replace(/\/+$/, '')
 }
 
 /**
