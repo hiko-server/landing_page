@@ -24,8 +24,14 @@ export const IDENTITY: ViewTransform = Object.freeze({ x: 0, y: 0, scale: 1 })
 /** Zoom range (1 = fitted). Pinching past either end rubber-bands, then settles back. */
 export const MIN_SCALE = 1
 export const MAX_SCALE = 4
-/** Double tap / double click / the zoom button: at least this, more if the image needs it to fill the screen. */
+/** Double tap / double click / the zoom button: at least this, more if the image needs it to fill the screen — but never past the source's own pixels (nativeScale). */
 export const DOUBLE_TAP_SCALE = 2.5
+/**
+ * A one-shot zoom (click, double tap, the zoom button) smaller than this
+ * would barely change the picture: below it the image counts as shown at
+ * full size, and the viewer offers no zoom for it (PhotoSwipe's rule).
+ */
+export const MIN_ZOOM_GAIN = 1.2
 /** A scale above this counts as zoomed in (pans instead of paging; the zoom button zooms out). */
 export const ZOOMED_EPSILON = 1.01
 
@@ -141,19 +147,58 @@ export function fillScale(base: Base, view: Box): number {
   return Math.max((view.right - view.left) / base.width, (view.bottom - view.top) / base.height)
 }
 
-/** The zoomed-in level of a double tap or the zoom button: DOUBLE_TAP_SCALE, or enough to fill the stage. */
-export function zoomInScale(base: Base, view: Box): number {
-  return clamp(Math.max(DOUBLE_TAP_SCALE, fillScale(base, view)), MIN_SCALE, MAX_SCALE)
+/**
+ * The widest file a source offers, in px: the largest `w` descriptor of its
+ * srcset(s) — a browser never picks `src` beside `w` candidates — else its
+ * own `width`. 0 when neither says (the decoded file's width then decides).
+ */
+export function sourcePixelWidth(width: number | undefined, ...srcSets: (string | undefined)[]): number {
+  let widest = 0
+  for (const set of srcSets) {
+    for (const m of (set || '').matchAll(/\s(\d+)w(?=\s*(?:,|$))/g)) widest = Math.max(widest, Number(m[1]))
+  }
+  if (widest > 0) return widest
+  return width && width > 0 ? width : 0
+}
+
+/**
+ * The zoom (1 = fitted) at which one pixel of the source covers one CSS
+ * pixel — PhotoSwipe's "1:1" (`sourceWidth` px of file drawn over `base`).
+ * Past it a zoom magnifies pixels and shows no more detail. Infinity when the
+ * source's width is unknown.
+ */
+export function nativeScale(sourceWidth: number, base: Base): number {
+  if (!(sourceWidth > 0) || !(base.width > 0)) return Infinity
+  return sourceWidth / base.width
+}
+
+/** Whether a one-shot zoom shows more of the image than the fitted view (see MIN_ZOOM_GAIN). */
+export function canZoomIn(native: number): boolean {
+  return native >= MIN_ZOOM_GAIN
+}
+
+/**
+ * The zoomed-in level of a double tap or the zoom button: DOUBLE_TAP_SCALE,
+ * or enough to fill the stage — capped where the source runs out of pixels
+ * (`native`, see nativeScale), so the zoom never shows a blown-up file.
+ */
+export function zoomInScale(base: Base, view: Box, native = Infinity): number {
+  return clamp(Math.min(Math.max(DOUBLE_TAP_SCALE, fillScale(base, view)), native), MIN_SCALE, MAX_SCALE)
 }
 
 export function isZoomed(t: ViewTransform): boolean {
   return t.scale > ZOOMED_EPSILON
 }
 
-/** Double tap / double click at `focal`: zoom in there, or back out to fitted when zoomed. */
-export function toggleZoom(t: ViewTransform, focal: Point, base: Base, view: Box): ViewTransform {
+/**
+ * Double tap / double click at `focal`: zoom in there (as far as the
+ * source's pixels allow), or back out to fitted when zoomed. An image
+ * already shown at its full size stays as it is.
+ */
+export function toggleZoom(t: ViewTransform, focal: Point, base: Base, view: Box, native = Infinity): ViewTransform {
   if (isZoomed(t)) return { ...IDENTITY }
-  return clampView(zoomAround(t, zoomInScale(base, view), focal, base), base, view)
+  if (!canZoomIn(native)) return { ...t }
+  return clampView(zoomAround(t, zoomInScale(base, view, native), focal, base), base, view)
 }
 
 /** `+` / `−` from the keyboard: one step of ×1.5 around `focal`, snapping back to fitted near it. */

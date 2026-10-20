@@ -171,6 +171,43 @@ async function pinch(page: Page, f: Fingers, c: Point, from: number, to: number,
 
 const pageZoom = (page: Page) => page.evaluate(() => window.visualViewport?.scale ?? 1)
 
+/**
+ * Where a click, a double tap or the zoom button takes the image on screen
+ * (lib/lightboxGestures zoomInScale): 2.5× or enough to fill the stage, but
+ * never past one file pixel per CSS pixel; `zoomable` is false when the
+ * image is already shown at (about) its file's size (VISU-5).
+ */
+async function oneShot(page: Page): Promise<{ zoomable: boolean; scale: number }> {
+  return page.evaluate(() => {
+    const layer = Array.from(document.querySelectorAll<HTMLElement>('.lightbox-layer')).find((l) => !l.closest('[aria-hidden="true"]'))!
+    const img = layer.querySelector<HTMLImageElement>('img:not([aria-hidden])')!
+    const widths = [img.getAttribute('srcset'), img.closest('picture')?.querySelector('source')?.getAttribute('srcset')].flatMap((s) =>
+      Array.from((s || '').matchAll(/\s(\d+)w(?=\s*(?:,|$))/g), (m) => Number(m[1])),
+    )
+    const source = widths.length ? Math.max(...widths) : Number(img.getAttribute('width')) || img.naturalWidth
+    const stage = document.querySelector('.lightbox-stage')!.getBoundingClientRect()
+    const fill = Math.max(stage.width / layer.offsetWidth, stage.height / layer.offsetHeight)
+    const native = source / layer.offsetWidth
+    return { zoomable: native >= 1.2, scale: Math.min(Math.max(2.5, fill), 4, native) }
+  })
+}
+
+/**
+ * A narrow desktop window: a Field Notes photo is shown smaller than its
+ * file, so a click and the zoom button have something to zoom to (at
+ * 1280 × 800 an 800 px photo is shown at its full size and offers none),
+ * and zoomed to its file's size it is wider than the window (so it pans).
+ */
+const NARROW_DESKTOP = { width: 600, height: 700 }
+
+/** The image's fitted (unzoomed) size and the stage's. */
+const sizes = (page: Page) =>
+  page.evaluate(() => {
+    const layer = Array.from(document.querySelectorAll<HTMLElement>('.lightbox-layer')).find((l) => !l.closest('[aria-hidden="true"]'))!
+    const stage = document.querySelector('.lightbox-stage')!.getBoundingClientRect()
+    return { w: layer.offsetWidth, h: layer.offsetHeight, stageW: stage.width, stageH: stage.height }
+  })
+
 // ── Desktop: morph, keyboard, mouse, wheel, focus ─────────────────────────
 
 test.describe('lightbox gestures: desktop', () => {
@@ -204,6 +241,7 @@ test.describe('lightbox gestures: desktop', () => {
 
   test('keyboard: ← → wrap, Home / End, + − 0 zoom with an announcement, arrows pan a zoomed image', async ({ page, isMobile }) => {
     test.skip(isMobile, 'desktop keyboard')
+    await page.setViewportSize(NARROW_DESKTOP)
     const notes = await fieldNotes(page)
     test.skip(!notes, 'no Field Notes photos in this content store')
     const n = notes!.count
@@ -248,31 +286,38 @@ test.describe('lightbox gestures: desktop', () => {
     await page.keyboard.press('-')
     await idle(page)
     expect((await view(page)).scale).toBe(1)
-    // The zoom button does the same.
+    // The zoom button does the same — as far as the file has pixels.
+    const shot = await oneShot(page)
+    test.skip(!shot.zoomable, 'this store\'s first photo is not larger than it is shown here')
     await page.getByRole('button', { name: 'Zoom in' }).click()
     await idle(page)
-    expect((await view(page)).scale).toBeGreaterThanOrEqual(2.5)
+    expect((await view(page)).scale).toBeCloseTo(shot.scale, 2)
     await page.getByRole('button', { name: 'Zoom out' }).click()
     await idle(page)
     expect((await view(page)).scale).toBe(1)
   })
 
-  test('mouse: a click zooms at the pointer, a double click is one zoom, dragging pans, the wheel zooms at the pointer, a click beside the image closes', async ({ page, isMobile }) => {
+  test('mouse: a click zooms at the pointer (as far as the file has pixels), a double click is one zoom, dragging pans, the wheel zooms at the pointer, a click beside the image closes', async ({ page, isMobile }) => {
     test.skip(isMobile, 'desktop pointer')
+    await page.setViewportSize(NARROW_DESKTOP)
     const notes = await fieldNotes(page)
     test.skip(!notes, 'no Field Notes photos in this content store')
     await notes!.tiles.first().click()
     await idle(page)
     const fitted = await view(page)
+    const shot = await oneShot(page)
+    test.skip(!shot.zoomable, 'this store\'s first photo is not larger than it is shown here')
     const p = { x: fitted.cx + 40, y: fitted.cy + 20 }
 
     await page.mouse.click(p.x, p.y)
     await idle(page)
     let v = await view(page)
-    expect(v.scale).toBeGreaterThanOrEqual(2.5)
-    // The point under the pointer stayed under it.
-    expect(Math.abs(v.cx + 40 * v.scale - p.x)).toBeLessThan(2)
-    expect(Math.abs(v.cy + 20 * v.scale - p.y)).toBeLessThan(2)
+    expect(v.scale).toBeCloseTo(shot.scale, 2)
+    // The point under the pointer stayed under it (along each axis where the zoomed photo is larger than the stage; where it fits it stays centred).
+    const box = await sizes(page)
+    if (box.w * v.scale > box.stageW + 1) expect(Math.abs(v.cx + 40 * v.scale - p.x)).toBeLessThan(2)
+    if (box.h * v.scale > box.stageH + 1) expect(Math.abs(v.cy + 20 * v.scale - p.y)).toBeLessThan(2)
+    expect(box.w * v.scale > box.stageW + 1 || box.h * v.scale > box.stageH + 1, 'zoomed past the stage on one axis at least').toBe(true)
     await page.mouse.click(p.x, p.y)
     await idle(page)
     expect((await view(page)).scale).toBe(1)
@@ -280,9 +325,16 @@ test.describe('lightbox gestures: desktop', () => {
     await page.mouse.dblclick(fitted.cx, fitted.cy)
     await idle(page)
     v = await view(page)
-    expect(v.scale, 'a double click zooms once (not in and straight back out)').toBeGreaterThanOrEqual(2.5)
+    expect(v.scale, 'a double click zooms once (not in and straight back out)').toBeCloseTo(shot.scale, 2)
 
-    // Drag to pan (slowly: no momentum to speak of).
+    // Drag to pan (slowly: no momentum to speak of) — magnified on purpose
+    // (+ +: 2.25×) so the photo is wider than the window.
+    await page.keyboard.press('0')
+    await idle(page)
+    await page.keyboard.press('+')
+    await page.keyboard.press('+')
+    await idle(page)
+    v = await view(page)
     await page.mouse.move(fitted.cx, fitted.cy)
     await page.mouse.down()
     for (let i = 1; i <= 6; i++) {
@@ -320,6 +372,7 @@ test.describe('lightbox gestures: desktop', () => {
 
   test('focus stays inside the viewer; the open viewer passes axe', async ({ page, isMobile }) => {
     test.skip(isMobile, 'desktop keyboard')
+    await page.setViewportSize(NARROW_DESKTOP)
     const notes = await fieldNotes(page)
     test.skip(!notes, 'no Field Notes photos in this content store')
     await notes!.tiles.first().focus()
@@ -334,7 +387,8 @@ test.describe('lightbox gestures: desktop', () => {
       expect(where.inside, 'Tab never leaves the viewer').toBe(true)
       seen.add(where.label)
     }
-    expect([...seen].sort()).toEqual(['Close image viewer', 'Next image', 'Previous image', 'Zoom in'])
+    const { zoomable } = await oneShot(page)
+    expect([...seen].sort()).toEqual(['Close image viewer', 'Next image', 'Previous image', ...(zoomable ? ['Zoom in'] : [])])
     expect(await seriousA11yViolations(page)).toEqual([])
     await page.keyboard.press('Escape')
     await expect(dialog).toHaveCount(0)
@@ -384,9 +438,12 @@ test.describe('lightbox gestures: touch', () => {
     const f = await fingers(page, browserName)
     const c = await view(page)
 
+    const shot = await oneShot(page)
+    test.skip(!shot.zoomable, 'this store\'s first photo is not larger than a phone shows it')
     await doubleTap(page, f, { x: c.cx, y: c.cy })
     await idle(page)
-    expect((await view(page)).scale).toBeGreaterThanOrEqual(2.5)
+    // As far as the file has pixels (not to fill the screen: that would blow it up).
+    expect((await view(page)).scale).toBeCloseTo(shot.scale, 2)
     await doubleTap(page, f, { x: c.cx, y: c.cy })
     await idle(page)
     expect((await view(page)).scale).toBe(1)
@@ -422,18 +479,24 @@ test.describe('lightbox gestures: touch', () => {
     await idle(page)
     const f = await fingers(page, browserName)
     const c = await view(page)
+    const shot = await oneShot(page)
+    test.skip(!shot.zoomable, 'this store\'s first photo is not larger than a phone shows it')
     await doubleTap(page, f, { x: c.cx, y: c.cy })
     await idle(page)
-    expect((await view(page)).scale).toBeGreaterThanOrEqual(2.5)
+    expect((await view(page)).scale).toBeCloseTo(shot.scale, 2)
 
     // Pan slowly to the image's right edge (held: no momentum), then keep going: the strip moves on.
     const width = page.viewportSize()!.width
     const y = c.cy - 40
-    await drag(page, f, { x: width - 16, y }, { x: 16, y }, 8, 30, 150)
+    const box = await sizes(page)
+    // How far it pans before its edge meets the stage's; a little past it (less than a page turn) it stays.
+    const range = (box.w * shot.scale - box.stageW) / 2
+    expect(range, 'zoomed wider than the phone').toBeGreaterThan(60)
+    await drag(page, f, { x: width - 16, y }, { x: width - 16 - (range + 40), y }, 8, 30, 150)
     await idle(page)
     const atEdge = await view(page)
     expect(atEdge.counter, 'held at the edge: still the same image').toBe(`1 / ${notes!.count}`)
-    expect(atEdge.x).toBeLessThan(-100)
+    expect(atEdge.x).toBeLessThan(-(range - 2))
     await drag(page, f, { x: width - 16, y }, { x: width / 3, y }, 8, 30, 150)
     await expect(page.locator('.lightbox-counter')).toHaveText(`2 / ${notes!.count}`)
     await idle(page)
@@ -487,11 +550,14 @@ test.describe('lightbox gestures: reduced motion', () => {
     expect([...new Set(await recordedScales(page))].every((s) => s === 1 || s === 1.5), 'no zoom in between').toBe(true)
     await page.keyboard.press('0')
     await expect.poll(async () => (await view(page)).scale).toBe(1)
-    // Gestures still work.
+    // Gestures still work: a click zooms at once (as far as the file has pixels), or closes a photo shown at its full size.
     const v = await view(page)
+    const shot = await oneShot(page)
     await page.mouse.click(v.cx, v.cy)
-    await expect.poll(async () => (await view(page)).scale).toBeGreaterThanOrEqual(2.5)
-    await page.keyboard.press('Escape')
+    if (shot.zoomable) {
+      await expect.poll(async () => (await view(page)).scale).toBeCloseTo(shot.scale, 2)
+      await page.keyboard.press('Escape')
+    }
     await expect(page.getByRole('dialog')).toHaveCount(0)
   })
 })

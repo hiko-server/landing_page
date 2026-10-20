@@ -37,7 +37,8 @@ test('the enlarged image can always be pinch-zoomed', () => {
   const engine = read('components/Common/lightboxEngine.ts')
   assert.equal((src.match(/touchAction: 'none'/g) || []).length, 1)
   assert.match(engine, /pinchView\(g\.start, a, b, this\.base, this\.viewBox\)/)
-  assert.match(src, /aria-label=\{zoomed \? t\.zoomOut : t\.zoomIn\}/)
+  // The zoom button (shown while the image has pixels to zoom to, or is zoomed: review round 3, VISU-5).
+  assert.match(src, /<ZoomButton[\s\S]*?label=\{zoomed \? t\.zoomOut : t\.zoomIn\}/)
 })
 
 test('deploy.sh: tar tolerates a changing WAL, compose always recreates, a lost build aborts', () => {

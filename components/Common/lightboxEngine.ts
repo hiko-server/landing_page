@@ -8,6 +8,7 @@ import {
   DOUBLE_TAP_MS,
   DOUBLE_TAP_SLOP,
   backdropOpacity,
+  canZoomIn,
   clampView,
   clipPathOf,
   dismissProgress,
@@ -20,6 +21,7 @@ import {
   lockAxis,
   midpoint,
   morphPose,
+  nativeScale,
   pageDecision,
   panBounds,
   panWithOverflow,
@@ -77,7 +79,10 @@ import {
  * flick; when zoomed it pans with momentum and runs into the next image at
  * an edge. Two fingers pinch (1–4×, rubber band past both ends; pinching a
  * fitted image small closes it). A double tap or a click zooms at that
- * point. The wheel zooms at the pointer (trackpad pinch included); a
+ * point — as far as the source has pixels for (one file pixel per CSS
+ * pixel, PhotoSwipe's 1:1); an image already shown at its full size offers
+ * no such zoom (a click on it closes, like a click beside it), while pinch,
+ * the wheel and + / − still magnify on purpose. The wheel zooms at the pointer (trackpad pinch included); a
  * sideways trackpad swipe pages. Safari's trackpad pinch arrives as gesture
  * events.
  *
@@ -109,6 +114,8 @@ export type EngineCallbacks = {
   closed(): void
   /** The zoom changed: `settled` once it rests (the zoom button, the high-resolution source, announcements). */
   zoomChange(scale: number, settled: boolean): void
+  /** Whether the image on screen has more pixels than it is shown with (a click, a double tap and the zoom button zoom it). */
+  zoomableChange?(zoomable: boolean): void
 }
 
 /** The viewer frame's own corner radius (px). */
@@ -199,6 +206,9 @@ export class LightboxEngine {
   private count = 0
   private reduced = false
   private slides = new Map<number, SlideElements>()
+  /** The widest file each image's source offers (px; lightboxGestures sourcePixelWidth). */
+  private sourceWidths = new Map<number, number>()
+  private zoomableNotified: boolean | null = null
 
   private width = 0
   private height = 0
@@ -308,6 +318,7 @@ export class LightboxEngine {
     this.safariPinch = null
     this.lastTap = null
     this.zoomedNotified = false
+    this.zoomableNotified = null
     this.active = false
     this.closing = false
     this.frozen = false
@@ -326,6 +337,16 @@ export class LightboxEngine {
   registerSlide(index: number, els: SlideElements | null): void {
     if (els) this.slides.set(index, els)
     else this.slides.delete(index)
+    this.render()
+  }
+
+  /** How many pixels wide image `index`'s largest file is (0: unknown); a one-shot zoom stops there. */
+  setSourceWidth(index: number, width: number): void {
+    if ((this.sourceWidths.get(index) ?? 0) === width) return
+    if (width > 0) this.sourceWidths.set(index, width)
+    else this.sourceWidths.delete(index)
+    if (index !== this.index || !this.attached) return
+    this.measure()
     this.render()
   }
 
@@ -463,13 +484,19 @@ export class LightboxEngine {
     this.requestStep(delta, 0)
   }
 
-  /** The zoom button: zoom in on the centre of the image, or back out. */
+  /** The zoom button: zoom in on the centre of the image (as far as its source allows), or back out. */
   toggleZoom(): void {
     if (this.closing) return
     this.finishOpen()
     this.measure()
+    if (isZoomed(this.view)) {
+      this.animateZoom({ ...IDENTITY })
+      return
+    }
+    const native = this.nativeScale()
+    if (!canZoomIn(native)) return
     const focal = { x: this.base.cx + this.view.x, y: this.base.cy + this.view.y }
-    this.animateZoom(isZoomed(this.view) ? { ...IDENTITY } : clampView(zoomTo(this.view, zoomInScale(this.base, this.viewBox), focal, this.base, this.viewBox), this.base, this.viewBox))
+    this.animateZoom(clampView(zoomTo(this.view, zoomInScale(this.base, this.viewBox, native), focal, this.base, this.viewBox), this.base, this.viewBox))
   }
 
   /** `+` / `−`: one zoom step around the middle of the stage. */
@@ -509,6 +536,16 @@ export class LightboxEngine {
     const w = els.layer.offsetWidth
     const h = els.layer.offsetHeight
     this.base = { cx: r.left + els.layer.offsetLeft + w / 2, cy: r.top + els.layer.offsetTop + h / 2, width: w, height: h }
+    const zoomable = canZoomIn(this.nativeScale())
+    if (zoomable !== this.zoomableNotified) {
+      this.zoomableNotified = zoomable
+      this.cb.zoomableChange?.(zoomable)
+    }
+  }
+
+  /** The zoom at which the image on screen shows its source 1:1 (Infinity when its width is unknown). */
+  private nativeScale(): number {
+    return nativeScale(this.sourceWidths.get(this.index) ?? 0, this.base)
   }
 
   private baseRect(): Rect {
@@ -581,7 +618,10 @@ export class LightboxEngine {
       root.style.setProperty('--lb-caption', String(isZoomed(this.view) ? 0 : ui))
     }
     const stage = this.host.stage()
-    if (stage) stage.dataset.zoomed = isZoomed(this.view) ? 'true' : 'false'
+    if (stage) {
+      stage.dataset.zoomed = isZoomed(this.view) ? 'true' : 'false'
+      stage.dataset.zoomable = canZoomIn(this.nativeScale()) ? 'true' : 'false'
+    }
   }
 
   private morphFade(): number {
@@ -1023,29 +1063,32 @@ export class LightboxEngine {
   /**
    * A tap. Mouse: a click on the image zooms in at that point (or back out);
    * the second click of a double click is the same action, so it is not
-   * counted twice; a click beside the image closes (zooms out when zoomed).
-   * Touch and pen: a double tap zooms at that point; a single tap beside a
-   * fitted image closes.
+   * counted twice; a click beside the image closes (zooms out when zoomed),
+   * and so does a click on an image already shown at its full size.
+   * Touch and pen: a double tap zooms at that point (nothing on an image at
+   * its full size); a single tap beside a fitted image closes.
    */
   private tap(e: PointerEvent, type: string): void {
     const p = { x: e.clientX, y: e.clientY }
     const prev = this.lastTap
     const double = !!prev && prev.type === type && e.timeStamp - prev.t < DOUBLE_TAP_MS && distance(prev, p) < DOUBLE_TAP_SLOP
     const hit = this.onImage(p)
+    const native = this.nativeScale()
+    const zoomable = isZoomed(this.view) || canZoomIn(native)
     if (type === 'mouse') {
       if (double) {
         this.lastTap = null
         return
       }
       this.lastTap = { t: e.timeStamp, x: p.x, y: p.y, type }
-      if (hit) this.animateZoom(toggleZoom(this.view, p, this.base, this.viewBox))
+      if (hit && zoomable) this.animateZoom(toggleZoom(this.view, p, this.base, this.viewBox, native))
       else if (isZoomed(this.view)) this.animateZoom({ ...IDENTITY })
       else this.cb.requestClose()
       return
     }
     if (double) {
       this.lastTap = null
-      this.animateZoom(toggleZoom(this.view, p, this.base, this.viewBox))
+      if (zoomable) this.animateZoom(toggleZoom(this.view, p, this.base, this.viewBox, native))
       return
     }
     this.lastTap = { t: e.timeStamp, x: p.x, y: p.y, type }
