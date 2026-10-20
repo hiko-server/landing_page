@@ -59,7 +59,23 @@ export function watchToasts(onFirstToast: () => void): () => void {
   return stop
 }
 
-/** The fixed live region of one placement (Chakra's getToastListStyle, safe-area aware). */
+/**
+ * Bottom edge of the bottom placements: above a page's sticky bottom bar
+ * while one is shown (the /cv action bar and the draft-preview bar on
+ * phones publish their height as --bottom-bar-h, components/Common/
+ * useBottomBarOffset — a height that already includes the safe-area inset),
+ * else the safe-area inset. A toast never covers the bar's controls.
+ */
+export const TOAST_BOTTOM = 'var(--bottom-bar-h, env(safe-area-inset-bottom, 0px))'
+
+/**
+ * Height of the toasts in the bottom placements, published on <html> while
+ * any is shown (ToastHost), so a floating control in the same corner (the
+ * scroll-to-top button on narrow screens, styles/globals.css) moves above them.
+ */
+export const TOAST_STACK_VAR = '--toast-stack-h'
+
+/** The fixed live region of one placement (Chakra's getToastListStyle, safe-area and bottom-bar aware). */
 export function toastListStyle(position: ToastPlacement): Record<string, string | undefined> {
   const centred = position === 'top' || position === 'bottom'
   return {
@@ -70,7 +86,7 @@ export function toastListStyle(position: ToastPlacement): Record<string, string 
     flexDirection: 'column',
     margin: centred ? '0 auto' : undefined,
     top: position.includes('top') ? 'env(safe-area-inset-top, 0px)' : undefined,
-    bottom: position.includes('bottom') ? 'env(safe-area-inset-bottom, 0px)' : undefined,
+    bottom: position.includes('bottom') ? TOAST_BOTTOM : undefined,
     right: !position.includes('left') ? 'env(safe-area-inset-right, 0px)' : undefined,
     left: !position.includes('right') ? 'env(safe-area-inset-left, 0px)' : undefined,
   }

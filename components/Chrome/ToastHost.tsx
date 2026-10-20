@@ -1,9 +1,9 @@
-import { useSyncExternalStore, type CSSProperties } from 'react'
+import { useEffect, useRef, useSyncExternalStore, type CSSProperties, type MutableRefObject } from 'react'
 import { Portal, toastStore, type ToastOptions } from '@chakra-ui/react'
 import { AnimatePresence, LazyMotion, MotionConfig } from 'framer-motion'
 import UnifiedToast from '../Common/UnifiedToast'
 import { loadMotionFeatures } from '../../lib/motionFeatures'
-import { subscribeToToasts, toastListStyle, type ToastPlacement } from './toastWatch'
+import { subscribeToToasts, toastListStyle, TOAST_STACK_VAR, type ToastPlacement } from './toastWatch'
 
 /**
  * The toast host, in a chunk of its own (AppChakraProvider loads it once the
@@ -32,20 +32,57 @@ import { subscribeToToasts, toastListStyle, type ToastPlacement } from './toastW
  * them an `m` element never gets the animation engine and every toast stayed
  * in its `initial` state — opacity 0, invisible — and reduced motion was not
  * honoured.
+ *
+ * The bottom placements sit above a page's sticky bottom bar
+ * (./toastWatch.ts toastListStyle), and their height is published as
+ * --toast-stack-h while a toast is shown there, so the scroll-to-top button
+ * in the same corner of a narrow screen moves up instead of being covered.
  */
 
 type StoreState = Record<ToastPlacement, ToastOptions[]>
 
 const getState = () => toastStore.getState() as unknown as StoreState
 
+const BOTTOM_PLACEMENTS: readonly ToastPlacement[] = ['bottom', 'bottom-left', 'bottom-right']
+
+/** Keeps --toast-stack-h on <html> at the height of the tallest bottom placement (removed while none shows a toast). */
+function usePublishBottomStack(regions: MutableRefObject<Map<ToastPlacement, HTMLElement>>) {
+  useEffect(() => {
+    if (typeof ResizeObserver === 'undefined') return
+    const root = document.documentElement
+    const apply = () => {
+      let h = 0
+      for (const position of BOTTOM_PLACEMENTS) h = Math.max(h, Math.ceil(regions.current.get(position)?.getBoundingClientRect().height ?? 0))
+      if (h > 0) root.style.setProperty(TOAST_STACK_VAR, `${h}px`)
+      else root.style.removeProperty(TOAST_STACK_VAR)
+    }
+    const observer = new ResizeObserver(apply)
+    for (const position of BOTTOM_PLACEMENTS) {
+      const el = regions.current.get(position)
+      if (el) observer.observe(el)
+    }
+    apply()
+    return () => {
+      observer.disconnect()
+      root.style.removeProperty(TOAST_STACK_VAR)
+    }
+  }, [regions])
+}
+
 /** The live regions with their toasts (the host's content, without the portal). */
 export function ToastRegions() {
   const state = useSyncExternalStore(subscribeToToasts, getState, getState)
+  const regions = useRef(new Map<ToastPlacement, HTMLElement>())
+  usePublishBottomStack(regions)
   return (
     <>
       {(Object.keys(state) as ToastPlacement[]).map((position) => (
         <div
           key={position}
+          ref={(el) => {
+            if (el) regions.current.set(position, el)
+            else regions.current.delete(position)
+          }}
           role="region"
           aria-live="polite"
           aria-label={`Notifications-${position}`}

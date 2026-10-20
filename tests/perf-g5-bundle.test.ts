@@ -243,7 +243,8 @@ test('toast watch: a toast in any placement counts; list and stack styles match 
   const bottom = toastListStyle('bottom')
   assert.equal(bottom.position, 'fixed')
   assert.equal(bottom.margin, '0 auto')
-  assert.equal(bottom.bottom, 'env(safe-area-inset-bottom, 0px)')
+  // Above a page's sticky bottom bar when one is shown, else the safe-area inset (UX-A-1).
+  assert.equal(bottom.bottom, 'var(--bottom-bar-h, env(safe-area-inset-bottom, 0px))')
   assert.equal(bottom.top, undefined)
   const topLeft = toastListStyle('top-left')
   assert.equal(topLeft.left, 'env(safe-area-inset-left, 0px)')

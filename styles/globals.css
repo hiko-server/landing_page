@@ -1083,6 +1083,19 @@ html .scroll-top[data-visible='true']:active {
   padding: 10px 14px;
   border: 1px solid var(--chakra-colors-page-border-strong);
   border-radius: 12px;
+/* Narrow screens: a toast at the bottom (centred, up to 560px wide) reaches
+   the button's corner, so the button moves up above the toasts while any is
+   shown (--toast-stack-h, components/Chrome/ToastHost.tsx) — never covered
+   by one. `translate` composes with the reveal's `transform`. */
+@media (max-width: 47.99em) {
+  html .scroll-top {
+    translate: 0 calc(-1 * var(--toast-stack-h, 0px));
+  }
+  html .scroll-top,
+  html .scroll-top[data-visible='true'] {
+    transition-property: opacity, transform, visibility, translate;
+  }
+}
   background: var(--chakra-colors-page-bg-elevated);
   color: var(--chakra-colors-page-fg-secondary);
   box-shadow: var(--elevation-md);
