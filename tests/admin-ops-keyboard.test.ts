@@ -146,3 +146,13 @@ test('H14 wiring: the palette lists admin destinations and view commands; the ov
   const header = fs.readFileSync(path.join(root, 'components/Header/Header.tsx'), 'utf8')
   for (const src of [app, header]) assert.doesNotMatch(src, /adminCommands|useAdminCommands/)
 })
+
+test('admin lists take j / k from the page body before the visitor keyboard layer does (capture phase)', () => {
+  // The layer (components/Chrome/KeyboardLayer) also claims j / k and mounts from its own chunk, so with
+  // both on the bubble phase whichever registered first won — a list that mounts after its data never moved.
+  const hook = fs.readFileSync(path.join(root, 'components/Admin/shell/useListKeyboard.ts'), 'utf8')
+  assert.match(hook, /document\.addEventListener\('keydown', onDocKey, true\)/)
+  assert.match(hook, /document\.removeEventListener\('keydown', onDocKey, true\)/)
+  const layer = fs.readFileSync(path.join(root, 'lib/keyboardLayer.ts'), 'utf8')
+  assert.match(layer, /e\.defaultPrevented\) return null/, 'the layer leaves a key the list handled alone')
+})

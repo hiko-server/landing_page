@@ -11,7 +11,11 @@ import { isTextEntryTarget, listKeyAction, type ListKeyAction } from './listKeys
  *
  * `global`: j / k also work while nothing in particular has focus (the page
  * body), the way list views in mail and issue trackers behave — never while a
- * dialog is open, inside a text field or with single-key shortcuts off.
+ * dialog is open, inside a text field or with single-key shortcuts off. That
+ * listener runs in the capture phase, so it always comes before the visitor
+ * keyboard layer (components/Chrome/KeyboardLayer, which also takes j / k
+ * and mounts from a chunk of its own — whichever registered first used to
+ * win); a key it moves the list with is marked handled for the layer.
  */
 
 export type UseListKeyboardOptions = {
@@ -104,8 +108,8 @@ export function useListKeyboard(opts: UseListKeyboardOptions) {
       e.preventDefault()
       focusItem(action.to)
     }
-    document.addEventListener('keydown', onDocKey)
-    return () => document.removeEventListener('keydown', onDocKey)
+    document.addEventListener('keydown', onDocKey, true)
+    return () => document.removeEventListener('keydown', onDocKey, true)
   }, [opts.global, focusItem])
 
   const itemProps = useCallback(
