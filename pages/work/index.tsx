@@ -29,9 +29,9 @@ import { StarIcon } from '../../components/Icons/ui/content'
  * one pointer listener on the grid via useSpotlight), lift on hover and
  * press in on click (motion only when allowed); the whole card is the hit
  * area (stretched title link). A tag filter over the stacks of both lists
- * is shareable as `?tag=` (D8). The first card's cover shares a
- * view-transition name with the case-study page's cover, so it morphs on
- * navigation. ISR (60 s), regenerated on case-study and CV saves.
+ * is shareable as `?tag=` (D8). Opening a card morphs its title and cover
+ * into the case-study page's, and Back flies them home (data-vt-morph,
+ * lib/viewTransition.ts). ISR (60 s), regenerated on case-study and CV saves.
  */
 
 type WorkCardData = {
@@ -104,7 +104,7 @@ function WorkCard({ w, featured, first }: { w: WorkCardData; featured: boolean; 
       eyebrow={w.period || undefined}
       sizes={featured ? FEATURED_SIZES : GRID_SIZES}
       eager={first}
-      vtName={first && w.cover ? `vt-work-cover-${w.slug}` : undefined}
+      morph={!!w.cover}
       decorative
     />
   )
@@ -130,7 +130,7 @@ function WorkCard({ w, featured, first }: { w: WorkCardData; featured: boolean; 
         fontWeight={500}
         mb={featured ? 3 : 2}
         lang={titleLang(w)}
-        style={{ viewTransitionName: `vt-work-${w.slug}` }}
+        data-vt-part="title"
       >
         <NextLink href={w.permalink} className="stretched-link">
           {w.title}
@@ -162,8 +162,10 @@ function WorkCard({ w, featured, first }: { w: WorkCardData; featured: boolean; 
   return (
     <Box
       as="article"
-      className="spotlight work-card"
+      className="spotlight work-card pressable"
       data-spotlight=""
+      data-vt-morph={w.permalink}
+      data-kbd-item=""
       data-tag-item=""
       data-tag-slugs={tagSlugList(w.tech)}
       position="relative"

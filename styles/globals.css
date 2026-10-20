@@ -302,29 +302,60 @@ a:focus-visible > .link-underline {
 
 /* ──────────────────────────────────────────────────────────────────────────
  * View transitions — client-side route changes (components/Chrome/
- * RouteTransitions.tsx starts them only when motion is allowed).
+ * RouteTransitions.tsx starts them only when motion is allowed) and, in
+ * browsers that support it, full page loads between the site's own pages.
  *
- * The page cross-fades as one snapshot: the persistent header is identical in
- * both states, so it stays put while the content changes underneath it.
- * Elements that share a `view-transition-name` across two pages (e.g. a blog
- * card title and the post's <h1>: `vt-blog-<slug>`) morph between their old
- * and new boxes on the same curve.
+ * The page FADES THROUGH as one snapshot: the outgoing page is gone (first
+ * 40%) before the incoming one fades in (from 30%), so two pages are never
+ * seen on top of each other. The persistent header has its own snapshot and
+ * stays put while the content changes underneath it.
+ *
+ * Shared elements: a card's title / cover and the detail page's are named
+ * only for the one transition that links them (lib/viewTransition.ts
+ * planMorph) and morph between their boxes; such a transition carries the
+ * type 'morph' and takes the slow duration.
  * ──────────────────────────────────────────────────────────────────────── */
-/* Same duration + curve on both halves keeps the UA's plus-lighter
-   cross-fade at full opacity throughout (no dip on unchanged pixels). */
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation-duration: var(--duration-base);
-  animation-timing-function: var(--ease-standard);
+:root {
+  /* The route transition's length (the morph type lengthens it). */
+  --vt-route: var(--duration-base);
+}
+html:active-view-transition-type(morph) {
+  --vt-route: var(--duration-slow);
+}
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition {
+    navigation: auto;
+  }
+}
+/* Behind the snapshots: the page colour, so the gap between the outgoing and
+   the incoming page is never the browser's canvas. */
+::view-transition {
+  background-color: var(--chakra-colors-page-bg);
+}
+@keyframes vt-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+@keyframes vt-fade-in {
+  from {
+    opacity: 0;
+  }
 }
 ::view-transition-group(*) {
-  animation-duration: var(--duration-base);
+  animation-duration: var(--vt-route);
   animation-timing-function: var(--ease-standard);
+}
+::view-transition-old(root) {
+  animation: calc(var(--vt-route) * 0.4) var(--ease-standard) both vt-fade-out;
+}
+::view-transition-new(root) {
+  animation: calc(var(--vt-route) * 0.7) var(--ease-standard) calc(var(--vt-route) * 0.3) both vt-fade-in;
 }
 
 /* Directional route transitions. RouteTransitions passes a type: 'next' /
    'prev' (article prev/next links) or 'forward' / 'back' (history order).
-   A transition without a type keeps the plain cross-fade above. */
+   A transition without a type keeps the plain fade-through above. */
 @keyframes vt-out-left {
   to {
     opacity: 0;
@@ -350,16 +381,68 @@ a:focus-visible > .link-underline {
   }
 }
 html:active-view-transition-type(next, forward)::view-transition-old(root) {
-  animation: var(--duration-base) var(--ease-standard) both vt-out-left;
+  animation: calc(var(--vt-route) * 0.4) var(--ease-standard) both vt-out-left;
 }
 html:active-view-transition-type(next, forward)::view-transition-new(root) {
-  animation: var(--duration-base) var(--ease-standard) both vt-in-right;
+  animation: calc(var(--vt-route) * 0.7) var(--ease-standard) calc(var(--vt-route) * 0.3) both vt-in-right;
 }
 html:active-view-transition-type(prev, back)::view-transition-old(root) {
-  animation: var(--duration-base) var(--ease-standard) both vt-out-right;
+  animation: calc(var(--vt-route) * 0.4) var(--ease-standard) both vt-out-right;
 }
 html:active-view-transition-type(prev, back)::view-transition-new(root) {
-  animation: var(--duration-base) var(--ease-standard) both vt-in-left;
+  animation: calc(var(--vt-route) * 0.7) var(--ease-standard) calc(var(--vt-route) * 0.3) both vt-in-left;
+}
+/* While a card morphs into its page (or flies back), the page itself only
+   fades through: a sliding page would compete with the moving title. */
+html:active-view-transition-type(morph)::view-transition-old(root) {
+  animation: calc(var(--vt-route) * 0.4) var(--ease-standard) both vt-fade-out;
+}
+html:active-view-transition-type(morph)::view-transition-new(root) {
+  animation: calc(var(--vt-route) * 0.7) var(--ease-standard) calc(var(--vt-route) * 0.3) both vt-fade-in;
+}
+
+/* Morphing title (vt-morph-title): never stretched. Each snapshot keeps its
+   own size, pinned to the top-left of the moving box (the large title is
+   revealed as the box grows), and the two fade through instead of
+   overlapping. Styled by name, so engines without view-transition-class
+   still get it. */
+::view-transition-old(vt-morph-title),
+::view-transition-new(vt-morph-title) {
+  height: 100%;
+  object-fit: none;
+  object-position: left top;
+}
+::view-transition-old(vt-morph-title) {
+  animation: calc(var(--vt-route) * 0.35) var(--ease-standard) both vt-fade-out;
+}
+::view-transition-new(vt-morph-title) {
+  animation: calc(var(--vt-route) * 0.6) var(--ease-standard) calc(var(--vt-route) * 0.2) both vt-fade-in;
+}
+/* Morphing cover (vt-morph-cover, the image's frame): the picture scales
+   with its box (both frames are 16:10); the outgoing image stays opaque
+   underneath while the incoming one (sharper, perhaps still decoding) fades
+   in over it — no dim midpoint. */
+::view-transition-old(vt-morph-cover),
+::view-transition-new(vt-morph-cover) {
+  height: 100%;
+  object-fit: cover;
+}
+::view-transition-old(vt-morph-cover) {
+  animation: none;
+}
+::view-transition-new(vt-morph-cover) {
+  animation: var(--vt-route) var(--ease-standard) both vt-fade-in;
+  mix-blend-mode: normal;
+}
+/* A part without a partner on the other page (its card is off screen, the
+   list shows no cover) fades exactly like the page around it. */
+::view-transition-old(vt-morph-title):only-child,
+::view-transition-old(vt-morph-cover):only-child {
+  animation: calc(var(--vt-route) * 0.4) var(--ease-standard) both vt-fade-out;
+}
+::view-transition-new(vt-morph-title):only-child,
+::view-transition-new(vt-morph-cover):only-child {
+  animation: calc(var(--vt-route) * 0.7) var(--ease-standard) calc(var(--vt-route) * 0.3) both vt-fade-in;
 }
 
 /* The sticky, blurred header (view-transition-name: site-header, set in

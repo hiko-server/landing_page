@@ -194,21 +194,21 @@ export default function WorkCase({
             <EditPill kind="work" slug={slug} />
           </Flex>
 
-          <Box as="article" lang={lang}>
+          <Box as="article" lang={lang} data-vt-morph={path}>
             <PageHeader
               eyebrow={<span lang={ui}>Case study</span>}
               title={frontmatter.title}
               titleLang={titleLang !== lang ? titleLang : undefined}
               lede={frontmatter.description}
               actions={actions}
-              vtName={`vt-work-${slug}`}
+              morph
             />
 
             <AtAGlance summary={frontmatter.summary} outcomes={frontmatter.outcomes} labelLang={ui} />
 
             {cover && (
               <Box mb={10}>
-                <CoverFrame cover={cover} title={frontmatter.title} sizes="(min-width: 1280px) 1200px, 100vw" eager vtName={`vt-work-cover-${slug}`} radius="xl" />
+                <CoverFrame cover={cover} title={frontmatter.title} sizes="(min-width: 1280px) 1200px, 100vw" eager morph radius="xl" />
               </Box>
             )}
 

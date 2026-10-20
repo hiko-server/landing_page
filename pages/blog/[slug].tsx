@@ -160,13 +160,13 @@ export default function BlogPost({
             <EditPill kind="blog" slug={slug} />
           </Flex>
 
-          <Box as="article" lang={lang}>
+          <Box as="article" lang={lang} data-vt-morph={path}>
             <PageHeader
               eyebrow={<span lang={ui}>Writing</span>}
               title={frontmatter.title}
               titleLang={titleLang !== lang ? titleLang : undefined}
               lede={frontmatter.description}
-              vtName={`vt-blog-${slug}`}
+              morph
             />
 
             <Box mb={12} pb={6} borderBottom="1px solid" borderColor="page.border" lang={ui}>
