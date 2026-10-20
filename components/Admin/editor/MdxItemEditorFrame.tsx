@@ -208,6 +208,9 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
                     <MenuItem as="a" href={livePath} target="_blank" rel="noopener" bg="transparent">
                       View live ↗
                     </MenuItem>
+                    <MenuItem as="a" href={`/admin/dashboard?tab=analytics&f=${encodeURIComponent(`page:is:${livePath}`)}`} target="_blank" rel="noopener" bg="transparent">
+                      Analytics for this page ↗
+                    </MenuItem>
                     {hasPending ? (
                       <MenuItem as="a" href={previewHref} target="_blank" rel="noopener" bg="transparent">
                         Preview unpublished changes ↗

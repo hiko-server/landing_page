@@ -139,21 +139,21 @@ export default function GoalsTable({
   goals,
   comparable,
   period,
-  rangeLabel,
+  when,
   since,
 }: {
   goals: GoalRow[]
   comparable: boolean
   /** "the previous 30 days" */
   period: string
-  /** "30 days" */
-  rangeLabel: string
+  /** The period in a sentence: "in the last 30 days", "this month", "from Oct 1 to Oct 7". */
+  when: string
   since: string | null
 }) {
   const nothing = goals.every((g) => g.events === 0)
   return (
     <>
-      <HairTable caption={`Goal events in the last ${rangeLabel}`}>
+      <HairTable caption={`Goal events ${when}`}>
         <Thead>
           <Tr>
             <Th>Goal</Th>
@@ -179,7 +179,7 @@ export default function GoalsTable({
       </HairTable>
       {nothing ? (
         <EmptyNote>
-          No goal events in the last {rangeLabel}
+          No goal events {when}
           {since ? ` (goals are counted from ${formatBucket(since)}, ${since.slice(0, 4)} on)` : ''}.
         </EmptyNote>
       ) : null}

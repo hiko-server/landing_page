@@ -220,9 +220,10 @@ test.describe('Admin → Analytics goals (H9)', { tag: '@admin' }, () => {
       await expect(goals.getByText(/Arrived from /)).toBeVisible()
     }
 
-    // The period toggle drives the goals too.
-    const weekly = page.waitForResponse((r) => new URL(r.url()).pathname === '/api/admin/goals' && new URL(r.url()).searchParams.get('range') === '7d')
-    await page.getByRole('group', { name: 'Period' }).getByRole('button', { name: '7 days' }).click()
+    // The period picker drives the goals too (H10: a menu of presets).
+    const weekly = page.waitForResponse((r) => new URL(r.url()).pathname === '/api/admin/goals' && new URL(r.url()).searchParams.get('period') === '7d')
+    await page.getByRole('group', { name: 'Period' }).getByRole('button', { name: /^Period:/ }).click()
+    await page.getByRole('menuitemradio', { name: 'Last 7 days' }).click()
     expect((await weekly).status()).toBe(200)
     await expect(goals.getByRole('table', { name: 'Goal events in the last 7 days' })).toBeVisible()
 
