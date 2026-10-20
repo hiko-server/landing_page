@@ -30,6 +30,7 @@ import {
   FaShieldAlt,
   FaHeartbeat,
   FaUser,
+  FaTags,
 } from 'react-icons/fa'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
@@ -37,7 +38,7 @@ import { Eyebrow, MONO, outlineButtonProps } from '../../components/Admin/shell/
 import ShortcutsOverlay from '../../components/Admin/shell/ShortcutsOverlay'
 import type { AdminOverview } from '../api/admin/overview'
 
-type CardKey = 'inbox' | 'cv' | 'home' | 'about' | 'blog' | 'work' | 'now' | 'uses' | 'analytics' | 'versions' | 'storage' | 'mongo' | 'security' | 'system'
+type CardKey = 'inbox' | 'cv' | 'home' | 'about' | 'blog' | 'work' | 'now' | 'uses' | 'tags' | 'analytics' | 'versions' | 'storage' | 'mongo' | 'security' | 'system'
 type Card = { key: CardKey; title: string; desc: string; href: string; icon: IconType }
 
 const GROUPS: Array<{ label: string; cards: Card[] }> = [
@@ -75,6 +76,7 @@ const GROUPS: Array<{ label: string; cards: Card[] }> = [
       { key: 'work', title: 'Case studies', desc: 'Project write-ups shown at /work.', href: '/admin/work', icon: FaBriefcase },
       { key: 'now', title: 'Now', desc: 'What you are focused on right now (/now).', href: '/admin/now', icon: FaClock },
       { key: 'uses', title: 'Uses', desc: 'Hardware, editor and stack (/uses).', href: '/admin/uses', icon: FaToolbox },
+      { key: 'tags', title: 'Tags & export', desc: 'Rename and merge tags across posts and case studies; download all content as a .zip.', href: '/admin/tags', icon: FaTags },
     ],
   },
   {
