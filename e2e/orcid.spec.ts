@@ -101,7 +101,9 @@ test.describe('ORCID iD in CV Studio', { tag: '@admin' }, () => {
         const hiddenFields = Array.isArray(s.hiddenFields) ? s.hiddenFields.filter((f: string) => f !== 'orcid') : undefined
         return { ...rest, ...(hiddenFields ? { hiddenFields } : {}) }
       })
-      if (!list.some((s) => s?.sessionName === 'personalInformation')) list.unshift({ sessionName: 'personalInformation', firstName: 'Example', lastName: 'Person' })
+      if (!list.some((s) => s?.sessionName === 'personalInformation')) {
+        list.unshift({ sessionName: 'personalInformation', firstName: 'Example', lastName: 'Person', introduction: 'A synthetic summary written by the end-to-end suite.' })
+      }
       if (!list.some((s) => s?.sessionName === 'publications')) list.push({ sessionName: 'publications', headerName: lang === 'zh' ? '论文' : 'Publications', papers: [] })
       return list
     }
