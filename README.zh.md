@@ -154,8 +154,8 @@ English → [README.md](./README.md)
   内容或后台提供的 URL 时一律经过 `lib/security/safeFetch.ts`。
 - 服务器上的 compose 覆盖文件不再纳入版本库（提供只绑定回环地址的示例），
   容器日志轮转，基础镜像按 digest 固定，发布镜像只包含追踪出的运行时文件。
-- CI 关卡：阻断式生产依赖审计（带到期日的豁免清单）、性能预算，以及针对同一
-  Docker 镜像运行的 Playwright + axe 端到端测试。
+- 推送前运行的[质量关卡](#质量关卡)：阻断式生产依赖审计（带到期日的豁免清单）、
+  性能预算，以及针对生产构建运行的 Playwright + axe 端到端测试。
 - [`scripts/deploy.sh`](#部署到生产环境)：带健康检查、备份与自动回滚的部署。
 - [版本化的 Cloudflare 配置](#cloudflare)，以及每次重新生成页面时按环境变量
   启用的缓存清除与 IndexNow 推送。
@@ -178,7 +178,7 @@ English → [README.md](./README.md)
 | 鉴权 | **scrypt + `jsonwebtoken` + `jose`（Edge）** | 锁定感知登录、Edge JWT 校验 |
 | 编辑器 | **TipTap**（富文本） + 类 Monaco JSON | 文章块编辑器 + 原始 JSON CV |
 | 图片 | **sharp**（上传时处理） | WebP 尺寸变体 + 宽高；不做按请求优化 |
-| 测试 | **node:test**、**Playwright** + **axe-core** | 单元测试、浏览器端到端测试与 CI 中的 WCAG 2.2 AA 检查 |
+| 测试 | **node:test**、**Playwright** + **axe-core** | 单元测试、浏览器端到端测试与 WCAG 2.2 AA 检查 |
 
 ---
 
@@ -515,11 +515,9 @@ docker compose up -d --build
 
 `docker-compose.override.yml` **不纳入版本库**：每台主机按
 `docker-compose.override.example.yml` 保留自己的副本。示例只把站点绑定到
-`127.0.0.1:3002`（Cloudflare Tunnel 从这里接入；CI 会断言合并后的配置不对
-回环以外的地址暴露端口），用 `./data` 与 `./public/uploads` 的绑定挂载取代
+`127.0.0.1:3002`（Cloudflare Tunnel 从这里接入），用 `./data` 与 `./public/uploads` 的绑定挂载取代
 具名卷，并轮转容器日志（`local` 驱动，5 × 10 MB）。基础文件还去掉了全部 Linux
-capability、设置 `no-new-privileges` 与进程数上限（CI 断言这三项，并用同样参数
-启动容器跑 E2E）。根文件系统保持可写：ISR 会改写 `/app/.next/server` 下的预渲染
+capability、设置 `no-new-privileges` 与进程数上限。根文件系统保持可写：ISR 会改写 `/app/.next/server` 下的预渲染
 页面，只读镜像需要把该目录放到每次部署都重新初始化的卷上。页面变成 404 时（删除或
 撤回发布的文章与案例研究、没有公开论文的 `/publications`），每次内容写入后及启动时
 都会删除它在该目录下的持久化副本（`lib/isrCache`、`lib/isrPages`），否则重启后
@@ -553,7 +551,7 @@ musl）；发布阶段只包含 Next 追踪出的 standalone 输出——构建�
 凭据：新提交以 git bundle 的形式传过去。
 
 ```bash
-git switch main && git pull && git push   # main == origin/main，且 CI 通过
+git switch main && git pull && git push   # main == origin/main
 scripts/deploy.sh                         # --force 重新构建当前已部署的提交
 ```
 
@@ -629,20 +627,20 @@ IndexNow（密钥文件位于站点根目录 `/<INDEXNOW_KEY>.txt`：密钥文�
 
 ## 质量关卡
 
-CI（`.github/workflows/ci.yml`）在每次推送和 Pull Request 时运行：
+项目没有托管的 CI：推送到 `main` 之前请在本地运行以下检查。
 
-| 任务 | 必须通过 |
+| 命令 | 必须通过 |
 |---|---|
-| build | `tsc`、零警告的 ESLint、单元测试、`next build --webpack`，以及性能预算（`scripts/perf-budget.mjs`：共享与逐页首屏 JS、共享 CSS、预加载字体的数量与体积） |
-| audit | `scripts/check-audit.mjs`：生产依赖中不得有高危 / 严重漏洞，除非在 `security/audit-allowlist.json` 中写明理由与到期日；过期条目同样失败。完整报告作为构建产物保留 |
-| docker | 合并后的 compose 配置只暴露回环地址；镜像能构建、在空数据卷上启动、提供服务、预热 ISR 页面并优雅停止；随后针对该容器运行 Playwright + axe 测试 |
+| `yarn check`、`yarn build`、`node scripts/perf-budget.mjs` | `tsc`、零警告的 ESLint、单元测试、`next build --webpack`，以及性能预算（共享与逐页首屏 JS、共享 CSS、预加载字体的数量与体积） |
+| `yarn audit:deps` | `scripts/check-audit.mjs`：生产依赖中不得有高危 / 严重漏洞，除非在 `security/audit-allowlist.json` 中写明理由与到期日；过期条目同样失败 |
+| `yarn e2e` | 针对正在运行的生产构建或容器运行 Playwright + axe 测试（`E2E_BASE_URL`，默认 `http://127.0.0.1:3000`） |
 
 端到端测试（`e2e/`）在桌面、平板、手机与减少动效四种配置下检查每个公开页面：
 恰好一个可见的 `h1`、`lang`（`/cv/zh` 为 `zh-Hans`）、标题与描述、无严重 /
 关键级 axe 问题（WCAG 2.0–2.2 A/AA）、无横向滚动、手机上 24 × 24 px 的点击目标
 （正文内联链接除外）、减少动效时没有正在播放的动画、主题持久化、⌘K 命令面板和
 旧地址跳转——任何控制台错误、未捕获异常或 CSP 违规都会使测试失败。`@admin`
-用例（仅在 CI 中）会登录后台，端到端地隐藏并恢复一个 CV 字段，制造两个编辑器
+用例（只针对本地容器运行：它们会修改内容）会登录后台，端到端地隐藏并恢复一个 CV 字段，制造两个编辑器
 之间的「Changed elsewhere」冲突，打开快捷键面板，并跟踪一条联系留言进入收件箱。
 
 ---
