@@ -467,7 +467,7 @@ The seven streams above, merged and working together.
 ### Changed
 
 - **No hosted CI**: `.github/workflows/ci.yml` is removed, so pushes and pull
-  requests no longer run GitHub Actions. The same gates (`yarn check`,
+  requests no longer run GitHub Actions. The same gates (`yarn run check`,
   `yarn build` + `scripts/perf-budget.mjs`, `yarn audit:deps`) are run
   locally before pushing; the docker job's checks (compose config, image
   build, fresh-data start, runtime hardening, E2E against the container,

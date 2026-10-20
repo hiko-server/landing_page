@@ -494,7 +494,7 @@ yarn content:migrate    # 文件系统 → SQLite（幂等）
 yarn content:pull       # R2 → SQLite（覆盖；读 .env）
 yarn content:push       # SQLite → R2（覆盖；读 .env）
 yarn content:list       # 列出 R2 对象
-yarn check              # tsc + ESLint + 单元测试
+yarn run check          # tsc + ESLint + 单元测试
 yarn e2e                # 针对 E2E_BASE_URL 运行 Playwright + axe（默认 http://127.0.0.1:3000）
 yarn audit:deps         # 生产依赖审计关卡（security/audit-allowlist.json）
 yarn db:status          # 各 SQLite 库的版本（只读）
@@ -631,7 +631,7 @@ IndexNow（密钥文件位于站点根目录 `/<INDEXNOW_KEY>.txt`：密钥文�
 
 | 命令 | 必须通过 |
 |---|---|
-| `yarn check`、`yarn build`、`node scripts/perf-budget.mjs` | `tsc`、零警告的 ESLint、单元测试、`next build --webpack`，以及性能预算（共享与逐页首屏 JS、共享 CSS、预加载字体的数量与体积） |
+| `yarn run check`、`yarn build`、`node scripts/perf-budget.mjs` | `tsc`、零警告的 ESLint、单元测试、`next build --webpack`，以及性能预算（共享与逐页首屏 JS、共享 CSS、预加载字体的数量与体积） |
 | `yarn audit:deps` | `scripts/check-audit.mjs`：生产依赖中不得有高危 / 严重漏洞，除非在 `security/audit-allowlist.json` 中写明理由与到期日；过期条目同样失败 |
 | `scripts/check-container.sh` | 合并后的 compose 配置只暴露回环地址并保留加固项；镜像能构建、在只含 git 种子的全新数据目录上启动、提供服务、预热 ISR 页面，以 uid 1001 运行、没有任何 capability 且 `NoNewPrivs` 为 1；针对该容器运行的 Playwright + axe 测试（含 `@admin` 用例，使用一次性的管理员账号）全部通过；8 秒内优雅停止。需要 Docker、`jq` 与 `curl`；修改 Dockerfile、`docker-entrypoint.sh` 或 compose 文件时必须运行，`--no-e2e` 可跳过端到端测试 |
 

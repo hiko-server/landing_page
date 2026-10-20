@@ -644,7 +644,7 @@ yarn content:migrate    # filesystem → SQLite (idempotent)
 yarn content:pull       # R2 → SQLite (overwrites; uses .env)
 yarn content:push       # SQLite → R2 (overwrites; uses .env)
 yarn content:list       # list R2 objects
-yarn check              # tsc + ESLint + unit tests
+yarn run check          # tsc + ESLint + unit tests
 yarn e2e                # Playwright + axe against E2E_BASE_URL (default http://127.0.0.1:3000)
 yarn audit:deps         # production-dependency audit gate (security/audit-allowlist.json)
 yarn db:status          # schema version of each SQLite store (no writes)
@@ -802,7 +802,7 @@ There is no hosted CI: run these before pushing to `main`.
 
 | Command | What must pass |
 |---|---|
-| `yarn check`, `yarn build`, `node scripts/perf-budget.mjs` | `tsc`, ESLint with zero warnings, unit tests, `next build --webpack`, and the performance budget (shared and per-page first-load JS, shared CSS, number and weight of preloaded fonts) |
+| `yarn run check`, `yarn build`, `node scripts/perf-budget.mjs` | `tsc`, ESLint with zero warnings, unit tests, `next build --webpack`, and the performance budget (shared and per-page first-load JS, shared CSS, number and weight of preloaded fonts) |
 | `yarn audit:deps` | `scripts/check-audit.mjs`: no high/critical advisory in production dependencies unless allowlisted in `security/audit-allowlist.json` with a reason and an expiry date; expired entries fail too |
 | `scripts/check-container.sh` | the merged compose config publishes loopback only and keeps the hardening; the image builds, starts on fresh data holding only the git seeds, serves, warms its ISR pages, runs as uid 1001 with no capabilities and `NoNewPrivs`; the Playwright + axe suite (`@admin` specs included, with a throwaway admin) passes against that container; it stops in under 8 s. Needs Docker, `jq` and `curl`; required for changes to the Dockerfile, `docker-entrypoint.sh` or the compose files, `--no-e2e` skips the suite |
 
