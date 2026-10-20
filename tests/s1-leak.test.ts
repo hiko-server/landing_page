@@ -40,9 +40,13 @@ function fill(kind: FieldKind): unknown {
 const isPrivateSlot = (sectionName: string, slot: { ownerPath: CvPath; field: string }) =>
   slot.ownerPath.length === 1 && (PRIVATE_SECTION_FIELDS[sectionName] || []).includes(slot.field)
 
+/** A select gets a real option (a paper needs a known status to be public at all, CV-L-4). */
+const fillField = (f: { kind: FieldKind; options?: ReadonlyArray<{ value: string }> }): unknown =>
+  f.kind === 'select' && f.options?.length ? f.options[0].value : fill(f.kind)
+
 function buildEntry(list: ListDef): Record<string, any> {
   const entry: Record<string, any> = {}
-  for (const f of list.fields) entry[f.key] = fill(f.kind)
+  for (const f of list.fields) entry[f.key] = fillField(f)
   for (const nested of list.lists || []) entry[nested.key] = [buildEntry(nested), buildEntry(nested)]
   return entry
 }
@@ -51,7 +55,7 @@ function buildDoc(): CvDoc {
   const lang = (l: 'en' | 'zh') =>
     CV_SECTIONS.map((def) => {
       const section: Record<string, any> = { sessionName: def.sessionName, headerName: def.headerDefault[l] }
-      for (const f of def.fields || []) section[f.key] = fill(f.kind)
+      for (const f of def.fields || []) section[f.key] = fillField(f)
       for (const list of def.lists || []) section[list.key] = [buildEntry(list), buildEntry(list)]
       return section as { sessionName: string }
     })
@@ -159,6 +163,12 @@ test('a hidden sentinel never reaches any public view or the derived chip, and h
     const base = buildDoc()
     const planted: CvDoc = { en: setAt(base.en, slot.path, sentinel), zh: setAt(base.zh, slot.path, sentinel) }
 
+    // A paper whose status is not a known one renders nowhere, so it is never
+    // public at all (CV-L-4): the sentinel planted as its status must not be.
+    if (CV_SECTIONS[slot.path[0] as number].sessionName === 'publications' && slot.field === 'status') {
+      for (const audience of AUDIENCES) assert.ok(!JSON.stringify(publicCvDoc(planted, audience)).includes(needle), `${slot.path.join('.')}: an unknown status ('${audience}')`)
+      continue
+    }
     // Control: unhidden, the sentinel is public — so the slot is real.
     assert.ok(JSON.stringify(publicCvDoc(planted, 'any')).includes(needle), `control ${slot.path.join('.')}`)
 
@@ -174,7 +184,19 @@ test('a hidden sentinel never reaches any public view or the derived chip, and h
           assert.ok(!JSON.stringify(deriveCurrentlyCoding(pub.en)).includes(needle), `${where}: leaked via derived chip ('${audience}')`)
         }
         assert.ok(!text.includes('"hiddenFields"') && !text.includes('"hiddenItems"'), `${where}: metadata leaked`)
-        if (mech.redacted) {
+        // A paper with its title or status hidden renders nowhere, so it is
+        // left out whole (CV-L-4) instead of carrying a redaction mark.
+        const droppedPaper =
+          !!mech.redacted &&
+          CV_SECTIONS[slot.path[0] as number].sessionName === 'publications' &&
+          mech.redacted.ownerPath.length > 1 &&
+          ['title', 'status'].includes(mech.redacted.name)
+        if (droppedPaper) {
+          for (const lang of ['en', 'zh'] as const) {
+            const papers = resolvePruned(doc[lang], pub[lang], [slot.path[0], 'papers'])
+            if (papers) assert.equal(papers.length, 1, `${where}: the paper is left out in '${audience}' ${lang}`)
+          }
+        } else if (mech.redacted) {
           for (const lang of ['en', 'zh'] as const) {
             const owner = resolvePruned(doc[lang], pub[lang], mech.redacted.ownerPath)
             assert.ok(owner, `${where}: owner present in '${audience}' ${lang}`)

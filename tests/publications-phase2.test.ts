@@ -413,8 +413,9 @@ test('search: one document per public paper, at its /publications anchor — or 
   // Website switch off: the CV still lists them, at the sheet's anchors.
   const cvOnly = cvDoc({ showOnWebsite: false })
   const fromCv = publicationDocs(view(cvOnly), publicCvDoc(cvOnly, 'cv').en)
-  // (The index counts visible papers — the hidden one is gone, the status-less one still counts — like the sheet.)
-  assert.deepEqual(fromCv.map((d) => d.href), ['/cv#cv-publications-0', '/cv#cv-publications-1', '/cv#cv-publications-3'])
+  // (The index counts the papers of the public data, like the sheet: the hidden one and — since CV-L-4, as no
+  // view renders it — the status-less one are not in it.)
+  assert.deepEqual(fromCv.map((d) => d.href), ['/cv#cv-publications-0', '/cv#cv-publications-1', '/cv#cv-publications-2'])
   // Off both: nothing.
   const off = cvDoc({ showOnWebsite: false, isVisible: false })
   assert.deepEqual(publicationDocs(view(off), publicCvDoc(off, 'cv').en), [])

@@ -1,8 +1,9 @@
 /**
  * CV visibility model — one place that decides what is public.
  *
- * Pure / dependency-free so it runs identically in API routes,
- * getServerSideProps and the admin Studio preview.
+ * Pure (its one import, lib/publications/types, is dependency-free) so it
+ * runs identically in API routes, getServerSideProps and the admin Studio
+ * preview.
  *
  * Three levels, all optional and backwards compatible with existing data:
  *
@@ -30,6 +31,8 @@
  * must not turn a past job into the current one, and a hidden expiry date
  * must not print "No Expiry". Only key names are exposed, never values.
  */
+
+import { isPublicationStatus } from './publications/types'
 
 export type CvSectionLike = { sessionName?: string; [k: string]: any }
 export type CvDoc = { en: CvSectionLike[]; zh: CvSectionLike[] }
@@ -169,6 +172,17 @@ function pruneNode(node: any): any {
   return out
 }
 
+/** A paper's text field as the publication views read it (whitespace collapsed, trimmed). */
+const paperText = (v: unknown): string => (typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '')
+
+/**
+ * A pruned paper some view renders (lib/publications toPublication's rule):
+ * a title and a known status, neither hidden (a hidden field is blank here).
+ */
+function isRenderablePaper(paper: unknown): paper is Record<string, any> {
+  return isPlainObject(paper) && paperText(paper.title) !== '' && isPublicationStatus(paperText(paper.status))
+}
+
 /** Prune one section's body while keeping its section-level switches for the renderer. */
 function pruneSection(section: CvSectionLike): CvSectionLike {
   const name = String(section.sessionName || '')
@@ -185,12 +199,14 @@ function pruneSection(section: CvSectionLike): CvSectionLike {
         }
       : section
   const body = pruneNode(source)
-  // A manuscript under review is cited without where it was submitted (APA 7;
-  // lib/publications showsVenue): since no view renders those fields, the
-  // public data never carries them either.
+  // Papers: public data never carries what no view renders. A paper without
+  // a title or without a valid status (empty, hidden, unknown) is shown
+  // nowhere (lib/publications toPublication), so it is left out whole; a
+  // manuscript under review is cited without where it was submitted (APA 7;
+  // lib/publications showsVenue), so those fields are left out.
   if (name === 'publications' && Array.isArray(body.papers)) {
-    body.papers = body.papers.map((paper: unknown) => {
-      if (!isPlainObject(paper) || paper.status !== 'under-review') return paper
+    body.papers = body.papers.filter(isRenderablePaper).map((paper: Record<string, any>) => {
+      if (paperText(paper.status) !== 'under-review') return paper
       const rest = { ...paper }
       for (const key of UNDER_REVIEW_WITHHELD) delete rest[key]
       return rest

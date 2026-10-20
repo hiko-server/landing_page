@@ -9,6 +9,8 @@
  *     published case study, and the article siblings (prev / next / related
  *     on every post page) never carry an unresolved one;
  *   - Draft Mode keeps the owner's value; publishing the case study links it.
+ * CV-L-4: a paper no view renders (no title, or a status that is empty,
+ * hidden or unknown) is not in the public CV data at all.
  * Runs over a real (temporary) content store.
  */
 import { test, before, after } from 'node:test'
@@ -16,6 +18,8 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { publicSections, UNDER_REVIEW_WITHHELD } from '../lib/cvVisibility'
+import { toPublication } from '../lib/publications/normalize'
 
 for (const k of ['R2_ENDPOINT', 'R2_BUCKET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'SMTP_HOST', 'SMTP_USER', 'SMTP_PASS', 'CF_ZONE_ID', 'CF_API_TOKEN', 'INDEXNOW_KEY']) delete process.env[k]
 process.env.JWT_SECRET = 'review-fixes-2b-cv-secret-0123456789abcd'
@@ -164,4 +168,34 @@ test('control: once the case study is published, the CV project, the post and th
   } finally {
     await store.putItem('work', DRAFT, { title: 'A case study still in draft', draft: true }, en)
   }
+})
+
+test('CV-L-4: a paper no view renders (no title; empty, hidden or unknown status) is left out of the public data whole', () => {
+  const papers = [
+    { title: 'Printed work', status: 'published', venue: 'Known Venue', authors: ['Jane Doe'] },
+    { title: 'No status yet', status: '', venue: 'ZZ-NOSTATUS-VENUE', doi: '10.5555/zznostatus', abstract: 'ZZ-NOSTATUS-ABSTRACT', authors: ['ZZ-COAUTHOR'] },
+    { title: 'Status hidden', status: 'published', hiddenFields: ['status'], venue: 'ZZ-HIDDENSTATUS-VENUE', abstract: 'ZZ-HIDDENSTATUS-ABSTRACT' },
+    { title: 'Unknown status', status: 'submitted', venue: 'ZZ-BADSTATUS-VENUE' },
+    { title: '', status: 'published', venue: 'ZZ-UNTITLED-VENUE' },
+    { title: 'Title hidden', status: 'published', hiddenFields: ['title'], venue: 'ZZ-HIDDENTITLE-VENUE' },
+    { title: '  Spaced   status ', status: ' published ', venue: 'Spaced Venue' },
+    { title: 'Spaced review', status: ' under-review ', venue: 'ZZ-SPACED-SUBMITTED-TO', volume: '9' },
+  ]
+  const section = { sessionName: 'publications', headerName: 'PUBLICATIONS', papers }
+  // The rule mirrors the renderers': exactly the papers toPublication renders stay.
+  const rendered = papers.map((p, i) => toPublication(p, i)).filter(Boolean).map((p) => p!.title)
+  assert.deepEqual(rendered, ['Printed work', 'Spaced status', 'Spaced review'])
+  for (const audience of ['any', 'cv', 'website'] as const) {
+    const [pub] = publicSections([section], audience)
+    const kept = pub.papers as Array<Record<string, unknown>>
+    assert.deepEqual(kept.map((p) => String(p.title).replace(/\s+/g, ' ').trim()), rendered, audience)
+    const text = JSON.stringify(pub)
+    for (const needle of ['ZZ-NOSTATUS', 'ZZ-COAUTHOR', 'ZZ-HIDDENSTATUS', 'ZZ-BADSTATUS', 'ZZ-UNTITLED', 'ZZ-HIDDENTITLE', 'ZZ-SPACED-SUBMITTED-TO'])
+      assert.ok(!text.includes(needle), `${audience}: ${needle}`)
+    for (const key of UNDER_REVIEW_WITHHELD) assert.equal(key in kept[2], false, `${key} withheld while under review (status with spaces)`)
+    assert.equal(kept[1].venue, 'Spaced Venue')
+  }
+  // Every paper renders nowhere: the list is empty, the section stays (its switches are the renderers').
+  const [none] = publicSections([{ sessionName: 'publications', papers: papers.slice(1, 6) }], 'any')
+  assert.deepEqual(none.papers, [])
 })

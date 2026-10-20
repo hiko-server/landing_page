@@ -5,7 +5,11 @@
  *     chrome / sitemap flag is false;
  *   - nothing hidden — a field, an entry, an author, the whole list, the
  *     section — reaches the page props (= __NEXT_DATA__ and the HTML), its
- *     JSON-LD, the public /api/cvdata view, or the CV-page views;
+ *     JSON-LD, the public /api/cvdata view, or the CV-page views; nor does
+ *     what no view shows: the venue fields of a paper under review, or a
+ *     paper without a valid status (wave 2B review CV-L-1 / CV-L-4 / CV-L-5:
+ *     asserted on the raw projections — the /api/cvdata handler's JSON and
+ *     the /cv and /cv/zh page props);
  *   - CV writes regenerate /publications; the chrome helpers and the
  *     Studio's linked "shared" values behave.
  */
@@ -40,6 +44,28 @@ const personal = (lang: 'en' | 'zh') =>
     ? { sessionName: 'personalInformation', firstName: 'Yanpei', lastName: 'Li', nickName: 'Lucian', email: `${SECRET}@example.test`, hiddenFields: ['email'] }
     : { sessionName: 'personalInformation', firstName: '彦霈', lastName: '李', nickName: 'Lucian' }
 
+/**
+ * Papers the editor refuses to save (lib/cvValidate: a status is required)
+ * but a restored snapshot or older data can hold: rendered nowhere, so never
+ * shipped either.
+ */
+function withStatuslessPapers(doc: { en: any[]; zh: any[] }) {
+  const add = (sections: any[]) =>
+    sections.map((s) =>
+      s.sessionName === 'publications'
+        ? {
+            ...s,
+            papers: [
+              ...s.papers,
+              { title: 'No status yet', status: '', venue: 'STATUSLESS Venue', doi: '10.5555/statusless', abstract: 'STATUSLESS abstract.', authors: ['Jane Doe', 'STATUSLESS Coauthor'] },
+              { title: 'Unknown status', status: 'submitted', venue: 'STATUSLESS Unknown Venue' },
+            ],
+          }
+        : s,
+    )
+  return { en: add(doc.en), zh: add(doc.zh) }
+}
+
 /** A CV whose publications hide something at every level. */
 function cv(extra: Record<string, unknown> = {}) {
   const papers = [
@@ -64,7 +90,9 @@ function cv(extra: Record<string, unknown> = {}) {
       award: 'Best Paper Award',
     },
     { title: `${SECRET} hidden paper`, status: 'published', isVisible: false, authors: ['Yanpei Li'] },
-    { title: 'Under review paper', status: 'under-review', venue: 'SUBMITTED-TO Venue', date: '2026', authors: ['Yanpei Li'] },
+    { title: 'Under review paper', status: 'under-review', venue: 'SUBMITTED-TO Venue', volume: 'SUBMITTED-TO-VOL', issue: 'SUBMITTED-TO-ISSUE', pages: 'SUBMITTED-TO-PAGES', publisher: 'SUBMITTED-TO Press', date: '2026', authors: ['Yanpei Li'] },
+    // Rendered nowhere (its status is hidden): never shipped either.
+    { title: 'Status hidden', status: 'published', hiddenFields: ['status'], venue: 'STATUSLESS Hidden Venue', abstract: 'STATUSLESS hidden abstract.' },
   ]
   const section = { sessionName: 'publications', headerName: 'Publications', papers, ...extra }
   return { en: [personal('en'), section], zh: [personal('zh'), { ...section, headerName: '论文' }] }
@@ -101,7 +129,7 @@ test('an empty store: no page (404), no nav link, nothing in the sitemap', async
 })
 
 test('nothing hidden reaches the page props, the JSON-LD, the public API or the CV views', async () => {
-  await writeCvData(cv())
+  await writeCvData(withStatuslessPapers(cv()))
   const page = data.buildPublicationsPage()
   assert.ok(page)
   assert.equal(data.hasPublicationsPage(), true)
@@ -139,9 +167,25 @@ test('nothing hidden reaches the page props, the JSON-LD, the public API or the 
   assert.equal(article.abstract, undefined, 'hidden abstract')
   assert.equal(list[1].item.datePublished, undefined, 'under review: not published')
 
-  // The public API (GET /api/cvdata) and the CV pages' loaders.
-  for (const view of [readPublicCvData('any'), readPublicCvSections('cv', ['publications', 'personalInformation'])]) {
-    assert.ok(!JSON.stringify(view).includes(SECRET))
+  // The public API (GET /api/cvdata: the real handler) and the CV pages'
+  // loaders (the /cv and /cv/zh page props = their __NEXT_DATA__), raw.
+  const api = await callPublic((await import('../pages/api/cvdata')).default, 'GET')
+  assert.equal(api.statusCode, 200)
+  const { loadCvPageProps } = await import('../lib/cvPage')
+  const views: Array<[string, unknown]> = [
+    ['readPublicCvData(any)', readPublicCvData('any')],
+    ['readPublicCvSections(cv)', readPublicCvSections('cv', ['publications', 'personalInformation'])],
+    ['GET /api/cvdata', api.body],
+    ['/cv props', (await loadCvPageProps('en')).props],
+    ['/cv/zh props', (await loadCvPageProps('zh')).props],
+  ]
+  for (const [where, view] of views) {
+    const text = JSON.stringify(view)
+    assert.ok(text.includes('Tiny models at the edge') && text.includes('Under review paper'), `${where}: the public papers are there`)
+    assert.ok(!text.includes(SECRET), `${where}: a hidden value`)
+    assert.ok(!text.includes('SUBMITTED-TO'), `${where}: where a paper under review was submitted`)
+    assert.ok(!text.includes('STATUSLESS'), `${where}: a paper without a valid status`)
+    for (const title of ['No status yet', 'Status hidden', 'Unknown status']) assert.ok(!text.includes(title), `${where}: ${title}`)
   }
   const owner = data.readCvOwnerNames()
   assert.ok(owner.latin.length && owner.cjk.includes('李彦霈'))
@@ -180,6 +224,15 @@ test('CV writes regenerate /publications; the sitemap lists it only while it exi
 /** Call an API handler as the admin with a mock response that records res.revalidate(). */
 async function callAdmin(handler: (req: any, res: any) => unknown, method: string, body?: unknown) {
   const token = jwt.sign({ role: 'admin', email: 'owner@example.test' }, 'publications-leak-secret', { algorithm: 'HS256' })
+  return callApi(handler, method, body, token)
+}
+
+/** Call an API handler as an anonymous visitor. */
+function callPublic(handler: (req: any, res: any) => unknown, method: string) {
+  return callApi(handler, method)
+}
+
+async function callApi(handler: (req: any, res: any) => unknown, method: string, body?: unknown, token?: string) {
   const out = { statusCode: 200, body: undefined as any, revalidated: [] as string[], headers: {} as Record<string, string> }
   const res: any = {
     get statusCode() {
@@ -213,7 +266,9 @@ async function callAdmin(handler: (req: any, res: any) => unknown, method: strin
       out.revalidated.push(p)
     },
   }
-  await handler({ method, query: {}, body, cookies: { cv_admin_token: token }, headers: { cookie: `cv_admin_token=${token}` }, socket: { remoteAddress: '127.0.0.1' } }, res)
+  const cookies = token ? { cv_admin_token: token } : {}
+  const headers = token ? { cookie: `cv_admin_token=${token}` } : {}
+  await handler({ method, query: {}, body, cookies, headers, socket: { remoteAddress: '127.0.0.1' } }, res)
   return out
 }
 
