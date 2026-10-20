@@ -84,10 +84,30 @@ function timingSafeEqualHex(a: string, b: string): boolean {
 
 // ── Read / write ───────────────────────────────────────────────────────
 
+/**
+ * The admin record; null only when data/admin.json does not exist (first
+ * boot, before the bootstrap from ADMIN_EMAIL / ADMIN_PASS). Throws when the
+ * file exists but cannot be read (EACCES, EIO, EISDIR…) or is not a JSON
+ * object — callers that check sessions must fail closed then, never treat
+ * the record as absent (SECU-3, wave 2B review).
+ */
+export function readAdminStrict(): AdminData | null {
+  let raw: string
+  try {
+    raw = fs.readFileSync(adminPath, 'utf-8')
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException | null)?.code === 'ENOENT') return null
+    throw err
+  }
+  const data: unknown = JSON.parse(raw)
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('data/admin.json does not hold an admin record')
+  return data as AdminData
+}
+
+/** The admin record, or null when there is none OR it cannot be read (see readAdminStrict). */
 export function readAdmin(): AdminData | null {
   try {
-    const raw = fs.readFileSync(adminPath, 'utf-8')
-    return JSON.parse(raw)
+    return readAdminStrict()
   } catch {
     return null
   }
@@ -103,8 +123,20 @@ function writeAdmin(data: AdminData) {
   fs.renameSync(tmp, adminPath)
 }
 
+/**
+ * The admin record, created from ADMIN_EMAIL / ADMIN_PASS on first boot.
+ * Only a MISSING data/admin.json is created: one that exists but cannot be
+ * read is never overwritten (that would reset the session version to 0 and
+ * the password to the environment's) — null, so sign-in fails closed until
+ * the file is repaired.
+ */
 export function ensureAdminFromEnv(): AdminData | null {
-  const current = readAdmin()
+  let current: AdminData | null
+  try {
+    current = readAdminStrict()
+  } catch {
+    return null
+  }
   if (current) return current
   const email = normalizeEmail(process.env.ADMIN_EMAIL || process.env.ADMIN_USER)
   const pass = process.env.ADMIN_PASS
@@ -126,6 +158,17 @@ export function ensureAdminFromEnv(): AdminData | null {
 /** Current session version (0 when the record or the field is missing). */
 export function getSessionVersion(data: AdminData | null = readAdmin()): number {
   return toSessionVersion(data?.sessionVersion)
+}
+
+/**
+ * The session version tokens are checked against and minted with: 0 while
+ * there is no admin record yet, and it THROWS when data/admin.json exists
+ * but cannot be read — so the proxy gate answers `unavailable` and
+ * lib/auth finds no session (fail closed) instead of taking the version
+ * for 0, which would let tokens revoked by "Sign out everywhere" back in.
+ */
+export function currentSessionVersion(): number {
+  return getSessionVersion(readAdminStrict())
 }
 
 /**

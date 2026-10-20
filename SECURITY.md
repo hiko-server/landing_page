@@ -49,7 +49,10 @@ What the code actually does today, and where its limits are.
 
 - **Single admin account** stored in `data/admin.json` (bind-mounted,
   gitignored, written atomically with mode `0600`). Bootstrapped from
-  `ADMIN_EMAIL` / `ADMIN_PASS` on first use.
+  `ADMIN_EMAIL` / `ADMIN_PASS` on first use — only while the file does not
+  exist: one that exists but cannot be read or parsed is never overwritten,
+  and until it is repaired (or removed, to bootstrap again) every admin
+  session check fails closed and nobody can sign in.
 - **Password hashing** — scrypt (`N=16384, r=8, p=1`, 64-byte key) with a
   random 16-byte salt; constant-time compare.
 - **Session cookie** — `cv_admin_token`, an HS256 JWT (algorithm pinned on
@@ -60,7 +63,8 @@ What the code actually does today, and where its limits are.
   (guests → `307 /admin/login?next=…`) and `/api/admin/*` route (guests →
   JSON `401`): signature, expiry, role, session version and session row
   (`lib/adminAuth/proxyGate.ts`; read-only, fail-closed when `admin.json`
-  or `auth.db` cannot be read). Every API handler then calls `lib/auth.ts`,
+  exists but cannot be read or parsed, or `auth.db` cannot be read). Every
+  API handler then calls `lib/auth.ts`,
   the authoritative check, which also refreshes the session's last-seen
   time.
 - **Sessions** (`lib/adminAuth/sessions.ts`, `data/auth.db`, owner-only:

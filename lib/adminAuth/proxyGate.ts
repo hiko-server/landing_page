@@ -1,5 +1,5 @@
 import { jwtVerify } from 'jose'
-import { getSessionVersion } from '../admin'
+import { currentSessionVersion } from '../admin'
 import { isSessionCurrent } from '../security/session'
 import { liveSession, SESSION_ID_RE } from './sessions'
 import { isLegacyTokenEnded } from './store'
@@ -21,9 +21,11 @@ import { isLegacyTokenEnded } from './store'
  * first page view (lib/auth.ts).
  *
  * Read-only and fail-closed: it never refreshes last-seen (the API routes
- * do), and an unreadable admin.json / auth.db answers `unavailable`, which
- * the gate treats like no session. lib/auth.ts readAdminContext stays the
- * authoritative check inside every route.
+ * do), and an admin.json that exists but cannot be read or parsed (lib/admin
+ * currentSessionVersion throws; only a missing one — first boot — counts as
+ * version 0) or an unreadable auth.db answers `unavailable`, which the gate
+ * treats like no session. lib/auth.ts readAdminContext stays the
+ * authoritative check inside every route, with the same rule.
  */
 
 export type AdminTokenVerdict = 'ok' | 'missing' | 'invalid' | 'revoked' | 'unavailable'
@@ -31,7 +33,7 @@ export type AdminTokenVerdict = 'ok' | 'missing' | 'invalid' | 'revoked' | 'unav
 export type AdminGateDeps = {
   /** JWT_SECRET; unset or the placeholder `change-me` lets nobody in. */
   secret: string | undefined
-  /** data/admin.json `sessionVersion` (0 when absent). */
+  /** data/admin.json `sessionVersion` (0 when the file is absent); throws when it cannot be read. */
   sessionVersion: () => number
   /** True while the auth.db session row may still be used. */
   isLiveSession: (sid: string) => boolean
@@ -43,7 +45,7 @@ export type AdminGateDeps = {
 export function adminGateDeps(): AdminGateDeps {
   return {
     secret: process.env.JWT_SECRET,
-    sessionVersion: () => getSessionVersion(),
+    sessionVersion: () => currentSessionVersion(),
     isLiveSession: (sid) => liveSession(sid) !== null,
     legacyEnded: (iat) => isLegacyTokenEnded(iat),
   }

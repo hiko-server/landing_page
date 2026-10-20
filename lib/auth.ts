@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { deleteCookie, getCookie, setCookie } from 'cookies-next'
 import jwt from 'jsonwebtoken'
 import { getJwtSecret, isProd } from './env'
-import { getSessionVersion } from './admin'
+import { currentSessionVersion } from './admin'
 import { isSessionCurrent, SESSION_VERSION_CLAIM } from './security/session'
 import { ADMIN_HINT_COOKIE } from './adminHint'
 import { ipFromReq } from './rateLimit'
@@ -108,8 +108,9 @@ export type AdminContext = { claims: AdminClaims; session: AdminSession | null }
  * Full check: signature (HS256 only), role, session version, and — for a
  * token with `sid` — a live session row (not revoked, not expired), whose
  * last-seen time is refreshed; a token without `sid` only until the legacy
- * cutoff. Null for anything else. Never throws: an unreadable auth.db fails
- * closed (no session).
+ * cutoff. Null for anything else. Never throws: an unreadable auth.db, or
+ * an admin.json that exists but cannot be read (lib/admin
+ * currentSessionVersion), fails closed (no session).
  */
 export function readAdminContext(req: NextApiRequest, res: NextApiResponse): AdminContext | null {
   try {
@@ -117,7 +118,7 @@ export function readAdminContext(req: NextApiRequest, res: NextApiResponse): Adm
     if (!token) return null
     const claims = jwt.verify(token, getJwtSecret(), { algorithms: ['HS256'] }) as AdminClaims
     if (claims?.role !== 'admin') return null
-    if (!isSessionCurrent(claims as Record<string, unknown>, getSessionVersion())) return null
+    if (!isSessionCurrent(claims as Record<string, unknown>, currentSessionVersion())) return null
     if (claims.sid === undefined) return isLegacyTokenEnded(claims.iat) ? null : { claims, session: null }
     if (typeof claims.sid !== 'string') return null
     const session = liveSession(claims.sid)
@@ -140,7 +141,7 @@ export function isAdminRequest(req: NextApiRequest, res: NextApiResponse): boole
 
 /** Mint an admin session token bound to the current session version (and to a session row when `sid` is given). */
 export function signAdminToken(email: string, opts: { sid?: string; amr?: string[]; authTime?: number } = {}): string {
-  const payload: Record<string, unknown> = { sub: 'cv-admin', role: 'admin', email, [SESSION_VERSION_CLAIM]: getSessionVersion() }
+  const payload: Record<string, unknown> = { sub: 'cv-admin', role: 'admin', email, [SESSION_VERSION_CLAIM]: currentSessionVersion() }
   if (opts.sid) payload.sid = opts.sid
   if (opts.amr?.length) payload.amr = opts.amr
   if (opts.authTime) payload.auth_time = Math.floor(opts.authTime / 1000)
