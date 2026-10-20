@@ -318,9 +318,9 @@ export function RevalidatedPaths({ paths }: { paths: string[] }) {
       role="status"
     >
       <Text as="span">Live now:</Text>
-      <Wrap spacing={1.5} as="span">
+      <Wrap spacing={1.5}>
         {paths.map((p) => (
-          <WrapItem key={p} as="span">
+          <WrapItem key={p}>
             <Link
               href={p}
               isExternal
