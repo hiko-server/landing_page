@@ -395,6 +395,15 @@ export function listItems(collection: string): ItemRecord[] {
   return listItemsFromDb(collection)
 }
 
+/**
+ * Slugs of a collection's published items: stored and not a draft — the
+ * rule of lib/mdx listPosts / listWork / getPost / getWork, for server code
+ * that must not load the MDX pipeline (lib/isrPages, lib/cvdata).
+ */
+export function publishedItemSlugs(collection: 'blog' | 'work'): Set<string> {
+  return new Set(listItems(collection).filter((i) => !i.frontmatter?.draft).map((i) => i.slug))
+}
+
 export function getItem(collection: string, slug: string): ItemRecord | null {
   const fromDb = getItemFromDb(collection, slug)
   if (fromDb) return fromDb

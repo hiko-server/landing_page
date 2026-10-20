@@ -6,7 +6,7 @@ import remarkGfm from 'remark-gfm'
 import remarkRehype from 'remark-rehype'
 import rehypePrettyCode from 'rehype-pretty-code'
 import type { Root as HastRoot } from 'hast'
-import { listItems, getItem, getPage, type ItemRecord } from './contentStore'
+import { listItems, getItem, getPage, publishedItemSlugs, type ItemRecord } from './contentStore'
 import { getPendingRevision } from './pendingRevisions'
 import { detectContentLang, readingMinutes, type TocEntry } from './toc'
 import remarkStripMdxExpressions from './rehype/stripMdxExpressions'
@@ -411,20 +411,38 @@ function postEntry(item: { slug: string; frontmatter: Record<string, any>; body:
   }
 }
 
+/**
+ * A public post's `project` only while it names a PUBLISHED case study: a
+ * draft's or a deleted case study's slug never reaches a public page's props
+ * (/blog, /blog/<slug> and its neighbours, the Markdown twins). Draft Mode
+ * (`includeDrafts`) keeps the owner's value.
+ */
+function withPublishedProject(entry: MDXIndexEntry<PostFrontmatter>, published: ReadonlySet<string>): MDXIndexEntry<PostFrontmatter> {
+  const project = entry.frontmatter.project
+  if (!project || published.has(project)) return entry
+  const frontmatter = { ...entry.frontmatter }
+  delete frontmatter.project
+  return { ...entry, frontmatter }
+}
+
 /** Published posts, newest first (drafts only with `includeDrafts`: Draft Mode). */
 export function listPosts(opts: GetOptions = {}): MDXIndexEntry<PostFrontmatter>[] {
-  return listItems('blog')
+  const posts = listItems('blog')
     .map(postEntry)
     .filter((p) => opts.includeDrafts || !p.frontmatter.draft)
     .sort((a, b) => +new Date(b.frontmatter.date) - +new Date(a.frontmatter.date))
+  if (opts.includeDrafts || !posts.some((p) => p.frontmatter.project)) return posts
+  const published = publishedItemSlugs('work')
+  return posts.map((p) => withPublishedProject(p, published))
 }
 
 export async function getPost(slug: string, opts: GetOptions = {}): Promise<MDXRendered<PostFrontmatter> | null> {
   if (!SLUG_RE.test(slug)) return null
   const item = itemFor('blog', slug, opts)
   if (!item) return null
-  const entry = postEntry(item)
+  let entry = postEntry(item)
   if (entry.frontmatter.draft && !opts.includeDrafts) return null
+  if (!opts.includeDrafts && entry.frontmatter.project) entry = withPublishedProject(entry, publishedItemSlugs('work'))
   return render(entry, item.body)
 }
 

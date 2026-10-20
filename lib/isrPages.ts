@@ -19,13 +19,13 @@
  * lib/mdx, and lib/publicationsData stays React-free too.
  */
 
-import { listItems } from './contentStore'
+import { publishedItemSlugs } from './contentStore'
 import { forgetVanishedPages, serverDir, type ForgetResult, type VanishingRoute } from './isrCache'
 import { PUBLICATIONS_PATH, hasPublicationsPage } from './publicationsData'
 
-/** Slugs of a collection's published items: stored and not a draft (lib/mdx's rule). */
+/** Slugs of a collection's published items: stored and not a draft (lib/mdx's rule, lib/contentStore). */
 export function publishedSlugs(collection: 'blog' | 'work'): Set<string> {
-  return new Set(listItems(collection).filter((i) => !i.frontmatter?.draft).map((i) => i.slug))
+  return publishedItemSlugs(collection)
 }
 
 /** The page families that can vanish, with fresh content checks (one store read per family and call). */

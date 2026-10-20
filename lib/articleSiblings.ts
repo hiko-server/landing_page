@@ -23,7 +23,7 @@ export type ArticleSiblings = {
   alternates: Alternate[]
   posts: ArticleLink[]
   work: ArticleLink[]
-  /** The case-study slug a post's `project` resolves to in the article's language (undefined when none). */
+  /** The case-study slug a post's `project` resolves to in the article's language (undefined when none is published). */
   projectFor: (project: string | null | undefined) => string | undefined
 }
 
@@ -42,11 +42,16 @@ export function articleSiblings(kind: 'blog' | 'work', self: Self, opts: { draft
   const workGroups = translationGroups(work)
   const workKept = collapseTranslations(work, self.lang, workGroups).map((c) => c.entry)
   const keptWork = new Set(workKept.map((w) => w.slug))
-  const projectFor = (project: string | null | undefined) => (project ? keptVersion(project, workGroups, keptWork) : undefined)
+  // Only a PUBLISHED case study: keptVersion answers an unknown slug with itself.
+  const publishedWork = new Set(work.map((w) => w.slug))
+  const projectFor = (project: string | null | undefined) =>
+    project && publishedWork.has(project) ? keptVersion(project, workGroups, keptWork) : undefined
 
+  // Each post's case study in the article's language; a `project` that names
+  // no published case study is left out (never shipped as the raw slug).
   const postLinks = collapseTranslations(posts, self.lang).map(({ entry }) => {
-    const link = toArticleLink('blog', entry)
-    const project = projectFor(link.project)
+    const { project: raw, ...link } = toArticleLink('blog', entry)
+    const project = projectFor(raw)
     return project ? { ...link, project } : link
   })
   return {

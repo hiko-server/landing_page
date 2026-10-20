@@ -2,6 +2,7 @@ import path from 'path'
 import {
   getKvWithMeta,
   listSnapshotFiles,
+  publishedItemSlugs,
   putKv,
   readSnapshotFile,
   safeSnapshotName,
@@ -11,6 +12,7 @@ import {
   type KvPutResult,
 } from './contentStore'
 import { publicCvDoc, type CvAudience, type CvDoc, type CvLang } from './cvVisibility'
+import { withPublishedCaseStudies } from './cvLinks'
 import { pdfPhoto } from './cvLocale'
 
 const snapshotDir = path.join(process.cwd(), 'data', 'cv_snapshots')
@@ -45,7 +47,17 @@ export function readCvDataWithVersion(): FullCvDoc & { version: number } {
  * unauthenticated API — never ship readCvData() output to the browser.
  */
 export function readPublicCvData(audience: CvAudience = 'any'): CvDoc {
-  return publicCvDoc(readCvData(), audience)
+  const doc = publicCvDoc(readCvData(), audience)
+  // A project's case study only when it is published (lib/cvLinks): no
+  // draft's or deleted case study's slug in any public payload. A store that
+  // cannot list the case studies links none.
+  let published: Set<string>
+  try {
+    published = publishedItemSlugs('work')
+  } catch {
+    published = new Set()
+  }
+  return { en: withPublishedCaseStudies(doc.en, published), zh: withPublishedCaseStudies(doc.zh, published) }
 }
 
 /**
