@@ -1,4 +1,5 @@
 import { Box, Flex, Text } from '@chakra-ui/react'
+import QrSvg from '../Common/QrSvg'
 
 /**
  * Print-only footer of the A4 sheet: an 18 mm QR code linking to the live CV
@@ -42,8 +43,9 @@ export default function CvQr({
         h="18mm"
         flexShrink={0}
         sx={{ '& svg': { display: 'block', width: '100%', height: '100%' } }}
-        dangerouslySetInnerHTML={{ __html: svg }}
-      />
+      >
+        <QrSvg svg={svg} />
+      </Box>
     </Flex>
   )
 }

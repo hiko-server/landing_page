@@ -5,6 +5,7 @@ import { copyText } from '../MDX/clipboard'
 import { LinkedInIcon } from '../Icons/brand'
 import { CopyIcon, QrCodeIcon, ShareIcon } from '../Icons/ui/content'
 import { CheckIcon } from '../Icons/ui/theme'
+import QrSvg from '../Common/QrSvg'
 import { cssTransition } from '../../theme/tokens'
 import type { AuthorCardData } from '../../lib/authorCard'
 
@@ -240,8 +241,9 @@ export function ShareBar({ share }: { share: ShareData }) {
             h="148px"
             flexShrink={0}
             sx={{ '& svg': { display: 'block', width: '100%', height: '100%' } }}
-            dangerouslySetInnerHTML={{ __html: share.qrSvg }}
-          />
+          >
+            <QrSvg svg={share.qrSvg} />
+          </Box>
           <Box fontSize="13px" lineHeight="1.6" color="page.fg-secondary" maxW="30ch">
             <Text m={0}>Scan with WeChat to open this page on your phone, then share it from there.</Text>
             <Text m={0} mt={1} lang="zh-Hans">

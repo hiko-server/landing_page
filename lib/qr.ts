@@ -2,7 +2,9 @@ import QRCode from 'qrcode'
 
 /**
  * QR codes as inline SVG markup, generated on the server (getServerSideProps
- * / getStaticProps) so no QR library ships to the browser.
+ * / getStaticProps) so no QR library ships to the browser. Pages draw it
+ * with components/Common/QrSvg.tsx, which renders the viewBox and path data
+ * (lib/qrShape.ts) as elements — the markup never goes through innerHTML.
  *
  * The code is drawn with `currentColor` on a transparent background, so the
  * surrounding element decides its colour (ink on the printed CV, page.fg on
