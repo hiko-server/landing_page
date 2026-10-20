@@ -25,6 +25,7 @@ import { articleUiFor, type ArticleUi } from '../../lib/uiStrings/article'
 import { ArticleRoot } from '../../components/Article/articleUi'
 import type { SwitchLink } from '../../lib/translations'
 import { markdownTwinPath } from '../../lib/markdownTwinPaths'
+import { reviewReadOptions, reviewRenderOf } from '../../lib/review/render'
 
 type Props = {
   slug: string
@@ -60,6 +61,8 @@ type Props = {
   alternates: Alternate[]
   /** Draft Mode is showing the post's unpublished changes, not its live version (H4). */
   pendingPreview: boolean
+  /** Rendered for a review link (H5, pages/review/[token]): kept out of search indexes. */
+  review?: boolean
 }
 
 const MONO = 'var(--font-geist-mono), monospace'
@@ -86,6 +89,7 @@ export default function BlogPost({
   alternates,
   ui: articleUi,
   pendingPreview,
+  review = false,
 }: Props) {
   const path = `/blog/${slug}`
   const url = absUrl(path)
@@ -140,7 +144,7 @@ export default function BlogPost({
         imageAlt={cardImageAlt(frontmatter.title, frontmatter.cover, frontmatter.coverAlt)}
         type="article"
         lang={lang}
-        noindex={draftMode}
+        noindex={draftMode || review}
         alternates={alternates}
         publishedTime={published || undefined}
         modifiedTime={modified || undefined}
@@ -225,9 +229,12 @@ export const getStaticPaths: GetStaticPaths = async () => ({
 
 export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
   const slug = String(ctx.params?.slug || '')
-  const draftMode = ctx.draftMode === true
+  // A review link (H5) renders this one draft or these unpublished changes, and nothing else unpublished.
+  const review = reviewRenderOf(ctx)
+  const draftMode = ctx.draftMode === true && !review
   // Draft Mode shows drafts, and a live post's unpublished changes (H4).
-  const post = await getPost(slug, { includeDrafts: draftMode, pending: draftMode })
+  const post = await getPost(slug, review ? reviewReadOptions(review) : { includeDrafts: draftMode, pending: draftMode })
+  if (!post && review) return { notFound: true }
   // No item: a renamed post's old address redirects permanently (308) to the new one (H6), else 404.
   if (!post) return (await import('../../lib/redirects')).missingItemProps('blog', slug, draftMode)
 
@@ -283,6 +290,7 @@ export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
       alternates,
       ui: articleUiFor(post.lang),
       pendingPreview: draftMode && !!(await import('../../lib/pendingRevisions')).getPendingRevision('blog', post.slug),
+      ...(review ? { review: true } : {}),
       // Whether /publications exists, for the nav link (lib/publicationsData).
       ...(await import('../../lib/publicationsData')).chromePublicationsProp(),
     },

@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { readAdminContext, requestOrigin } from '../auth'
+import { isInternalJobRequest } from '../internalJobs'
 import { log } from '../log'
 import type { SnapshotKind } from './context'
 import { AUDITED_ROUTES, isAuditArea, type AuditArea } from './describe'
@@ -29,6 +30,12 @@ import { recordAudit } from './store'
  * recorded. It never throws and never blocks the action: it returns whether
  * an entry was written. Do not call it from a route the automatic capture
  * already covers (that would record the write twice).
+ *
+ * The server's own jobs record what they do with `{ actor: 'scheduler' }`
+ * (H5: scheduled publishing): no session — the entry names the scheduler
+ * as the actor ("Scheduler · this server") — and only for a request that
+ * really is the server calling itself (lib/internalJobs: loopback peer and
+ * the per-process token), so no outside request can write as the scheduler.
  */
 
 export type AdminAuditEntry = {
@@ -48,7 +55,12 @@ export type AdminAuditOptions = {
   status?: number
   /** Version-history files the write took (so the history views can say what replaced them). */
   snapshots?: Array<{ kind: SnapshotKind; file: string }>
+  /** Who acted when it was not a signed-in browser: the scheduler (an internal job request only). */
+  actor?: 'scheduler'
 }
+
+/** How the activity log names the scheduler (device column; network "loopback" reads "this server"). */
+export const SCHEDULER_ACTOR = { device: 'Scheduler', ipPrefix: 'loopback' } as const
 
 const ACTION_RE = /^[a-z][a-z0-9-]{0,31}\.[a-z][a-z0-9-]{0,47}$/
 
@@ -80,16 +92,23 @@ export function recordAdminAudit(req: NextApiRequest, res: NextApiResponse, entr
       log.warn('activity log: route is already recorded automatically', { route, action: clean.action })
       return false
     }
-    const ctx = readAdminContext(req, res)
-    if (!ctx) return false
-    const origin = requestOrigin(req)
+    let who: { sessionId: string | null; device: string | null; ipPrefix: string | null; country: string | null }
+    if (opts.actor === 'scheduler') {
+      if (!isInternalJobRequest(req)) {
+        log.warn('activity log: a scheduler entry from outside the server was refused', { action: clean.action })
+        return false
+      }
+      who = { sessionId: null, device: SCHEDULER_ACTOR.device, ipPrefix: SCHEDULER_ACTOR.ipPrefix, country: null }
+    } else {
+      const ctx = readAdminContext(req, res)
+      if (!ctx) return false
+      const origin = requestOrigin(req)
+      who = { sessionId: ctx.session?.id ?? null, device: origin.device, ipPrefix: origin.ipPrefix, country: origin.country }
+    }
     const requestId = res.getHeader?.('X-Request-Id')
     recordAudit({
       ...clean,
-      sessionId: ctx.session?.id ?? null,
-      device: origin.device,
-      ipPrefix: origin.ipPrefix,
-      country: origin.country,
+      ...who,
       method: String(req.method || '').toUpperCase(),
       route,
       status: opts.status ?? 200,

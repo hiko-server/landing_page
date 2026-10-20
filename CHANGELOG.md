@@ -136,6 +136,59 @@ Analytics explore in the admin (final batch: H10).
   `/api/admin/analytics/digest`. ⌘K gains "compare", "clear the filters" and
   "export this view" while the Analytics tab is open.
 
+### scheduling
+
+Scheduled publishing and expiring review links (wave 3: H5).
+
+- **Publish later** — *Publish… → Schedule…* (or ⋯ → *Schedule…*) sets when
+  a draft goes live, or when the saved, unpublished changes of a live post
+  or case study go live, and optionally when it unpublishes again (a
+  time-limited announcement). Quick picks (later today, tomorrow morning,
+  Monday morning), date and time in Hong Kong time — or this device's zone
+  when it differs, always shown in both — and "date the post on the day it
+  goes live" / "mark as updated on that day". Unsaved edits are saved first.
+  A banner in the editor shows the schedule with *Change…* and a two-step
+  *Unschedule*; the lists mark scheduled items. Times are server-owned
+  frontmatter (`publishAt` / `unpublishAt` — on a draft, on a live item's
+  pending revision, on a live item): only POST `{ action: 'schedule' }` sets
+  them (version-checked, in the activity log); an editor save or a history
+  restore keeps the stored schedule, publishing or unpublishing by hand ends
+  it, discarding the changes drops theirs, and public pages never see it.
+- **The scheduler** (`lib/schedule`) runs in the server process like the
+  backup schedule: it sleeps until the next slot (re-armed the moment a
+  schedule changes, rescanning every 10 minutes for restores and pulls),
+  and a pass (`/api/internal/scheduled-publish`, loopback + per-process
+  token) publishes due drafts, publishes **exactly the stored pending
+  revision** (re-read after its body is checked, written and dropped in
+  one transaction only while it is still that version) and unpublishes,
+  then regenerates the pages, feeds and sitemap like an admin save. Nothing
+  lives in memory: after a restart the first check catches up every missed
+  slot ("caught up 3 h late" in the log); a draft whose whole window passed
+  while the site was down, or whose body no longer renders, is not
+  published and the log says why. Idempotent, one pass at a time, failures
+  back off without losing the slot. Every action is recorded with
+  `recordAdminAudit(…, { actor: 'scheduler' })` — *Scheduler · this server*
+  in Activity — which only the server's own job request may use.
+- **Review links** — ⋯ → *Share for review…* makes a private link
+  (1 hour – 30 days, with a note only you see) that shows the draft — or a
+  live item's unpublished changes — read-only, exactly as it will look, under
+  a "Preview" watermark and bar (EN / 简 / 繁). The article page renders it
+  through its own getStaticProps (no other drafts among its neighbours).
+  Never cached or indexed (`private, no-store`, `X-Robots-Tag: noindex`),
+  `Referrer-Policy: no-referrer`, not on the analytics allow-list, the token
+  scrubbed from error reports; failed look-ups rate-limited. A published
+  item's link leads to its public page, a renamed one follows the rename;
+  expired, turned-off and unknown links explain themselves (410 / 404)
+  without naming the draft. Views are counted (a number, never who). Tokens
+  are HMAC-signed over the link's scope (own HKDF key from `JWT_SECRET`)
+  and stored only as SHA-256 hashes in **auth.db migration 3
+  (`review-links`)** — never restored from a content backup, so a turned-off
+  link cannot come back.
+- **Admin → Scheduled & review links** (`/admin/publishing`, `G Y`): what
+  publishes, goes live or unpublishes, by day, with the scheduler's state;
+  every active review link with Copy and Turn off. The overview card counts
+  both.
+
 ### admin-editorial
 
 Editorial tools in the post and case-study editors (wave 2B: H1, H3, H4, H6, H16).

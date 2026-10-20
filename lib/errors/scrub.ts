@@ -9,6 +9,8 @@ import crypto from 'crypto'
  *   - query strings and fragments of every URL (reset tokens, search terms)
  *   - e-mail addresses, IPv4/IPv6 addresses, long digit runs (phone numbers,
  *     ids), JWTs and long hex / base64 runs (tokens, keys, session ids)
+ *   - the token of a review link (/review/<token> → /review/[token], H5),
+ *     in paths, messages and stacks alike
  *   - the site's own origin in stack frames (shorter; nothing else is lost)
  *   - stack frames that belong to browser extensions (the error is not ours)
  * Messages are capped at MAX_MESSAGE characters, stacks at MAX_FRAMES frames
@@ -31,6 +33,8 @@ const LONG_HEX_RE = /\b[0-9a-f]{24,}\b/gi
 // lower-case slug or a hashed chunk name is not a secret.
 const LONG_B64_RE = /\b[A-Za-z0-9_+-]{32,}={0,2}(?![A-Za-z0-9_+=-])/g
 const LONG_DIGITS_RE = /\b\d{7,}\b/g
+/** A review link's token in a path (H5): whatever follows /review/ is a secret. */
+const REVIEW_TOKEN_RE = /\/review\/[^\s/?#"'<>()]+/g
 
 // eslint-disable-next-line no-control-regex
 const CONTROL_RE = /[\u0000-\u0009\u000b\u000c\u000e-\u001f\u007f]/g
@@ -55,6 +59,7 @@ export function scrubText(raw: unknown, max = MAX_MESSAGE): string {
   let s = String(raw ?? '')
     .replace(CONTROL_RE, ' ')
     .replace(URL_RE, stripUrlQuery)
+    .replace(REVIEW_TOKEN_RE, '/review/[token]')
     .replace(JWT_RE, '[token]')
     .replace(EMAIL_RE, '[email]')
     .replace(IPV6_RE, '[ip]')
@@ -115,7 +120,7 @@ export function normalizeErrorPath(raw: unknown): string | null {
       return null
     }
   }
-  s = stripQuery(s)
+  s = stripQuery(s).replace(REVIEW_TOKEN_RE, '/review/[token]')
   if (!s.startsWith('/') || s.startsWith('//')) return null
   // eslint-disable-next-line no-control-regex
   if (/[\u0000-\u001f\s]/.test(s)) return null

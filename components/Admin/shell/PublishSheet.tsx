@@ -61,6 +61,8 @@ type Props = {
   markUpdated?: { checked: boolean; onChange: (checked: boolean) => void }
   /** The live version changed after the pending changes were started. */
   stale?: boolean
+  /** "Schedule…" (H5): publish later instead (the checks still apply). */
+  onSchedule?: () => void
 }
 
 const MAX_SIBLING_PAGES = 50
@@ -101,6 +103,7 @@ export default function PublishSheet({
   diff,
   markUpdated,
   stale = false,
+  onSchedule,
 }: Props) {
   const changes = mode === 'changes'
   const textDiff = useMemo(() => {
@@ -404,9 +407,14 @@ export default function PublishSheet({
           </Stack>
         </DrawerBody>
         <DrawerFooter gap={2} borderTop="1px solid" borderColor="page.border">
-          <Button size="sm" {...outlineButtonProps} onClick={onClose}>
+          <Button size="sm" {...outlineButtonProps} onClick={onClose} mr={onSchedule ? 'auto' : undefined}>
             Keep editing
           </Button>
+          {onSchedule ? (
+            <Button size="sm" {...outlineButtonProps} onClick={onSchedule} isDisabled={blocked || publishing} title="Publish at a time you choose">
+              Schedule…
+            </Button>
+          ) : null}
           <Button size="sm" {...primaryButtonProps} onClick={() => void publish()} isDisabled={blocked} isLoading={publishing} loadingText="Publishing">
             {changes ? 'Publish changes' : 'Publish now'}
           </Button>

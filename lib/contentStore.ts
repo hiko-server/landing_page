@@ -413,19 +413,29 @@ export function getItem(collection: string, slug: string): ItemRecord | null {
   return getItemFromDb(collection, slug) ?? fromDisk
 }
 
+export type PutItemOptions = {
+  /** More DB writes that commit or roll back with the item (H5: dropping the revision a scheduled publish made live). */
+  inTransaction?: () => void
+  /** Lowest updated_at the write may get (a version strictly newer than one the caller read). */
+  minUpdatedAt?: number
+}
+
 export async function putItem(
   collection: string,
   slug: string,
   frontmatter: Record<string, any>,
   body: string,
+  opts: PutItemOptions = {},
 ): Promise<StoreError> {
   try {
     getDb().transaction(() => {
-      putItemToDbOnly({ collection, slug, frontmatter: jsonSafeFrontmatter(frontmatter), body, updated_at: Date.now() })
+      const updatedAt = Math.max(Date.now(), Math.trunc(opts.minUpdatedAt ?? 0))
+      putItemToDbOnly({ collection, slug, frontmatter: jsonSafeFrontmatter(frontmatter), body, updated_at: updatedAt })
       // A corrupt tombstone row is left untouched (reported by the reader);
       // the item row itself wins over any tombstone on read.
       const dead = readTombstoneRow(collection)
       if (!dead.corrupt && dead.set.delete(slug)) writeTombstones(collection, dead.set)
+      opts.inTransaction?.()
     })()
   } catch (err: any) {
     return { ok: false, error: `DB write failed: ${err?.message || String(err)}` }

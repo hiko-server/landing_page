@@ -43,6 +43,7 @@ import { wasStepUpCancelled } from '../security/stepUpClient'
 import { Collapse } from '../../General-UI/Collapse'
 import { relativeTime } from './ItemHistoryDrawer'
 import { useListKeyboard } from './useListKeyboard'
+import { parseItemSchedule, scheduleSummary, type ItemScheduleView } from './itemSchedule'
 
 export type CollectionRow = {
   slug: string
@@ -50,6 +51,8 @@ export type CollectionRow = {
   mtime: number
   /** When the item's unpublished changes were last saved (H4), null without any. */
   pendingAt?: number | null
+  /** When it publishes / unpublishes on its own (H5), null when not scheduled. */
+  schedule?: ItemScheduleView | null
 }
 
 type DeletedRow = { slug: string; title: string; filename: string; date: string }
@@ -443,6 +446,15 @@ export default function CollectionIndex({
                               changes not live
                             </Badge>
                           ) : null}
+                          {(() => {
+                            const s = parseItemSchedule(it.schedule)
+                            const line = s ? scheduleSummary(s, Date.now()) : null
+                            return line ? (
+                              <Badge ml={2} colorScheme="blue" variant="subtle" fontSize="10px" fontFamily="body" textTransform="none" whiteSpace="normal" title={line} data-testid="schedule-list-badge">
+                                {line}
+                              </Badge>
+                            ) : null
+                          })()}
                         </Text>
                       </Td>
                       {columns.map((c) => (
