@@ -306,6 +306,11 @@ const STATIC_PAGE_TITLE: Record<string, string> = {
   '/contact': 'Contact',
   '/colophon': 'Colophon',
   '/publications': 'Publications',
+  '/zh': 'Home (Chinese)',
+  '/zh/about': 'About (Chinese)',
+  '/zh/work': 'Work (Chinese)',
+  '/zh/blog': 'Writing (Chinese)',
+  '/zh/contact': 'Contact (Chinese)',
 }
 
 function eventPair(db: Db, span: Span, filters: readonly ExploreFilter[], name: string, prop: string | null): CountPair {
