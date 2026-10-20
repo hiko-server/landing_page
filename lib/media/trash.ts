@@ -2,7 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { getDb } from '../db'
 import { log } from '../log'
-import { isR2Configured, r2Delete, r2List, r2PutBuffer } from '../r2'
+import { isR2Configured, r2Delete, r2GetBuffer, r2List, r2PutBuffer } from '../r2'
 import { clearR2Pending, markR2Pending, uploadR2Key } from '../contentStore'
 import { purgeEdgeUrls } from '../revalidate'
 import { isValidUploadName } from '../security/uploadName'
@@ -44,9 +44,10 @@ export type R2Ops = {
   list: (prefix: string) => Promise<string[]>
   del: (key: string) => Promise<void>
   put: (key: string, body: Buffer, contentType: string) => Promise<void>
+  get?: (key: string) => Promise<Buffer | null>
 }
 
-export const defaultR2Ops: R2Ops = { configured: isR2Configured, list: r2List, del: r2Delete, put: r2PutBuffer }
+export const defaultR2Ops: R2Ops = { configured: isR2Configured, list: r2List, del: r2Delete, put: r2PutBuffer, get: r2GetBuffer }
 
 export const UPLOAD_CONTENT_TYPES: Record<string, string> = {
   '.webp': 'image/webp',
@@ -173,11 +174,32 @@ export async function moveToTrash(name: string, opts: TrashOptions = {}): Promis
     if (usage.length) return { ok: false, name, code: 'IN_USE', error: 'Still used — remove it from every place first', usage }
   }
 
-  // 1. The files leave public/uploads (rolled back if any move fails).
+  // 1. The files leave public/uploads (rolled back if any move fails). An
+  //    upload only R2 holds is downloaded into the trash first, so it can be
+  //    restored like any other; if that fails, nothing is deleted.
   const target = assetTrashDir(name)
   fs.rmSync(target, { recursive: true, force: true })
   fs.mkdirSync(target, { recursive: true })
   const moved: string[] = []
+  if (!hasOriginal) {
+    const keys = r2.configured() && r2.get ? await r2KeysOf(name, r2) : null
+    const original = uploadR2Key(name)
+    try {
+      if (!keys || !keys.includes(original)) throw new Error('R2 holds no copy to keep')
+      for (const key of [original, ...keys.filter((k) => k !== original)]) {
+        const buf = await (r2.get as NonNullable<R2Ops['get']>)(key)
+        if (!buf) continue
+        const f = key.slice('uploads/'.length)
+        fs.writeFileSync(path.join(target, f), buf as unknown as Uint8Array, { flag: 'wx' })
+        moved.push(f)
+      }
+      if (moved[0] !== name) throw new Error('R2 holds no copy to keep')
+    } catch (err) {
+      fs.rmSync(target, { recursive: true, force: true })
+      log.warn('media: could not keep a copy of an R2-only upload; nothing deleted', { name, err })
+      return { ok: false, name, code: 'FS', error: 'Its copy in R2 could not be kept for the trash; nothing was deleted' }
+    }
+  }
   try {
     for (const f of files) {
       moveFile(path.join(dir, f), path.join(target, f))
@@ -200,14 +222,14 @@ export async function moveToTrash(name: string, opts: TrashOptions = {}): Promis
   let width = asset?.width ?? null
   let height = asset?.height ?? null
   let bytes = asset?.bytes ?? 0
-  if (hasOriginal) {
+  if (moved.includes(name)) {
     try {
       bytes = fs.statSync(path.join(target, name)).size
     } catch {
       /* keep the indexed size */
     }
   }
-  if ((width === null || height === null) && hasOriginal) {
+  if ((width === null || height === null) && moved.includes(name)) {
     const size = headerSize(path.join(target, name))
     width = size?.width ?? null
     height = size?.height ?? null

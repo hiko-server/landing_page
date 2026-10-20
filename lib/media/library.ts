@@ -296,6 +296,13 @@ export function syncLocalAssetRows(local: Map<string, LocalAsset>, now = Date.no
   })()
 }
 
+/** Is `name` an upload of the library: on this server, or only in R2 (last listing)? */
+export function assetExists(name: string): boolean {
+  if (!isValidUploadName(name)) return false
+  if (fs.existsSync(path.join(uploadsDir(), name))) return true
+  return !!getDb().prepare('SELECT 1 FROM media_assets WHERE name = ?').get(name)
+}
+
 /** Is `name` in the trash (or replaced)? */
 export function isTrashed(name: string): boolean {
   return !!getDb().prepare('SELECT 1 FROM media_trash WHERE name = ?').get(name)

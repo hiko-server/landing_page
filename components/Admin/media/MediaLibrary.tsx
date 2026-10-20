@@ -766,7 +766,7 @@ export default function MediaLibrary() {
             <AlertDialogBody fontSize="sm">
               Nothing on the site uses {trashable.length === 1 ? 'it' : 'them'}.{' '}
               {selected.size > trashable.length ? `${selected.size - trashable.length} selected image${selected.size - trashable.length === 1 ? ' is' : 's are'} still used and stay${selected.size - trashable.length === 1 ? 's' : ''}. ` : ''}
-              They leave this server{data?.r2.configured ? ' and R2' : ''} now; you can restore them from the trash for {data?.trashDays ?? 30} days.
+              They leave this server{data?.r2.configured ? ' and R2' : ''} now and their addresses stop working; you can restore them from the trash for {data?.trashDays ?? 30} days.
             </AlertDialogBody>
             <AlertDialogFooter gap={2}>
               <Button ref={cancelRef} size="sm" {...outlineButtonProps} onClick={() => setConfirmTrash(false)}>

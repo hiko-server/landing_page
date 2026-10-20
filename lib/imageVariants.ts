@@ -466,9 +466,15 @@ export type StoreUploadOptions = {
   mirror?: (name: string, buf: Buffer, contentType: string) => Promise<string | null>
 }
 
-/** True when `name` is taken in `dir`, or any variant file of that name exists (a stale one would be served for the new image). */
+/**
+ * True when `name` is taken in `dir`, or any variant file of that name
+ * exists (a stale one would be served for the new image), or it waits in the
+ * media library's trash (data/media-trash/<name>, lib/media/trashStore): a
+ * new file must never take the name a restore would bring back — nor the
+ * tombstone that keeps R2 from serving the old one.
+ */
 function nameInUse(dir: string, name: string): boolean {
-  return fs.existsSync(path.join(dir, name)) || variantFilesOf(dir, name).length > 0
+  return fs.existsSync(path.join(dir, name)) || variantFilesOf(dir, name).length > 0 || fs.existsSync(path.join(process.cwd(), 'data', 'media-trash', name))
 }
 
 /**

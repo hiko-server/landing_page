@@ -105,6 +105,7 @@ fs.mkdirSync(path.join(libRoot, 'public', 'uploads'), { recursive: true })
 const { closeDb } = await import('../lib/db')
 const r2sync = await import('../lib/media/r2sync')
 const list = await import('../lib/media/list')
+const trash = await import('../lib/media/trash')
 
 after(() => {
   server.close()
@@ -202,4 +203,30 @@ test('H7 R2 index: listing records what R2 holds, an R2-only upload is listed wi
   const fake = await r2sync.pullFromR2(['fake.png'])
   assert.equal(fake.failed[0].error, 'R2 holds something that is not an image under this name')
   assert.ok(!fs.existsSync(path.join(uploads, 'fake.png')))
+})
+
+test('H7 trash: an upload only R2 holds is kept in the trash before its R2 copies go, and restores to the server and R2', async () => {
+  const uploads = path.join(libRoot, 'public', 'uploads')
+  const img = await png(200, 150)
+  objects.set('uploads/remote-only.png', { body: img, at: Date.now() })
+  objects.set('uploads/remote-only.png.w16.webp', { body: Buffer.from('RIFF\0\0\0\0WEBPVP8 '), at: Date.now() })
+  await r2sync.scanR2()
+  assert.equal(list.listLibrary().items.find((i) => i.name === 'remote-only.png')?.local, false)
+  const out = await trash.moveToTrash('remote-only.png', { purge: async () => undefined })
+  assert.ok(out.ok, JSON.stringify(out))
+  assert.ok(!objects.has('uploads/remote-only.png') && !objects.has('uploads/remote-only.png.w16.webp'), 'R2 copies deleted')
+  const kept = fs.readdirSync(path.join(libRoot, 'data', 'media-trash', 'remote-only.png')).sort()
+  assert.deepEqual(kept, ['remote-only.png', 'remote-only.png.w16.webp'])
+  const back = await trash.restoreFromTrash('remote-only.png')
+  assert.ok(back.ok)
+  assert.ok(fs.existsSync(path.join(uploads, 'remote-only.png')))
+  assert.ok(objects.has('uploads/remote-only.png') && objects.has('uploads/remote-only.png.w16.webp'), 'R2 copies back')
+
+  // Without a copy to keep, nothing is deleted.
+  objects.set('uploads/ghost.png.w320.webp', { body: Buffer.from('x'), at: Date.now() })
+  const { getDb } = await import('../lib/db')
+  getDb().prepare("INSERT INTO media_assets (name, local, r2, r2_files, added_at, checked_at) VALUES ('ghost.png', 0, 1, '[]', 0, 0)").run()
+  const ghost = await trash.moveToTrash('ghost.png', { purge: async () => undefined })
+  assert.ok(!ghost.ok && ghost.code === 'FS')
+  assert.ok(objects.has('uploads/ghost.png.w320.webp'))
 })

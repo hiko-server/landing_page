@@ -714,7 +714,7 @@ export default function MediaDrawer({ item, isOpen, onClose, now, r2Configured, 
               <>
                 <AlertDialogHeader fontSize="md">Move “{item.name}” to the trash?</AlertDialogHeader>
                 <AlertDialogBody fontSize="sm">
-                  Nothing on the site uses it. It leaves this server{r2Configured ? ' and R2' : ''} now and its address stops working; you can restore it from the trash for 30 days.
+                  Nothing on the site uses it. It leaves this server{r2Configured ? ' and R2' : ''} now and its address stops working (an older version in a page’s history that shows it would show a gap); you can restore it from the trash for 30 days.
                 </AlertDialogBody>
                 <AlertDialogFooter gap={2}>
                   <Button ref={cancelRef} size="sm" {...outlineButtonProps} onClick={() => setConfirm(null)}>

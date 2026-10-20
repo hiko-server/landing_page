@@ -327,6 +327,19 @@ test('H7 fill in alt: English and Chinese documents get their own default; snaps
   assert.ok(lib.usageOf(img.name).filter((u) => u.doc.startsWith('blog/')).every((u) => u.alt === 'ok'))
 })
 
+test('H7 a new upload never takes the name of one in the trash; the content export carries the texts', async () => {
+  const first = await upload('same-name.png', 300, 200)
+  await metaStore.saveMediaMeta(first.name, { alt: 'Exported alt' })
+  const { buildContentExport } = await import('../lib/contentExport')
+  const zip = (await buildContentExport()).zip
+  assert.ok(zip.includes(Buffer.from('image-texts.json')))
+  const out = await trash.moveToTrash(first.name, { r2: fakeR2(new Set()).ops, purge: noPurge })
+  assert.ok(out.ok)
+  const second = await upload('same-name.png', 300, 200)
+  assert.notEqual(second.name, first.name, 'gets a hash suffix instead')
+  assert.ok((await trash.restoreFromTrash(first.name, { r2: fakeR2(new Set()).ops })).ok)
+})
+
 // ── The admin API ───────────────────────────────────────────────────────────
 
 type Out = { statusCode: number; body: any; headers: Record<string, string> }
@@ -403,6 +416,7 @@ test('H7 API: admin only; the listing; texts and deletes answer clearly and land
   assert.equal(stale.body.code, 'CONFLICT')
   assert.equal((await call('../pages/api/admin/media/index', 'POST', { action: 'meta', name: '../x', alt: 'x' })).statusCode, 400)
   assert.equal((await call('../pages/api/admin/media/index', 'POST', { action: 'meta', name: target.name, alt: 5 })).statusCode, 400)
+  assert.equal((await call('../pages/api/admin/media/index', 'POST', { action: 'meta', name: 'not-there.png', alt: 'x' })).statusCode, 404)
 
   const used = (libRes.body.items as Array<{ name: string; usage: unknown[] }>).find((i) => i.usage.length > 0)
   assert.ok(used)
@@ -429,7 +443,7 @@ test('H7 API: admin only; the listing; texts and deletes answer clearly and land
 
   const { listAudit } = await import('../lib/audit/store')
   const summaries = listAudit({ area: 'media' }).entries.map((e) => e.summary)
-  assert.ok(summaries.includes(`Updated the alt text and caption of image “${target.name}”`))
+  assert.ok(summaries.includes(`Updated the default alt text and caption of image “${target.name}”`))
   assert.ok(summaries.includes(`Moved image “${target.name}” to the trash`))
   assert.ok(summaries.includes(`Deleted image “${target.name}” for good`))
 })
