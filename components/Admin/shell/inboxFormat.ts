@@ -62,3 +62,23 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
+
+/**
+ * Host + path of a link for display ("jobs.example.com/职位/123"): stored
+ * links are percent-encoded, so non-ASCII paths are shown decoded (the href
+ * stays encoded); long paths are cut with an ellipsis.
+ */
+export function shortUrl(url: string, max = 48): string {
+  try {
+    const u = new URL(url)
+    let rest = `${u.pathname}${u.search}`.replace(/\/$/, '')
+    try {
+      rest = decodeURI(rest)
+    } catch {
+      /* not valid UTF-8 percent-encoding: keep it encoded */
+    }
+    return `${u.host}${rest.length > max ? `${rest.slice(0, max - 1)}…` : rest}`
+  } catch {
+    return url
+  }
+}

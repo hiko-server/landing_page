@@ -86,7 +86,8 @@ test('GET without summary (or with another value) keeps the full listing', async
     const res = await call('GET', query)
     assert.equal(res.statusCode, 200)
     assert.equal(res.headers['cache-control'], 'no-store')
-    assert.deepEqual(Object.keys(res.body).sort(), ['messages', 'retention', 'retentionDays', 'storage', 'total', 'truncated', 'unread'])
+    // H11 added the archived / starred counts.
+    assert.deepEqual(Object.keys(res.body).sort(), ['archived', 'messages', 'retention', 'retentionDays', 'starred', 'storage', 'total', 'truncated', 'unread'])
     assert.equal(res.body.messages.length, 3)
     assert.equal(res.body.total, 3)
     assert.equal(res.body.unread, 3)
@@ -98,12 +99,12 @@ test('a repeated summary parameter uses its first value', async () => {
   assert.ok(Array.isArray((await call('GET', { summary: ['0', '1'] })).body.messages))
 })
 
-test('POST responses are unchanged', async () => {
+test('POST responses keep their fields (plus the H11 archived / starred counts)', async () => {
   const { listInbox } = await import('../lib/inbox')
   const id = listInbox().messages[0].id
   const res = await call('POST', {}, { body: { action: 'read', ids: [id] } })
   assert.equal(res.statusCode, 200)
-  assert.deepEqual(Object.keys(res.body).sort(), ['affected', 'ok', 'storage', 'total', 'unread'])
+  assert.deepEqual(Object.keys(res.body).sort(), ['affected', 'archived', 'ok', 'starred', 'storage', 'total', 'unread'])
   assert.equal(res.body.affected, 1)
   assert.equal(res.body.unread, 2)
 })

@@ -1,7 +1,7 @@
 import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
 import { rateLimit } from '../../lib/rateLimit'
-import { sendMail } from '../../lib/mailer'
+import { messageIdHost, sendMail } from '../../lib/mailer'
 import { getJwtSecret } from '../../lib/env'
 import { inboxCapacity, storeInboxMessage } from '../../lib/inbox'
 import { sharedReplayGuard } from '../../lib/security/replayGuard'
@@ -150,6 +150,10 @@ export default withApi('contact', async (req, res, { log }) => {
   // is reached; the owner can read and answer it from
   // /admin/dashboard?tab=inbox even without SMTP.
   let delivered = false
+  // The notification's Message-ID, stored with the message: a reply sent
+  // later from the admin Inbox references it, so the owner's mail client
+  // threads the notification and the reply.
+  const mid = `<contact.${crypto.randomBytes(12).toString('hex')}@${messageIdHost()}>`
   if (to) {
     try {
       const result = await sendMail({
@@ -158,6 +162,7 @@ export default withApi('contact', async (req, res, { log }) => {
         text: `From: ${safeName} <${safeEmail}>\n${details.length ? `${details.join('\n')}\n` : ''}\n${safeMessage}`,
         // Hitting "Reply" answers the visitor directly.
         replyTo: safeEmail,
+        messageId: mid,
       })
       delivered = !!result?.ok
     } catch (err) {
@@ -175,6 +180,8 @@ export default withApi('contact', async (req, res, { log }) => {
       message: safeMessage,
       delivered,
       meta,
+      // Only a notification that was sent can be threaded with.
+      ...(delivered ? { mid } : {}),
     })
     if (stored.stored) {
       persisted = true

@@ -8,8 +8,12 @@ import { contactRetentionDays, isExpired, retentionCutoff } from './retention'
  * Contact inbox — every message sent through the public contact form.
  *
  * Storage (inside the bind-mounted data/ dir, so it survives redeploys):
- *   data/contact-inbox.jsonl        append-only, one JSON message per line
- *   data/contact-inbox.state.json   { read: [id, …], deleted: [id, …] }
+ *   data/contact-inbox.jsonl         append-only, one JSON message per line
+ *   data/contact-inbox.state.json    { read, starred, archived, replied: [id, …],
+ *                                      deleted: [id, …], replies: { id: [reply, …] } }
+ *
+ * (The owner's reply templates are content, not inbox state: they live in
+ * the content store — lib/inboxTemplates.ts — so backups and R2 carry them.)
  *
  * A message id is a hash of its stored line, so the ids of messages written
  * before this module existed are stable too. Reading/marking never rewrites
@@ -37,7 +41,15 @@ import { contactRetentionDays, isExpired, retentionCutoff } from './retention'
  * restore never merges them back.
  *
  * A message may carry `meta`: the structured part of the inquiry (reason,
- * kind, company, link, timeline — lib/inquiry.ts). Older lines have none.
+ * kind, company, link, timeline — lib/inquiry.ts) and `mid`: the Message-ID
+ * of the notification e-mail the owner received for it, which a reply from
+ * the admin references so mail clients thread them. Older lines have neither.
+ *
+ * Statuses (read, starred, archived, replied) and the replies sent from the
+ * admin live in the state file, keyed by message id, and are forgotten with
+ * the message (delete or retention). Replies keep what the owner sent (time,
+ * subject, text, its Message-ID) — the owner's own words, kept as long as the
+ * message they answer.
  */
 
 export type InboxMessage = {
@@ -50,9 +62,30 @@ export type InboxMessage = {
   /** true = emailed to the owner, false = email failed/unconfigured, null = unknown (older entries). */
   delivered: boolean | null
   read: boolean
+  starred: boolean
+  archived: boolean
+  /** Answered: a reply was sent from the admin, or the owner marked it replied. */
+  replied: boolean
+  /** Replies sent from the admin, oldest first. */
+  replies: InboxReply[]
   /** Structured inquiry fields; absent on older messages and when the visitor gave none. */
   meta?: InquiryMeta
+  /** Message-ID of the owner's notification e-mail for this message (newer messages only). */
+  mid?: string
 }
+
+export type InboxReply = {
+  at: string
+  subject: string
+  body: string
+  /** Message-ID of the sent reply (threading of later replies). */
+  messageId: string | null
+  lang: 'en' | 'zh'
+  /** A copy went to the owner's public address. */
+  copied: boolean
+}
+
+export type InboxFlag = 'read' | 'starred' | 'archived' | 'replied'
 
 export type InboxStorage = {
   /** Current size of the log in bytes. */
@@ -67,8 +100,11 @@ export type InboxStorage = {
 
 export type InboxListing = {
   messages: InboxMessage[]
+  /** Unread messages that are not archived (the Inbox badge). */
   unread: number
   total: number
+  archived: number
+  starred: number
   /** The log holds older messages beyond what was read for this listing. */
   truncated: boolean
   storage: InboxStorage
@@ -93,6 +129,10 @@ export const LIST_WINDOW_BYTES = MAX_INBOX_BYTES + 1024 * 1024
 /** Deleted ids remembered so a restore can't resurrect them. */
 export const MAX_DELETED_IDS = 5000
 const MAX_READ_IDS = 20_000
+/** Replies kept per message, and the longest reply text stored. */
+export const MAX_REPLIES_PER_MESSAGE = 20
+export const MAX_REPLY_CHARS = 20_000
+const MID_RE = /^<[A-Za-z0-9._%+=-]{1,120}@[A-Za-z0-9.-]{1,120}>$/
 const CHUNK_BYTES = 64 * 1024
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -104,6 +144,11 @@ export function inboxFile() {
 }
 function stateFile() {
   return path.join(dataDir(), 'contact-inbox.state.json')
+}
+
+/** A Message-ID as this module accepts it ("<local@host>", bounded, no spaces). */
+export function isMessageId(v: unknown): v is string {
+  return typeof v === 'string' && MID_RE.test(v)
 }
 
 export function isInboxId(v: unknown): v is string {
@@ -211,17 +256,56 @@ function scanLines(file: string, onLine: (line: string) => void, limit = Infinit
   }
 }
 
-type State = { read: Set<string>; deleted: string[] }
+type State = {
+  read: Set<string>
+  starred: Set<string>
+  archived: Set<string>
+  replied: Set<string>
+  deleted: string[]
+  replies: Record<string, InboxReply[]>
+}
+
+const idSet = (v: unknown) => new Set(Array.isArray(v) ? v.filter(isInboxId) : [])
+
+function parseReply(raw: unknown): InboxReply | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const o = raw as Record<string, unknown>
+  const at = str(o.at, 40)
+  if (!at || Number.isNaN(Date.parse(at))) return null
+  return {
+    at,
+    subject: str(o.subject, 300),
+    body: str(o.body, MAX_REPLY_CHARS),
+    messageId: isMessageId(o.messageId) ? o.messageId : null,
+    lang: o.lang === 'zh' ? 'zh' : 'en',
+    copied: o.copied === true,
+  }
+}
+
+function parseReplies(raw: unknown): Record<string, InboxReply[]> {
+  const out: Record<string, InboxReply[]> = {}
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out
+  for (const [id, list] of Object.entries(raw as Record<string, unknown>)) {
+    if (!isInboxId(id) || !Array.isArray(list)) continue
+    const replies = list.map(parseReply).filter((r): r is InboxReply => r !== null).slice(-MAX_REPLIES_PER_MESSAGE)
+    if (replies.length) out[id] = replies
+  }
+  return out
+}
 
 function readState(): State {
   try {
     const raw = JSON.parse(readText(stateFile()) || '{}')
     return {
-      read: new Set(Array.isArray(raw?.read) ? raw.read.filter(isInboxId) : []),
+      read: idSet(raw?.read),
+      starred: idSet(raw?.starred),
+      archived: idSet(raw?.archived),
+      replied: idSet(raw?.replied),
       deleted: Array.isArray(raw?.deleted) ? raw.deleted.filter(isInboxId).slice(-MAX_DELETED_IDS) : [],
+      replies: parseReplies(raw?.replies),
     }
   } catch {
-    return { read: new Set(), deleted: [] }
+    return { read: new Set(), starred: new Set(), archived: new Set(), replied: new Set(), deleted: [], replies: {} }
   }
 }
 
@@ -233,17 +317,35 @@ function writeAtomic(file: string, text: string) {
 }
 
 /**
- * Persist the state. With `liveIds`, read flags of messages that no longer
- * exist are forgotten; without, the read list is only capped.
+ * Persist the state. With `liveIds`, flags and replies of messages that no
+ * longer exist are forgotten; without, the lists are only capped.
  */
 function writeState(state: State, liveIds?: Set<string>) {
-  let read = Array.from(state.read)
-  if (liveIds) read = read.filter((id) => liveIds.has(id))
+  const keep = (set: Set<string>) => {
+    let list = Array.from(set)
+    if (liveIds) list = list.filter((id) => liveIds.has(id))
+    return list.slice(-MAX_READ_IDS)
+  }
+  const replies: Record<string, InboxReply[]> = {}
+  for (const [id, list] of Object.entries(state.replies)) {
+    if (liveIds && !liveIds.has(id)) continue
+    if (list.length) replies[id] = list.slice(-MAX_REPLIES_PER_MESSAGE)
+  }
   const deleted = Array.from(new Set(state.deleted)).slice(-MAX_DELETED_IDS)
-  writeAtomic(stateFile(), JSON.stringify({ read: read.slice(-MAX_READ_IDS), deleted }) + '\n')
+  writeAtomic(
+    stateFile(),
+    JSON.stringify({
+      read: keep(state.read),
+      starred: keep(state.starred),
+      archived: keep(state.archived),
+      replied: keep(state.replied),
+      deleted,
+      replies,
+    }) + '\n',
+  )
 }
 
-type Parsed = { id: string; line: string; msg: Omit<InboxMessage, 'read'> }
+type Parsed = { id: string; line: string; msg: Omit<InboxMessage, 'read' | 'starred' | 'archived' | 'replied' | 'replies'> }
 
 function parseLine(raw: string): Parsed | null {
   const line = raw.trim()
@@ -269,6 +371,7 @@ function parseLine(raw: string): Parsed | null {
       message: str(obj.message, 10_000),
       delivered: typeof obj.delivered === 'boolean' ? obj.delivered : null,
       ...(meta ? { meta } : {}),
+      ...(isMessageId(obj.mid) ? { mid: obj.mid } : {}),
     },
   }
 }
@@ -350,7 +453,7 @@ export function inboxCapacity(now = Date.now()): InboxCapacity {
 
 // ── Writes ──────────────────────────────────────────────────────────────
 
-type NewMessage = { name: string; email: string; subject: string; message: string; delivered: boolean; meta?: InquiryMeta }
+type NewMessage = { name: string; email: string; subject: string; message: string; delivered: boolean; meta?: InquiryMeta; mid?: string }
 
 function messageLine(m: NewMessage, now: number): string {
   const meta = parseInquiryMeta(m.meta)
@@ -362,6 +465,7 @@ function messageLine(m: NewMessage, now: number): string {
     message: m.message,
     delivered: m.delivered,
     ...(meta ? { meta } : {}),
+    ...(isMessageId(m.mid) ? { mid: m.mid } : {}),
   })
 }
 
@@ -406,11 +510,21 @@ export function storeInboxMessage(m: NewMessage, now = Date.now()): StoreResult 
  */
 export function listInbox(now = Date.now(), retentionDays = contactRetentionDays()): InboxListing {
   const { parsed, truncated, size } = readWindow()
-  const { read } = readState()
+  const state = readState()
   const cutoff = retentionCutoff(now, retentionDays)
-  const messages = parsed
+  const messages: InboxMessage[] = parsed
     .filter((p) => !isExpired(p.msg.at, cutoff))
-    .map((p) => ({ ...p.msg, read: read.has(p.id) }))
+    .map((p) => {
+      const replies = state.replies[p.id] || []
+      return {
+        ...p.msg,
+        read: state.read.has(p.id),
+        starred: state.starred.has(p.id),
+        archived: state.archived.has(p.id),
+        replied: replies.length > 0 || state.replied.has(p.id),
+        replies,
+      }
+    })
     .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
   const day = utcDay(now)
   const storedToday = countOnDay(parsed, day)
@@ -418,8 +532,10 @@ export function listInbox(now = Date.now(), retentionDays = contactRetentionDays
     size >= MAX_INBOX_BYTES ? 'inbox-full' : storedToday >= DAILY_STORE_LIMIT ? 'daily-limit' : null
   return {
     messages: messages.slice(0, MAX_LISTED),
-    unread: messages.filter((m) => !m.read).length,
+    unread: messages.filter((m) => !m.read && !m.archived).length,
     total: messages.length,
+    archived: messages.filter((m) => m.archived).length,
+    starred: messages.filter((m) => m.starred).length,
     truncated,
     storage: { bytes: size, maxBytes: MAX_INBOX_BYTES, storedToday, dailyLimit: DAILY_STORE_LIMIT, paused },
     retentionDays: Math.max(0, retentionDays),
@@ -430,27 +546,68 @@ export function unreadCount(): number {
   return listInbox().unread
 }
 
-/** Mark messages read/unread. Returns how many existing ids were affected. */
-export function markInbox(ids: readonly string[], read: boolean): number {
+const FLAG_SET: Record<InboxFlag, 'read' | 'starred' | 'archived' | 'replied'> = {
+  read: 'read',
+  starred: 'starred',
+  archived: 'archived',
+  replied: 'replied',
+}
+
+/**
+ * Turn a status on or off for messages. Returns how many existing ids
+ * changed. (A message with replies sent from the admin keeps counting as
+ * replied even when its manual `replied` flag is turned off.)
+ */
+export function setInboxFlag(ids: readonly string[], flag: InboxFlag, on: boolean): number {
   const wanted = new Set(ids.filter(isInboxId))
   // Only messages a listing can show are markable; that is the window.
   const { parsed, truncated } = readWindow()
   const live = new Set(parsed.map((p) => p.id))
   const state = readState()
+  const set = state[FLAG_SET[flag]]
   let n = 0
   for (const id of wanted) {
     if (!live.has(id)) continue
-    if (read && !state.read.has(id)) {
-      state.read.add(id)
+    if (on && !set.has(id)) {
+      set.add(id)
       n++
-    } else if (!read && state.read.has(id)) {
-      state.read.delete(id)
+    } else if (!on && set.has(id)) {
+      set.delete(id)
       n++
     }
   }
-  // Prune stale read flags only when the window covers the whole log.
+  // Prune stale flags only when the window covers the whole log.
   writeState(state, truncated ? undefined : live)
   return n
+}
+
+/** Mark messages read/unread. Returns how many existing ids were affected. */
+export function markInbox(ids: readonly string[], read: boolean): number {
+  return setInboxFlag(ids, 'read', read)
+}
+
+/** One message as a listing shows it, or null when it is not (or no longer) there. */
+export function getInboxMessage(id: string, now = Date.now()): InboxMessage | null {
+  if (!isInboxId(id)) return null
+  return listInbox(now).messages.find((m) => m.id === id) ?? null
+}
+
+/**
+ * Remember a reply sent from the admin: appended to the message's thread
+ * (the newest MAX_REPLIES_PER_MESSAGE are kept), and the message counts as
+ * read and replied. False when the message does not exist.
+ */
+export function addInboxReply(id: string, reply: InboxReply): boolean {
+  if (!isInboxId(id)) return false
+  const { parsed } = readWindow()
+  if (!parsed.some((p) => p.id === id)) return false
+  const clean = parseReply(reply)
+  if (!clean) return false
+  const state = readState()
+  state.replies[id] = [...(state.replies[id] || []), clean].slice(-MAX_REPLIES_PER_MESSAGE)
+  state.read.add(id)
+  writeState(state)
+  return true
 }
 
 /** Copy bytes [from, end of file) of `src` to the open descriptor `out`. */
