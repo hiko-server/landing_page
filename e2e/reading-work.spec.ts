@@ -381,7 +381,9 @@ test.describe('reading-work: authored content', { tag: '@admin' }, () => {
       await expect(card).toBeVisible()
       await card.getByRole('button', { name: 'Use the template' }).click()
       await expect(card).toHaveCount(0)
-      await expect(page.getByRole('tab', { name: 'MDX' })).toHaveAttribute('aria-selected', 'true')
+      // The guidance notes are MDX comments: the visual editor holds them as note blocks (H2).
+      await expect(page.getByRole('tab', { name: 'Visual' })).toHaveAttribute('aria-selected', 'true')
+      await expect(page.locator('.ProseMirror .tt-mdx-block[data-kind="comment"]')).toHaveCount(6)
       await expect(page.locator('textarea').first()).toHaveValue(/## The problem\n\n\{\/\* Case-study template:/)
       await page.getByLabel(/^title\b/i).fill('E2E template check')
       await page.getByRole('button', { name: 'Publish…' }).click()
