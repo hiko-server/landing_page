@@ -958,6 +958,52 @@ Motion and interaction (C1, C2, C5, C6, C7, C9).
   bar, hover guard, morph loader); the palette, the keyboard actions and
   the morphs are lazy chunks.
 
+### review-fixes-2b
+
+Fixes for defects an adversarial review found in wave 2B before it shipped.
+
+- **Toasts (CORR-1)**: the on-demand toast host drew Chakra's stock frame,
+  so the one toast policy never applied — error toasts vanished after 5 s
+  and were not announced as alerts. The host now renders every toast in the
+  unified frame (errors and loading toasts stay until dismissed, the timer
+  pauses on hover, focus and a hidden tab, errors are alerts); frame and
+  host load together, outside the first-load JS, and a toast raised before
+  they have loaded appears once, already in its final frame.
+- **Keyboard focus on touch screens (CORR-2)**: the hover guard moved whole
+  selector lists behind `@media (hover:hover)`, taking the `:focus-visible`
+  / `:focus-within` reveals written beside a `:hover` with them — hints on
+  the home page and /about, heading self-links, copy buttons, publication
+  permalinks stayed hidden for a keyboard on a phone or tablet. Only the
+  hover selectors move now.
+- **Error monitor (SECU-2)**: one address could fill the browser-report
+  share of the error monitor in ten hours and blind it to new CSP blocks
+  and client errors for 90 days. Each sender (address / network) now gets a
+  small daily share of new problems (5 / 20) and of stored events
+  (1 000 / 4 000); a flood still cannot delete older reports.
+- **Admin record (SECU-3)**: an unreadable `data/admin.json` made the
+  session version 0, so tokens revoked by "Sign out everywhere" worked
+  again. A record that exists but cannot be read or parsed now fails
+  closed (no admin session anywhere, no sign-in) and is never re-created
+  over; only a missing one is bootstrapped from the environment.
+- **Unpublished case studies (CV-L-2, CV-L-3)**: a CV project's case study
+  and a post's `project` that name a draft or deleted case study no longer
+  ship the slug — not in GET /api/cvdata, the CV data of any page, /blog,
+  a post page or the prev / next / related links of its neighbours. Draft
+  Mode keeps the owner's value.
+- **Papers without a status (CV-L-4, CV-L-5)**: a paper with an empty,
+  hidden or unknown status (or no title) renders nowhere, and now its record
+  is not in the public CV data either; the leak tests check the raw public
+  projections (/api/cvdata, the /cv page props) for it and for the venue of
+  a paper under review.
+- **Draft preview (CORR-3)**: previewing a pending change to a post's
+  translation link shows the language switch it will have.
+- **Markdown twins after a rename (CORR-4)**: `/blog/<old>.md` and
+  `/work/<old>.md` now answer 308 to the twin at the new address, like the
+  page, instead of 404.
+- **Privacy (PRIV-4)**: the fixture's owner-neutral test no longer names
+  organisations; it reads the owner's facts from the local store at test
+  time and skips that part without one.
+
 ### Changed
 
 - **No more "[01] INTRODUCTION" labels** (owner request): the public site
