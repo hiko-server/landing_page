@@ -650,6 +650,8 @@ export default function CVEditorStudio() {
   // The owner's names from both languages' public Personal Info: author lists
   // in the A4 preview emphasise them exactly like /cv and /cv/zh do.
   const ownerNames = useMemo(() => ownerNamesFromSections(publicSections(doc.en, 'cv'), publicSections(doc.zh, 'cv')), [doc.en, doc.zh])
+  // The published case studies (from the readiness context): the A4 preview links only these, like /cv.
+  const publishedWorks = useMemo(() => (readyCtx?.caseStudies || []).filter((w) => !w.draft).map(({ slug, title }) => ({ slug, title })), [readyCtx])
 
   // ── Save ───────────────────────────────────────────────────────────────
   /** Save; resolves true only when the server stored the document. */
@@ -936,7 +938,7 @@ export default function CVEditorStudio() {
     </Flex>
   )
 
-  const preview = <Preview sections={sections} lang={lang} onPages={onPages} ownerNames={ownerNames} />
+  const preview = <Preview sections={sections} lang={lang} onPages={onPages} ownerNames={ownerNames} works={publishedWorks} />
 
   return (
     <StudioContext.Provider value={api}>
