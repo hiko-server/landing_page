@@ -36,8 +36,8 @@ import type { MediaFormat, MediaUsage, MediaVariant, UsageAlt } from './types'
  * lib/media/metaStore; the trash lib/media/trash.
  */
 
-/** Bump when the scanning rules change, so stored indexes are rebuilt. */
-const USAGE_RULES_VERSION = 1
+/** Bump when the scanning rules change, so stored indexes are rebuilt (2: alt states of home photos and logos; a logo's measurement is not a place). */
+const USAGE_RULES_VERSION = 2
 
 export function uploadsDir(): string {
   return path.join(process.cwd(), 'public', 'uploads')

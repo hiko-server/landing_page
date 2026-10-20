@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
-import dynamic from 'next/dynamic'
 import {
   Alert,
   AlertDescription,
@@ -69,6 +68,7 @@ import FindReplacePanel from './editor/FindReplacePanel'
 import { scrollCaretToCenter } from './editor/typewriter'
 import { imageMarkdown } from '../../lib/media/view'
 import type { PickedImage } from './media/MediaPicker'
+import { MediaPickerLazy as MediaPicker } from './media/LibraryPicker'
 import {
   planVisualSync,
   sameToolbarState,
@@ -135,7 +135,6 @@ export type RichEditorHandle = {
 }
 
 // The media library's picker loads only when it is opened (H7).
-const MediaPicker = dynamic(() => import('./media/MediaPicker'), { ssr: false })
 
 type Props = {
   value: string

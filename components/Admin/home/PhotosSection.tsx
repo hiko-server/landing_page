@@ -3,6 +3,8 @@ import { AddIcon } from '@chakra-ui/icons'
 import SortableList from '../shell/SortableList'
 import { outlineButtonProps } from '../shell/ui'
 import { moveItem, newId, type PhotoItem } from './homeForm'
+import { LibraryButton, useLibraryPicker, type LibraryRequest } from '../media/LibraryPicker'
+import { newPhotoFromLibrary, photoFromLibrary } from './libraryPick'
 import {
   AltMissingChip,
   CardShell,
@@ -20,12 +22,23 @@ import {
  * Field-notes photos as sortable cards: 16:10 preview, description (used as
  * the alt text), link, visibility, drag handle and a ⋯ menu (replace, move
  * to top, remove with Undo). A drop zone above adds several images at once.
+ * "Library…" (beside the drop zone's button, on each card's image URL and
+ * in its ⋯ menu) picks an uploaded image from the media library with its
+ * alt text in English — the description — and its Chinese default as the
+ * Chinese caption (./libraryPick).
  */
 export default function PhotosSection({ value, onChange }: SectionProps<PhotoItem[]>) {
   const remove = useUndoableRemove(onChange, 'photo')
   const { busy, upload } = useCardUpload()
+  const library = useLibraryPicker()
   const patch = (id: string, change: Partial<PhotoItem>) =>
     onChange((prev) => prev.map((p) => (p._id === id ? { ...p, ...change } : p)))
+  const pickFor = (p: PhotoItem, index: number): LibraryRequest => ({
+    labels: { title: `Choose photo ${index + 1}`, confirm: 'Use this photo' },
+    altLang: 'en',
+    current: p.url,
+    onPick: (img) => onChange((prev) => prev.map((x) => (x._id === p._id ? { ...x, ...photoFromLibrary(x, img) } : x))),
+  })
 
   return (
     <Box>
@@ -33,6 +46,21 @@ export default function PhotosSection({ value, onChange }: SectionProps<PhotoIte
         label="Add photos"
         hint="Drop images here (several at once) or pick files — JPEG, PNG, WebP, GIF, up to 8 MB each."
         onUploaded={(url) => onChange((prev) => [...prev, { _id: newId(), url, describe: '', redirectTo: '', visible: true }])}
+        extra={
+          <LibraryButton
+            size="sm"
+            context="— add a photo from the media library"
+            onClick={() =>
+              library.open({
+                labels: { title: 'Add a photo from the library', confirm: 'Add photo' },
+                altLang: 'en',
+                onPick: (img) => onChange((prev) => [...prev, { _id: newId(), ...newPhotoFromLibrary(img) }]),
+              })
+            }
+          >
+            From library…
+          </LibraryButton>
+        }
       />
       {value.length === 0 ? (
         <Text fontSize="sm" color="page.fg-secondary" mb={3}>
@@ -63,6 +91,7 @@ export default function PhotosSection({ value, onChange }: SectionProps<PhotoIte
               preview={<ImagePreview src={p.url} alt={p.describe || `Photo ${index + 1}`} variant="photo" />}
               headerExtra={<VisibleSwitch checked={p.visible} onChange={(v) => patch(p._id, { visible: v })} label={`Show photo ${index + 1} on the home page`} />}
               onReplace={(file) => void upload(p._id, file, (url) => patch(p._id, { url }))}
+              onLibrary={() => library.open(pickFor(p, index))}
               onMoveTop={() => onChange((prev) => moveItem(prev, prev.findIndex((x) => x._id === p._id), 0))}
               onRemove={() => remove(value, index)}
             >
@@ -86,6 +115,7 @@ export default function PhotosSection({ value, onChange }: SectionProps<PhotoIte
                 onChange={(v) => patch(p._id, { url: v })}
                 placeholder="/uploads/…"
                 invalid={linkError(p.url)}
+                extra={<LibraryButton variant="ghost" color="accent.text" context={`for photo ${index + 1}`} onClick={() => library.open(pickFor(p, index))} />}
               />
             </CardShell>
           )}
@@ -101,6 +131,7 @@ export default function PhotosSection({ value, onChange }: SectionProps<PhotoIte
           Add empty photo card
         </Button>
       </Flex>
+      {library.element}
     </Box>
   )
 }

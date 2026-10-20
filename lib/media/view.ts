@@ -218,3 +218,31 @@ export function imageMarkdown(url: string, alt: string, caption = ''): string {
   const c = caption.replace(/\s+/g, ' ').trim().replace(/\\/g, '\\\\').replace(/"/g, '\\"')
   return `![${a}](${url}${c ? ` "${c}"` : ''})`
 }
+
+/**
+ * The upload a field's value points at — `/uploads/<name>` anywhere in it
+ * (an absolute URL, the home editor's `?__ts=` preview cache-buster, a
+ * responsive variant standing for its original) — or null. The image
+ * pickers of the home and CV fields select it when they open.
+ */
+export function uploadNameIn(value: string | null | undefined): string | null {
+  const m = /\/uploads\/([A-Za-z0-9._%-]+)/.exec(value || '')
+  if (!m) return null
+  let name: string
+  try {
+    name = decodeURIComponent(m[1])
+  } catch {
+    return null
+  }
+  // A variant (photo.jpg.w640.webp) counts for its original (lib/uploadVariants VARIANT_NAME_RE).
+  return /^(.+\.(?:png|jpe?g|webp|gif))\.w\d+\.(?:webp|avif)$/i.exec(name)?.[1] ?? name
+}
+
+/**
+ * Whether an item can go in a field that takes only `formats` (all formats
+ * when none are given): the CV's PDF photo takes still JPEG, PNG and WebP.
+ */
+export function fitsFormats(item: Pick<MediaItem, 'format' | 'animated'>, formats: readonly string[] | null | undefined): boolean {
+  if (!formats || !formats.length) return true
+  return !!item.format && formats.includes(item.format) && !item.animated
+}

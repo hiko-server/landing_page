@@ -101,8 +101,9 @@ type UploadRow = { key: string; name: string; state: 'queued' | 'uploading' | 'd
  * Drop zone (and file picker) for several images at once. Files upload one
  * after another; each finished upload calls `onUploaded(url)` right away, so
  * cards appear as files complete. Per-file progress is listed below.
+ * `extra` sits beside the button (the media library's "Library…").
  */
-export function UploadDropZone({ label, hint, onUploaded }: { label: string; hint: string; onUploaded: (url: string, file: File) => void }) {
+export function UploadDropZone({ label, hint, onUploaded, extra }: { label: string; hint: string; onUploaded: (url: string, file: File) => void; extra?: React.ReactNode }) {
   const toast = useToast()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [over, setOver] = useState(false)
@@ -166,9 +167,12 @@ export function UploadDropZone({ label, hint, onUploaded }: { label: string; hin
         <Text fontSize="sm" color="page.fg-secondary" id={hintId}>
           {hint}
         </Text>
-        <Button size="sm" {...outlineButtonProps} onClick={() => inputRef.current?.click()} isLoading={busy} loadingText="Uploading" aria-describedby={hintId}>
-          {label}
-        </Button>
+        <HStack spacing={2}>
+          <Button size="sm" {...outlineButtonProps} onClick={() => inputRef.current?.click()} isLoading={busy} loadingText="Uploading" aria-describedby={hintId}>
+            {label}
+          </Button>
+          {extra}
+        </HStack>
         <input
           ref={inputRef}
           type="file"
@@ -241,6 +245,7 @@ export function CardShell({
   preview,
   headerExtra,
   onReplace,
+  onLibrary,
   onMoveTop,
   onRemove,
   children,
@@ -251,6 +256,8 @@ export function CardShell({
   preview: React.ReactNode
   headerExtra?: React.ReactNode
   onReplace: (file: File) => void
+  /** Replace the image with one from the media library. */
+  onLibrary?: () => void
   onMoveTop: () => void
   onRemove: () => void
   children: React.ReactNode
@@ -258,7 +265,8 @@ export function CardShell({
 }) {
   const fileRef = useRef<HTMLInputElement | null>(null)
   return (
-    <Box border="1px solid" borderColor="page.border" borderRadius="lg" bg="page.bg" p={3} h="100%">
+    // A named group, so a screen reader says whose fields these are ("Photo 3").
+    <Box role="group" aria-label={`${noun.charAt(0).toUpperCase()}${noun.slice(1)} ${index + 1}`} border="1px solid" borderColor="page.border" borderRadius="lg" bg="page.bg" p={3} h="100%">
       <Flex align="center" gap={1} mb={2}>
         <SortableHandle label={`Reorder ${noun} ${index + 1}`} />
         <Text fontFamily={MONO} fontSize="11px" color="page.fg-secondary" className="tnum">
@@ -273,6 +281,11 @@ export function CardShell({
               <MenuItem bg="transparent" _hover={{ bg: 'page.bg-overlay' }} _focus={{ bg: 'page.bg-overlay' }} onClick={() => fileRef.current?.click()}>
                 Replace image…
               </MenuItem>
+              {onLibrary ? (
+                <MenuItem bg="transparent" _hover={{ bg: 'page.bg-overlay' }} _focus={{ bg: 'page.bg-overlay' }} onClick={onLibrary}>
+                  Replace from library…
+                </MenuItem>
+              ) : null}
               <MenuItem bg="transparent" _hover={{ bg: 'page.bg-overlay' }} _focus={{ bg: 'page.bg-overlay' }} onClick={onMoveTop} isDisabled={index === 0}>
                 Move to top
               </MenuItem>
