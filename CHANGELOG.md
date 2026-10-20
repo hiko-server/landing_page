@@ -1144,6 +1144,70 @@ shown.
   else none), and the project editor says so under the field: "No published
   case study at /work/<slug>" (or that it is still a draft).
 
+### review-fixes-r2
+
+The second review round's findings (UX / accessibility, visual / motion,
+operations) on the release candidate.
+
+- **Toasts never cover a bottom bar** (UX-A-1): on a phone, toasts sit above
+  the /cv action bar and the draft-preview bar (`--bottom-bar-h`, which
+  already includes the safe-area inset) instead of on their buttons — an
+  error toast stays until dismissed, and Download PDF, EN / 中文, More
+  formats and Copy link were unreachable under it. On narrow screens the
+  scroll-to-top button moves up above any bottom toast (`--toast-stack-h`).
+- **Ask speaks Chinese as Chinese** (UX-A-2): the "no answer", "ask more
+  specifically", loading and error views, the options and their key hints,
+  the palette's status line while asking, and the search view's
+  "提问：…" row (its hint and badge too) carry `lang="zh-Hans"` for a Chinese
+  question (WCAG 3.1.2), as the answer view already did.
+- **"Ask Lucian directly" on /contact keeps focus** (UX-A-3): the form takes
+  the hand-off, focuses the message once the palette's focus trap has let go
+  (`lib/focusAfterDialog`, shared with the cited-quote focus), centres it with
+  the caret after the question, and announces "Your question is in the
+  Message field" — focus used to end on `<body>`.
+- **"?" on a tablet with a keyboard** (UX-A-4): the first key press only a
+  hardware keyboard can make marks the page (`data-keyboard`), and the key
+  hints hidden on touch screens come back — the Keyboard shortcuts page
+  lists every key instead of an empty page.
+- **Keyboard shortcuts page header** (VISU-3): no Search / Ask switch on a
+  nested page (the chip, ⌫ and Esc lead back), a short "Filter…"
+  placeholder, a field never narrower than 72 px, Esc hidden below `sm`, a
+  chip that gives way with an ellipsis; an option's label keeps its width
+  and its side hint truncates first.
+- **Small covers morph cleanly** (VISU-1): a logo-like cover morphs as its
+  tinted panel and, apart from it, its logo (`vt-morph-panel`,
+  `vt-morph-logo`), so the logo travels at its own size — never a magnified,
+  blurred copy behind the sharp one, opening or flying back.
+- **No ghosting in morphs** (VISU-2): the outgoing title fades within 0.15 of
+  the route and the old page within 0.2; the new page comes in over the
+  second half, once the title has nearly landed. Reduced motion stays
+  instant.
+- **Admin**: j / k work after a click on a panel's blank space (UX-A-5); the
+  admin's checkboxes get a ≥ 3:1 border (`page.control-border`, UX-A-6); the
+  Activity log's area label, the Inbox star, the version-history labels, the
+  line-diff "unchanged lines", the tab shortcut hints, the error fingerprint
+  and the editor placeholder move off the decorative `page.muted` to
+  contrast-safe tokens, no smaller than 11 px (UX-A-7, VISU-5); a table
+  wider than the screen (analytics, vitals attribution, storage) becomes a
+  focusable, labelled region while it overflows (UX-A-8); the content health
+  summary cards align their labels (VISU-4); the editor header wraps under
+  the title — on a phone the save state is a row and "Save" / "Publish…" fit
+  on the next, the "?" button shows from `lg` and never sits alone (VISU-6).
+- **Uploads queue their encoding** (OPS-2): one process-wide queue
+  (`lib/imageJobs`, on `globalThis` so every API route shares it) encodes
+  one image at a time (`IMAGE_JOB_CONCURRENCY`, default 1), at most
+  `IMAGE_JOB_QUEUE_MAX` (8) wait, beyond that 503 `{ code: 'BUSY' }` with
+  Retry-After; the media-optimize backfill takes its turn per image. libvips
+  uses at most `SHARP_CONCURRENCY` threads (default: CPUs, at most 2) and a
+  small operation cache. Four concurrent large uploads no longer push the
+  1 GiB container into the OOM killer.
+- **Container gate** (OPS-1 follow-up): `scripts/check-container.sh` runs an
+  explicit, macOS-safe project list — Chromium (desktop, tablet, phone,
+  reduced motion) and WebKit, then `@admin` with `--no-deps` — and installs
+  both browsers; Firefox and the visual baselines stay in
+  `scripts/check-fixture-gates.sh` (Linux image).
+- Tests: `tests/review-fixes-r2.test.ts`, `e2e/review-r2.spec.ts`.
+
 ### Changed
 
 - **No hosted CI**: `.github/workflows/ci.yml` is removed, so pushes and pull
