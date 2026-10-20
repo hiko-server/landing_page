@@ -101,8 +101,8 @@ test('(d) every admin write regenerates exactly the pages that render what it ch
   for (const p of new Set([...HOME_PAGE_PATHS, ...CV_PAGE_PATHS, '/blog', '/uses', '/colophon', '/publications'])) {
     assert.ok((STATIC_CONTENT_PATHS as readonly string[]).includes(p), `restores regenerate ${p}`)
   }
-  // A CV page change purges its files at the edge.
-  assert.deepEqual(sorted(derivedPurgePaths(['/cv/zh'])), ['/cv/zh.json', '/cv/zh.pdf', '/cv/zh.txt'])
+  // A CV page change purges its files at the edge (and /llms.txt, which links it — G9).
+  assert.deepEqual(sorted(derivedPurgePaths(['/cv/zh'])), ['/cv/zh.json', '/cv/zh.pdf', '/cv/zh.txt', '/llms.txt'])
 })
 
 // ── (e) tokens-theme + reading-work: one icon set, the token type scale ─────

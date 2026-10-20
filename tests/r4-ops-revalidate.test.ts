@@ -191,7 +191,8 @@ test('confirm paths are regenerated a second time, after the first pass has fini
 })
 
 test('derived purge paths and helpers', () => {
-  assert.deepEqual(derivedPurgePaths(['/now']), ['/api/search-index'])
+  // /llms.txt quotes the /now description (G9).
+  assert.deepEqual(derivedPurgePaths(['/now']), ['/api/search-index', '/llms.txt'])
   assert.deepEqual(derivedPurgePaths(['/colophon']), [])
   assert.ok(derivedPurgePaths(['/work/x']).includes('/work/feed.xml'))
   assert.ok(derivedPurgePaths(['/blog']).includes('/sitemap.xml'))
@@ -202,11 +203,11 @@ test('derived purge paths and helpers', () => {
   assert.deepEqual(derivedPurgePaths(['/about']), ['/api/search-index'])
   // ISR pages only (/ and /about since home-about G1, /cv and /cv/zh since cv-docs G1, /contact since cv-studio-contact G1, /publications since publications).
   assert.deepEqual([...STATIC_CONTENT_PATHS], ['/', '/about', '/blog', '/work', '/now', '/uses', '/colophon', '/contact', '/cv', '/cv/zh', '/publications'])
-  // A CV page change purges its downloadable files with it.
-  assert.deepEqual(derivedPurgePaths(['/cv']), ['/cv.pdf', '/cv.txt', '/cv.json'])
-  assert.deepEqual(derivedPurgePaths(['/cv/zh']), ['/cv/zh.pdf', '/cv/zh.txt', '/cv/zh.json'])
-  // The sitemap lists /publications only while it has public papers.
-  assert.deepEqual(derivedPurgePaths(['/publications']), ['/sitemap.xml'])
+  // A CV page change purges its downloadable files with it, and /llms.txt (it links a CV language only while it has public content, G9).
+  assert.deepEqual(derivedPurgePaths(['/cv']), ['/cv.pdf', '/cv.txt', '/cv.json', '/llms.txt'])
+  assert.deepEqual(derivedPurgePaths(['/cv/zh']), ['/cv/zh.pdf', '/cv/zh.txt', '/cv/zh.json', '/llms.txt'])
+  // The sitemap and /llms.txt list /publications only while it has public papers.
+  assert.deepEqual(derivedPurgePaths(['/publications']), ['/sitemap.xml', '/llms.txt'])
 })
 
 function fakeRes() {

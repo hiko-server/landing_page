@@ -1,4 +1,5 @@
 import type { GetStaticPaths, GetStaticProps } from 'next'
+import Head from 'next/head'
 import { Box, Flex, Link } from '@chakra-ui/react'
 import NextLink from 'next/link'
 import HeaderFooter from '../../layout/HeaderFooter'
@@ -10,14 +11,20 @@ import ArticleEnd, { type ShareData } from '../../components/Article/ArticleEnd'
 import MetaGrid, { MetaChips, type MetaItem } from '../../components/Article/MetaGrid'
 import DraftBar from '../../components/Article/DraftBar'
 import EditPill from '../../components/Article/EditPill'
+import LanguageSwitch from '../../components/Article/LanguageSwitch'
 import { neighbours, projectLinks, relatedArticles, toArticleLink, type ArticleLink } from '../../components/Article/collectionNav'
-import { listPosts, listWorkInDisplayOrder, getPost, type HastRoot, type PostFrontmatter } from '../../lib/mdx'
+import { listPosts, getPost, type HastRoot, type PostFrontmatter } from '../../lib/mdx'
 import { labelLang, type TocEntry } from '../../lib/toc'
-import { articleImageUrls, blogPostingNode, breadcrumb, absUrl, ogLangOf, PERSON_NAME, type ArticleCards, type OgImageOptions } from '../../lib/schema'
+import { articleImageUrls, blogPostingNode, breadcrumb, absUrl, ogLangOf, PERSON_NAME, type Alternate, type ArticleCards, type OgImageOptions } from '../../lib/schema'
 import { signedOgImageUrl } from '../../lib/og/sign'
 import { tagHref } from '../../lib/tagFilter'
 import type { AuthorCardData } from '../../lib/authorCard'
 import { formatPostDate, isoDate } from '../../lib/postDate'
+import { fillUi, uiLangAttr } from '../../lib/uiStrings'
+import { articleUiFor, type ArticleUi } from '../../lib/uiStrings/article'
+import { ArticleRoot } from '../../components/Article/articleUi'
+import type { SwitchLink } from '../../lib/translations'
+import { markdownTwinPath } from '../../lib/markdownTwinPaths'
 
 type Props = {
   slug: string
@@ -45,12 +52,15 @@ type Props = {
   shareQr: string | null
   /** Rendered in Draft Mode (the admin preview cookie): drafts are visible. */
   draftMode: boolean
+  /** The post in other languages (F2): the language switch. */
+  translations: SwitchLink[]
+  /** The interface words in the post's language (F1, lib/uiStrings/article). */
+  ui: ArticleUi
+  /** hreflang alternates of the post and its translations (empty without translations). */
+  alternates: Alternate[]
 }
 
 const MONO = 'var(--font-geist-mono), monospace'
-
-/** English UI text inside a non-English article keeps its own language. */
-const uiLang = (lang: string) => (lang === 'en' || lang.startsWith('en-') ? undefined : 'en')
 
 const blogTag = (t: string) => tagHref('/blog', t)
 
@@ -70,6 +80,9 @@ export default function BlogPost({
   author,
   shareQr,
   draftMode,
+  translations,
+  alternates,
+  ui: articleUi,
 }: Props) {
   const path = `/blog/${slug}`
   const url = absUrl(path)
@@ -78,37 +91,39 @@ export default function BlogPost({
   const tags = Array.isArray(frontmatter.tags) ? frontmatter.tags : []
   const image = ogImages.card
   const titleLang = labelLang(frontmatter.title) || 'en'
-  const ui = uiLang(lang)
+  // Interface words in the article's language (lib/uiStrings): 日期 / 阅读 on a Chinese post.
+  const { t, lang: uiLang } = articleUi
+  const ui = uiLangAttr(lang)
   const share: ShareData = { url, title: frontmatter.title, qrSvg: shareQr }
 
   const meta: MetaItem[] = [
     {
-      label: 'Date',
+      label: t.date,
       value: published ? (
         <time dateTime={published} className="tnum">
-          {formatPostDate(frontmatter.date)}
+          {formatPostDate(frontmatter.date, uiLang)}
         </time>
       ) : null,
     },
     {
-      label: 'Updated',
+      label: t.updated,
       value:
         modified && modified !== published ? (
           <time dateTime={modified} className="tnum">
-            {formatPostDate(frontmatter.updated)}
+            {formatPostDate(frontmatter.updated, uiLang)}
           </time>
         ) : null,
     },
-    { label: 'Read', value: <span className="tnum">{readingMinutes} min</span> },
+    { label: t.read, value: <span className="tnum">{fillUi(t.minutes, { n: readingMinutes })}</span> },
     {
-      label: 'Case study',
+      label: t.caseStudy,
       value: project ? (
-        <Link as={NextLink} href={project.permalink} color="accent.text" className="link-underline" lang={project.lang === 'en' ? undefined : project.lang}>
+        <Link as={NextLink} href={project.permalink} color="accent.text" className="link-underline" lang={project.lang === lang ? undefined : project.lang}>
           {project.title}
         </Link>
       ) : null,
     },
-    { label: 'Tags', value: tags.length ? <MetaChips items={tags} label="Tags" hrefFor={blogTag} /> : null, wide: true },
+    { label: t.tags, value: tags.length ? <MetaChips items={tags} label={t.tags} hrefFor={blogTag} pageLang={lang} /> : null, wide: true },
   ]
 
   return (
@@ -123,6 +138,7 @@ export default function BlogPost({
         type="article"
         lang={lang}
         noindex={draftMode}
+        alternates={alternates}
         publishedTime={published || undefined}
         modifiedTime={modified || undefined}
         jsonLd={[
@@ -143,6 +159,12 @@ export default function BlogPost({
           ]),
         ]}
       />
+      {/* The Markdown twin of the post (G9: /blog/<slug>.md, for language models and agents). */}
+      {!frontmatter.draft && (
+        <Head>
+          <link key="markdown-twin" rel="alternate" type="text/markdown" href={markdownTwinPath(path)} title={`${frontmatter.title} (Markdown)`} />
+        </Head>
+      )}
       <HeaderFooter>
         <Box
           maxW="var(--container-content)"
@@ -153,16 +175,19 @@ export default function BlogPost({
           // The page gutter: full-width figures bleed through it on phones.
           sx={{ '--page-gutter': { base: '1rem', sm: '1.5rem', md: '2rem' } }}
         >
-          <Flex align="center" justify="space-between" gap={4} minH="32px" mb={8} className="no-print">
-            <Link as={NextLink} href="/blog" fontFamily={MONO} fontSize="11px" color="page.fg-secondary" className="link-underline">
-              ← All posts
+          <Flex align="center" justify="space-between" gap={4} rowGap={3} wrap="wrap" minH="32px" mb={8} className="no-print">
+            <Link as={NextLink} href="/blog" fontFamily={MONO} fontSize="11px" color="page.fg-secondary" className="link-underline" lang={ui}>
+              {t.allPosts}
             </Link>
-            <EditPill kind="blog" slug={slug} />
+            <Flex align="center" gap={2} wrap="wrap" justify="flex-end">
+              <LanguageSwitch translations={translations} label={t.otherLanguages} />
+              <EditPill kind="blog" slug={slug} />
+            </Flex>
           </Flex>
 
-          <Box as="article" lang={lang}>
+          <ArticleRoot ui={articleUi} lang={lang}>
             <PageHeader
-              eyebrow={<span lang={ui}>Writing</span>}
+              eyebrow={<span lang={ui}>{t.writing}</span>}
               title={frontmatter.title}
               titleLang={titleLang !== lang ? titleLang : undefined}
               lede={frontmatter.description}
@@ -175,14 +200,14 @@ export default function BlogPost({
 
             <ArticleBody tree={tree} toc={toc} />
 
-            <ArticleEnd author={author} share={share} lang={lang} />
+            <ArticleEnd author={author} share={share} />
 
             <ArticleNav
-              before={newer ? { label: 'Newer', item: newer } : null}
-              after={older ? { label: 'Older', item: older } : null}
+              before={newer ? { label: t.newer, item: newer } : null}
+              after={older ? { label: t.older, item: older } : null}
               related={related}
             />
-          </Box>
+          </ArticleRoot>
         </Box>
         {draftMode && <DraftBar path={path} />}
       </HeaderFooter>
@@ -201,10 +226,15 @@ export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
   const post = await getPost(slug, { includeDrafts: draftMode })
   if (!post) return { notFound: true, revalidate: 60 }
 
-  const [{ loadAuthorCard }, { qrSvg }] = await Promise.all([import('../../lib/authorCard'), import('../../lib/qr')])
-  const posts = listPosts().map((p) => toArticleLink('blog', p))
-  const work = listWorkInDisplayOrder().map((w) => toArticleLink('work', w))
-  const self = toArticleLink('blog', post)
+  const [{ loadAuthorCard }, { qrSvg }, { articleSiblings }] = await Promise.all([
+    import('../../lib/authorCard'),
+    import('../../lib/qr'),
+    import('../../lib/articleSiblings'),
+  ])
+  // One link per piece, in this post's language (F2); its own translations for the switch.
+  const { posts, work, translations, alternates, projectFor } = articleSiblings('blog', post, { draftMode })
+  const ownLink = toArticleLink('blog', post)
+  const self = { ...ownLink, project: projectFor(ownLink.project) ?? null }
   const { before, after } = neighbours(posts, slug)
   const related = relatedArticles(self, [...posts, ...work])
   const project = projectLinks(self, work)[0] ?? null
@@ -244,6 +274,9 @@ export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
       author: loadAuthorCard(),
       shareQr,
       draftMode,
+      translations,
+      alternates,
+      ui: articleUiFor(post.lang),
       // Whether /publications exists, for the nav link (lib/publicationsData).
       ...(await import('../../lib/publicationsData')).chromePublicationsProp(),
     },
