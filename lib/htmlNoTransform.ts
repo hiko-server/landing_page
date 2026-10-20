@@ -1,4 +1,5 @@
 import { ServerResponse, type OutgoingHttpHeaders } from 'http'
+import { EDGE_CACHE_HEADER, edgeHtmlCacheControl } from './edgeHtmlTtl'
 
 /**
  * `Cache-Control: no-transform` on every HTML document — SERVER-ONLY,
@@ -22,6 +23,11 @@ import { ServerResponse, type OutgoingHttpHeaders } from 'http'
  * Only HTML: scripts, styles, images and API responses stay transformable,
  * so Cloudflare keeps serving them with Brotli. (HTML now travels with the
  * origin's gzip: a few KB per page.)
+ *
+ * The same hook caps how long Cloudflare keeps an HTML page
+ * (lib/edgeHtmlTtl.ts: `Cloudflare-CDN-Cache-Control` when the page's shared
+ * lifetime is longer than a few minutes), so the edge never serves a
+ * previous build's HTML for long after a deploy.
  */
 
 const NO_TRANSFORM_RE = /(?:^|,)\s*no-transform\s*(?:,|$)/i
@@ -59,8 +65,15 @@ export function installHtmlNoTransform(proto: Proto = ServerResponse.prototype a
       const type = (passed && headerIn(passed, 'content-type')?.value) ?? this.getHeader('content-type')
       if (isHtml(type)) {
         const cc = passed ? headerIn(passed, 'cache-control') : null
-        if (cc) passed![cc.key] = withNoTransform(String(cc.value ?? ''))
-        else this.setHeader('Cache-Control', withNoTransform(String(this.getHeader('cache-control') ?? '')))
+        const policy = String((cc ? cc.value : this.getHeader('cache-control')) ?? '')
+        if (cc) passed![cc.key] = withNoTransform(policy)
+        else this.setHeader('Cache-Control', withNoTransform(policy))
+        const edge = edgeHtmlCacheControl(policy)
+        const lower = EDGE_CACHE_HEADER.toLowerCase()
+        if (edge && !(passed && headerIn(passed, lower)) && this.getHeader(lower) === undefined) {
+          if (passed) passed[EDGE_CACHE_HEADER] = edge
+          else this.setHeader(EDGE_CACHE_HEADER, edge)
+        }
       }
     } catch {
       // Never let the header tweak break a response.

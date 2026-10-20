@@ -515,6 +515,58 @@ status.
   and finds it in the PDF text, the JSON Resume, the home page and search,
   then restores the stored CV.
 
+### wave2a-fixes
+
+Fixes for defects an adversarial review found in wave 2A before it shipped.
+
+- **Error monitor (SECU-1)**: anonymous browser and CSP reports can no
+  longer fill the error monitor and hide real server errors. Browser
+  reports get their own share (300 of the 500 fingerprints, at most 30 new
+  ones an hour across every sender) and their own daily budget; server
+  errors keep the rest of the table and a daily budget of their own, and a
+  new server error replaces the least valuable browser report (resolved
+  first, ignored last) when the table is full. Reports refused by a cap no
+  longer use up the day's budget.
+- **Sign-in history (SECU-2)**: failed sign-ins and failed identity checks
+  no longer push real sign-ins and security changes out of the 500-entry
+  history (about 50 junk requests could erase a foreign sign-in). Failures
+  are now counted per hour, method, country and reason code in a table of
+  their own (auth.db migration 2 moves the existing ones); Admin → Security
+  lists the newest 40 sign-ins and security changes and, above them, a
+  "Failed attempts" summary for the last 24 hours, 7 and 30 days by method
+  and country.
+- **Browsers signed in before the update (SECU-3)**: an admin token issued
+  before sessions existed has no session id, so "Sign out other browsers",
+  signing out one browser and Log out could not end it (only "Sign out
+  everywhere" or a password reset did), and it never appeared in the list.
+  Now the first of those actions ends every such token as well — the
+  owner's own session is never affected — and the Security page says so,
+  keeping "Sign out other browsers" available while such a browser may
+  still exist (at most a week after the update).
+- **auth.db file permissions (SECU-4)**: `data/auth.db` was made `0600`
+  only after SQLite had already created its `-wal` and `-shm` files `0644`,
+  and those hold nearly all of its recent data (recovery-code hashes,
+  session ids, the sign-in history). The file is now created `0600` before
+  SQLite opens it (so the sidecars start `0600`), all three are made `0600`
+  on every open — repairing files left world-readable — and the
+  pre-migration copy and `scripts/migrate-db.mjs` follow the same rule.
+- **Deploys and the edge cache (OPS-1)**: /, /about, /contact and the CV
+  pages are now ISR, so Cloudflare could keep the previous build's HTML for
+  up to an hour after a deploy (/colophon a year), and that HTML points at
+  scripts the new image does not have. Now:
+  - `scripts/deploy.sh` purges the zone right after the switch with the
+    app's own `CF_ZONE_ID` + `CF_API_TOKEN` (`scripts/edge-purge.mjs`, run
+    inside the new container: `purge_everything`, else every cacheable URL
+    in batches of 30), warns clearly when they are missing, checks that the
+    cache-busting `/` serves the new build id (else it rolls back) and
+    reports what the edge serves for `/` without a query string;
+  - Cloudflare keeps HTML at most 5 minutes
+    (`Cloudflare-CDN-Cache-Control: max-age=300, stale-if-error=86400` on
+    HTML whose shared lifetime is longer), whatever the ISR window;
+  - the container keeps the browser assets of the builds deployed in the
+    last week (`scripts/static-archive.mjs`, the `landing-static-archive`
+    volume), so open tabs and any edge copy of old HTML keep working.
+
 ### Changed
 
 - **No more "[01] INTRODUCTION" labels** (owner request): the public site

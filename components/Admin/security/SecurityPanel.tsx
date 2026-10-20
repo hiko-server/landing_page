@@ -46,7 +46,8 @@ import RecoveryCodesDialog from './RecoveryCodesDialog'
 import {
   absoluteTime,
   eventLabel,
-  isWarningEvent,
+  failureCountriesLabel,
+  failureKindLabel,
   methodLabel,
   passkeySyncLabel,
   relativeTime,
@@ -92,6 +93,15 @@ type AuthEventRow = {
   detail: string | null
 }
 
+type FailureSummary = {
+  last24h: number
+  last7d: number
+  last30d: number
+  lastAt: number | null
+  byMethod: Array<{ type: string; method: string | null; count: number }>
+  byCountry: Array<{ country: string | null; count: number }>
+}
+
 type Overview = {
   rp: { id: string | null; available: boolean }
   userId?: string
@@ -100,7 +110,9 @@ type Overview = {
   policy: { passkeyRequired: boolean }
   sessions: Session[]
   current: { sessionId: string | null; verifiedAt: number | null; recentUntil: number | null }
+  legacySessions: boolean
   events: AuthEventRow[]
+  failures: FailureSummary
   stepUp: { windowMinutes: number }
 }
 
@@ -121,6 +133,88 @@ function Meta({ children }: { children: React.ReactNode }) {
     <Text fontFamily={MONO} fontSize="11px" color="page.fg-secondary" className="tnum">
       {children}
     </Text>
+  )
+}
+
+/**
+ * Failed sign-ins and identity checks of the last 30 days, summed: the
+ * server only counts them (per hour, method and country), so a flood of
+ * them can never push a sign-in out of the history list below.
+ */
+function FailedAttempts({ summary, now }: { summary: FailureSummary; now: number }) {
+  if (summary.last30d === 0) {
+    return (
+      <Text fontSize="sm" color="page.fg-secondary" mb={3}>
+        No failed sign-in attempts in the last 30 days.
+      </Text>
+    )
+  }
+  const recent = summary.last24h > 0
+  return (
+    <Box
+      as="section"
+      aria-labelledby="security-failures"
+      border="1px solid"
+      borderColor="page.border"
+      borderRadius="lg"
+      px={{ base: 3, md: 4 }}
+      py={3}
+      mb={3}
+    >
+      <Flex align="baseline" justify="space-between" gap={3} flexWrap="wrap">
+        <Text
+          as="h3"
+          id="security-failures"
+          fontSize="sm"
+          fontWeight={600}
+          color={recent ? 'status.warning' : undefined}
+        >
+          Failed attempts
+        </Text>
+        {summary.lastAt ? (
+          <Meta>
+            last{' '}
+            <time
+              dateTime={new Date(summary.lastAt).toISOString()}
+              title={absoluteTime(summary.lastAt)}
+            >
+              {relativeTime(summary.lastAt, now)}
+            </time>
+          </Meta>
+        ) : null}
+      </Flex>
+      <Box
+        as="dl"
+        display="grid"
+        gridTemplateColumns="repeat(3, minmax(0, max-content))"
+        columnGap={{ base: 6, md: 10 }}
+        mt={2}
+      >
+        {[
+          { label: '24 hours', value: summary.last24h },
+          { label: '7 days', value: summary.last7d },
+          { label: '30 days', value: summary.last30d },
+        ].map((w) => (
+          <Box key={w.label} minW={0}>
+            <Text as="dt" fontFamily={MONO} fontSize="11px" color="page.fg-secondary">
+              {w.label}
+            </Text>
+            <Text as="dd" fontSize="md" fontWeight={600} className="tnum">
+              {w.value.toLocaleString('en')}
+            </Text>
+          </Box>
+        ))}
+      </Box>
+      <Text fontSize="xs" color="page.fg-secondary" mt={2}>
+        {summary.byMethod.map((m) => failureKindLabel(m.type, m.method, m.count)).join(' · ')}
+      </Text>
+      {/* Only when Cloudflare named at least one country (locally it names none). */}
+      {summary.byCountry.some((c) => c.country) ? (
+        <Text fontSize="xs" color="page.fg-secondary" mt={0.5}>
+          By country: {failureCountriesLabel(summary.byCountry)}
+        </Text>
+      ) : null}
+    </Box>
   )
 }
 
@@ -717,13 +811,21 @@ export default function SecurityPanel() {
         index={4}
         title="Signed-in browsers"
         id="security-sessions"
-        hint="Every browser signed in to the admin. Signing one out ends its session on its next request."
+        hint={
+          data.legacySessions
+            ? 'Every browser signed in to the admin. Signing one out ends its session on its next request. Browsers signed in before the passkey update appear here only after their next page view — signing out any browser, this one included, also ends every one of those.'
+            : 'Every browser signed in to the admin. Signing one out ends its session on its next request.'
+        }
         action={
           <Flex gap={2} flexWrap="wrap">
             <Button
               size="sm"
               {...outlineButtonProps}
-              isDisabled={data.sessions.filter((s) => !s.current).length === 0}
+              // While a browser from before the passkey update may still be
+              // signed in (it is never listed), there is always something to end.
+              isDisabled={
+                !data.legacySessions && data.sessions.filter((s) => !s.current).length === 0
+              }
               isLoading={busy === 'others'}
               onClick={() =>
                 void signOut(
@@ -830,11 +932,12 @@ export default function SecurityPanel() {
         index={5}
         title="Sign-in history"
         id="security-history"
-        hint="The last 40 sign-ins and security changes. Failed attempts keep only the time, the method and the country."
+        hint="The last 40 sign-ins and security changes. Failed attempts are only counted (per hour, method and country — no address or device), so they can never push an entry out of this list."
       />
+      <FailedAttempts summary={data.failures} now={now} />
       {data.events.length === 0 ? (
         <Text fontSize="sm" color="page.fg-secondary">
-          Nothing recorded yet.
+          No sign-ins or security changes recorded yet.
         </Text>
       ) : (
         <Box
@@ -860,13 +963,9 @@ export default function SecurityPanel() {
                 {relativeTime(e.at, now)}
               </Text>
               <Box flex="1 1 240px" minW={0}>
-                <Text
-                  fontSize="sm"
-                  fontWeight={isWarningEvent(e.type) ? 600 : 500}
-                  color={isWarningEvent(e.type) ? 'orange.400' : undefined}
-                >
+                <Text fontSize="sm" fontWeight={500}>
                   {eventLabel(e.type)}
-                  {e.detail && !['signin-failed', 'step-up-failed'].includes(e.type) ? (
+                  {e.detail ? (
                     <Box as="span" fontWeight={400} color="page.fg-secondary">
                       {' '}
                       — {e.detail}

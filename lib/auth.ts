@@ -9,7 +9,7 @@ import { ipFromReq } from './rateLimit'
 import { KNOWN_DEVICE_COOKIE, KNOWN_DEVICE_TTL_S, signKnownDevice, verifyKnownDevice } from './security/knownDevice'
 import { deviceLabel, ipPrefix } from './adminAuth/describe'
 import { createSession, liveSession, touchSession, type AdminSession, type SessionOrigin } from './adminAuth/sessions'
-import { recordAuthEvent, type AuthMethod } from './adminAuth/store'
+import { isLegacyTokenEnded, recordAuthEvent, type AuthMethod } from './adminAuth/store'
 
 /**
  * Single admin-session check for every Node API route.
@@ -98,16 +98,18 @@ export type AdminClaims = {
 /**
  * The request's verified admin session: the token's claims plus its session
  * row (null for a token minted before sessions existed — signature, expiry
- * and session version still apply to it, and /api/admin/session upgrades it
- * to a row on the next page view).
+ * and session version still apply to it, it is refused once the owner signs
+ * any browser out (lib/adminAuth/store legacy_cutoff), and
+ * /api/admin/session upgrades it to a row on the next page view).
  */
 export type AdminContext = { claims: AdminClaims; session: AdminSession | null }
 
 /**
  * Full check: signature (HS256 only), role, session version, and — for a
  * token with `sid` — a live session row (not revoked, not expired), whose
- * last-seen time is refreshed. Null for anything else. Never throws: an
- * unreadable auth.db fails closed (no session).
+ * last-seen time is refreshed; a token without `sid` only until the legacy
+ * cutoff. Null for anything else. Never throws: an unreadable auth.db fails
+ * closed (no session).
  */
 export function readAdminContext(req: NextApiRequest, res: NextApiResponse): AdminContext | null {
   try {
@@ -116,7 +118,7 @@ export function readAdminContext(req: NextApiRequest, res: NextApiResponse): Adm
     const claims = jwt.verify(token, getJwtSecret(), { algorithms: ['HS256'] }) as AdminClaims
     if (claims?.role !== 'admin') return null
     if (!isSessionCurrent(claims as Record<string, unknown>, getSessionVersion())) return null
-    if (claims.sid === undefined) return { claims, session: null }
+    if (claims.sid === undefined) return isLegacyTokenEnded(claims.iat) ? null : { claims, session: null }
     if (typeof claims.sid !== 'string') return null
     const session = liveSession(claims.sid)
     if (!session) return null

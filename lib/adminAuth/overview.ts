@@ -1,15 +1,18 @@
 import type { NextApiRequest } from 'next'
-import type { AdminContext } from '../auth'
+import { ADMIN_SESSION_TTL_S, type AdminContext } from '../auth'
 import { passkeyProvider } from './describe'
 import { listPasskeys, relyingPartyFor, type StoredPasskey } from './passkeys'
 import { listLiveSessions } from './sessions'
 import { recentAuthWindowMs, stepUpMethods, type StepUpMethods } from './stepUp'
 import {
+  authFailureSummary,
   isPasskeyRequired,
+  legacyTokensMayBeValid,
   listAuthEvents,
   recoveryStatus,
   webauthnUserId,
   type AuthEvent,
+  type AuthFailureSummary,
   type AuthMethod,
   type RecoveryStatus,
 } from './store'
@@ -34,7 +37,16 @@ export type SecurityOverview = {
     country: string | null
   }>
   current: { sessionId: string | null; verifiedAt: number | null; recentUntil: number | null }
+  /**
+   * True while a browser signed in before sessions existed may still hold a
+   * valid token: it is not listed in `sessions`, and signing any browser out
+   * ends it (lib/adminAuth/store endLegacyTokens).
+   */
+  legacySessions: boolean
+  /** The newest sign-ins and security changes; failed attempts are only in `failures`. */
   events: AuthEvent[]
+  /** Failed sign-ins and identity checks, summed per window (they never crowd out `events`). */
+  failures: AuthFailureSummary
   stepUp: StepUpMethods & { windowMinutes: number }
 }
 
@@ -71,7 +83,9 @@ export function securityOverview(
       recentUntil:
         verifiedAt !== null && now - verifiedAt <= windowMs ? verifiedAt + windowMs : null,
     },
+    legacySessions: legacyTokensMayBeValid(ADMIN_SESSION_TTL_S * 1000, now),
     events: listAuthEvents(40),
+    failures: authFailureSummary(now),
     stepUp: { ...stepUpMethods(), windowMinutes: windowMs / 60_000 },
   }
 }

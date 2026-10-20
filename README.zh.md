@@ -412,12 +412,16 @@ UA 或 Cookie；在 后台 → 系统 → 错误 中处理（已解决的错误�
   密钥"后，仅凭密码无法登录，还需一个恢复码。在 后台 → 安全 中管理。
 - **会话**：每个已登录的浏览器在 `data/auth.db` 中有一行（JWT 携带其 id）；
   登出只结束当前浏览器，后台 → 安全 列出所有浏览器（粗粒度设备、网段、国家）
-  并可单独或全部登出；重置密码会吊销全部会话。
+  并可单独或全部登出；重置密码会吊销全部会话。通行密钥更新之前就已登录的浏览器
+  没有会话记录：它在下一次打开页面后才会出现在列表里，而登出任何一个浏览器
+  （包括当前这个）都会同时结束所有这类浏览器。
 - **二次验证（Step-up）**：恢复备份、删除文章或案例、MongoDB 恢复/目标变更，
   以及任何通行密钥、恢复码、策略或其他浏览器的变更，都要求在
   `ADMIN_RECENT_AUTH_MINUTES`（默认 10）分钟内登录或重新验证过，否则弹出
   "确认是你本人"对话框（通行密钥，或密码 + 恢复码）后再继续。
-- **登录记录**：登录、失败（仅时间、方式、国家与原因代码，不含地址或设备）与安全变更。
+- **登录记录**：登录与安全变更（列出最近 40 条）。任何人都能造成的失败尝试只计数——
+  按小时、方式、国家与原因代码，不含地址或设备——存在单独的表里，并在列表上方汇总
+  （24 小时、7 天、30 天），因此大量失败尝试永远不会把一次登录挤出记录。
 - **JWT** 走 HS256（固定算法），7 天有效期，签名密钥 `JWT_SECRET`。
 - **Cookie**：`httpOnly`、`sameSite: 'strict'`、生产开 `secure`、`path: /`。
 - **重置 Token**：24 字节随机、30 分钟 TTL、一次性、常量时间比较、
@@ -538,9 +542,18 @@ musl）；发布阶段只包含 Next 追踪出的 standalone 输出——构建�
 
 自带的 `docker-entrypoint.sh`（由 `dumb-init` 托管）在启动时先运行
 `sync-from-r2.mjs`：按真实时间戳对齐本地 SQLite 与 R2 镜像，并补齐此前未能
-写入 R2 的内容；随后启动服务器和 `scripts/warm-isr.mjs`，用真实数据重新生成
-所有静态页面（镜像构建时不含数据库）。`./data` 与 `./public/uploads` 通过卷或
-绑定挂载持久化。
+写入 R2 的内容；接着运行 `scripts/static-archive.mjs`（见下）；随后启动服务器和
+`scripts/warm-isr.mjs`，用真实数据重新生成所有静态页面（镜像构建时不含数据库）。
+`./data` 与 `./public/uploads` 通过卷或绑定挂载持久化。
+
+**保留早先构建的静态资源。** 每次构建的 chunk 文件名都不同，而镜像只带有自己的
+`.next/static`。为了让部署前打开的页面（会按需加载 chunk 的已打开标签页，或仍在
+边缘缓存里的 HTML）继续正常工作，`landing-static-archive` 卷
+（`/app/next-static-archive`）会在启动时收集每次构建的 `/_next/static` 文件，并把
+最近一周（`STATIC_ARCHIVE_DAYS`，默认 7 天）部署过的构建的文件复制回新构建旁边——
+绝不覆盖新构建自己的文件（所有文件名都是内容哈希或构建 id）。它只存构建产物（每次
+构建几 MB），随时可以删除；服务器的覆盖文件必须合并卷列表（不要对 `volumes` 使用
+`!override`），示例文件就是这样写的。
 
 运行时配置来自 `.env`（`env_file`）；公开的 `NEXT_PUBLIC_*` 变量同时作为构建
 参数传入，因为 Next 会在构建时把它们写进前端代码。
@@ -573,9 +586,24 @@ scripts/deploy.sh                         # --force 重新构建当前已部署�
 5. **切换**：`docker compose up -d --no-build`，然后等待容器变为 `healthy` 并
    输出 `[warm-isr] regenerated`、`/api/health` 返回 `"status":"ok"`，且端口
    只绑定在 `127.0.0.1`。
-6. **冒烟测试**：经 `https://lucian-dev.com` 访问主要页面、订阅源、站点地图、
-   健康检查和旧 CV 跳转（带破缓存参数，确保由新的源站响应）。
-7. **回滚**：切换后任何一步失败都会执行 `docker tag …:pre-<时间戳> …:latest &&
+6. **清除边缘缓存**：ISR 页面可以被边缘缓存，而上一次构建的 HTML 引用的 chunk
+   新镜像里已经没有了。部署脚本在新容器内运行 `scripts/edge-purge.mjs`，用应用
+   自己的 `CF_ZONE_ID` + `CF_API_TOKEN`（Cache Purge 权限，令牌不离开服务器）清除
+   Cloudflare 区域缓存：先 `purge_everything`；若 Cloudflare 拒绝，则按每批 30 个
+   清除所有可缓存的页面、订阅源与站点地图中的 URL。没有凭据（或清除失败）时，
+   部署只打印警告并继续：Cloudflare 本来就最多保留 HTML 5 分钟（对共享缓存寿命
+   更长的 HTML——`/`、`/about`、`/colophon`——源站会发送
+   `Cloudflare-CDN-Cache-Control: max-age=300, stale-if-error=86400`，见
+   `lib/edgeHtmlTtl.ts`），而这期间旧 HTML 仍能正常水合，因为早先构建的静态资源
+   会被保留（见上文 Docker）。这个上限始终开启，而不仅在没有凭据时：清除可能失败，
+   构建时也无法知道运行时的凭据，而每个边缘节点每隔几分钟从 ISR 缓存重新取一次
+   几乎没有成本。
+7. **冒烟测试**：经 `https://lucian-dev.com` 访问主要页面、订阅源、站点地图、
+   健康检查和旧 CV 跳转（带破缓存参数，确保由新的源站响应）；`/` 必须引用新的
+   构建 id（`.next/BUILD_ID`）。随后不带查询串再请求 `/`——也就是访客从边缘拿到的
+   版本——检查是否也是新构建 id（重试几次）；边缘副本过期只报告、不回滚（源站
+   正常，回滚也刷新不了边缘，而且旧副本仍能工作）。
+8. **回滚**：切换后任何一步失败都会执行 `docker tag …:pre-<时间戳> …:latest &&
    docker compose up -d --no-build`，恢复检出目录，并打印失败容器最后 100 行
    日志和备份路径。成功时写入 `.deployed-sha` 并清理旧镜像（保留最近三个回滚
    镜像），同时清理备份：只保留最新的十个 `<UTC 时间戳>/` 备份目录（每个都含
@@ -624,7 +652,10 @@ Analytics:Edit（没有它时，脚本会打印在控制台中手动关闭 Web A
 清除订阅源、站点地图与搜索索引；设置 `INDEXNOW_KEY` 后，页面 URL 会推送给
 IndexNow（密钥文件位于站点根目录 `/<INDEXNOW_KEY>.txt`：密钥文件只对其所在
 目录及以下的 URL 有效；中间件只把这一个路径改写到 `/api/indexnow-key`）。两者都是发出即不等待、3 秒
-超时、记录日志，且绝不会导致保存失败；未设置环境变量时什么都不发送。
+超时、记录日志，且绝不会导致保存失败；未设置环境变量时什么都不发送。每次部署后
+也用同一组凭据清除整个区域（`scripts/deploy.sh`、`scripts/edge-purge.mjs`；可用
+`docker exec <容器> node scripts/edge-purge.mjs --dry-run` 检查配置），并且 HTML
+在边缘最多保留 5 分钟（`Cloudflare-CDN-Cache-Control`，只有 Cloudflare 读取）。
 
 ---
 

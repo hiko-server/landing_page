@@ -59,8 +59,9 @@ What the code actually does today, and where its limits are.
   every `/admin/*` page (guests → `302 /admin/login?next=…`) and
   `/api/admin/*` route (guests → JSON `401`). Every API handler then calls
   `lib/auth.ts`, which additionally enforces session revocation.
-- **Sessions** (`lib/adminAuth/sessions.ts`, `data/auth.db`) — every sign-in
-  creates a session row; the JWT carries its id (`sid`) and is honoured only
+- **Sessions** (`lib/adminAuth/sessions.ts`, `data/auth.db`, owner-only:
+  the file, its `-wal` / `-shm` files and its pre-migration copies are
+  `0600`) — every sign-in creates a session row; the JWT carries its id (`sid`) and is honoured only
   while the row exists, is not revoked and has not expired. Admin → Security
   lists the signed-in browsers (browser · OS, an IPv4 /24 or IPv6 /48 prefix,
   the Cloudflare country — never a full address or user agent) and signs any
@@ -72,7 +73,11 @@ What the code actually does today, and where its limits are.
   bumped by "Sign out everywhere" and by a **password reset** (which also
   burns all outstanding reset links and revokes every session row). A token
   minted before sessions existed (no `sid`) still needs a matching `sv`; the
-  first page view swaps it for one bound to a new row. Because the edge
+  first page view swaps it for one bound to a new row. Such a token cannot
+  be listed or revoked on its own, so the first time the owner signs any
+  browser out (Log out, one browser, the other browsers) a cutoff is stored
+  in `auth.db` and every `sid`-less token issued until then is refused;
+  a week after `auth.db` was created none can be valid anyway. Because the edge
   middleware cannot read the filesystem, a revoked token can still load an
   admin page shell until it expires, but every admin API it calls answers
   `401` and `/api/admin/session` reports `authenticated: false`.
@@ -237,8 +242,12 @@ For `POST` / `PUT` / `PATCH` / `DELETE` to `/api/admin/*`, `/api/auth/*`,
   immutable` for real cards.
 - **`/api/e`** (error reports) — browser error reports and CSP violation
   reports (`report-uri`, same origin). 8 KB bodies, per-client and
-  per-network minute budgets, 500 fingerprints and 20 000 events a day at
-  most; DNT / GPC, bots and cross-site posts are dropped. Query strings,
+  per-network minute budgets; browser reports may hold at most 300 of the
+  500 fingerprints, add at most 30 new ones an hour (all senders together)
+  and store 20 000 events a day, while server errors keep their own room
+  and daily budget (a new one replaces the least valuable browser report
+  when the table is full), so anonymous reports can never hide a server
+  error; DNT / GPC, bots and cross-site posts are dropped. Query strings,
   e-mail and IP addresses, tokens and ID-like numbers are scrubbed before
   storage; no address, user agent, cookie or body is kept. Always `204`.
 - **`/api/internal/restore-drill`** — loopback peers with the per-process

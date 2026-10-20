@@ -47,8 +47,8 @@ import { consumeRecoveryCode, isPasskeyRequired, recordAuthEvent } from '../../.
  *   7. A session row in auth.db and a JWT (HS256, 7d, bound to the session
  *      version and the row) in an httpOnly + sameSite=strict + secure cookie,
  *      plus the readable `cv_admin_hint=1` companion cookie (lib/auth
- *      startAdminSession). Sign-ins and failures go to the sign-in history
- *      (a failure keeps only the time, method and country).
+ *      startAdminSession). Sign-ins go to the sign-in history; a failure only
+ *      adds to an hourly count per method and country (lib/adminAuth/store).
  */
 
 const ALLOWED_BODY_KEYS = new Set(['email', 'password', 'recoveryCode'])
@@ -162,7 +162,7 @@ export default withApi('auth/email-login', async (req: NextApiRequest, res: Next
   return res.status(200).json({ ok: true })
 })
 
-/** A failed attempt in the sign-in history: time, method and country only (no address, no device). */
+/** Count a failed attempt: hour, method and country only (no address, no device). */
 function recordFailure(req: NextApiRequest, method: 'password' | 'recovery') {
   try {
     recordAuthEvent({ type: 'signin-failed', method, country: requestOrigin(req).country })

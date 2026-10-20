@@ -3,6 +3,7 @@
  * Append new files here; never edit or reorder a released one.
  */
 import passkeysSessions from './001-passkeys-sessions.mjs'
+import failureCounts from './002-failure-counts.mjs'
 
 /** @type {readonly import('../migrate.mjs').Migration[]} */
-export const AUTH_MIGRATIONS = Object.freeze([passkeysSessions])
+export const AUTH_MIGRATIONS = Object.freeze([passkeysSessions, failureCounts])

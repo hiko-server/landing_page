@@ -21,8 +21,16 @@
 #   4. activate   `docker compose up -d --no-build`, wait for `healthy` and the
 #                 `[warm-isr] regenerated` log line, /api/health status "ok",
 #                 port published on 127.0.0.1 only
-#   5. smoke      key URLs through https://lucian-dev.com
-#   6. finalize   .deployed-sha, prune old images, keep only the 10 newest
+#   5. edge       purge Cloudflare's cache with the app's own CF_ZONE_ID +
+#                 CF_API_TOKEN (scripts/edge-purge.mjs inside the new
+#                 container), so no edge keeps the previous build's HTML;
+#                 without them, a warning (HTML leaves the edge within 5
+#                 minutes anyway — lib/edgeHtmlTtl.ts — and earlier builds'
+#                 assets stay served for a week: scripts/static-archive.mjs)
+#   6. smoke      key URLs through https://lucian-dev.com (cache-busting
+#                 query: the new origin answers, and / must reference the new
+#                 build id), then / without a query: what the edge serves
+#   7. finalize   .deployed-sha, prune old images, keep only the 10 newest
 #                 backup directories (each one holds a copy of .env)
 #
 # Any failure after the image switch rolls back automatically:
@@ -267,6 +275,13 @@ case "$MODE" in
     say "healthy on $addr"
     ;;
 
+  edge) # after the switch: this build's id, then purge the edge with the app's credentials
+    printf 'BUILD_ID=%s\n' "$(docker exec "$CONTAINER" cat /app/.next/BUILD_ID 2>/dev/null || true)"
+    rc=0
+    docker exec "$CONTAINER" node /app/scripts/edge-purge.mjs || rc=$?
+    printf 'PURGE_EXIT=%s\n' "$rc"
+    ;;
+
   rollback)
     say "last 100 log lines of the failed container:"
     docker logs --tail 100 "$CONTAINER" 2>&1 | sed 's/^/    /' || true
@@ -415,8 +430,41 @@ if [ $code -eq 3 ]; then
 fi
 [ $code -eq 0 ] || rollback "the new container did not become healthy"
 
-# ── 5. Smoke test through Cloudflare ───────────────────────────────────────
+# ── 5. Edge: drop the previous build's HTML from Cloudflare ────────────────
 PHASE=smoke
+# The build id a page's HTML loads its scripts for (/_next/static/<id>/_buildManifest.js).
+html_build_id() { grep -o '/_next/static/[A-Za-z0-9_-]*/_buildManifest\.js' | head -n 1 | cut -d/ -f4; }
+# "purged" | "unconfigured" | "failed" for scripts/edge-purge.mjs's exit code.
+edge_status() { case "$1" in 0) echo purged ;; 3) echo unconfigured ;; *) echo failed ;; esac; }
+# What the edge serves for $1 without a query string: "fresh" once its HTML
+# references build $2 (a few tries: a purge takes seconds to spread), else
+# "stale <id seen>".
+edge_build_check() {
+  local seen="" try
+  for try in $(seq 1 "${EDGE_CHECK_TRIES:-5}"); do
+    seen=$(curl -sS --compressed --max-time 20 "$DEPLOY_SITE_URL$1" 2>/dev/null | html_build_id || true)
+    if [ "$seen" = "$2" ]; then
+      echo fresh
+      return 0
+    fi
+    [ "$try" -lt "${EDGE_CHECK_TRIES:-5}" ] && sleep "${EDGE_CHECK_DELAY:-3}"
+  done
+  echo "stale ${seen:-none}"
+}
+
+log "purging the Cloudflare cache (the previous build's HTML)"
+edge_out=$(run edge 2>&1) || true
+grep -v -E '^(BUILD_ID|PURGE_EXIT)=' <<<"$edge_out" | sed 's/^/  /' || true
+BUILD_ID=$(sed -n 's/^BUILD_ID=//p' <<<"$edge_out" | tail -n 1)
+edge=$(edge_status "$(sed -n 's/^PURGE_EXIT=//p' <<<"$edge_out" | tail -n 1)")
+case "$edge" in
+  purged) ;;
+  unconfigured) warn "no Cloudflare purge: set CF_ZONE_ID + CF_API_TOKEN (Cache Purge) in the server's .env — until then the edge may serve the previous build's HTML for up to 5 minutes (it still works: earlier builds' assets are kept)" ;;
+  *) warn "the Cloudflare purge failed (see above) — the edge may serve the previous build's HTML for up to 5 minutes; purge the zone in the dashboard to end it at once" ;;
+esac
+[ -n "$BUILD_ID" ] || warn "could not read the new build id — the build-id checks below are skipped"
+
+# ── 6. Smoke test through Cloudflare ───────────────────────────────────────
 log "smoke test via $DEPLOY_SITE_URL"
 fetch_code() { curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$@" 2>/dev/null || echo 000; }
 smoke_failed=""
@@ -438,10 +486,25 @@ health=$(curl -fsS --max-time 20 "$DEPLOY_SITE_URL/api/health" 2>/dev/null || tr
 grep -q '"status":"ok"' <<<"$health" || smoke_failed="$smoke_failed /api/health"
 plain=$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 20 "http://${DEPLOY_SITE_URL#https://}/" 2>/dev/null || echo 000)
 case "$plain" in 30[178]" https://"*) ;; *) warn "http:// did not redirect to https:// ($plain) — run scripts/cloudflare-config.mjs" ;; esac
+if [ -n "$BUILD_ID" ]; then
+  # The new origin answers through Cloudflare with this build's HTML…
+  origin_id=$(curl -sS --compressed --max-time 20 "$DEPLOY_SITE_URL/?deploy=$TS" 2>/dev/null | html_build_id || true)
+  printf '  %-12s %s\n' "/ build" "${origin_id:-none} (expected $BUILD_ID)"
+  [ "$origin_id" = "$BUILD_ID" ] || smoke_failed="$smoke_failed /(build ${origin_id:-none})"
+  # …and the edge, asked without a query string, no longer serves the old one.
+  # Not a rollback reason: the origin is fine, rolling back cannot refresh an
+  # edge copy, and that copy still works (earlier builds' assets are kept).
+  edge_state=$(edge_build_check / "$BUILD_ID")
+  printf '  %-12s %s\n' "/ (edge)" "$edge_state"
+  case "$edge_state" in
+    fresh) ;;
+    *) warn "the edge still serves an older build's HTML for / ($edge_state, purge: $edge) — it leaves the edge within 5 minutes; purge the zone in the Cloudflare dashboard to end it at once" ;;
+  esac
+fi
 
 [ -z "$smoke_failed" ] || rollback "smoke test failed:$smoke_failed"
 
-# ── 6. Done ────────────────────────────────────────────────────────────────
+# ── 7. Done ────────────────────────────────────────────────────────────────
 PHASE=finalizing
 run finalize
 print_backups

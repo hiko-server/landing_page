@@ -21,6 +21,8 @@ import {
   currentVersion,
   ensureWal,
   migrationDrift,
+  PRIVATE_FILE_MODE,
+  restrictPrivateDbFiles,
   runMigrations,
 } from './db/migrate.mjs'
 import { CONTENT_MIGRATIONS } from './db/content/index.mjs'
@@ -30,10 +32,12 @@ import { AUTH_MIGRATIONS } from './db/auth/index.mjs'
 const here = path.dirname(fileURLToPath(import.meta.url))
 const dataDir = path.join(path.resolve(here, '..'), 'data')
 
+// `private`: owner-only files (0600, -wal / -shm and the pre-migration copy
+// included), as lib/adminAuth/db.ts keeps them.
 const STORES = {
   content: { file: 'content.db', migrations: CONTENT_MIGRATIONS, backup: true },
   analytics: { file: 'analytics.db', migrations: ANALYTICS_MIGRATIONS, backup: false },
-  auth: { file: 'auth.db', migrations: AUTH_MIGRATIONS, backup: true },
+  auth: { file: 'auth.db', migrations: AUTH_MIGRATIONS, backup: true, private: true },
 }
 
 function parseArgs(argv) {
@@ -100,6 +104,8 @@ function main() {
       }
       continue
     }
+    // Before opening: the -wal / -shm files SQLite creates copy the main file's mode.
+    if (store.private && !args.status) restrictPrivateDbFiles(file)
     const db = new Database(file, { timeout: 10_000, readonly: args.status, fileMustExist: true })
     try {
       if (args.status) {
@@ -116,9 +122,15 @@ function main() {
             label,
             from,
           })
-          if (copy) console.log(`${label}: copied to ${copy} first`)
+          if (!copy) return
+          if (store.private) fs.chmodSync(copy, PRIVATE_FILE_MODE)
+          console.log(`${label}: copied to ${copy} first`)
         },
       })
+      if (store.private) {
+        for (const f of restrictPrivateDbFiles(file))
+          console.error(`${label}: could not make ${f.path} owner-only (${f.code})`)
+      }
       if (report.applied.length) {
         console.log(
           `${label}: migrated v${report.from} → v${report.to} (${report.applied.map((m) => `${m.version}-${m.name}`).join(', ')})`

@@ -74,10 +74,13 @@ WORKDIR /app
 
 # Non-root runtime user. Local SQLite database lives in /app/data: mount this
 # dir as a volume to persist content across container restarts.
+# /app/next-static-archive keeps earlier builds' /_next/static files for a
+# week (scripts/static-archive.mjs; a named volume in docker-compose.yml,
+# which inherits this ownership on first use).
 RUN addgroup --system --gid 1001 nodejs \
  && adduser --system --uid 1001 nextjs \
- && mkdir -p .next /app/data \
- && chown nextjs:nodejs .next /app/data
+ && mkdir -p .next /app/data /app/next-static-archive \
+ && chown nextjs:nodejs .next /app/data /app/next-static-archive
 
 COPY --from=build --chown=nextjs:nodejs /app/public ./public
 # Runtime uploads dir (mounted as a volume in docker-compose.yml). Created
@@ -105,6 +108,9 @@ COPY --chown=nextjs:nodejs docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh \
  && test -f /app/.next/prerender-manifest.json \
  && test -f /app/scripts/warm-isr.mjs \
+ && test -f /app/scripts/static-archive.mjs \
+ && test -f /app/scripts/edge-purge.mjs \
+ && test -f /app/.next/BUILD_ID \
  && test -f /app/scripts/sync-from-r2.mjs \
  && test -f /app/scripts/content-helpers.mjs \
  && test -f /app/scripts/db/migrate.mjs \
