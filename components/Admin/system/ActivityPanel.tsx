@@ -233,7 +233,7 @@ export default function ActivityPanel() {
                             </Text>
                           ) : null}
                         </Box>
-                        <Text fontSize="10px" fontFamily={MONO} color="page.muted" flexShrink={0} display={{ base: 'none', sm: 'block' }}>
+                        <Text fontSize="label" fontFamily={MONO} color="page.fg-secondary" flexShrink={0} display={{ base: 'none', sm: 'block' }}>
                           {AUDIT_AREA_LABEL[item.area as keyof typeof AUDIT_AREA_LABEL] || item.area}
                         </Text>
                         {item.href ? <VisuallyHidden>(opens the page)</VisuallyHidden> : null}

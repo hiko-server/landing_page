@@ -964,7 +964,7 @@ export default function RichEditor({
                   '.tt-prose': { minHeight: minH, outline: 'none' },
                   '.tt-prose p.is-editor-empty:first-of-type::before': {
                     content: 'attr(data-placeholder)',
-                    color: 'page.muted',
+                    color: 'page.fg-subtle',
                     float: 'left',
                     height: 0,
                     pointerEvents: 'none',

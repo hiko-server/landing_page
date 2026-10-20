@@ -415,7 +415,7 @@ export default function ErrorsPanel() {
                         Delete
                       </Button>
                     </Flex>
-                    <Text fontFamily={MONO} fontSize="10px" color="page.muted" mt={3}>
+                    <Text fontFamily={MONO} fontSize="label" color="page.fg-subtle" mt={3}>
                       fingerprint {e.fingerprint}
                     </Text>
                   </AccordionPanel>

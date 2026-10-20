@@ -1235,7 +1235,7 @@ function MessageRow({ m, first, active, selected, hasDraft, rowTabbable, itemPro
           onClick={onToggleStar}
           minW="28px"
           h="28px"
-          color={m.starred ? 'status.limited' : 'page.muted'}
+          color={m.starred ? 'status.limited' : 'page.fg-subtle'}
           _hover={{ color: m.starred ? 'status.limited' : 'page.fg', bg: 'transparent' }}
         />
       </Flex>

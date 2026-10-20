@@ -221,8 +221,8 @@ function Dashboard() {
             <Text
               display={{ base: 'none', lg: 'block' }}
               fontFamily={MONO}
-              fontSize="10px"
-              color="page.muted"
+              fontSize="label"
+              color="page.fg-subtle"
               aria-hidden
             >
               {tabShortcutLabel(isMac, DASHBOARD_TABS.length)} switch tabs

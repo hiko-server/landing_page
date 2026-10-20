@@ -142,7 +142,7 @@ function DiffRow({ e }: { e: DiffEntry }) {
       <Stack spacing={1} fontFamily={MONO} fontSize="12px" pl={{ base: 0, md: 2 }}>
         {e.kind !== 'added' ? (
           <Flex gap={2} align="baseline">
-            <Text as="span" color="page.muted" flexShrink={0} w="64px">
+            <Text as="span" color="page.fg-subtle" flexShrink={0} w="64px">
               live
             </Text>
             <Text
@@ -158,7 +158,7 @@ function DiffRow({ e }: { e: DiffEntry }) {
         ) : null}
         {e.kind !== 'removed' ? (
           <Flex gap={2} align="baseline">
-            <Text as="span" color="page.muted" flexShrink={0} w="64px">
+            <Text as="span" color="page.fg-subtle" flexShrink={0} w="64px">
               snapshot
             </Text>
             <Text as="span" color="page.fg" wordBreak="break-word" whiteSpace={words ? 'pre-wrap' : undefined}>

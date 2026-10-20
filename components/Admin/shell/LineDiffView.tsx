@@ -41,7 +41,7 @@ export default function LineDiffView({ lines, context = 3 }: { lines: DiffLine[]
       {rows.map((r, i) => {
         if (r.type === 'skip') {
           return (
-            <Box key={i} px={3} py={0.5} color="page.muted" bg="page.bg-elevated" fontStyle="italic">
+            <Box key={i} px={3} py={0.5} color="page.fg-subtle" bg="page.bg-elevated" fontStyle="italic">
               ⋯ {r.count} unchanged line{r.count === 1 ? '' : 's'}
             </Box>
           )

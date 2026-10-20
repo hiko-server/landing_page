@@ -117,8 +117,8 @@ export default function SegmentedTabs<K extends string>({
                 as="span"
                 display={{ base: 'none', xl: 'inline' }}
                 fontFamily={MONO}
-                fontSize="10px"
-                color="page.muted"
+                fontSize="label"
+                color="page.fg-subtle"
                 aria-hidden
               >
                 {it.shortcut}

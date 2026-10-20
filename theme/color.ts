@@ -38,6 +38,13 @@ export const semanticColors = {
   'page.fg-subtle': { light: '#666666', dark: '#8a8a8a' },
   /** Decorative only (dividers, disabled glyphs) — NOT for readable text. */
   'page.muted': { light: '#a1a1a1', dark: '#525252' },
+  /**
+   * The boundary of an unchecked form control (a checkbox's box): ≥ 3:1 on
+   * every page and row background in both modes (WCAG 1.4.11; checked in
+   * tests/review-fixes-r2.test.ts). page.border / border-strong are hairlines
+   * for surfaces, too faint to find a control by.
+   */
+  'page.control-border': { light: '#858585', dark: '#6b6b6b' },
   'page.border': { light: 'rgba(0,0,0,0.08)', dark: 'rgba(255,255,255,0.10)' },
   'page.border-strong': { light: 'rgba(0,0,0,0.16)', dark: 'rgba(255,255,255,0.20)' },
   'page.surface': { light: 'rgba(255,255,255,0.7)', dark: 'rgba(22,22,22,0.7)' },
