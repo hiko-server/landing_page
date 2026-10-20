@@ -49,9 +49,13 @@ services:
     # backups, the contact fallback inbox and uploaded images. Named volumes
     # inherit the image's nextjs ownership on first use and survive
     # `docker compose down` (only `down -v` removes them).
+    # landing-static-archive keeps the browser assets of the builds deployed
+    # in the last week (scripts/static-archive.mjs), so a page loaded before a
+    # deploy still finds its scripts. Not personal data; safe to delete.
     volumes:
       - landing-data:/app/data
       - landing-uploads:/app/public/uploads
+      - landing-static-archive:/app/next-static-archive
     # Loopback only: the site is reached through a reverse proxy / Cloudflare
     # Tunnel on the host, never directly. (The server's override — see
     # docker-compose.override.example.yml — replaces this mapping with its own
@@ -66,6 +70,7 @@ services:
 volumes:
   landing-data:
   landing-uploads:
+  landing-static-archive:
 
 networks:
   easilycv:

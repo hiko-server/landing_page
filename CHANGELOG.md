@@ -499,6 +499,22 @@ Fixes for defects an adversarial review found in wave 2A before it shipped.
   SQLite opens it (so the sidecars start `0600`), all three are made `0600`
   on every open — repairing files left world-readable — and the
   pre-migration copy and `scripts/migrate-db.mjs` follow the same rule.
+- **Deploys and the edge cache (OPS-1)**: /, /about, /contact and the CV
+  pages are now ISR, so Cloudflare could keep the previous build's HTML for
+  up to an hour after a deploy (/colophon a year), and that HTML points at
+  scripts the new image does not have. Now:
+  - `scripts/deploy.sh` purges the zone right after the switch with the
+    app's own `CF_ZONE_ID` + `CF_API_TOKEN` (`scripts/edge-purge.mjs`, run
+    inside the new container: `purge_everything`, else every cacheable URL
+    in batches of 30), warns clearly when they are missing, checks that the
+    cache-busting `/` serves the new build id (else it rolls back) and
+    reports what the edge serves for `/` without a query string;
+  - Cloudflare keeps HTML at most 5 minutes
+    (`Cloudflare-CDN-Cache-Control: max-age=300, stale-if-error=86400` on
+    HTML whose shared lifetime is longer), whatever the ISR window;
+  - the container keeps the browser assets of the builds deployed in the
+    last week (`scripts/static-archive.mjs`, the `landing-static-archive`
+    volume), so open tabs and any edge copy of old HTML keep working.
 
 ### Changed
 

@@ -699,10 +699,22 @@ deployed commit on `/colophon`.
 The bundled `docker-entrypoint.sh` (under `dumb-init`) runs
 `sync-from-r2.mjs` on boot — reconciling the local SQLite store with the R2
 mirror by real timestamps, repairing writes that never reached R2 — then
-starts the server and `scripts/warm-isr.mjs`, which regenerates every
-statically generated page from the real store (the image is built without
-a database). `./data` and `./public/uploads` are persisted through volumes
-or bind mounts.
+`scripts/static-archive.mjs` (below), then starts the server and
+`scripts/warm-isr.mjs`, which regenerates every statically generated page
+from the real store (the image is built without a database). `./data` and
+`./public/uploads` are persisted through volumes or bind mounts.
+
+**Earlier builds' assets.** Every build has new chunk names, and an image
+carries only its own `.next/static`. So that a page loaded before a deploy
+(an open tab that lazily loads a chunk, or HTML still in an edge cache)
+keeps working, the `landing-static-archive` volume
+(`/app/next-static-archive`) collects each build's `/_next/static` files at
+start-up and copies the ones of the builds deployed in the last week
+(`STATIC_ARCHIVE_DAYS`, default 7) back next to the new build's — never
+replacing one of its files (all names are content hashes or the build id).
+It holds build output only (a few MB per build) and may be deleted at any
+time; the server's override must merge the volume list (no `!override` on
+`volumes`), as the example does.
 
 Runtime settings come from `.env` (`env_file`); the public `NEXT_PUBLIC_*`
 values are also passed as build args because Next inlines them at build
@@ -737,10 +749,29 @@ scripts/deploy.sh                         # --force rebuilds the deployed commit
    container to be `healthy` and log `[warm-isr] regenerated`, for
    `/api/health` to report `"status":"ok"`, and for the port to be bound to
    `127.0.0.1` only.
-6. **Smoke test** through `https://lucian-dev.com`: the main pages, feeds,
+6. **Edge purge** — the ISR pages are edge-cacheable, and the previous
+   build's HTML points at chunks the new image does not have. Inside the
+   new container, `scripts/edge-purge.mjs` purges the Cloudflare zone with
+   the app's own `CF_ZONE_ID` + `CF_API_TOKEN` (Cache Purge; the token never
+   leaves the server): `purge_everything`, or — if Cloudflare refuses that —
+   every cacheable page, feed and sitemap URL in batches of 30. Without the
+   credentials (or if the purge fails) the deploy prints a warning and
+   carries on: Cloudflare keeps HTML at most 5 minutes anyway (the origin
+   sends `Cloudflare-CDN-Cache-Control: max-age=300, stale-if-error=86400`
+   on HTML whose own shared lifetime is longer — `/`, `/about`, `/colophon`;
+   `lib/edgeHtmlTtl.ts`), and the old HTML still hydrates meanwhile because
+   earlier builds' assets are kept (Docker, above). That cap is always on,
+   not only without credentials: a purge can fail, the build cannot know
+   the runtime credentials, and a refetch from the ISR cache every few
+   minutes per edge location costs next to nothing.
+7. **Smoke test** through `https://lucian-dev.com`: the main pages, feeds,
    sitemap, health and the legacy CV redirect (cache-busting query, so the
-   new origin answers).
-7. **Rollback** on any failure after the switch: `docker tag
+   new origin answers); `/` must reference the new build id
+   (`.next/BUILD_ID`). Then `/` without a query string — what visitors get
+   from the edge — is checked for the new build id too (a few tries); a
+   stale edge copy is reported, not rolled back (the origin is fine, a
+   rollback cannot refresh the edge, and the copy still works).
+8. **Rollback** on any failure after the switch: `docker tag
    …:pre-<timestamp> …:latest && docker compose up -d --no-build`, the
    checkout reset, the failed container's last 100 log lines and the backup
    paths printed. On success: `.deployed-sha`, image pruning (the three
@@ -797,7 +828,11 @@ batches of 30; with `INDEXNOW_KEY` the page URLs are submitted to IndexNow
 key file only covers URLs in its own directory and below; the middleware
 rewrites exactly that path to `/api/indexnow-key`). Both are fire-and-forget with a
 3 s timeout, logged, and never fail a save; without the env nothing is
-sent.
+sent. The same credentials purge the whole zone after every deploy
+(`scripts/deploy.sh`, `scripts/edge-purge.mjs`; check them with
+`docker exec <container> node scripts/edge-purge.mjs --dry-run`), and HTML
+never stays at the edge longer than 5 minutes
+(`Cloudflare-CDN-Cache-Control`, read by Cloudflare only).
 
 ---
 

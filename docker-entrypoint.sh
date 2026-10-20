@@ -24,11 +24,18 @@ case "$status" in
     ;;
 esac
 
-# 2. The image is built without a content DB, so every statically generated
+# 2. Keep the browser assets of the builds deployed in the last week next to
+#    this build's (/app/next-static-archive volume), so pages loaded before
+#    a deploy — an open tab, or HTML still in an edge cache — keep working.
+#    Next lists .next/static at start-up, so this runs first (best effort,
+#    always exits 0).
+node /app/scripts/static-archive.mjs
+
+# 3. The image is built without a content DB, so every statically generated
 #    page baked into it was rendered from an empty store. Once the server is
 #    healthy, regenerate them in the background (best effort, always exits 0).
 node /app/scripts/warm-isr.mjs &
 
-# 3. Replace this shell with the server so dumb-init's signals reach it directly.
+# 4. Replace this shell with the server so dumb-init's signals reach it directly.
 echo "[entrypoint] Launching Next.js server…"
 exec node /app/server.js

@@ -18,7 +18,9 @@ services:
       - "127.0.0.1:3002:3000"
     # Bind mounts on the same targets replace the named volumes of
     # docker-compose.yml, so the live data sits in the checkout's ./data and
-    # ./public/uploads (owned by uid 1001, the image's non-root user).
+    # ./public/uploads (owned by uid 1001, the image's non-root user). The
+    # earlier builds' asset archive stays a named volume (merged by target —
+    # do not `!override` this list, or it is lost on every deploy).
     volumes:
       - ./data:/app/data
       - ./public/uploads:/app/public/uploads
