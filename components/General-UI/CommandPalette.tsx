@@ -136,7 +136,10 @@ type Item = PageMember & {
   external?: boolean
   run?: () => void | Promise<void>
   keywords?: string
+  /** Language of the label (and of a result's excerpt) when it is not the palette's English. */
   lang?: string
+  /** Language of the row's interface words — hint and badge — when not English (the "Ask: …" row of a Chinese question). */
+  uiLang?: string
 }
 
 type Detail = { prefix: string; segments: Segment[] }
@@ -869,7 +872,8 @@ export default function CommandPalette({
         // "Ask: …" — first when the query is phrased as a question, otherwise after the results (or alone).
         const copy = askCopyFor(q, 'en')
         const askRow: Row = {
-          item: { id: ASK_ROW_ID, group: 'Actions', kind: 'action', label: copy.askRow(q), hint: copy.askRowHint, badge: copy.modeAsk, lang: /\p{Script=Han}/u.test(q) ? 'zh-Hans' : undefined },
+          // The row speaks the question's language: label, hint and badge alike.
+          item: { id: ASK_ROW_ID, group: 'Actions', kind: 'action', label: copy.askRow(q), hint: copy.askRowHint, badge: copy.modeAsk, lang: copy.lang === 'en' ? undefined : copy.lang, uiLang: copy.lang === 'en' ? undefined : copy.lang },
           group: 'Actions',
           indices: [],
         }
@@ -1171,7 +1175,7 @@ export default function CommandPalette({
               <Highlighted text={item.label} indices={row.indices} />
             </Text>
             {!detail && sideHint && (
-              <Text as="span" fontFamily={MONO} fontSize="11px" color="page.fg-secondary" noOfLines={1} flexShrink={1} minW={0}>
+              <Text as="span" fontFamily={MONO} fontSize="11px" color="page.fg-secondary" noOfLines={1} flexShrink={1} minW={0} lang={row.group === 'Recent' ? undefined : item.uiLang}>
                 {sideHint}
               </Text>
             )}
@@ -1189,7 +1193,7 @@ export default function CommandPalette({
         </Box>
         <Flex alignItems="center" gap={2} flexShrink={0}>
           {searching && !subpage && (
-            <Text as="span" fontFamily={MONO} fontSize="10px" letterSpacing="0.08em" textTransform="uppercase" color="page.fg-secondary">
+            <Text as="span" fontFamily={MONO} fontSize="10px" letterSpacing="0.08em" textTransform="uppercase" color="page.fg-secondary" lang={item.badge ? item.uiLang : undefined}>
               {item.badge || item.group}
             </Text>
           )}
@@ -1526,7 +1530,8 @@ export default function CommandPalette({
               </Flex>
             )}
           </Flex>
-          <Text role="status" aria-live="polite" ml="auto" className="tnum">
+          {/* While asking, the status speaks the question's language (askStatusText uses its copy). */}
+          <Text role="status" aria-live="polite" ml="auto" className="tnum" lang={asking ? askCopy.lang : undefined}>
             {resultText}
           </Text>
         </Flex>

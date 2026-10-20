@@ -112,9 +112,9 @@ function Cite({ n, active }: { n: number; active?: boolean }) {
   )
 }
 
-function EnterHint({ label }: { label: string }) {
+function EnterHint({ label, lang }: { label: string; lang: string }) {
   return (
-    <Flex as="span" aria-hidden align="center" gap={1} color="page.fg-secondary" fontFamily="mono" fontSize="label" flexShrink={0} sx={HIDE_ON_COARSE_POINTER}>
+    <Flex as="span" aria-hidden align="center" gap={1} color="page.fg-secondary" fontFamily="mono" fontSize="label" flexShrink={0} sx={HIDE_ON_COARSE_POINTER} lang={lang}>
       <CornerDownLeftIcon size="xs" />
       {label}
     </Flex>
@@ -132,6 +132,7 @@ function OptionRow({
   children,
   reveal: revealOrder,
   align = 'flex-start',
+  lang,
 }: {
   index: number
   active: boolean
@@ -142,12 +143,15 @@ function OptionRow({
   children: React.ReactNode
   reveal?: number
   align?: 'flex-start' | 'center'
+  /** The language of the row's words when it differs from the view around it. */
+  lang?: string
 }) {
   return (
     <Flex
       as={href ? 'a' : 'div'}
       {...(href ? { href, tabIndex: -1 } : {})}
       id={optId(index)}
+      lang={lang}
       data-idx={index}
       role="option"
       aria-selected={active}
@@ -186,7 +190,7 @@ export default function AskView({ state, options, copy, pending, activeIdx, optI
 
   if (state.failed) {
     return (
-      <Flex direction="column" align="center" textAlign="center" py={10} px={6} gap={2} color="page.fg-secondary">
+      <Flex direction="column" align="center" textAlign="center" py={10} px={6} gap={2} color="page.fg-secondary" lang={copy.lang}>
         <Text fontSize="small">{copy.unavailable}</Text>
         {emptyList}
       </Flex>
@@ -195,7 +199,7 @@ export default function AskView({ state, options, copy, pending, activeIdx, optI
 
   if (!state.ready) {
     return (
-      <Box px={3} py={4}>
+      <Box px={3} py={4} lang={copy.lang}>
         {emptyList}
         {[92, 78, 64].map((w, i) => (
           <Box
@@ -222,16 +226,17 @@ export default function AskView({ state, options, copy, pending, activeIdx, optI
   const hasAnswer = !!question && (result.status === 'answered' || result.status === 'partial')
   const indexOf = (id: string) => options.findIndex((o) => o.id === id)
 
-  const renderSimpleOption = (option: AskOption, icon: React.ReactNode, label: React.ReactNode, hint?: string, lang?: string, enter: string = copy.openHint) => {
+  // An option's words are in the copy's language; a suggested question keeps its own (`labelLang`).
+  const renderSimpleOption = (option: AskOption, icon: React.ReactNode, label: React.ReactNode, hint?: string, labelLang?: string, enter: string = copy.openHint) => {
     const i = indexOf(option.id)
     const active = i === activeIdx
     return (
-      <OptionRow key={option.id} index={i} active={active} optId={optId} onHover={onHover} onClick={(e) => onRun(option, e)} align="center">
+      <OptionRow key={option.id} index={i} active={active} optId={optId} onHover={onHover} onClick={(e) => onRun(option, e)} align="center" lang={copy.lang}>
         <Box as="span" color={active ? 'accent.text' : 'page.fg-secondary'} display="inline-flex" flexShrink={0}>
           {icon}
         </Box>
         <Box flex={1} minW={0}>
-          <Text as="span" display="block" fontSize="small" lineHeight="1.4" lang={lang} noOfLines={2}>
+          <Text as="span" display="block" fontSize="small" lineHeight="1.4" lang={labelLang} noOfLines={2}>
             {label}
           </Text>
           {hint ? (
@@ -240,7 +245,7 @@ export default function AskView({ state, options, copy, pending, activeIdx, optI
             </Text>
           ) : null}
         </Box>
-        {active ? <EnterHint label={enter} /> : null}
+        {active ? <EnterHint label={enter} lang={copy.lang} /> : null}
       </OptionRow>
     )
   }
@@ -249,7 +254,7 @@ export default function AskView({ state, options, copy, pending, activeIdx, optI
   if (!hasAnswer && result.status !== 'none') {
     const suggestions = options.filter((o): o is Extract<AskOption, { kind: 'suggestion' }> => o.kind === 'suggestion')
     return (
-      <Box>
+      <Box lang={copy.lang}>
         <Flex gap={3} px={3} pt={3} pb={2} align="flex-start">
           <Box as="span" color="accent.text" mt="3px" display="inline-flex" flexShrink={0}>
             <QuoteIcon size="sm" />
@@ -279,7 +284,7 @@ export default function AskView({ state, options, copy, pending, activeIdx, optI
     const contact = options.find((o) => o.kind === 'contact')
     const search = options.find((o) => o.kind === 'search')
     return (
-      <Box key={`none:${question}`} sx={REVEAL_SX}>
+      <Box key={`none:${question}`} sx={REVEAL_SX} lang={copy.lang}>
         <Flex direction="column" align="center" textAlign="center" pt={8} pb={5} px={6} gap={2} className="ask-reveal">
           <Flex
             align="center"
@@ -318,7 +323,7 @@ export default function AskView({ state, options, copy, pending, activeIdx, optI
       sx={REVEAL_SX}
       opacity={pending ? 0.55 : 1}
       transition="opacity var(--duration-fast) var(--ease-standard)"
-      lang={result.lang === 'zh' ? 'zh-Hans' : 'en'}
+      lang={copy.lang}
     >
       <Flex align="center" justify="space-between" gap={3} px={3} pt={3} pb={2} className="ask-reveal" sx={{ '--i': '0' }}>
         <Flex align="center" gap={2} minW={0} color="page.fg-secondary">

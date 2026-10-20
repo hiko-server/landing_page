@@ -9,6 +9,13 @@
 export type AskLang = 'en' | 'zh'
 
 export type AskCopy = {
+  /**
+   * The BCP-47 tag of these words (lib/uiStrings conventions: Chinese is
+   * zh-Hans). Every element showing them carries it as its `lang`, so screen
+   * readers and font fallback treat the Chinese copy as Chinese inside the
+   * English palette (WCAG 3.1.2).
+   */
+  lang: 'en' | 'zh-Hans'
   name: string
   modeSearch: string
   modeAsk: string
@@ -57,6 +64,7 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 
 export const ASK_COPY: Record<AskLang, AskCopy> = {
   en: {
+    lang: 'en',
     name: 'Ask Lucian',
     modeSearch: 'Search',
     modeAsk: 'Ask',
@@ -101,6 +109,7 @@ export const ASK_COPY: Record<AskLang, AskCopy> = {
     },
   },
   zh: {
+    lang: 'zh-Hans',
     name: '问问 Lucian',
     modeSearch: '搜索',
     modeAsk: '提问',
