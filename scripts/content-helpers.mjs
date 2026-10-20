@@ -25,6 +25,32 @@ export const SAFE_NAME = /^[a-z0-9][a-z0-9-_]*$/
 // tests/r4-ops-schema-parity.test.ts asserts both regexes are identical.
 export const SAFE_UPLOAD = /^(?!.*\.\.)[A-Za-z0-9_-][A-Za-z0-9._-]{0,254}$/
 
+/**
+ * A responsive variant of an upload (`photo.jpg.w640.webp`): group 1 is its
+ * original. Must match lib/uploadVariants.ts VARIANT_NAME_RE
+ * (tests/media-library-store.test.ts asserts both are identical).
+ */
+export const UPLOAD_VARIANT_RE = /^(.+\.(?:png|jpe?g|webp|gif))\.w(\d+)\.(webp|avif)$/i
+
+/** The original upload a file belongs to: itself, or the original of a variant. */
+export function uploadOriginalOf(name) {
+  const m = UPLOAD_VARIANT_RE.exec(name)
+  return m ? m[1] : name
+}
+
+/**
+ * Names in the media library's trash (content.db media_trash, migration 3):
+ * the boot sync never pulls them back from R2 and removes R2's copies.
+ * Empty for a store without the table.
+ */
+export function trashedUploads(db) {
+  try {
+    return new Set(db.prepare('SELECT name FROM media_trash').all().map((r) => r.name))
+  } catch {
+    return new Set()
+  }
+}
+
 export const COLLECTIONS = ['blog', 'work']
 
 /** Clock-skew slack between this host and R2 when comparing timestamps. */

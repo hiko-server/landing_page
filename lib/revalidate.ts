@@ -341,6 +341,35 @@ async function submitIndexNow(fetchFn: FetchFn, host: string, key: string, urlLi
 }
 
 /**
+ * Purge files (not pages) from the Cloudflare cache — e.g. the uploads of an
+ * image moved to the media library's trash, which the edge would otherwise
+ * keep serving for a year (`immutable`). Never submitted to IndexNow. Same
+ * configuration, host and batch rules as notifyEdge; never throws; returns
+ * how many URLs Cloudflare confirmed.
+ */
+export async function purgeEdgeUrls(paths: readonly string[], fetchFn: FetchFn = (...args) => fetch(...args)): Promise<number> {
+  try {
+    const purge = getCloudflarePurgeConfig()
+    if (!purge) return 0
+    const host = getPublicHost()
+    if (!host) return 0
+    const urls = Array.from(new Set(paths.filter((p) => typeof p === 'string' && p.startsWith('/')))).map((p) => `https://${host}${p}`)
+    let purged = 0
+    await Promise.all(
+      chunk(urls, PURGE_BATCH_SIZE).map((files) =>
+        purgeBatch(fetchFn, purge.zoneId, purge.apiToken, files).then((ok) => {
+          if (ok) purged += files.length
+        }),
+      ),
+    )
+    return purged
+  } catch (err) {
+    log.warn('edge purge of files failed', { err })
+    return 0
+  }
+}
+
+/**
  * Tell the edge that `paths` changed: purge their absolute URLs (plus the
  * feeds / sitemap / search index derived from them) from the Cloudflare cache
  * in batches of ≤30, and submit the page URLs to IndexNow. Each part is

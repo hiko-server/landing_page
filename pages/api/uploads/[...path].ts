@@ -4,6 +4,7 @@ import path from 'path'
 import { isR2Configured, r2GetBuffer } from '../../../lib/r2'
 import { uploadR2Key } from '../../../lib/contentStore'
 import { isValidUploadName } from '../../../lib/security/uploadName'
+import { uploadMissPolicy } from '../../../lib/media/serve'
 
 /**
  * Runtime file server for /uploads/* .
@@ -19,7 +20,9 @@ import { isValidUploadName } from '../../../lib/security/uploadName'
  * time: local disk first (the fast path — the upload endpoint writes there and
  * docker-entrypoint's sync-from-r2 rehydrates it on boot), then Cloudflare R2
  * as a fallback so a freshly-provisioned container serves correctly even
- * before the disk copy exists.
+ * before the disk copy exists. A name the media library replaced redirects
+ * to its replacement, and one in its trash is never served from R2
+ * (lib/media/serve — read only on a local miss).
  */
 
 const MIME: Record<string, string> = {
@@ -90,7 +93,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // fall through to R2
   }
 
-  // 2) Cloudflare R2 fallback.
+  // 2) The media library (lib/media/serve): a replaced upload redirects to
+  //    the file that replaced it; a trashed one is gone, even while R2
+  //    still holds a copy.
+  const policy = uploadMissPolicy(name)
+  if (policy && 'redirect' in policy) {
+    res.setHeader('Location', policy.redirect)
+    // Not a year: restoring the old file from the trash ends the redirect.
+    res.setHeader('Cache-Control', 'public, max-age=3600')
+    return res.status(308).end()
+  }
+  if (policy) {
+    res.setHeader('Cache-Control', 'public, max-age=60')
+    return res.status(404).end('Not found')
+  }
+
+  // 3) Cloudflare R2 fallback.
   const missUntil = misses.get(name)
   if (missUntil && missUntil > Date.now()) {
     res.setHeader('Cache-Control', 'public, max-age=60')

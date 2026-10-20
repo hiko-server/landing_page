@@ -10,8 +10,9 @@
 //     weekly restore drill (lib/restoreDrill), the nightly expiry of
 //     contact messages (lib/inboxRetention) and the daily external-link check
 //     of the content health center (lib/contentHealth/schedule) and the
-//     daily roll-up / retention of goal events (lib/analytics/events) — never
-//     during `next build`, and only once per process;
+//     daily roll-up / retention of goal events (lib/analytics/events) and the
+//     nightly purge of the media library's 30-day trash (lib/media/trashSchedule)
+//     — never during `next build`, and only once per process;
 //   - warns in the log when mail would be sent From a domain whose DMARC
 //     policy the SMTP account cannot pass (lib/mailAlignment);
 //   - adds `Cache-Control: no-transform` to HTML documents
@@ -36,6 +37,7 @@ type InstrumentationGlobal = typeof globalThis & {
   __inboxRetentionStarted?: boolean
   __contentHealthScheduleStarted?: boolean
   __eventsMaintenanceStarted?: boolean
+  __mediaTrashPurgeStarted?: boolean
 }
 
 export async function register() {
@@ -113,6 +115,18 @@ export async function register() {
       } catch (err) {
         const { log } = await import('./lib/log')
         log.error('could not start the goal-event retention', { err })
+      }
+    }
+    if (!building && !g.__mediaTrashPurgeStarted) {
+      // Uploads deleted from the media library more than 30 days ago are
+      // removed for good (lib/media/trashSchedule).
+      g.__mediaTrashPurgeStarted = true
+      try {
+        const { startMediaTrashPurge } = await import('./lib/media/trashSchedule')
+        startMediaTrashPurge()
+      } catch (err) {
+        const { log } = await import('./lib/log')
+        log.error('could not start the media trash purge', { err })
       }
     }
     if (!building) {
