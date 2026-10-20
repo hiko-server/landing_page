@@ -916,23 +916,42 @@ export default function CommandPalette({
     el?.scrollIntoView({ block: 'nearest' })
   }, [active, isOpen, asking])
 
-  // A settled query that found nothing is reported once per open (lib/search/emptyResult).
+  // A settled query that found nothing is reported once per open (lib/search/emptyResult);
+  // closing the palette on one reports it at once — the visitor gave up on it.
   const reported = useRef(new Set<string>())
+  const pendingEmpty = useRef<{ text: string; mode: PaletteMode; key: string } | null>(null)
+  const reportEmpty = (text: string, emptyMode: PaletteMode, key: string) => {
+    if (reported.current.has(key)) return
+    reported.current.add(key)
+    onEmptyResult(text, emptyMode)
+  }
   useEffect(() => {
-    if (isOpen) reported.current = new Set()
+    if (isOpen) {
+      reported.current = new Set()
+      return
+    }
+    const pending = pendingEmpty.current
+    pendingEmpty.current = null
+    if (pending) reportEmpty(pending.text, pending.mode, pending.key)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reportEmpty only reads refs
   }, [isOpen])
   const searchEmpty = !asking && !subpage && listReady && searching && !!index && matchCount === 0
   const askEmpty = asking && ask.state.ready && !ask.pending && ask.state.result.status === 'none'
   useEffect(() => {
-    if (!isOpen || !(searchEmpty || askEmpty)) return
+    if (!isOpen) return // a pending query is left for the close effect above
+    if (!(searchEmpty || askEmpty)) {
+      pendingEmpty.current = null
+      return
+    }
     const text = query.trim()
     const key = `${mode}:${text.toLowerCase()}`
+    pendingEmpty.current = { text, mode, key }
     const id = window.setTimeout(() => {
-      if (reported.current.has(key)) return
-      reported.current.add(key)
-      onEmptyResult(text, mode)
+      pendingEmpty.current = null
+      reportEmpty(text, mode, key)
     }, EMPTY_SETTLE_MS)
     return () => window.clearTimeout(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reportEmpty only reads refs
   }, [isOpen, searchEmpty, askEmpty, query, mode])
 
   // A page that stays highlighted a moment is prefetched, so Enter opens it
