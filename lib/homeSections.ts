@@ -36,6 +36,7 @@ export const DEFAULT_SECTION_ORDER: readonly SortableSectionKey[] = [
   'tech-stack',
   'activity',
   'projects',
+  'publications',
   'writing',
   'experience',
   'certifications',
@@ -45,11 +46,12 @@ export const DEFAULT_SECTION_ORDER: readonly SortableSectionKey[] = [
 
 /**
  * "Recruiter-first": the evidence a hiring manager scans for (projects,
- * experience, writing, skills) before the GitHub activity.
+ * experience, papers, writing, skills) before the GitHub activity.
  */
 export const RECRUITER_SECTION_ORDER: readonly SortableSectionKey[] = [
   'projects',
   'experience',
+  'publications',
   'writing',
   'tech-stack',
   'certifications',

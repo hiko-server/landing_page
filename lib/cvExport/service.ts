@@ -24,8 +24,8 @@ import { buildCvModel, hasContent, type CvDocModel } from './model'
 import { renderCvText } from './text'
 import { buildJsonResume } from './jsonResume'
 
-/** Bump when the output of a renderer changes for the same input. */
-export const EXPORT_VERSION = 2
+/** Bump when the output of a renderer changes for the same input (3: publications). */
+export const EXPORT_VERSION = 3
 
 export type CvExport = {
   body: Buffer
@@ -63,6 +63,7 @@ function modelOf(src: CvSource): CvDocModel {
     updatedAt: src.updatedAt,
     canonical: absUrl(src.lang === 'zh' ? '/cv/zh' : '/cv'),
     headerExtras: src.headerExtras,
+    owner: src.ownerNames,
   })
 }
 

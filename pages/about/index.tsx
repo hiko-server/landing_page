@@ -48,6 +48,8 @@ type Props = {
   chromeSocials?: HomeData['socials'] | null
   /** Website-pruned Recommendations section (permitted entries only), or null. */
   recommendations?: CvSectionLike | null
+  /** How many papers /publications lists (0: no page, no link on the rail). */
+  publicationCount?: number
 }
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
@@ -70,7 +72,7 @@ const ANCHOR_SX = { scrollMarginTop: clearOfHeader('8px') } as const
  * The GitHub widgets and the experience timeline live on the home page only.
  * Below lg the rail is the page header; the section nav shows from lg up.
  */
-const About = ({ hero, identity, portrait, availability, bio, cv, work, personFacts, chromeSocials, recommendations }: Props) => {
+const About = ({ hero, identity, portrait, availability, bio, cv, work, personFacts, chromeSocials, recommendations, publicationCount = 0 }: Props) => {
   const [lang, setLang] = useState<'en' | 'zh'>('en')
   const [lead, ...focus] = taglinePhrases(hero.tagline)
   const socials = useMemo(() => resolveSocialLinks(chromeSocials), [chromeSocials])
@@ -105,7 +107,16 @@ const About = ({ hero, identity, portrait, availability, bio, cv, work, personFa
       <HeaderFooter>
         <Box w="100%" maxW="var(--container-content)" mx="auto" px={{ base: 4, md: 6, lg: 8 }} py={{ base: 10, md: 14, lg: 16 }}>
           <Grid templateColumns={{ base: 'minmax(0, 1fr)', lg: 'minmax(0, 20rem) minmax(0, 1fr)' }} columnGap={{ lg: 16 }} rowGap={{ base: 10, md: 12 }} alignItems="start">
-            <IdentityRail brand={hero.brand} identity={identity} portrait={portrait} availability={availability} socials={socials} nav={nav} cvLang={active} />
+            <IdentityRail
+              brand={hero.brand}
+              identity={identity}
+              portrait={portrait}
+              availability={availability}
+              socials={socials}
+              nav={nav}
+              cvLang={active}
+              publicationCount={publicationCount}
+            />
 
             <Box minW={0}>
               {lead || focus.length ? (
@@ -314,6 +325,14 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
     }
   }
 
+  // The rail links /publications with its count (the website view the page lists).
+  let publicationCount = 0
+  try {
+    publicationCount = (await import('../../lib/publicationsData')).publicationCount()
+  } catch {
+    /* no link */
+  }
+
   return {
     revalidate: revalidateAfter(PROFILE_REVALIDATE_SECONDS),
     props: {
@@ -326,6 +345,7 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
       work,
       personFacts,
       recommendations,
+      publicationCount,
       clockMonth: referenceMonth(),
       // Omitted when the home document could not be read: the chrome then
       // loads the public view itself.

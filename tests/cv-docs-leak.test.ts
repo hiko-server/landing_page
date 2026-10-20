@@ -15,7 +15,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { CV_SECTIONS, type FieldKind, type ListDef } from '../lib/cvSections'
+import { CV_SECTIONS, type FieldDef, type FieldKind, type ListDef } from '../lib/cvSections'
 import { getAt, publicCvDoc, setAt, type CvAudience, type CvDoc, type CvPath } from '../lib/cvVisibility'
 import { allEvidenceLinks, profileLinks, withEvidenceLinks } from '../lib/cvLinks'
 import { buildCvModel } from '../lib/cvExport/model'
@@ -38,18 +38,22 @@ const NOW = '2026-10'
 const works = [{ slug: SLUG_SENTINEL, title: 'Sentinel case study', link: 'https://case.example.org', repo: 'https://github.com/example/case' }]
 const socials = { github: 'https://github.com/fallback', linkedin: 'https://www.linkedin.com/in/fallback/' }
 
-function fill(kind: FieldKind): unknown {
+/** A valid value for a field, so every entry renders (a paper needs a real status; a DOI must be one). */
+function fill(f: Pick<FieldDef, 'kind' | 'options' | 'format'>): unknown {
+  const kind = f.kind
   if (kind === 'bullets' || kind === 'tags') return ['first filler item', 'second filler item']
   if (kind === 'endMonth') return 'Present'
-  if (kind === 'month') return '2020-01'
+  if (kind === 'month' || kind === 'yearMonth') return '2020-01'
   if (kind === 'color') return '#123456'
   if (kind === 'url') return 'https://filler.example.org'
+  if (kind === 'select') return f.options?.[0]?.value ?? 'filler text'
+  if (f.format === 'doi') return '10.5555/filler'
   return 'filler text'
 }
 
 function buildEntry(list: ListDef): Record<string, any> {
   const entry: Record<string, any> = {}
-  for (const f of list.fields) entry[f.key] = fill(f.kind)
+  for (const f of list.fields) entry[f.key] = fill(f)
   for (const nested of list.lists || []) entry[nested.key] = [buildEntry(nested), buildEntry(nested)]
   return entry
 }
@@ -58,7 +62,7 @@ function buildDoc(): CvDoc {
   const lang = (l: 'en' | 'zh') =>
     CV_SECTIONS.map((def) => {
       const section: Record<string, any> = { sessionName: def.sessionName, headerName: def.headerDefault[l] }
-      for (const f of def.fields || []) section[f.key] = fill(f.kind)
+      for (const f of def.fields || []) section[f.key] = fill(f)
       for (const list of def.lists || []) section[list.key] = [buildEntry(list), buildEntry(list)]
       return section as { sessionName: string }
     })
@@ -145,14 +149,13 @@ function websiteOutputs(doc: CvDoc): string {
   return JSON.stringify(personNode(personExtrasFromCv(publicCvDoc(doc, 'website').en, NOW)))
 }
 
-// Publications stay in the document (the exports must cope with them) but are
-// not sampled here: the downloadable CVs do not print papers yet, and their
-// own leak checks (props, JSON-LD, /api/cvdata, the switches) live in
-// tests/publications-leak.test.ts.
-const NOT_EXPORTED = new Set(['publications'])
+// Every section is sampled, publications included (the PDF, text and JSON
+// Resume print papers); their page-level checks (props, JSON-LD,
+// /api/cvdata, the switches) live in tests/publications-leak.test.ts, the
+// home / search / export store checks in tests/publications-phase2.test.ts.
 const slots: Slot[] = []
 buildDoc().en.forEach((section, i) => {
-  if (!NOT_EXPORTED.has((section as any).sessionName)) collect(section, [i], [], [], slots, (section as any).sessionName)
+  collect(section, [i], [], [], slots, (section as any).sessionName)
 })
 
 test('the fixture reaches the new fields (profiles, project links) and nested bullets', () => {

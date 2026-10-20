@@ -17,6 +17,11 @@
  *     header carries the availability lines (求职意向, right to work); the
  *     self-assessment prints as a statement with points and the
  *     recommendations as quotes with their credit (BlockQuote + P).
+ *   - Publications print in citation style, like the A4 sheet: the title
+ *     with its date, the authors (the owner in bold, a hidden co-author as
+ *     "…"), the venue (slanted) with volume(issue), pages and publisher, the
+ *     status of anything not yet published, the award, then the DOI as its
+ *     https://doi.org/ link and the PDF / code / slides / paper links.
  *   - The optional photo (lib/cvExport/photo — only when the owner switched
  *     it on for this language's PDF) sits at the top right of the header as
  *     a tagged Figure with alternative text.
@@ -30,7 +35,7 @@ import PDFDocument, { type PDFStructureContent, type PDFStructureElement } from 
 import { create as createFont, type Font } from 'fontkit'
 import { cvLabels } from '../cvFormat'
 import { layoutRuns, type FontKey, type Line, type Measurer, type Run } from './pdfLayout'
-import type { CvDocModel, ModelEntry, ModelQuote, ModelSection } from './model'
+import type { CvDocModel, ModelEntry, ModelPublication, ModelQuote, ModelSection } from './model'
 import type { PdfPhoto } from './photo'
 
 /** Font files, relative to the app root (next.config.js traces them into the standalone build). */
@@ -62,6 +67,9 @@ const CW = PAGE_W - MARGIN.left - MARGIN.right
 const BOTTOM = PAGE_H - MARGIN.bottom
 
 const SIZE = { name: 20, aside: 11, contact: 8.8, h2: 9.6, h3: 10.2, body: 9.2, meta: 8.8, small: 8.4, footer: 7.4 }
+
+/** Slant of a synthetic italic (degrees): the faces ship upright only. */
+const ITALIC_SLANT = 11
 
 const INK = '#111111'
 const BODY = '#222222'
@@ -197,6 +205,7 @@ class Writer {
       baseline: 'alphabetic',
       ...(p.characterSpacing ? { characterSpacing: p.characterSpacing } : null),
       ...(p.fauxBold ? { fill: true, stroke: true } : null),
+      ...(p.italic ? { oblique: ITALIC_SLANT } : null),
     })
     this.opts.onText?.(p.text)
   }
@@ -408,13 +417,12 @@ class Writer {
     return contrastOnWhite(this.accent) >= 3 ? this.accent : MUTED
   }
 
-  entry(sect: PDFStructureElement, e: ModelEntry) {
-    const div = this.el(sect, 'Div')
-    const meta = [e.date, e.place].filter(Boolean).join('  |  ')
+  /** An entry's first lines: the title (H3) with the date / place right-aligned on its first line. */
+  entryHead(div: PDFStructureElement, title: string, meta: string) {
     const metaLines = meta ? this.layout([{ text: meta, size: SIZE.meta, color: MUTED }], CW * 0.42) : []
     const metaW = Math.max(0, ...metaLines.map((l) => l.width))
     const titleW = metaW ? CW - metaW - 14 : CW
-    const titleLines = e.title ? this.layout([{ text: e.title, size: SIZE.h3, bold: true, color: INK }], titleW) : []
+    const titleLines = title ? this.layout([{ text: title, size: SIZE.h3, bold: true, color: INK }], titleW) : []
     const headH = Math.max(titleLines.length * this.lineHeight(SIZE.h3), metaLines.length * this.lineHeight(SIZE.meta))
     this.ensure(headH + this.lineHeight(SIZE.body) * 2)
 
@@ -431,6 +439,11 @@ class Writer {
       p.end()
       this.y = Math.max(this.y, end)
     }
+  }
+
+  entry(sect: PDFStructureElement, e: ModelEntry) {
+    const div = this.el(sect, 'Div')
+    this.entryHead(div, e.title, [e.date, e.place].filter(Boolean).join('  |  '))
     if (e.subtitle) {
       this.para(div, 'P', [{ text: e.subtitle, size: SIZE.body, color: BODY, link: e.subtitleHref || undefined }], { size: SIZE.body })
     }
@@ -453,6 +466,55 @@ class Writer {
       e.links.forEach((l, i) => {
         if (i) runs.push({ text: '     ', size: SIZE.small, color: MUTED })
         runs.push({ text: `${l.label}${sep}`, size: SIZE.small, color: MUTED }, { text: l.text, size: SIZE.small, color: this.linkColor, link: l.href, keep: true })
+      })
+      this.para(div, 'P', runs, { size: SIZE.small })
+    }
+    div.end()
+    this.y += 7
+  }
+
+  /**
+   * A paper in citation style: title + date, authors (the owner in bold),
+   * venue line, status / award, links (the DOI first, printed as its URL).
+   */
+  publication(sect: PDFStructureElement, p: ModelPublication) {
+    const zh = this.model.lang === 'zh'
+    const div = this.el(sect, 'Div')
+    this.entryHead(div, p.title, p.date)
+    if (p.authors.length) {
+      const runs: Run[] = []
+      p.authors.forEach((a, i) => {
+        if (i) runs.push({ text: ', ', size: SIZE.body, color: BODY })
+        if (a.hidden) runs.push({ text: a.name, size: SIZE.body, color: SUBTLE })
+        else runs.push({ text: a.name, size: SIZE.body, bold: a.self, color: a.self ? INK : BODY })
+      })
+      this.para(div, 'P', runs, { size: SIZE.body })
+    }
+    // "Venue, 12(3), 45–67. Publisher" — as the A4 sheet writes it.
+    const tail = [p.details, p.publisher].filter(Boolean).join('. ')
+    if (p.venue || tail) {
+      const runs: Run[] = []
+      if (p.venue) runs.push({ text: p.venue, size: SIZE.body, color: INK, italic: true })
+      if (p.venue && tail) runs.push({ text: p.details ? ', ' : '. ', size: SIZE.body, color: BODY })
+      if (tail) runs.push({ text: tail, size: SIZE.body, color: BODY })
+      this.para(div, 'P', runs, { size: SIZE.body })
+    }
+    if (p.status || p.award) {
+      const runs: Run[] = []
+      // Small bold text: the accent only when it reads at 4.5:1 (else ink), like the links.
+      if (p.status) runs.push({ text: zh ? p.status : p.status.toUpperCase(), size: SIZE.small, bold: true, color: this.linkColor, ...(zh ? null : { characterSpacing: 0.5 }) })
+      if (p.status && p.award) runs.push({ text: '   ', size: SIZE.small, color: MUTED })
+      if (p.award) runs.push({ text: p.award, size: SIZE.small, color: BODY, italic: true })
+      this.para(div, 'P', runs, { size: SIZE.small })
+    }
+    if (p.links.length) {
+      const runs: Run[] = []
+      const sep = zh ? '：' : ': '
+      p.links.forEach((l, i) => {
+        if (i) runs.push({ text: '     ', size: SIZE.small, color: MUTED })
+        // The DOI reads as its resolver URL (APA 7); the others carry their label.
+        if (l.key !== 'doi') runs.push({ text: `${l.label}${sep}`, size: SIZE.small, color: MUTED })
+        runs.push({ text: l.text, size: SIZE.small, color: this.linkColor, link: l.href, keep: true })
       })
       this.para(div, 'P', runs, { size: SIZE.small })
     }
@@ -530,9 +592,10 @@ class Writer {
 
   section(s: ModelSection) {
     const sect = this.el(this.root, 'Sect')
-    const keep = s.kind === 'entries' ? this.lineHeight(SIZE.h3) + this.lineHeight(SIZE.body) * 2 : this.lineHeight(SIZE.body) * 2
+    const keep = s.kind === 'entries' || s.kind === 'publications' ? this.lineHeight(SIZE.h3) + this.lineHeight(SIZE.body) * 2 : this.lineHeight(SIZE.body) * 2
     this.sectionTitle(sect, s.title, keep)
     if (s.kind === 'entries') for (const e of s.entries) this.entry(sect, e)
+    else if (s.kind === 'publications') for (const p of s.items) this.publication(sect, p)
     else if (s.kind === 'skills') this.skills(sect, s)
     else if (s.kind === 'quotes') for (const q of s.items) this.quote(sect, q)
     else if (s.kind === 'statement') {

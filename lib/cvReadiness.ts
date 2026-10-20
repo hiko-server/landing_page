@@ -7,7 +7,9 @@
  * Checks judge what a recruiter gets — the A4 CV / PDF view: sections off
  * the CV, hidden entries, hidden fields and hidden bullets are skipped
  * (except where hiding itself is the point, e.g. a hidden project whose case
- * study is public).
+ * study is public). Publications are judged wherever they are public — the
+ * CV or the /publications page — and only papers that render (a title and
+ * a real status, lib/publications).
  *
  *   high    date-order        an end date before its start date
  *           date-mismatch     EN and 中文 disagree on a date of the same entry
@@ -23,6 +25,10 @@
  *                             for", "参与", "负责" … (with or without a result)
  *           low-quantified    under a third of the highlights state a measurable result
  *           too-long          the A4 preview runs past two pages
+ *           paper-incomplete  a published paper without its venue, its date, or any
+ *                             way to find it (DOI, paper page or PDF)
+ *           stale-review      a paper still "under review" more than 18 months after
+ *                             its date
  *   low     missing-link      no website; a credential ID without its URL; a project
  *                             that matches a published case study but does not link it
  *           case-study-unlisted a published case study no CV project points to
@@ -39,7 +45,10 @@
  */
 
 import type { CvLang, CvPath } from './cvVisibility'
-import { hiddenIndices, isEntryHidden, isFieldHidden, isSectionOnCv } from './cvVisibility'
+import { hiddenIndices, isEntryHidden, isFieldHidden, isSectionOnCv, isSectionOnWebsite } from './cvVisibility'
+import { normalizeDoi } from './publications/doi'
+import { PUB_DATE_RE, publicationHref } from './publications/normalize'
+import { PAPERS_KEY, PUBLICATIONS_SECTION, isPublicationStatus } from './publications/types'
 import { isPresent, parseCvDate } from './cvFormat'
 import { monthIndex } from './clock'
 import { SECTION_BY_NAME } from './cvSections'
@@ -60,6 +69,8 @@ export type ReadinessCheck =
   | 'weak-opening'
   | 'low-quantified'
   | 'too-long'
+  | 'paper-incomplete'
+  | 'stale-review'
   | 'missing-link'
   | 'case-study-unlisted'
   | 'hidden-referenced'
@@ -79,6 +90,8 @@ export const CHECK_SEVERITY: Record<ReadinessCheck, ReadinessSeverity> = {
   'weak-opening': 'medium',
   'low-quantified': 'medium',
   'too-long': 'medium',
+  'paper-incomplete': 'medium',
+  'stale-review': 'medium',
   'missing-link': 'low',
   'case-study-unlisted': 'low',
   'hidden-referenced': 'low',
@@ -99,6 +112,8 @@ export const CHECK_LABEL: Record<ReadinessCheck, string> = {
   'weak-opening': 'Weak opening',
   'low-quantified': 'Few measurable results',
   'too-long': 'Longer than two pages',
+  'paper-incomplete': 'Published paper incomplete',
+  'stale-review': 'Under review for long',
   'missing-link': 'Missing link',
   'case-study-unlisted': 'Case study not on the CV',
   'hidden-referenced': 'Hidden, but its case study is public',
@@ -145,6 +160,8 @@ type Node = Record<string, any>
 const LANGS: CvLang[] = ['en', 'zh']
 const LANG_NAME: Record<CvLang, string> = { en: 'EN', zh: '中文' }
 export const MAX_PAGES = 2
+/** A paper "under review" for longer than this (months after its date) is flagged. */
+export const REVIEW_STALE_MONTHS = 18
 const QUANTIFIED_MIN_BULLETS = 4
 const QUANTIFIED_MIN_RATIO = 1 / 3
 
@@ -347,6 +364,42 @@ export function runReadinessChecks(doc: CvDocLike, ctx: ReadinessContext): Readi
     })
   }
 
+  /**
+   * Papers that render (a title and a real status): a published one needs
+   * where it appeared, when, and a way to find it; one under review should
+   * not stay so for more than REVIEW_STALE_MONTHS. A field the owner hid is
+   * a decision, not a gap, and is not reported.
+   */
+  const checkPapers = (section: Node, si: number, lang: CvLang) => {
+    for (const { item, index } of visibleEntries(section, PAPERS_KEY)) {
+      const status = isFieldHidden(item, 'status') ? '' : str(item.status)
+      const name = shown(item, 'title')
+      if (!name || !isPublicationStatus(status)) continue
+      const title = shorten(name, 48)
+      const base: CvPath = [si, PAPERS_KEY, index]
+      const date = shown(item, 'date')
+      const dated = PUB_DATE_RE.test(date)
+      if (status === 'published') {
+        if (!shown(item, 'venue') && !isFieldHidden(item, 'venue')) {
+          add('paper-incomplete', lang, si, [...base, 'venue'], [title], `“${title}” is published but names no venue`, 'A paper is cited by where it appeared: add the journal, the proceedings or the repository.', `paper:${name}:venue`)
+        }
+        if (!dated && !isFieldHidden(item, 'date')) {
+          add('paper-incomplete', lang, si, [...base, 'date'], [title], `“${title}” is published but has no date`, 'Add the year (and month) it was published: citations and the order of your list depend on it.', `paper:${name}:date`)
+        }
+        const findable = normalizeDoi(shown(item, 'doi')) || publicationHref(shown(item, 'url')) || publicationHref(shown(item, 'pdfUrl'))
+        if (!findable && !isFieldHidden(item, 'doi')) {
+          add('paper-incomplete', lang, si, [...base, 'doi'], [title], `“${title}” has no DOI or link`, 'Add its DOI (or a link to the paper or its PDF) so a reader can open and verify it in one click.', `paper:${name}:link`)
+        }
+      }
+      if (status === 'under-review' && dated) {
+        const months = nowIdx - dateIdx(date, true)
+        if (months > REVIEW_STALE_MONTHS) {
+          add('stale-review', lang, si, [...base, 'status'], [title], `“${title}” has been under review since ${date}`, `That is ${months} months — longer than most reviews take. Set the status to where the paper stands now (accepted, in press, published, a preprint), or hide it if it was withdrawn.`, `paper:${name}:review:${date}`)
+        }
+      }
+    }
+  }
+
   for (const lang of LANGS) {
     const list = sections[lang]
     if (!list.length) continue
@@ -357,8 +410,12 @@ export function runReadinessChecks(doc: CvDocLike, ctx: ReadinessContext): Readi
     const linkedSlugs = new Set<string>()
 
     list.forEach((section, si) => {
-      if (!isSectionOnCv(section)) return
       const name = String(section.sessionName || '')
+      if (name === PUBLICATIONS_SECTION) {
+        if (isSectionOnCv(section) || isSectionOnWebsite(section)) checkPapers(section, si, lang)
+        return
+      }
+      if (!isSectionOnCv(section)) return
 
       if (name === 'personalInformation') {
         if (!shown(section, 'introduction')) {

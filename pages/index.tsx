@@ -16,6 +16,7 @@ import { heroIdentity, heroMeta, type HeroIdentity, type HeroMeta } from '../com
 import { latestWriting, type WorkIndexItem } from '../components/LandingPage/projectMatch'
 import type { AvatarMeta } from '../components/LandingPage/PersonalInfo'
 import type { HomeWriting } from '../components/LandingPage/Content'
+import type { SelectedPublications } from '../lib/publications/selected'
 import type { ScrollerImage } from '../components/imageScoller/imageScroller'
 import { githubPageData, type GithubPageData, type GithubSummary } from '../components/Common/githubEvents'
 import { referenceMonth } from '../lib/clock'
@@ -41,6 +42,8 @@ type Props = {
   github: GithubPageData | null
   /** Newest posts + case studies (null when the section is off). */
   writing: HomeWriting | null
+  /** "Selected publications" from the /publications list (null when the section is off or there is no public paper). */
+  publications: SelectedPublications | null
   /** schema.org Person facts — the site-wide loader (lib/personFacts), identical on every page. */
   personFacts: PersonFacts
   /** Server reference month ('YYYY-MM', lib/clock.ts) for "Present" / "Expected". */
@@ -49,7 +52,7 @@ type Props = {
   chromeSocials?: HomeData['socials'] | null
 }
 
-const LandingPage = ({ home, cv, identity, autoCoding, meta, work, avatar, photos, github, writing, personFacts }: Props) => {
+const LandingPage = ({ home, cv, identity, autoCoding, meta, work, avatar, photos, github, writing, publications, personFacts }: Props) => {
   return (
     <>
       <CustomHead
@@ -87,6 +90,7 @@ const LandingPage = ({ home, cv, identity, autoCoding, meta, work, avatar, photo
           photos={photos}
           github={github}
           writing={writing}
+          publications={publications}
         />
       </HeaderFooter>
     </>
@@ -209,6 +213,17 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
     }
   }
 
+  // Selected publications: the first papers of the /publications list
+  // (website view) — only the strings the rows print.
+  let publications: SelectedPublications | null = null
+  if (show('publications')) {
+    try {
+      publications = (await import('../lib/publicationsData')).readHomePublications()
+    } catch {
+      /* best effort — no publications row */
+    }
+  }
+
   // File facts for the portrait and the field-note photos: intrinsic size
   // (no layout shift) and the upload variants (responsive srcset).
   let avatar: AvatarMeta = {}
@@ -246,6 +261,7 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
       photos,
       github,
       writing,
+      publications,
       personFacts,
       clockMonth,
       // Omitted when the home document could not be read: the chrome then

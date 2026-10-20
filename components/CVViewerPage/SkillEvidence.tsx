@@ -2,7 +2,8 @@ import React, { useEffect } from 'react'
 import { Box, Flex, Text } from '@chakra-ui/react'
 import NextLink from 'next/link'
 import type { CvLang } from '../../lib/cvVisibility'
-import { EVIDENCE_KIND_LABELS, type SkillEvidence as SkillEvidenceRow } from '../../lib/skillEvidence'
+import type { SkillEvidence as SkillEvidenceRow } from '../../lib/skillEvidence'
+import { EVIDENCE_KIND_LABELS } from '../../lib/skillEvidenceLabels'
 import { ANCHOR_SCROLL_MARGIN } from './primitives'
 import SectionHeading from '../General-UI/SectionHeading'
 
@@ -10,8 +11,8 @@ import SectionHeading from '../General-UI/SectionHeading'
  * "Skill evidence" — below the CV on /cv and /cv/zh (never printed): every
  * skill the CV lists that is evidenced somewhere, as a disclosure row
  * (native <details>, so it works without JavaScript and opens on find-in-
- * page) listing the roles, projects, awards and patents on this page and
- * the case studies and posts that use it (lib/skillEvidence). Skills with
+ * page) listing the roles, projects, awards, patents and papers on this
+ * page and the case studies and posts that use it (lib/skillEvidence). Skills with
  * no evidence get no row — never a "0".
  *
  * A role's skills on the A4 sheet (inline in its skills line) and every
@@ -27,11 +28,13 @@ const COPY = {
   en: {
     title: 'Skill evidence',
     lede: 'Where each skill on this CV is used: roles, projects and awards above, plus case studies and writing.',
+    ledeWithPapers: 'Where each skill on this CV is used: roles, projects, awards and papers above, plus case studies and writing.',
     count: (n: number) => (n === 1 ? '1 source' : `${n} sources`),
   },
   zh: {
     title: '技能出处',
     lede: '每项技能用在哪里：上方的职位、项目与奖项，以及案例和文章。',
+    ledeWithPapers: '每项技能用在哪里：上方的职位、项目、奖项与论文，以及案例和文章。',
     count: (n: number) => `${n} 处`,
   },
 } as const
@@ -68,6 +71,7 @@ export default function SkillEvidence({ evidence, lang }: { evidence: SkillEvide
   }, [])
 
   if (!evidence.length) return null
+  const citesPapers = evidence.some((row) => row.items.some((item) => item.kind === 'paper'))
 
   return (
     <Box as="section" className="no-print" aria-labelledby="cv-skill-evidence" mt={{ base: 10, md: 16 }} lang={lang === 'zh' ? 'zh-Hans' : 'en'}>
@@ -75,7 +79,7 @@ export default function SkillEvidence({ evidence, lang }: { evidence: SkillEvide
         {T.title}
       </SectionHeading>
       <Text mt={3} maxW="62ch" fontSize="15px" lineHeight="1.6" color="page.fg-secondary">
-        {T.lede}
+        {citesPapers ? T.ledeWithPapers : T.lede}
       </Text>
       <Box
         as="ul"

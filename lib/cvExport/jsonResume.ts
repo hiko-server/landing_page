@@ -13,20 +13,31 @@
  *   project             → projects (live / case study / repository URLs)
  *   competitionAwards   → awards
  *   certification       → certificates
- *   patents             → publications (one per listed patent)
+ *   publications        → publications (papers first, through lib/publications
+ *                         toJsonResume: name, publisher, releaseDate, url,
+ *                         summary; unpublished work names its status in
+ *                         `publisher` and has no releaseDate unless it is a
+ *                         released preprint)
+ *   patents             → publications (one per listed patent, after the papers)
  *   skill               → skills (core skills with their level, then groups)
  *   extraSkill          → languages ("Mandarin: Native" → language + fluency)
  *   recommendations     → references (only entries given with permission
  *                         exist in public data; name + credit, the quote)
  * Dates are ISO 8601 (YYYY / YYYY-MM); an open end ("Present", or a future
- * end on a running project) has no endDate.
+ * end on a running project) has no endDate. A start date without an end
+ * therefore reads as "still running", so an entry whose end date the owner
+ * hid carries no date range at all (work, education, projects): JSON Resume
+ * cannot say "ended, date not shown", and a past role must never pass for
+ * the current one (the vCard and the Person facts skip it the same way).
  */
 
-import type { CvLang, CvSectionLike } from '../cvVisibility'
+import { isRedacted, type CvLang, type CvSectionLike } from '../cvVisibility'
 import { isFuture, isPresent, parseCvDate, safeHref } from '../cvFormat'
 import { profileLinks, projectLinks, webHref } from '../cvLinks'
 import { bullets, entries, entryStatus, field, indexedCertificates, list } from '../../components/CVViewerPage/fields'
 import { recommendationCredit, recommendationItems } from '../../components/CVViewerPage/recommendationView'
+import { publicPublications } from '../publications/normalize'
+import { toJsonResume } from '../publications/jsonResume'
 
 export const JSON_RESUME_SCHEMA = 'https://raw.githubusercontent.com/jsonresume/resume-schema/v1.0.0/schema.json'
 
@@ -64,10 +75,31 @@ function highlights(node: unknown): string[] {
     .filter(Boolean)
 }
 
+/**
+ * startDate / endDate of a dated entry (`openEnd`: the end counts as open —
+ * a running project's future end). A hidden end date leaves out the whole
+ * range: a start alone would claim the entry is still running.
+ */
+function dateRange(e: unknown, openEnd: (end: string) => boolean = () => false): { startDate?: string; endDate?: string } {
+  if (isRedacted(e, 'endDate')) return {}
+  const end = field(e, 'endDate')
+  return { startDate: isoDate(field(e, 'startDate')), endDate: openEnd(end) ? '' : isoDate(end) }
+}
+
 /** "Mandarin: Native" / "普通话：母语" → { language, fluency }; a plain point is just the language. */
 export function languageOf(point: string): { language: string; fluency?: string } {
   const m = /^([^:：]{1,40})[:：]\s*(.+)$/.exec(point.trim())
   return m ? { language: m[1].trim(), fluency: m[2].trim() } : { language: point.trim() }
+}
+
+/** Origin of an absolute http(s) URL ('' otherwise): same-site paper links (/uploads/…) become absolute with it. */
+function originOf(url: string): string {
+  try {
+    const u = new URL(url)
+    return /^https?:$/.test(u.protocol) ? u.origin : ''
+  } catch {
+    return ''
+  }
 }
 
 function username(url: string): string {
@@ -123,8 +155,7 @@ export function buildJsonResume(input: readonly CvSectionLike[] | null | undefin
         position: field(e, 'jobTitle'),
         url: webHref(field(e, 'companyURL')),
         location: field(e, 'location'),
-        startDate: isoDate(field(e, 'startDate')),
-        endDate: isoDate(field(e, 'endDate')),
+        ...dateRange(e),
         summary: field(e, 'jobDescription'),
         highlights: highlights(e),
         keywords: bullets(e, 'relatedSkills'),
@@ -139,8 +170,7 @@ export function buildJsonResume(input: readonly CvSectionLike[] | null | undefin
         location: field(e, 'schoolLocation'),
         area: field(e, 'major'),
         studyType: field(e, 'degree'),
-        startDate: isoDate(field(e, 'startDate')),
-        endDate: isoDate(field(e, 'endDate')),
+        ...dateRange(e),
         score: field(e, 'gpa'),
       }),
     )
@@ -150,13 +180,11 @@ export function buildJsonResume(input: readonly CvSectionLike[] | null | undefin
     .map((p) => {
       const links = projectLinks(p, lang)
       const of = (kind: string) => links.find((l) => l.kind === kind)?.href || ''
-      const end = field(p, 'endDate')
       return compact({
         name: field(p, 'title'),
         description: field(p, 'description'),
         highlights: highlights(p),
-        startDate: isoDate(field(p, 'startDate')),
-        endDate: isFuture(end, now) ? '' : isoDate(end),
+        ...dateRange(p, (end) => isFuture(end, now)),
         url: of('live') || of('caseStudy') || of('repo'),
         caseStudy: of('caseStudy'),
         repository: of('repo'),
@@ -188,7 +216,9 @@ export function buildJsonResume(input: readonly CvSectionLike[] | null | undefin
       }),
     )
 
-  const publications = list(section(sections, 'patents'), 'patentExperience').flatMap((g) => {
+  // Papers (sorted like every other view), then patents.
+  const papers = toJsonResume(publicPublications(sections), { origin: originOf(opts.canonical) })
+  const patents = list(section(sections, 'patents'), 'patentExperience').flatMap((g) => {
     const items = bullets(g, 'patents')
     const status = field(g, 'status')
     const summary = [field(g, 'title'), field(g, 'organization'), status].filter(Boolean).join(' · ')
@@ -196,6 +226,7 @@ export function buildJsonResume(input: readonly CvSectionLike[] | null | undefin
     if (!items.length) return field(g, 'title') ? [compact({ name: field(g, 'title'), ...base, summary: [field(g, 'organization'), status].filter(Boolean).join(' · ') })] : []
     return items.map((name) => compact({ name, ...base, summary }))
   })
+  const publications = [...papers, ...patents]
 
   const skillSection = section(sections, 'skill')
   const skills = [

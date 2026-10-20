@@ -464,6 +464,57 @@ The seven streams above, merged and working together.
   (and still fits 160 columns with every section); CV Studio's sidebar says
   the Publications section appears on `/publications`, not on /about.
 
+### publications (phase 2)
+
+The papers everywhere else they belong. Still nothing public without a
+public paper, nothing invented, and unpublished work always shows its real
+status.
+
+- **Downloadable CVs**: `/cv.pdf` and `/cv/zh.pdf` print the Publications
+  section in citation style — the title with its date, the authors (the
+  owner in the bold face, a hidden co-author as "…"), the venue slanted
+  (Chinese text stays upright) with volume(issue), pages and publisher, the
+  status of anything not yet published (ACCEPTED / 审稿中 …), the award,
+  then the DOI as its `https://doi.org/…` link and the PDF / code / slides /
+  paper links (site paths made absolute). `/cv.txt` prints the same as
+  citation lines with "Status: …" and the DOI URL; `/cv.json` lists the
+  papers in JSON Resume `publications` (name, publisher, releaseDate, url,
+  summary — work not yet published names its status in `publisher` and
+  has no release date unless it is a released preprint), followed by the
+  patents as before.
+- **A CV whose only public content is papers** now gets `/cv.pdf`,
+  `/cv.txt`, `/cv.json` and the /cv download menu instead of a 404
+  (review finding CORR-1).
+- **JSON Resume dates** (CORR-2): an entry whose end date the owner hid
+  (work, education, projects) carries no date range at all, instead of a
+  start date that read as "still running".
+- **Home: Selected Publications** — a new owner-ordered home section (after
+  projects by default, in the recruiter-first preset after experience),
+  listing the first three papers of `/publications` with their year,
+  authors (the owner in bold), venue, status chip and award; each title
+  opens the paper's anchor on `/publications`, and "All N publications"
+  links the list. Absent without a public paper; its code loads only with
+  a page that has the section.
+- **/about**: the identity rail links `/publications` with the paper count
+  ("Publications: 3 papers" to screen readers).
+- **Proof strip**: the Home editor suggests every published paper verbatim
+  (title; "venue · year"), linking its `/publications` anchor.
+- **Search**: one ⌘K document per public paper (title, status, venue,
+  year, visible authors, abstract, award, keywords) at its `/publications`
+  anchor, or at the `/cv` anchor when the section is on the CV only.
+- **CV Studio readiness**: a published paper without its venue, date, or a
+  DOI / paper / PDF link is flagged at the field, and so is a paper still
+  "under review" more than 18 months after its date. Hidden fields are a
+  choice, not a gap; papers are checked wherever they are public.
+- **Skill evidence**: a paper whose keywords (or, word-bounded, its title
+  and abstract) name a CV skill is listed under that skill on `/cv`, linked
+  to the paper.
+- The leak tests now cover the Publications section in the PDF, text and
+  JSON Resume exports, and new tests cover the home section, the search
+  documents and the export store; an @admin end-to-end test adds a paper
+  and finds it in the PDF text, the JSON Resume, the home page and search,
+  then restores the stored CV.
+
 ### Changed
 
 - **No more "[01] INTRODUCTION" labels** (owner request): the public site

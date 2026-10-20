@@ -6,6 +6,7 @@ import { textLang, type CitationParts } from '../../lib/publications/citation'
 import { LINK_LABELS, type PubLang, type Publication } from '../../lib/publications/types'
 import { ChevronDownIcon } from '../Icons/ui/chrome'
 import { StarIcon } from '../Icons/ui/content'
+import AuthorLine from './AuthorLine'
 
 /**
  * One publication on the web (/publications and the /cv Reading view):
@@ -27,7 +28,6 @@ const MONO = 'var(--font-geist-mono), ui-monospace, monospace'
 
 const ABSTRACT = { en: 'Abstract', zh: '摘要' } as const
 const KEYWORDS = { en: 'Keywords', zh: '关键词' } as const
-const HIDDEN_AUTHOR = { en: 'an author not shown', zh: '未显示的作者' } as const
 const NEW_TAB = { en: '(opens in a new tab)', zh: '（在新标签页打开）' } as const
 
 export type PublicationItemProps = {
@@ -92,31 +92,6 @@ function ExternalPill({ href, children, lang, label }: { href: string; children:
       </Box>
       <span className="sr-only"> {NEW_TAB[lang]}</span>
     </Link>
-  )
-}
-
-export function AuthorLine({ parts, lang, pageLang, fontSize }: { parts: CitationParts; lang: PubLang; pageLang: PubLang; fontSize: any }) {
-  if (!parts.authors.length) return null
-  return (
-    <Text fontSize={fontSize} lineHeight="1.55" color="page.fg-secondary" mt={1.5}>
-      {parts.authors.map((a, i) => (
-        <React.Fragment key={i}>
-          {i ? ', ' : null}
-          {a.hidden ? (
-            <>
-              <span aria-hidden>…</span>
-              <span className="sr-only">{HIDDEN_AUTHOR[lang]}</span>
-            </>
-          ) : a.self ? (
-            <Text as="strong" fontWeight={600} color="page.fg" lang={textLang(a.name, pageLang)}>
-              {a.name}
-            </Text>
-          ) : (
-            <span lang={textLang(a.name, pageLang)}>{a.name}</span>
-          )}
-        </React.Fragment>
-      ))}
-    </Text>
   )
 }
 
@@ -268,7 +243,7 @@ export default function PublicationItem({
       }}
     >
       {Heading}
-      <AuthorLine parts={parts} lang={lang} pageLang={pageLang} fontSize={body} />
+      <AuthorLine authors={parts.authors} lang={lang} pageLang={pageLang} fontSize={body} />
       {venueLine.length ? (
         <Text fontSize={body} lineHeight="1.55" color="page.fg-secondary" mt={0.5}>
           {venueLine.map((x, i) => (

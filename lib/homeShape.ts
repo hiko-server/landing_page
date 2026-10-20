@@ -249,6 +249,7 @@ export type SectionKey =
   | 'tech-stack'   // Skills (from the CV)
   | 'activity'     // ActivityFeed
   | 'projects'     // ProjectSpotlight
+  | 'publications' // SelectedPublications (public papers from the CV; hidden while there is none)
   | 'experience'   // ExperienceTimeline
   | 'certifications' // CertificationsPeek
   | 'photos'       // Field Notes photo strip
@@ -264,6 +265,7 @@ export const HOME_SECTION_META: Array<{ key: SectionKey; label: string; hint: st
   { key: 'tech-stack', label: 'Skills', hint: 'skills from your CV' },
   { key: 'activity', label: 'Recent activity', hint: 'GitHub event feed' },
   { key: 'projects', label: 'Selected projects', hint: 'horizontal spotlight' },
+  { key: 'publications', label: 'Selected publications', hint: 'top papers from /publications, once one is public' },
   { key: 'experience', label: 'Experience', hint: 'CV timeline' },
   { key: 'certifications', label: 'Certifications', hint: 'certifications from your CV' },
   { key: 'photos', label: 'Field notes', hint: 'full-width photo strip' },

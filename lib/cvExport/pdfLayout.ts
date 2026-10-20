@@ -19,6 +19,9 @@
  *   - A `keep` run (a URL, a skill tag) has no break opportunities of its
  *     own: it moves to the next line as a whole, and is split by characters
  *     only when it is wider than a full line.
+ *   - An `italic` run (a journal name) is drawn slanted; Chinese characters
+ *     in it stay upright (Chinese type has no italic, and GB/T 7714 sets
+ *     titles upright), so their pieces are not flagged.
  */
 
 import LineBreaker from 'linebreak'
@@ -42,12 +45,16 @@ export type Run = {
   characterSpacing?: number
   /** Keep the run on one line when it fits (no break inside a URL or a skill tag). */
   keep?: boolean
+  /** Slanted (Latin pieces only — see the module comment). */
+  italic?: boolean
 }
 
 export type Piece = {
   text: string
   font: FontKey
   fauxBold: boolean
+  /** Drawn slanted (an oblique of the upright face; the width does not change). */
+  italic?: boolean
   size: number
   color?: string
   link?: string
@@ -83,6 +90,7 @@ export function fontPieces(run: Run, m: Pick<Measurer, 'has'>, onMissing?: (ch: 
         text: ch,
         font,
         fauxBold: !!run.bold && font === 'cjk',
+        ...(run.italic && font !== 'cjk' ? { italic: true } : null),
         size: run.size,
         color: run.color,
         link: run.link,
@@ -99,7 +107,7 @@ function measure(p: Omit<Piece, 'width'>, m: Measurer): Piece {
 }
 
 const sameStyle = (a: Piece, b: Piece) =>
-  a.font === b.font && a.fauxBold === b.fauxBold && a.size === b.size && a.color === b.color && a.link === b.link && a.characterSpacing === b.characterSpacing
+  a.font === b.font && a.fauxBold === b.fauxBold && !!a.italic === !!b.italic && a.size === b.size && a.color === b.color && a.link === b.link && a.characterSpacing === b.characterSpacing
 
 function trimLine(pieces: Piece[], m: Measurer): Line {
   const out = pieces.map((p) => ({ ...p }))

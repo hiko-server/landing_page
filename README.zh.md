@@ -42,18 +42,23 @@ English → [README.md](./README.md)
   两种语言共用一套撤销历史、拖拽排序、自适应宽度的 A4 实时预览（含分页参考线）、
   本地草稿恢复与覆盖保护。
 - **论文（Publications）**：CV 中新增论文板块（作者按顺序、发表载体、状态、DOI、
-  链接、摘要），在 `/cv`、`/cv/zh`、阅读视图和 A4 页面上以引用格式呈现，并在
-  `/publications` 提供 BibTeX / APA 复制与 ScholarlyArticle 结构化数据。本人姓名
+  链接、摘要），在 `/cv`、`/cv/zh`、阅读视图、A4 页面以及可下载的简历（中英文 PDF、
+  纯文本、JSON Resume 的 `publications`）中以引用格式呈现，并在
+  `/publications` 提供 BibTeX / APA 复制与 ScholarlyArticle 结构化数据。首页可显示
+  “Selected Publications”板块（可排序，默认位于项目之后），/about 侧栏链接论文列表并
+  显示篇数，⌘K 可搜索每篇论文，论文关键词计入技能出处，首页编辑器会把已发表论文
+  原文作为成果条建议，CV Studio 的就绪检查会提示缺少载体、日期或 DOI / 链接的已发表
+  论文，以及“审稿中”超过 18 个月的论文。本人姓名
   依据公开的个人信息自动加粗；尚未发表的论文始终标明真实状态；被隐藏的合著者显示
   为 “…”，作者顺序保持真实。在出现第一篇公开论文之前，网站上不显示任何相关内容
   （无板块、无导航链接，`/publications` 返回 404）。逻辑位于 `lib/publications/`。
 - **面向非工程师的后台**：可视化编辑 Hero、品牌、社交、照片墙、博客、
   案例研究、CV（Studio + 原始 JSON）、Now/Uses，以及关于页自述。
 - **逐节可见性与排序**：首页所有板块（Open Source / Skills /
-  Activity / Projects / Writing / Experience / Certs / Photos / Contact）都可
-  从后台隐藏、拖拽排序，或一键套用「招聘者优先」预设，无需改代码。
+  Activity / Projects / Publications / Writing / Experience / Certs / Photos /
+  Contact）都可从后台隐藏、拖拽排序，或一键套用「招聘者优先」预设，无需改代码。
 - **成就条**：Hero 下方最多 4 个站长亲写的成就块，每块链接到出处；编辑器从公开
-  CV（奖项、专利、学历）原文生成建议，保存之前首页不显示任何内容。
+  CV（奖项、专利、已发表论文、学历）原文生成建议，保存之前首页不显示任何内容。
 - **联系面板可编辑**：标题、眉标、副标语、原因下拉项均来自
   `data/home.json`；留空时回退到内置默认值。
 - **后台收件箱**：联系表单的每条留言都会连同是否已发出邮件一起保存，

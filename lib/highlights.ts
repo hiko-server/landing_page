@@ -2,10 +2,13 @@
  * Proof-strip helpers (pure, client-safe; unit tested).
  *
  *   - suggestHighlights: tiles the Home editor OFFERS, built verbatim from the
- *     public CV (competition awards, patents, education). Nothing here is
- *     published: the owner accepts a suggestion into the form, may edit it,
- *     and saves. Each suggestion links to the CV entry it was read from, at
- *     the same anchor /cv renders (`/cv#cv-<section>-<index>`).
+ *     public CV (competition awards, patents, published papers, education).
+ *     Nothing here is published: the owner accepts a suggestion into the
+ *     form, may edit it, and saves. Each suggestion links to the CV entry it
+ *     was read from, at the same anchor /cv renders
+ *     (`/cv#cv-<section>-<index>`); a paper links to its /publications anchor
+ *     (lib/publications publicationTiles, passed in as `papers` so this module
+ *     — which the home page loads — stays free of the publications code).
  *   - splitLeadingNumber: the number a tile can roll up ("18th" → 18 + "th").
  */
 
@@ -54,13 +57,14 @@ export function fitsHighlightLimits(h: Pick<HomeHighlight, 'value' | 'label'>): 
 
 /**
  * Suggested highlights from the public (website-pruned) English CV, in this
- * order: competition awards, patents, education. Hidden sections, entries and
+ * order: competition awards, patents, published papers (`opts.papers`, built
+ * from the /publications list), education. Hidden sections, entries and
  * fields are already gone from the input; `field` / `list` also respect any
  * `redacted` markers, so a hidden value is never suggested.
  */
 export function suggestHighlights(
   cvEn: readonly Section[] | null | undefined,
-  opts: { max?: number; hrefFor?: (sessionName: string, index: number) => string } = {},
+  opts: { max?: number; hrefFor?: (sessionName: string, index: number) => string; papers?: readonly HighlightSuggestion[] } = {},
 ): HighlightSuggestion[] {
   const cv = Array.isArray(cvEn) ? cvEn : []
   const max = opts.max ?? 8
@@ -87,6 +91,8 @@ export function suggestHighlights(
     const label = joinParts([field(p, 'organization'), field(p, 'authority'), field(p, 'status')], ' · ')
     push(tile(title, label, hrefFor('patents', i), sourceLabel(patents, 'Patents')))
   })
+
+  for (const paper of opts.papers || []) push(tile(paper.value, paper.label, paper.href, paper.source))
 
   const education = sectionOf(cv, 'education')
   list(education, 'educationExperience').forEach((e, i) => {

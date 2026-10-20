@@ -2,7 +2,9 @@
  * Server-side readers for publications (content store → PUBLIC views only).
  *
  *   /publications   the website view (Website switch): the English list, or
- *                   the Chinese one when the English CV has no public paper
+ *                   the Chinese one when the English CV has no public paper;
+ *                   the home section, the /about rail's count and the search
+ *                   index read the same list, so their links land on it
  *   CV pages        the CV view (CV switch), through the normal section loaders
  *   the chrome      `chromePublications`: whether /publications exists, shipped
  *                   by page loaders so the header, footer, drawer and ⌘K
@@ -23,6 +25,7 @@ import {
   publicPublications,
   publicationsDescription,
   scholarlyArticleNode,
+  selectPublications,
   summarizePublications,
   textLang,
   toApa,
@@ -31,6 +34,7 @@ import {
   type OwnerNames,
   type PubLang,
   type Publication,
+  type SelectedPublications,
 } from './publications'
 import { PERSON_NAME, SITE_URL, WEBSITE_ID, absUrl, breadcrumb, personAuthor, personRef } from './schema'
 
@@ -54,6 +58,16 @@ export function readPublicationsView(): PublicationsView {
   } catch {
     return { lang: 'en', publications: [], owner: NO_OWNER_NAMES }
   }
+}
+
+/** The home page's "Selected publications" (lib/publications selectPublications); null without a public paper. */
+export function readHomePublications(): SelectedPublications | null {
+  return selectPublications(readPublicationsView())
+}
+
+/** How many papers /publications lists (0: no page) — the count on the /about rail's link. */
+export function publicationCount(): number {
+  return readPublicationsView().publications.length
 }
 
 /** True when /publications has at least one public paper (the page answers 404 otherwise). */

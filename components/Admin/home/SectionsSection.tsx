@@ -90,7 +90,7 @@ function SectionRow({
  *     top in that order; they can only be switched on or off.
  *   - The numbered sections ([02]…) are a sortable list (drag the handle, or
  *     Space + arrow keys) with a checkbox each.
- *   - "Recruiter-first" puts projects, experience, writing and skills before
+ *   - "Recruiter-first" puts projects, experience, papers, writing and skills before
  *     the GitHub activity in one click; "Default order" restores the
  *     built-in order. Neither touches visibility.
  *

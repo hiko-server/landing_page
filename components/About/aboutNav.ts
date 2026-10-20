@@ -20,6 +20,11 @@ export function aboutHeading(identity: HeroIdentity | null | undefined): string 
   return identity?.name || identity?.nick || PERSON_NAME
 }
 
+/** "1 paper" / "3 papers" — the count the rail's Publications link names (and screen readers hear). */
+export function paperCount(n: number): string {
+  return n === 1 ? '1 paper' : `${n} papers`
+}
+
 /** The list each CV section's entries live in (a section without entries renders nothing). */
 const ENTRY_KEYS: Record<string, readonly string[]> = {
   education: ['educationExperience'],

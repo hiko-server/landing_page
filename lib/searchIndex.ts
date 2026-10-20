@@ -19,6 +19,8 @@ import {
 } from '../components/CVViewerPage/fields'
 import { detectContentLang, readableText } from './toc'
 import type { CvSectionLike } from './cvVisibility'
+import { readPublicationsView } from './publicationsData'
+import { publicationDocs } from './publicationsSearch'
 
 /**
  * The public search index behind ⌘K (GET /api/search-index):
@@ -33,6 +35,9 @@ import type { CvSectionLike } from './cvVisibility'
  *                         gone), EN only, linking to the anchors /cv
  *                         renders: `/cv#cv-<section>-<i>` for entries,
  *                         `/cv#cv-<section>` for skill groups
+ *   publications          one doc per public paper (lib/publicationsSearch):
+ *                         `/publications#<key>`, or the CV anchors when the
+ *                         section is on the CV only
  *
  * Contact details are never indexed. Drafts never appear (listPosts /
  * listWork exclude them).
@@ -299,15 +304,17 @@ function aboutDoc(): SearchDoc | null {
 
 const bodyOf = (collection: 'blog' | 'work', slug: string): string => getItem(collection, slug)?.body || ''
 
-/** The whole public index (posts, case studies, /now, /uses, the /about bio, CV entries). */
+/** The whole public index (posts, case studies, /now, /uses, the /about bio, CV entries, papers). */
 export function buildSearchIndex(): SearchIndex {
+  const cvEn = readPublicCvData('cv').en
   const docs: SearchDoc[] = [
     ...listPosts().map((p) => articleDoc('post', p, bodyOf('blog', p.slug), p.frontmatter.tags)),
     ...listWorkInDisplayOrder().map((w) => articleDoc('work', w, bodyOf('work', w.slug), w.frontmatter.tech)),
     pageDoc('now', 'Now'),
     pageDoc('uses', 'Uses'),
     ...[aboutDoc()].filter((d): d is SearchDoc => d !== null),
-    ...cvSearchDocs(readPublicCvData('cv').en),
+    ...cvSearchDocs(cvEn),
+    ...publicationDocs(readPublicationsView(), cvEn),
   ]
   const home = readPublicHome() as { availability?: { bookingUrl?: unknown } } | null
   const bookingUrl = safeHref(home?.availability?.bookingUrl)

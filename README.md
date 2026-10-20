@@ -50,24 +50,32 @@ backup, and a hardened admin GUI for non-engineers.
   guard. See [CV visibility model](#cv-visibility-model).
 - **Publications (论文)** — a CV section for papers, preprints and theses
   (authors in order, venue, status, DOI, links, abstract), rendered in
-  citation style on `/cv`, `/cv/zh`, the Reading view and the A4 sheet,
-  and on `/publications` with BibTeX / APA copy and ScholarlyArticle
-  JSON-LD. The owner's own name is emphasised from the public Personal
-  Info; anything not yet published carries its real status; a hidden
-  co-author shows as "…" so the author order stays true. Nothing is public
-  (no section, no nav link, `/publications` answers 404) until a public
-  paper exists. Logic in `lib/publications/`.
+  citation style on `/cv`, `/cv/zh`, the Reading view, the A4 sheet and
+  the downloadable CVs (PDF in EN and 中文, plain text, JSON Resume
+  `publications`), and on `/publications` with BibTeX / APA copy and
+  ScholarlyArticle JSON-LD. The home page can show **Selected
+  Publications** (an owner-ordered section, after projects by default),
+  the /about rail links the list with its count, ⌘K finds every paper,
+  a paper's keywords count as skill evidence, the Home editor suggests
+  published papers as proof-strip tiles (verbatim), and CV Studio's
+  readiness checks flag a published paper without venue, date or DOI /
+  link and a paper "under review" for more than 18 months. The owner's
+  own name is emphasised from the public Personal Info; anything not yet
+  published carries its real status; a hidden co-author shows as "…" so
+  the author order stays true. Nothing is public (no section, no nav
+  link, `/publications` answers 404) until a public paper exists. Logic in
+  `lib/publications/`.
 - **Admin GUI for non-engineers** — visual editors for hero, brands,
   socials, photo strip, blog posts, case studies, the CV (Studio + raw
   JSON), the Now/Uses pages and the About bio.
 - **Per-section visibility and order** — toggle any section of the home
-  page (Open Source, Skills, Activity, Projects, Writing, Experience, Certs,
-  Photos, Contact) and drag them into any order, or apply the one-click
+  page (Open Source, Skills, Activity, Projects, Publications, Writing,
+  Experience, Certs, Photos, Contact) and drag them into any order, or apply the one-click
   *Recruiter-first* preset, without touching code.
 - **Proof strip** — up to four owner-written highlights under the hero, each
   linked to its source; the editor suggests tiles built verbatim from the
-  public CV (awards, patents, education) and nothing shows until one is
-  saved.
+  public CV (awards, patents, published papers, education) and nothing
+  shows until one is saved.
 - **Editable contact panel** — heading, eyebrow, blurb, and the dropdown
   reasons list all come from `data/home.json`; built-in defaults when
   blank.
