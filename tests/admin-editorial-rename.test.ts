@@ -255,5 +255,6 @@ test('the [slug] pages resolve renames in getStaticProps (self-contained, before
     const src = read(page)
     assert.match(src, new RegExp(`return \\(await import\\('\\.\\./\\.\\./lib/redirects'\\)\\)\\.missingItemProps\\('${c}', slug, draftMode\\)`))
   }
-  assert.match(read('middleware.ts'), /edge/i)
+  // Renames never live in the proxy (proxy.ts): the pages own them, so the proxy file stays rename-free.
+  assert.doesNotMatch(read('proxy.ts'), /missingItemProps|lib\/redirects/)
 })
