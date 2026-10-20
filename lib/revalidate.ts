@@ -2,6 +2,7 @@ import type { NextApiResponse } from 'next'
 import { getCloudflarePurgeConfig, getIndexNowKey, getPublicHost } from './env'
 import { log } from './log'
 import { uploadNamesIn } from './uploadVariants'
+import { invalidateSearchIndex } from './searchIndexCache'
 
 /**
  * On-demand ISR revalidation.
@@ -29,11 +30,17 @@ import { uploadNamesIn } from './uploadVariants'
  * (forgetVanishedPages below, lib/isrPages), so a deleted or unpublished
  * page can never come back from disk after a restart.
  *
+ * Every save also refreshes the search index (GET /api/search-index: the ⌘K
+ * documents and the "Ask" passages): the built copy is marked stale first
+ * (lib/searchIndexCache), so the next request rebuilds it from the saved
+ * content, and the edge copy is purged with the pages (derivedPurgePaths).
+ *
  * Every path that did refresh is then handed to the edge (`notifyEdge`):
  * purged from the Cloudflare cache when CF_ZONE_ID + CF_API_TOKEN are set and
  * pushed to IndexNow when INDEXNOW_KEY is set. Both are fire-and-forget.
  */
 export async function revalidatePaths(res: NextApiResponse, paths: string[], opts: { confirm?: readonly string[] } = {}): Promise<string[]> {
+  invalidateSearchIndex()
   const unique = Array.from(new Set(paths.filter((p) => typeof p === 'string' && p.startsWith('/'))))
   const failed: string[] = []
   const pass = (list: string[]) =>
@@ -249,20 +256,25 @@ const CV_FILE_PATHS: Record<string, readonly string[]> = {
   '/cv/zh': ['/cv/zh.pdf', '/cv/zh.txt', '/cv/zh.json'],
 }
 
+/** The search index (⌘K documents and "Ask" passages, lib/searchIndex.ts). */
+export const SEARCH_INDEX_PATH = '/api/search-index'
+
 /**
  * Edge-cached responses derived from the given pages that must be purged with
  * them: a post or case-study change alters the feeds, the sitemap and the
  * search index; the /now, /uses and /about (bio) bodies are part of the
  * search index; a CV page change alters its PDF, plain-text and JSON Resume
- * files; the sitemap lists /publications only while it has public papers.
+ * files and the search index (CV entries in both languages); /contact's
+ * availability is quoted by "Ask"; the sitemap lists /publications only
+ * while it has public papers, and its papers are search documents.
  */
 export function derivedPurgePaths(paths: readonly string[]): string[] {
   const out = new Set<string>()
   for (const p of paths) {
     if (/^\/(blog|work)(\/|$)/.test(p)) COLLECTION_DERIVED_PATHS.forEach((d) => out.add(d))
-    else if (p === '/now' || p === '/uses' || p === '/about') out.add('/api/search-index')
-    else if (CV_FILE_PATHS[p]) CV_FILE_PATHS[p].forEach((d) => out.add(d))
-    else if (p === '/publications') out.add('/sitemap.xml')
+    else if (p === '/now' || p === '/uses' || p === '/about' || p === '/contact') out.add(SEARCH_INDEX_PATH)
+    else if (CV_FILE_PATHS[p]) [...CV_FILE_PATHS[p], SEARCH_INDEX_PATH].forEach((d) => out.add(d))
+    else if (p === '/publications') ['/sitemap.xml', SEARCH_INDEX_PATH].forEach((d) => out.add(d))
   }
   return Array.from(out)
 }

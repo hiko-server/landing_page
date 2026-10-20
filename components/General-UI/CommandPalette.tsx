@@ -119,7 +119,7 @@ const RESULT_LIMIT = 40
 const BROWSE_LIMIT = 6
 const GROUP_ORDER: Group[] = ['Recent', 'On this page', 'Admin', 'Pages', 'Actions', 'Writing', 'Work', 'Content']
 const GROUP_BOOST: Record<Item['group'], number> = { Pages: 6, Admin: 5, Actions: 4, 'On this page': 3, Writing: 2, Work: 2, Content: 2 }
-const KIND_LABEL: Record<SearchDocLike['kind'], string> = { post: 'Post', work: 'Case study', page: 'Page', cv: 'CV' }
+const KIND_LABEL: Record<SearchDocLike['kind'], string> = { post: 'Post', work: 'Case study', page: 'Page', cv: 'CV', publication: 'Paper' }
 const MONO = 'var(--font-geist-mono), monospace'
 
 /** The theme preference actions, in menu order. */
@@ -243,14 +243,16 @@ function Key({ children }: { children: React.ReactNode }) {
 }
 
 function docItem(doc: SearchDocLike, group: Item['group']): Item {
+  const zh = /^zh/i.test(doc.lang || '')
   return {
-    id: `doc:${doc.href}`,
+    // CV skill groups share their section's href: the title keeps ids unique.
+    id: doc.kind === 'cv' ? `doc:${doc.href}|${doc.title}` : `doc:${doc.href}`,
     group,
     kind: 'nav',
     label: doc.title,
     href: doc.href,
     hint: group === 'Content' ? undefined : doc.description ? truncate(doc.description) : undefined,
-    badge: KIND_LABEL[doc.kind],
+    badge: zh ? `${KIND_LABEL[doc.kind]} · 中文` : KIND_LABEL[doc.kind],
     lang: doc.lang && doc.lang !== 'en' ? doc.lang : undefined,
   }
 }
@@ -260,7 +262,7 @@ function docDetail(hit: DocHit<SearchDocLike>): Detail | undefined {
   if (hit.field === 'title') {
     return hit.doc.description ? { prefix: '', segments: [{ text: truncate(hit.doc.description), match: false }] } : undefined
   }
-  if (hit.field === 'body' && hit.snippet) return { prefix: 'in: ', segments: hit.snippet }
+  if (hit.snippet && hit.snippet.length) return { prefix: 'in: ', segments: hit.snippet }
   return { prefix: 'in: ', segments: [{ text: truncate(hit.value), match: false }] }
 }
 
@@ -643,7 +645,7 @@ export default function CommandPalette({
     const ranked: Array<{ row: Row; score: number }> = rankItems([...sections, ...commands], q, (it) => boost(it.id, it.group)).map(
       ({ item, score, indices }) => ({ row: { item, group: item.group, indices }, score }),
     )
-    for (const hit of rankSearchDocs(index?.docs || [], q, (doc) => boost(`doc:${doc.href}`, 'Content'))) {
+    for (const hit of rankSearchDocs(index?.docs || [], q, (doc) => boost(docItem(doc, 'Content').id, 'Content'), { subject: index?.subject })) {
       ranked.push({
         row: { item: docItem(hit.doc, 'Content'), group: 'Content', indices: hit.indices, detail: docDetail(hit) },
         score: hit.score,

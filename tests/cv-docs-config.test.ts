@@ -49,5 +49,6 @@ test('ISR: bounded stale window; CV pages are regenerated on store restores and 
     assert.ok(CV_PAGE_PATHS.includes(p), `CV writes regenerate ${p}`)
     assert.ok(HOME_PAGE_PATHS.includes(p), `home writes regenerate ${p}`)
   }
-  assert.deepEqual(derivedPurgePaths([...CV_DOCUMENT_PATHS]).sort(), [...ALL_EXPORT_PATHS].sort())
+  // …and the search index, which carries the CV entries of both languages (F4 / J1).
+  assert.deepEqual(derivedPurgePaths([...CV_DOCUMENT_PATHS]).sort(), [...ALL_EXPORT_PATHS, '/api/search-index'].sort())
 })
