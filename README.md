@@ -255,6 +255,18 @@ checklist points at any left behind. A post can name its case study
 link to `/blog?tag=…` and `/work?tag=…`; `/work` ends with every public CV
 project (*All projects*), linked to its case study when there is one.
 
+Editing something that is already live never publishes half-done work:
+**Save changes** (⌘S) keeps the edits as *unpublished changes* — visitors
+see the published version — until **Publish changes…** (with a diff); Preview
+shows them at the real address. **Change…** next to the slug moves an item to
+a new address: the old one redirects permanently and every internal link is
+rewritten. **Search & sharing** under the body sets the search title,
+language and "Mark as updated", and previews the Google result and the
+LinkedIn, X, WhatsApp, Slack and WeChat cards. The writing bar counts words
+(CJK per character), and offers find & replace (⌘F), focus mode and
+typewriter scrolling. **Admin → Tags & export** renames or merges tags across
+all items and downloads everything as a .zip of Markdown and JSON.
+
 ---
 
 ## Tech stack
@@ -864,8 +876,9 @@ are gated by the middleware.
 | `/admin/dashboard?tab=storage` | SQLite + R2 inventory, manual Backup / Pull |
 | `/admin/dashboard?tab=inbox` | Contact Inbox — read, reply by e-mail, mark, delete |
 | `/admin/dashboard?tab=analytics` | First-party page views, referrers, devices and real-user Web Vitals |
-| `/admin/blog`, `/admin/blog/edit?slug=…` | Blog post manager: drafts, publish checklist, live preview, history |
-| `/admin/work`, `/admin/work/edit?slug=…` | Case-study manager |
+| `/admin/blog`, `/admin/blog/edit?slug=…` | Blog post manager: drafts, unpublished changes of live posts, publish checklist, live preview, history, slug change with redirect, search & sharing previews |
+| `/admin/work`, `/admin/work/edit?slug=…` | Case-study manager (the same tools) |
+| `/admin/tags` | Rename, unify or merge post tags and case-study tech; content export (.zip) |
 | `/admin/now`, `/admin/uses`, `/admin/about` | One-off page editors (`about` = the bio on /about; empty = no bio section) |
 | `/admin/db-config` | MongoDB connection + manual backup/restore |
 | `/admin/security` | Passkeys, recovery codes, "Require a passkey", signed-in browsers, sign-in history |

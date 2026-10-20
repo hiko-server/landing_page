@@ -687,14 +687,22 @@ API 在 `/api/*`；`/api/admin/*` 全部需要鉴权（Middleware 把关）。
 | `/admin/dashboard?tab=storage` | SQLite + R2 清单，手动 Backup / Pull |
 | `/admin/dashboard?tab=inbox` | 联系收件箱：阅读、邮件回复、标记、删除 |
 | `/admin/dashboard?tab=analytics` | 第一方访问量、来源、设备与真实用户 Web Vitals |
-| `/admin/blog`、`/admin/blog/edit?slug=…` | 博客管理：草稿、发布检查清单、实时预览、历史 |
-| `/admin/work`、`/admin/work/edit?slug=…` | 案例研究管理 |
+| `/admin/blog`、`/admin/blog/edit?slug=…` | 博客管理：草稿、已上线文章的待发布修改、发布检查清单、实时预览、历史、改网址（自动 301/308）、搜索与分享预览 |
+| `/admin/work`、`/admin/work/edit?slug=…` | 案例研究管理（同样的工具） |
+| `/admin/tags` | 标签与技术栈的重命名、统一写法、合并；内容导出（.zip） |
 | `/admin/now`、`/admin/uses` | 单页编辑器 |
 | `/admin/db-config` | MongoDB 连接 + 手动备份/恢复 |
 | `/admin/security` | 通行密钥、恢复码、"必须使用通行密钥"、已登录浏览器、登录记录 |
 | `/admin/system` | 系统健康（版本、磁盘、数据库、备份、恢复演练、近期警告）与 `?view=errors` 错误监控（自建，不发给第三方） |
 
 在任意后台页面按 `?` 可查看键盘快捷键。
+
+编辑已上线的文章或案例时，“保存修改”（⌘S）只存为**待发布修改**，访客仍看到已发布版本，
+直到点“发布修改…”（附与线上版本的差异对比）；“预览”在真实网址上显示这些修改。网址旁的
+“修改…”可以更换网址：旧网址永久跳转，站内链接自动改写。正文下方的“搜索与分享”可设置搜索标题、
+语言和“标记为已更新”，并预览谷歌搜索结果与领英、X、WhatsApp、Slack、微信的卡片（微信只显示标题和
+通用链接图标）。写作栏提供中英文字数（中日韩按字计）、阅读时间、查找替换（⌘F）、专注模式和打字机滚动。
+“后台 → Tags & export”可跨文章重命名或合并标签，并一键把全部内容导出为 Markdown + JSON 的 .zip。
 
 <div align="center">
   <img src="docs/screenshots/admin-cv-studio.png" alt="CV Studio" width="780" />
