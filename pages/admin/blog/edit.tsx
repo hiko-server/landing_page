@@ -135,6 +135,11 @@ function BlogEditor() {
             onChange={(cover) => setFm((f) => ({ ...f, cover }))}
             alt={fm.coverAlt}
             onAltChange={(coverAlt) => setFm((f) => ({ ...f, coverAlt }))}
+            focus={fm.coverFocus}
+            onFocusChange={(coverFocus) => setFm((f) => ({ ...f, coverFocus }))}
+            // The social card shows a post's cover in a 420 × 486 panel, cropped around this point.
+            focusAspect="420 / 486"
+            focusHint="Social cards crop the cover around this point."
             onMeasure={setCoverSize}
           />
 

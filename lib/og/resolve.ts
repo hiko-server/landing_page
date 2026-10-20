@@ -14,7 +14,7 @@ export type CardSource = 'preset' | 'signed' | 'default' | 'refused'
 
 export type ResolvedCard = { source: CardSource; params: OgParams }
 
-const TEXT_PARAMS = ['title', 'subtitle', 'kind', 'date', 'mins', 'tags', 'cover', 'v', 'sig']
+const TEXT_PARAMS = ['title', 'subtitle', 'kind', 'date', 'mins', 'tags', 'cover', 'focus', 'v', 'sig']
 
 /** The default card in the requested size (the only parameter honoured without a signature). */
 export function defaultCardParams(search: URLSearchParams): OgParams {

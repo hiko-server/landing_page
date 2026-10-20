@@ -1,4 +1,7 @@
 import { isValidUploadName } from './uploadName'
+import { parseOgFocus } from '../og/focus'
+
+export { parseOgFocus }
 
 /**
  * Query parsing for the Open Graph image route (/api/og).
@@ -15,6 +18,8 @@ import { isValidUploadName } from './uploadName'
  *          renderer decodes (PNG / JPEG) — never an arbitrary URL, so the
  *          renderer cannot be pointed at other hosts
  *   lang   'en' | 'zh'
+ *   focus  the cover's focal point "x% y%" (whole percents 0–100; the
+ *          centre is the default and never sent)
  *   size   'square' (1200×1200), else the default 1200×630
  *   v      digits only (cache-buster; ignored by the renderer)
  */
@@ -47,6 +52,8 @@ export type OgParams = {
   size: 'default' | 'square'
   /** Digits or ''. */
   v: string
+  /** Focal point of the cover, "x% y%" (whole percents), or '' for the centre. */
+  focus: string
 }
 
 function parseDate(raw: string | null): string {
@@ -99,5 +106,7 @@ export function parseOgParams(params: URLSearchParams): OgParams {
     lang: params.get('lang') === 'zh' ? 'zh' : 'en',
     size: params.get('size') === 'square' ? 'square' : 'default',
     v: new RegExp(`^\\d{1,${OG_LIMITS.v}}$`).test(v) ? v : '',
+    // Only with a cover to place.
+    focus: parseCover(params.get('cover')) ? parseOgFocus(params.get('focus')) : '',
   }
 }

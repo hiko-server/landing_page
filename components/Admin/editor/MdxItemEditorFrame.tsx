@@ -359,6 +359,7 @@ export default function MdxItemEditorFrame<F extends ItemFm>({
                 tags={ed.list}
                 cover={String(fm.cover || '')}
                 coverAlt={textField(fm, 'coverAlt')}
+                coverFocus={textField(fm, 'coverFocus')}
                 date={collection === 'blog' ? textField(fm, 'date') : undefined}
                 updated={collection === 'blog' ? textField(fm, 'updated') : undefined}
                 onUpdated={collection === 'blog' ? (v) => setText('updated', v) : undefined}

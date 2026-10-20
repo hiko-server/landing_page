@@ -13,6 +13,7 @@
 
 import type { CvSectionLike } from './cvVisibility'
 import { canonicalOrcid, orcidRecordUrl } from './orcid/uri'
+import { parseOgFocus } from './og/focus'
 
 const HOST = process.env.NEXT_PUBLIC_SITE_HOST || 'lucian-dev.com'
 
@@ -370,6 +371,8 @@ export type OgImageOptions = {
   tags?: readonly string[]
   /** Same-site /uploads/<name>.png|jpg cover shown on the right of the card (other formats are skipped). */
   cover?: string
+  /** The cover's focal point "x% y%" (the card crops the cover around it). */
+  coverFocus?: string
   /** Cache-buster: the content's last write (epoch ms). */
   v?: number | null
 }
@@ -396,7 +399,11 @@ export function ogImageUrl(o: OgImageOptions): string {
   const tags = (o.tags || []).map((t) => String(t).trim()).filter(Boolean).slice(0, 3)
   if (tags.length) params.set('tags', tags.join(','))
   const cover = (o.cover || '').trim()
-  if (/^\/uploads\/[^/?#]+\.(?:png|jpe?g)$/i.test(cover)) params.set('cover', cover)
+  if (/^\/uploads\/[^/?#]+\.(?:png|jpe?g)$/i.test(cover)) {
+    params.set('cover', cover)
+    const focus = parseOgFocus(o.coverFocus)
+    if (focus) params.set('focus', focus)
+  }
   if (typeof o.v === 'number' && Number.isFinite(o.v) && o.v > 0) params.set('v', String(Math.floor(o.v)))
   return absUrl(`/api/og?${params.toString()}`)
 }

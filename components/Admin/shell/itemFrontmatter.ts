@@ -57,6 +57,8 @@ export type BlogFrontmatter = {
   updated: string
   /** Description of the cover (shown in the social card's alt text). */
   coverAlt: string
+  /** Cover focal point "x% y%" ('' = centre): the social card is cropped around it. */
+  coverFocus: string
 } & TranslationForm
 
 export const BLOG_EMPTY: BlogFrontmatter = {
@@ -71,6 +73,7 @@ export const BLOG_EMPTY: BlogFrontmatter = {
   seoTitle: '',
   updated: '',
   coverAlt: '',
+  coverFocus: '',
 }
 
 export const blogFromServer = (f: Record<string, any>): BlogFrontmatter => ({
@@ -85,6 +88,7 @@ export const blogFromServer = (f: Record<string, any>): BlogFrontmatter => ({
   seoTitle: textOf(f.seoTitle),
   updated: cleanDate(f.updated),
   coverAlt: textOf(f.coverAlt),
+  coverFocus: cleanFocus(f.coverFocus),
 })
 
 export const blogToServer = (fm: BlogFrontmatter, tags: string[]) => ({
@@ -99,6 +103,7 @@ export const blogToServer = (fm: BlogFrontmatter, tags: string[]) => ({
   seoTitle: fm.seoTitle.trim() || undefined,
   updated: cleanDate(fm.updated) || undefined,
   coverAlt: (fm.cover && fm.coverAlt.trim()) || undefined,
+  coverFocus: (fm.cover && cleanFocus(fm.coverFocus)) || undefined,
 })
 
 // ── Case studies ─────────────────────────────────────────────────────────

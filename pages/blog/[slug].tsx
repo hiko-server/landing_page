@@ -251,6 +251,7 @@ export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
     mins: post.readingMinutes,
     tags: Array.isArray(post.frontmatter.tags) ? post.frontmatter.tags : [],
     cover: post.frontmatter.cover,
+    coverFocus: post.frontmatter.coverFocus,
     v: post.updatedAt,
   }
 

@@ -65,6 +65,7 @@ test('lang, size and v are enumerations / digits', () => {
     lang: 'en',
     size: 'default',
     v: '',
+    focus: '',
   })
 })
 
