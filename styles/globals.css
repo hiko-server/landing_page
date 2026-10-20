@@ -807,6 +807,58 @@ a:focus-visible .nudge-ne {
   }
 }
 
+/* Slow-navigation bar on the header's bottom edge (components/Chrome/
+   NavProgress.tsx shows it only after 150ms). A sweep while loading; a still
+   bar under reduced motion. The followed link waits with a progress cursor. */
+.nav-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--duration-base) var(--ease-standard);
+}
+.nav-progress[data-state='loading'] {
+  opacity: 1;
+  transition-duration: var(--duration-fast);
+}
+.nav-progress::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, var(--accent) 35%, var(--accent) 65%, transparent);
+  transform: translateX(-100%);
+}
+.nav-progress[data-state='loading']::before {
+  animation: nav-progress-sweep 1100ms ease-in-out infinite;
+}
+@keyframes nav-progress-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-progress::before,
+  .nav-progress[data-state='loading']::before {
+    width: 100%;
+    transform: none;
+    background: var(--accent);
+    animation: none !important;
+  }
+}
+a[data-nav-pending] {
+  cursor: progress;
+}
+
 /* Touch press feedback (touch screens only; a mouse has hover instead).
    No grey tap flash; cards and list rows (`.pressable`) tint and sink a
    little while pressed — after 40ms, so a touch that turns into a scroll
@@ -982,6 +1034,7 @@ html .scroll-top[data-visible='true']:active {
     forced-color-adjust: none;
     background: CanvasText !important;
   }
+  .nav-progress::before,
   .toc-marker {
     forced-color-adjust: none;
     background: Highlight !important;
