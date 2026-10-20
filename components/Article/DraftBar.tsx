@@ -6,9 +6,10 @@ import { useBottomBarOffset } from '../Common/useBottomBarOffset'
  * Fixed bottom bar shown while an article renders in Draft Mode (the
  * preview cookie issued by the admin-gated /api/admin/draft). "Exit" clears
  * Draft Mode through the same endpoint and returns to the public page, as a
- * full navigation so the cookie change takes effect.
+ * full navigation so the cookie change takes effect. `pending`: the page
+ * shows a live item's unpublished changes (H4), not a draft.
  */
-export default function DraftBar({ path }: { path: string }) {
+export default function DraftBar({ path, pending = false }: { path: string; pending?: boolean }) {
   const ref = useRef<HTMLDivElement | null>(null)
   useBottomBarOffset(ref)
   const exitHref = `/api/admin/draft?disable=1&path=${encodeURIComponent(path)}`
@@ -17,7 +18,7 @@ export default function DraftBar({ path }: { path: string }) {
     <Box
       ref={ref}
       role="region"
-      aria-label="Draft preview"
+      aria-label={pending ? 'Preview of unpublished changes' : 'Draft preview'}
       // Its controls are not scrolled clear of the bar they sit in (globals.css).
       data-bottom-bar=""
       position="fixed"
@@ -37,9 +38,9 @@ export default function DraftBar({ path }: { path: string }) {
       <Flex maxW="var(--container-content)" mx="auto" align="center" justify="space-between" gap={4}>
         <Text as="p" m={0} fontFamily="var(--font-geist-mono), monospace" fontSize="12px" color="page.fg-secondary">
           <Box as="span" color="accent.text" fontWeight={600}>
-            Draft preview
+            {pending ? 'Unpublished changes' : 'Draft preview'}
           </Box>{' '}
-          · not visible to visitors
+          {pending ? '· visitors still see the published version' : '· not visible to visitors'}
         </Text>
         <Box
           as="a"

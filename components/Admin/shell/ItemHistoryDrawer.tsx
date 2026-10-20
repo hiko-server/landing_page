@@ -69,7 +69,8 @@ function refParam(kind: HistoryKind, itemRef: string): string {
   return kind === 'page' ? `name=${encodeURIComponent(itemRef)}` : `slug=${encodeURIComponent(itemRef)}`
 }
 
-function DiffView({ rows }: { rows: DiffRow[] }) {
+/** Unified line diff (also used by the "Publish changes" sheet). */
+export function DiffView({ rows }: { rows: DiffRow[] }) {
   return (
     <Box
       as="pre"

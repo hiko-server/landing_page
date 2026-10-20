@@ -8,6 +8,56 @@ portfolio CMS, no public package). Entries are grouped by release date.
 
 ## [Unreleased]
 
+### admin-editorial
+
+Editorial tools in the post and case-study editors (wave 2B: H1, H3, H4, H6, H16).
+
+- **Unpublished changes on live items** (H4): saving a published post or case
+  study (⌘S, "Save changes") stores the edits as unpublished changes — the
+  public page, feeds and sitemap keep the published version. A banner says so,
+  with **Preview ↗** (Draft Mode renders the changes at the real address, with
+  a bar that says what it shows), **Discard…** and **Review & publish…**: a
+  diff against the live version, the publish checklist and — for posts — "Mark
+  as updated today". The list pages mark items with changes not live. Drafts
+  and new items save as before. Restoring a history version replaces the
+  changes too, after keeping them in the history.
+- **Change a slug** (H6): "Change…" next to the slug of an existing item. A dry
+  run lists every post, case study, page, CV entry and home-page link to the
+  old address; the change rewrites them (never inside code), moves the item's
+  history and unpublished changes, and keeps the old address working with a
+  permanent (308) redirect answered by getStaticProps (the edge middleware
+  cannot read the store). Chains collapse to one hop, a live item always wins
+  over a redirect, and each old address can stop redirecting. The old and new
+  pages, feeds and sitemap refresh.
+- **Search & sharing** (H1): search title (measured against Google's ~600 px
+  cut), description length guidance, language, "Mark as updated" and the card
+  alt text, with live previews of the Google result and the LinkedIn, X,
+  WhatsApp and Slack cards — the real signed `/api/og` card for the unsaved
+  state (admin endpoint, 800 ms debounce, loaded only while open). WeChat is
+  shown as it really looks without its JS-SDK: the title and a generic link
+  icon. Posts gain a cover alt text field; `og:image:alt` describes the cover
+  when the card shows it.
+- **Writing environment** (H3): word and character counts (Chinese, Japanese
+  and Korean per character) and the page's reading time, find & replace (⌘F /
+  Ctrl+F inside the editor; case, whole word and regex with `$1` groups; one
+  undo step), focus mode (other blocks dim to the AA "subtle" colour),
+  typewriter scrolling and a line saying where the words are (this device,
+  draft, not live yet, live).
+- **Tags & export** (H16, `/admin/tags`): every post tag and case-study tech
+  entry with its usage and spellings; rename, unify spellings or merge across
+  all items (a history snapshot per item, unpublished changes follow); and a
+  one-click **.zip export** of all posts, case studies and pages as MDX with
+  YAML frontmatter, unpublished changes, the CV and home JSON, the redirects
+  and a list of every image used.
+- **Content migration 2 (`editorial`)**: adds the `pending_revisions` and
+  `redirects` tables (expand-only; applies cleanly on a v1 store, an older
+  image keeps working on v2).
+- `lib/editorialEvents` lets the admin audit log hear renames, publishes of
+  changes, discards, redirect removals, tag changes and exports.
+- Fixed: admin title-bar actions wrap on phones instead of widening the page;
+  an open collapsible panel with a long unbreakable line no longer widens the
+  page; the editor's ⌘⇧P hint meets AA contrast.
+
 ### security-a
 
 Security and reliability foundation.

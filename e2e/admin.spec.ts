@@ -173,7 +173,7 @@ test.describe('admin', { tag: '@admin' }, () => {
         date: new Date().toISOString().slice(0, 10),
         updated: '2026-01-02',
         lang: 'en',
-        coverAlt: 'Alt text the post form does not edit',
+        series: 'A field the post form does not edit',
         description: 'Created by the end-to-end suite to check that a save keeps unmodelled fields; deleted afterwards.',
         draft: true,
       },
@@ -193,11 +193,13 @@ test.describe('admin', { tag: '@admin' }, () => {
       expect(stored.status, stored.text).toBe(200)
       const fm = (JSON.parse(stored.text) as { frontmatter: Record<string, unknown> }).frontmatter
       expect(fm.title).toBe('E2E frontmatter check (edited)')
+      // seoTitle / updated / lang are edited in "Search & sharing" (H1) and survive the round trip;
+      // `series` stands for any key the form does not model.
       expect(fm).toMatchObject({
         seoTitle: 'E2E frontmatter check — search title',
         updated: '2026-01-02',
         lang: 'en',
-        coverAlt: 'Alt text the post form does not edit',
+        series: 'A field the post form does not edit',
       })
     } finally {
       await adminFetch('DELETE', `/api/admin/posts?slug=${slug}`)

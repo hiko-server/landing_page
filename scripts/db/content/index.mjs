@@ -3,6 +3,7 @@
  * Append new files here; never edit or reorder a released one.
  */
 import baseline from './001-baseline.mjs'
+import editorial from './002-editorial.mjs'
 
 /** @type {readonly import('../migrate.mjs').Migration[]} */
-export const CONTENT_MIGRATIONS = Object.freeze([baseline])
+export const CONTENT_MIGRATIONS = Object.freeze([baseline, editorial])

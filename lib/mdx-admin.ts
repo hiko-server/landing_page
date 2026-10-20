@@ -25,6 +25,10 @@ import {
   ifMatchAllows,
   type StoreError,
 } from './contentStore'
+import { deletePendingRevision, getPendingRevision, pendingRevisionIndex, putPendingRevision } from './pendingRevisions'
+import { forgetRedirectFrom, redirectsTo, removeRedirect } from './redirects'
+import { planRename, renameSlug } from './slugRename'
+import { emitEditorialEvent } from './editorialEvents'
 
 /**
  * Admin-only operations for MDX collections and the single pages (/now,
@@ -131,6 +135,35 @@ export function pruneItemSnapshots(kind: SnapshotKind, slug: string, keep = SNAP
     }
   }
   return removed
+}
+
+/** True when `slug` has snapshots (e.g. a deleted item's history). */
+export function hasItemSnapshots(kind: SnapshotKind, slug: string): boolean {
+  return listSnapshots(kind, slug).length > 0
+}
+
+/**
+ * Move an item's history to its new slug after a rename (H6): every
+ * `<from>_<stamp>.mdx` becomes `<to>_<stamp>.mdx`, so the history drawer
+ * keeps showing it and the old slug never shows up under "Recently
+ * deleted". Returns how many files moved.
+ */
+export function moveItemSnapshots(kind: SnapshotKind, from: string, to: string): number {
+  if (!isSafeSlug(from) || !isSafeSlug(to)) return 0
+  let moved = 0
+  for (const s of listSnapshots(kind, from)) {
+    const stamp = MDX_SNAPSHOT_RE.exec(s.filename)?.[2]
+    if (!stamp) continue
+    const target = path.join(snapshotDir(kind), `${to}_${stamp}.mdx`)
+    if (fs.existsSync(target)) continue
+    try {
+      fs.renameSync(path.join(snapshotDir(kind), s.filename), target)
+      moved++
+    } catch (err) {
+      log.warn('could not move snapshot after a rename', { file: s.filename, err })
+    }
+  }
+  return moved
 }
 
 /** Read and parse one snapshot (frontmatter + body); null when missing or unsafe. */
@@ -272,6 +305,8 @@ export function listDeleted(c: Collection, limit = 100): DeletedItem[] {
 /**
  * Write a snapshot back as the live item (the current state, if any, is
  * snapshotted first by writeOne, so a restore can itself be undone).
+ * Unpublished changes (H4) are what the editor shows, and the restore
+ * replaces them too — so they are kept in the history first, never lost.
  */
 export async function restoreItemSnapshot(
   c: Collection,
@@ -282,7 +317,11 @@ export async function restoreItemSnapshot(
   if (!info || info.slug !== slug) return { ok: false, error: 'Snapshot not found', notFound: true }
   const doc = readSnapshot(c, filename)
   if (!doc) return { ok: false, error: 'Snapshot not found', notFound: true }
-  return await writeOne(c, slug, doc.frontmatter, doc.body)
+  const pending = getPendingRevision(c, slug)
+  if (pending) writeSnapshot(c, slug, pending.frontmatter, pending.body)
+  const out = await writeOne(c, slug, doc.frontmatter, doc.body)
+  if (out.ok && pending) deletePendingRevision(c, slug)
+  return out
 }
 
 // ── Single-file pages (now, uses, about) ──────────────────────────────────
@@ -428,16 +467,66 @@ export async function refreshCollection(res: NextApiResponse, c: Collection, slu
 }
 
 /**
+ * Version of an item as the editor sees it (H4): the live row's updated_at,
+ * plus the pending revision's when there is one — `"<live>"` or
+ * `"<live>.<pending>"`. Any change to either (a save in another tab, a
+ * publish, a discard, a restore) changes it, so If-Match catches them all.
+ */
+export function itemEtag(liveUpdatedAt: number, pendingUpdatedAt?: number | null): string {
+  const live = Number.isFinite(liveUpdatedAt) && liveUpdatedAt > 0 ? Math.trunc(liveUpdatedAt) : 0
+  const pending = typeof pendingUpdatedAt === 'number' && pendingUpdatedAt > 0 ? Math.trunc(pendingUpdatedAt) : 0
+  return pending ? `"${live}.${pending}"` : `"${live}"`
+}
+
+/** If-Match against an item version (itemEtag); no header keeps "last write wins". */
+export function itemIfMatchAllows(header: string | string[] | undefined, liveUpdatedAt: number, pendingUpdatedAt?: number | null): boolean {
+  const raw = Array.isArray(header) ? header.join(',') : header
+  if (typeof raw !== 'string' || raw.trim() === '') return true
+  const current = itemEtag(liveUpdatedAt, pendingUpdatedAt)
+  return raw
+    .split(',')
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .some((t) => (t === '*' ? liveUpdatedAt > 0 : t === current))
+}
+
+function checkItemIfMatch(req: NextApiRequest, res: NextApiResponse, liveUpdatedAt: number, pendingUpdatedAt?: number | null): boolean {
+  if (itemIfMatchAllows(req.headers['if-match'], liveUpdatedAt, pendingUpdatedAt)) return true
+  const etag = itemEtag(liveUpdatedAt, pendingUpdatedAt)
+  sendVersionedJson(res, 409, { code: 'VERSION_CONFLICT', error: 'This was changed elsewhere since you loaded it', etag }, etag)
+  return false
+}
+
+/** A stored item counts as a draft when its `draft` flag is truthy (lib/mdx's rule). */
+export const isDraftFrontmatter = (fm: Record<string, any> | null | undefined) => Boolean(fm?.draft)
+
+/**
  * Admin CRUD for a collection (blog posts, case studies):
  *
- *   GET    ?slug=foo  → { slug, frontmatter, body, updatedAt } with ETag "<updatedAt>"
- *   GET               → { items } (drafts included)
- *   PUT    { slug, frontmatter, body, create? } (optional If-Match)
- *          → 200 { ok, etag, revalidated } with the new ETag
+ *   GET    ?slug=foo  → { slug, frontmatter, body, updatedAt, pending, redirectsFrom }
+ *                       with ETag itemEtag(live, pending); `pending` is the
+ *                       unpublished revision of a live item ({ frontmatter,
+ *                       body, updatedAt, baseUpdatedAt }) or null;
+ *                       `redirectsFrom` the old slugs that redirect here
+ *   GET               → { items } (drafts included; `pendingAt` per item)
+ *   PUT    { slug, frontmatter, body, create?, target? } (optional If-Match)
+ *          target 'live' (default): write the item (a pending revision is
+ *            superseded and dropped) → 200 { ok, etag, revalidated }
+ *          target 'pending': store the edits of a PUBLISHED item as its
+ *            pending revision; the public pages keep the live version and
+ *            nothing is regenerated → 200 { ok, pending, etag }
  *          → 409 { code:'SLUG_EXISTS' } when `create` hits an existing slug
+ *          → 409 { code:'NOT_PUBLISHED' } for target 'pending' on a draft
  *          → 409 { code:'VERSION_CONFLICT', etag } when If-Match is stale
  *          → 422 { code:'MDX_INVALID', line, column, reason } when the body
  *            does not compile (nothing is written)
+ *   POST   { action:'discard-pending', slug } → drop the pending revision
+ *   POST   { action:'rename', slug, to, redirect?, dryRun? } → move the item
+ *          to a new slug (lib/slugRename): the old address redirects (308)
+ *          unless redirect is false, internal links are rewritten; dryRun
+ *          only reports what would change
+ *   POST   { action:'remove-redirect', slug, from } → the old address `from`
+ *          stops redirecting to `slug`
  *   DELETE ?slug=foo  → { ok, snapshot, revalidated } (snapshot first; needs a
  *                       recent sign-in or step-up, else 403 STEP_UP_REQUIRED)
  */
@@ -452,25 +541,40 @@ export function createCollectionApi(c: Collection, opts: { noun: string; require
         if (typeof slug !== 'string' || !isSafeSlug(slug)) return res.status(400).json({ error: 'Invalid slug' })
         const one = readOne(c, slug)
         if (!one) return res.status(404).json({ error: 'Not found' })
-        return sendVersionedJson(res, 200, one, versionEtag(one.updatedAt))
+        const pending = getPendingRevision(c, slug)
+        return sendVersionedJson(
+          res,
+          200,
+          {
+            ...one,
+            pending: pending
+              ? { frontmatter: pending.frontmatter, body: pending.body, updatedAt: pending.updatedAt, baseUpdatedAt: pending.baseUpdatedAt }
+              : null,
+            redirectsFrom: redirectsTo(c, slug),
+          },
+          itemEtag(one.updatedAt, pending?.updatedAt),
+        )
       }
-      return res.status(200).json({ items: listAll(c) })
+      const pendingAt = pendingRevisionIndex(c)
+      return res.status(200).json({ items: listAll(c).map((i) => ({ ...i, pendingAt: pendingAt.get(i.slug) ?? null })) })
     }
 
     if (req.method === 'PUT') {
       const rl = rateLimit(req, 30, 10 * 60 * 1000)
       res.setHeader('X-RateLimit-Remaining', String(rl.remaining))
       if (!rl.allowed) return res.status(429).json({ error: 'Too many writes, try later' })
-      const { slug, frontmatter, body, create } = (req.body || {}) as {
+      const { slug, frontmatter, body, create, target } = (req.body || {}) as {
         slug?: unknown
         frontmatter?: unknown
         body?: unknown
         create?: unknown
+        target?: unknown
       }
       if (typeof slug !== 'string' || !slug) return res.status(400).json({ error: 'Missing slug' })
       if (!isSafeSlug(slug)) return res.status(400).json({ error: 'Invalid slug (use a-z, 0-9, -, _)' })
       if (!frontmatter || typeof frontmatter !== 'object' || Array.isArray(frontmatter))
         return res.status(400).json({ error: 'Missing frontmatter' })
+      if (target !== undefined && target !== 'live' && target !== 'pending') return res.status(400).json({ error: 'target must be "live" or "pending"' })
       const fm = frontmatter as Record<string, any>
       if (!fm.title) return res.status(400).json({ error: 'frontmatter.title required' })
       if (opts.requireDate && !fm.date) return res.status(400).json({ error: 'frontmatter.date required' })
@@ -489,11 +593,104 @@ export function createCollectionApi(c: Collection, opts: { noun: string; require
       if (create === true && existing) {
         return res.status(409).json({ code: 'SLUG_EXISTS', error: `A ${opts.noun} with this slug already exists` })
       }
-      if (!checkIfMatch(req, res, existing?.updatedAt ?? 0)) return
+      const pendingNow = existing ? getPendingRevision(c, slug) : null
+      if (!checkItemIfMatch(req, res, existing?.updatedAt ?? 0, pendingNow?.updatedAt)) return
+
+      if (target === 'pending') {
+        if (!existing || isDraftFrontmatter(existing.frontmatter)) {
+          return res.status(409).json({ code: 'NOT_PUBLISHED', error: `This ${opts.noun} is not published — save it directly` })
+        }
+        if (isDraftFrontmatter(fm)) return res.status(400).json({ error: 'Unpublishing is a direct save (target "live")' })
+        const rev = putPendingRevision(c, slug, fm, text, existing.updatedAt)
+        const etag = itemEtag(existing.updatedAt, rev.updatedAt)
+        return sendVersionedJson(res, 200, { ok: true, pending: { updatedAt: rev.updatedAt, baseUpdatedAt: rev.baseUpdatedAt }, etag }, etag)
+      }
+
       const result = await writeOne(c, slug, fm, text)
       if (!result.ok) return res.status(400).json({ error: result.error })
-      const etag = versionEtag(readOne(c, slug)?.updatedAt ?? 0)
+      // The editor sent its whole state: a pending revision is superseded.
+      const hadPending = deletePendingRevision(c, slug)
+      // A new item at an old address of a renamed one: the live item wins.
+      if (!existing) forgetRedirectFrom(c, slug)
+      if (existing && !isDraftFrontmatter(existing.frontmatter) && !isDraftFrontmatter(fm) && hadPending) {
+        const markedUpdated = typeof fm.updated === 'string' && !!fm.updated && fm.updated !== existing.frontmatter.updated
+        emitEditorialEvent({ action: 'publish-changes', collection: c, slug, markedUpdated }, { req })
+      }
+      const etag = itemEtag(readOne(c, slug)?.updatedAt ?? 0)
       return sendVersionedJson(res, 200, { ...result, etag, ...(await refreshCollection(res, c, slug, [existing?.frontmatter?.translationKey])) }, etag)
+    }
+
+    if (req.method === 'POST') {
+      const { action, slug } = (req.body || {}) as { action?: unknown; slug?: unknown }
+      if (typeof slug !== 'string' || !isSafeSlug(slug)) return res.status(400).json({ error: 'Invalid slug' })
+
+      if (action === 'discard-pending') {
+        const one = readOne(c, slug)
+        if (!one) return res.status(404).json({ error: 'Not found' })
+        const pending = getPendingRevision(c, slug)
+        if (!checkItemIfMatch(req, res, one.updatedAt, pending?.updatedAt)) return
+        const discarded = deletePendingRevision(c, slug)
+        if (discarded) emitEditorialEvent({ action: 'discard-changes', collection: c, slug }, { req })
+        const etag = itemEtag(one.updatedAt)
+        return sendVersionedJson(res, 200, { ok: true, discarded, etag }, etag)
+      }
+
+      if (action === 'rename') {
+        const { to, redirect, dryRun } = req.body as { to?: unknown; redirect?: unknown; dryRun?: unknown }
+        if (typeof to !== 'string') return res.status(400).json({ error: 'Missing new slug' })
+        const request = { collection: c, from: slug, to: to.trim().toLowerCase(), redirect: redirect !== false }
+        if (dryRun === true) {
+          const plan = await planRename(request)
+          if (!plan.ok) return res.status(plan.status).json({ code: plan.code, error: plan.error })
+          return res.status(200).json(plan)
+        }
+        const rl = rateLimit(req, 30, 10 * 60 * 1000)
+        res.setHeader('X-RateLimit-Remaining', String(rl.remaining))
+        if (!rl.allowed) return res.status(429).json({ error: 'Too many writes, try later' })
+        const one = readOne(c, slug)
+        if (!one) return res.status(404).json({ error: 'Not found' })
+        if (!checkItemIfMatch(req, res, one.updatedAt, getPendingRevision(c, slug)?.updatedAt)) return
+        const out = await renameSlug(request)
+        if (!out.ok) return res.status(out.status).json({ code: out.code, error: out.error })
+        emitEditorialEvent(
+          { action: 'rename', collection: c, from: slug, to: request.to, redirect: request.redirect, linksRewritten: out.links },
+          { req },
+        )
+        const failed = await revalidatePaths(res, out.paths)
+        const etag = itemEtag(out.updatedAt, getPendingRevision(c, request.to)?.updatedAt)
+        return sendVersionedJson(
+          res,
+          200,
+          {
+            ok: true,
+            slug: request.to,
+            etag,
+            rewrites: out.rewrites,
+            links: out.links,
+            redirectsFrom: redirectsTo(c, request.to),
+            ...(out.warnings.length ? { r2Warning: out.warnings.join('; ') } : {}),
+            revalidated: out.paths.filter((p) => !failed.includes(p)),
+            ...(failed.length ? { revalidateFailed: failed } : {}),
+          },
+          etag,
+        )
+      }
+
+      if (action === 'remove-redirect') {
+        const from = (req.body as { from?: unknown }).from
+        if (typeof from !== 'string' || !isSafeSlug(from)) return res.status(400).json({ error: 'Invalid old slug' })
+        if (!removeRedirect(c, from, slug)) return res.status(404).json({ error: 'No such redirect' })
+        emitEditorialEvent({ action: 'redirect-removed', collection: c, from, to: slug }, { req })
+        // The old address answers 404 from now on.
+        const failed = await revalidatePaths(res, [`/${c}/${from}`])
+        return res.status(200).json({
+          ok: true,
+          redirectsFrom: redirectsTo(c, slug),
+          ...(failed.length ? { revalidateFailed: failed } : {}),
+        })
+      }
+
+      return res.status(400).json({ error: 'Unknown action' })
     }
 
     if (req.method === 'DELETE') {
@@ -504,10 +701,11 @@ export function createCollectionApi(c: Collection, opts: { noun: string; require
       const previousKey = isSafeSlug(slug) ? getItem(c, slug)?.frontmatter?.translationKey : undefined
       const result = await deleteOne(c, slug)
       if (!result.ok) return res.status(result.error === 'Invalid slug' ? 400 : 404).json({ error: result.error })
+      deletePendingRevision(c, slug)
       return res.status(200).json({ ...result, ...(await refreshCollection(res, c, slug, [previousKey])) })
     }
 
-    res.setHeader('Allow', 'GET,PUT,DELETE')
+    res.setHeader('Allow', 'GET,PUT,POST,DELETE')
     return res.status(405).json({ error: 'Method not allowed' })
   }
 }

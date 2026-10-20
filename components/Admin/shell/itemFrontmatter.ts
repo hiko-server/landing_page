@@ -38,6 +38,8 @@ export const translationToServer = (fm: TranslationForm) => ({
   translationKey: normalizeTranslationKey(fm.translationKey) || undefined,
 })
 
+const textOf = (v: unknown) => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '')
+
 // ── Blog posts ───────────────────────────────────────────────────────────
 
 export type BlogFrontmatter = {
@@ -49,6 +51,12 @@ export type BlogFrontmatter = {
   cover: string
   /** Slug of the case study the post is about (linked both ways on the site); '' for none. */
   project: string
+  /** Search-result title when it should differ from the title (H1); '' = the title. */
+  seoTitle: string
+  /** "Mark as updated": the post's dateModified, YYYY-MM-DD ('' = none). */
+  updated: string
+  /** Description of the cover (shown in the social card's alt text). */
+  coverAlt: string
 } & TranslationForm
 
 export const BLOG_EMPTY: BlogFrontmatter = {
@@ -60,6 +68,9 @@ export const BLOG_EMPTY: BlogFrontmatter = {
   cover: '',
   project: '',
   ...TRANSLATION_EMPTY,
+  seoTitle: '',
+  updated: '',
+  coverAlt: '',
 }
 
 export const blogFromServer = (f: Record<string, any>): BlogFrontmatter => ({
@@ -71,6 +82,9 @@ export const blogFromServer = (f: Record<string, any>): BlogFrontmatter => ({
   cover: String(f.cover || ''),
   project: typeof f.project === 'string' ? f.project : '',
   ...translationFromServer(f),
+  seoTitle: textOf(f.seoTitle),
+  updated: cleanDate(f.updated),
+  coverAlt: textOf(f.coverAlt),
 })
 
 export const blogToServer = (fm: BlogFrontmatter, tags: string[]) => ({
@@ -82,6 +96,9 @@ export const blogToServer = (fm: BlogFrontmatter, tags: string[]) => ({
   cover: fm.cover || undefined,
   project: fm.project.trim() || undefined,
   ...translationToServer(fm),
+  seoTitle: fm.seoTitle.trim() || undefined,
+  updated: cleanDate(fm.updated) || undefined,
+  coverAlt: (fm.cover && fm.coverAlt.trim()) || undefined,
 })
 
 // ── Case studies ─────────────────────────────────────────────────────────
@@ -120,6 +137,8 @@ export type WorkFrontmatter = {
   published: string
   outcomes: OutcomeForm[]
   links: LinkForm[]
+  /** Search-result title when it should differ from the title (H1); '' = the title. */
+  seoTitle: string
 } & TranslationForm
 
 export const WORK_EMPTY: WorkFrontmatter = {
@@ -142,9 +161,8 @@ export const WORK_EMPTY: WorkFrontmatter = {
   outcomes: [],
   links: [],
   ...TRANSLATION_EMPTY,
+  seoTitle: '',
 }
-
-const textOf = (v: unknown) => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : '')
 
 function outcomesFromServer(raw: unknown): OutcomeForm[] {
   if (!Array.isArray(raw)) return []
@@ -209,6 +227,7 @@ export const workFromServer = (f: Record<string, any>): WorkFrontmatter => ({
   outcomes: outcomesFromServer(f.outcomes),
   links: linksFromServer(f.links),
   ...translationFromServer(f),
+  seoTitle: textOf(f.seoTitle),
 })
 
 export const workToServer = (fm: WorkFrontmatter, tech: string[]) => ({
@@ -231,6 +250,7 @@ export const workToServer = (fm: WorkFrontmatter, tech: string[]) => ({
   outcomes: outcomesToServer(fm.outcomes),
   links: linksToServer(fm.links),
   ...translationToServer(fm),
+  seoTitle: fm.seoTitle.trim() || undefined,
 })
 
 // ── Single pages (/now, /uses) ───────────────────────────────────────────

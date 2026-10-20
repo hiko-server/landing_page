@@ -156,13 +156,18 @@ test('a content store from before migrations adopts the baseline without touchin
 
     const db = new Database(file)
     const report = initSchema(db, { backupDir: path.join(dir, 'pre') })
-    assert.deepEqual(report.applied, [{ version: 1, name: 'baseline' }])
+    // The baseline is adopted as is; later migrations only add tables (expand-only).
+    assert.deepEqual(report.applied[0], { version: 1, name: 'baseline' })
+    assert.deepEqual(report.applied.map((a) => a.version), CONTENT_MIGRATIONS.map((x) => x.version))
     assert.equal(fs.existsSync(path.join(dir, 'pre')), false, 'adopting the baseline needs no copy')
+    // Every table, index and column the legacy store had is exactly as it was.
+    const legacyNames = new Set((before as Array<{ name: string }>).map((r) => r.name))
     const after = db
       .prepare(
-        "SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' AND name != 'schema_version' ORDER BY name"
+        "SELECT type, name, sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name"
       )
       .all()
+      .filter((r) => legacyNames.has((r as { name: string }).name))
     assert.deepEqual(after, before)
     assert.equal(count(db, 'SELECT count(*) AS n FROM kv'), 1)
     assert.equal(count(db, 'SELECT count(*) AS n FROM pages'), 1)
@@ -183,7 +188,7 @@ test('a versioned store is copied aside (VACUUM INTO) before a new migration, ne
     const pre = path.join(dir, 'pre')
     const next = [
       ...CONTENT_MIGRATIONS,
-      m(2, 'add-x', (d) => d.exec('ALTER TABLE kv ADD COLUMN x TEXT')),
+      m(CONTENT_MIGRATIONS.length + 1, 'add-x', (d) => d.exec('ALTER TABLE kv ADD COLUMN x TEXT')),
     ]
     let copy: string | null = null
     runMigrations(db, next, {
@@ -195,7 +200,7 @@ test('a versioned store is copied aside (VACUUM INTO) before a new migration, ne
     assert.ok(copy && fs.existsSync(copy), 'copy written')
     const snap = new Database(copy as unknown as string, { readonly: true })
     assert.equal(count(snap, 'SELECT count(*) AS n FROM kv'), 1)
-    assert.equal(currentVersion(snap), 1, 'the copy is the pre-migration state')
+    assert.equal(currentVersion(snap), CONTENT_MIGRATIONS.length, 'the copy is the pre-migration state')
     snap.close()
 
     for (let i = 0; i < PRE_MIGRATION_KEEP + 3; i++) {
@@ -298,18 +303,20 @@ test('the operator CLI reports status without writing and migrates a given file'
       { encoding: 'utf8' }
     )
     assert.equal(status.status, 0, status.stderr)
-    assert.match(status.stdout, /content\s+v0\/1\s+behind: 1-baseline/)
+    const all = CONTENT_MIGRATIONS.map((x) => `${x.version}-${x.name}`).join(', ')
+    const latest = CONTENT_MIGRATIONS.length
+    assert.ok(status.stdout.includes(`v0/${latest}  behind: ${all}`), status.stdout)
     const migrated = spawnSync(process.execPath, [cli, '--db', 'content', '--file', file], {
       encoding: 'utf8',
     })
     assert.equal(migrated.status, 0, migrated.stderr)
-    assert.match(migrated.stdout, /content: migrated v0 → v1 \(1-baseline\)/)
+    assert.ok(migrated.stdout.includes(`content: migrated v0 → v${latest} (${all})`), migrated.stdout)
     const again = spawnSync(
       process.execPath,
       [cli, '--status', '--db', 'content', '--file', file],
       { encoding: 'utf8' }
     )
-    assert.match(again.stdout, /content\s+v1\/1\s+current/)
+    assert.ok(again.stdout.includes(`v${latest}/${latest}  current`), again.stdout)
     const bad = spawnSync(process.execPath, [cli, '--db', 'nope'], { encoding: 'utf8' })
     assert.equal(bad.status, 2)
   } finally {

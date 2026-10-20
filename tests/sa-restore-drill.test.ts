@@ -10,6 +10,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { CONTENT_MIGRATIONS } from '../scripts/db/content/index.mjs'
 
 for (const k of ['R2_ENDPOINT', 'R2_BUCKET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY'])
   delete process.env[k]
@@ -67,7 +68,7 @@ test('with no snapshot yet the drill is recorded as skipped', async () => {
 test('a snapshot manifest records per-file SHA-256, row counts and the schema version', async () => {
   const snap = await backup.createSnapshot({ reason: 'manual' })
   assert.deepEqual(snap.manifest.counts, { pages: 1, collection_items: 2, kv: 1 })
-  assert.equal(snap.manifest.schemaVersion, 1)
+  assert.equal(snap.manifest.schemaVersion, CONTENT_MIGRATIONS.length)
   assert.ok(snap.manifest.files.length >= 2)
   for (const f of snap.manifest.files) assert.match(f.sha256 || '', /^[0-9a-f]{64}$/, f.path)
 })

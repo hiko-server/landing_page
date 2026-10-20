@@ -58,16 +58,17 @@ function workSave(stored: Record<string, any>, edit: (fm: ReturnType<typeof work
 // ── Merge ────────────────────────────────────────────────────────────────
 
 test('modelledKeys: the keys of the empty form and of what toServer writes', () => {
-  // reading-work D8 added the post's case study (`project`); i18n-content F2 the language and translation key.
-  assert.deepEqual([...BLOG_KEYS].sort(), ['cover', 'date', 'description', 'draft', 'lang', 'project', 'tags', 'title', 'translationKey'])
-  assert.ok(WORK_KEYS.has('coverAlt') && WORK_KEYS.has('status') && !WORK_KEYS.has('seoTitle'))
+  // reading-work D8 added the post's case study (`project`); i18n-content F2 the language and
+  // translation key; admin-editorial H1 the search title, "Mark as updated" and the post cover alt.
+  assert.deepEqual([...BLOG_KEYS].sort(), ['cover', 'coverAlt', 'date', 'description', 'draft', 'lang', 'project', 'seoTitle', 'tags', 'title', 'translationKey', 'updated'])
+  assert.ok(WORK_KEYS.has('coverAlt') && WORK_KEYS.has('status') && WORK_KEYS.has('seoTitle') && WORK_KEYS.has('lang') && WORK_KEYS.has('translationKey') && !WORK_KEYS.has('updated'))
   assert.deepEqual([...PAGE_MODELLED_KEYS].sort(), ['description', 'title', 'updated'])
   assert.deepEqual([...modelledKeys(null, undefined, { a: undefined })], ['a'])
 })
 
 test('unmodelledFrontmatter: the stored keys the form does not show, as stored', () => {
-  const stored = { title: 'T', seoTitle: 'S', updated: '2026-10-01', tags: ['x'], outcomes: [{ k: 1 }], gone: undefined }
-  assert.deepEqual(unmodelledFrontmatter(stored, BLOG_KEYS), { seoTitle: 'S', updated: '2026-10-01', outcomes: [{ k: 1 }] })
+  const stored = { title: 'T', seoTitle: 'S', updated: '2026-10-01', tags: ['x'], outcomes: [{ k: 1 }], featuredQuote: 'q', gone: undefined }
+  assert.deepEqual(unmodelledFrontmatter(stored, BLOG_KEYS), { outcomes: [{ k: 1 }], featuredQuote: 'q' })
   assert.deepEqual(unmodelledFrontmatter(null, BLOG_KEYS), {})
   assert.deepEqual(unmodelledFrontmatter(['x'], BLOG_KEYS), {})
 })
@@ -99,7 +100,9 @@ test('post form: seoTitle, updated, lang, coverAlt and unknown keys survive a sa
     outcomes: ['61 ms inference'],
   }
   // Before the fix the editor sent only this: every unmodelled key was lost.
-  assert.equal('seoTitle' in blogToServer(blogFromServer(stored), stored.tags), false)
+  assert.equal('outcomes' in blogToServer(blogFromServer(stored), stored.tags), false)
+  // The SEO fields are modelled since H1 (the "Search & sharing" panel edits them).
+  assert.equal(blogToServer(blogFromServer(stored), stored.tags).seoTitle, stored.seoTitle)
 
   const saved = blogSave(stored, (fm) => {
     fm.title = 'Edge waste sorter, revisited'

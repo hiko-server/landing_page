@@ -111,6 +111,9 @@ export function adminShortcutGroups(isMac: boolean, tabCount: number): ShortcutG
         { keys: [mod, '⇧', 'P'], label: 'Toggle Write / Preview' },
         { keys: ['/'], label: 'Insert a block (slash menu)' },
         { keys: [mod, 'K'], label: 'Add or edit a link' },
+        { keys: [mod, 'F'], label: 'Find & replace in the body' },
+        { keys: ['Enter', '⇧ Enter'], label: 'Next / previous match' },
+        { keys: [mod, 'Enter'], label: 'Replace all (in the replace field)' },
       ],
     },
   ]

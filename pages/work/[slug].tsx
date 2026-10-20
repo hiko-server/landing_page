@@ -27,7 +27,7 @@ import type { SwitchLink } from '../../lib/translations'
 import { markdownTwinPath } from '../../lib/markdownTwinPaths'
 import { tagHref } from '../../lib/tagFilter'
 import type { AuthorCardData } from '../../lib/authorCard'
-import { articleImageUrls, breadcrumb, absUrl, caseStudyNode, ogLangOf, PERSON_NAME, type Alternate, type ArticleCards, type OgImageOptions } from '../../lib/schema'
+import { articleImageUrls, breadcrumb, absUrl, cardImageAlt, caseStudyNode, ogLangOf, PERSON_NAME, type Alternate, type ArticleCards, type OgImageOptions } from '../../lib/schema'
 import { signedOgImageUrl } from '../../lib/og/sign'
 
 type Props = {
@@ -64,6 +64,8 @@ type Props = {
   ui: ArticleUi
   /** hreflang alternates of the case study and its translations (empty without translations). */
   alternates: Alternate[]
+  /** Draft Mode is showing the case study's unpublished changes, not its live version (H4). */
+  pendingPreview: boolean
 }
 
 const MONO = 'var(--font-geist-mono), monospace'
@@ -91,6 +93,7 @@ export default function WorkCase({
   translations,
   alternates,
   ui: articleUi,
+  pendingPreview,
 }: Props) {
   const path = `/work/${slug}`
   const url = absUrl(path)
@@ -168,7 +171,7 @@ export default function WorkCase({
         fallbackDescription={excerpt}
         url={url}
         image={image}
-        imageAlt={`${frontmatter.title} — ${PERSON_NAME}`}
+        imageAlt={cardImageAlt(frontmatter.title, cover?.src, frontmatter.coverAlt)}
         type="article"
         lang={lang}
         noindex={draftMode}
@@ -254,7 +257,7 @@ export default function WorkCase({
             />
           </ArticleRoot>
         </Box>
-        {draftMode && <DraftBar path={path} />}
+        {draftMode && <DraftBar path={path} pending={pendingPreview} />}
       </HeaderFooter>
     </>
   )
@@ -268,8 +271,10 @@ export const getStaticPaths: GetStaticPaths = async () => ({
 export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
   const slug = String(ctx.params?.slug || '')
   const draftMode = ctx.draftMode === true
-  const w = await getWork(slug, { includeDrafts: draftMode })
-  if (!w) return { notFound: true, revalidate: 60 }
+  // Draft Mode shows drafts, and a live case study's unpublished changes (H4).
+  const w = await getWork(slug, { includeDrafts: draftMode, pending: draftMode })
+  // No item: a renamed case study's old address redirects permanently (308) to the new one (H6), else 404.
+  if (!w) return (await import('../../lib/redirects')).missingItemProps('work', slug, draftMode)
 
   const [{ resolveCover }, { loadAuthorCard }, { qrSvg }, { articleSiblings }] = await Promise.all([
     import('../../lib/coverImage'),
@@ -325,6 +330,7 @@ export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
       translations,
       alternates,
       ui: articleUiFor(w.lang),
+      pendingPreview: draftMode && !!(await import('../../lib/pendingRevisions')).getPendingRevision('work', w.slug),
       // Whether /publications exists, for the nav link (lib/publicationsData).
       ...(await import('../../lib/publicationsData')).chromePublicationsProp(),
     },

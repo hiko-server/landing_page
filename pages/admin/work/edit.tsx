@@ -7,6 +7,7 @@ import { LinksField, OutcomesField } from '../../../components/Admin/shell/Glanc
 import { useMdxItemEditor } from '../../../components/Admin/shell/useMdxItemEditor'
 import TranslationField from '../../../components/Admin/shell/TranslationField'
 import MdxItemEditorFrame from '../../../components/Admin/editor/MdxItemEditorFrame'
+import SlugField from '../../../components/Admin/editor/SlugField'
 import CaseStudyTemplateCard from '../../../components/Admin/editor/CaseStudyTemplateCard'
 import { DESCRIPTION_MAX, TITLE_MAX } from '../../../components/Admin/shell/publishChecks'
 import { SUMMARY_MAX, TEAM_MAX } from '../../../lib/caseStudy'
@@ -59,30 +60,7 @@ function WorkEditor() {
           </FormControl>
 
           <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-            <FormControl isRequired>
-              <FormLabel fontSize="13px" htmlFor="item-slug">
-                Slug
-              </FormLabel>
-              <Input
-                {...inputProps}
-                id="item-slug"
-                value={ed.slug}
-                placeholder="my-project"
-                onChange={(e) => ed.setSlug(e.target.value.trim().toLowerCase())}
-                isReadOnly={!ed.isNew}
-                fontFamily={MONO}
-                fontSize="14px"
-                autoComplete="off"
-                spellCheck={false}
-              />
-              <FormHelperText fontSize="xs" color={ed.slugHint ? 'orange.400' : 'page.fg-secondary'}>
-                {ed.slugHint
-                  ? `${ed.slugHint} — the title has no English words to build one from.`
-                  : ed.isNew
-                    ? 'Follows the title until you edit it. a–z, 0–9, - and _; becomes /work/<slug> and can’t be changed later.'
-                    : `Published at /work/${ed.slug}`}
-              </FormHelperText>
-            </FormControl>
+            <SlugField ed={ed} collection="work" placeholder="my-project" />
             <FormControl>
               <FormLabel fontSize="13px" htmlFor="item-period">
                 Period

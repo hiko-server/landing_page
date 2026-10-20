@@ -15,7 +15,7 @@ import LanguageSwitch from '../../components/Article/LanguageSwitch'
 import { neighbours, projectLinks, relatedArticles, toArticleLink, type ArticleLink } from '../../components/Article/collectionNav'
 import { listPosts, getPost, type HastRoot, type PostFrontmatter } from '../../lib/mdx'
 import { labelLang, type TocEntry } from '../../lib/toc'
-import { articleImageUrls, blogPostingNode, breadcrumb, absUrl, ogLangOf, PERSON_NAME, type Alternate, type ArticleCards, type OgImageOptions } from '../../lib/schema'
+import { articleImageUrls, blogPostingNode, breadcrumb, absUrl, cardImageAlt, ogLangOf, PERSON_NAME, type Alternate, type ArticleCards, type OgImageOptions } from '../../lib/schema'
 import { signedOgImageUrl } from '../../lib/og/sign'
 import { tagHref } from '../../lib/tagFilter'
 import type { AuthorCardData } from '../../lib/authorCard'
@@ -58,6 +58,8 @@ type Props = {
   ui: ArticleUi
   /** hreflang alternates of the post and its translations (empty without translations). */
   alternates: Alternate[]
+  /** Draft Mode is showing the post's unpublished changes, not its live version (H4). */
+  pendingPreview: boolean
 }
 
 const MONO = 'var(--font-geist-mono), monospace'
@@ -83,6 +85,7 @@ export default function BlogPost({
   translations,
   alternates,
   ui: articleUi,
+  pendingPreview,
 }: Props) {
   const path = `/blog/${slug}`
   const url = absUrl(path)
@@ -134,7 +137,7 @@ export default function BlogPost({
         fallbackDescription={excerpt}
         url={url}
         image={image}
-        imageAlt={`${frontmatter.title} — ${PERSON_NAME}`}
+        imageAlt={cardImageAlt(frontmatter.title, frontmatter.cover, frontmatter.coverAlt)}
         type="article"
         lang={lang}
         noindex={draftMode}
@@ -209,7 +212,7 @@ export default function BlogPost({
             />
           </ArticleRoot>
         </Box>
-        {draftMode && <DraftBar path={path} />}
+        {draftMode && <DraftBar path={path} pending={pendingPreview} />}
       </HeaderFooter>
     </>
   )
@@ -223,8 +226,10 @@ export const getStaticPaths: GetStaticPaths = async () => ({
 export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
   const slug = String(ctx.params?.slug || '')
   const draftMode = ctx.draftMode === true
-  const post = await getPost(slug, { includeDrafts: draftMode })
-  if (!post) return { notFound: true, revalidate: 60 }
+  // Draft Mode shows drafts, and a live post's unpublished changes (H4).
+  const post = await getPost(slug, { includeDrafts: draftMode, pending: draftMode })
+  // No item: a renamed post's old address redirects permanently (308) to the new one (H6), else 404.
+  if (!post) return (await import('../../lib/redirects')).missingItemProps('blog', slug, draftMode)
 
   const [{ loadAuthorCard }, { qrSvg }, { articleSiblings }] = await Promise.all([
     import('../../lib/authorCard'),
@@ -277,6 +282,7 @@ export const getStaticProps: GetStaticProps<Props> = async (ctx) => {
       translations,
       alternates,
       ui: articleUiFor(post.lang),
+      pendingPreview: draftMode && !!(await import('../../lib/pendingRevisions')).getPendingRevision('blog', post.slug),
       // Whether /publications exists, for the nav link (lib/publicationsData).
       ...(await import('../../lib/publicationsData')).chromePublicationsProp(),
     },

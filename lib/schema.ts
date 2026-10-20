@@ -396,6 +396,20 @@ export function articleImageUrls(cards: { card: string; square: string }, cover?
   return out
 }
 
+/** Covers the social card can show (Satori decodes PNG and JPEG only; lib/security/ogParams). */
+export const CARD_COVER_RE = /^\/uploads\/[^/?#]+\.(?:png|jpe?g)$/i
+
+/**
+ * Alt text of an article's social card (og:image:alt, twitter:image:alt):
+ * "<title> — <name>", followed by the owner's description of the cover
+ * (`coverAlt`) when the card actually shows that cover (H1).
+ */
+export function cardImageAlt(title: string, cover?: string, coverAlt?: string): string {
+  const base = `${(title || '').replace(/\s+/g, ' ').trim()} — ${PERSON_NAME}`
+  const alt = (coverAlt || '').replace(/\s+/g, ' ').trim()
+  return alt && CARD_COVER_RE.test((cover || '').trim()) ? `${base}. ${alt}` : base
+}
+
 /** The social card options of an article (the page loader signs them; lib/og/sign.ts). */
 export type ArticleCards = { card: string; square: string }
 
