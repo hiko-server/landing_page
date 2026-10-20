@@ -7,6 +7,7 @@
  * A paper prints as a citation in lines: title, authors (a hidden co-author
  * as "…"), venue line, date, "Status: …" for anything not yet published,
  * award, then the DOI as its https://doi.org/ URL and the other links.
+ * The owner's ORCID iD is a labelled line, "ORCID: https://orcid.org/…".
  */
 
 import type { CvLang } from '../cvVisibility'
@@ -103,8 +104,10 @@ export function renderCvText(model: CvDocModel): string {
   if (c.location) out.push(c.location)
   const reach = [c.phone ? `${L.phone}${L.sep}${c.phone}` : '', c.email ? `${L.email}${L.sep}${c.email}` : ''].filter(Boolean)
   if (reach.length) out.push(reach.join(' | '))
-  const web = [c.website ? c.website.href || c.website.text : '', ...c.profiles.map((p) => p.href)].filter(Boolean)
+  // GitHub / LinkedIn with the website; the ORCID iD on a labelled line of its own.
+  const web = [c.website ? c.website.href || c.website.text : '', ...c.profiles.filter((p) => p.kind !== 'orcid').map((p) => p.href)].filter(Boolean)
   if (web.length) out.push(web.join(' | '))
+  for (const p of c.profiles) if (p.kind === 'orcid') out.push(`${p.label}${L.sep}${p.href}`)
   for (const line of model.headerLines) out.push(`${line.label}${L.sep}${line.value}`)
   if (model.summary) {
     if (out.length) out.push('')

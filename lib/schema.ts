@@ -12,6 +12,7 @@
  */
 
 import type { CvSectionLike } from './cvVisibility'
+import { canonicalOrcid, orcidRecordUrl } from './orcid/uri'
 
 const HOST = process.env.NEXT_PUBLIC_SITE_HOST || 'lucian-dev.com'
 
@@ -102,6 +103,12 @@ export type PersonFacts = {
   /** Schools of studies that are running right now. */
   affiliation?: ReadonlyArray<{ name: string }>
   /**
+   * The owner's ORCID iD (public Personal Info, canonical bare form —
+   * lib/personFacts reads it with lib/orcid/cv orcidOf): the record's URI
+   * joins `sameAs` and the iD becomes an ORCID `identifier` PropertyValue.
+   */
+  orcid?: string
+  /**
    * When these facts last changed (ISO): the later of the CV and home
    * saves. Not part of the Person node — pages put it on their ProfilePage.
    */
@@ -122,8 +129,18 @@ const PERSON_FACT_KEYS = new Set([
   'knowsLanguage',
   'worksFor',
   'affiliation',
+  'orcid',
   'dateModified',
 ])
+
+/**
+ * The ORCID `identifier` of a Person node (schema.org PropertyValue: the
+ * bare iD as `value`, the record's URI as `url`), or null without a valid iD.
+ */
+export function orcidIdentifier(id: unknown): { '@type': 'PropertyValue'; propertyID: 'ORCID'; value: string; url: string } | null {
+  const bare = canonicalOrcid(id)
+  return bare ? { '@type': 'PropertyValue', propertyID: 'ORCID', value: bare, url: orcidRecordUrl(bare) } : null
+}
 
 const nonEmpty = (v: unknown): v is string => typeof v === 'string' && v.trim() !== ''
 const uniq = (list: string[]) => Array.from(new Set(list.map((s) => s.trim()).filter(Boolean)))
@@ -188,7 +205,9 @@ export function personNode(data: PersonFacts & Record<string, unknown> = {}) {
   const affiliation = (data.affiliation || [])
     .filter((a) => a && nonEmpty(a.name))
     .map((a) => ({ '@type': 'EducationalOrganization', name: a.name.trim() }))
-  const sameAs = uniq([...(data.sameAs && data.sameAs.length ? data.sameAs : DEFAULT_SAME_AS)])
+  const orcid = orcidRecordUrl(data.orcid)
+  const sameAs = uniq([...(data.sameAs && data.sameAs.length ? data.sameAs : DEFAULT_SAME_AS), ...(orcid ? [orcid] : [])])
+  const identifier = orcidIdentifier(data.orcid)
   const address =
     typeof data.address === 'string'
       ? data.address.trim() || undefined
@@ -207,6 +226,7 @@ export function personNode(data: PersonFacts & Record<string, unknown> = {}) {
     jobTitle: nonEmpty(data.jobTitle) ? data.jobTitle.trim() : DEFAULT_JOB_TITLE,
     ...(nonEmpty(data.description) ? { description: data.description.trim() } : {}),
     sameAs,
+    ...(identifier ? { identifier } : {}),
     ...(alumniOf.length ? { alumniOf } : {}),
     ...(affiliation.length ? { affiliation } : {}),
     ...(worksFor ? { worksFor } : {}),
@@ -232,6 +252,11 @@ export function personFactsFromCv(sections: readonly CvSectionLike[] | null | un
 
   const info = find('personalInformation')
   if (info && nonEmpty(info.address)) facts.address = info.address.trim()
+  // Pruned data: a hidden iD arrives blank. Saves store the canonical bare iD
+  // (lib/orcid/id withBareOrcid); the light check keeps this module small on
+  // every page — lib/personFacts reads the iD with the full normaliser.
+  const orcid = info ? canonicalOrcid(info.orcid) : ''
+  if (orcid) facts.orcid = orcid
 
   const education = find('education')
   const schools = Array.isArray(education?.educationExperience)

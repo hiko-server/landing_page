@@ -9,6 +9,7 @@ import PublicationItem, { pillProps } from '../components/Publications/Publicati
 import { copyText } from '../components/MDX/clipboard'
 import { useChromeToast } from '../components/Chrome/useChromeToast'
 import { CopyIcon } from '../components/Icons/ui/content'
+import OrcidIdLink from '../components/Common/OrcidIdLink'
 import { absUrl } from '../lib/schema'
 import { ogPresetUrl } from '../lib/og/presets'
 import { STATUS_GROUP_LABELS, STATUS_LABELS, type PublicationStatus } from '../lib/publications/types'
@@ -30,8 +31,10 @@ import type { HomeData } from '../lib/homeShape'
  * lang="zh-Hans"). Each paper has an anchor (#<citation key>), a formatted
  * citation with the owner emphasised, a status label unless published, its
  * links, a collapsible abstract and Copy BibTeX / Copy APA. Year and status
- * filters appear from FILTER_THRESHOLD papers on. JSON-LD: a CollectionPage
- * whose ItemList holds one ScholarlyArticle per paper (lib/publications/jsonld).
+ * filters appear from FILTER_THRESHOLD papers on. The header shows the
+ * owner's ORCID iD once it is public (icon + record URI). JSON-LD: a
+ * CollectionPage whose ItemList holds one ScholarlyArticle per paper
+ * (lib/publications/jsonld; the owner is identified by the ORCID URI).
  */
 
 type Item = PublicationsPageItem
@@ -59,7 +62,7 @@ const chip = (selected: boolean) => ({
   _focusVisible: { outline: '2px solid var(--accent)', outlineOffset: '2px' },
 })
 
-export default function PublicationsPage({ items, lang, jsonLd, description, summary }: Props) {
+export default function PublicationsPage({ items, lang, jsonLd, description, summary, orcid }: Props) {
   const toast = useChromeToast()
   const [filter, setFilter] = useState<PublicationFilter>({ year: null, status: null })
   const filterable = items.length >= FILTER_THRESHOLD
@@ -166,6 +169,18 @@ export default function PublicationsPage({ items, lang, jsonLd, description, sum
               <>
                 {summary.charAt(0).toUpperCase() + summary.slice(1)}. Copy any entry as BibTeX or APA
                 {items.length > 1 ? ', or the whole list at once' : ''}.
+                {orcid ? (
+                  // The author's ORCID iD under the lede: the iD icon, then the record's URI (ORCID's display guidelines).
+                  <Box as="span" display="block" mt={3} fontSize="14px" lineHeight="1.6">
+                    <OrcidIdLink
+                      id={orcid}
+                      iconSize={16}
+                      color="page.fg"
+                      _hover={{ color: 'accent.text', textDecoration: 'none' }}
+                      _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '3px', borderRadius: 'sm' }}
+                    />
+                  </Box>
+                ) : null}
               </>
             }
             actions={

@@ -19,6 +19,7 @@ import { CV_PAGE_PATHS, revalidatePaths } from '../../lib/revalidate'
 import { warmCvExports } from '../../lib/cvExport/service'
 import { trackPublicationsNav } from '../../lib/publicationsNav'
 import { validateCvDoc, type CvValidationError } from '../../lib/cvValidate'
+import { withBareOrcid } from '../../lib/orcid/id'
 import { withApi } from '../../lib/apiHandler'
 import type { Logger } from '../../lib/log'
 
@@ -149,8 +150,9 @@ export default withApi('cvdata', async (req: NextApiRequest, res: NextApiRespons
     if (!rl.allowed) return res.status(429).json({ error: 'Too many updates, try later' })
     const body = req.body && typeof req.body === 'object' ? req.body : {}
     const syncZh = !!body.syncZh
-    const en = parseLoose(body.en)
-    const zh = parseLoose(body.zh)
+    // A pasted ORCID link is stored as the bare iD (lib/orcid/id).
+    const en = withBareOrcid(parseLoose(body.en))
+    const zh = withBareOrcid(parseLoose(body.zh))
     if (en === undefined && zh === undefined) return res.status(400).json({ error: 'Missing payload' })
     if ((en !== undefined && !isSectionArray(en)) || (zh !== undefined && !isSectionArray(zh))) {
       return res.status(400).json({ error: 'Each language must be an array of sections with a string "sessionName"' })
@@ -244,6 +246,8 @@ export default withApi('cvdata', async (req: NextApiRequest, res: NextApiRespons
       if ((enIn && !isSectionArray(enIn)) || (zhIn && !isSectionArray(zhIn))) {
         return res.status(400).json({ error: 'Each language must be an array of sections with a string "sessionName"' })
       }
+      enIn = withBareOrcid(enIn)
+      zhIn = withBareOrcid(zhIn)
       const checkedImport = validateCvDoc({ en: enIn, zh: zhIn })
       if (!checkedImport.ok) return sendInvalid(res, checkedImport.errors)
       const current = readCvData()

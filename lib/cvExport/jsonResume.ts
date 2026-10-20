@@ -7,7 +7,8 @@
  *
  * Mapping (empty values are omitted, never written as ""):
  *   personalInformation → basics (location as free text in `address`;
- *                         GitHub / LinkedIn → profiles)
+ *                         GitHub / LinkedIn → profiles, and the ORCID iD as
+ *                         { network: 'ORCID', username: <iD>, url: <URI> })
  *   workExperience      → work   (relatedSkills → `keywords`)
  *   education           → education
  *   project             → projects (live / case study / repository URLs)

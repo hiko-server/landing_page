@@ -53,8 +53,13 @@ export interface FieldDef {
    * other language (text fields stay per language).
    */
   shared?: boolean
-  /** Extra validation of a text value: 'doi' (10.xxxx/…), 'https-link' (https:// or a same-site path). */
-  format?: 'doi' | 'https-link'
+  /**
+   * Extra validation of a text value: 'doi' (10.xxxx/…), 'https-link'
+   * (https:// or a same-site path), 'orcid' (an ORCID iD with a correct
+   * checksum; a pasted https://orcid.org/… link is accepted and stored as
+   * the bare iD).
+   */
+  format?: 'doi' | 'https-link' | 'orcid'
   /** The save is refused when this field is empty while the named sibling field has content. */
   requiredWhen?: string
 }
@@ -141,6 +146,16 @@ export const CV_SECTIONS: SectionDef[] = [
         kind: 'url',
         placeholder: 'https://www.linkedin.com/in/you',
         help: 'In the CV header, its files and the vCard. Empty: the Home → Socials link. Hide it to leave LinkedIn off.',
+      },
+      {
+        key: 'orcid',
+        label: 'ORCID iD',
+        kind: 'text',
+        format: 'orcid',
+        shared: true,
+        span: 2,
+        placeholder: '0000-0000-0000-0000',
+        help: 'Paste your iD or its https://orcid.org/… link; the bare iD is stored. Shown with the ORCID iD icon on /cv, /publications and /about, in the CV files, the vCard and structured data; Publications can import your works from it. Hide it to leave ORCID off everywhere.',
       },
       { key: 'address', label: 'Location', kind: 'text', span: 2 },
       { key: 'introduction', label: 'Summary', kind: 'textarea', span: 2 },

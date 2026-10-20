@@ -317,12 +317,25 @@ class Writer {
       this.para(this.root, 'H1', runs, { width: leftW, size: SIZE.name, gapAfter: 1 })
     }
     const web: Run[] = []
-    const items = [...(c.website ? [c.website] : []), ...c.profiles]
+    const items = [...(c.website ? [c.website] : []), ...c.profiles.filter((p) => p.kind !== 'orcid')]
     items.forEach((link, i) => {
       if (i) web.push({ text: '  ·  ', size: SIZE.contact, color: SUBTLE })
       web.push({ text: link.text, size: SIZE.contact, color: link.href ? this.linkColor : BODY, link: link.href || undefined, keep: true })
     })
     if (web.length) this.para(this.root, 'P', web, { width: leftW, size: SIZE.contact })
+    // The ORCID iD as a labelled text link ("ORCID: https://orcid.org/…") — no vector logo in the PDF.
+    for (const p of c.profiles) {
+      if (p.kind !== 'orcid') continue
+      this.para(
+        this.root,
+        'P',
+        [
+          { text: `${p.label}${sep}`, size: SIZE.contact, color: MUTED },
+          { text: p.href, size: SIZE.contact, color: this.linkColor, link: p.href, keep: true },
+        ],
+        { width: leftW, size: SIZE.contact },
+      )
+    }
     // The availability lines: right to work, and 求职意向 on the Chinese CV.
     const lineSep = model.lang === 'zh' ? '：' : ': '
     model.headerLines.forEach((line, i) => {

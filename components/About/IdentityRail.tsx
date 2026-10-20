@@ -13,6 +13,7 @@ import { clearOfHeader } from '../../lib/anchorOffset'
 import { cvPdfPath } from '../../lib/cvExport/paths'
 import type { CvLang } from '../../lib/cvVisibility'
 import { aboutHeading, paperCount, type AboutNavEntry } from './aboutNav'
+import OrcidIdLink from '../Common/OrcidIdLink'
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 
@@ -69,10 +70,12 @@ function useActiveSection(ids: readonly string[]): string | null {
 /**
  * /about identity rail — the page header: portrait, names (the h1),
  * availability, the CV, the publications (a link with the count, once
- * /publications lists a paper), profiles and, from lg up, a nav of the
- * page's sections with the current one marked. Sticky beside the content on
- * large screens (scrolling inside itself if the window is too short), a
- * plain header block above it on smaller ones and in print.
+ * /publications lists a paper), profiles, the ORCID iD (once set: the iD
+ * icon and the record's URI, per ORCID's display guidelines) and, from lg
+ * up, a nav of the page's sections with the current one marked. Sticky
+ * beside the content on large screens (scrolling inside itself if the
+ * window is too short), a plain header block above it on smaller ones and
+ * in print.
  */
 export default function IdentityRail({
   brand,
@@ -83,6 +86,7 @@ export default function IdentityRail({
   nav,
   cvLang = 'en',
   publicationCount = 0,
+  orcid = '',
 }: {
   brand?: string
   identity?: HeroIdentity | null
@@ -94,6 +98,8 @@ export default function IdentityRail({
   cvLang?: CvLang
   /** Papers on /publications; 0 = no page, no link. */
   publicationCount?: number
+  /** The owner's public ORCID iD (bare, lib/cvLinks orcidOf); '' = no link. */
+  orcid?: string
 }) {
   const heading = aboutHeading(identity)
   const nick = identity?.name && identity.nick && identity.nick !== heading ? identity.nick : ''
@@ -278,6 +284,22 @@ export default function IdentityRail({
                 →
               </span>
             </Flex>
+          </Box>
+        ) : null}
+
+        {orcid ? (
+          <Box mt={publicationCount > 0 ? 1 : 3} sx={{ '@media print': { display: 'none' } }}>
+            <OrcidIdLink
+              id={orcid}
+              iconSize={16}
+              minH="32px"
+              fontSize="14px"
+              fontWeight={500}
+              color="page.fg"
+              borderRadius="md"
+              _hover={{ color: 'accent.text', textDecoration: 'none' }}
+              _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '3px' }}
+            />
           </Box>
         ) : null}
 

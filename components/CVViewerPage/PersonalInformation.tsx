@@ -5,6 +5,7 @@ import type { CvLang } from '../../lib/cvVisibility'
 import { cvLabels, displayUrl, safeHref } from '../../lib/cvFormat'
 import { profileLinks } from '../../lib/cvLinks'
 import EmailText from '../Common/EmailText'
+import OrcidIdLink from '../Common/OrcidIdLink'
 import { composeName } from './cvName'
 import { cvSectionAnchor, field } from './fields'
 import { ANCHOR_SCROLL_MARGIN } from './primitives'
@@ -25,7 +26,9 @@ export { composeName, publicNameZh } from './cvName'
  *
  * Profile links (GitHub / LinkedIn, lib/cvLinks.ts) follow the website on
  * the name's line: the page decorates the public section with them (the
- * CV's own value, else Home → Socials; nothing for a hidden field).
+ * CV's own value, else Home → Socials; nothing for a hidden field). The
+ * ORCID iD, when set, takes the next line as ORCID's display guidelines
+ * want it: the iD icon, then the full https://orcid.org/… URI.
  */
 
 const PersonalInformationSection = ({ data, lang = 'en' }: { data: PersonalInformation; lang?: CvLang }) => {
@@ -33,7 +36,9 @@ const PersonalInformationSection = ({ data, lang = 'en' }: { data: PersonalInfor
   const { main, aside } = composeName(data, lang)
   const website = field(data, 'personalWebsite')
   const websiteHref = safeHref(website)
-  const profiles = profileLinks(data)
+  const allProfiles = profileLinks(data)
+  const profiles = allProfiles.filter((p) => p.kind !== 'orcid')
+  const orcid = allProfiles.find((p) => p.kind === 'orcid')
   const address = field(data, 'address')
   const phone = field(data, 'phoneNumber')
   const email = field(data, 'email')
@@ -41,7 +46,7 @@ const PersonalInformationSection = ({ data, lang = 'en' }: { data: PersonalInfor
   // Owner-entered lines from the availability (right-to-work, 求职意向), via context.
   const extras = useCvHeaderLines(lang)
 
-  const hasHeader = !!(main || aside || website || profiles.length || address || phone || email)
+  const hasHeader = !!(main || aside || website || profiles.length || orcid || address || phone || email)
   if (!hasHeader && !intro) return null
   const sep = lang === 'zh' ? '：' : ': '
 
@@ -88,6 +93,11 @@ const PersonalInformationSection = ({ data, lang = 'en' }: { data: PersonalInfor
                     </Link>
                   </React.Fragment>
                 ))}
+              </Text>
+            ) : null}
+            {orcid ? (
+              <Text fontSize="12px" mt="3px" lineHeight="1.5">
+                <OrcidIdLink id={orcid.href} iconSize={16} color="var(--cv-separator-color, blue)" verticalAlign="top" />
               </Text>
             ) : null}
           </Box>

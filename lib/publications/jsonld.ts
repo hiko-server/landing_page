@@ -3,7 +3,8 @@
  *
  * Each paper is a ScholarlyArticle (a Thesis for theses) whose `author`
  * list keeps the paper's order, with the owner as the site's one Person
- * entity (lib/schema PERSON_ID) and co-authors as plain Persons. Where it
+ * entity (lib/schema PERSON_ID — or, once the owner's ORCID iD is public,
+ * that record's URI as the `@id`) and co-authors as plain Persons. Where it
  * appeared:
  *   journal                      isPartOf PublicationIssue → PublicationVolume → Periodical
  *                                (as far as issue / volume are given)
@@ -27,8 +28,15 @@ import { statusLabel, type Publication } from './types'
 export type ScholarlyNodeOptions = {
   /** Absolute URL of the paper's anchor on /publications ("https://…/publications#li2025deep"). */
   id: string
-  /** The site Person as an author node ({ '@type': 'Person', '@id', name, url }). */
+  /**
+   * The site Person as an author node ({ '@type': 'Person', '@id', name,
+   * url }). With `orcid`, the author's `@id` is the ORCID record URI
+   * instead — the identifier scholarly consumers key authors on — and the
+   * site's Person node lists that URI in `sameAs` (lib/schema personNode).
+   */
   person: Record<string, unknown>
+  /** The owner's ORCID record URI (https://orcid.org/0000-…), when public. */
+  orcid?: string
   owner: OwnerNames
   /** Origin for same-site links. */
   origin: string
@@ -63,10 +71,11 @@ export function scholarlyArticleNode(p: Publication, o: ScholarlyNodeOptions): R
     headline: p.title,
     name: p.title,
   }
+  const self = o.orcid ? { ...o.person, '@id': o.orcid } : o.person
   const authors = p.authors
     .filter((a) => !a.hidden)
-    .map((a) => (isOwnerName(a.name, o.owner) ? o.person : { '@type': 'Person', name: a.name }))
-  node.author = authors.length ? authors : [o.person]
+    .map((a) => (isOwnerName(a.name, o.owner) ? self : { '@type': 'Person', name: a.name }))
+  node.author = authors.length ? authors : [self]
   if (published && p.date) node.datePublished = p.date
   node.creativeWorkStatus = statusLabel(p.status, 'en')
   if (o.inLanguage) node.inLanguage = o.inLanguage

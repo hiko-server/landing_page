@@ -1,0 +1,14 @@
+The ORCID iD icon (https://orcid.org), shown next to the site owner's ORCID
+iD on the CV pages, /publications and /about (components/Icons/orcid.tsx).
+
+ORCID(TM), the ORCID logo, and the iD logo are trademarks of ORCID, Inc.,
+registered in the US and other jurisdictions. They are not covered by this
+site's MIT licence and are not open-source assets of this project.
+
+The iD icon is used here as ORCID's iD display guidelines describe
+(https://info.orcid.org/documentation/integration-guide/orcid-id-display-guidelines/):
+exactly as ORCID distributes it, in its green colourway, at 16 px or larger,
+in front of the full iD URI (https://orcid.org/0000-...), linking only to the
+ORCID record that URI identifies. It is never recoloured, reshaped, animated
+or used to name or endorse this site, as the ORCID brand guidelines
+(https://info.orcid.org/brand-guidelines/) require.

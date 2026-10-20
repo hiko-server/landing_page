@@ -29,7 +29,9 @@
  *                             way to find it (DOI, paper page or PDF)
  *           stale-review      a paper still "under review" more than 18 months after
  *                             its date
- *   low     missing-link      no website; a credential ID without its URL; a project
+ *   low     orcid-missing     a paper carries a DOI but Personal Info has no ORCID iD
+ *                             (a suggestion; a hidden iD field is never reported)
+ *           missing-link      no website; a credential ID without its URL; a project
  *                             that matches a published case study but does not link it
  *           case-study-unlisted a published case study no CV project points to
  *           hidden-referenced a project hidden on the CV while its case study is public
@@ -71,6 +73,7 @@ export type ReadinessCheck =
   | 'too-long'
   | 'paper-incomplete'
   | 'stale-review'
+  | 'orcid-missing'
   | 'missing-link'
   | 'case-study-unlisted'
   | 'hidden-referenced'
@@ -92,6 +95,7 @@ export const CHECK_SEVERITY: Record<ReadinessCheck, ReadinessSeverity> = {
   'too-long': 'medium',
   'paper-incomplete': 'medium',
   'stale-review': 'medium',
+  'orcid-missing': 'low',
   'missing-link': 'low',
   'case-study-unlisted': 'low',
   'hidden-referenced': 'low',
@@ -114,6 +118,7 @@ export const CHECK_LABEL: Record<ReadinessCheck, string> = {
   'too-long': 'Longer than two pages',
   'paper-incomplete': 'Published paper incomplete',
   'stale-review': 'Under review for long',
+  'orcid-missing': 'No ORCID iD',
   'missing-link': 'Missing link',
   'case-study-unlisted': 'Case study not on the CV',
   'hidden-referenced': 'Hidden, but its case study is public',
@@ -400,9 +405,36 @@ export function runReadinessChecks(doc: CvDocLike, ctx: ReadinessContext): Readi
     }
   }
 
+  /**
+   * A paper carries a DOI but Personal Info has no ORCID iD: a gentle
+   * suggestion (low) — the iD ties the DOIs to one researcher and lets the
+   * Studio import the record's works. A hidden iD field is a decision and
+   * is never reported; so is an iD that is set (even with a typo — the
+   * validator reports that on save).
+   */
+  const checkOrcid = (list: Node[], lang: CvLang) => {
+    const pi = list.findIndex((s) => s.sessionName === 'personalInformation')
+    if (pi < 0 || isFieldHidden(list[pi], 'orcid') || str(list[pi].orcid)) return
+    const pubs = list.find((s) => s.sessionName === PUBLICATIONS_SECTION && s.isVisible !== false)
+    if (!pubs) return
+    const withDoi = visibleEntries(pubs, PAPERS_KEY).filter(({ item }) => shown(item, 'title') && isPublicationStatus(shown(item, 'status')) && normalizeDoi(shown(item, 'doi')))
+    if (!withDoi.length) return
+    add(
+      'orcid-missing',
+      lang,
+      pi,
+      [pi, 'orcid'],
+      ['ORCID iD'],
+      withDoi.length === 1 ? 'A paper has a DOI, but the CV has no ORCID iD' : `${withDoi.length} papers have DOIs, but the CV has no ORCID iD`,
+      'An ORCID iD (free, at orcid.org) ties your DOIs to you across publishers and lets CV Studio import your works from your record. Add it in Personal Info — or hide the field to leave ORCID off.',
+      `${lang}:orcid`,
+    )
+  }
+
   for (const lang of LANGS) {
     const list = sections[lang]
     if (!list.length) continue
+    checkOrcid(list, lang)
     const L = LANG_NAME[lang]
     let highlightTotal = 0
     let highlightQuantified = 0

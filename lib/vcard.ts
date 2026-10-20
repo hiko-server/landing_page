@@ -9,7 +9,9 @@
  *   - Profiles (GitHub / LinkedIn, lib/cvLinks profileLinks — the CV's own
  *     value, else Home → Socials, never for a hidden field) become RFC 9554
  *     SOCIALPROFILE lines, plus Apple's X-SOCIALPROFILE twin, which Apple
- *     Contacts reads.
+ *     Contacts reads. The ORCID iD (profile kind 'orcid') is a
+ *     `URL;TYPE=orcid:https://orcid.org/…` line plus `X-ORCID:<iD>`, the
+ *     forms research tools look for.
  *   - TEXT values are escaped per RFC 6350 §3.4 (\\ \n \, \;); URIs are not.
  *   - Lines are folded at 75 octets (UTF-8) with CRLF + one space, never
  *     splitting a multi-byte character.
@@ -20,6 +22,7 @@ import { isRedacted } from './cvVisibility'
 import { isFuture, isPresent, type CvNow } from './cvFormat'
 import { field, list } from '../components/CVViewerPage/fields'
 import { PERSON_NAME, SITE_URL } from './schema'
+import { normalizeOrcidId, orcidUrl } from './orcid/id'
 
 export type VcardRole = { title?: string; org?: string }
 export type VcardExtras = {
@@ -27,8 +30,8 @@ export type VcardExtras = {
   photoUrl?: string
   /** The site URL for the URL property (defaults to the canonical origin). */
   siteUrl?: string
-  /** Public social profiles (label "GitHub" / "LinkedIn", absolute https URL). */
-  profiles?: ReadonlyArray<{ label: string; href: string }>
+  /** Public social profiles (label "GitHub" / "LinkedIn", absolute https URL); kind 'orcid' is the ORCID iD link. */
+  profiles?: ReadonlyArray<{ label: string; href: string; kind?: string }>
 }
 
 /** Parameter-safe service name: letters, digits and "-" only. */
@@ -183,6 +186,14 @@ export function buildVcard(
   lines.push(`URL:${extras.siteUrl || SITE_URL}`)
   for (const p of extras.profiles || []) {
     const href = typeof p?.href === 'string' ? p.href.trim() : ''
+    if (p?.kind === 'orcid') {
+      // The researcher identifier: its URI as a typed URL, and the bare iD as X-ORCID.
+      const id = normalizeOrcidId(href)
+      if (!id) continue
+      lines.push(`URL;TYPE=orcid:${orcidUrl(id)}`)
+      lines.push(`X-ORCID:${id}`)
+      continue
+    }
     const service = serviceType(typeof p?.label === 'string' ? p.label : '')
     if (!/^https:\/\/[^\s"<>]+$/i.test(href) || !service) continue
     lines.push(`SOCIALPROFILE;SERVICE-TYPE=${service}:${href}`)

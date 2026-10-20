@@ -13,10 +13,12 @@
  *   - visibility metadata: `isVisible` / `showOnWebsite` booleans,
  *     `hiddenFields` string[], `hiddenItems` { [field]: non-negative int[] }
  *   - select fields hold one of their options (or nothing); yearMonth fields
- *     hold `YYYY` or `YYYY-MM`; `format: 'doi'` text must be a DOI and
- *     `format: 'https-link'` text an https:// address or a same-site path;
- *     a `requiredWhen` field must be filled once its sibling is (publication
- *     status once the paper has a title)
+ *     hold `YYYY` or `YYYY-MM`; `format: 'doi'` text must be a DOI,
+ *     `format: 'https-link'` text an https:// address or a same-site path
+ *     and `format: 'orcid'` text an ORCID iD whose checksum holds (a pasted
+ *     https://orcid.org/… link passes too — readers store and print the bare
+ *     iD); a `requiredWhen` field must be filled once its sibling is
+ *     (publication status once the paper has a title)
  *   - unknown sections and unknown keys pass through untouched, and missing
  *     or null values count as empty (renderers already handle both)
  *
@@ -29,6 +31,7 @@ import { SECTION_BY_NAME, type FieldDef, type ListDef } from './cvSections'
 import { isCvImageRef } from './url'
 import { normalizeDoi } from './publications/doi'
 import { PUB_DATE_RE, publicationHref } from './publications/normalize'
+import { ORCID_MESSAGES, orcidIdProblem } from './orcid/id'
 
 export type CvLangKey = 'en' | 'zh'
 export type CvErrorPath = [CvLangKey, number, ...(string | number)[]]
@@ -59,7 +62,7 @@ const absent = (v: unknown) => v === undefined || v === null
 const hasText = (v: unknown) => typeof v === 'string' && v.trim() !== ''
 const listLabels = (labels: string[]) => (labels.length > 1 ? `${labels.slice(0, -1).join(', ')} or ${labels[labels.length - 1]}` : labels.join(''))
 
-const FORMAT_MESSAGES: Record<NonNullable<FieldDef['format']>, (label: string) => string> = {
+const FORMAT_MESSAGES: Record<Exclude<NonNullable<FieldDef['format']>, 'orcid'>, (label: string) => string> = {
   doi: (label) => `${label} must look like 10.1234/abcd (a doi.org link works too).`,
   'https-link': (label) => `${label} must be an https:// address or a path on this site such as /uploads/paper.pdf.`,
 }
@@ -67,6 +70,12 @@ const FORMAT_MESSAGES: Record<NonNullable<FieldDef['format']>, (label: string) =
 function checkFormat(f: FieldDef, value: string, path: Path, out: Collector) {
   const v = value.trim()
   if (!v || !f.format) return
+  if (f.format === 'orcid') {
+    // A bad checksum gets its own message: the shape is right, one digit is not.
+    const problem = orcidIdProblem(v)
+    if (problem) out.add(path, ORCID_MESSAGES[problem])
+    return
+  }
   const ok = f.format === 'doi' ? !!normalizeDoi(v) : !!publicationHref(v)
   if (!ok) out.add(path, FORMAT_MESSAGES[f.format](f.label))
 }

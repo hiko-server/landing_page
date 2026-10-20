@@ -51,6 +51,8 @@ type Props = {
   recommendations?: CvSectionLike | null
   /** How many papers /publications lists (0: no page, no link on the rail). */
   publicationCount?: number
+  /** The owner's public ORCID iD (website-audience Personal Info, lib/cvLinks orcidOf); '' when unset or hidden. */
+  orcid?: string
 }
 
 const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
@@ -76,7 +78,7 @@ const ANCHOR_SX = { scrollMarginTop: clearOfHeader('8px') } as const
  * The GitHub widgets and the experience timeline live on the home page only.
  * Below lg the rail is the page header; the section nav shows from lg up.
  */
-const About = ({ hero, identity, portrait, availability, bio, cv, work, personFacts, chromeSocials, recommendations, publicationCount = 0 }: Props) => {
+const About = ({ hero, identity, portrait, availability, bio, cv, work, personFacts, chromeSocials, recommendations, publicationCount = 0, orcid = '' }: Props) => {
   const [lang, setLang] = useState<'en' | 'zh'>('en')
   const [lead, ...focus] = taglinePhrases(hero.tagline)
   const socials = useMemo(() => resolveSocialLinks(chromeSocials), [chromeSocials])
@@ -120,6 +122,7 @@ const About = ({ hero, identity, portrait, availability, bio, cv, work, personFa
               nav={nav}
               cvLang={active}
               publicationCount={publicationCount}
+              orcid={orcid}
             />
 
             <Box minW={0}>
@@ -239,17 +242,20 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
   let chromeSocials: HomeData['socials'] | null | undefined
   let work: WorkIndexItem[] = []
   let personFacts: PersonFacts = {}
+  let orcid = ''
 
   try {
     // Live CV from the content store, website audience, exactly the sections
     // rendered here. personalInformation is read only to derive the display
-    // names; the section itself is never shipped.
+    // names and the public ORCID iD; the section itself is never shipped.
     const { readCvData, readPublicCvSections } = await import('../../lib/cvdata')
+    const { orcidOf } = await import('../../lib/orcid/cv')
     cv = readPublicCvSections('website', CV_WEBSITE_SECTIONS, ['en', 'zh'])
     const pi = readPublicCvSections('website', ['personalInformation'], ['en', 'zh'])
     const stored = readCvData()
     const storedHasPersonalInfo = [...stored.en, ...stored.zh].some((s) => s?.sessionName === 'personalInformation')
     identity = heroIdentity(pi.en[0], pi.zh[0], { storedHasPersonalInfo })
+    orcid = orcidOf(pi.en[0]) || orcidOf(pi.zh[0])
   } catch {
     /* best effort — render with what we have */
   }
@@ -353,6 +359,7 @@ export const getStaticProps: GetStaticProps<Props> = async () => {
       personFacts,
       recommendations,
       publicationCount,
+      orcid,
       clockMonth: referenceMonth(),
       // Omitted when the home document could not be read: the chrome then
       // loads the public view itself.

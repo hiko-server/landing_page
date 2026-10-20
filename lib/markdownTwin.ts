@@ -327,6 +327,8 @@ export type LlmsInput = {
   publications: boolean
   /** The CV languages with public content (/cv, /cv/zh and their files exist only then). */
   cv: { en: boolean; zh: boolean }
+  /** The owner's public ORCID record URI (https://orcid.org/0000-…), when the iD is set and shown. */
+  orcid?: string
   /** The owner's descriptions of /now and /uses, when written. */
   nowDescription?: string
   usesDescription?: string
@@ -372,6 +374,7 @@ export function buildLlmsTxt(input: LlmsInput): string {
     )
   }
   if (input.publications) out.push(`- ${mdLink('Publications', u('/publications'))}: papers with citations`)
+  if (input.orcid) out.push(`- ORCID iD: ${input.orcid}`)
   out.push(`- ${mdLink('Contact', u('/contact'))}: how to get in touch, and availability`)
   out.push('')
 

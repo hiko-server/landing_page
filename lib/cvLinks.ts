@@ -6,6 +6,10 @@
  *              else the matching Home → Socials link. WhatsApp is never a
  *              CV profile. A field the owner HID (CV Studio eye) stays empty
  *              — the Home link is not used for it either.
+ *              `orcid` (lib/orcid/id): the CV's own iD, normalised to its
+ *              bare form; no fallback anywhere. Printed as its full URI
+ *              `https://orcid.org/0000-…` (ORCID's display guidelines), the
+ *              ORCID iD icon in front of it on the web surfaces.
  *   Projects   projectExperience[].caseStudy is normalised to the slug of the
  *              PUBLISHED case study the project refers to (lib matchCaseStudy:
  *              the owner's slug first, else a strict title match) and is ''
@@ -22,6 +26,8 @@ import { displayUrl, safeHref } from './cvFormat'
 import { absUrl } from './schema'
 import { field, list } from '../components/CVViewerPage/fields'
 import { matchCaseStudy, type WorkIndexItem } from '../components/LandingPage/projectMatch'
+import { orcidUrl } from './orcid/id'
+import { ORCID_FIELD, ORCID_LABEL, orcidOf } from './orcid/cv'
 
 /** The Home socials a CV may print (never WhatsApp). */
 export type PublicSocials = { github?: unknown; linkedin?: unknown; [k: string]: unknown }
@@ -33,6 +39,9 @@ export const PROFILE_FIELDS = ['github', 'linkedin'] as const
 export type ProfileKey = (typeof PROFILE_FIELDS)[number]
 
 const PROFILE_LABEL: Record<ProfileKey, string> = { github: 'GitHub', linkedin: 'LinkedIn' }
+
+// The ORCID iD reader lives in lib/orcid/cv (light enough for the proxy's import graph).
+export { ORCID_FIELD, ORCID_LABEL, orcidOf } from './orcid/cv'
 
 const isObject = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v)
 
@@ -51,6 +60,8 @@ function decorateProfiles(pi: Record<string, any>, socials: PublicSocials | null
     }
     out[key] = webHref(field(pi, key)) || webHref(socials?.[key])
   }
+  // The public payload carries the bare iD (a pasted link is normalised); '' when empty, invalid or hidden.
+  out[ORCID_FIELD] = orcidOf(pi)
   return out
 }
 
@@ -88,24 +99,30 @@ export function withEvidenceLinks(
 }
 
 export type CvLink = {
-  kind: ProfileKey | 'caseStudy' | 'live' | 'repo'
-  /** Short label ("GitHub", "Case study" / "案例"). */
+  kind: ProfileKey | 'orcid' | 'caseStudy' | 'live' | 'repo'
+  /** Short label ("GitHub", "ORCID", "Case study" / "案例"). */
   label: string
   /** Absolute href (what the PDF, text and JSON exports print). */
   href: string
   /** Same-site path for in-site navigation ("/work/swcs"), when there is one. */
   path?: string
-  /** Display text without the protocol ("github.com/HikoPLi"). */
+  /** Display text without the protocol ("github.com/HikoPLi") — except the ORCID iD, shown as its full URI. */
   text: string
 }
 
-/** Profile links of a (decorated) personalInformation section, GitHub first. */
+/**
+ * Profile links of a (decorated) personalInformation section: GitHub,
+ * LinkedIn, then the ORCID iD (kind 'orcid'; its text is the full
+ * `https://orcid.org/…` URI, as ORCID's display guidelines ask).
+ */
 export function profileLinks(pi: unknown): CvLink[] {
   const out: CvLink[] = []
   for (const key of PROFILE_FIELDS) {
     const href = webHref(field(pi, key))
     if (href) out.push({ kind: key, label: PROFILE_LABEL[key], href, text: displayUrl(href).replace(/^www\./i, '') })
   }
+  const orcid = orcidUrl(orcidOf(pi))
+  if (orcid) out.push({ kind: 'orcid', label: ORCID_LABEL, href: orcid, text: orcid })
   return out
 }
 
