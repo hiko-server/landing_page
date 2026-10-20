@@ -65,6 +65,20 @@ backup, and a hardened admin GUI for non-engineers.
   the author order stays true. Nothing is public (no section, no nav
   link, `/publications` answers 404) until a public paper exists. Logic in
   `lib/publications/`.
+- **ORCID iD** — the owner's ORCID iD is a Personal Info field in CV
+  Studio (checked with ORCID's MOD 11-2 checksum; a pasted
+  `https://orcid.org/…` link is stored as the bare iD) with the usual eye
+  toggle. Once set it appears as ORCID's display guidelines ask — the
+  green iD icon and the full `https://orcid.org/…` link — on `/cv`,
+  `/cv/zh`, `/publications` and the /about rail, as a text link in the PDF
+  and plain-text CVs, as a JSON Resume profile, in the vCard, in the
+  Person JSON-LD (`sameAs` + an ORCID `identifier`, and the papers'
+  author `@id`) and as one line of `/llms.txt`; hidden, it appears
+  nowhere. **Import from ORCID** in the Publications section lists the
+  record's public works (read on the server from ORCID's public API,
+  nothing stored), marks the ones already on the CV (same DOI or title)
+  and adds the ticked ones as papers to review before saving. Logic in
+  `lib/orcid/`.
 - **Admin GUI for non-engineers** — visual editors for hero, brands,
   socials, photo strip, blog posts, case studies, the CV (Studio + raw
   JSON), the Now/Uses pages and the About bio.

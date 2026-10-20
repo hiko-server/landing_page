@@ -958,6 +958,60 @@ Motion and interaction (C1, C2, C5, C6, C7, C9).
   bar, hover guard, morph loader); the palette, the keyboard actions and
   the morphs are lazy chunks.
 
+### orcid
+
+The owner's ORCID iD (owner request, 2026-10-20: 添加ORCID连接和显示). Nothing
+is public until the owner enters an iD; no iD is ever invented.
+
+- **The iD is CV data**: a new *ORCID iD* field in CV Studio → Personal Info
+  (shared by EN and 中文), checked with ORCID's ISO 7064 MOD 11-2 checksum —
+  a typo in the last character gets its own message, a wrong shape another.
+  A pasted `https://orcid.org/…` link (or the iD without hyphens) is stored
+  as the bare iD, by the editor and again on every save and import
+  (`withBareOrcid`). The usual eye toggle hides it: hidden, it reaches no
+  page, file, feed or structured data (the leak tests cover it).
+- **Shown as ORCID's iD display guidelines ask**: the official green iD icon
+  (inline SVG, 16 px, decorative) followed by the full `https://orcid.org/…`
+  URI as the link text, named "ORCID iD: https://orcid.org/… (opens in a new
+  tab)" for screen readers; in a narrow column the URI breaks after
+  `orcid.org/`, never inside the iD. On `/cv` and `/cv/zh` (A4 sheet and
+  Reading view), `/publications` (under the lede), the /about identity rail.
+  The PDF CVs (EN + 中文) and `/cv.txt` print `ORCID: https://orcid.org/…`
+  as a text link; `/cv.json` lists it in `basics.profiles` (`network:
+  ORCID`, `username`: the iD); the vCard carries `URL;TYPE=orcid` and
+  `X-ORCID`; the Person JSON-LD adds the record to `sameAs` and an ORCID
+  `identifier` (PropertyValue), and each ScholarlyArticle names the owner by
+  the record's URI as `@id`; `/llms.txt` gets one `- ORCID iD:` line.
+- **Readiness**: a low-severity suggestion when a public paper has a DOI but
+  the CV has no ORCID iD (a hidden field is a decision and never reported).
+- **Import from ORCID** (CV Studio → Publications): with an iD set, the
+  dialog lists the record's public works — read on the server by
+  `POST /api/admin/orcid/works` (admin only, 10 reads per browser per 10
+  minutes, every read in the activity log without the iD) from
+  `https://pub.orcid.org/v3.0/<iD>/works` and its bulk details (authors,
+  abstract; 100 per call) through `safeFetch`, one allow-listed host, no
+  redirects. Each work group becomes one candidate from the researcher's
+  preferred version (highest display index): title, venue, ORCID type →
+  venue type and status (preprints stay preprints), year / month, DOI and
+  other identifiers, an https link. Works already on the CV (same DOI, else
+  the same normalised title) and non-paper types (patents, datasets,
+  software …) are left unticked; the ticked ones are added to the unsaved
+  document as one undo step, like papers typed by hand (mirrored into the
+  other language when linked) — nothing is saved until the owner saves.
+  Clear messages for no iD, an unknown record, no public works, ORCID busy
+  (429 / 5xx, with its wait), a timeout, an unreadable answer and an ended
+  session. Unit tests run over synthetic fixtures in ORCID's v3.0 works
+  shape; no browser request ever goes to ORCID (`connect-src` unchanged).
+- `/colophon` and `public/licenses/orcid.txt` state that the iD icon is
+  ORCID's trademark, used as its guidelines allow, outside the site's
+  licence.
+- `lib/orcid/`: `id` (parse, checksum, normalise), `uri` (the light check
+  for code on every page), `cv` (the one reader), `works` (mapping, details,
+  dedupe), `fetch`, `route`, `importClient`. Shared first-load JS unchanged
+  in content (167.0 KiB vs 166.6 at the base, minifier naming); each public
+  page carries ~0.3 KiB more for the Person node's ORCID support; the Studio
+  dialog is its own chunk.
+
 ### Changed
 
 - **No more "[01] INTRODUCTION" labels** (owner request): the public site

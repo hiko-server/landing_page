@@ -52,6 +52,15 @@ English → [README.md](./README.md)
   依据公开的个人信息自动加粗；尚未发表的论文始终标明真实状态；被隐藏的合著者显示
   为 “…”，作者顺序保持真实。在出现第一篇公开论文之前，网站上不显示任何相关内容
   （无板块、无导航链接，`/publications` 返回 404）。逻辑位于 `lib/publications/`。
+- **ORCID iD**：CV Studio 的个人信息新增 ORCID iD 字段（按 ORCID 的 MOD 11-2 校验位
+  检查；粘贴 `https://orcid.org/…` 链接会存为纯 iD），同样可用眼睛图标隐藏。填写后按
+  ORCID 的 iD 展示规范显示——绿色 iD 图标加完整的 `https://orcid.org/…` 链接——出现在
+  `/cv`、`/cv/zh`、`/publications` 和 /about 侧栏，PDF 与纯文本简历中为文字链接，
+  JSON Resume 中为一项 profile，并写入 vCard、Person 结构化数据（`sameAs` 与 ORCID
+  `identifier`，论文作者的 `@id`）和 `/llms.txt` 的一行；隐藏后任何地方都不出现。论文板块的
+  **Import from ORCID** 会列出该 ORCID 记录的公开作品（由服务器经 ORCID 公共 API 读取，
+  不保存任何内容），标出 CV 中已有的论文（DOI 或标题相同），勾选的作品作为论文加入，
+  保存前可逐条修改。逻辑位于 `lib/orcid/`。
 - **面向非工程师的后台**：可视化编辑 Hero、品牌、社交、照片墙、博客、
   案例研究、CV（Studio + 原始 JSON）、Now/Uses，以及关于页自述。
 - **逐节可见性与排序**：首页所有板块（Open Source / Skills /
