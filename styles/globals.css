@@ -74,7 +74,7 @@
    sticky bottom bar (data-bottom-bar) and its controls are left out. */
 :where(#main),
 :where(#main)
-  :where([id], a, button, input, select, textarea, summary, [tabindex], [contenteditable]):where(
+  :where([id], a, button, input, select, textarea, summary, [tabindex], [contenteditable], [data-kbd-item]):where(
     :not([data-bottom-bar], [data-bottom-bar] *)
   ) {
   scroll-margin-top: calc(var(--header-h) + 16px);
@@ -938,6 +938,56 @@ html .scroll-top[data-visible='true']:active {
     opacity var(--duration-fast) var(--ease-standard);
 }
 
+/* "G then …" hint (components/Chrome/keyboardLayerActions.ts): appears when
+   no second key follows G within 450 ms; a fluent "G H" never shows it. */
+.kbd-hint {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  z-index: 1500;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 14px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  padding: 10px 14px;
+  border: 1px solid var(--chakra-colors-page-border-strong);
+  border-radius: 12px;
+  background: var(--chakra-colors-page-bg-elevated);
+  color: var(--chakra-colors-page-fg-secondary);
+  box-shadow: var(--elevation-md);
+  font: 400 12px/1.5 var(--font-geist-sans), system-ui, sans-serif;
+  opacity: 0;
+  transform: translate(-50%, 8px);
+  pointer-events: none;
+  transition:
+    opacity var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard);
+}
+.kbd-hint[data-open] {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+.kbd-hint > span {
+  white-space: nowrap;
+}
+.kbd-hint kbd {
+  display: inline-block;
+  min-width: 18px;
+  margin-right: 6px;
+  padding: 1px 5px;
+  border: 1px solid var(--chakra-colors-page-border-strong);
+  border-radius: 4px;
+  color: var(--chakra-colors-page-fg);
+  font: 500 11px/1.4 var(--font-geist-mono), ui-monospace, monospace;
+  text-align: center;
+}
+.kbd-hint__title {
+  color: var(--chakra-colors-page-fg);
+  font-weight: 500;
+}
+
 /* ──────────────────────────────────────────────────────────────────────────
  * Reduced motion — respect user preference everywhere.
  * ──────────────────────────────────────────────────────────────────────── */
@@ -1038,6 +1088,9 @@ html .scroll-top[data-visible='true']:active {
   .toc-marker {
     forced-color-adjust: none;
     background: Highlight !important;
+  }
+  .kbd-hint {
+    border-color: CanvasText;
   }
 }
 

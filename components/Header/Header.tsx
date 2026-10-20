@@ -13,7 +13,6 @@ import {
   type SocialLink,
   formatAge,
   isActiveRoute,
-  shortcutTarget,
   shouldProbeSession,
   shouldRecheckSession,
   splitBrand,
@@ -22,10 +21,11 @@ import { useBrandHost } from '../Chrome/useBrandHost'
 import { useChromeToast } from '../Chrome/useChromeToast'
 import { useShortcutsEnabled } from '../Chrome/useShortcutsEnabled'
 import { HIDE_ON_COARSE_POINTER, isApplePlatform, paletteKeyShortcuts, paletteShortcutLabel } from '../Chrome/platform'
-import { OPEN_PALETTE_EVENT, normalizePaletteQuery, type OpenPaletteDetail } from '../Chrome/paletteEvents'
+import { OPEN_PALETTE_EVENT, normalizePalettePage, normalizePaletteQuery, type OpenPaletteDetail, type OpenPaletteOptions } from '../Chrome/paletteEvents'
+import type { PalettePage } from '../General-UI/paletteModel'
 import { useFetchJson } from '../Common/useFetchJson'
 import { MenuIcon, SearchIcon } from '../Icons/ui/chrome'
-import { getShortcutsEnabled, isImeComposing } from '../../lib/keyboardShortcuts'
+import { isImeComposing } from '../../lib/keyboardShortcuts'
 import { pageKeyOf } from '../../lib/viewTransition'
 import ThemeControl from './ThemeControl'
 
@@ -64,11 +64,6 @@ function useMediaQuery(query: string): boolean {
     return () => mql.removeEventListener('change', update)
   }, [query])
   return matches
-}
-
-function isEditableTarget(target: EventTarget | null): boolean {
-  const el = target as HTMLElement | null
-  return !!el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))
 }
 
 type GithubEvents = { events?: { type?: string; created_at?: string }[] }
@@ -158,6 +153,10 @@ const Header = ({
   const [paletteRequested, setPaletteRequested] = useState(false)
   // Text the palette opens with (the 404 page's search field); '' otherwise.
   const [paletteQuery, setPaletteQuery] = useState('')
+  // The nested page it opens on ("?" → Keyboard shortcuts), and whether it
+  // was opened from the keyboard (it then appears at once, no entrance).
+  const [palettePage, setPalettePage] = useState<PalettePage | null>(null)
+  const [paletteInstant, setPaletteInstant] = useState(false)
   const [drawerRequested, setDrawerRequested] = useState(false)
   const brand = useBrandHost()
   const [brandHead, brandTail] = splitBrand(brand)
@@ -168,18 +167,24 @@ const Header = ({
   const [dialogsReturnFocus, setDialogsReturnFocus] = useState(true)
 
   const openPalette = useCallback(
-    (query = '') => {
+    (query = '', { page = null, instant = false }: OpenPaletteOptions = {}) => {
       setDialogsReturnFocus(true)
       setPaletteQuery(query)
+      setPalettePage(page)
+      setPaletteInstant(instant)
       setPaletteRequested(true)
       openCmdk()
     },
     [openCmdk],
   )
 
-  // Page content can ask for the palette (components/Chrome/paletteEvents).
+  // Page content and the keyboard layer ("/", "?") ask for the palette
+  // (components/Chrome/paletteEvents).
   useEffect(() => {
-    const onOpen = (e: Event) => openPalette(normalizePaletteQuery((e as CustomEvent<OpenPaletteDetail>).detail?.query))
+    const onOpen = (e: Event) => {
+      const detail = (e as CustomEvent<OpenPaletteDetail>).detail
+      openPalette(normalizePaletteQuery(detail?.query), { page: normalizePalettePage(detail?.page), instant: detail?.instant === true })
+    }
     window.addEventListener(OPEN_PALETTE_EVENT, onOpen)
     return () => window.removeEventListener(OPEN_PALETTE_EVENT, onOpen)
   }, [openPalette])
@@ -268,13 +273,11 @@ const Header = ({
     setIsMac(isApplePlatform(navigator as Navigator & { userAgentData?: { platform?: string } }))
   }, [])
 
-  // Global keys: ⌘K / Ctrl+K toggles the palette anywhere; "/" opens it and
-  // "G then <key>" navigates (both only outside text fields, palette closed,
-  // and only while the visitor has not turned single-key shortcuts off —
-  // WCAG 2.1.4, lib/keyboardShortcuts). Keys typed into an input method's
-  // composition are never shortcuts.
+  // ⌘K / Ctrl+K toggles the palette anywhere (keys typed into an input
+  // method's composition are never shortcuts). It opens at once, without the
+  // entrance animation. The single-key shortcuts ("/", "?", "G then …",
+  // J / K, …) are the keyboard layer's (components/Chrome/KeyboardLayer.tsx).
   useEffect(() => {
-    let armedUntil = 0
     const onKey = (e: KeyboardEvent) => {
       if (isImeComposing(e)) return
       if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k') {
@@ -282,33 +285,12 @@ const Header = ({
         if (e.defaultPrevented) return
         e.preventDefault()
         if (cmdkOpen) closeCmdk()
-        else openPalette()
-        return
+        else openPalette('', { instant: true })
       }
-      if (cmdkOpen || e.metaKey || e.ctrlKey || e.altKey || e.repeat || e.defaultPrevented || isEditableTarget(e.target)) return
-      if (!getShortcutsEnabled()) {
-        armedUntil = 0
-        return
-      }
-      if (e.key === '/') {
-        e.preventDefault()
-        armedUntil = 0
-        openPalette()
-        return
-      }
-      const k = e.key.toLowerCase()
-      const target = Date.now() < armedUntil ? shortcutTarget(k) : null
-      if (target) {
-        armedUntil = 0
-        e.preventDefault()
-        if (router.asPath.split(/[?#]/)[0] !== target) router.push(target)
-        return
-      }
-      armedUntil = k === 'g' && !e.shiftKey ? Date.now() + 1200 : 0
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [cmdkOpen, openPalette, closeCmdk, router])
+  }, [cmdkOpen, openPalette, closeCmdk])
 
   // Warm the palette chunk once the browser is idle after load.
   useEffect(() => {
@@ -347,7 +329,8 @@ const Header = ({
         backdropFilter="blur(14px)"
         borderBottom="1px solid"
         borderColor="page.border"
-        className="no-print glass"
+        // .site-header: the hairline comes in once the page scrolls (globals.css).
+        className="no-print glass site-header"
       >
         <Flex
           maxW="var(--container-content)"
@@ -558,6 +541,8 @@ const Header = ({
           onClose={closeCmdk}
           isAdmin={isAdmin}
           initialQuery={paletteQuery}
+          initialPage={palettePage}
+          instant={paletteInstant}
           publications={publications}
           returnFocusOnClose={dialogsReturnFocus}
         />

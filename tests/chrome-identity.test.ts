@@ -333,7 +333,7 @@ test('A5: the palette opens from page content with a prefilled query', () => {
   } finally {
     if (!had) delete g.window
   }
-  assert.deepEqual(seen, [[OPEN_PALETTE_EVENT, { query: 'blog carboy' }]])
+  assert.deepEqual(seen, [[OPEN_PALETTE_EVENT, { query: 'blog carboy', page: null, instant: false }]])
   const header = code('components/Header/Header.tsx')
   assert.match(header, /window\.addEventListener\(OPEN_PALETTE_EVENT, onOpen\)/)
   assert.match(header, /initialQuery=\{paletteQuery\}/)

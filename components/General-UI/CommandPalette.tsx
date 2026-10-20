@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
   Box,
   Flex,
@@ -33,8 +33,19 @@ import { useShortcutsEnabled } from '../Chrome/useShortcutsEnabled'
 import { useThemePreference } from '../Chrome/useThemePreference'
 import { systemPrefersDark, type ThemePreference } from '../../lib/themePreference'
 import { motionTransition } from '../../theme/tokens'
-import { HIDE_ON_COARSE_POINTER, isApplePlatform } from '../Chrome/platform'
+import { COARSE_POINTER_QUERY, HIDE_ON_COARSE_POINTER, isApplePlatform } from '../Chrome/platform'
 import { setShortcutsEnabled } from '../../lib/keyboardShortcuts'
+import {
+  LAYER_SHORTCUT_ROWS,
+  PAGE_TITLES,
+  PREFETCH_DELAY_MS,
+  browseItems,
+  isPrefetchableHref,
+  pageKeyAction,
+  searchableItems,
+  type PageMember,
+  type PalettePage,
+} from './paletteModel'
 
 /**
  * ⌘K command palette (loaded on demand by CommandPaletteLazy).
@@ -48,10 +59,20 @@ import { setShortcutsEnabled } from '../../lib/keyboardShortcuts'
  *   - Empty query: recently used items, this page's sections, the owner's
  *     Admin group (signed in only), everything else grouped, and a
  *     keyboard-shortcut cheatsheet.
+ *   - Nested pages (components/General-UI/paletteModel.ts): Theme ›, CV ›
+ *     and Contact › gather their actions; "?" opens Keyboard shortcuts.
+ *     Backspace in an empty field or Escape goes back; a search from the top
+ *     still finds everything inside them.
  *   - WAI-ARIA combobox: the input owns a listbox, the active option is
  *     announced via aria-activedescendant, result counts via a live region.
- *   - Opens instantly (a fast scale-in, none under reduced motion); the list
- *     glides between heights as results change.
+ *   - Fast to open: from the keyboard it appears at once (`instant`), from a
+ *     click with a quick scale-in (none under reduced motion). The frame and
+ *     the field paint first and the rows render right after; ranking runs on
+ *     a deferred copy of the query, so typing never waits for it. Touch
+ *     screens get a plain scrim (a full-screen blur is costly on phones).
+ *   - A highlighted page is prefetched after a short pause, and Enter
+ *     navigates at once — the closing dialog fades out on its own in the
+ *     route transition (lib/viewTransition.ts liftDismissibleLayers).
  *   - `initialQuery` opens it already searching (the 404 page's search field).
  *   - Keyboard hints (shortcut chips, ESC, the cheatsheet) are hidden on
  *     touch-first devices (components/Chrome/platform).
@@ -62,7 +83,7 @@ import { setShortcutsEnabled } from '../../lib/keyboardShortcuts'
  */
 
 type Group = 'Recent' | 'On this page' | 'Admin' | 'Pages' | 'Actions' | 'Writing' | 'Work' | 'Content'
-type Kind = 'nav' | 'action' | 'section'
+type Kind = 'nav' | 'action' | 'section' | 'page'
 
 /**
  * Save a same-site file under the name its Content-Disposition gives
@@ -78,7 +99,7 @@ function downloadFile(href: string) {
   a.remove()
 }
 
-type Item = {
+type Item = PageMember & {
   id: string
   group: Exclude<Group, 'Recent'>
   kind: Kind
@@ -110,6 +131,10 @@ export type CommandPaletteProps = {
   publications?: boolean
   /** False when the palette closes because the visitor left the page (focus then moves to the new page). */
   returnFocusOnClose?: boolean
+  /** Opened from the keyboard: appear at once, without the entrance animation. */
+  instant?: boolean
+  /** The nested page it opens on ("?" opens Keyboard shortcuts); null = the top level. */
+  initialPage?: PalettePage | null
 }
 
 const HIKO_EMAIL = 'hi@lucian-dev.com'
@@ -297,6 +322,8 @@ export default function CommandPalette({
   initialQuery = '',
   publications = false,
   returnFocusOnClose = true,
+  instant = false,
+  initialPage = null,
 }: CommandPaletteProps) {
   const router = useRouter()
   const toast = useChromeToast()
@@ -309,7 +336,11 @@ export default function CommandPalette({
   const listId = `${baseId}-list`
   const optId = (i: number) => `${baseId}-opt-${i}`
 
-  const [query, setQuery] = useState('')
+  const [query, setQuery] = useState(initialQuery)
+  // Ranking follows a deferred copy: the field shows every keystroke at once.
+  const deferredQuery = useDeferredValue(query)
+  // The nested page on screen (null = the top level).
+  const [subpage, setSubpage] = useState<PalettePage | null>(initialPage)
   const [activeIdx, setActiveIdx] = useState(0)
   const [index, setIndex] = useState<SearchIndex | null>(null)
   const [loading, setLoading] = useState(false)
@@ -318,27 +349,56 @@ export default function CommandPalette({
   const [restoreFocus, setRestoreFocus] = useState(true)
   const [isMac, setIsMac] = useState(true)
   const [unread, setUnread] = useState<number | null>(null)
+  // The rows render once the dialog's first frame is on screen (see below).
+  const [listReady, setListReady] = useState(false)
+  // A keyboard is likely (fine pointer): the Keyboard shortcuts page is offered.
+  const [keyboardLikely, setKeyboardLikely] = useState(true)
   const inputRef = useRef<HTMLInputElement | null>(null)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const pending = useRef<(() => void) | null>(null)
   // Read when the palette opens; a prefilled query is selected on focus so typing replaces it.
   const initialQueryRef = useRef(initialQuery)
   initialQueryRef.current = initialQuery
+  const initialPageRef = useRef(initialPage)
+  initialPageRef.current = initialPage
   const selectOnFocus = useRef(false)
 
   useEffect(() => {
     setIsMac(isApplePlatform(navigator as Navigator & { userAgentData?: { platform?: string } }))
+    setKeyboardLikely(!window.matchMedia(COARSE_POINTER_QUERY).matches)
   }, [])
 
   // Fresh state every time the palette opens.
   useEffect(() => {
     if (!isOpen) return
     setQuery(initialQueryRef.current)
+    setSubpage(initialPageRef.current)
     selectOnFocus.current = initialQueryRef.current !== ''
     setActiveIdx(0)
     setRestoreFocus(true)
-    setSections(collectSections())
-    setRecent(readRecent())
+  }, [isOpen])
+
+  // First frame: the frame, the field and the caret; the rows follow in the
+  // next task, after that frame has painted — so the interaction that opened
+  // the palette only pays for the shell (INP), never for reading the page's
+  // sections (a layout pass) or rendering 40 rows.
+  useEffect(() => {
+    if (!isOpen) {
+      setListReady(false)
+      return
+    }
+    let timer = 0
+    const frame = requestAnimationFrame(() => {
+      timer = window.setTimeout(() => {
+        setSections(collectSections())
+        setRecent(readRecent())
+        setListReady(true)
+      }, 0)
+    })
+    return () => {
+      cancelAnimationFrame(frame)
+      window.clearTimeout(timer)
+    }
   }, [isOpen])
 
   // Content index: one request per visit (shared by every open).
@@ -429,6 +489,26 @@ export default function CommandPalette({
       hint,
       keywords: `admin ${keywords}`,
     })
+    // WCAG 2.1.4: single-character shortcuts ("/", "?", "G then …", J / K,
+    // [ / ], T, "E") can be turned off; ⌘K / Ctrl+K keeps working either
+    // way. At the top level and on the Keyboard shortcuts page.
+    const shortcutsToggle: Item = {
+      id: 'action:shortcuts',
+      group: 'Actions',
+      kind: 'action',
+      label: `Keyboard shortcuts: ${shortcutsOn ? 'on' : 'off'}`,
+      hint: shortcutsOn ? 'turn off single-key shortcuts' : 'turn on single-key shortcuts',
+      run: () => {
+        const next = !shortcutsOn
+        setShortcutsEnabled(next)
+        toast(
+          next
+            ? { status: 'success', title: 'Keyboard shortcuts on', description: '/ opens this palette, ? lists every shortcut.' }
+            : { status: 'success', title: 'Keyboard shortcuts off', description: `Single-key shortcuts are off. ${isMac ? '⌘K' : 'Ctrl+K'} still opens this palette.` },
+        )
+      },
+      keywords: 'keyboard shortcuts hotkeys keys single key disable enable turn on off accessibility',
+    }
     const list: Item[] = []
 
     if (isAdmin) {
@@ -476,10 +556,51 @@ export default function CommandPalette({
       page('Uses', '/uses', 'tools gear setup'),
       page('Contact', '/contact', 'email message hire'),
       page('Colophon', '/colophon', 'about this site fonts stack privacy analytics'),
+      // The nested pages' entries (paletteModel.ts), first among the actions.
+      {
+        id: 'open:theme',
+        group: 'Actions',
+        kind: 'page',
+        opens: 'theme',
+        label: PAGE_TITLES.theme,
+        hint: preference === 'system' ? 'System' : preference === 'light' ? 'Light' : 'Dark',
+        keywords: 'theme appearance mode colour color dark light system',
+      },
+      {
+        id: 'open:cv',
+        group: 'Actions',
+        kind: 'page',
+        opens: 'cv',
+        label: PAGE_TITLES.cv,
+        hint: 'PDF · 中文',
+        keywords: 'resume curriculum vitae pdf download chinese 简历',
+      },
+      {
+        id: 'open:contact',
+        group: 'Actions',
+        kind: 'page',
+        opens: 'contact',
+        label: PAGE_TITLES.contact,
+        hint: 'email · vCard',
+        keywords: 'email mail message hire vcard reach',
+      },
+      // CV ›
+      {
+        id: 'cv:view',
+        group: 'Actions',
+        kind: 'nav',
+        page: 'cv',
+        nestedOnly: true,
+        label: 'View the CV',
+        hint: 'English',
+        href: '/cv',
+        keywords: 'resume curriculum vitae open',
+      },
       {
         id: 'action:cv-pdf',
         group: 'Actions',
         kind: 'action',
+        page: 'cv',
         label: 'Download CV (PDF)',
         hint: 'A4 · English',
         run: () => downloadFile('/cv.pdf'),
@@ -489,6 +610,7 @@ export default function CommandPalette({
         id: 'action:cv-pdf-zh',
         group: 'Actions',
         kind: 'action',
+        page: 'cv',
         label: 'Download CV in 中文 (PDF)',
         hint: 'A4 · Chinese',
         run: () => downloadFile('/cv/zh.pdf'),
@@ -498,15 +620,39 @@ export default function CommandPalette({
         id: 'action:cv-zh',
         group: 'Actions',
         kind: 'nav',
+        page: 'cv',
         label: 'CV in 中文',
         hint: 'Chinese version',
         href: '/cv/zh',
         keywords: 'chinese zh resume 简历 中文 cv',
       },
+      // Contact ›
+      {
+        id: 'contact:page',
+        group: 'Actions',
+        kind: 'nav',
+        page: 'contact',
+        nestedOnly: true,
+        label: 'Contact page',
+        hint: 'write a message',
+        href: '/contact',
+        keywords: 'email message hire form',
+      },
+      {
+        id: 'action:copy-email',
+        group: 'Actions',
+        kind: 'action',
+        page: 'contact',
+        label: 'Copy email address',
+        hint: HIKO_EMAIL,
+        run: () => copyAndToast(HIKO_EMAIL, 'Email copied'),
+        keywords: 'contact mail clipboard',
+      },
       {
         id: 'action:vcard',
         group: 'Actions',
         kind: 'action',
+        page: 'contact',
         label: 'Download vCard',
         hint: 'add to contacts',
         run: () => window.location.assign('/api/vcard'),
@@ -518,6 +664,7 @@ export default function CommandPalette({
         id: 'action:book',
         group: 'Actions',
         kind: 'nav',
+        page: 'contact',
         label: 'Book a call',
         hint: 'opens the booking page',
         href: index.bookingUrl,
@@ -532,31 +679,29 @@ export default function CommandPalette({
           id: `action:theme-${value}`,
           group: 'Actions',
           kind: 'action',
+          page: 'theme',
           label,
           hint: preference === value ? 'current' : value === 'system' ? `${hint} (${systemPrefersDark() ? 'dark' : 'light'} now)` : hint,
           run: () => choose(value, null),
           keywords: `theme appearance mode colour color toggle switch ${keywords}`,
         }),
       ),
-      {
-        // WCAG 2.1.4: single-character shortcuts ("/", "G then …", "E", "?")
-        // can be turned off; ⌘K / Ctrl+K keeps working either way.
-        id: 'action:shortcuts',
-        group: 'Actions',
-        kind: 'action',
-        label: `Keyboard shortcuts: ${shortcutsOn ? 'on' : 'off'}`,
-        hint: shortcutsOn ? 'turn off single-key shortcuts' : 'turn on single-key shortcuts',
-        run: () => {
-          const next = !shortcutsOn
-          setShortcutsEnabled(next)
-          toast(
-            next
-              ? { status: 'success', title: 'Keyboard shortcuts on', description: '/ opens this palette; G then a letter jumps to a page.' }
-              : { status: 'success', title: 'Keyboard shortcuts off', description: `Single-key shortcuts are off. ${isMac ? '⌘K' : 'Ctrl+K'} still opens this palette.` },
-          )
-        },
-        keywords: 'keyboard shortcuts hotkeys keys single key disable enable turn on off accessibility',
-      },
+      shortcutsToggle,
+      { ...shortcutsToggle, id: 'shortcuts:toggle', page: 'shortcuts', nestedOnly: true },
+      // Keyboard shortcuts › (also "?"), where a keyboard is likely.
+      ...(keyboardLikely
+        ? [
+            {
+              id: 'open:shortcuts',
+              group: 'Actions',
+              kind: 'page',
+              opens: 'shortcuts',
+              label: PAGE_TITLES.shortcuts,
+              hint: 'every key',
+              keywords: 'keyboard shortcuts hotkeys keys cheatsheet help list',
+            } satisfies Item,
+          ]
+        : []),
       {
         id: 'action:copy-link',
         group: 'Actions',
@@ -565,15 +710,6 @@ export default function CommandPalette({
         hint: 'share this page',
         run: () => copyAndToast(window.location.href, 'Link copied'),
         keywords: 'url share permalink clipboard',
-      },
-      {
-        id: 'action:copy-email',
-        group: 'Actions',
-        kind: 'action',
-        label: 'Copy email address',
-        hint: HIKO_EMAIL,
-        run: () => copyAndToast(HIKO_EMAIL, 'Email copied'),
-        keywords: 'contact mail clipboard',
       },
       {
         id: 'action:source',
@@ -609,7 +745,7 @@ export default function CommandPalette({
       else if (doc.kind === 'work') list.push(docItem(doc, 'Work'))
     }
     return list
-  }, [isAdmin, publications, editTarget, unread, index, preference, choose, shortcutsOn, isMac, toast, copyAndToast, backUpNow, logOut])
+  }, [isAdmin, publications, editTarget, unread, index, preference, choose, shortcutsOn, keyboardLikely, isMac, toast, copyAndToast, backUpNow, logOut])
 
   const recentItems: Item[] = useMemo(() => {
     const out: Item[] = []
@@ -623,43 +759,80 @@ export default function CommandPalette({
     return out
   }, [recent, items])
 
-  const { rows, total } = useMemo((): { rows: Row[]; total: number } => {
-    const q = query.trim()
-    if (!q) {
+  /** The browse view (no query) of `view`: grouped at the top level, a flat list on a nested page. */
+  const browseRows = useCallback(
+    (view: PalettePage | null): Row[] => {
+      if (view) return browseItems(items, view).map((item) => ({ item, group: item.group, indices: [] }))
+      const top = browseItems(items, null)
       const grouped: Row[] = []
       const push = (group: Group, list: Item[]) => list.forEach((item) => grouped.push({ item, group, indices: [] }))
       push('Recent', recentItems)
       push('On this page', sections)
       for (const g of ['Admin', 'Pages', 'Actions', 'Writing', 'Work'] as const) {
-        const list = items.filter((i) => i.group === g)
+        const list = top.filter((i) => i.group === g)
         push(g, g === 'Writing' || g === 'Work' ? list.slice(0, BROWSE_LIMIT) : list)
       }
-      return { rows: grouped, total: grouped.length }
-    }
-    const recentIds = new Set(recent.map((r) => r.id))
-    const boost = (id: string, group: Item['group']) => GROUP_BOOST[group] + (recentIds.has(id) ? 8 : 0)
-    // Commands and sections (posts / case studies are searched as content below).
-    const commands = items.filter((i) => i.group !== 'Writing' && i.group !== 'Work')
-    const ranked: Array<{ row: Row; score: number }> = rankItems([...sections, ...commands], q, (it) => boost(it.id, it.group)).map(
-      ({ item, score, indices }) => ({ row: { item, group: item.group, indices }, score }),
-    )
-    for (const hit of rankSearchDocs(index?.docs || [], q, (doc) => boost(`doc:${doc.href}`, 'Content'))) {
-      ranked.push({
-        row: { item: docItem(hit.doc, 'Content'), group: 'Content', indices: hit.indices, detail: docDetail(hit) },
-        score: hit.score,
-      })
-    }
-    ranked.sort((a, b) => b.score - a.score)
-    return { rows: ranked.slice(0, RESULT_LIMIT).map((r) => r.row), total: ranked.length }
-  }, [query, items, sections, recentItems, recent, index])
+      return grouped
+    },
+    [items, recentItems, sections],
+  )
 
-  useEffect(() => setActiveIdx(0), [query])
+  /** The rows for a query on a page: the browse view, or every match ranked best-first. */
+  const computeRows = useCallback(
+    (q: string, view: PalettePage | null): { rows: Row[]; total: number } => {
+      if (!q) {
+        const list = browseRows(view)
+        return { rows: list, total: list.length }
+      }
+      const recentIds = new Set(recent.map((r) => r.id))
+      const boost = (id: string, group: Item['group']) => GROUP_BOOST[group] + (recentIds.has(id) ? 8 : 0)
+      // Commands and sections (posts / case studies are searched as content
+      // below); a nested page searches its own items only.
+      const commands = searchableItems(items, view).filter((i) => i.group !== 'Writing' && i.group !== 'Work')
+      const ranked: Array<{ row: Row; score: number }> = rankItems(view ? commands : [...sections, ...commands], q, (it) =>
+        boost(it.id, it.group),
+      ).map(({ item, score, indices }) => ({ row: { item, group: item.group, indices }, score }))
+      if (!view) {
+        for (const hit of rankSearchDocs(index?.docs || [], q, (doc) => boost(`doc:${doc.href}`, 'Content'))) {
+          ranked.push({
+            row: { item: docItem(hit.doc, 'Content'), group: 'Content', indices: hit.indices, detail: docDetail(hit) },
+            score: hit.score,
+          })
+        }
+      }
+      ranked.sort((a, b) => b.score - a.score)
+      return { rows: ranked.slice(0, RESULT_LIMIT).map((r) => r.row), total: ranked.length }
+    },
+    [browseRows, items, sections, recent, index],
+  )
+
+  const q = deferredQuery.trim()
+  const searching = q !== ''
+  const { rows, total } = useMemo(
+    (): { rows: Row[]; total: number } => (listReady ? computeRows(q, subpage) : { rows: [], total: 0 }),
+    [listReady, q, subpage, computeRows],
+  )
+
+  // The highlighted row (always one that exists).
+  const active = rows.length ? Math.min(activeIdx, rows.length - 1) : -1
+  const activeItem = active >= 0 ? rows[active].item : undefined
 
   useEffect(() => {
-    if (!isOpen) return
-    const el = scrollRef.current?.querySelector<HTMLElement>(`[data-idx="${activeIdx}"]`)
+    if (!isOpen || active < 0) return
+    const el = scrollRef.current?.querySelector<HTMLElement>(`[data-idx="${active}"]`)
     el?.scrollIntoView({ block: 'nearest' })
-  }, [activeIdx, isOpen])
+  }, [active, isOpen])
+
+  // A page that stays highlighted a moment is prefetched, so Enter opens it
+  // at once; arrowing past rows costs nothing.
+  const prefetchHref = activeItem && isPrefetchableHref(activeItem.href, activeItem.external) ? activeItem.href : undefined
+  useEffect(() => {
+    if (!isOpen || !prefetchHref) return
+    const timer = window.setTimeout(() => {
+      router.prefetch(prefetchHref).catch(() => undefined)
+    }, PREFETCH_DELAY_MS)
+    return () => window.clearTimeout(timer)
+  }, [isOpen, prefetchHref, router])
 
   // Height glide: the scroll area's height follows its content (capped by
   // max-height), transitioning only after the first measurement so opening
@@ -699,24 +872,50 @@ export default function CommandPalette({
   )
 
   const remember = (item: Item) => {
-    if (item.kind === 'section') return
+    if (item.kind === 'section' || item.kind === 'page') return
     const record: RecentRecord = { id: item.id, label: item.label, href: item.href, group: item.group }
     const next = [record, ...readRecent().filter((r) => r.id !== item.id)]
     writeRecent(next)
   }
 
+  const openSubpage = (next: PalettePage) => {
+    setSubpage(next)
+    setQuery('')
+    setActiveIdx(0)
+  }
+
+  // Back to the top level, with the entry of the page just left highlighted.
+  const leaveSubpage = () => {
+    const from = subpage
+    if (!from) return
+    const entry = browseRows(null).findIndex((r) => r.item.opens === from)
+    setSubpage(null)
+    setQuery('')
+    setActiveIdx(Math.max(0, entry))
+    inputRef.current?.focus()
+  }
+
   const runItem = (item: Item | undefined) => {
     if (!item) return
+    if (item.opens) {
+      openSubpage(item.opens)
+      return
+    }
     remember(item)
-    // Navigation and section jumps move focus themselves; actions hand focus
-    // back to whatever opened the palette.
-    setRestoreFocus(item.kind === 'action')
+    // Navigation and section jumps move focus themselves; actions (and a
+    // page opened in a new tab) hand focus back to whatever opened the palette.
+    setRestoreFocus(item.kind === 'action' || !!item.external)
+    if (item.href && !item.run) {
+      // A page opens at once: the closing dialog is lifted out of the route
+      // transition's snapshot and fades out on its own (lib/viewTransition.ts
+      // liftDismissibleLayers), so nothing waits for its exit animation.
+      if (item.external) window.open(item.href, '_blank', 'noopener,noreferrer')
+      else void router.push(item.href)
+      onClose()
+      return
+    }
     pending.current = () => {
       if (item.run) void item.run()
-      else if (item.href) {
-        if (item.external) window.open(item.href, '_blank', 'noopener,noreferrer')
-        else router.push(item.href)
-      }
     }
     onClose()
   }
@@ -730,25 +929,34 @@ export default function CommandPalette({
 
   const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.nativeEvent.isComposing) return
-    if (e.key === 'ArrowDown') {
+    if (pageKeyAction(e.key, query, subpage) === 'back') {
+      // Escape / Backspace in an empty field leave the nested page; the
+      // dialog stays open (its own Escape handler never sees the key).
       e.preventDefault()
-      setActiveIdx((i) => (rows.length ? (i + 1) % rows.length : 0))
+      e.stopPropagation()
+      leaveSubpage()
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActiveIdx(rows.length ? (active + 1) % rows.length : 0)
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
-      setActiveIdx((i) => (rows.length ? (i - 1 + rows.length) % rows.length : 0))
+      setActiveIdx(rows.length ? (active - 1 + rows.length) % rows.length : 0)
     } else if (e.key === 'Enter') {
       e.preventDefault()
-      runItem(rows[activeIdx]?.item)
+      // Typed faster than the deferred ranking (or before the first rows):
+      // rank the field's text now, so Enter never opens a stale row.
+      const live = query.trim()
+      if (live !== q || !listReady) runItem(computeRows(live, subpage).rows[0]?.item)
+      else runItem(activeItem)
     }
   }
 
   const mod = isMac ? '⌘' : 'Ctrl'
-  const searching = query.trim() !== ''
   const pageShortcuts = NAV_SHORTCUTS.map((s) => items.find((i) => i.id === `page:${s.url}`)).filter((i): i is Item => !!i)
 
   const renderRow = (row: Row, idx: number) => {
     const { item, detail } = row
-    const active = idx === activeIdx
+    const selected = idx === active
     const sideHint = row.group === 'Recent' ? item.group : item.hint
     return (
       <Flex
@@ -756,16 +964,18 @@ export default function CommandPalette({
         id={optId(idx)}
         data-idx={idx}
         role="option"
-        aria-selected={active}
-        onMouseMove={() => !active && setActiveIdx(idx)}
+        aria-selected={selected}
+        onMouseMove={() => !selected && setActiveIdx(idx)}
+        // The field keeps focus (and with it the keys: ↑ ↓ ↵, ⌫ / Esc on a page).
+        onMouseDown={(e) => e.preventDefault()}
         onClick={() => runItem(item)}
         px={3}
         py={2}
         minH="44px"
         borderRadius="md"
         cursor="pointer"
-        bg={active ? 'var(--accent-soft)' : 'transparent'}
-        boxShadow={active ? 'inset 2px 0 0 var(--accent)' : 'none'}
+        bg={selected ? 'var(--accent-soft)' : 'transparent'}
+        boxShadow={selected ? 'inset 2px 0 0 var(--accent)' : 'none'}
         alignItems="center"
         justifyContent="space-between"
         gap={3}
@@ -793,12 +1003,18 @@ export default function CommandPalette({
           )}
         </Box>
         <Flex alignItems="center" gap={2} flexShrink={0}>
-          {searching && (
+          {searching && !subpage && (
             <Text as="span" fontFamily={MONO} fontSize="10px" letterSpacing="0.08em" textTransform="uppercase" color="page.fg-secondary">
               {item.badge || item.group}
             </Text>
           )}
           {!searching && shortcutsOn && item.shortcut && <Key>{item.shortcut}</Key>}
+          {item.opens && (
+            // A nested page: › like a menu that opens a submenu.
+            <Text as="span" aria-hidden color="page.fg-secondary" fontFamily={MONO} fontSize="13px" lineHeight={1}>
+              ›
+            </Text>
+          )}
           {item.external && (
             <Text as="span" aria-hidden color="page.fg-secondary" fontSize="12px">
               ↗
@@ -836,11 +1052,100 @@ export default function CommandPalette({
     })
   }
 
-  const resultText = searching
-    ? total > rows.length
-      ? `Showing ${rows.length} of ${total} results`
-      : `${total} result${total === 1 ? '' : 's'}`
-    : `${rows.length} command${rows.length === 1 ? '' : 's'}`
+  /** One line of the shortcut sheet. */
+  const sheetRow = (label: string, keys: React.ReactNode, key = label) => (
+    <div key={key}>
+      <dt>{label}</dt>
+      <dd>{keys}</dd>
+    </div>
+  )
+  const keysOf = (keys: readonly string[], joiner: 'or' | 'then' | ' ' = ' ') =>
+    keys.map((k, i) => (
+      <React.Fragment key={k}>
+        {i > 0 && (joiner === ' ' ? ' ' : <Text as="span"> {joiner} </Text>)}
+        <Key>{k}</Key>
+      </React.Fragment>
+    ))
+
+  /**
+   * The keyboard cheatsheet: compact under the browse view, every key on the
+   * Keyboard shortcuts page. Hidden on touch-first devices.
+   */
+  const renderSheet = (full: boolean) => (
+    <Box
+      as="section"
+      aria-label="Keyboard shortcuts"
+      mt={2}
+      mx={3}
+      mb={2}
+      pt={full ? 2 : 4}
+      borderTop={full ? undefined : '1px solid'}
+      borderColor="page.border"
+      sx={HIDE_ON_COARSE_POINTER}
+    >
+      {!full && (
+        <Text fontFamily={MONO} fontSize="10px" letterSpacing="0.16em" textTransform="uppercase" color="page.fg-secondary" mb={3}>
+          Shortcuts
+        </Text>
+      )}
+      {full && !shortcutsOn && (
+        <Text fontSize="12px" color="page.fg-secondary" mb={3}>
+          Single-key shortcuts are off; {mod} K still opens this palette. Turn them on above.
+        </Text>
+      )}
+      <Box
+        as="dl"
+        display="grid"
+        gridTemplateColumns={{ base: '1fr', sm: '1fr 1fr' }}
+        columnGap={6}
+        rowGap={2}
+        fontSize="12px"
+        color="page.fg-secondary"
+        sx={{ '& > div': { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 3 }, '& dd': { m: 0, whiteSpace: 'nowrap' } }}
+      >
+        {sheetRow(
+          'Open / close palette',
+          <>
+            <Key>{mod}</Key> <Key>K</Key>
+            {shortcutsOn && (
+              <>
+                {' '}
+                <Text as="span">or</Text> <Key>/</Key>
+              </>
+            )}
+          </>,
+        )}
+        {sheetRow('Move / open', keysOf(['↑', '↓', '↵']))}
+        {full && sheetRow('Back from a page', keysOf(['⌫', 'Esc'], 'or'))}
+        {!full &&
+          (shortcutsOn ? (
+            <>
+              {pageShortcuts.map((it) => sheetRow(`Go to ${it.label}`, <Key>{it.shortcut}</Key>, it.id))}
+              {keyboardLikely && sheetRow('Every shortcut', <Key>?</Key>)}
+            </>
+          ) : (
+            sheetRow('Single-key shortcuts', 'off')
+          ))}
+        {full && (
+          <>
+            {LAYER_SHORTCUT_ROWS.filter((r) => r.keys[0] !== '/').map((r) => sheetRow(r.label, keysOf(r.keys)))}
+            {pageShortcuts.map((it) => sheetRow(`Go to ${it.label}`, keysOf(['G', (it.shortcut || '').slice(2)], 'then'), it.id))}
+            {isAdmin && editTarget && sheetRow('Edit this page', <Key>E</Key>)}
+          </>
+        )}
+      </Box>
+    </Box>
+  )
+
+  const resultText = !listReady
+    ? ''
+    : `${subpage ? `${PAGE_TITLES[subpage]}: ` : ''}${
+        searching
+          ? total > rows.length
+            ? `Showing ${rows.length} of ${total} results`
+            : `${total} result${total === 1 ? '' : 's'}`
+          : `${rows.length} command${rows.length === 1 ? '' : 's'}`
+      }`
 
   return (
     <Modal
@@ -852,13 +1157,19 @@ export default function CommandPalette({
       isCentered={false}
       initialFocusRef={inputRef}
       returnFocusOnClose={restoreFocus && returnFocusOnClose}
+      // On a nested page Escape goes back to the top level, wherever focus is.
+      closeOnEsc={!subpage}
+      onEsc={subpage ? leaveSubpage : undefined}
     >
-      <ModalOverlay backdropFilter="blur(12px)" bg="rgba(0,0,0,0.45)" />
+      {/* A plain scrim on touch screens: a full-screen blur costs phones a
+          frame or more on open (and nothing under reduced transparency). */}
+      <ModalOverlay bg="rgba(0,0,0,0.5)" sx={{ '@media (hover: hover) and (pointer: fine)': { backdropFilter: 'blur(12px)' } }} />
       <ModalContent
         aria-label="Command palette"
         lang={chromeLang}
         motionProps={
-          reduceMotion
+          // From the keyboard it is simply there; from a click it scales in.
+          instant || reduceMotion
             ? undefined
             : {
                 initial: { opacity: 0, scale: 0.98, y: -4 },
@@ -878,13 +1189,47 @@ export default function CommandPalette({
         overflow="hidden"
       >
         <Flex borderBottom="1px solid" borderColor="page.border" px={4} h="56px" alignItems="center" gap={3}>
-          <Text as="span" aria-hidden color="page.fg-secondary" fontFamily={MONO} fontSize="13px" lineHeight={1}>
-            ›
-          </Text>
+          {subpage ? (
+            // The nested page: a chip that leads back (as do ⌫ and Esc).
+            <Box
+              as="button"
+              type="button"
+              onClick={leaveSubpage}
+              aria-label={`Back to all commands (leave ${PAGE_TITLES[subpage]})`}
+              display="inline-flex"
+              alignItems="center"
+              gap={1}
+              flexShrink={0}
+              minH="26px"
+              px={2}
+              borderRadius="control"
+              border="1px solid"
+              borderColor="page.border-strong"
+              bg="page.surface"
+              color="page.fg"
+              fontFamily={MONO}
+              fontSize="11px"
+              lineHeight={1}
+              _hover={{ borderColor: 'accent.text' }}
+              _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
+            >
+              <Text as="span" aria-hidden color="page.fg-secondary">
+                ‹
+              </Text>
+              {PAGE_TITLES[subpage]}
+            </Box>
+          ) : (
+            <Text as="span" aria-hidden color="page.fg-secondary" fontFamily={MONO} fontSize="13px" lineHeight={1}>
+              ›
+            </Text>
+          )}
           <Input
             ref={inputRef}
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value)
+              setActiveIdx(0)
+            }}
             onFocus={(e) => {
               if (!selectOnFocus.current) return
               selectOnFocus.current = false
@@ -892,15 +1237,15 @@ export default function CommandPalette({
             }}
             onKeyDown={onKey}
             role="combobox"
-            aria-label="Search pages, sections, actions, posts, case studies and the CV"
+            aria-label={subpage ? `Search ${PAGE_TITLES[subpage]}` : 'Search pages, sections, actions, posts, case studies and the CV'}
             aria-expanded={rows.length > 0}
             aria-controls={listId}
             aria-autocomplete="list"
-            aria-activedescendant={rows.length ? optId(activeIdx) : undefined}
+            aria-activedescendant={active >= 0 ? optId(active) : undefined}
             autoComplete="off"
             autoCorrect="off"
             spellCheck={false}
-            placeholder="Search or jump to…"
+            placeholder={subpage ? `Search ${PAGE_TITLES[subpage].toLowerCase()}…` : 'Search or jump to…'}
             variant="unstyled"
             fontSize="15px"
             color="page.fg"
@@ -924,77 +1269,18 @@ export default function CommandPalette({
             '&[data-ready]': { transition: 'height var(--duration-fast) var(--ease-standard)' },
           }}
         >
-          <Box ref={observeContent}>
-            <Box id={listId} role="listbox" aria-label="Commands">
-              {searching ? rows.map((row, i) => renderRow(row, i)) : renderGrouped()}
+          {/* Measured from the first frame that has rows, so opening never glides. */}
+          <Box ref={listReady ? observeContent : undefined}>
+            <Box id={listId} role="listbox" aria-label={subpage ? PAGE_TITLES[subpage] : 'Commands'}>
+              {searching || subpage ? rows.map((row, i) => renderRow(row, i)) : renderGrouped()}
             </Box>
-            {searching && rows.length === 0 && (
+            {listReady && searching && rows.length === 0 && (
               <Flex direction="column" align="center" justify="center" py={10} color="page.fg-secondary" fontFamily={MONO} fontSize="12px" gap={1}>
                 <Text>no matches</Text>
-                <Text>{loading ? 'still loading posts and projects…' : 'try fewer or different letters'}</Text>
+                <Text>{loading && !subpage ? 'still loading posts and projects…' : 'try fewer or different letters'}</Text>
               </Flex>
             )}
-            {!searching && (
-              <Box
-                as="section"
-                aria-label="Keyboard shortcuts"
-                mt={2}
-                mx={3}
-                mb={2}
-                pt={4}
-                borderTop="1px solid"
-                borderColor="page.border"
-                sx={HIDE_ON_COARSE_POINTER}
-              >
-                <Text fontFamily={MONO} fontSize="10px" letterSpacing="0.16em" textTransform="uppercase" color="page.fg-secondary" mb={3}>
-                  Shortcuts
-                </Text>
-                <Box
-                  as="dl"
-                  display="grid"
-                  gridTemplateColumns={{ base: '1fr', sm: '1fr 1fr' }}
-                  columnGap={6}
-                  rowGap={2}
-                  fontSize="12px"
-                  color="page.fg-secondary"
-                  sx={{ '& > div': { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 3 }, '& dd': { m: 0 } }}
-                >
-                  <div>
-                    <dt>Open / close palette</dt>
-                    <dd>
-                      <Key>{mod}</Key> <Key>K</Key>
-                      {shortcutsOn && (
-                        <>
-                          {' '}
-                          <Text as="span">or</Text> <Key>/</Key>
-                        </>
-                      )}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Move / open</dt>
-                    <dd>
-                      <Key>↑</Key> <Key>↓</Key> <Key>↵</Key>
-                    </dd>
-                  </div>
-                  {shortcutsOn ? (
-                    pageShortcuts.map((it) => (
-                      <div key={it.id}>
-                        <dt>Go to {it.label}</dt>
-                        <dd>
-                          <Key>{it.shortcut}</Key>
-                        </dd>
-                      </div>
-                    ))
-                  ) : (
-                    <div>
-                      <dt>Single-key shortcuts</dt>
-                      <dd>off</dd>
-                    </div>
-                  )}
-                </Box>
-              </Box>
-            )}
+            {listReady && !searching && (subpage === 'shortcuts' ? renderSheet(true) : subpage ? null : renderSheet(false))}
           </Box>
         </Box>
 
@@ -1019,6 +1305,12 @@ export default function CommandPalette({
               <Key>↵</Key>
               <Text>open</Text>
             </Flex>
+            {subpage && (
+              <Flex gap={1} alignItems="center">
+                <Key>⌫</Key>
+                <Text>back</Text>
+              </Flex>
+            )}
           </Flex>
           <Text role="status" aria-live="polite" ml="auto" className="tnum">
             {resultText}

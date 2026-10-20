@@ -97,7 +97,8 @@ export default function PublicationsPage({ items, lang, jsonLd, description, sum
   )
 
   const renderItem = (it: Item, headingAs: 'h2' | 'h3') => (
-    <Box as="li" key={it.key} py={{ base: 6, md: 7 }} borderBottom="1px solid" borderColor="page.border">
+    // data-kbd-item: J / K move through the entries (components/Chrome/KeyboardLayer.tsx).
+    <Box as="li" key={it.key} py={{ base: 6, md: 7 }} borderBottom="1px solid" borderColor="page.border" data-kbd-item="">
       <Flex direction={{ base: 'column', sm: 'row' }} gap={{ base: 1.5, sm: 6 }}>
         <Text
           as="span"
