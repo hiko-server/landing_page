@@ -140,21 +140,8 @@ async function shoot(page: Page, name: string) {
   await page.screenshot({ path: `${SHOTS}/${name}-${SHOT_THEME}.png`, fullPage: false })
 }
 
-/**
- * Each test is its own client (a TEST-NET-1 address in cf-connecting-ip,
- * believed from a loopback peer like Cloudflare's): saves are limited per
- * client (30 per 10 minutes, lib/mdx-admin.ts), and these drafts would
- * otherwise spend the budget the rest of the admin suite writes with.
- */
-let clients = 0
-const clientHeaders = () => ({ 'cf-connecting-ip': `192.0.2.${(clients++ % 250) + 1}` })
-
 test.describe('editor-parity', { tag: '@admin' }, () => {
   test.skip(!ADMIN.email || !ADMIN.password, 'ADMIN_EMAIL / ADMIN_PASS not set')
-
-  test.beforeEach(async ({ page }) => {
-    await page.setExtraHTTPHeaders(clientHeaders())
-  })
 
   test('the visual editor shows tables, callouts, figures, videos and MDX blocks, and saves the body back unchanged @admin', async ({ page }) => {
     await loginAsAdmin(page)

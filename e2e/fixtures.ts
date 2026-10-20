@@ -63,9 +63,45 @@ async function serveWithoutHttpsUpgrade(page: Page, origin: string): Promise<voi
   )
 }
 
+/**
+ * Every test is its own client. The server limits requests per client
+ * address (lib/rateLimit.ts: e.g. 30 post saves per 10 minutes, 20 contact
+ * nonces per 5 minutes, 10 sign-ins per 5 minutes), and a whole run against
+ * one server otherwise comes from a single address (127.0.0.1, or the
+ * Docker gateway in the container gate), so the suite's later specs would
+ * get 429s from budgets the earlier ones spent. Each test therefore sends a
+ * documentation address (RFC 5737 TEST-NET-1/2/3) in cf-connecting-ip. The
+ * server believes that header only from a trusted proxy peer — loopback or
+ * the container's gateway, exactly where Cloudflare's tunnel arrives in
+ * production (lib/security/proxyTrust.ts) — so nothing changes for a
+ * request from anywhere else, and against production Cloudflare replaces
+ * the header with the real address anyway. Workers running at the same time
+ * hold different parallel slots, and slot s only ever uses addresses
+ * s, s + W, s + 2W … (W workers) from an offset that changes per run, so no
+ * two concurrent tests — and no test of a rerun against the same server
+ * inside a limit window — share a budget. The header goes on the context,
+ * so the page, its fetches, `page.request` and any `browser.newContext()`
+ * of the test carry it; a spec that sets its own cf-connecting-ip (per
+ * visitor, page.setExtraHTTPHeaders) still wins.
+ */
+const TEST_NETS = ['192.0.2', '198.51.100', '203.0.113'] as const
+const HOSTS_PER_NET = 254
+const ADDRESSES = TEST_NETS.length * HOSTS_PER_NET
+const RUN_OFFSET = process.ppid % ADDRESSES
+let testsInWorker = 0
+
+function testClientAddress(slot: number, workers: number, n: number): string {
+  const i = (RUN_OFFSET + slot + Math.max(1, workers) * n) % ADDRESSES
+  return `${TEST_NETS[Math.floor(i / HOSTS_PER_NET)]}.${(i % HOSTS_PER_NET) + 1}`
+}
+
 type Fixtures = { pageGuard: void }
 
 export const test = base.extend<Fixtures>({
+  extraHTTPHeaders: async ({ extraHTTPHeaders }, use, testInfo) => {
+    const address = testClientAddress(testInfo.parallelIndex, testInfo.config.workers, testsInWorker++)
+    await use({ 'cf-connecting-ip': address, ...extraHTTPHeaders })
+  },
   pageGuard: [
     async ({ page, baseURL, browserName }, run) => {
       const origin = new URL(baseURL || 'http://127.0.0.1:3000').origin
