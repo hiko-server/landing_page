@@ -403,7 +403,7 @@ test('search: one document per public paper, at its /publications anchor — or 
       ['A preprint', `/publications#${citationKeys(v.publications)[2]}`, 'Preprint · arXiv · 2026'],
     ],
   )
-  assert.ok(docs.every((d) => d.kind === 'cv'))
+  assert.ok(docs.every((d) => d.kind === 'publication'))
   assert.equal(docs[0].body, 'Jane Doe, Yanpei Li* Best Paper Award')
   assert.deepEqual(docs[0].tags, ['TypeScript'])
   const raw = JSON.stringify(docs)

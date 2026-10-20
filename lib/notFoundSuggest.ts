@@ -136,26 +136,30 @@ function wordScore(token: string, words: readonly string[], haystack: string): n
   return best
 }
 
+/** CV entries and papers are anchors inside one page (/cv#…, /publications#…): the path says nothing about them. */
+const isAnchorKind = (kind: PageCandidate['kind']) => kind === 'cv' || kind === 'publication'
+
 /** Score of one candidate for a normalised requested path (0–1). */
 export function scoreCandidate(requested: string, candidate: PageCandidate): number {
   const target = normalizeRequestedPath(candidate.href)
   if (target === requested) return 0
+  const anchor = isAnchorKind(candidate.kind)
   // The last segment carries the intent (a section prefix is shared by every
   // page in it): a typo in it, or the same slug under another section
   // (/posts/x → /blog/x), counts almost fully.
   const reqLast = squash(lastSegment(requested))
   const candLast = squash(lastSegment(target))
   let pathScore = 0
-  if (reqLast && candLast && candidate.kind !== 'cv') {
+  if (reqLast && candLast && !anchor) {
     const segSim = similarity(reqLast, candLast)
     pathScore = segSim >= 0.7 ? segSim * 0.95 : 0
   }
 
   const tokens = wordsOf(requested).filter((t) => t.length >= 2 && !STOPWORDS.has(t))
   // A candidate is described by its title, keywords and slug — not by its
-  // section (every /work/… page would match "work"), and a CV entry not by
-  // its anchor.
-  const slug = candidate.kind === 'cv' ? '' : lastSegment(target)
+  // section (every /work/… page would match "work"), and a CV entry or a
+  // paper not by the page it is anchored in.
+  const slug = anchor ? '' : lastSegment(target)
   const words = wordsOf(`${candidate.title} ${slug} ${candidate.keywords || ''}`)
   const haystack = `${candidate.title} ${slug.replace(/-+/g, ' ')} ${candidate.keywords || ''}`
   // In a deeper path the first segment only says which section the visitor
@@ -177,8 +181,8 @@ export function scoreCandidate(requested: string, candidate: PageCandidate): num
   const reqSection = requested.split('/')[1] || ''
   const sameSection = !!reqSection && reqSection === (target.split('/')[1] || '') && target !== `/${reqSection}`
   if (sameSection && score >= SUGGESTION_THRESHOLD) score += 0.05
-  // CV entries are anchors inside /cv: offered after real pages.
-  if (candidate.kind === 'cv') score *= 0.85
+  // CV entries and papers are anchors inside a page: offered after real pages.
+  if (anchor) score *= 0.85
   return Math.min(1, score)
 }
 

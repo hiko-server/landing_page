@@ -145,8 +145,11 @@ quoted from the site itself (J1).
   ten-minute time-based rebuild is the fallback. The leak tests cover the
   search documents and the passages (`tests/search-ask-leak.test.ts`,
   `tests/search-ask-store-leak.test.ts`).
-- **Publications** — paper documents in the index (`kind: 'publication'`)
-  are searched and quoted as soon as they exist.
+- **Publications** — paper documents (`lib/publicationsSearch.ts`) now carry
+  the `publication` kind (they used the CV's): the palette and the 404 page
+  label them *Paper*, questions about papers find them, and the Ask index
+  quotes their abstracts. The 404 page still treats them as anchors inside
+  /publications, as it does CV entries.
 - **With the palette's nested pages (motion, C5)**: Ask is a view of the
   top level — Theme ›, CV ›, Contact › and Keyboard shortcuts › belong to
   Search; opening in Ask mode (the entries on /about and /contact) lands

@@ -12,8 +12,11 @@
  * Only what those pages show is indexed: the title, the status of anything
  * not yet published, the venue (never for a paper under review), the year,
  * the visible authors (a hidden co-author contributes nothing), the abstract,
- * the award and the keywords. The documents use the frozen `cv` kind of the
- * search-index contract (components/Article/fuzzyMatch SearchDocLike).
+ * the award and the keywords. The documents carry the `publication` kind of
+ * the search-index contract (components/Article/fuzzyMatch SEARCH_DOC_KINDS):
+ * the palette and the 404 page label them "Paper", search questions about
+ * papers find them (lib/search/synonyms `publications`), and the Ask index
+ * quotes their abstracts (lib/askIndex docPassages).
  */
 
 import type { SearchDoc } from './searchIndex'
@@ -32,7 +35,7 @@ function clampChars(s: string, max: number): string {
 }
 
 function paperDoc(p: Publication, href: string): SearchDoc {
-  const doc: SearchDoc = { kind: 'cv', title: p.title, href, lang: textLang(p.title, 'en') || 'en' }
+  const doc: SearchDoc = { kind: 'publication', title: p.title, href, lang: textLang(p.title, 'en') || 'en' }
   const description = [isPublishedStatus(p.status) ? '' : statusLabel(p.status, 'en'), p.venue, p.year].filter(Boolean).join(' · ')
   if (description) doc.description = description
   const authors = p.authors.filter((a) => !a.hidden).map((a) => a.name)
