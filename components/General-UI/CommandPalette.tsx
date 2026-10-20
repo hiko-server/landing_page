@@ -1,4 +1,4 @@
-import React, { useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useDeferredValue, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   Box,
   Flex,
@@ -65,6 +65,8 @@ import {
   type PalettePage,
 } from './paletteModel'
 import { listenSearchEmpty } from '../../lib/analytics/searchEmpty'
+import { focusPageStart } from '../Chrome/routeFocus'
+import { focusReturnTarget, initialSession, sessionAfterExit, sessionAfterToggle, type PaletteSession } from './paletteSession'
 
 /**
  * ⌘K command palette (loaded on demand by CommandPaletteLazy).
@@ -92,6 +94,10 @@ import { listenSearchEmpty } from '../../lib/analytics/searchEmpty'
  *   - A highlighted page is prefetched after a short pause, and Enter
  *     navigates at once — the closing dialog fades out on its own in the
  *     route transition (lib/viewTransition.ts liftDismissibleLayers).
+ *     Every opening is a fresh dialog: ⌘K pressed while the last one is
+ *     still leaving puts the caret in a new field at once, and focus returns
+ *     where it was opened from — or to the new page after a navigation
+ *     (paletteSession.ts).
  *   - `initialQuery` opens it already searching (the 404 page's search field).
  *   - Two modes: Search (above) and Ask ("Ask Lucian", J1): a question is
  *     answered only with quotes from the site's public pages, each linked to
@@ -234,6 +240,13 @@ function loadSearchIndex(): Promise<SearchIndex> {
 }
 
 // ── Recents ─────────────────────────────────────────────────────────────────
+
+/** What has focus right now (where focus returns to when the palette opening now closes). */
+function focusedElement(): HTMLElement | null {
+  if (typeof document === 'undefined') return null
+  const el = document.activeElement
+  return el instanceof HTMLElement ? el : null
+}
 
 function readRecent(): RecentRecord[] {
   try {
@@ -450,6 +463,53 @@ export default function CommandPalette({
   const initialModeRef = useRef<PaletteMode>(initialMode)
   initialModeRef.current = normalizePaletteMode(initialMode)
   const selectOnFocus = useRef(false)
+
+  // One dialog per opening (paletteSession.ts): a reopen while the last one
+  // is still leaving — fading out, or held hidden by the route transition
+  // after it opened a page — mounts a fresh dialog whose field takes focus,
+  // and focus returns where the palette was opened from.
+  const [session, setSession] = useState<PaletteSession<HTMLElement>>(() => initialSession(isOpen, focusedElement()))
+  if (session.open !== isOpen) {
+    setSession(sessionAfterToggle(session, isOpen, { focused: focusedElement(), restores: restoreFocus && returnFocusOnClose }))
+  }
+  // Read by the leaving dialog's focus trap as it lets go (during a commit, so kept current while rendering).
+  const focusState = useRef({ session, open: isOpen, restores: restoreFocus && returnFocusOnClose, asPath: router.asPath })
+  focusState.current = { session, open: isOpen, restores: restoreFocus && returnFocusOnClose, asPath: router.asPath }
+  const returnFocusRef = useMemo<{ readonly current: { focus: () => void } | null }>(
+    () => ({
+      get current() {
+        const { session: s, open, restores, asPath } = focusState.current
+        const target = focusReturnTarget(s, { open, restores }, (el) => (el === document.body ? 'body' : el.isConnected ? 'yes' : 'gone'))
+        if (target === null) return null
+        if (target === 'page') return { focus: () => void focusPageStart(document, asPath) }
+        return target
+      },
+    }),
+    [],
+  )
+
+  // The route transition hides the overlays on screen as the page changes
+  // (lib/viewTransition liftDismissibleLayers), so a closing dialog leaves
+  // with the old page. A palette opened while the next page was still loading
+  // (⌘K right after a link) is not leaving: it shows again at once — before
+  // the new state is captured, and before its hidden field could lose focus.
+  const keepShown = useMemo(
+    () =>
+      typeof MutationObserver === 'undefined'
+        ? null
+        : new MutationObserver((records) => {
+            const { open, session: s } = focusState.current
+            for (const r of records) {
+              const el = r.target as HTMLElement
+              if (open && el.dataset.paletteSession === String(s.key) && el.style.visibility === 'hidden') el.style.visibility = ''
+            }
+          }),
+    [],
+  )
+  useEffect(() => () => keepShown?.disconnect(), [keepShown])
+  const layerRef = useCallback((el: HTMLElement | null) => {
+    if (el) keepShown?.observe(el, { attributes: true, attributeFilter: ['style'] })
+  }, [keepShown])
 
   useEffect(() => {
     setIsMac(isApplePlatform(navigator as Navigator & { userAgentData?: { platform?: string } }))
@@ -1171,10 +1231,20 @@ export default function CommandPalette({
 
   // Run the chosen item once the dialog (and its focus trap) is gone.
   const onCloseComplete = () => {
+    setSession(sessionAfterExit)
     const run = pending.current
     pending.current = null
     run?.()
   }
+  // A reopen dropped the leaving dialog before its exit completed: what its
+  // choice left to run (a theme switch, a copy…) runs now instead of never.
+  useLayoutEffect(() => {
+    if (!session.interrupted) return
+    const run = pending.current
+    pending.current = null
+    run?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per opening
+  }, [session.key])
 
   // An Enter pressed while the posts and projects were loading is carried out
   // once they are in (or failed to come): the first result for the text it was
@@ -1436,6 +1506,8 @@ export default function CommandPalette({
 
   return (
     <Modal
+      // A fresh dialog for every opening (see paletteSession.ts).
+      key={session.key}
       isOpen={isOpen}
       onClose={onClose}
       onCloseComplete={onCloseComplete}
@@ -1443,15 +1515,20 @@ export default function CommandPalette({
       motionPreset="none"
       isCentered={false}
       initialFocusRef={inputRef}
-      returnFocusOnClose={restoreFocus && returnFocusOnClose}
+      // The palette decides where focus returns (returnFocusRef): the trap's
+      // own memory would be wrong after a reopen dropped the leaving dialog.
+      returnFocusOnClose={false}
+      finalFocusRef={returnFocusRef}
       // On a nested page Escape goes back to the top level, wherever focus is.
       closeOnEsc={!subpage}
       onEsc={subpage ? leaveSubpage : undefined}
     >
       {/* A plain scrim on touch screens: a full-screen blur costs phones a
           frame or more on open (and nothing under reduced transparency). */}
-      <ModalOverlay bg="rgba(0,0,0,0.5)" sx={{ '@media (hover: hover) and (pointer: fine)': { backdropFilter: 'blur(12px)' } }} />
+      <ModalOverlay ref={layerRef} data-palette-session={session.key} bg="rgba(0,0,0,0.5)" sx={{ '@media (hover: hover) and (pointer: fine)': { backdropFilter: 'blur(12px)' } }} />
       <ModalContent
+        ref={layerRef}
+        data-palette-session={session.key}
         aria-label={p.dialog}
         lang={chromeLang}
         motionProps={
