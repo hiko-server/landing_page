@@ -85,7 +85,7 @@
     "@axe-core/playwright": "4.13.0",
     "@playwright/test": "1.63.0",
     "@types/better-sqlite3": "^7.6.13",
-    "@types/hast": "3.0.4",
+    "@types/hast": "3.0.5",
     "@types/jsonwebtoken": "^9.0.2",
     "@types/node": "^20.4.6",
     "@types/qrcode": "1.5.6",
