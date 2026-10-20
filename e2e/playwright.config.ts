@@ -29,8 +29,12 @@ const baseURL = process.env.E2E_BASE_URL || 'http://127.0.0.1:3000'
 const CI = !!process.env.CI
 const desktop = { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } }
 const publicOnly = /public\.spec\.ts$/
-/** The public checks and the fixture-store layout gates (e2e/gates.spec.ts), also run on WebKit and Firefox. */
-const crossEngine = /(public|gates)\.spec\.ts$/
+/**
+ * The public checks, the fixture-store layout gates (e2e/gates.spec.ts) and
+ * the image viewer's gestures (e2e/lightbox-gestures.spec.ts: touch on
+ * Safari's engine matters most), also run on WebKit and Firefox.
+ */
+const crossEngine = /(public|gates|lightbox-gestures)\.spec\.ts$/
 
 export default defineConfig({
   testDir: '.',
@@ -59,8 +63,8 @@ export default defineConfig({
     { name: 'reduced', testMatch: publicOnly, use: { ...desktop, reducedMotion: 'reduce' } },
     // Cross-engine: the public checks on Safari's engine (iPhone — about half
     // of Hong Kong's mobile visits) and on Firefox.
-    { name: 'webkit', testMatch: crossEngine, use: { ...devices['iPhone 15'] } },
-    { name: 'firefox', testMatch: crossEngine, use: { ...devices['Desktop Firefox'], viewport: { width: 1280, height: 800 } } },
+    { name: 'webkit', testMatch: crossEngine, grepInvert: /@admin/, use: { ...devices['iPhone 15'] } },
+    { name: 'firefox', testMatch: crossEngine, grepInvert: /@admin/, use: { ...devices['Desktop Firefox'], viewport: { width: 1280, height: 800 } } },
     // Visual baselines of the fixture store (e2e/visual.spec.ts; skipped elsewhere).
     { name: 'visual', testMatch: /visual\.spec\.ts$/, use: { ...devices['Desktop Chrome'] } },
     { name: 'admin', use: desktop, grep: /@admin/, workers: 1, dependencies: ['chromium', 'tablet', 'mobile', 'reduced', 'webkit', 'firefox', 'visual'] },

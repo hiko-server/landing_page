@@ -4,6 +4,8 @@
  * plugins stay dependency-free (no unist-util-visit / hast-util-to-string).
  */
 
+import { isPlaceholder } from '../lqip'
+
 export type HastNode = {
   type: string
   tagName?: string
@@ -69,6 +71,8 @@ export type TreeImage = {
   caption?: string
   width?: number
   height?: number
+  /** The blur-up placeholder (lib/rehype/images.ts `data-lqip`), drawn by the viewer until the image has loaded. */
+  placeholder?: string
 }
 
 const num = (v: unknown): number | undefined => {
@@ -94,6 +98,7 @@ export function collectImages(tree: HastNode): TreeImage[] {
         alt: typeof p.alt === 'string' ? p.alt : '',
         ...(caption ? { caption } : {}),
         ...(num(p.width) && num(p.height) ? { width: num(p.width), height: num(p.height) } : {}),
+        ...(isPlaceholder(p.dataLqip) ? { placeholder: p.dataLqip } : {}),
       })
       return
     }

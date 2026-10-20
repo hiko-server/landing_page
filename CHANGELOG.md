@@ -43,6 +43,37 @@ https://lucian-dev.com).
   keeps the origin's `Cache-Control` checks; the header itself stays covered
   against the container and by `tests/wave2a-fixes-edge.test.ts`.
 
+### lightbox-gestures
+
+The image viewer of article images and the home Field Notes, rebuilt
+around its own gesture engine (C3).
+
+- **Open and close as one picture**: the image grows out of the photo you
+  pressed — cut to what its tile shows, with its corners — and flies back
+  into the photo on screen when it closes, from wherever a gesture left it
+  (dragged, pinched, zoomed). After stepping through, the home strip has
+  already moved to the photo shown, and focus returns to it. A photo that
+  is off screen fades instead. Nothing glides under reduced motion.
+- **Touch**: swipe between images (a spring that carries the flick); drag
+  up or down to close — the photo follows the finger and the backdrop
+  fades; pinch to zoom 1–4× with pan, or pinch a photo small to close it;
+  double tap zooms at your finger; a zoomed photo pans with momentum,
+  bounces at its edges and runs into the next one. Pinching zooms the
+  photo, never the page, so the site is never left zoomed afterwards; the
+  page outside the viewer keeps the browser's pinch-zoom. On phones the
+  previous / next buttons sit under the photo, clear of the swipe.
+- **Mouse, trackpad, keyboard**: click to zoom at the pointer and drag to
+  pan; the wheel and a trackpad pinch zoom at the pointer; a sideways
+  trackpad swipe pages. ← / → page (pan when zoomed), ↑ / ↓ pan, + / − / 0
+  zoom (announced to screen readers), Home / End, Esc. A zoom button sits
+  next to Close; the keys are described to screen readers in the
+  article's language.
+- **Sharper as you zoom**: the viewer starts with the copy the page has
+  already decoded over the blur-up placeholder, fades in the full-size
+  AVIF / WebP once decoded, and fetches a larger size as you zoom in.
+- The backdrop is a little deeper (0.96), so a light page no longer reads
+  through behind the caption.
+
 ### admin-editorial
 
 Editorial tools in the post and case-study editors (wave 2B: H1, H3, H4, H6, H16).

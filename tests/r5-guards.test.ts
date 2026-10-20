@@ -28,10 +28,16 @@ test('reduced motion shows the hero name at once (no staggered delay)', () => {
   assert.match(global[0], /animation-delay:\s*0s !important/)
 })
 
-test('the lightbox keeps native pinch-zoom on the enlarged image', () => {
+test('the enlarged image can always be pinch-zoomed', () => {
+  // Round 4 gave the image native pinch-zoom (it zoomed the page). Since C3
+  // the viewer's stage takes every touch (touch-action: none) and zooms the
+  // picture itself — pinch, double tap, the zoom button, + / − — so the page
+  // is never left zoomed; tests/lightbox-gestures.test.ts guards the details.
   const src = read('components/Common/Lightbox.tsx')
-  assert.match(src, /touchAction: 'pinch-zoom'/)
-  assert.doesNotMatch(src, /touchAction: 'none'/)
+  const engine = read('components/Common/lightboxEngine.ts')
+  assert.equal((src.match(/touchAction: 'none'/g) || []).length, 1)
+  assert.match(engine, /pinchView\(g\.start, a, b, this\.base, this\.viewBox\)/)
+  assert.match(src, /aria-label=\{zoomed \? t\.zoomOut : t\.zoomIn\}/)
 })
 
 test('deploy.sh: tar tolerates a changing WAL, compose always recreates, a lost build aborts', () => {

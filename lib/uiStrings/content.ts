@@ -20,6 +20,11 @@ export type ContentStrings = {
   closeImageViewer: string
   previousImage: string
   nextImage: string
+  /** The viewer's zoom ({n}: the zoom in percent) and its keyboard help. */
+  zoomIn: string
+  zoomOut: string
+  zoomLevel: string
+  viewerKeys: string
   /** Click-to-load video facade ({provider}: "YouTube", {host}: "youtube-nocookie.com", {title}). */
   videoFallback: string
   playVideo: string
@@ -40,6 +45,10 @@ export const CONTENT_UI: UiTable<ContentStrings> = {
     closeImageViewer: 'Close image viewer',
     previousImage: 'Previous image',
     nextImage: 'Next image',
+    zoomIn: 'Zoom in',
+    zoomOut: 'Zoom out',
+    zoomLevel: 'Zoom {n}%',
+    viewerKeys: 'Left and right arrows: previous and next image (they pan a zoomed image). Plus and minus: zoom. Zero: fit. Escape: close.',
     videoFallback: '{provider} video',
     playVideo: 'Play video: {title}',
     videoNote: 'Loads from {host} ({provider}) only when you press play.',
@@ -57,6 +66,10 @@ export const CONTENT_UI: UiTable<ContentStrings> = {
     closeImageViewer: '关闭图片查看器',
     previousImage: '上一张',
     nextImage: '下一张',
+    zoomIn: '放大',
+    zoomOut: '缩小',
+    zoomLevel: '缩放 {n}%',
+    viewerKeys: '左右方向键：上一张、下一张（放大后用于平移）。加号、减号：缩放。0：复原。Esc：关闭。',
     videoFallback: '{provider} 视频',
     playVideo: '播放视频：{title}',
     videoNote: '按下播放后才会从 {host}（{provider}）加载。',
@@ -74,6 +87,10 @@ export const CONTENT_UI: UiTable<ContentStrings> = {
     closeImageViewer: '關閉圖片檢視器',
     previousImage: '上一張',
     nextImage: '下一張',
+    zoomIn: '放大',
+    zoomOut: '縮小',
+    zoomLevel: '縮放 {n}%',
+    viewerKeys: '左右方向鍵：上一張、下一張（放大後用於平移）。加號、減號：縮放。0：還原。Esc：關閉。',
     videoFallback: '{provider} 影片',
     playVideo: '播放影片：{title}',
     videoNote: '按下播放後才會從 {host}（{provider}）載入。',

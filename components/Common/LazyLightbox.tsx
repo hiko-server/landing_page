@@ -12,8 +12,7 @@ import type LightboxComponent from './Lightbox'
  *     an image button gets focus — starts the download earlier, so the
  *     first open is normally instant.
  *   - Once opened, the viewer stays mounted, exactly like an eagerly
- *     imported one: closing it runs the same exit and shared-layout
- *     animation back into its tile.
+ *     imported one: closing it runs the same flight back into its tile.
  */
 
 const loadLightbox = () => import('./Lightbox')

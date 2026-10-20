@@ -131,6 +131,11 @@ English → [README.md](./README.md)
   再自行翻译），页面就会出现「阅读中文版 / Read in English」切换、hreflang
   互链和站点地图互链，列表只显示一次（优先英文版）。界面文字统一放在
   `lib/uiStrings/`。
+- **图片查看器**：文章与案例中的每张图片（以及首页 Field Notes 照片）都可全屏
+  查看——从原图位置放大展开，关闭时飞回原位。左右滑动切换，双指或双击缩放
+  （只缩放图片，不会缩放整页），下拉关闭；鼠标可点击放大、用滚轮缩放；键盘支持
+  方向键、+ / − / 0 和 Esc。手势引擎在 `components/Common/lightboxEngine.ts`，
+  相关计算在 `lib/lightboxGestures.ts` 与 `lib/lightboxPhysics.ts`。
 - **机器可读内容**：`/llms.txt`（llmstxt.org）、`/llms-full.txt`，以及每篇已发布
   文章与案例的 Markdown 版本（在地址后加 `.md`，如 `/blog/<slug>.md`）；只含公开
   内容，草稿与简历数据从不出现，`robots.txt` 不变。
