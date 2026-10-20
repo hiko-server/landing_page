@@ -16,6 +16,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import Database from 'better-sqlite3'
 import sharp from 'sharp'
 import { FIXTURE_DIR, FIXTURE_TIME, install } from '../scripts/ci/fixture-store.mjs'
 
@@ -30,8 +31,58 @@ function files(dir: string): string[] {
 
 const textFiles = () => files(FIXTURE_DIR).filter((f) => /\.(json|mdx?)$/.test(f))
 
-test('the fixture is owner-neutral: no owner identity, no real contact data', () => {
+/** CV fields that name an organisation (an employer, a school, an issuer, a venue, a contest). */
+const ORG_FIELDS = new Set(['companyName', 'schoolName', 'issuingOrganization', 'organization', 'authority', 'contestName', 'publisher', 'venue'])
+/** CV fields that name the owner or their work. */
+const OWN_FIELDS = new Set(['firstName', 'lastName', 'nickName', 'title', 'projectLocation'])
+
+/**
+ * The owner's facts the fixture must not contain — organisations, project
+ * and case-study names, the owner's names — read at test time from the real
+ * content store when this checkout has one (data/ is never committed, so the
+ * public repository itself names none of them: a tracked list of "what
+ * identifies the owner" would disclose exactly that). Null without a store
+ * (CI): that part of the check is skipped there.
+ */
+function ownerFactsFromStore(): string[] | null {
+  const file = path.join(ROOT, 'data', 'content.db')
+  if (!fs.existsSync(file)) return null
+  const facts = new Set<string>()
+  const add = (v: unknown) => {
+    if (typeof v !== 'string') return
+    const text = v.replace(/\s+/g, ' ').trim()
+    for (const part of [text, ...Array.from(text.matchAll(/\(([^)]+)\)/g), (m) => m[1].trim())]) if (part.length >= 4) facts.add(part.toLowerCase())
+  }
+  const walk = (node: unknown) => {
+    if (Array.isArray(node)) node.forEach(walk)
+    else if (node && typeof node === 'object')
+      for (const [k, v] of Object.entries(node)) {
+        if (ORG_FIELDS.has(k) || OWN_FIELDS.has(k)) add(v)
+        if (v && typeof v === 'object') walk(v)
+      }
+  }
+  const db = new Database(file, { readonly: true, fileMustExist: true })
+  try {
+    const cv = db.prepare("SELECT value FROM kv WHERE key = 'cvdata'").get() as { value: string } | undefined
+    if (cv) walk(JSON.parse(cv.value))
+    for (const item of db.prepare('SELECT slug, frontmatter FROM collection_items').all() as Array<{ slug: string; frontmatter: string }>) {
+      add(item.slug)
+      add((JSON.parse(item.frontmatter) as { title?: unknown }).title)
+    }
+  } finally {
+    db.close()
+  }
+  return [...facts]
+}
+
+const wholeWords = (fact: string) => new RegExp(`(?<![\\p{L}\\p{N}])${fact.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'iu')
+
+test('the fixture is owner-neutral: no owner identity, no real contact data', (t) => {
+  // Only what the public site itself shows (the display name, the domain, the handle) and contact-data shapes.
   const forbidden = [/yanpei/i, /李彦霈|李彥霈|彦霈/, /\blucian\b/i, /lucian-dev/i, /hiko/i, /\+852/, /\b\d{8}\b/]
+  const facts = ownerFactsFromStore()
+  if (facts) forbidden.push(...facts.map(wholeWords))
+  else t.diagnostic('no data/content.db in this checkout: the check against the owner\'s own facts is skipped')
   for (const file of textFiles()) {
     const text = fs.readFileSync(file, 'utf8')
     for (const re of forbidden) assert.doesNotMatch(text, re, `${path.relative(ROOT, file)} matches ${re}`)
