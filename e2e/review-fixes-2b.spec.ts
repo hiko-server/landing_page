@@ -1,5 +1,5 @@
 import { devices, type Page } from '@playwright/test'
-import { test, expect, ADMIN, loginAsAdmin } from './fixtures'
+import { test, expect, ADMIN, adminCleanup, loginAsAdmin } from './fixtures'
 
 /**
  * Wave 2B review fixes (stream review-fixes-2b):
@@ -122,19 +122,6 @@ const adminFetch = (page: Page, method: string, url: string, body?: unknown) =>
     [method, url, body] as const,
   )
 
-/**
- * Clean-up requests outside the page (no console noise when something is
- * already gone). The page's cookies are passed by hand: the request context
- * leaves the Secure session cookie out over http://127.0.0.1.
- */
-async function cleanup(page: Page, method: 'DELETE' | 'POST', url: string, body?: unknown): Promise<number> {
-  const cookie = (await page.context().cookies()).map((c) => `${c.name}=${c.value}`).join('; ')
-  const res = await page.request
-    .fetch(url, { method, headers: { 'Content-Type': 'application/json', cookie }, data: body === undefined ? undefined : JSON.stringify(body) })
-    .catch(() => null)
-  return res ? res.status() : 0
-}
-
 test.describe('renamed Markdown twins (CORR-4)', { tag: '@admin' }, () => {
   test.skip(!ADMIN.email || !ADMIN.password, 'ADMIN_EMAIL / ADMIN_PASS not set')
 
@@ -170,8 +157,8 @@ test.describe('renamed Markdown twins (CORR-4)', { tag: '@admin' }, () => {
       expect(followed.status()).toBe(200)
       expect(await followed.text()).toMatch(/^# E2E twin rename/)
     } finally {
-      await cleanup(page, 'POST', '/api/admin/posts', { action: 'remove-redirect', slug: to, from })
-      for (const slug of [to, from]) await cleanup(page, 'DELETE', `/api/admin/posts?slug=${slug}`)
+      await adminCleanup(page, 'POST', '/api/admin/posts', { action: 'remove-redirect', slug: to, from })
+      for (const slug of [to, from]) await adminCleanup(page, 'DELETE', `/api/admin/posts?slug=${slug}`)
     }
     // Nothing is left behind (the public pages' checks would list the post).
     expect((await page.request.get(`/blog/${to}.md`, { maxRedirects: 0 })).status()).toBe(404)

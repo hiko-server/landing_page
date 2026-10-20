@@ -211,6 +211,22 @@ export async function undersizedTargets(page: Page): Promise<TargetOffender[]> {
 /** Admin credentials from the job env (the CI container is started with the same values). */
 export const ADMIN = { email: process.env.ADMIN_EMAIL || '', password: process.env.ADMIN_PASS || '' }
 
+/**
+ * A clean-up request to the admin API outside the page, so nothing is logged
+ * to the page's console when the thing is already gone. The page's cookies
+ * are passed by hand: the request context leaves the session cookie out
+ * over plain http (it is Secure in a production build), which made every
+ * clean-up a silent 401 on http://127.0.0.1. Resolves to the status (0 when
+ * the request failed); deleting needs a recent sign-in (lib/adminAuth/stepUp).
+ */
+export async function adminCleanup(page: Page, method: 'DELETE' | 'POST', url: string, body?: unknown): Promise<number> {
+  const cookie = (await page.context().cookies()).map((c) => `${c.name}=${c.value}`).join('; ')
+  const res = await page.request
+    .fetch(url, { method, headers: { 'Content-Type': 'application/json', cookie }, data: body === undefined ? undefined : JSON.stringify(body) })
+    .catch(() => null)
+  return res ? res.status() : 0
+}
+
 /** Fill and submit the real login form (the page is on /admin/login) and wait for the admin portal. */
 async function submitLoginForm(page: Page): Promise<void> {
   // Required fields carry a visual "*" in their label, hence the prefix match.

@@ -159,8 +159,13 @@ test.describe('admin-ops: Inbox 2.0', { tag: '@admin' }, () => {
     await page.getByTestId('undo-toast').filter({ hasText: 'Message deleted' }).getByRole('button', { name: 'Dismiss' }).click()
     expect((await sent).status()).toBe(200)
     await page.reload()
-    await page.getByRole('searchbox', { name: 'Search messages' }).fill(token)
-    await expect(page.getByTestId('inbox-list').locator('[data-message-id]')).toHaveCount(0)
+    // Gone after a reload: the search finds nothing — or, when it was the only message, the Inbox is empty.
+    const searchAgain = page.getByRole('searchbox', { name: 'Search messages' })
+    await expect(searchAgain.or(page.getByText('No messages yet'))).toBeVisible()
+    if (await searchAgain.isVisible()) {
+      await searchAgain.fill(token)
+      await expect(page.getByTestId('inbox-list').locator('[data-message-id]')).toHaveCount(0)
+    }
 
     // H13: the activity log names what happened, without the visitor's address.
     await page.goto('/admin/system?view=activity')

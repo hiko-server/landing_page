@@ -1,4 +1,4 @@
-import { test, expect, ADMIN, loginAsAdmin, seriousA11yViolations, settle } from './fixtures'
+import { test, expect, ADMIN, adminCleanup, loginAsAdmin, seriousA11yViolations, settle } from './fixtures'
 import type { Page } from '@playwright/test'
 
 /**
@@ -31,8 +31,7 @@ const adminFetch = (page: Page, method: string, url: string, body?: unknown, hea
   )
 
 /** Clean-up requests outside the page (no console noise when something is already gone). */
-const cleanup = (page: Page, method: 'DELETE' | 'POST', url: string, body?: unknown) =>
-  page.request.fetch(url, { method, headers: { 'Content-Type': 'application/json' }, data: body === undefined ? undefined : JSON.stringify(body) }).catch(() => undefined)
+const cleanup = adminCleanup
 
 const today = () => new Date().toISOString().slice(0, 10)
 
