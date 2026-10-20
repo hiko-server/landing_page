@@ -229,6 +229,53 @@ test('JSON Resume 1.0.0: basics, profiles, ISO dates, open ends omitted, languag
   for (const d of dates) assert.match(d.split(':"')[1].slice(0, -1), /^([1-2][0-9]{3}-[0-1][0-9]-[0-3][0-9]|[1-2][0-9]{3}-[0-1][0-9]|[1-2][0-9]{3})$/)
 })
 
+test('JSON Resume: a hidden end date drops the whole date range, so an ended entry never reads as current (CORR-2)', () => {
+  const ended = { startDate: '2022-01', endDate: '2023-03', hiddenFields: ['endDate'] }
+  const doc = publicSections(
+    [
+      {
+        sessionName: 'workExperience',
+        experiences: [
+          { jobTitle: 'Engineer', companyName: 'Acme', ...ended },
+          { jobTitle: 'Dev', companyName: 'NowCo', startDate: '2024-01', endDate: 'Present' },
+        ],
+      },
+      {
+        sessionName: 'education',
+        educationExperience: [
+          { schoolName: 'Uni Hidden End', degree: 'BSc', ...ended },
+          { schoolName: 'Uni Now', degree: 'MSc', startDate: '2026-09', endDate: '2028-06' },
+        ],
+      },
+      {
+        sessionName: 'project',
+        projectExperience: [
+          { title: 'Hidden end project', ...ended },
+          { title: 'Running project', startDate: '2025-01', endDate: '2027-01' },
+        ],
+      },
+    ],
+    'cv',
+  )
+  const r = buildJsonResume(doc, { lang: 'en', now: NOW, canonical: 'https://lucian-dev.com/cv.json' }) as Record<string, Array<Record<string, string>>>
+  // The hidden end leaves no range at all; the current role keeps its start (and no end: "Present").
+  assert.deepEqual(r.work[0], { name: 'Acme', position: 'Engineer' })
+  assert.deepEqual(r.work[1], { name: 'NowCo', position: 'Dev', startDate: '2024-01' })
+  assert.notDeepEqual(Object.keys(r.work[0]), Object.keys(r.work[1]), 'the ended role and the current one no longer look alike')
+  assert.deepEqual(r.education[0], { institution: 'Uni Hidden End', studyType: 'BSc' })
+  assert.deepEqual(r.education[1], { institution: 'Uni Now', studyType: 'MSc', startDate: '2026-09', endDate: '2028-06' })
+  assert.deepEqual(r.projects[0], { name: 'Hidden end project' })
+  assert.deepEqual(r.projects[1], { name: 'Running project', startDate: '2025-01' }, 'a future end on a running project stays open')
+  // The hidden value itself never appears (the editor document behaves the same way).
+  assert.ok(!JSON.stringify(r).includes('2023-03'))
+  const editor = buildJsonResume([{ sessionName: 'workExperience', experiences: [{ jobTitle: 'Engineer', companyName: 'Acme', ...ended }] }], {
+    lang: 'en',
+    now: NOW,
+    canonical: '',
+  }) as Record<string, Array<Record<string, string>>>
+  assert.deepEqual(editor.work[0], { name: 'Acme', position: 'Engineer' })
+})
+
 test('JSON Resume helpers', () => {
   assert.equal(isoDate('2024-09-01'), '2024-09')
   assert.equal(isoDate('2024'), '2024')
