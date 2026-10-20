@@ -101,7 +101,7 @@ test('parseAttribution accepts exactly the browser shape and rejects anything el
 const metric = (over: Partial<WebVitalMetric> = {}): WebVitalMetric => ({ id: 'v4-1', name: 'LCP', value: 2100, navigationType: 'navigate', ...over })
 
 test('the collector sends the attribution with LCP / INP / CLS, updates it with a grown value, and ingest validates it', () => {
-  const c = createVitalsCollector('/blog')
+  const c = createVitalsCollector('/blog', buildAttribution)
   c.add(metric({ attribution: { element: 'main>img.cover', url: '/u.jpg', timeToFirstByte: 100, resourceLoadDelay: 10, resourceLoadDuration: 900, elementRenderDelay: 5 } }))
   c.add(metric({ id: 'cls', name: 'CLS', value: 0.02, attribution: { largestShiftTarget: 'main>p', largestShiftValue: 0.02, loadState: 'complete' } }))
   c.add(metric({ id: 'ttfb', name: 'TTFB', value: 90, attribution: { waitingDuration: 10 } }))
@@ -206,11 +206,22 @@ test('installWebVitals loads the attribution build once, right away (web-vitals 
       const on = (name: string) => () => subscribed.push(name)
       return { onLCP: on('LCP'), onINP: on('INP'), onCLS: on('CLS'), onFCP: on('FCP'), onTTFB: on('TTFB') }
     }
-    mod.installWebVitals(fake)
-    mod.installWebVitals(fake)
+    // The attribution mapping rides in the same lazy fetch (it left the shared bundle).
+    let attributionLoads = 0
+    const fakeAttribution = async () => {
+      attributionLoads++
+      return { buildAttribution }
+    }
+    mod.installWebVitals(fake, fakeAttribution)
+    mod.installWebVitals(fake, fakeAttribution)
     assert.equal(loads, 1, 'requested at once, before the load event, and only once')
+    assert.equal(attributionLoads, 1, 'the attribution module is requested with it, once')
     await new Promise((r) => setImmediate(r))
     assert.deepEqual(subscribed, ['LCP', 'INP', 'CLS', 'FCP', 'TTFB'])
+    // Once loaded, the collector attributes measurements through the loaded module.
+    const c = mod.createVitalsCollector('/work/')
+    c.add({ id: 'v1', name: 'CLS', value: 0.2, attribution: { largestShiftTarget: 'main>figure', largestShiftValue: 0.2, loadState: 'complete' } })
+    assert.ok(c.drain()[0][0].a, 'attribution attached after the lazy module loaded')
   } finally {
     g.window = saved.window
     g.document = saved.document

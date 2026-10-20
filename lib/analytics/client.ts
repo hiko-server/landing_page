@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import type { NextRouter } from 'next/router'
 import { isVitalName, normalizeNavType, normalizeTrackedPath, type NavType, type VitalName } from './shared'
-import { buildAttribution, type VitalAttribution } from './attribution'
+import type { VitalAttribution } from './attribution'
 
 /**
  * Browser side of the first-party analytics (server: lib/analytics/ingest).
@@ -130,7 +130,14 @@ export type VitalBeaconEvent = { t: 'v'; route: string; name: VitalName; value: 
  * instances with new ids: new measurements.) FID, unknown names and
  * non-finite values are ignored.
  */
-export function createVitalsCollector(route: string | null) {
+/** Maps a web-vitals attribution object to the beacon's shape (lib/analytics/attribution buildAttribution, loaded with web-vitals). */
+export type Attribute = (name: string, raw: unknown) => VitalAttribution | null
+
+// Set once the attribution module has loaded (installWebVitals); until then
+// — and in the admin, which never loads it — a measurement has no `a`.
+let attribute: Attribute = () => null
+
+export function createVitalsCollector(route: string | null, attributeWith: Attribute = (name, raw) => attribute(name, raw)) {
   const latest = new Map<string, { event: VitalBeaconEvent; sent: boolean }>()
   return {
     /** Record `metric`; false when it is ignored or repeats the stored value. `fallbackNav` is read only for a new instance without a navigation type. */
@@ -138,7 +145,7 @@ export function createVitalsCollector(route: string | null) {
       if (!route || !metric || typeof metric.id !== 'string' || !metric.id) return false
       if (!isVitalName(metric.name) || typeof metric.value !== 'number' || !Number.isFinite(metric.value)) return false
       const known = latest.get(metric.id)
-      const a = buildAttribution(metric.name, metric.attribution)
+      const a = attributeWith(metric.name, metric.attribution)
       if (known) {
         if (known.event.name !== metric.name || known.event.value === metric.value) return false
         known.event = { ...known.event, value: metric.value }
@@ -223,17 +230,28 @@ let vitalsInstalled = false
  * not measured or the visitor opted out (Do Not Track, Global Privacy
  * Control, automated browsers, /admin).
  */
-export function installWebVitals(load: () => Promise<WebVitalsModule> = loadWebVitals): void {
+export function installWebVitals(
+  load: () => Promise<WebVitalsModule> = loadWebVitals,
+  loadAttribution: () => Promise<{ buildAttribution: Attribute }> = loadAttributionModule,
+): void {
   if (typeof window === 'undefined' || vitalsInstalled) return
   vitalsInstalled = true
   if (!trackingAllowed(landingPath) || !normalizeTrackedPath(landingPath)) return
-  load()
-    .then((wv) => {
+  // The attribution mapping rides in the same lazy fetch as web-vitals: both
+  // are needed only once a measurement arrives, and neither belongs in the
+  // shared first-load JavaScript (perf budget: pages/_app).
+  Promise.all([load(), loadAttribution()])
+    .then(([wv, attr]) => {
+      attribute = attr.buildAttribution
       for (const on of [wv.onLCP, wv.onINP, wv.onCLS, wv.onFCP, wv.onTTFB]) on(reportWebVital)
     })
     .catch(() => {
       // Analytics must never surface errors to the visitor.
     })
+}
+
+function loadAttributionModule(): Promise<{ buildAttribution: Attribute }> {
+  return import('./attribution')
 }
 
 function loadWebVitals(): Promise<WebVitalsModule> {

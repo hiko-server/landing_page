@@ -4,7 +4,7 @@
  * tests/s5-chrome.test.ts.
  */
 
-import { safeHref } from '../../lib/cvFormat'
+import { safeHref } from '../../lib/url'
 import { ADMIN_HINT_COOKIE } from '../../lib/adminHint'
 
 export type NavLink = { name: string; url: string }
