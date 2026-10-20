@@ -199,3 +199,42 @@ test('CV-L-4: a paper no view renders (no title; empty, hidden or unknown status
   const [none] = publicSections([{ sessionName: 'publications', papers: papers.slice(1, 6) }], 'any')
   assert.deepEqual(none.papers, [])
 })
+
+/** Every module reached from `entry` through static and literal dynamic imports (type-only imports excluded), with the packages they import. */
+function importGraph(entry: string): { files: string[]; packages: Map<string, string> } {
+  const root = originalCwd
+  const seen = new Set<string>()
+  const packages = new Map<string, string>()
+  const resolve = (from: string, spec: string): string | null => {
+    const base = path.resolve(path.dirname(from), spec)
+    for (const candidate of [base, `${base}.ts`, `${base}.tsx`, `${base}.js`, `${base}.mjs`, path.join(base, 'index.ts')])
+      if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) return candidate
+    return null
+  }
+  const visit = (file: string) => {
+    if (seen.has(file)) return
+    seen.add(file)
+    const src = fs.readFileSync(file, 'utf8')
+    const specs = [
+      ...Array.from(src.matchAll(/^\s*(?:import|export)\s+(?!type\b)[^'";]*?from\s+['"]([^'"]+)['"]/gm), (m) => m[1]),
+      ...Array.from(src.matchAll(/^\s*import\s+['"]([^'"]+)['"]/gm), (m) => m[1]),
+      ...Array.from(src.matchAll(/\bimport\(\s*['"]([^'"]+)['"]\s*\)/g), (m) => m[1]),
+    ]
+    for (const spec of specs) {
+      if (spec.startsWith('.')) {
+        const next = resolve(file, spec)
+        if (next) visit(next)
+      } else if (!packages.has(spec)) packages.set(spec, path.relative(root, file))
+    }
+  }
+  visit(path.join(root, entry))
+  return { files: [...seen].map((f) => path.relative(root, f)), packages }
+}
+
+test('the server-start clean-up (instrumentation.ts → lib/isrPages, through lib/cvdata) stays React-free', () => {
+  // Next refuses to build the instrumentation bundle when it reaches React client APIs (createContext…).
+  const { files, packages } = importGraph('lib/isrPages.ts')
+  assert.ok(files.includes('lib/cvdata.ts') && files.includes('lib/cvVisibility.ts'), files.join(', '))
+  for (const pkg of ['react', 'react-dom', '@chakra-ui/react', 'framer-motion', '@emotion/react'])
+    assert.equal(packages.get(pkg), undefined, `${pkg} reached through ${packages.get(pkg)}`)
+})

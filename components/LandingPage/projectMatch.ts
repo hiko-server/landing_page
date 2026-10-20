@@ -25,6 +25,7 @@
  */
 
 import { isoDate } from '../../lib/postDate'
+import { caseStudySlug } from '../../lib/cvVisibility'
 import { bullets, field, list } from '../CVViewerPage/fields'
 
 export type WorkIndexItem = {
@@ -83,15 +84,8 @@ function workKeys(w: WorkIndexItem): string[] {
 /** What a CV entry offers for matching: its title, and optionally the owner's chosen slug. */
 export type CaseStudyRef = { title?: unknown; caseStudy?: unknown }
 
-/** The slug part of an owner-entered case-study reference ("raku", "/work/raku", "/work/raku/"). */
-export function caseStudySlug(value: unknown): string {
-  if (typeof value !== 'string') return ''
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/^\/?work\//, '')
-    .replace(/\/+$/, '')
-}
+/** The slug part of an owner-entered case-study reference (lib/cvVisibility, React-free for the public projection). */
+export { caseStudySlug }
 
 /**
  * The case study a CV entry refers to, or null. `project` is either a title

@@ -232,6 +232,38 @@ function pruneSection(section: CvSectionLike): CvSectionLike {
   return body
 }
 
+/** The slug part of an owner-entered case-study reference ("raku", "/work/raku", "/work/raku/"). */
+export function caseStudySlug(value: unknown): string {
+  if (typeof value !== 'string') return ''
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/^\/?work\//, '')
+    .replace(/\/+$/, '')
+}
+
+/**
+ * Public CV sections in which a project's `caseStudy` is the slug of a
+ * PUBLISHED case study (`published`: lib/contentStore publishedItemSlugs)
+ * or '' — the rule of the CV's evidence links (lib/cvLinks), applied to
+ * every public CV payload by lib/cvdata readPublicCvData, so a draft's or
+ * a deleted case study's slug never leaves the server. Entries without the
+ * field stay without it.
+ */
+export function withPublishedCaseStudies(sections: readonly CvSectionLike[], published: ReadonlySet<string>): CvSectionLike[] {
+  return sections.map((s) => {
+    if (!isPlainObject(s) || s.sessionName !== 'project' || !Array.isArray(s.projectExperience)) return s
+    return {
+      ...s,
+      projectExperience: s.projectExperience.map((p: unknown) => {
+        if (!isPlainObject(p) || !('caseStudy' in p)) return p
+        const slug = caseStudySlug(p.caseStudy)
+        return { ...p, caseStudy: slug && published.has(slug) ? slug : '' }
+      }),
+    }
+  })
+}
+
 export type CvAudience = 'cv' | 'website' | 'any'
 
 /**

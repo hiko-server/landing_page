@@ -21,7 +21,7 @@ import { isRedacted, type CvLang, type CvSectionLike } from './cvVisibility'
 import { displayUrl, safeHref } from './cvFormat'
 import { absUrl } from './schema'
 import { field, list } from '../components/CVViewerPage/fields'
-import { caseStudySlug, matchCaseStudy, type WorkIndexItem } from '../components/LandingPage/projectMatch'
+import { matchCaseStudy, type WorkIndexItem } from '../components/LandingPage/projectMatch'
 
 /** The Home socials a CV may print (never WhatsApp). */
 export type PublicSocials = { github?: unknown; linkedin?: unknown; [k: string]: unknown }
@@ -84,30 +84,6 @@ export function withEvidenceLinks(
       return { ...s, projectExperience: s.projectExperience.map((p: unknown) => (isObject(p) ? decorateProject(p, works) : p)) }
     }
     return s
-  })
-}
-
-/**
- * Public CV sections in which a project's `caseStudy` is the slug of a
- * PUBLISHED case study or '' — the rule of the evidence links above, for
- * public data that is not decorated (GET /api/cvdata and every other reader
- * of lib/cvdata readPublicCvData), so a draft's or a deleted case study's
- * slug never leaves the server. Entries without the field stay without it.
- */
-export function withPublishedCaseStudies(
-  sections: readonly CvSectionLike[] | null | undefined,
-  published: ReadonlySet<string>,
-): CvSectionLike[] {
-  return (Array.isArray(sections) ? sections : []).map((s) => {
-    if (!isObject(s) || s.sessionName !== 'project' || !Array.isArray(s.projectExperience)) return s
-    return {
-      ...s,
-      projectExperience: s.projectExperience.map((p: unknown) => {
-        if (!isObject(p) || !('caseStudy' in p)) return p
-        const slug = caseStudySlug(p.caseStudy)
-        return { ...p, caseStudy: slug && published.has(slug) ? slug : '' }
-      }),
-    }
   })
 }
 
