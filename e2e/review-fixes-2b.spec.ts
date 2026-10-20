@@ -25,6 +25,8 @@ test.describe('one toast policy (CORR-1)', () => {
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: () => Promise.reject(new Error('denied')) } })
       document.execCommand = () => false
+      // Each toast element once (a record for its region may already contain it).
+      const elements = new WeakSet<Element>()
       const seen: Array<{ status: string | null; role: string | null }> = []
       ;(window as unknown as { __toasts: typeof seen }).__toasts = seen
       new MutationObserver((records) => {
@@ -32,7 +34,8 @@ test.describe('one toast policy (CORR-1)', () => {
           for (const n of Array.from(r.addedNodes)) {
             if (!(n instanceof HTMLElement)) continue
             for (const el of [n, ...Array.from(n.querySelectorAll('.chakra-toast'))]) {
-              if (!el.classList.contains('chakra-toast')) continue
+              if (!el.classList.contains('chakra-toast') || elements.has(el)) continue
+              elements.add(el)
               seen.push({ status: el.getAttribute('data-toast-status'), role: el.querySelector('.chakra-toast__inner')?.getAttribute('role') ?? null })
             }
           }
