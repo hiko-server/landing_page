@@ -48,6 +48,16 @@ import {
   type DashboardTab,
 } from '../../components/Admin/shell/dashboardTabs'
 
+// CV variants and their private links (E4): loaded only when that view opens.
+const CvVariantsPanel = dynamic(() => import('../../components/Admin/cvVariants/CvVariantsPanel'), {
+  ssr: false,
+  loading: () => (
+    <Flex h="40vh" align="center" justify="center" role="status" aria-label="Loading CV variants">
+      <Spinner color="accent.500" />
+    </Flex>
+  ),
+})
+
 // Loaded only when the tab opens: the charts and tables never weigh on the editors.
 const AnalyticsPanel = dynamic(() => import('../../components/Admin/AnalyticsPanel'), {
   ssr: false,
@@ -70,6 +80,7 @@ const TAB_META: Record<DashboardTab, { label: string; icon: SegmentedItem<Dashbo
 
 const CV_VIEW_ITEMS: SegmentedItem<CvView>[] = [
   { key: 'studio', label: 'Studio' },
+  { key: 'variants', label: 'Variants & links' },
   { key: 'raw', label: 'Raw JSON' },
 ]
 
@@ -318,7 +329,7 @@ function Dashboard() {
             {tab === 'home' ? <HomeEditor onUnsavedSource={setHomeUnsavedSource} /> : null}
             {tab === 'cv' ? (
               <Box {...tabPanelProps('cvview', cvView)}>
-                {cvView === 'raw' ? <CVEditor /> : <CVEditorStudio />}
+                {cvView === 'raw' ? <CVEditor /> : cvView === 'variants' ? <CvVariantsPanel /> : <CVEditorStudio />}
               </Box>
             ) : null}
             {tab === 'versions' ? (

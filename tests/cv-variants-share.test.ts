@@ -136,7 +136,7 @@ test('variants: validation names what is wrong; the selection keeps its order an
   const doc = cv()
   const picked = applyVariant(doc.en, variant())
   assert.deepEqual(picked.map((s) => s.sessionName), ['personalInformation', 'workExperience', 'education'])
-  assert.deepEqual(picked[1].experiences.map((e: any) => e.uid), ['job-ml', 'job-gone'], 'chosen entries in the variant’s order')
+  assert.deepEqual((picked[1] as any).experiences.map((e: any) => e.uid), ['job-ml', 'job-gone'], 'chosen entries in the variant’s order')
   const { publicSections } = await import('../lib/cvVisibility')
   const out = JSON.stringify(publicSections(picked, 'cv', 'private'))
   assert.ok(out.includes('ZZ-ML-MODELS') && out.includes(PRIVATE_PHONE))

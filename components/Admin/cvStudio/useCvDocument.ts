@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { docJson, type Doc } from './docOps'
+import { withEntryUids } from '../../../lib/cvEntryUid'
 import { EMPTY_DOC, historyApply, historyInit, historyRedo, historyUndo, type History } from './history'
 import { DRAFT_MAX_AGE_MS, UNKNOWN_BASE, readAdminCv, saveCv, type SaveOutcome } from './cvApi'
 
@@ -195,7 +196,8 @@ export function useCvDocument() {
 
   const restoreDraft = useCallback(() => {
     if (!draft) return
-    const d = draft.doc
+    // A draft written before entries had uids gets them as the server would (lib/cvEntryUid).
+    const d = withEntryUids(draft.doc)
     apply(() => d)
     // A draft based on an older version keeps that base, so saving it hits
     // the If-Match check and asks before overwriting the newer server copy.

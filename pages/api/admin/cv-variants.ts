@@ -14,6 +14,9 @@ import type { CvLang } from '../../../lib/cvVisibility'
  *
  *   GET                     { variants, keyConfigured } + ETag of the stored
  *                           document ("0" when none)
+ *   GET ?pdf=<id>&lang=en|zh
+ *                           the SAVED variant's PDF, exactly as its share
+ *                           links serve it (for the owner to look at)
  *   PUT { variants }        save the whole list (If-Match against the ETag;
  *                           409 with the current ETag when it changed). A
  *                           variant left out is deleted and its share links
@@ -44,6 +47,23 @@ async function measure(variant: Pick<CvVariant, 'sections'>): Promise<Record<CvL
 export default withApi('admin/cv-variants', async (req: NextApiRequest, res: NextApiResponse) => {
   if (!isAdminRequest(req, res)) return res.status(401).json({ error: 'Unauthorized' })
   res.setHeader('Cache-Control', 'no-store')
+
+  if (req.method === 'GET' && typeof req.query.pdf === 'string') {
+    const variant = readVariants().variants.find((v) => v.id === req.query.pdf)
+    const lang: CvLang = req.query.lang === 'zh' ? 'zh' : 'en'
+    if (!variant) return res.status(404).json({ error: 'No saved variant has this id.' })
+    const { loadShareSource } = await import('../../../lib/cvShare/page')
+    const { getCvExport } = await import('../../../lib/cvExport/service')
+    const { inlineDisposition } = await import('../../../lib/cvExport/files')
+    const result = await getCvExport(lang, 'pdf', await loadShareSource(variant, lang))
+    if (!result.ok) return res.status(404).json({ error: lang === 'zh' ? 'This variant prints nothing in Chinese.' : 'This variant prints nothing in English.' })
+    res.setHeader('Content-Type', result.file.contentType)
+    res.setHeader('Content-Disposition', inlineDisposition(result.file.filename))
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow')
+    res.setHeader('Content-Length', result.file.body.length)
+    res.statusCode = 200
+    return res.end(result.file.body)
+  }
 
   if (req.method === 'GET') {
     const { variants, version } = readVariants()

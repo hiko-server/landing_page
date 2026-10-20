@@ -644,6 +644,16 @@ export default function ColophonPage({ releases, stack, buildSha, builtAt }: Pro
                   their own privacy policies apply from then on.
                 </Para>
                 <Para>
+                  I sometimes share a version of my CV tailored to one role through a private link
+                  (<Code>/cv/r/…</Code>). Such a link expires, can be withdrawn at any time, and is never
+                  listed, indexed or kept in a cache. Opening one adds one to a count on that link and
+                  keeps the day of the latest opening &mdash; no cookie, visitor ID, address or device
+                  detail &mdash; and only
+                  once the page has really been shown in a browser: link previews in chat apps, mail
+                  scanners, Do Not Track and Global Privacy Control are not counted. Private links are
+                  not part of the site analytics above.
+                </Para>
+                <Para>
                   Messages sent through the <InlineLink href="/contact">contact form</InlineLink> are
                   handled separately:
                 </Para>

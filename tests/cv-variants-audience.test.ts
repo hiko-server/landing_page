@@ -163,8 +163,9 @@ test('uids: deterministic for a stored CV without them, kept once stored, unique
   const once = withEntryUids(raw)
   const twice = withEntryUids(JSON.parse(JSON.stringify(raw)))
   assert.deepEqual(once, twice, 'the same stored document always reads the same')
-  assert.deepEqual(once.en[0].educationExperience.map((e: any) => e.uid), ['educationExperience-0', 'educationExperience-1'])
-  assert.deepEqual(once.zh[0].educationExperience.map((e: any) => e.uid), once.en[0].educationExperience.map((e: any) => e.uid))
+  const uidsOf = (s: any) => s.educationExperience.map((e: any) => e.uid)
+  assert.deepEqual(uidsOf(once.en[0]), ['educationExperience-0', 'educationExperience-1'])
+  assert.deepEqual(uidsOf(once.zh[0]), uidsOf(once.en[0]))
   assert.equal('uid' in once.en[1], false, 'sections themselves carry none')
   assert.equal(withEntryUids(once), once, 'nothing to fill: the same object')
 

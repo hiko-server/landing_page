@@ -4,11 +4,16 @@
  * and agrees with countHidden() / the public pruning in lib/cvVisibility.
  */
 
-import { hiddenIndices, isSectionOnCv, isSectionOnWebsite, type CvLang, type CvPath } from '../../../lib/cvVisibility'
+import { FIELDS_ONLY_IN_KEY, ONLY_IN_KEY, audienceOf, hiddenIndices, isSectionOnCv, isSectionOnWebsite, type CvLang, type CvPath } from '../../../lib/cvVisibility'
+import { audienceSummary } from './audience'
 import { SECTION_BY_NAME, type FieldDef, type ListDef } from '../../../lib/cvSections'
 import type { Doc } from './docOps'
 
-export type HiddenKind = 'section-cv' | 'section-web' | 'entry' | 'field' | 'list' | 'item'
+/**
+ * 'limited' (E4): shown only on some surfaces — a section, an entry, a field
+ * or a list with an audience list (lib/cvVisibility onlyIn / fieldsOnlyIn).
+ */
+export type HiddenKind = 'section-cv' | 'section-web' | 'entry' | 'field' | 'list' | 'item' | 'limited'
 
 export type HiddenRow = {
   /** Unique within one document snapshot. */
@@ -35,7 +40,9 @@ export type HiddenRow = {
 
 const isPlainObject = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v)
 
-const META = new Set(['isVisible', 'showOnWebsite', 'hiddenFields', 'hiddenItems', 'redacted'])
+const META = new Set(['isVisible', 'showOnWebsite', 'hiddenFields', 'hiddenItems', 'redacted', ONLY_IN_KEY, FIELDS_ONLY_IN_KEY, 'uid'])
+
+const onlyLine = (list: unknown) => `Only on ${audienceSummary(audienceOf(list))}`
 
 export function truncate(s: string, n = 60): string {
   const t = s.replace(/\s+/g, ' ').trim()
@@ -85,6 +92,9 @@ export function collectHidden(doc: Doc): HiddenRow[] {
       if (!isSectionOnWebsite(section)) {
         push({ kind: 'section-web', nodePath: [sectionIdx], crumbs: [], label: sectionLabel, preview: 'Off the website', targetPath: [sectionIdx, 'web'] })
       }
+      if (audienceOf(section[ONLY_IN_KEY]) !== null) {
+        push({ kind: 'limited', nodePath: [sectionIdx], crumbs: [], label: sectionLabel, preview: onlyLine(section[ONLY_IN_KEY]), targetPath: [sectionIdx, 'audience'] })
+      }
 
       const walk = (node: Record<string, any>, path: CvPath, shape: Shape, crumbs: string[]) => {
         const hiddenFields: string[] = Array.isArray(node.hiddenFields) ? node.hiddenFields.filter((f: unknown) => typeof f === 'string') : []
@@ -99,6 +109,19 @@ export function collectHidden(doc: Doc): HiddenRow[] {
             preview: previewOf(node[field]),
             targetPath: [...path, field],
           })
+        }
+        if (isPlainObject(node[FIELDS_ONLY_IN_KEY])) {
+          for (const field of Object.keys(node[FIELDS_ONLY_IN_KEY])) {
+            push({
+              kind: 'limited',
+              nodePath: path,
+              field,
+              crumbs,
+              label: labelFor(shape, field),
+              preview: onlyLine(node[FIELDS_ONLY_IN_KEY][field]),
+              targetPath: [...path, field],
+            })
+          }
         }
         if (isPlainObject(node.hiddenItems)) {
           for (const field of Object.keys(node.hiddenItems)) {
@@ -136,6 +159,9 @@ export function collectHidden(doc: Doc): HiddenRow[] {
                   preview: truncate((listDef?.subtitleOf?.(item) || '').trim()),
                   targetPath: itemPath,
                 })
+              }
+              if (audienceOf(item[ONLY_IN_KEY]) !== null) {
+                push({ kind: 'limited', nodePath: itemPath, crumbs, label: title, preview: onlyLine(item[ONLY_IN_KEY]), targetPath: itemPath })
               }
               walk(item, itemPath, { fields: listDef?.fields, lists: listDef?.lists }, [...crumbs, title])
             })

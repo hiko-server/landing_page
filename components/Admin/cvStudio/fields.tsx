@@ -147,6 +147,7 @@ export function FieldShell({
   gridColumn,
   group = false,
   cvPath,
+  audience,
 }: {
   fieldId: string
   label: string
@@ -163,6 +164,8 @@ export function FieldShell({
   group?: boolean
   /** data-cvpath for jump-to from the Hidden items panel. */
   cvPath?: string
+  /** The field's "Shows on" control (AudienceMenu), beside the eye. */
+  audience?: React.ReactNode
 }) {
   const { dim, hiddenFg } = useStudioTokens()
   const labelStyle = {
@@ -194,7 +197,10 @@ export function FieldShell({
         {labelEl}
         {hidden ? <HiddenChip /> : null}
       </HStack>
-      {hideable && onToggleHidden ? <VisibilityToggle hidden={hidden} onToggle={onToggleHidden} label={label} /> : null}
+      <HStack spacing={0.5} flexShrink={0}>
+        {audience}
+        {hideable && onToggleHidden ? <VisibilityToggle hidden={hidden} onToggle={onToggleHidden} label={label} /> : null}
+      </HStack>
     </Flex>
   )
   const body = (
