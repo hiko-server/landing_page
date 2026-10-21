@@ -30,6 +30,7 @@ const EVENT: Record<string, string> = {
   'recovery-code-used': 'Used a recovery code',
   'policy-changed': 'Changed the sign-in policy',
   'password-reset': 'Reset the password',
+  'password-changed': 'Changed the password',
 }
 
 export function eventLabel(type: string): string {
@@ -38,7 +39,7 @@ export function eventLabel(type: string): string {
 
 /** True for history entries worth highlighting (failures). */
 export function isWarningEvent(type: string): boolean {
-  return type === 'signin-failed' || type === 'step-up-failed'
+  return type === 'signin-failed' || type === 'step-up-failed' || type === 'password-change-failed'
 }
 
 const FAILURE_METHOD: Record<string, string> = {
@@ -48,17 +49,17 @@ const FAILURE_METHOD: Record<string, string> = {
   legacy: 'password',
 }
 
-/** "30 passkey sign-ins", "1 password identity check" — one part of the failed-attempts breakdown. */
+const FAILURE_NOUN: Record<string, [string, string]> = {
+  'step-up-failed': ['identity check', 'identity checks'],
+  'password-change-failed': ['password change', 'password changes'],
+}
+
+/** "30 passkey sign-ins", "1 password identity check", "2 password changes" — one part of the failed-attempts breakdown. */
 export function failureKindLabel(type: string, method: string | null, count: number): string {
-  const noun =
-    type === 'step-up-failed'
-      ? count === 1
-        ? 'identity check'
-        : 'identity checks'
-      : count === 1
-        ? 'sign-in'
-        : 'sign-ins'
-  const how = (method && FAILURE_METHOD[method]) || ''
+  const [one, many] = FAILURE_NOUN[type] ?? ['sign-in', 'sign-ins']
+  const noun = count === 1 ? one : many
+  // A failed password change always means a wrong current password: no method word.
+  const how = type === 'password-change-failed' ? '' : (method && FAILURE_METHOD[method]) || ''
   return [count.toLocaleString('en'), how, noun].filter(Boolean).join(' ')
 }
 

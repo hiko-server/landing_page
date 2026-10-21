@@ -44,6 +44,7 @@ import { KeyIcon, ShieldIcon } from './icons'
 import { useStepUp } from './useStepUp'
 import { wasStepUpCancelled } from './stepUpClient'
 import RecoveryCodesDialog from './RecoveryCodesDialog'
+import PasswordCard, { type PasswordInfo } from './PasswordCard'
 import {
   absoluteTime,
   eventLabel,
@@ -115,7 +116,22 @@ type Overview = {
   events: AuthEventRow[]
   failures: FailureSummary
   stepUp: { windowMinutes: number }
+  /** Absent only from a server older than the Password card. */
+  password?: PasswordInfo
 }
+
+/**
+ * The page's numbered sections. The status strip's tiles carry the number of
+ * the section they summarise, so a tile and its section always agree.
+ */
+const SECTION = {
+  passkeys: 1,
+  recovery: 2,
+  password: 3,
+  policy: 4,
+  sessions: 5,
+  history: 6,
+} as const
 
 const ROW = {
   as: 'li' as const,
@@ -220,10 +236,12 @@ function FailedAttempts({ summary, now }: { summary: FailureSummary; now: number
 }
 
 /**
- * Admin → Security: passkeys, recovery codes, the "Require a passkey"
- * policy, signed-in browsers and the sign-in history (server:
+ * Admin → Security: passkeys, recovery codes, the password, the "Require a
+ * passkey" policy, signed-in browsers and the sign-in history (server:
  * /api/admin/security/*). Every change that weakens or replaces a way in asks
- * for a recent verification first (useStepUp).
+ * for a recent verification first (useStepUp) — except the password change
+ * while the password may sign in: its current-password field is that check
+ * (PasswordCard).
  */
 export default function SecurityPanel() {
   const toast = useToast()
@@ -513,6 +531,7 @@ export default function SecurityPanel() {
         >
           {[
             {
+              section: SECTION.passkeys,
               label: 'Passkeys',
               value: String(passkeyCount),
               sub:
@@ -523,6 +542,7 @@ export default function SecurityPanel() {
                     : 'registered',
             },
             {
+              section: SECTION.recovery,
               label: 'Recovery codes',
               value: data.recovery.total
                 ? `${data.recovery.remaining}/${data.recovery.total}`
@@ -530,6 +550,7 @@ export default function SecurityPanel() {
               sub: data.recovery.total ? 'unused' : 'created with the first passkey',
             },
             {
+              section: SECTION.policy,
               label: 'Sign-in',
               value: data.policy.passkeyRequired ? 'Passkey' : 'Password or passkey',
               sub: data.policy.passkeyRequired
@@ -537,6 +558,7 @@ export default function SecurityPanel() {
                 : 'password alone works',
             },
             {
+              section: SECTION.sessions,
               label: 'This browser',
               value: recentLeft > 0 ? 'Verified' : 'Not recent',
               sub:
@@ -565,7 +587,7 @@ export default function SecurityPanel() {
                 color="page.fg-secondary"
               >
                 <Box as="span" color="accent.text" mr={1.5}>
-                  [{String(i + 1).padStart(2, '0')}]
+                  [{String(c.section).padStart(2, '0')}]
                 </Box>
                 {c.label}
               </Text>
@@ -595,7 +617,7 @@ export default function SecurityPanel() {
 
       {/* Passkeys */}
       <SectionLabel
-        index={1}
+        index={SECTION.passkeys}
         title="Passkeys"
         id="security-passkeys"
         hint={
@@ -741,7 +763,7 @@ export default function SecurityPanel() {
 
       {/* Recovery codes */}
       <SectionLabel
-        index={2}
+        index={SECTION.recovery}
         title="Recovery codes"
         id="security-recovery"
         hint="One-time codes for when no passkey is at hand. Keep them offline — printed, or in a password manager. Only their fingerprints are stored here."
@@ -776,8 +798,21 @@ export default function SecurityPanel() {
         )}
       </Text>
 
+      {/* Password */}
+      {data.password ? (
+        <PasswordCard
+          index={SECTION.password}
+          info={data.password}
+          passkeyOnly={data.policy.passkeyRequired && passkeyCount > 0}
+          otherBrowsers={data.sessions.filter((s) => !s.current).length}
+          now={now}
+          fetchWithStepUp={fetchWithStepUp}
+          onChanged={load}
+        />
+      ) : null}
+
       {/* Policy */}
-      <SectionLabel index={3} title="Sign-in policy" id="security-policy" />
+      <SectionLabel index={SECTION.policy} title="Sign-in policy" id="security-policy" />
       <FormControl display="flex" alignItems="flex-start" gap={3}>
         <Switch
           id="passkey-required"
@@ -809,7 +844,7 @@ export default function SecurityPanel() {
 
       {/* Sessions */}
       <SectionLabel
-        index={4}
+        index={SECTION.sessions}
         title="Signed-in browsers"
         id="security-sessions"
         hint={
@@ -930,7 +965,7 @@ export default function SecurityPanel() {
 
       {/* History */}
       <SectionLabel
-        index={5}
+        index={SECTION.history}
         title="Sign-in history"
         id="security-history"
         hint="The last 40 sign-ins and security changes. Failed attempts are only counted (per hour, method and country — no address or device), so they can never push an entry out of this list."

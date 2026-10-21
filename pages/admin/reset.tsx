@@ -1,25 +1,53 @@
 import { useRouter } from 'next/router'
-import { useEffect, useRef, useState } from 'react'
-import { Alert, AlertDescription, AlertIcon, Button, Link, VStack } from '@chakra-ui/react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Alert, AlertDescription, AlertIcon, Box, Button, Link, Spinner, VStack } from '@chakra-ui/react'
 import NextLink from 'next/link'
 import HeaderFooter from '../../layout/HeaderFooter'
 import CustomHead from '../../components/General-UI/CustomHead'
 import { AuthCard, AuthError, AuthSubmit, PasswordField } from '../../components/Admin/AuthCard'
 import { NETWORK_ERROR, resetPasswordErrorMessage } from '../../components/Admin/shell/authMessages'
 import { primaryButtonProps } from '../../components/Admin/shell/ui'
+import PasswordChecklist from '../../components/Admin/security/PasswordChecklist'
+import { passwordRules } from '../../components/Admin/security/passwordRules'
+import {
+  checkNewPassword,
+  PASSWORD_ISSUE_MESSAGES,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  passwordIssues,
+} from '../../lib/adminAuth/passwordPolicy'
 
-const MIN_LENGTH = 12
-const MAX_LENGTH = 1024
+/**
+ * /admin/reset?token=… — the e-mailed link: choose a new password.
+ *
+ * The same rules as Admin → Security → Password (lib/adminAuth/passwordPolicy)
+ * with the same live checklist (PasswordChecklist): length, not common or
+ * predictable, not the site's name — the e-mail's name is unknown before
+ * sign-in, so for that one rule the server is the judge, and its refusal
+ * lands on the New password field like any other. A field's error is set on
+ * submit and only cleared once the field passes (never swapped while
+ * typing); nothing is disabled while the request runs, so focus never falls
+ * back to the page — a refused password focuses and selects the field.
+ */
+const MIN_LENGTH = PASSWORD_MIN_LENGTH
+const MAX_LENGTH = PASSWORD_MAX_LENGTH
+const RULES_ID = 'reset-password-rules'
+/** "Fill this in" errors: they stop applying at the first character typed. */
+const EMPTY_PASSWORD = 'Enter a new password.'
+const EMPTY_CONFIRM = 'Type the new password again.'
 
 export default function ResetPassword() {
   const router = useRouter()
   const [token, setToken] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
-  const [touched, setTouched] = useState({ password: false, confirm: false })
+  const [passwordError, setPasswordError] = useState('')
+  const [confirmError, setConfirmError] = useState('')
   const [ok, setOk] = useState(false)
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  // The site's own name is one of the rules; known only in the browser.
+  const [siteHost, setSiteHost] = useState<string | null>(null)
   const passwordRef = useRef<HTMLInputElement>(null)
   const confirmRef = useRef<HTMLInputElement>(null)
   const doneRef = useRef<HTMLAnchorElement>(null)
@@ -29,25 +57,41 @@ export default function ResetPassword() {
   }, [router.isReady, router.query.token])
 
   useEffect(() => {
+    setSiteHost(window.location.hostname || null)
+  }, [])
+
+  useEffect(() => {
     if (ok) doneRef.current?.focus()
   }, [ok])
 
-  const passwordError =
-    touched.password && password.length < MIN_LENGTH
-      ? `Use at least ${MIN_LENGTH} characters (${password.length} so far).`
-      : password.length > MAX_LENGTH
-        ? `Use at most ${MAX_LENGTH} characters.`
-        : ''
-  const confirmError = touched.confirm && confirm !== password ? 'The passwords don’t match.' : ''
+  const check = useMemo(() => checkNewPassword(password, { siteHost }), [password, siteHost])
+  // "Different from the current password" does not apply to a reset.
+  const rules = passwordRules(check, MIN_LENGTH, MAX_LENGTH).filter((r) => r.key !== 'current')
+  const confirmOk = !!confirm && confirm === password
+
+  // An error goes away once its field passes (and is never replaced while typing);
+  // the password's is cleared in its onChange.
+  useEffect(() => {
+    if (confirmOk) setConfirmError('')
+  }, [confirmOk])
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (submitting) return
-    setTouched({ password: true, confirm: true })
     setError('')
-    if (password.length < MIN_LENGTH || password.length > MAX_LENGTH)
-      return passwordRef.current?.focus()
-    if (confirm !== password) return confirmRef.current?.focus()
+    const firstIssue = passwordIssues(check)[0]
+    const errors = {
+      password: !password
+        ? EMPTY_PASSWORD
+        : firstIssue
+          ? PASSWORD_ISSUE_MESSAGES[firstIssue]
+          : '',
+      confirm: !confirm ? EMPTY_CONFIRM : confirmOk ? '' : 'The passwords don’t match.',
+    }
+    setPasswordError(errors.password)
+    setConfirmError(errors.confirm)
+    if (errors.password) return passwordRef.current?.focus()
+    if (errors.confirm) return confirmRef.current?.focus()
     setSubmitting(true)
     try {
       const res = await fetch('/api/auth/reset-password', {
@@ -60,7 +104,14 @@ export default function ResetPassword() {
         return
       }
       const data = await res.json().catch(() => ({}))
-      setError(resetPasswordErrorMessage(res.status, data?.error))
+      if (res.status === 400 && data?.code === 'PASSWORD_POLICY') {
+        // A rule the page could not check (the e-mail's name): on the field, which takes focus.
+        setPasswordError(resetPasswordErrorMessage(res.status, data?.error, data?.code))
+        passwordRef.current?.focus()
+        passwordRef.current?.select()
+        return
+      }
+      setError(resetPasswordErrorMessage(res.status, data?.error, data?.code))
     } catch {
       setError(NETWORK_ERROR)
     } finally {
@@ -74,7 +125,7 @@ export default function ResetPassword() {
       <HeaderFooter>
         <AuthCard
           title="Choose a new password"
-          subtitle={`At least ${MIN_LENGTH} characters. A passphrase works well.`}
+          subtitle={`${MIN_LENGTH}–${MAX_LENGTH} characters, not a common password, and not your e-mail’s name or the site’s name. A passphrase works well.`}
         >
           {ok ? (
             <VStack align="stretch" spacing={4} role="status" aria-live="polite">
@@ -124,32 +175,53 @@ export default function ResetPassword() {
                     autoComplete="new-password"
                     inputRef={passwordRef}
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    onBlur={() =>
-                      setTouched((t) => ({ ...t, password: password.length > 0 || t.password }))
-                    }
+                    onChange={(e) => {
+                      setPassword(e.target.value)
+                      // Cleared once the edited password passes every rule the page can check
+                      // (a server refusal then no longer applies either); kept, unchanged, until then.
+                      const v = e.target.value
+                      if ((v && passwordError === EMPTY_PASSWORD) || checkNewPassword(v, { siteHost }).ok)
+                        setPasswordError('')
+                    }}
                     error={passwordError}
-                    helper={`${MIN_LENGTH}–${MAX_LENGTH} characters.`}
-                    isDisabled={submitting}
+                    aria-describedby={`${RULES_ID} ${RULES_ID}-strength`}
+                    // Read-only, not disabled, while it works: focus stays where it is.
+                    isReadOnly={submitting}
                     isRequired
                     autoFocus
+                    {...({
+                      passwordrules: `minlength: ${MIN_LENGTH}; maxlength: ${MAX_LENGTH};`,
+                    } as Record<string, string>)}
                   />
+                  <Box>
+                    <PasswordChecklist
+                      id={RULES_ID}
+                      value={password}
+                      rules={rules}
+                      strength={check.strength}
+                    />
+                  </Box>
                   <PasswordField
                     label="Confirm password"
                     name="confirm-password"
                     autoComplete="new-password"
                     inputRef={confirmRef}
                     value={confirm}
-                    onChange={(e) => setConfirm(e.target.value)}
-                    onBlur={() =>
-                      setTouched((t) => ({ ...t, confirm: confirm.length > 0 || t.confirm }))
-                    }
+                    onChange={(e) => {
+                      setConfirm(e.target.value)
+                      if (e.target.value && confirmError === EMPTY_CONFIRM) setConfirmError('')
+                    }}
                     error={confirmError}
-                    isDisabled={submitting}
+                    isReadOnly={submitting}
                     isRequired
                   />
-                  <AuthSubmit isLoading={submitting} loadingText="Updating…" isDisabled={!token}>
-                    Update password
+                  {/* Never disabled while it works (focus would fall back to the page): it says so instead. */}
+                  <AuthSubmit
+                    aria-busy={submitting || undefined}
+                    leftIcon={submitting ? <Spinner size="xs" /> : undefined}
+                    isDisabled={!token}
+                  >
+                    {submitting ? 'Updating…' : 'Update password'}
                   </AuthSubmit>
                 </VStack>
               </form>

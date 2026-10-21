@@ -109,7 +109,10 @@ export function AuthField({ label, error, helper, inputRef, isRequired, ...props
 
 /**
  * Password input with a keyboard-reachable show / hide toggle (aria-pressed)
- * and a Caps Lock hint, both wired to the input via aria attributes.
+ * and a Caps Lock hint, both wired to the input via aria attributes. Extra
+ * `aria-describedby` ids (a requirements list) are kept beside the hint's.
+ * The toggle is named after its field ("Show current password", "Show new
+ * password"), so a form with several of them lists distinct buttons.
  */
 export function PasswordField({
   label,
@@ -120,6 +123,7 @@ export function PasswordField({
   onKeyDown,
   onKeyUp,
   onBlur,
+  'aria-describedby': describedBy,
   ...props
 }: FieldProps) {
   const [show, setShow] = useState(false)
@@ -149,7 +153,7 @@ export function PasswordField({
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}
-          aria-describedby={capsLock ? capsId : undefined}
+          aria-describedby={[describedBy, capsLock ? capsId : ''].filter(Boolean).join(' ') || undefined}
           onKeyDown={(e) => {
             readCaps(e)
             onKeyDown?.(e)
@@ -166,7 +170,7 @@ export function PasswordField({
         />
         <InputRightElement w="48px">
           <IconButton
-            aria-label="Show password"
+            aria-label={`Show ${label.toLowerCase()}`}
             aria-pressed={show}
             aria-controls={inputId}
             icon={show ? <ViewOffIcon /> : <ViewIcon />}

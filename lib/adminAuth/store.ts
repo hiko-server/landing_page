@@ -106,7 +106,11 @@ export const AUTH_EVENT_DAYS = 180
 /** Hour buckets of failure counts kept at most (oldest go first). */
 export const AUTH_FAILURE_ROWS = 5000
 
-export const FAILURE_EVENT_TYPES = ['signin-failed', 'step-up-failed'] as const
+export const FAILURE_EVENT_TYPES = [
+  'signin-failed',
+  'step-up-failed',
+  'password-change-failed',
+] as const
 export type AuthFailureType = (typeof FAILURE_EVENT_TYPES)[number]
 
 export function isFailureEvent(type: string): type is AuthFailureType {
@@ -131,6 +135,8 @@ export type AuthEventType =
   | 'recovery-code-used'
   | 'policy-changed'
   | 'password-reset'
+  | 'password-changed'
+  | 'password-change-failed'
 
 export type AuthMethod = 'password' | 'passkey' | 'recovery' | 'legacy'
 
@@ -264,10 +270,10 @@ export function authFailureSummary(now = Date.now()): AuthFailureSummary {
 export function listAuthEvents(limit = 50): AuthEvent[] {
   const rows = getAuthDb()
     .prepare(
-      `SELECT * FROM auth_events WHERE type NOT IN ('signin-failed', 'step-up-failed')
+      `SELECT * FROM auth_events WHERE type NOT IN (${FAILURE_EVENT_TYPES.map(() => '?').join(', ')})
        ORDER BY at DESC, id DESC LIMIT ?`
     )
-    .all(Math.max(1, Math.min(AUTH_EVENT_KEEP, limit))) as Array<{
+    .all(...FAILURE_EVENT_TYPES, Math.max(1, Math.min(AUTH_EVENT_KEEP, limit))) as Array<{
     id: number
     at: number
     type: AuthEventType

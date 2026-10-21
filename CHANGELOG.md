@@ -8,7 +8,20 @@ portfolio CMS, no public package). Entries are grouped by release date.
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **Change the admin password in Admin → Security**: type the current
+  password and a new one. A live checklist shows the rules as you type — at
+  least 12 characters (anything goes, spaces and emoji included), not a
+  common or predictable password, not your e-mail's name or the site's name,
+  not the current password — with a rough strength hint, and password
+  managers fill and save it. By default every other signed-in browser is
+  signed out while this one stays signed in, unused reset links stop working,
+  the change appears in the sign-in history and the activity log, and an
+  e-mail notice goes out when mail is set up. The page also tells you when
+  the start-up password in the server's settings still equals the current
+  one. Password resets by e-mail follow the same rules and show the same
+  checklist as you type.
 
 ## [2.5.0] — 2026-10-21
 
