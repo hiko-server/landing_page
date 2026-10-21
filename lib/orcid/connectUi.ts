@@ -22,7 +22,7 @@ export const ORCID_CALLBACK_PATH = '/api/admin/orcid/callback'
 export const ORCID_CONNECTION_PATH = '/api/admin/orcid/connection'
 
 /** README section on registering the ORCID client (the disabled button links here). */
-export const ORCID_SETUP_DOCS_URL = 'https://github.com/hiko-server/landing_page#connect-your-orcid-id'
+export const ORCID_SETUP_DOCS_URL = 'https://github.com/hiko-server/portfolio-studio#connect-your-orcid-id'
 
 export const ORCID_CONNECT_REASONS = [
   'config',

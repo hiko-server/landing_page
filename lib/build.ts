@@ -9,7 +9,7 @@
  */
 
 /** The site's public source repository. */
-export const REPO_URL = 'https://github.com/hiko-server/landing_page'
+export const REPO_URL = 'https://github.com/hiko-server/portfolio-studio'
 
 const SHA_RE = /^[0-9a-f]{7,40}$/i
 

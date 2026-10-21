@@ -905,7 +905,7 @@ export default function CommandPalette({
         group: 'Actions',
         kind: 'nav',
         label: p.viewSource,
-        href: 'https://github.com/hiko-server/landing_page',
+        href: 'https://github.com/hiko-server/portfolio-studio',
         external: true,
         keywords: 'repo source code',
       },

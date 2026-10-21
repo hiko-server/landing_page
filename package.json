@@ -4,13 +4,13 @@
   "private": true,
   "main": "index.js",
   "license": "MIT",
-  "homepage": "https://github.com/hiko-server/landing_page#readme",
+  "homepage": "https://github.com/hiko-server/portfolio-studio#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hiko-server/landing_page.git"
+    "url": "git+https://github.com/hiko-server/portfolio-studio.git"
   },
   "bugs": {
-    "url": "https://github.com/hiko-server/landing_page/issues"
+    "url": "https://github.com/hiko-server/portfolio-studio/issues"
   },
   "scripts": {
     "dev": "next dev --webpack",

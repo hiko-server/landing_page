@@ -7,8 +7,8 @@ just keep PRs focused and the diff understandable.
 ## Quick start
 
 ```bash
-git clone https://github.com/hiko-server/landing_page.git
-cd landing_page
+git clone https://github.com/hiko-server/portfolio-studio.git
+cd portfolio-studio
 yarn
 cp .env.example .env
 # Fill in JWT_SECRET (required) and ADMIN_EMAIL/ADMIN_PASS (first-boot bootstrap)

@@ -7,5 +7,5 @@ contact_links:
       Please report security issues privately by e-mail to the Contact
       address in security.txt, NOT as a public issue. See SECURITY.md.
   - name: Documentation question
-    url: https://github.com/hiko-server/landing_page#readme
+    url: https://github.com/hiko-server/portfolio-studio#readme
     about: Most "how do I…" answers live in the README + lib docstrings.

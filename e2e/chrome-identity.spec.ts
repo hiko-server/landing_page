@@ -11,7 +11,7 @@ import { test, expect, settle, seriousA11yViolations, ADMIN, loginAsAdmin } from
  */
 
 const STORAGE_KEY = 'chakra-ui-color-mode'
-const REPO = 'https://github.com/hiko-server/landing_page'
+const REPO = 'https://github.com/hiko-server/portfolio-studio'
 const { viewport: PHONE_VIEWPORT, userAgent, deviceScaleFactor, isMobile, hasTouch } = devices['Pixel 7']
 
 async function useColorMode(page: Page, mode: 'light' | 'dark'): Promise<void> {

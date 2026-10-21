@@ -70,7 +70,7 @@ RUN rm -f .next/standalone/data/content.db .next/standalone/data/content.db-* \
 FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS release
 
 ARG NEXT_PUBLIC_BUILD_SHA=""
-LABEL org.opencontainers.image.source="https://github.com/hiko-server/landing_page" \
+LABEL org.opencontainers.image.source="https://github.com/hiko-server/portfolio-studio" \
       org.opencontainers.image.revision=$NEXT_PUBLIC_BUILD_SHA
 
 ENV NODE_ENV=production

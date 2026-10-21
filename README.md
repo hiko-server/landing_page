@@ -8,7 +8,7 @@ backup, and a hardened admin GUI for non-engineers.
 
 中文版 → [README.zh.md](./README.zh.md)
 
-[![Repo](https://img.shields.io/badge/GitHub-hiko--server%2Flanding__page-181717?logo=github)](https://github.com/hiko-server/landing_page)
+[![Repo](https://img.shields.io/badge/GitHub-hiko--server%2Fportfolio--studio-181717?logo=github)](https://github.com/hiko-server/portfolio-studio)
 [![Next.js](https://img.shields.io/badge/Next.js-15.5-black?logo=next.js)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Chakra UI](https://img.shields.io/badge/Chakra_UI-2.8-319795?logo=chakraui)](https://chakra-ui.com/)
@@ -469,8 +469,8 @@ Scheduled & review links** lists both.
 ### 1. Clone & install
 
 ```bash
-git clone https://github.com/hiko-server/landing_page.git
-cd landing_page
+git clone https://github.com/hiko-server/portfolio-studio.git
+cd portfolio-studio
 yarn          # or npm install / pnpm install
 ```
 

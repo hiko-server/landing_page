@@ -33,13 +33,13 @@ test('only well-formed, mailto-safe addresses are used', () => {
 })
 
 test('the policy URL is SECURITY.md of the package.json repository', () => {
-  assert.equal(repositoryWebUrl({ type: 'git', url: 'git+https://github.com/hiko-server/landing_page.git' }), 'https://github.com/hiko-server/landing_page')
+  assert.equal(repositoryWebUrl({ type: 'git', url: 'git+https://github.com/hiko-server/portfolio-studio.git' }), 'https://github.com/hiko-server/portfolio-studio')
   assert.equal(repositoryWebUrl('git@github.com:o/r.git'), 'https://github.com/o/r')
   assert.equal(repositoryWebUrl('github:o/r'), 'https://github.com/o/r')
   assert.equal(repositoryWebUrl('https://gitlab.com/o/r.git'), null)
   assert.equal(repositoryWebUrl(undefined), null)
   const pkg = JSON.parse(read('package.json'))
-  assert.equal(securityPolicyUrl(pkg.repository), 'https://github.com/hiko-server/landing_page/blob/main/SECURITY.md')
+  assert.equal(securityPolicyUrl(pkg.repository), 'https://github.com/hiko-server/portfolio-studio/blob/main/SECURITY.md')
 })
 
 test('the file has every RFC 9116 field, LF lines, and an Expires 180 days ahead', () => {
@@ -137,7 +137,7 @@ test('GET serves the public CV e-mail as text/plain; a hidden e-mail (or section
   assert.equal(ok.status, 200)
   assert.equal(ok.headers['content-type'], 'text/plain; charset=utf-8')
   assert.match(ok.body || '', /^Contact: mailto:owner@example\.com$/m)
-  assert.match(ok.body || '', /^Policy: https:\/\/github\.com\/hiko-server\/landing_page\/blob\/main\/SECURITY\.md$/m)
+  assert.match(ok.body || '', /^Policy: https:\/\/github\.com\/hiko-server\/portfolio-studio\/blob\/main\/SECURITY\.md$/m)
   assert.match(ok.body || '', /^Canonical: https:\/\/[^/\s]+\/\.well-known\/security\.txt$/m)
   const expires = Date.parse(/^Expires: (.+)$/m.exec(ok.body || '')?.[1] || '')
   assert.ok(expires - Date.now() > 179 * 86_400_000)

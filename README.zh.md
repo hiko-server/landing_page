@@ -8,7 +8,7 @@
 
 English → [README.md](./README.md)
 
-[![Repo](https://img.shields.io/badge/GitHub-hiko--server%2Flanding__page-181717?logo=github)](https://github.com/hiko-server/landing_page)
+[![Repo](https://img.shields.io/badge/GitHub-hiko--server%2Fportfolio--studio-181717?logo=github)](https://github.com/hiko-server/portfolio-studio)
 [![Next.js](https://img.shields.io/badge/Next.js-15.5-black?logo=next.js)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![Chakra UI](https://img.shields.io/badge/Chakra_UI-2.8-319795?logo=chakraui)](https://chakra-ui.com/)
@@ -312,8 +312,8 @@ English → [README.md](./README.md)
 ### 1. 拉取与安装
 
 ```bash
-git clone https://github.com/hiko-server/landing_page.git
-cd landing_page
+git clone https://github.com/hiko-server/portfolio-studio.git
+cd portfolio-studio
 yarn          # 或 npm install / pnpm install
 ```
 
