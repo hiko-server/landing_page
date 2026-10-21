@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures'
+import { test, expect, isLocalServer } from './fixtures'
 
 /**
  * OPS-1: every test is its own client (e2e/fixtures.ts gives each one a
@@ -19,8 +19,7 @@ test.describe.serial('per-test client address', () => {
 
   for (const which of ['first', 'second']) {
     test(`the ${which} test spends its own rate-limit budget`, async ({ page, baseURL, extraHTTPHeaders }) => {
-      const host = new URL(baseURL || 'http://127.0.0.1').hostname
-      test.skip(!['127.0.0.1', 'localhost', '[::1]'].includes(host), 'needs a local server that trusts the loopback peer')
+      test.skip(!isLocalServer(baseURL), 'needs a local server that trusts the loopback peer')
 
       const address = extraHTTPHeaders?.['cf-connecting-ip'] || ''
       expect(address).toMatch(/^(192\.0\.2|198\.51\.100|203\.0\.113)\.\d{1,3}$/)

@@ -74,8 +74,10 @@ async function serveWithoutHttpsUpgrade(page: Page, origin: string): Promise<voi
  * server believes that header only from a trusted proxy peer — loopback or
  * the container's gateway, exactly where Cloudflare's tunnel arrives in
  * production (lib/security/proxyTrust.ts) — so nothing changes for a
- * request from anywhere else, and against production Cloudflare replaces
- * the header with the real address anyway. Workers running at the same time
+ * request from anywhere else. Only a run against a local server sends it:
+ * Cloudflare refuses (403) any request that carries its own
+ * cf-connecting-ip, so a run against the live site (the post-deploy check)
+ * sends none and is one client, as before. Workers running at the same time
  * hold different parallel slots, and slot s only ever uses addresses
  * s, s + W, s + 2W … (W workers) from an offset that changes per run, so no
  * two concurrent tests — and no test of a rerun against the same server
@@ -95,10 +97,22 @@ function testClientAddress(slot: number, workers: number, n: number): string {
   return `${TEST_NETS[Math.floor(i / HOSTS_PER_NET)]}.${(i % HOSTS_PER_NET) + 1}`
 }
 
+/** A server on this machine (or its container), which is the only kind that may be sent cf-connecting-ip. */
+export function isLocalServer(baseURL: string | undefined): boolean {
+  let host: string
+  try {
+    host = new URL(baseURL || 'http://127.0.0.1').hostname
+  } catch {
+    return false
+  }
+  return ['127.0.0.1', 'localhost', '[::1]'].includes(host) || host.endsWith('.localhost')
+}
+
 type Fixtures = { pageGuard: void }
 
 export const test = base.extend<Fixtures>({
-  extraHTTPHeaders: async ({ extraHTTPHeaders }, run, testInfo) => {
+  extraHTTPHeaders: async ({ extraHTTPHeaders, baseURL }, run, testInfo) => {
+    if (!isLocalServer(baseURL)) return run(extraHTTPHeaders)
     const address = testClientAddress(testInfo.parallelIndex, testInfo.config.workers, testsInWorker++)
     await run({ 'cf-connecting-ip': address, ...extraHTTPHeaders })
   },
