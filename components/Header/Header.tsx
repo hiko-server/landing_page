@@ -38,14 +38,16 @@ import { MenuIcon, SearchIcon } from '../Icons/ui/chrome'
 import { isImeComposing } from '../../lib/keyboardShortcuts'
 import { pageKeyOf } from '../../lib/viewTransition'
 import ThemeControl from './ThemeControl'
+import type AdminMenu from './AdminMenu'
 
 /**
  * v6 Header — rendered once by components/Chrome/SiteChrome (persistent across
  * client-side navigations).
  *
- * Layout (lg+):      [logo · live-status]  [primary nav]  [中文 · ⌘K · theme ▾ · admin]
+ * Layout (lg+):      [logo · admin ▾ · live-status]  [primary nav]  [中文 · ⌘K · theme ▾]
  *                    (a 1fr · auto · 1fr grid: the nav is centred and never
- *                    moves when a side changes width from page to page)
+ *                    moves when a side changes width from page to page, or
+ *                    when the signed-in owner's menu appears — ./AdminMenu)
  * Layout (< lg):     [logo]                [中文 · ⌘K · theme ▾ · hamburger → drawer]
  *
  * Every word comes from the chrome's dictionary (lib/uiStrings/chrome,
@@ -57,14 +59,19 @@ import ThemeControl from './ThemeControl'
  * token (CSS variable), so the header is correct on the very first paint at
  * every width and in both colour modes.
  *
- * Weight: the ⌘K palette, the mobile drawer and the theme menu are separate
- * chunks, fetched when first needed (and warmed on hover / focus / idle);
- * icons are inline (components/Icons/ui/chrome).
+ * Weight: the ⌘K palette, the mobile drawer, the theme menu and the
+ * signed-in owner's menu are separate chunks, fetched when first needed (and
+ * warmed on hover / focus / idle, or with the session check); icons are
+ * inline (components/Icons/ui/chrome).
  */
 
 const MONO = 'var(--font-geist-mono), ui-monospace, monospace'
 
 const LiveStatusPill = dynamic(() => import('./LiveStatusPill'), { ssr: false, loading: () => null })
+
+// The signed-in owner's menu (./AdminMenu): its own chunk, fetched only for
+// a visitor who can be signed in (alongside the session check).
+const loadAdminMenu = () => import('./AdminMenu').then((m) => m.default, () => null)
 
 const loadMobileDrawer = () => import('./MobileDrawer')
 const MobileDrawer = dynamic(loadMobileDrawer, { ssr: false, loading: () => null })
@@ -114,6 +121,11 @@ const Header = ({
   // The chrome's words (F3: Chinese on a Chinese page) and the page's other-language versions.
   const { t, lang: uiLang, links: langLinks } = useChromeUi()
   const [isAdmin, setIsAdmin] = useState(false)
+  // The owner's menu, once its code is in; and whether the header knows who
+  // is visiting. The live status waits for that (at once for a visitor who
+  // cannot be signed in), so the menu never appears in front of it later.
+  const [OwnerMenu, setOwnerMenu] = useState<typeof AdminMenu | null>(null)
+  const [visitorKnown, setVisitorKnown] = useState(false)
   const { isOpen, onOpen, onClose } = useDisclosure()
   const { isOpen: cmdkOpen, onOpen: openCmdk, onClose: closeCmdk } = useDisclosure()
   // The lazy chunks are rendered from the first time they are asked for on.
@@ -196,14 +208,21 @@ const Header = ({
     const seq = ++sessionSeq.current
     if (!shouldProbeSession(document.cookie, pathname)) {
       setIsAdmin(false)
+      setVisitorKnown(true)
       return
     }
+    const menu = loadAdminMenu()
     fetch('/api/admin/session', { credentials: 'same-origin' })
       .then((r) => (r.ok ? r.json() : { authenticated: false }))
-      .then((d) => {
-        if (seq === sessionSeq.current) setIsAdmin(!!d?.authenticated)
+      .then(async (d) => {
+        // Signed in: the menu's code first, so it shows with the answer.
+        const Menu = d?.authenticated ? await menu : null
+        if (seq !== sessionSeq.current) return
+        if (Menu) setOwnerMenu(() => Menu)
+        setIsAdmin(!!d?.authenticated)
       })
       .catch(() => {})
+      .finally(() => setVisitorKnown(true))
   }, [])
   const pathname = router.pathname
   const lastPathRef = useRef(pathname)
@@ -317,14 +336,18 @@ const Header = ({
           // lg+: three columns with the nav in the middle one, so the nav
           // sits at the same place on every page — whether this page has a
           // language switch, the live status has loaded, or the labels are
-          // Chinese (it then narrows about its centre). The side columns
-          // share what is left; a side wider than its share (the signed-in
-          // admin's buttons) takes what it needs.
+          // Chinese (it then narrows about its centre), or the owner is
+          // signed in (./AdminMenu sits in the left share, which always has
+          // room for it). The side columns share what is left; a side wider
+          // than its share (the right-hand group beside a nine-link nav at
+          // 992 px) takes what it needs, the same on every page.
           display={{ base: 'flex', lg: 'grid' }}
           gridTemplateColumns={{ lg: '1fr auto 1fr' }}
         >
-          {/* Left: brand + live status */}
-          <Flex alignItems="center" gap={5} minW={0} justifySelf="start">
+          {/* Left: brand (+ the signed-in owner's menu, lg+) + live status.
+              6 px between the wordmark and the menu; the live status keeps
+              20 px before it (its own margin, ./LiveStatusPill). */}
+          <Flex alignItems="center" gap={1.5} minW={0} justifySelf="start">
             <Link
               as={NextLink}
               href="/"
@@ -349,7 +372,11 @@ const Header = ({
                 </Text>
               )}
             </Link>
-            <LiveStatus />
+            {/* Signed in only (per spec: 不要直接显示 — /admin/login is
+                reached through ⌘K "Admin login" or its URL); a signed-in
+                owner keeps an obvious way to the dashboard and out. */}
+            {isAdmin && OwnerMenu ? <OwnerMenu onLogout={logout} /> : null}
+            {visitorKnown && <LiveStatus />}
           </Flex>
 
           {/* Center: primary nav (lg+) */}
@@ -371,7 +398,8 @@ const Header = ({
                   href={l.url}
                   aria-current={active ? 'page' : undefined}
                   position="relative"
-                  px={2.5}
+                  // 10 px; 7 px with nine links (globals.css "Header row with nine primary links").
+                  px="var(--nav-item-px, 10px)"
                   py={1.5}
                   borderRadius="md"
                   color={active ? 'page.fg' : undefined}
@@ -389,8 +417,8 @@ const Header = ({
                       layoutId="nav-active"
                       aria-hidden
                       position="absolute"
-                      left="10px"
-                      right="10px"
+                      left="var(--nav-item-px, 10px)"
+                      right="var(--nav-item-px, 10px)"
                       bottom="-1px"
                       h="1.5px"
                       borderRadius="full"
@@ -407,9 +435,8 @@ const Header = ({
           <Flex alignItems="center" gap={2} justifySelf="end">
             {/* This page in the other language, when it has one (F3). From
                 lg up its place is kept on a page without one, so the nav does
-                not move from page to page — signed out only: the admin's
-                buttons already fill the row at lg. */}
-            <LanguageSwitch links={langLinks} reserveFor={isAdmin ? undefined : uiLang === 'en' ? ZH_LANG : 'en'} />
+                not move from page to page. */}
+            <LanguageSwitch links={langLinks} reserveFor={uiLang === 'en' ? ZH_LANG : 'en'} />
 
             {/* ⌘K search trigger — opens the full CommandPalette */}
             <Button
@@ -433,7 +460,7 @@ const Header = ({
               aria-haspopup="dialog"
               aria-keyshortcuts={paletteKeyShortcuts(isMac, shortcutsOn)}
             >
-              <Text as="span" display={{ base: 'none', xl: 'inline' }} mr={2}>
+              <Text as="span" display={{ base: 'none', xl: 'inline' }} mr={2} data-search-label="">
                 {t.search}
               </Text>
               <Kbd
@@ -453,44 +480,6 @@ const Header = ({
             {/* Theme: one-tap toggle (the new mode is revealed from it) + the
                 System / Light / Dark menu. */}
             <ThemeControl />
-
-            {/*
-              Admin entry — hidden when logged out (per spec: 不要直接显示).
-              Reach /admin/login through the ⌘K command palette ("Admin login")
-              or by typing the URL directly. The logged-in pair (Dashboard +
-              Logout) stays visible because an authenticated admin needs an
-              obvious way back to the dashboard / out of the session.
-            */}
-            {isAdmin && (
-              <Flex gap={1} display={{ base: 'none', lg: 'flex' }}>
-                <Button
-                  as={NextLink}
-                  href="/admin/dashboard"
-                  size="sm"
-                  variant="outline"
-                  h="32px"
-                  borderColor="page.border"
-                  color="page.fg-secondary"
-                  fontSize="13px"
-                  fontWeight={500}
-                  _hover={{ borderColor: 'page.border-strong', color: 'page.fg' }}
-                >
-                  {t.dashboard}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  h="32px"
-                  color="page.fg-subtle"
-                  fontSize="13px"
-                  _hover={{ color: 'page.fg', bg: 'page.hover' }}
-                  onClick={logout}
-                  title={t.logoutTitle}
-                >
-                  {t.logout}
-                </Button>
-              </Flex>
-            )}
 
             <IconButton
               icon={<MenuIcon size="sm" />}

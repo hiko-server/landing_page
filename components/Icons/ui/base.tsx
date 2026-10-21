@@ -12,7 +12,7 @@ import { createElement, forwardRef, type SVGProps } from 'react'
  * runtime lookup). The icons are grouped by where they render: ./chrome
  * (shared bundle), ./theme (on-demand menu and palette), ./content (page
  * chunks), ./ask ("Ask Lucian": the palette's Ask view and its entry on
- * /about and /contact). Import from the group file, never through a barrel, so the
+ * /about and /contact), ./account (the signed-in owner's header menu). Import from the group file, never through a barrel, so the
  * shared bundle never pulls a page's icons.
  *
  * Sized on the 4 px grid — `size="xs" | "sm" | "md" | "lg"` = 12 / 16 / 20 /

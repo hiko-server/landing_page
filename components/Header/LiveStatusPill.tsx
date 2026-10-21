@@ -41,8 +41,10 @@ export default function LiveStatusPill() {
 
   return (
     <Flex
-      // Hidden at lg (1024–1279): the full nav + admin actions leave no room there.
+      // Hidden at lg (992–1279): the full nav leaves no room for it there.
       display={{ base: 'none', md: 'flex', lg: 'none', xl: 'flex' }}
+      // 20 px after the wordmark (or the owner's menu): the header's left group is spaced for those two (6 px).
+      ml="14px"
       alignItems="center"
       gap="6px"
       flexShrink={0}
@@ -52,6 +54,7 @@ export default function LiveStatusPill() {
       color="page.fg-subtle"
       letterSpacing="0.02em"
       className="tnum"
+      data-live-status=""
       title={`${t.lastCommit} · ${text}`}
     >
       <Box position="relative" w="6px" h="6px" aria-hidden>

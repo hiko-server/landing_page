@@ -161,6 +161,14 @@ Fixes for defects the final review found in the final batch before it shipped.
   width; **Scheduled & review links** has one rule under "Review links";
   the **analytics page card**'s "View page" lines up with the title on
   phones.
+- **Header while you are signed in (HEADER-ADMIN)**: Dashboard and Logout
+  are one menu button beside the wordmark (keyboard and screen-reader
+  ready, in English and Chinese) instead of two buttons at the right, so
+  the wordmark and the live status no longer run into the nav (from 992 px
+  up — up to 40 px before, more with "Ctrl K"), and the nav sits where a
+  visitor sees it on every page: nothing moves when the menu appears after
+  the page loads. Once a paper is public and Publications joins the nav,
+  its links tighten and ⌘K drops its word, so the row still fits.
 - **Lighter CV, home and about pages (CV-BUNDLE)**: the public pages load
   only the few CV visibility checks they use (`lib/cvVisibilityRead`), not
   the whole model with the CV Studio's helpers — about 2.1–2.3 KiB gzip
