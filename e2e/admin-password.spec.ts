@@ -462,6 +462,90 @@ test.describe('admin password', { tag: '@admin' }, () => {
     }
   })
 
+  test('the e-mail reset page shows the rules as you type and puts a refusal on the field, which keeps focus', async ({
+    browser,
+    baseURL,
+    extraHTTPHeaders,
+  }) => {
+    // Signed out, on a phone; the token is never sent to the real route (answered here).
+    const context = await browser.newContext({
+      baseURL,
+      storageState: SIGNED_OUT,
+      extraHTTPHeaders: extraHTTPHeaders || {},
+      viewport: { width: 375, height: 812 },
+      colorScheme: 'light',
+    })
+    const page = await context.newPage()
+    try {
+      let requests = 0
+      await page.route('**/api/auth/reset-password', (route) => {
+        requests++
+        return route.fulfill({
+          status: 400,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            code: 'PASSWORD_POLICY',
+            error: 'Leave your e-mail name and the site’s name out of the password.',
+            issues: ['personal'],
+          }),
+        })
+      })
+      await page.goto(`/admin/reset?token=${'ab'.repeat(24)}`)
+      const password = page.getByLabel(/^New password/)
+      const confirm = page.getByLabel(/^Confirm password/)
+      const submit = page.getByRole('button', { name: /^(Update password|Updating…)$/ })
+      // The page says what the server will check — not only the length.
+      await expect(page.getByText(/not a common password, and not your e-mail’s name or the site’s name/)).toBeVisible()
+      const rules = page.getByRole('list', { name: 'Requirements' })
+      await expect(rules.getByRole('listitem')).toHaveCount(3)
+      expect(((await password.getAttribute('aria-describedby')) || '').split(' ')).toContain(
+        await rules.getAttribute('id')
+      )
+
+      // A rule the page checks itself: live, then on the field at submit — no request.
+      await password.fill('Password1234!')
+      await expect(
+        rules.getByRole('listitem').filter({ hasText: 'Not a common or predictable password' })
+      ).toHaveAttribute('data-state', 'unmet')
+      await confirm.fill('Password1234!')
+      await submit.click()
+      await expect(password).toBeFocused()
+      await expect(password).toHaveAttribute('aria-invalid', 'true')
+      await expect(page.getByText(/too common or predictable/)).toBeVisible()
+      expect(requests).toBe(0)
+
+      // A rule only the server can check (the e-mail's name): the refusal lands on the field,
+      // which takes focus with its text selected — nothing was disabled, nothing lost focus.
+      const ok = `kestrel harbour pilot lantern ${crypto.randomInt(10, 99)}`
+      await password.fill(ok)
+      await confirm.fill(ok)
+      await submit.focus()
+      await page.keyboard.press('Enter')
+      await expect(password).toBeFocused()
+      expect(requests).toBe(1)
+      await expect(password).toHaveAttribute('aria-invalid', 'true')
+      const described = await password.evaluate((el) =>
+        (el.getAttribute('aria-describedby') || '')
+          .split(' ')
+          .map((id) => document.getElementById(id)?.textContent || '')
+          .join(' | ')
+      )
+      expect(described).toContain('Leave your e-mail name and the site’s name out of the password.')
+      expect(
+        await password.evaluate(
+          (el: HTMLInputElement) => el.selectionStart === 0 && el.selectionEnd === el.value.length
+        )
+      ).toBe(true)
+      await expect(
+        page.getByRole('alert').filter({ hasText: /Leave your e-mail name/ })
+      ).toHaveCount(0)
+      await settle(page)
+      expect(await seriousA11yViolations(page)).toEqual([])
+    } finally {
+      await context.close()
+    }
+  })
+
   test('round trip with other browsers kept: the new password signs in, the old one does not — then it is restored', async ({
     browser,
     baseURL,

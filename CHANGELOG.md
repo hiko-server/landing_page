@@ -20,7 +20,8 @@ portfolio CMS, no public package). Entries are grouped by release date.
   the change appears in the sign-in history and the activity log, and an
   e-mail notice goes out when mail is set up. The page also tells you when
   the start-up password in the server's settings still equals the current
-  one. Password resets by e-mail follow the same rules.
+  one. Password resets by e-mail follow the same rules and show the same
+  checklist as you type.
 
 ## [2.5.0] — 2026-10-21
 
