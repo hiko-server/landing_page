@@ -287,7 +287,18 @@ test('sections and row staggers use the reveal path, not framer whileInView', ()
     assert.doesNotMatch(src, /whileInView/, f)
     assert.match(src, /initial=\{false\}/, f)
     assert.match(src, /animate=\{revealVariant\(reveal\.phase\)\}/, f)
+    // The phase drives framer variants: decided only once the LazyMotion features have rendered.
+    assert.match(src, /useScrollReveal<\w+>\(\{ afterMotionFeatures: true \}\)/, f)
   }
+})
+
+test('a row stagger decides its phase only after the motion features arrived and rendered (cold first visit)', () => {
+  const hook = read('components/General-UI/useScrollReveal.ts')
+  assert.match(hook, /loadMotionFeatures\(\)\s*\.then\(afterTwoFrames\)/)
+  assert.match(hook, /requestAnimationFrame\(\(\) => requestAnimationFrame\(/)
+  // A section wrapper (CSS, no framer) keeps deciding on the first observation.
+  assert.match(hook, /if \(!afterMotionFeatures\) return observe\(\)/)
+  assert.doesNotMatch(read('components/General-UI/SectionReveal.tsx'), /afterMotionFeatures/)
 })
 
 test('COR-2 / UX-3: every row stagger is marked, and print shows its animated rows whatever their reveal phase', () => {

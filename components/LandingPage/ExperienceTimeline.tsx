@@ -61,7 +61,7 @@ export default function ExperienceTimeline({
 }) {
   const { cvLang } = useHomeUi()
   const reduce = useReducedMotion()
-  const reveal = useScrollReveal<HTMLOListElement>()
+  const reveal = useScrollReveal<HTMLOListElement>({ afterMotionFeatures: true })
 
   const rows: Row[] = useMemo(() => {
     const section = Array.isArray(cvEn) ? cvEn.find((s) => s?.sessionName === 'workExperience') : undefined

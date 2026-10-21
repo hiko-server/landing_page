@@ -76,6 +76,12 @@ The gaps the final batch left (before release).
 
 Fixes for defects the final review found in the final batch before it shipped.
 
+- **Row staggers rise on a first visit too**: the home and about row
+  staggers (skills, certifications, experience, repositories, activity)
+  decide whether to wait below the fold only once the motion features have
+  loaded and rendered; when the features arrived late (a cold cache, a
+  slow network) framer took the change as its blocked first animation and
+  the rows never hid or rose.
 - **Media library alt text (CORR-1)**: "Use the default alt text" escapes
   every Markdown / MDX character, so an alt such as `x<y`, `<Award>` or
   `{draft` stays literal instead of breaking the post, the RSS feed and the

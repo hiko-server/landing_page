@@ -232,7 +232,7 @@ function GroupRow({ group, now }: { group: EventGroup; now: number }) {
 export default function ActivityFeed({ initialData }: { initialData?: GhEventsPayload | null }) {
   const { t } = useHomeUi()
   const reduce = useReducedMotion()
-  const reveal = useScrollReveal<HTMLElement>()
+  const reveal = useScrollReveal<HTMLElement>({ afterMotionFeatures: true })
   const { data, error, retry } = useFetchJson<GhEventsPayload>('/api/github/events', { initialData })
   const now = useRenderNow(data?.asOf)
 

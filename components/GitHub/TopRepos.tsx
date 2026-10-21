@@ -105,7 +105,7 @@ function RepoGrid({ repos, asOf }: { repos: GhRepoCard[]; asOf?: number }) {
   const { t, lang } = useHomeUi()
   const reduce = useReducedMotion()
   const listRef = useRef<HTMLElement | null>(null)
-  const reveal = useScrollReveal<HTMLElement>()
+  const reveal = useScrollReveal<HTMLElement>({ afterMotionFeatures: true })
   const revealRef = reveal.ref
   const setListRef = useCallback(
     (el: HTMLElement | null) => {

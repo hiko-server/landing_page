@@ -44,7 +44,7 @@ export default function Skills({ cvEn }: { cvEn?: CvSectionLike[] }) {
   const { t } = useHomeUi()
   const ownLang = useOwnLang()
   const reduce = useReducedMotion()
-  const reveal = useScrollReveal<HTMLDivElement>()
+  const reveal = useScrollReveal<HTMLDivElement>({ afterMotionFeatures: true })
   const groups = useMemo(() => {
     const section = Array.isArray(cvEn) ? cvEn.find((s) => s?.sessionName === 'skill') : undefined
     return skillGroups(section, t.skills)
