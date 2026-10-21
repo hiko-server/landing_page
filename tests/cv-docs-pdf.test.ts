@@ -164,3 +164,22 @@ for (const lang of ['en', 'zh'] as const) {
     assert.ok(drawn.join('').includes(lang === 'zh' ? '更新于 2026 年 10 月' : 'Updated October 2026'), 'footer carries the update')
   })
 }
+
+test('the header rule sets the summary apart only: without a summary the first section rule is the first rule (like the web sheet)', async () => {
+  const fonts = loadPdfFonts()
+  const model = buildCvModel(sections('en'), { lang: 'en', now: '2026-10', updatedAt: SAVED, canonical: 'https://lucian-dev.com/cv' })
+  /** Stroke widths in drawing order (`<w> w … S` inside each Layout artifact: the rules). */
+  const ruleWidths = (buf: Buffer) =>
+    contentStreams(buf)
+      .join('\n')
+      .split('/Artifact')
+      .slice(1)
+      .map((chunk) => /(\d+(?:\.\d+)?) w\b[\s\S]*?\bS\b/.exec(chunk.split('EMC')[0])?.[1])
+      .filter((w): w is string => !!w)
+  const withSummary = await renderCvPdf({ ...model, summary: 'An example summary of the person.' }, { fonts, updatedAt: SAVED })
+  const without = await renderCvPdf({ ...model, summary: '' }, { fonts, updatedAt: SAVED })
+  assert.equal(ruleWidths(withSummary.buffer)[0], '1.6', 'the heavy header rule comes first above a summary')
+  const plain = ruleWidths(without.buffer)
+  assert.ok(plain.length > 0, 'section rules are drawn')
+  assert.ok(!plain.includes('1.6'), `no heavy header rule without a summary (${plain.join(', ')})`)
+})

@@ -372,10 +372,16 @@ class Writer {
       this.figure(photo, MARGIN.left + CW - photoSize.w, top, photoSize)
     }
     this.y = Math.max(leftBottom, ry, photoBottom) + 8
+    // The heavy rule sets the summary apart from the header, as on the web
+    // sheet (components/CVViewerPage/PersonalInformation.tsx). Without a
+    // summary the first section's own rule follows: two rules in a row.
+    if (!model.summary) {
+      this.y += 10
+      return
+    }
     this.rule(this.y, 1.6)
     this.y += 10
-
-    if (model.summary) this.para(this.root, 'P', [{ text: model.summary, size: SIZE.body, color: BODY }], { size: SIZE.body, gapAfter: 10 })
+    this.para(this.root, 'P', [{ text: model.summary, size: SIZE.body, color: BODY }], { size: SIZE.body, gapAfter: 10 })
   }
 
   /** The header photo as a tagged Figure (alternative text: whose photo it is), with a hairline frame. */

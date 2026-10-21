@@ -76,6 +76,10 @@ The gaps the final batch left (before release).
 
 Fixes for defects the final review found in the final batch before it shipped.
 
+- **Downloaded CV without an introduction**: the PDF no longer draws the
+  heavy rule under the header when Personal Info has no introduction
+  (it stood right above the first section's own rule — two lines in a
+  row); like the web CV, the rule only sets an introduction apart.
 - **Row staggers rise on a first visit too**: the home and about row
   staggers (skills, certifications, experience, repositories, activity)
   decide whether to wait below the fold only once the motion features have
