@@ -372,7 +372,10 @@ test('DRAFTBAR-ROOM: Tab through the footer of a draft preview — no focused li
     }
   } finally {
     if ((await adminCleanup(page, 'DELETE', `/api/admin/posts?slug=${slug}`)) === 403) {
-      // Deleting needs a recent sign-in: sign in again for the clean-up.
+      // Deleting needs a recent sign-in: sign in again for the clean-up (the
+      // sign-in page sends a still-signed-in browser on to the admin, so drop
+      // this context's session first).
+      await page.context().clearCookies()
       await loginAsAdmin(page, { fresh: true })
       await adminCleanup(page, 'DELETE', `/api/admin/posts?slug=${slug}`)
     }
