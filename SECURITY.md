@@ -74,10 +74,15 @@ What the code actually does today, and where its limits are.
   30 current-password checks an hour for the whole site. The new
   password (`lib/adminAuth/passwordPolicy.ts`, shared with the e-mail reset
   and the page's live checklist): 12–256 code points after NFKC, any
-  characters, not built from very common password words, keyboard or
-  alphabet runs, repeats or years (look-alikes such as `p@ssw0rd`
-  included), not containing the e-mail's local part or the site's name, not
-  the current password. A refused password costs no hash and no lockout
+  characters, not built from very common password words or the best-known
+  passphrases (across spaces and dashes: "correct horse battery staple"),
+  keyboard or alphabet runs (zig-zags such as `1q2w3e` and numpad columns
+  included), stuttered runs (`112233`), repeats or years (look-alikes such
+  as `p@ssw0rd` included), not containing the e-mail's local part or the
+  site's name, not the current password. The strength hint counts a run of
+  letters that reads like a word as one word (about 13 bits), so a
+  passphrase needs about five words to show as strong; it only guides — the
+  rules decide. A refused password costs no hash and no lockout
   attempt. One change at a time, compare-and-swap against the verified hash,
   fresh salt, atomic write, every reset link burnt. "Sign out other
   browsers" (on by default) bumps the session version and revokes every

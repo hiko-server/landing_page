@@ -203,7 +203,7 @@ test('policy: length counts code points after NFKC, 12 to 256, every character a
   assert.equal(policy.checkNewPassword(long, CTX).tooLong, true)
   assert.equal(policy.checkNewPassword(long.slice(0, 256), CTX).tooLong, false)
   for (const ok of [
-    'correct horse battery staple',
+    'velvet orbit canyon pickle',
     'x7#Kp9$mQ2!vL4zR',
     'café crème brûlée 2026',
     '月亮代表我的心永远不变啊',
@@ -235,6 +235,68 @@ test('policy: common and predictable passwords are refused, also through look-al
   }
   assert.equal(policy.predictableUnits('Password2026!'), 3)
   assert.equal(policy.predictableUnits('x7#Kp9$mQ2!vL4zR'), 16)
+})
+
+test('policy: interleaved keyboard rows, numpad columns, stuttered runs and their roots are predictable', () => {
+  const ctx = { email: 'owner@example.test', siteHost: 'lucian-dev.example' }
+  for (const bad of [
+    '1q2w3e4r5t6y',
+    'q1w2e3r4t5y6',
+    'a1b2c3d4e5f6',
+    '1a2s3d4f5g6h',
+    '147258369147',
+    '741852963741',
+    '789456123789',
+    '11223344556677',
+    'aabbccddeeff',
+    '111222333444',
+    '1q2w3e4r1q2w3e4r',
+    'blink182blink182',
+    'loveyou12345',
+  ]) {
+    const c = policy.checkNewPassword(bad, ctx)
+    assert.equal(c.predictable, true, bad)
+    assert.equal(c.ok, false, bad)
+  }
+  // The new orders do not catch ordinary passphrases or generated passwords.
+  for (const ok of [
+    'x7#Kp9$mQ2!vL4zR',
+    'a quiet harbour at dawn',
+    'velvet orbit canyon pickle',
+    'café crème brûlée 2026',
+    'mk4 vq9 zt2w',
+  ]) {
+    assert.equal(policy.checkNewPassword(ok, ctx).ok, true, ok)
+  }
+  // 500 generated 14-character letters-and-digits passwords (seeded): none refused.
+  let seed = 20261021
+  const rand = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31
+  const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789'
+  for (let n = 0; n < 500; n++) {
+    const p = Array.from({ length: 14 }, () => alphabet[Math.floor(rand() * alphabet.length)]).join('')
+    assert.equal(policy.checkNewPassword(p, ctx).predictable, false, p)
+  }
+})
+
+test('strength: word passphrases count by the word, and the best-known phrases are refused', () => {
+  const ctx = { email: 'owner@example.test', siteHost: 'lucian-site.test' }
+  const strength = (p: string) => policy.checkNewPassword(p, ctx).strength
+  for (const famous of [
+    'correct horse battery staple',
+    'correcthorsebatterystaple',
+    'Correct-Horse-Battery-Staple',
+    'c0rrect h0rse battery staple',
+    'Hello World 2026',
+    'helloworld2026!',
+  ]) {
+    assert.equal(policy.checkNewPassword(famous, ctx).predictable, true, famous)
+  }
+  assert.equal(strength('tidal mosaic river'), 'fair', 'three words')
+  assert.equal(strength('iamtheadminhere'), 'fair')
+  assert.equal(strength('velvet orbit canyon pickle'), 'good', 'four words')
+  assert.equal(strength('velvet orbit canyon pickle meadow'), 'strong', 'five words')
+  assert.equal(strength('x7#Kp9$mQ2!vL4zR'), 'strong', 'a generated password')
+  assert.equal(strength('qhzvbmwkxtrplndg'), 'strong', 'random letters are not read as words')
 })
 
 test('policy: the e-mail name and the site name are refused, separators and look-alikes included', () => {

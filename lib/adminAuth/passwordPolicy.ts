@@ -12,15 +12,21 @@
  *   - no "one upper case, one digit, one symbol" rule — instead the
  *     password is refused when it is predictable: built from a very common
  *     password word (a small bundled list, matched through look-alike
- *     substitutions such as p@ssw0rd), keyboard or alphabet runs, repeats
- *     and years, the way Microsoft Entra's banned-password check scores
- *     what is left (each common piece counts once, every other character
- *     once; fewer than MIN_UNITS units is refused);
+ *     substitutions such as p@ssw0rd) or a famous phrase (across spaces and
+ *     dashes: "correct horse battery staple"), keyboard or alphabet runs
+ *     (zig-zag rows such as 1q2w3e and numpad columns included), stuttered
+ *     runs (112233), repeats and years, the way Microsoft Entra's
+ *     banned-password check scores what is left (each common piece counts
+ *     once, every other character once; fewer than MIN_UNITS units is
+ *     refused);
  *   - it may not contain the account e-mail's name or the site's name;
  *   - a new password may not equal the current one (compared normalised).
  *
- * The strength shown in the admin is a rough estimate from the same units
- * and the character classes used; the policy decides, the meter only guides.
+ * The strength shown in the admin is a rough estimate from the same pieces
+ * and the character classes used, where a run of letters that reads like a
+ * word counts as a word (about 13 bits), not letter by letter — so a
+ * passphrase needs about five words to be called strong. The policy
+ * decides, the meter only guides.
  */
 
 export const PASSWORD_MIN_LENGTH = 12
@@ -190,12 +196,30 @@ export const COMMON_PASSWORD_WORDS: readonly string[] = [
   'nihao',
   'sakura',
   'guest',
+  'blink',
+  'loveyou',
+]
+
+/**
+ * The best-known passphrases, matched across spaces, dashes, dots and
+ * underscores ("Correct-Horse-Battery-Staple") and through look-alikes:
+ * each is in every cracking list, however long it is.
+ */
+export const COMMON_PHRASES: readonly string[] = [
+  'correcthorsebatterystaple',
+  'thequickbrownfox',
+  'helloworld',
+  'opensesame',
+  'trustnoone',
 ]
 
 /**
  * Character orders people type as runs: the alphabet, digits (wrapping 9→0),
- * keyboard rows and columns of QWERTY, QWERTZ and AZERTY, and the shifted
- * number row. A run of three or more neighbours, either way, counts once.
+ * keyboard rows and columns of QWERTY, QWERTZ and AZERTY, the shifted
+ * number row, the zig-zags between the number row and a letter row
+ * (1q2w3e…, q1w2e3…, 1a2s3d…) or the alphabet (a1b2c3…), and the numeric
+ * keypad's rows and columns (789456123, 147258369, 741852963). A run of
+ * three or more neighbours, either way, counts once.
  */
 const SEQUENCES: readonly string[] = [
   'abcdefghijklmnopqrstuvwxyz',
@@ -210,6 +234,15 @@ const SEQUENCES: readonly string[] = [
   'azertyuiopqsdfghjklmwxcvbn',
   '1qaz2wsx3edc4rfv5tgb6yhn7ujm8ik9ol0p',
   'qazwsxedcrfvtgbyhnujmikolp',
+  '1q2w3e4r5t6y7u8i9o0p',
+  'q1w2e3r4t5y6u7i8o9p0',
+  '1a2s3d4f5g6h7j8k9l',
+  'a1s2d3f4g5h6j7k8l9',
+  'a1b2c3d4e5f6g7h8i9j0',
+  '1a2b3c4d5e6f7g8h9i0j',
+  '789456123',
+  '147258369',
+  '741852963',
 ]
 
 /** Look-alike substitutions (p@ssw0rd → password); "1" is tried as both i and l. */
@@ -232,6 +265,9 @@ const LEET: Record<string, string> = {
 }
 
 const WORDS_BY_LENGTH = [...COMMON_PASSWORD_WORDS].sort((a, b) => b.length - a.length)
+const PHRASES_BY_LENGTH = [...COMMON_PHRASES].sort((a, b) => b.length - a.length)
+/** What may stand between the words of a famous phrase. */
+const PHRASE_GAP = /^[\s._-]$/
 
 type SeqPairs = { forward: Set<string>; backward: Set<string> }
 const SEQ_PAIRS: SeqPairs[] = SEQUENCES.map((s) => {
@@ -258,6 +294,17 @@ function startsWithAt(chars: string[], word: string, at: number): boolean {
   return true
 }
 
+/** Characters a famous phrase covers from `at` (gaps between its letters allowed), or 0. */
+function phraseAt(chars: string[], phrase: string, at: number): number {
+  let i = at
+  for (let j = 0; j < phrase.length; j++) {
+    if (j > 0) while (i < chars.length && PHRASE_GAP.test(chars[i]) && chars[i] !== phrase[j]) i++
+    if (chars[i] !== phrase[j]) return 0
+    i++
+  }
+  return i - at
+}
+
 /** Length of the keyboard / alphabet run starting at `at` (1 when there is none). */
 function sequenceRun(chars: string[], at: number): number {
   let best = 1
@@ -269,6 +316,35 @@ function sequenceRun(chars: string[], at: number): number {
     }
   }
   return best >= 3 ? best : 1
+}
+
+/**
+ * Characters of a stuttered run from `at` — every character of a run typed
+ * twice or three times ("112233", "aabbcc", "111222333") — or 0. Three
+ * blocks at least.
+ */
+function stutterRun(chars: string[], at: number): number {
+  let best = 0
+  for (const r of [2, 3]) {
+    const blockAt = (i: number): string | null => {
+      if (i + r > chars.length) return null
+      for (let j = 1; j < r; j++) if (chars[i + j] !== chars[i]) return null
+      return chars[i]
+    }
+    if (blockAt(at) === null) continue
+    for (const { forward, backward } of SEQ_PAIRS) {
+      for (const pairs of [forward, backward]) {
+        let blocks = 1
+        for (;;) {
+          const next = blockAt(at + blocks * r)
+          if (next === null || !pairs.has(chars[at + (blocks - 1) * r] + next)) break
+          blocks++
+        }
+        if (blocks >= 3 && blocks * r > best) best = blocks * r
+      }
+    }
+  }
+  return best
 }
 
 /** Characters from `at` that repeat the block just before it (abcabc, aaaa), or 0. */
@@ -285,19 +361,26 @@ function repeatRun(chars: string[], at: number): number {
 }
 
 /**
- * How many unpredictable pieces the password is made of: every common
- * password word (also through look-alikes), keyboard or alphabet run of
- * three or more, repeat of what came just before, and 19xx / 20xx year
- * counts as ONE unit; every other character as one unit each.
- * "Password2026!" → password · 2026 · ! = 3 units; a random 16-character
- * password → 16.
+ * The password cut into its pieces: a common word or phrase (also through
+ * look-alikes), a keyboard or alphabet run of three or more, a stuttered
+ * run, a repeat of what came just before, or a 19xx / 20xx year is ONE
+ * predictable piece; every other character is a piece of its own. `text`
+ * is the piece as typed (normalised, original case).
  */
-export function predictableUnits(password: string): number {
+function pieces(password: string): Array<{ text: string; common: boolean }> {
+  const typed = Array.from(normalizePassword(password))
   const { chars, leetI, leetL } = readings(password)
-  let units = 0
+  const out: Array<{ text: string; common: boolean }> = []
   let i = 0
   while (i < chars.length) {
     let step = 1
+    for (const p of PHRASES_BY_LENGTH) {
+      const n = Math.max(phraseAt(chars, p, i), phraseAt(leetI, p, i), phraseAt(leetL, p, i))
+      if (n > step) {
+        step = n
+        break
+      }
+    }
     for (const w of WORDS_BY_LENGTH) {
       if (w.length <= step) break
       if (startsWithAt(chars, w, i) || startsWithAt(leetI, w, i) || startsWithAt(leetL, w, i)) {
@@ -305,12 +388,21 @@ export function predictableUnits(password: string): number {
         break
       }
     }
-    step = Math.max(step, sequenceRun(chars, i), repeatRun(chars, i))
+    step = Math.max(step, sequenceRun(chars, i), stutterRun(chars, i), repeatRun(chars, i))
     if (/^(19|20)\d\d$/.test(chars.slice(i, i + 4).join(''))) step = Math.max(step, 4)
-    units += 1
+    out.push({ text: typed.slice(i, i + step).join(''), common: step > 1 })
     i += step
   }
-  return units
+  return out
+}
+
+/**
+ * How many unpredictable pieces the password is made of (see pieces).
+ * "Password2026!" → password · 2026 · ! = 3 units; a random 16-character
+ * password → 16.
+ */
+export function predictableUnits(password: string): number {
+  return pieces(password).length
 }
 
 /** Letters and digits only, lower case ("Lucian-Dev" → "luciandev"). */
@@ -384,8 +476,39 @@ export type PasswordContext = {
   current?: string | null
 }
 
-/** Rough entropy estimate: unpredictable units × log2 of the character pool used. */
-function estimateBits(password: string, units: number): number {
+/** Bits a run of letters that reads like a word is worth (a list of ~8,000 words), whatever its length… */
+const WORD_BITS = 13
+/** …per letter, for a long run (several words written together)… */
+const WORD_LETTER_BITS = 2.2
+/** …and for the short words ("at", "the"): a much shorter list. */
+const SHORT_WORD_BITS: Record<number, number> = { 2: 7, 3: 10 }
+
+/**
+ * Does this run of ASCII letters read like a word (or a few written
+ * together)? Two letters or more, about a quarter of them vowels, and no
+ * cluster of more than three consonants — "at", "harbour", "lighthouse" do;
+ * "qhzvbmwk" does not, so generated letters keep their full value.
+ */
+function readsLikeWords(run: string): boolean {
+  if (run.length < 2) return false
+  const lower = run.toLowerCase()
+  const vowels = (lower.match(/[aeiouy]/g) || []).length
+  return vowels / lower.length >= 0.25 && !/[^aeiouy]{4}/.test(lower)
+}
+
+/** What a word-like run of `length` letters is worth. */
+function wordBits(length: number): number {
+  return SHORT_WORD_BITS[length] ?? Math.max(WORD_BITS, length * WORD_LETTER_BITS)
+}
+
+/**
+ * Rough entropy estimate. Each predictable piece, and each other character,
+ * is worth log2 of the character pool used — except that a run of single
+ * letters that reads like words is worth WORD_BITS (or WORD_LETTER_BITS a
+ * letter, when longer), plus a bit for a capital, and a separator typed
+ * again (the spaces of a passphrase) is worth one bit.
+ */
+function estimateBits(password: string): number {
   const s = normalizePassword(password)
   let pool = 0
   if (/[a-z]/.test(s)) pool += 26
@@ -393,7 +516,38 @@ function estimateBits(password: string, units: number): number {
   if (/[0-9]/.test(s)) pool += 10
   if (/[ -/:-@[-`{-~]/.test(s)) pool += 33
   if (Array.from(s).some((c) => (c.codePointAt(0) ?? 0) > 0x7f)) pool += 100
-  return units * Math.log2(Math.max(pool, 2))
+  const perPiece = Math.log2(Math.max(pool, 2))
+  const parts = pieces(password)
+  const seenSymbols = new Set<string>()
+  let bits = 0
+  let i = 0
+  while (i < parts.length) {
+    const p = parts[i]
+    if (!p.common && /^[A-Za-z]$/.test(p.text)) {
+      // A run of single letters: a word, or letter by letter.
+      let run = ''
+      let j = i
+      while (j < parts.length && !parts[j].common && /^[A-Za-z]$/.test(parts[j].text)) run += parts[j++].text
+      if (readsLikeWords(run)) {
+        const capitals = (run.match(/[A-Z]/g) || []).length
+        const caseBits =
+          capitals === 0 ? 0 : capitals === run.length || (capitals === 1 && /^[A-Z]/.test(run)) ? 1 : capitals
+        bits += Math.min(run.length * perPiece, wordBits(run.length) + caseBits)
+      } else {
+        bits += run.length * perPiece
+      }
+      i = j
+      continue
+    }
+    if (!p.common && /^[ -/:-@[-`{-~]$/.test(p.text)) {
+      bits += seenSymbols.has(p.text) ? 1 : perPiece
+      seenSymbols.add(p.text)
+    } else {
+      bits += perPiece
+    }
+    i++
+  }
+  return bits
 }
 
 export function checkNewPassword(password: string, ctx: PasswordContext = {}): PasswordCheck {
@@ -414,7 +568,7 @@ export function checkNewPassword(password: string, ctx: PasswordContext = {}): P
   if (length > 0) {
     if (tooShort || tooLong || predictable || personal) strength = 'too-weak'
     else {
-      const bits = estimateBits(password, units)
+      const bits = estimateBits(password)
       strength = bits < 50 ? 'fair' : bits < 72 ? 'good' : 'strong'
     }
   }
