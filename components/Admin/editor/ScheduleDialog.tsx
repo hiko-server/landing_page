@@ -19,7 +19,7 @@ import {
   Stack,
   Text,
 } from '@chakra-ui/react'
-import { inputProps, MONO, outlineButtonProps, primaryButtonProps, warnTextProps } from '../shell/ui'
+import { inputProps, MONO, outlineButtonProps, primaryButtonProps, useWarnFieldProps, warnTextProps } from '../shell/ui'
 import { Collapse } from '../../General-UI/Collapse'
 import { bothZones, inputsFor, publishTimeProblem, relativeInstant, schedulePresets, type ItemScheduleView, type ScheduleChange } from '../shell/itemSchedule'
 import { MIN_WINDOW_MS } from '../../../lib/schedule/fields'
@@ -77,6 +77,8 @@ function useNow(active: boolean): number {
 export default function ScheduleDialog({ isOpen, onClose, collection, mode, hasChanges, dirty, schedule, itemDate, setSchedule, finalFocusRef }: Props) {
   const ids = useId()
   const now = useNow(isOpen)
+  // A time that has passed is a warning, not an error: the fields' ring in the warning colour.
+  const warnField = useWarnFieldProps()
   // The first quick pick, or the unpublish switch when there is nothing to publish.
   const firstRef = useRef<HTMLButtonElement & HTMLInputElement>(null)
   const browserZone = useMemo(() => localTimeZone(), [])
@@ -204,9 +206,7 @@ export default function ScheduleDialog({ isOpen, onClose, collection, mode, hasC
    * is wrong both fields are invalid and described by it.
    */
   const pickers = (value: Picked, onChange: (v: Picked) => void, label: string, problem: string | null, when: ReactNode) => {
-    const invalid = problem
-      ? { isInvalid: true, 'aria-describedby': msgId(label), errorBorderColor: 'status.warning' }
-      : {}
+    const invalid = problem ? { isInvalid: true, 'aria-describedby': msgId(label), ...warnField } : {}
     return (
       <>
         <SimpleGrid columns={2} spacing={3} maxW="360px">

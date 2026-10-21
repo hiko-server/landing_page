@@ -203,42 +203,74 @@ export function withContrastSafeSolidButton<T extends { variants?: Record<string
 /** A text field's boundary and placeholder in the admin (see withAdminFieldContrast). */
 export const FIELD_BOUNDARY = { borderColor: 'var(--control-border)', hover: 'page.fg-subtle', placeholder: 'page.fg-subtle' } as const
 
+/**
+ * The ring of an admin field reached by keyboard: the accent (≥ 3.8:1 on
+ * every admin surface in both modes), not Chakra's default blue. Chakra
+ * draws a field's rings from its `focusBorderColor` / `errorBorderColor`
+ * props through its own colour parser (theme-tools getColor), which knows
+ * PALETTE tokens only: a semantic token ('status.warning') or a var()
+ * comes out #000000 — a black ring, invisible on the dark page. So those
+ * props take palette tokens ('accent.500', 'orange.700'), chosen per colour
+ * mode where it matters; tests/review-r3-fields.test.ts rejects anything
+ * else anywhere in the source.
+ */
+export const FIELD_RING = { focus: 'accent.500' } as const
+
 type FieldConfig = { baseStyle?: StyleValue; variants?: Record<string, StyleValue> } & Record<string, unknown>
+/** The variants whose edge is a line in the field's border colour (outline: a box; flushed: the underline). */
+const BOUNDED_VARIANTS = new Set(['outline', 'flushed'])
+type FieldProps = { focusBorderColor?: string } & Record<string, unknown>
 
 /**
- * The app theme's Input, Textarea or Select with an admin field you can find
- * and read (WCAG 1.4.11 / 1.4.3): the outline variant's border is
- * --control-border (Chakra's inherited gray.200 / whiteAlpha.300 is
- * 1.2–1.5:1, and it lightened further on hover), hover darkens it to
- * page.fg-subtle, and placeholders are page.fg-subtle (Chakra's gray.500 /
+ * The app theme's Input, Textarea, Select or NumberInput with an admin field
+ * you can find and read (WCAG 1.4.11 / 1.4.3): the outline variant's border
+ * and the flushed one's underline are --control-border (Chakra's inherited
+ * gray.200 / whiteAlpha.300 is 1.2–1.5:1, and it lightened further on
+ * hover), hover darkens it to page.fg-subtle, and placeholders are
+ * page.fg-subtle (Chakra's gray.500 /
  * whiteAlpha.400 is 3.6–4:1) — in every variant, the unstyled one of the tag
- * field included. A field's own borderColor prop still wins; focus and
- * invalid rings stay Chakra's. `parts`: Input and Select style a `field`
- * part, Textarea the element itself. Admin-only: AdminThemeScope applies it.
+ * field included. A field's own borderColor prop still wins (so fields leave
+ * it alone); the focus ring is the accent in every variant unless a field
+ * names another (FIELD_RING) — read-only fields included — and the invalid
+ * ring stays Chakra's. `parts`:
+ * Input, Select and NumberInput style a `field` part, Textarea the element
+ * itself. Admin-only: AdminThemeScope applies it.
  */
 export function withAdminFieldContrast<T extends FieldConfig | undefined>(config: T, parts: boolean): T {
   if (!config) return config
   const placeholder = { _placeholder: { color: FIELD_BOUNDARY.placeholder } }
-  const outline = config.variants?.outline
-  const boundary = (field: StyleObject = {}) => ({
-    ...field,
-    borderColor: FIELD_BOUNDARY.borderColor,
-    _hover: { ...field._hover, borderColor: FIELD_BOUNDARY.hover },
-  })
+  const boundary = (field: StyleObject = {}) => {
+    // Chakra takes the ring off a read-only field (`boxShadow: none !important`), leaving a 1px
+    // colour change as its only focus cue; a read-only field reached by Tab keeps the ring.
+    const readOnly: StyleObject = { ...field._readOnly }
+    delete readOnly.boxShadow
+    return {
+      ...field,
+      borderColor: FIELD_BOUNDARY.borderColor,
+      _hover: { ...field._hover, borderColor: FIELD_BOUNDARY.hover },
+      ...(field._readOnly ? { _readOnly: readOnly } : {}),
+    }
+  }
+  const ringed = (props: FieldProps) => ({ ...props, focusBorderColor: props.focusBorderColor || FIELD_RING.focus })
+  const variants = Object.fromEntries(
+    Object.entries(config.variants || {}).map(([name, variant]) => {
+      if (typeof variant !== 'function') return [name, variant]
+      if (!BOUNDED_VARIANTS.has(name)) return [name, (props: FieldProps) => variant(ringed(props))]
+      return [
+        name,
+        (props: FieldProps) => {
+          const v = variant(ringed(props))
+          return parts ? { ...v, field: boundary(v.field) } : boundary(v)
+        },
+      ]
+    }),
+  )
   return {
     ...config,
     baseStyle: (props: unknown) => {
       const base = resolve(config.baseStyle, props)
       return parts ? { ...base, field: { ...base.field, ...placeholder } } : { ...base, ...placeholder }
     },
-    variants: outline
-      ? {
-          ...config.variants,
-          outline: (props: unknown) => {
-            const v = resolve(outline, props)
-            return parts ? { ...v, field: boundary(v.field) } : boundary(v)
-          },
-        }
-      : config.variants,
+    variants: config.variants ? variants : config.variants,
   }
 }
