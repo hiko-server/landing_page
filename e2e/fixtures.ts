@@ -291,6 +291,29 @@ function readSharedCookies(file: string): Parameters<ReturnType<Page['context']>
 }
 
 /**
+ * How long the shared sign-in is handed out: half the server's recent-sign-in
+ * window (ADMIN_RECENT_AUTH_MINUTES, whole minutes 1–60, default 10 — as
+ * lib/adminAuth/stepUp.ts reads it). Deleting a post, signing a browser out
+ * and other dangerous actions need a sign-in that recent, and the admin
+ * project runs longer than the window, so a test always starts with at least
+ * half of it left.
+ */
+function sharedSessionMaxAgeMs(raw = process.env.ADMIN_RECENT_AUTH_MINUTES): number {
+  const n = Number(raw)
+  const minutes = raw !== undefined && raw.trim() !== '' && Number.isInteger(n) ? Math.min(60, Math.max(1, n)) : 10
+  return (minutes * 60_000) / 2
+}
+
+/** True when the shared session file was written longer ago than sharedSessionMaxAgeMs. */
+function sharedSessionStale(file: string): boolean {
+  try {
+    return Date.now() - fs.statSync(file).mtimeMs > sharedSessionMaxAgeMs()
+  } catch {
+    return false
+  }
+}
+
+/**
  * Land on the admin portal signed in.
  *
  * The login route allows 10 attempts per client address per 5 minutes, and
@@ -298,9 +321,12 @@ function readSharedCookies(file: string): Parameters<ReturnType<Page['context']>
  * default every test of a run shares ONE session per origin: the first test
  * signs in through the real form (under a lock file, so parallel workers do
  * not race) and saves the cookies; the others reuse them, and sign in again
- * only when that session has ended (a test signed it out, or it expired).
+ * when that session has ended (a test signed it out, or it expired) or is no
+ * longer recent enough for a dangerous action (sharedSessionMaxAgeMs).
  * `fresh: true` always signs in through the form — for tests that need a
- * session of their own (a second browser, a session they will end).
+ * session of their own (a second browser, a session they will end); call it
+ * on a page that is not signed in yet (the sign-in page sends a signed-in
+ * browser on to the admin).
  */
 export async function loginAsAdmin(page: Page, opts: { fresh?: boolean } = {}): Promise<void> {
   await page.goto('/admin/login')
@@ -313,6 +339,7 @@ export async function loginAsAdmin(page: Page, opts: { fresh?: boolean } = {}): 
     return !new URL(page.url()).pathname.startsWith('/admin/login')
   }
   for (let attempt = 0; attempt < 2; attempt++) {
+    if (sharedSessionStale(file)) fs.rmSync(file, { force: true })
     const cookies = readSharedCookies(file)
     if (cookies) {
       await page.context().addCookies(cookies)

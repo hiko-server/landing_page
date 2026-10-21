@@ -400,7 +400,7 @@ export function ScaleField({ value, onChange }: { value: number; onChange: (v: n
         clampValueOnBlur
         focusBorderColor="accent.500"
       >
-        <NumberInputField borderColor="page.border-strong" className="tnum" />
+        <NumberInputField className="tnum" />
         <NumberInputStepper>
           <NumberIncrementStepper />
           <NumberDecrementStepper />

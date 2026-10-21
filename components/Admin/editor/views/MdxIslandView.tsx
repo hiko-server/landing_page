@@ -138,7 +138,6 @@ function SourceEditor({
         spellCheck={false}
         autoComplete="off"
         bg="page.bg"
-        borderColor="page.border-strong"
         focusBorderColor="accent.500"
         isInvalid={!!error}
         aria-describedby={error ? `${id}-err` : `${id}-hint`}

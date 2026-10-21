@@ -54,7 +54,7 @@ function WorkEditor() {
               Title
             </FormLabel>
             <Input {...inputProps} id="item-title" value={fm.title} onChange={(e) => setFm({ ...fm, title: e.target.value })} />
-            <FormHelperText fontSize="xs" color={fm.title.length > TITLE_MAX ? 'orange.400' : 'page.fg-secondary'} className="tnum">
+            <FormHelperText fontSize="xs" color={fm.title.length > TITLE_MAX ? 'status.warning' : 'page.fg-secondary'} className="tnum">
               {fm.title.length}/{TITLE_MAX}
             </FormHelperText>
           </FormControl>
@@ -86,7 +86,7 @@ function WorkEditor() {
               onChange={(e) => setFm({ ...fm, description: e.target.value })}
               placeholder="One-line summary of the project"
             />
-            <FormHelperText fontSize="xs" color={fm.description.length > DESCRIPTION_MAX ? 'orange.400' : 'page.fg-secondary'} className="tnum">
+            <FormHelperText fontSize="xs" color={fm.description.length > DESCRIPTION_MAX ? 'status.warning' : 'page.fg-secondary'} className="tnum">
               {fm.description.length}/{DESCRIPTION_MAX} · 50–160 reads best in previews
             </FormHelperText>
           </FormControl>

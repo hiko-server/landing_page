@@ -36,6 +36,7 @@ import {
   inputProps,
   outlineButtonProps,
   primaryButtonProps,
+  warnTextProps,
 } from '../shell/ui'
 import { readJsonObject } from '../shell/http'
 import { NETWORK_ERROR } from '../shell/authMessages'
@@ -841,7 +842,7 @@ export default function SecurityPanel() {
             <Button
               size="sm"
               variant="ghost"
-              color="red.400"
+              color="status.error"
               isLoading={busy === 'all'}
               onClick={() =>
                 void signOut(
@@ -1050,7 +1051,7 @@ export default function SecurityPanel() {
               It can no longer sign in here. The passkey itself stays on the device until you delete
               it there (supported browsers are told to forget it).
               {data.policy.passkeyRequired && passkeyCount <= 1 ? (
-                <Text mt={3} color="orange.400">
+                <Text mt={3} {...warnTextProps}>
                   It is your only passkey and “Require a passkey” is on — turn that off or add
                   another passkey first.
                 </Text>

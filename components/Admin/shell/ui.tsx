@@ -15,6 +15,7 @@ import {
   VisuallyHidden,
   Wrap,
   WrapItem,
+  useColorModeValue,
   type BoxProps,
   type ButtonProps,
 } from '@chakra-ui/react'
@@ -59,12 +60,30 @@ export const outlineButtonProps: ButtonProps = {
 /** Warning text that meets 4.5:1 in both themes (orange.400 does not on white). */
 export const warnTextProps = { color: 'orange.700', _dark: { color: 'orange.300' } } as const
 
-/** Shared input props: indigo focus ring on hairline borders. */
+/**
+ * Shared input props: the indigo focus ring (a palette token — Chakra's
+ * colour parser turns semantic tokens and var() into #000000). The edge, its
+ * hover and the placeholder come from the admin theme (AdminThemeScope:
+ * --control-border, ≥ 3:1 on every admin surface): a field never sets its
+ * own borderColor — page.border-strong was 1.2–1.5:1, too faint to find
+ * the field by (WCAG 1.4.11) — and a style-prop _hover would also outrank
+ * the focus and invalid rings.
+ */
 export const inputProps = {
   focusBorderColor: 'accent.500',
-  borderColor: 'page.border-strong',
-  _hover: { borderColor: 'page.muted' },
 } as const
+
+/**
+ * A field marked invalid for a WARNING (a time that has passed) rather than
+ * an error: its ring in the warning text's colours (warnTextProps), as
+ * palette tokens per colour mode — `errorBorderColor` goes through Chakra's
+ * colour parser like `focusBorderColor`, and 'status.warning' came out as a
+ * black ring. Spread with `isInvalid`; the dialog is client-rendered, so the
+ * colour mode is known.
+ */
+export function useWarnFieldProps() {
+  return { errorBorderColor: useColorModeValue('orange.700', 'orange.300') }
+}
 
 export function Eyebrow({
   children,

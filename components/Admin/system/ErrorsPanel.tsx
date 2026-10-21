@@ -401,7 +401,7 @@ export default function ErrorsPanel() {
                       <Button
                         size="xs"
                         variant="ghost"
-                        color="red.400"
+                        color="status.error"
                         isLoading={busy === `del:${e.fingerprint}`}
                         onClick={() =>
                           void change(

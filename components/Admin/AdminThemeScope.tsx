@@ -15,9 +15,9 @@ import { ADMIN_COMPONENT_STYLES, ADMIN_GLOBAL_CSS, withAdminFieldContrast, withC
  * root provider. The admin's own CSS variables (the control border) are
  * added here as global styles, so public pages never carry them either.
  * Solid coloured buttons — only the admin has them — take the 600 shade in
- * light mode (white text ≥ 4.5:1; Chakra's 500 is 4.1:1 on red). Text
- * fields get a ≥ 3:1 boundary and ≥ 4.5:1 placeholders (the public
- * site's contact form keeps its own look).
+ * light mode (white text ≥ 4.5:1; Chakra's 500 is 4.1:1 on red). Text,
+ * select and number fields get a ≥ 3:1 boundary, ≥ 4.5:1 placeholders and
+ * the accent focus ring (the public site's contact form keeps its own look).
  */
 export default function AdminThemeScope({ children }: { children: ReactNode }) {
   const theme = useTheme()
@@ -29,6 +29,7 @@ export default function AdminThemeScope({ children }: { children: ReactNode }) {
         ...theme.components,
         Button: withContrastSafeSolidButton(theme.components.Button),
         Input: withAdminFieldContrast(theme.components.Input, true),
+        NumberInput: withAdminFieldContrast(ADMIN_COMPONENT_STYLES.NumberInput, true),
         Select: withAdminFieldContrast(theme.components.Select, true),
         Textarea: withAdminFieldContrast(theme.components.Textarea, false),
       },

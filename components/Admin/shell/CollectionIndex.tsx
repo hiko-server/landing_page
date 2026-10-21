@@ -479,7 +479,7 @@ export default function CollectionIndex({
                             icon={<DeleteIcon />}
                             variant="ghost"
                             color="page.fg-secondary"
-                            _hover={{ color: 'red.400', bg: 'page.bg-overlay' }}
+                            _hover={{ color: 'status.error', bg: 'page.bg-overlay' }}
                             onClick={() => setPendingDelete(it)}
                           />
                         </HStack>

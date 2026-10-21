@@ -121,7 +121,6 @@ export default function AvailabilitySection({ value, onChange }: SectionProps<Av
     onChange((prev) => ({ ...prev, ...change, updatedAt: Date.now() }))
 
   const bookingError = value.bookingUrl.trim() && !isHttpsUrl(value.bookingUrl.trim()) ? 'Use a full https:// link.' : undefined
-  const disabled = !value.status
   const rolesZh = value.roles_zh || []
   const lengthError = (v: string | undefined, max: number) => ((v || '').trim().length > max ? `Keep it under ${max} characters.` : undefined)
   const isEmpty =
@@ -173,7 +172,8 @@ export default function AvailabilitySection({ value, onChange }: SectionProps<Av
         </Text>
       </FormControl>
 
-      <Box opacity={disabled ? 0.6 : 1}>
+      {/* Without a status these are kept but not shown (the line above says so) — not faded, so they stay readable and findable. */}
+      <Box>
         <SimpleGrid columns={{ base: 1, md: 2 }} gap={3} mt={4}>
           <TextField label="Label (English)" value={value.label} onChange={(v) => edit({ label: v })} placeholder="Open to senior frontend roles" />
           <TextField label="Label (中文)" value={value.label_zh} onChange={(v) => edit({ label_zh: v })} placeholder="开放高级前端职位" />

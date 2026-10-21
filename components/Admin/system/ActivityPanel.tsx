@@ -255,7 +255,7 @@ export default function ActivityPanel() {
       )}
 
       {error && items ? (
-        <Text role="alert" fontSize="xs" color="red.500" _dark={{ color: 'red.300' }} mt={2}>
+        <Text role="alert" fontSize="xs" color="status.error" mt={2}>
           {error}
         </Text>
       ) : null}

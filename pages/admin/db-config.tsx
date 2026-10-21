@@ -38,6 +38,7 @@ import {
   inputProps,
   outlineButtonProps,
   primaryButtonProps,
+  warnTextProps,
 } from '../../components/Admin/shell/ui'
 import { useStepUp } from '../../components/Admin/security/useStepUp'
 import { wasStepUpCancelled } from '../../components/Admin/security/stepUpClient'
@@ -478,7 +479,7 @@ export default function DbConfigPage() {
                 <Button
                   size="xs"
                   variant="link"
-                  color="accent.500"
+                  color="accent.text"
                   onClick={() => {
                     setDbConfig({ ...dbConfig, url: '' })
                     setDbVerified(false)
@@ -564,7 +565,7 @@ export default function DbConfigPage() {
 
       {/* Operations */}
       <SimpleGrid columns={{ base: 1, md: 2 }} gap={6}>
-        <Panel as="section" aria-labelledby="mongo-backup-title" opacity={opsLocked ? 0.6 : 1}>
+        <Panel as="section" aria-labelledby="mongo-backup-title">
           <Eyebrow accent>[02]</Eyebrow>
           <Heading as="h2" id="mongo-backup-title" fontSize="md" fontWeight={600} mt={1} mb={2}>
             Backup
@@ -611,8 +612,8 @@ export default function DbConfigPage() {
           </Stack>
         </Panel>
 
-        <Panel as="section" aria-labelledby="mongo-restore-title" opacity={opsLocked ? 0.6 : 1}>
-          <Eyebrow color="orange.400">[03]</Eyebrow>
+        <Panel as="section" aria-labelledby="mongo-restore-title">
+          <Eyebrow {...warnTextProps}>[03]</Eyebrow>
           <Heading as="h2" id="mongo-restore-title" fontSize="md" fontWeight={600} mt={1} mb={2}>
             Restore
           </Heading>

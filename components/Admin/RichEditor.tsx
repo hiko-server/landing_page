@@ -1221,7 +1221,6 @@ export default function RichEditor({
               placeholder={placeholder ? `${placeholder} Type / for blocks.` : 'Type / for blocks.'}
               aria-labelledby={labelledBy}
               aria-autocomplete="list"
-              borderColor="page.border-strong"
               focusBorderColor="accent.500"
               bg="page.bg"
             />
