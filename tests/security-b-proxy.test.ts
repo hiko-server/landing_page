@@ -194,7 +194,9 @@ test('verifyAdminToken: signature, algorithm, expiry, role, sid shape, version a
 test('every proxy response carries the CSP with the script hashes, Trusted Types report-only and CORP by path', async () => {
   const pageRes = await proxyMod.proxy(req('https://lucian-dev.com/blog/x'))
   assert.equal(pageRes.headers.get('content-security-policy'), responseHeaders.contentSecurityPolicy())
-  assert.match(pageRes.headers.get('content-security-policy') || '', /script-src 'self'( 'sha256-[A-Za-z0-9+/]{43}='){4};/)
+  // One hash per inline script the pages render (lib/security/inlineScripts.ts), nothing else.
+  const { INLINE_SCRIPTS } = await import('../lib/security/inlineScripts')
+  assert.match(pageRes.headers.get('content-security-policy') || '', new RegExp(`script-src 'self'( 'sha256-[A-Za-z0-9+/]{43}='){${INLINE_SCRIPTS.length}};`))
   assert.match(pageRes.headers.get('content-security-policy-report-only') || '', /^require-trusted-types-for 'script'; /)
   assert.equal(pageRes.headers.get('reporting-endpoints'), 'csp="/api/e"')
   assert.equal(pageRes.headers.get('cross-origin-opener-policy'), 'same-origin')
