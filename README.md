@@ -720,10 +720,13 @@ word-level (Chinese segmented with `Intl.Segmenter`).
   (this one included) ends every such browser at once.
 - **Password change** (Admin → Security → Password): the current password
   (checked like a sign-in, under the same lockout; a wrong one only says
-  "incorrect") plus a new one — 12–256 characters counted after NFKC
+  "incorrect", and five wrong ones — with password step-ups — sign that
+  session out) plus a new one — 12–256 characters counted after NFKC
   normalisation, any characters, not common or predictable (a small bundled
-  word list, keyboard runs, repeats, look-alikes), not the e-mail's or the
-  site's name, not the current one; the e-mail reset applies the same rules.
+  word list and famous passphrases, keyboard and numpad runs, repeats,
+  look-alikes), not the e-mail's or the site's name, not the current one;
+  the e-mail reset applies the same rules, with the same checklist, once
+  its link has been checked.
   It is rehashed with a fresh salt, reset links are burnt, and by default
   every other browser is signed out while this one gets a fresh session.
   The sign-in history, the activity log and (with SMTP) a notice to
