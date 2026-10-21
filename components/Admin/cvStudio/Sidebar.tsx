@@ -34,7 +34,9 @@ function ScopeToggle({
   label: string
   onToggle: () => void
 }) {
-  const { faint } = useStudioTokens()
+  const { faint, accentText } = useStudioTokens()
+  // Off is the quiet colour with a strike through the icon — not a faded
+  // icon (55% opacity took it to 1.8–2.2:1, under WCAG 1.4.11's 3:1).
   return (
     <Tooltip label={`${on ? 'Shown on' : 'Hidden from'} ${label} — click to ${on ? 'hide' : 'show'}`} hasArrow openDelay={300}>
       <IconButton
@@ -43,8 +45,7 @@ function ScopeToggle({
         icon={icon}
         size="xs"
         variant="ghost"
-        color={on ? 'var(--accent)' : faint}
-        opacity={on ? 1 : 0.55}
+        color={on ? accentText : faint}
         position="relative"
         _after={
           on
@@ -58,7 +59,7 @@ function ScopeToggle({
                 transform: 'rotate(-45deg)',
               }
         }
-        _hover={{ bg: 'var(--accent-soft)', opacity: 1 }}
+        _hover={{ bg: 'var(--accent-soft)' }}
         onClick={(e) => {
           e.stopPropagation()
           onToggle()
@@ -139,7 +140,8 @@ function SidebarRow({
         textAlign="left"
         flex={1}
         minW={0}
-        opacity={onCv || onWeb ? 1 : 0.55}
+        // Off both the CV and the website: quiet words (≥ 4.5:1), not a faded row.
+        color={onCv || onWeb ? undefined : faint}
         aria-current={active ? 'true' : undefined}
         borderRadius="sm"
         _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '2px' }}
@@ -169,7 +171,7 @@ function SidebarRow({
             </Tooltip>
           ) : null}
         </HStack>
-        <Text as="span" display="block" fontFamily={monoFont} fontSize="10px" color={dim} noOfLines={1}>
+        <Text as="span" display="block" fontFamily={monoFont} fontSize="10px" color={onCv || onWeb ? dim : faint} noOfLines={1}>
           {section.headerName || section.sessionName}
           {n ? ` · ${n}` : ''}
         </Text>

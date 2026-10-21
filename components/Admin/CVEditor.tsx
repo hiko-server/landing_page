@@ -233,7 +233,8 @@ export default function CVEditor() {
         spellCheck={false}
         bg={editorBg}
         borderColor={parsed.ok ? border : 'red.400'}
-        focusBorderColor={parsed.ok ? 'var(--accent)' : 'red.400'}
+        // Palette tokens (Chakra turns 'var(--accent)' into a black ring): ≥ 3:1 on both pages.
+        focusBorderColor={parsed.ok ? 'accent.500' : 'red.500'}
         sx={{ tabSize: 2 }}
         onKeyDown={(e) => {
           // Tab indents; Esc first lets the next Tab leave the editor (no keyboard trap).

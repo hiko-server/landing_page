@@ -1,7 +1,6 @@
-import { useEffect, useId, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { Global } from '@emotion/react'
+import { useId, useRef } from 'react'
 import { Box, Flex, Text } from '@chakra-ui/react'
+import BottomBarHost from '../Common/BottomBarHost'
 import { useBottomBarOffset } from '../Common/useBottomBarOffset'
 
 /**
@@ -121,15 +120,12 @@ function BarBody({ word, note, expires, label, lang }: ReviewChromeProps) {
 }
 
 export function ReviewBar(props: ReviewChromeProps) {
-  // In place for the server render and hydration, then on <body>, above the footer.
-  const [host, setHost] = useState<HTMLElement | null>(null)
-  useEffect(() => setHost(document.body), [])
+  // In place for the server render and hydration, then on <body>, above the
+  // footer, with room after the footer so the page's last line never ends up under it.
   return (
-    <>
-      {/* Room after the footer for the bar, so the page's last line never ends up under it. */}
-      <Global styles={{ body: { paddingBottom: 'var(--bottom-bar-h, 0px)' } }} />
-      {host ? createPortal(<BarBody {...props} />, host) : <BarBody {...props} />}
-    </>
+    <BottomBarHost>
+      <BarBody {...props} />
+    </BottomBarHost>
   )
 }
 

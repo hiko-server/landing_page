@@ -89,7 +89,7 @@ export default function HiddenPanel({
       <DrawerContent bg="page.bg" borderLeft="1px solid" borderColor={border}>
         <DrawerCloseButton />
         <DrawerHeader borderBottom="1px solid" borderColor={border} pb={3}>
-          <Text fontFamily={monoFont} fontSize="10px" letterSpacing="0.12em" textTransform="uppercase" color="var(--accent)">
+          <Text fontFamily={monoFont} fontSize="10px" letterSpacing="0.12em" textTransform="uppercase" color="accent.text">
             Visibility
           </Text>
           <HStack spacing={2} mt={1} align="baseline">
@@ -204,7 +204,7 @@ export default function HiddenPanel({
                                   borderColor={border}
                                   leftIcon={<ViewIcon />}
                                   aria-label={row.kind === 'limited' ? `Show ${row.label} everywhere` : `Show ${row.label}`}
-                                  _hover={{ color: 'var(--accent)', borderColor: 'var(--accent)', bg: 'var(--accent-soft)' }}
+                                  _hover={{ color: 'accent.text', borderColor: 'var(--accent)', bg: 'var(--accent-soft)' }}
                                   onClick={() => {
                                     refocusAt.current = myIndex
                                     onShow(row)

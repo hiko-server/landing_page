@@ -172,6 +172,20 @@ Fixes for defects the final review found in the final batch before it shipped.
 - Solid confirm buttons (red, accent and the other colours) meet 4.5:1 in light mode (UX-A-10).
 - Video and figure controls in the editor are at least 24px tall (UX-A-11).
 - Typing a component in the MDX tab no longer re-announces the parse error at every pause; only the change is announced (UX-A-12).
+- **CV Studio meets AA in both themes (CV-STUDIO-CONTRAST)**: the EN / 中文
+  toggle, Linked, the Hidden count, chips, counts, hints, placeholders and
+  the Delete rows read at ≥ 4.5:1; field edges, switch tracks and every
+  icon at ≥ 3:1. Hidden and switched-off things look quiet through colour
+  (stripe, struck-through label, grey text) instead of fading below
+  contrast. Fields reached by Tab show the accent ring (it was black, so
+  invisible in dark mode), menu rows reached by keyboard get the ring too,
+  and a disabled menu row stays readable. Admin-wide through the admin
+  theme: text fields, switches, menus and outline badges.
+- **Draft preview bar (DRAFTBAR-ROOM)**: the owner's bar on a draft stays
+  above the footer (the footer painted over it at the end of the page),
+  and the page keeps room below the footer for it, so Tab through the
+  footer never leaves a link under the bar. The review link's "Preview"
+  bar now reserves its room the same way.
 
 ### patch-2b1
 
