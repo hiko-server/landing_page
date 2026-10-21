@@ -8,6 +8,138 @@ portfolio CMS, no public package). Entries are grouped by release date.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [2.5.0] — 2026-10-21
+
+The final batch of this round: Chinese versions of the main pages, a rebuilt
+image viewer, and new tools for the owner — scheduled publishing with review
+links, a media library, tailored CV versions shared by private link, deeper
+analytics and a visual editor that keeps everything an article can hold. A
+final review added contrast, focus and layout fixes across the header and the
+admin.
+
+### Added
+
+- **Chinese pages**: `/zh`, `/zh/about`, `/zh/work`, `/zh/blog` and
+  `/zh/contact` show the owner's own Chinese copy and the posts and case
+  studies written in Chinese. A Chinese page exists only while its copy does
+  (never a machine translation or a placeholder), and each English and Chinese
+  pair is linked with hreflang in the pages and the sitemap. The owner writes
+  the Chinese home, about and contact copy in the Home and About editors,
+  which show which Chinese pages are live.
+- **Chinese interface**: on Chinese pages the header, footer, mobile menu,
+  command palette, theme menu, messages, empty states, the 404 page and the
+  contact form's errors are in Chinese, and the Chinese typesetting of
+  articles (Chinese fonts and punctuation, space between Chinese and Latin
+  text) now covers every Chinese page. The header's language switch leads to
+  the same page in the other language and is hidden when there is none.
+- **Image viewer, rebuilt** for article images and the home Field Notes: the
+  image grows out of the photo you pressed and flies back into it when closed.
+  On touch screens, swipe between images, drag up or down to close, pinch to
+  zoom up to 4× and pan with momentum, or double-tap to zoom; with a mouse or
+  trackpad, use the wheel or a pinch to zoom at the pointer, click to zoom and
+  drag to pan; the arrow keys, + / − / 0, Home, End and Esc work too. Zooming
+  in loads a sharper copy, a click or double tap stops at the photo's full
+  resolution instead of a blurry upscale, and pinching never leaves the page
+  itself zoomed.
+- **Scheduled publishing**: a draft, or the saved changes to a live post or
+  case study, can be set to go live at a chosen time and optionally to come
+  down again later, with quick picks and both the site's and the device's time
+  zone shown. The server publishes on time, refreshes the pages, feeds and
+  sitemap, and after a restart catches up on anything it missed, logging what
+  it could not publish and why. Admin → Scheduled & review links shows what is
+  coming, day by day.
+- **Review links**: a private link that expires after 1 hour to 30 days shows
+  a draft or unpublished changes read-only, exactly as they will look, under a
+  "Preview" bar. Review pages are never cached or indexed and send no
+  referrer, views are counted as a number only, and deleting the item turns
+  its links off.
+- **Media library** (Admin → Media): every upload in one place, searchable,
+  filterable (no alt text, unused, large, missing sizes) and showing every
+  page that uses each image. Each image gets a default alt text and caption in
+  English and Chinese, offered by a new image picker wherever an image is
+  chosen (the editor, covers, home photos and logos, the avatar, the CV's PDF
+  photo) and filled in with one action on every page that shows the image
+  without one. Replacing a file updates every reference and redirects the old
+  address; deleting is refused while the image is in use and goes to a 30-day
+  trash with Undo.
+- **Where each part of the CV shows**: any section, entry, field, list or
+  single bullet can be limited to public pages, downloads (PDF, text, JSON,
+  vCard) or private links, so a phone number can stay in the PDF without
+  appearing on the public site. Hidden still wins everywhere; CV Studio sets
+  it from a "Shows on" menu beside each eye.
+- **CV variants and private links**: named selections of sections and entries
+  in their own order (say, "Machine learning" or "Full-stack"), with a page
+  target checked against the real PDF in both languages, shared by private
+  links that expire after 7 to 365 days and can be extended or revoked. A
+  shared CV is never cached, indexed or recorded by analytics; the owner sees
+  only how often a link was opened and the day of the last open.
+- **Analytics to explore**: any period from today to the last 12 months (or a
+  custom range), compared with the one before; filters by page, referrer,
+  country, device, browser and language (click any row to add one), kept in
+  the address; a detail view per page; the most common paths to each goal; and
+  CSV export of one table or all of them. An opt-in weekly e-mail digest sums
+  up the previous week. Nothing new about visitors is stored.
+- **A visual editor that keeps everything**: posts and case studies go between
+  the visual editor and MDX without loss (components, expressions, footnotes
+  and reference links stay exactly as written and can be edited in place), so
+  they no longer force the MDX tab. New blocks for tables (keyboard
+  navigation, column alignment), callouts, videos with their stored poster,
+  and captioned figures at text, wide or full width; blocks move by drag
+  handle or Alt+↑ / ↓, and pasted Markdown arrives formatted. A post's cover
+  can have a focal point, around which its social card is cropped.
+
+### Changed
+
+- **Header**: while the owner is signed in, Dashboard and Log out share one
+  menu beside the wordmark, so nothing crowds or shifts when it appears; on
+  wide screens the navigation is centred and stays in the same place on every
+  page; on phones narrower than 375 px the language switch shows only its
+  icon.
+- Article tables honour each column's alignment.
+- The public home, about, CV, publications and Chinese pages load about 2 KiB
+  less JavaScript (gzip), with nothing changed on screen.
+- **Admin accessibility**: CV Studio and the admin's fields, menus and
+  messages meet WCAG AA contrast in both themes (4.5:1 for text, 3:1 for field
+  edges and icons); keyboard focus always shows the accent ring (some rings
+  were black, invisible in dark mode); focus moves to a sensible control after
+  dialogs and actions; and the editor's small controls are at least 24 px
+  tall.
+
+### Fixed
+
+- ⌘K opened again while the previous palette is still closing puts the cursor
+  in the search field (typing went nowhere), and focus returns to where it was
+  opened from.
+- When the browser abandons a page transition (a slow sign-in redirect or
+  network), no uncaught error reaches the console or the admin's Errors panel.
+- The rows on the home and about pages (skills, certifications, experience,
+  repositories, activity) now also rise in on a first visit over a cold cache
+  or a slow network.
+- A downloaded CV without an introduction no longer shows two rules in a row
+  under the header.
+- The owner's draft preview bar stays above the footer, and tabbing through
+  the footer never leaves a link hidden under it.
+
+### Security
+
+- Trailing-slash redirects now carry every security header, so the slash form
+  of a private CV or review link is just as private, uncached and unindexed,
+  and every redirect has the Content-Security-Policy.
+- Review-link and private-CV-link tokens are signed and stored only as hashes
+  in the sign-in database, which a content restore never touches, so a link
+  that was turned off cannot come back.
+- Making or extending a private CV link and deleting an image for good ask the
+  owner to confirm with a recent sign-in.
+- Hidden and audience-limited CV content stays out of every public output
+  (pages, page data, the API, structured data, search, Ask and the files),
+  checked by a leak test across every output and surface.
+
+## 2.5.0 — detailed notes
+
+The per-stream development notes behind 2.5.0, as written while it was built.
+
 ### followups-3
 
 The gaps the final batch left (before release).
@@ -229,41 +361,6 @@ Fixes for defects the final review found in the final batch before it shipped.
   the whole model with the CV Studio's helpers — about 2.1–2.3 KiB gzip
   less first-load JavaScript on /, /about, /cv, /cv/zh, private CV links,
   /now, /publications, /zh and /zh/about. Nothing changes on screen.
-
-### patch-2b1
-
-Fixes after the wave 2B deploy (the post-deploy end-to-end run against
-https://lucian-dev.com).
-
-- **⌘K: Enter on a typed title opens its page, never Ask.** The palette
-  fetches its content index when it first opens (a few hundred milliseconds
-  on the live site). Until it arrived, a typed title had one row — "Ask: …"
-  — and Enter switched the palette to Ask instead of opening the post. Now a
-  search that is not phrased as a question gets its "Ask: …" row only once
-  the posts and projects are in (a question still gets it first, at once),
-  the status says "Loading posts and projects…", and an Enter pressed with
-  nothing to act on yet waits for them and then opens the first result for
-  the text still in the field (editing the text drops it; text that finds
-  nothing stays in Search, where the "Ask: …" row is then the next Enter).
-  Enter otherwise acts on the highlighted row, or on the first row ranked
-  for the field's text while the deferred list lags behind
-  (`components/General-UI/paletteModel.ts` `askRowPlacement`,
-  `resolveEnter`; `tests/patch-2b1-palette-enter.test.ts`,
-  `e2e/patch-2b1.spec.ts` with the index held back and CPU throttling).
-- **E2E: "a fast navigation never shows it" (C2) holds over any network.**
-  It relied on a prefetch to make the navigation to /now fast, which a
-  server a few hundred milliseconds away (production behind Cloudflare)
-  does not guarantee. Every request for /now's data is now answered from
-  memory (fetched once, as a navigation asks for it) and the page's code is
-  loaded beforehand, so no server round trip is left inside the 150 ms.
-- **E2E: the HTML edge-cache check (OPS-1) knows when it is behind
-  Cloudflare.** Cloudflare reads `Cloudflare-CDN-Cache-Control` and never
-  forwards it, so against production the header read as missing. Through
-  Cloudflare (a `cf-ray` on the response) the test now checks what is
-  observable there — `cf-cache-status` is present and a copy the edge
-  serves from its cache is never older than 5 minutes (`age` ≤ 300) — and
-  keeps the origin's `Cache-Control` checks; the header itself stays covered
-  against the container and by `tests/wave2a-fixes-edge.test.ts`.
 
 ### lightbox-gestures
 
@@ -666,6 +763,190 @@ A genuinely bilingual site (wave 3: F3).
   `lib/uiStrings/availability` (the home page no longer bundles the contact
   form's words). Contact API errors carry a `code`, so `/zh/contact` explains
   them in Chinese.
+
+## [2.4.0] — 2026-10-21
+
+What went live after 2.3.0, in two rounds of work and their reviews: real PDF
+and machine-readable CVs, publications with ORCID, search that reads Chinese
+and answers questions with quotes from the site, a narrative about page,
+richer articles and case studies, a much lighter site and a stronger admin.
+Security moved to a hash-only Content-Security-Policy, passkeys and
+per-browser sessions.
+
+### Added
+
+- **Real PDF CVs**: `/cv.pdf` and `/cv/zh.pdf` are rendered on the server
+  (selectable text, embedded fonts for Latin and Chinese, tagged headings,
+  lists and links) and re-rendered on every CV save, so a download always
+  matches the page; "Download PDF" now downloads the file instead of opening
+  the print dialog. Plain-text and JSON Resume versions in both languages
+  (`/cv.txt`, `/cv.json` and their Chinese twins) suit application forms, and
+  every version says when the CV was last updated.
+- **Publications**: a CV section for papers, preprints and theses, and a
+  `/publications` page with formatted citations, collapsible abstracts, Copy
+  BibTeX / APA and filters by year and status. Papers also appear in the PDF,
+  text and JSON CVs, in a "Selected Publications" home section, in search and
+  in the CV's skill evidence. Unpublished work always shows its real status,
+  and nothing appears until a public paper exists.
+- **ORCID iD**: a checksum-validated iD shown the way ORCID's guidelines ask
+  on the CV, `/publications` and /about, and carried by the CV files, the
+  vCard and the structured data. The owner can connect it through ORCID's own
+  sign-in so it shows as authenticated (a typed-in iD is marked
+  unauthenticated) and import papers from the public ORCID record.
+- **Search and Ask**: ⌘K search reads Chinese (the Chinese CV included),
+  searches what a question means rather than its question words, links common
+  recruiting terms across English and Chinese (internship ↔ 实习) and marks the
+  matched words. Ask answers a question in English or Chinese only with
+  passages quoted from the site, each linking to and highlighting its spot on
+  the page; it runs entirely in the browser (no AI model, no request), says so
+  when the site has no answer, and can carry the question into the contact
+  form.
+- **Home and about**: the owner orders and hides the home sections (with a
+  recruiter-first preset) and can add up to four linked highlights under the
+  hero; the Open Source band is compact, with an accessible contribution
+  calendar; the home page's contact is the availability card and a link to
+  /contact. /about becomes a narrative page with a sticky identity rail, an
+  owner-written bio and the full CV sections.
+- **Articles and case studies**: click-to-load YouTube and Vimeo players
+  (nothing loads from either before play); callouts, footnotes, wide and
+  full-width figures, and galleries laid out by aspect ratio; an "At a glance"
+  outcome with metrics on case studies and uniform covers on /work; an author
+  card with sharing (copy link, the system share sheet, LinkedIn, a WeChat QR
+  code); posts and case studies linked both ways, tag filters on /blog and
+  /work, and an archive of every project at the end of /work.
+- **Chinese articles and translations**: Chinese posts and case studies get
+  Chinese typesetting and interface words (dates, labels, navigation), and
+  versions of a piece in different languages link to each other with a
+  language switch and hreflang while lists show the piece once. Every
+  published post and case study is also served as Markdown at its address plus
+  `.md`, and `/llms.txt` lists the site for language models.
+- **The CV for recruiters**: GitHub, LinkedIn, live-site and source links in
+  the header and projects; skill evidence that links each skill to the roles,
+  projects and writing that use it; an owner-written right-to-work line;
+  recommendations shown only with each person's permission; and, on the
+  Chinese CV, a job intent (求职意向), a self-assessment and an optional photo in
+  the PDF only. CV Studio's Readiness panel checks dates, weak openings,
+  measurable results, length and missing links in both languages.
+- **Contact**: choosing a reason reveals a few optional questions (company, a
+  job posting link, a timeline); the form says what is kept and for how long,
+  and messages are deleted automatically after a set period (a year by
+  default).
+- **Motion and keyboard**: cards morph into the page they open and back; pages
+  fade through instead of overlapping; a thin bar marks a slow navigation; the
+  command palette appears instantly from the keyboard and gathers Theme, CV,
+  Contact and Keyboard shortcuts into nested pages; taps give press feedback
+  without sticky hover; on phones the header tucks away while reading down.
+  Visitors get keyboard shortcuts (J / K through lists, `[` / `]` between
+  articles, T for the theme, ? for the list), which can be switched off.
+- **Look and identity**: a System / Light / Dark preference applied before the
+  first paint; a typographic monogram as favicon and app icons; one icon set;
+  a hero that dissolves into the page; a three-column footer with the deployed
+  commit; a mobile menu that follows a swipe; a 404 page with "Did you mean"
+  suggestions; and this page's release timeline.
+- **Writing tools**: edits to a live post or case study stay unpublished until
+  reviewed against the live version; slugs can change, with every link
+  rewritten and the old address redirecting; previews of the Google result and
+  the LinkedIn, X, WhatsApp, Slack and WeChat cards; word counts, find and
+  replace, focus and typewriter modes; site-wide tag management and a
+  one-click .zip export of all content.
+- **Running the site**: a content health center (broken links, image and
+  heading issues, one-click safe fixes); cookieless goals such as CV downloads
+  and contact messages, with a Source → CV → Download conversion and the
+  searches that found nothing; an Inbox with folders, search, stars and
+  archive, and replies sent from the admin; an activity log of every admin
+  change; the whole admin reachable from the keyboard; Web Vitals traced to
+  the elements behind them; self-hosted error monitoring, a system health page
+  and a weekly test restore of the newest backup.
+
+### Changed
+
+- **Lighter and faster**: shared JavaScript on every page went from about 204
+  to 167 KiB (gzip) and the preloaded fonts from 138 to 68 KiB. Uploaded
+  images are served as AVIF or WebP at sizes that fit the screen (a 763 KB
+  screenshot now arrives as 21 KB), over a blurred placeholder that shows from
+  the first paint.
+- **Pages that stay current**: home, /about, the CV pages, /contact and
+  /publications are static pages regenerated right after every save that
+  changes them, and home and /about come back instantly on Back.
+- **Plain section headings**: the bracketed index labels ("[01] INTRODUCTION",
+  "[POST]") are gone; every section opens with one plain heading.
+
+### Fixed
+
+- Deleted or unpublished posts, case studies and pages no longer come back
+  after a server restart.
+- A deploy purges the edge cache and keeps the previous week's scripts
+  available, so open tabs and cached copies of old pages keep working; the CDN
+  keeps HTML for five minutes at most.
+- In ⌘K, Enter on a typed title opens that page even while the search index is
+  still loading, instead of switching to Ask.
+- On phones, toasts no longer cover the CV's action bar or the draft preview
+  bar; on touch screens with a keyboard, focus hints come back and "?" lists
+  every shortcut.
+- Several large uploads at once no longer exhaust the server's memory: images
+  are encoded one at a time.
+
+### Security
+
+- **Strict Content-Security-Policy**: scripts run only from this origin or by
+  hash, never as inline handlers; sources are tighter, violation reports land
+  in the site's own Errors panel, Trusted Types run in report-only mode, and
+  Cross-Origin-Opener-Policy, Cross-Origin-Resource-Policy and a complete
+  Permissions-Policy are sent.
+- **Passkeys and sessions**: the admin can sign in with a passkey (with
+  recovery codes and an optional passkey-only policy); every signed-in browser
+  is listed and can be signed out on its own, with a sign-in history;
+  restores, deletions and security changes ask "Confirm it's you".
+- Admin pages check whether a session was revoked, so a signed-out browser
+  cannot open them with an old cookie; browsers signed in before sessions
+  existed can now be signed out too, and an unreadable admin record locks the
+  admin instead of reopening revoked sessions.
+- Anonymous reports and failed sign-ins can no longer flood the error monitor
+  or push real entries out of the sign-in history; the sign-in database's
+  files are owner-only from the moment they are created; social cards render
+  only parameters the server signed.
+- Draft or deleted case studies are no longer named in public CV or post data,
+  and the container runs without Linux capabilities, with no-new-privileges
+  and a process limit.
+
+## 2.4.0 — detailed notes
+
+The per-stream development notes behind 2.4.0, as written while it was built.
+
+### patch-2b1
+
+Fixes after the wave 2B deploy (the post-deploy end-to-end run against
+https://lucian-dev.com).
+
+- **⌘K: Enter on a typed title opens its page, never Ask.** The palette
+  fetches its content index when it first opens (a few hundred milliseconds
+  on the live site). Until it arrived, a typed title had one row — "Ask: …"
+  — and Enter switched the palette to Ask instead of opening the post. Now a
+  search that is not phrased as a question gets its "Ask: …" row only once
+  the posts and projects are in (a question still gets it first, at once),
+  the status says "Loading posts and projects…", and an Enter pressed with
+  nothing to act on yet waits for them and then opens the first result for
+  the text still in the field (editing the text drops it; text that finds
+  nothing stays in Search, where the "Ask: …" row is then the next Enter).
+  Enter otherwise acts on the highlighted row, or on the first row ranked
+  for the field's text while the deferred list lags behind
+  (`components/General-UI/paletteModel.ts` `askRowPlacement`,
+  `resolveEnter`; `tests/patch-2b1-palette-enter.test.ts`,
+  `e2e/patch-2b1.spec.ts` with the index held back and CPU throttling).
+- **E2E: "a fast navigation never shows it" (C2) holds over any network.**
+  It relied on a prefetch to make the navigation to /now fast, which a
+  server a few hundred milliseconds away (production behind Cloudflare)
+  does not guarantee. Every request for /now's data is now answered from
+  memory (fetched once, as a navigation asks for it) and the page's code is
+  loaded beforehand, so no server round trip is left inside the 150 ms.
+- **E2E: the HTML edge-cache check (OPS-1) knows when it is behind
+  Cloudflare.** Cloudflare reads `Cloudflare-CDN-Cache-Control` and never
+  forwards it, so against production the header read as missing. Through
+  Cloudflare (a `cf-ray` on the response) the test now checks what is
+  observable there — `cf-cache-status` is present and a copy the edge
+  serves from its cache is never older than 5 minutes (`age` ≤ 300) — and
+  keeps the origin's `Cache-Control` checks; the header itself stays covered
+  against the container and by `tests/wave2a-fixes-edge.test.ts`.
 
 ### admin-editorial
 
