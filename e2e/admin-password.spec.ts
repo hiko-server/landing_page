@@ -219,6 +219,25 @@ test.describe('admin password', { tag: '@admin' }, () => {
       await expect(page.getByRole('heading', { name: /Password/, level: 2 })).toBeVisible()
       const f = fields(page)
 
+      // Each status tile carries the number of the section it summarises.
+      const tiles = await page
+        .getByRole('region', { name: 'Security status' })
+        .evaluate((el) =>
+          Array.from(el.children).map((c) => (c.firstElementChild?.textContent || '').trim())
+        )
+      const headings = (await page.locator('h2').allTextContents()).map((h) => h.trim())
+      const sectionOf: Record<string, string> = {
+        Passkeys: 'Passkeys',
+        'Recovery codes': 'Recovery codes',
+        'Sign-in': 'Sign-in policy',
+        'This browser': 'Signed-in browsers',
+      }
+      expect(tiles).toHaveLength(4)
+      for (const tile of tiles) {
+        const [, n, label] = tile.match(/^\[(\d\d)\](.+)$/) || []
+        expect(headings, tile).toContain(`[${n}]${sectionOf[label]}`)
+      }
+
       // One form password managers understand.
       const username = page.locator('form input[autocomplete="username"]')
       await expect(username).toHaveValue(ADMIN.email)
