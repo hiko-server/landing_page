@@ -6,7 +6,7 @@
  * proxy's import graph (lib/isrPages → lib/publicationsData) can use it.
  */
 
-import { isRedacted } from '../cvVisibility'
+import { isRedacted } from '../cvVisibilityRead'
 import { normalizeOrcidId } from './id'
 import { orcidAuthMarkerOf } from './marker'
 

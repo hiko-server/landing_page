@@ -22,7 +22,7 @@
  *   - The 中文 name is dropped when it would repeat the EN name.
  */
 
-import { isRedacted, isSectionOnWebsite } from '../../lib/cvVisibility'
+import { isRedacted, isSectionOnWebsite } from '../../lib/cvVisibilityRead'
 import { bullets, field } from '../CVViewerPage/fields'
 
 export const FALLBACK_NAME = 'Li Yanpei'

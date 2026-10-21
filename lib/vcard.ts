@@ -18,7 +18,7 @@
  *   - Lines end with CRLF, as the RFC requires.
  */
 
-import { isRedacted } from './cvVisibility'
+import { isRedacted } from './cvVisibilityRead'
 import { isFuture, isPresent, type CvNow } from './cvFormat'
 import { field, list } from '../components/CVViewerPage/fields'
 import { PERSON_NAME, SITE_URL } from './schema'

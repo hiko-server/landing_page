@@ -193,6 +193,20 @@ Fixes for defects the final review found in the final batch before it shipped.
   footer never leaves a link under the bar. The review link's "Preview"
   bar now reserves its room the same way.
 
+- **Header while you are signed in (HEADER-ADMIN)**: Dashboard and Logout
+  are one menu button beside the wordmark (keyboard and screen-reader
+  ready, in English and Chinese) instead of two buttons at the right, so
+  the wordmark and the live status no longer run into the nav (from 992 px
+  up — up to 40 px before, more with "Ctrl K"), and the nav sits where a
+  visitor sees it on every page: nothing moves when the menu appears after
+  the page loads. Once a paper is public and Publications joins the nav,
+  its links tighten and ⌘K drops its word, so the row still fits.
+- **Lighter CV, home and about pages (CV-BUNDLE)**: the public pages load
+  only the few CV visibility checks they use (`lib/cvVisibilityRead`), not
+  the whole model with the CV Studio's helpers — about 2.1–2.3 KiB gzip
+  less first-load JavaScript on /, /about, /cv, /cv/zh, private CV links,
+  /now, /publications, /zh and /zh/about. Nothing changes on screen.
+
 ### patch-2b1
 
 Fixes after the wave 2B deploy (the post-deploy end-to-end run against

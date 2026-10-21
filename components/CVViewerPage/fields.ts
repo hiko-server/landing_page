@@ -9,7 +9,7 @@
  * date helpers never turn a hidden date into "Present" / "No Expiry".
  */
 
-import { hiddenIndices, isRedacted, type CvLang } from '../../lib/cvVisibility'
+import { hiddenIndices, isRedacted, type CvLang } from '../../lib/cvVisibilityRead'
 import { cleanList, cvLabels, formatCvDate, formatCvRange, formatGraduation, isFuture, isPresent, type CvNow } from '../../lib/cvFormat'
 import { isPublicationStatus } from '../../lib/publications/types'
 import { fillUi } from '../../lib/uiStrings'

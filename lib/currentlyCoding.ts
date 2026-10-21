@@ -35,7 +35,7 @@
  */
 
 import { majorAddsInfo, type CvNow } from './cvFormat'
-import { isSectionOnWebsite } from './cvVisibility'
+import { isSectionOnWebsite } from './cvVisibilityRead'
 import { entryStatus, field, joinParts, list } from '../components/CVViewerPage/fields'
 
 export type CurrentlyCoding = { label: string; project: string; note: string }

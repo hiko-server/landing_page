@@ -24,7 +24,7 @@
  * dropped. Inputs are never mutated.
  */
 
-import { isRedacted, type CvLang, type CvSectionLike } from './cvVisibility'
+import { isRedacted, type CvLang, type CvSectionLike } from './cvVisibilityRead'
 import { displayUrl, safeHref } from './cvFormat'
 import { absUrl } from './schema'
 import { field, list } from '../components/CVViewerPage/fields'

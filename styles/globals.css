@@ -366,6 +366,24 @@ html:lang(zh),
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
+ * Header row with nine primary links (components/Header/Header.tsx) — once
+ * the owner has a public paper, Publications joins the nav. From 992 px the
+ * row then holds the wordmark, the owner's menu, the live status (xl), nine
+ * links and the right-hand group in a container that never grows past
+ * 1100 px: the links tighten (7 px each side, 2 px apart: 16 px between
+ * words instead of 24) and the ⌘K button drops its word (its icon, its
+ * shortcut and its name stay), so nothing runs into the nav at any width,
+ * signed in or out, with "Ctrl K" too (e2e/review-r3-header.spec.ts).
+ * ──────────────────────────────────────────────────────────────────────── */
+.site-header nav:has(> a:nth-of-type(9)) {
+  --nav-item-px: 7px;
+  gap: 2px;
+}
+.site-header:has(nav > a:nth-of-type(9)) [data-search-label] {
+  display: none;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
  * Pulse dot — used by the header's "● Last commit · 2h ago" status pill.
  * Apply to a positioned span that wraps the green dot.
  * ──────────────────────────────────────────────────────────────────────── */
