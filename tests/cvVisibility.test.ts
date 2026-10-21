@@ -22,8 +22,8 @@ const sample = () => [
     sessionName: 'education',
     headerName: 'EDUCATION',
     educationExperience: [
-      { schoolName: 'HKMU', gpa: '3.71 / 4.0', hiddenFields: ['gpa'] },
-      { schoolName: 'Hidden College', gpa: '—', isVisible: false },
+      { schoolName: 'HKMU', gpa: '2.75 / 4.0', hiddenFields: ['gpa'] },
+      { schoolName: 'Hidden College', gpa: '2.2', isVisible: false },
     ],
   },
   {

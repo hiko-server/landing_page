@@ -24,12 +24,12 @@ test('visibility metadata is copied from EN; missing ZH entries get EN text', ()
       headerName: 'EDUCATION',
       isVisible: false,
       educationExperience: [
-        { schoolName: 'HKMU', gpa: '—', hiddenFields: ['gpa'] },
-        { schoolName: 'UOW', gpa: '—' },
+        { schoolName: 'HKMU', gpa: '2.1', hiddenFields: ['gpa'] },
+        { schoolName: 'UOW', gpa: '2.2' },
       ],
     },
   ]
-  const zh = [{ sessionName: 'education', headerName: '教育', isVisible: true, educationExperience: [{ schoolName: '香港都会大学', gpa: '—' }] }]
+  const zh = [{ sessionName: 'education', headerName: '教育', isVisible: true, educationExperience: [{ schoolName: '香港都会大学', gpa: '2.1' }] }]
   const out = syncLanguage(en, zh)
   assert.equal(out[0].isVisible, false)
   assert.deepEqual(out[0].educationExperience[0].hiddenFields, ['gpa'])
@@ -43,8 +43,8 @@ test('hides set only on the ZH side survive a sync', () => {
       sessionName: 'education',
       headerName: 'EDUCATION',
       educationExperience: [
-        { schoolName: 'HKMU', gpa: '—', hiddenFields: ['gpa'] },
-        { schoolName: 'UOW', gpa: '—' },
+        { schoolName: 'HKMU', gpa: '2.1', hiddenFields: ['gpa'] },
+        { schoolName: 'UOW', gpa: '2.2' },
       ],
       points: ['a', 'b'],
     },
@@ -55,8 +55,8 @@ test('hides set only on the ZH side survive a sync', () => {
       sessionName: 'education',
       headerName: '教育',
       educationExperience: [
-        { schoolName: '都会', gpa: '—', hiddenFields: ['schoolName'] },
-        { schoolName: '伍伦贡', gpa: '—', isVisible: false },
+        { schoolName: '都会', gpa: '2.1', hiddenFields: ['schoolName'] },
+        { schoolName: '伍伦贡', gpa: '2.2', isVisible: false },
       ],
       points: ['甲', '乙', '丙'],
       hiddenItems: { points: [1, 2] },
