@@ -277,11 +277,16 @@ async function createDraft(page: Page, slug: string) {
   expect(status).toBe(200)
 }
 async function removeDraft(page: Page, slug: string) {
-  if ((await adminCleanup(page, 'DELETE', `/api/admin/posts?slug=${slug}`)) === 403) {
-    // Deleting needs a recent sign-in: sign in again for the clean-up.
-    await loginAsAdmin(page, { fresh: true })
-    await adminCleanup(page, 'DELETE', `/api/admin/posts?slug=${slug}`)
+  const url = `/api/admin/posts?slug=${slug}`
+  let status = await adminCleanup(page, 'DELETE', url)
+  if (status === 403) {
+    // Deleting needs a recent sign-in (lib/adminAuth/stepUp): confirm it's you with the password, then delete.
+    await page.evaluate(async (password) => {
+      await fetch('/api/admin/security/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ method: 'password', password }) })
+    }, ADMIN.password)
+    status = await adminCleanup(page, 'DELETE', url)
   }
+  expect(status, 'the synthetic draft is deleted').toBe(200)
 }
 
 /** The editor's ⋯ menu → an item. */
