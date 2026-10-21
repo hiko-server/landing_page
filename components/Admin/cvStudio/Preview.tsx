@@ -99,7 +99,8 @@ export default function Preview({
     fontSize: '10px',
     borderColor: active ? 'var(--accent)' : border,
     bg: active ? 'var(--accent-soft)' : undefined,
-    color: active ? 'var(--accent)' : undefined,
+    // Accent words, not the brand accent itself (3.9–4.3:1 at 10px).
+    color: active ? 'accent.text' : undefined,
     zIndex: active ? 1 : undefined,
   })
 

@@ -98,11 +98,13 @@ export default function ReadinessPanel({
         gap={2}
         border="1px solid"
         borderColor={border}
+        // Dismissed: a dashed, unfilled card with a secondary title — muted by
+        // colour, not opacity, so its words keep ≥ 4.5:1.
+        borderStyle={isDismissed ? 'dashed' : 'solid'}
         borderRadius="md"
-        bg={surfaceAlt}
+        bg={isDismissed ? 'transparent' : surfaceAlt}
         px={3}
         py={2.5}
-        opacity={isDismissed ? 0.75 : 1}
         _hover={{ borderColor: borderStrong }}
         transition="border-color 140ms var(--ease-out-quart)"
         data-finding={f.check}
@@ -127,7 +129,7 @@ export default function ReadinessPanel({
           </Text>
         </HStack>
         <Box minW={0}>
-          <Text fontSize="13px" fontWeight={500} wordBreak="break-word" lang={f.lang === 'zh' ? 'zh-Hans' : undefined}>
+          <Text fontSize="13px" fontWeight={500} wordBreak="break-word" color={isDismissed ? dim : undefined} lang={f.lang === 'zh' ? 'zh-Hans' : undefined}>
             {f.title}
           </Text>
           <Text fontSize="12px" color={dim} mt={0.5}>
@@ -198,7 +200,7 @@ export default function ReadinessPanel({
       <DrawerContent bg="page.bg" borderLeft="1px solid" borderColor={border}>
         <DrawerCloseButton />
         <DrawerHeader borderBottom="1px solid" borderColor={border} pb={3}>
-          <Text fontFamily={monoFont} fontSize="10px" letterSpacing="0.12em" textTransform="uppercase" color="var(--accent)">
+          <Text fontFamily={monoFont} fontSize="10px" letterSpacing="0.12em" textTransform="uppercase" color="accent.text">
             Readiness
           </Text>
           <Text fontSize="18px" fontWeight={600} letterSpacing="-0.01em" mt={1}>

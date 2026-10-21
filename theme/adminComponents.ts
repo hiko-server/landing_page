@@ -10,12 +10,33 @@ type CheckboxProps = Parameters<CheckboxStyleFn>[0]
  * page.border / border-strong are hairlines for surfaces, too faint to find
  * a control by. Admin-only, so it lives here (published as
  * --control-border by components/Admin/AdminThemeScope) rather than in the
- * public theme.
+ * public theme. Text fields, the switch's "off" track and the tag field
+ * take it too.
  */
 export const CONTROL_BORDER = { light: '#858585', dark: '#6b6b6b' } as const
 
+/**
+ * "Hidden from the CV and website" (CV Studio's eyes, "hidden" chips and
+ * counts): Chakra's orange.700 / orange.300 — the admin's warning-text pair
+ * (shell/ui warnTextProps) — ≥ 4.5:1 for small text on every admin surface,
+ * the hidden-stripe tint included (tests/review-r3-studio.test.ts).
+ * orange.600 was 4.2:1 on the toolbar's page.bg-elevated.
+ */
+export const HIDDEN_FG = { light: '#9c4221', dark: '#f6ad55' } as const
+
+/** The admin's own colour tokens, as CSS custom properties (AdminThemeScope publishes them). */
+export const ADMIN_COLOR_VARS = {
+  '--control-border': CONTROL_BORDER,
+  '--admin-hidden-fg': HIDDEN_FG,
+} as const
+
+const declarations = (mode: 'light' | 'dark') =>
+  Object.entries(ADMIN_COLOR_VARS)
+    .map(([name, pair]) => `${name}:${pair[mode]}`)
+    .join(';')
+
 /** The admin's global CSS variables (AdminThemeScope renders them). */
-export const ADMIN_GLOBAL_CSS = `:root{--control-border:${CONTROL_BORDER.light}}[data-theme='dark'],.chakra-ui-dark{--control-border:${CONTROL_BORDER.dark}}`
+export const ADMIN_GLOBAL_CSS = `:root{${declarations('light')}}[data-theme='dark'],.chakra-ui-dark{${declarations('dark')}}`
 
 /**
  * Chakra's checkbox with an unchecked box the owner can find: its stock
@@ -31,6 +52,89 @@ const adminCheckbox = {
   },
 }
 
+type StyleObject = Record<string, any>
+type StyleFn = (props: any) => StyleObject
+type StyleValue = StyleObject | StyleFn | undefined
+const resolve = (style: StyleValue, props: unknown): StyleObject => (typeof style === 'function' ? style(props) : style || {})
+
+/**
+ * Chakra's switch with tracks that stay findable (WCAG 1.4.11): "off" is
+ * --control-border (≥ 3:1 on every admin surface, the white thumb ≥ 3.7:1 on
+ * it) instead of gray.300 / whiteAlpha.400 (1.5:1 / 2:1); "on" is the 500
+ * shade in both modes — in dark mode Chakra's 200 shade left the white thumb
+ * at 1.7:1 on it, so where the thumb sat could not be seen. `--switch-bg` is
+ * the track colour variable of Chakra's switch theme.
+ */
+const adminSwitch = {
+  ...Switch,
+  baseStyle: (props: { colorScheme: string } & Record<string, unknown>) => {
+    const base = resolve(Switch.baseStyle as StyleValue, props)
+    const on = `colors.${props.colorScheme}.500`
+    return {
+      ...base,
+      track: {
+        ...base.track,
+        '--switch-bg': 'var(--control-border)',
+        _dark: { ...base.track?._dark, '--switch-bg': 'var(--control-border)' },
+        _checked: { ...base.track?._checked, '--switch-bg': on, _dark: { ...base.track?._checked?._dark, '--switch-bg': on } },
+      },
+    }
+  },
+}
+
+/**
+ * Chakra's menu on the admin's own surface: the list is page.bg-elevated
+ * (Chakra's is white / gray.700, a bluish grey the 11px hints fell to 3.9:1
+ * on), the active row page.bg-overlay; a row reached by keyboard also gets
+ * the accent ring inside its edge, since a background wash alone is about
+ * 1.1:1 against the rows around it (WCAG 1.4.11). A disabled row keeps its
+ * words readable (page.fg-subtle, ≥ 4.5:1) instead of fading to 40%: in the
+ * admin a disabled row still says something ("Reveal all hidden (0)", the
+ * one audience that cannot be unticked). `--menu-bg` is the background
+ * variable of Chakra's menu theme.
+ */
+const adminMenu = {
+  ...Menu,
+  baseStyle: (props: Record<string, unknown>) => {
+    const base = resolve(Menu.baseStyle as StyleValue, props)
+    const row = { '--menu-bg': 'colors.page.bg-overlay', _dark: { '--menu-bg': 'colors.page.bg-overlay' } }
+    return {
+      ...base,
+      list: {
+        ...base.list,
+        '--menu-bg': 'colors.page.bg-elevated',
+        _dark: { ...base.list?._dark, '--menu-bg': 'colors.page.bg-elevated' },
+        borderColor: 'page.border-strong',
+      },
+      item: {
+        ...base.item,
+        _focus: row,
+        _active: row,
+        _expanded: row,
+        _focusVisible: { outline: '2px solid var(--accent)', outlineOffset: '-2px' },
+        _disabled: { opacity: 1, color: 'page.fg-subtle', cursor: 'not-allowed' },
+      },
+    }
+  },
+}
+
+/**
+ * Chakra's badge with outline text that reads (WCAG 1.4.3): in light mode
+ * the 500 shade was 3–4.5:1 on paper (orange.500 3.0, gray.500 3.95, the
+ * accent 4.47), so it takes the 700 shade; dark mode keeps Chakra's.
+ * `--badge-color` is the text (and ring) variable of Chakra's badge theme.
+ */
+const adminBadge = {
+  ...Badge,
+  variants: {
+    ...Badge.variants,
+    outline: (props: { colorScheme: string } & Record<string, unknown>) => ({
+      ...resolve(Badge.variants?.outline as StyleValue, props),
+      '--badge-color': `colors.${props.colorScheme}.700`,
+    }),
+  },
+}
+
 /**
  * Chakra's default styles for the themed components only the admin renders.
  * They stay out of the public pages' shared bundle: pages/_app wraps /admin
@@ -39,14 +143,14 @@ const adminCheckbox = {
  */
 export const ADMIN_COMPONENT_STYLES = {
   Accordion,
-  Badge,
+  Badge: adminBadge,
   Checkbox: adminCheckbox,
   List,
-  Menu,
+  Menu: adminMenu,
   NumberInput,
   Popover,
   Progress,
-  Switch,
+  Switch: adminSwitch,
   Table,
   Tabs,
   Tag,
@@ -54,7 +158,6 @@ export const ADMIN_COMPONENT_STYLES = {
 }
 
 type SolidProps = { colorScheme?: string; colorMode?: 'light' | 'dark' } & Record<string, unknown>
-type StyleObject = Record<string, any>
 type SolidStyle = StyleObject | ((props: SolidProps) => StyleObject)
 
 /**
@@ -95,4 +198,47 @@ export function withContrastSafeSolidButton<T extends { variants?: Record<string
   const solid = button.variants?.solid as SolidStyle | undefined
   if (!solid) return button
   return { ...button, variants: { ...button.variants, solid: contrastSafeSolid(solid) } }
+}
+
+/** A text field's boundary and placeholder in the admin (see withAdminFieldContrast). */
+export const FIELD_BOUNDARY = { borderColor: 'var(--control-border)', hover: 'page.fg-subtle', placeholder: 'page.fg-subtle' } as const
+
+type FieldConfig = { baseStyle?: StyleValue; variants?: Record<string, StyleValue> } & Record<string, unknown>
+
+/**
+ * The app theme's Input, Textarea or Select with an admin field you can find
+ * and read (WCAG 1.4.11 / 1.4.3): the outline variant's border is
+ * --control-border (Chakra's inherited gray.200 / whiteAlpha.300 is
+ * 1.2–1.5:1, and it lightened further on hover), hover darkens it to
+ * page.fg-subtle, and placeholders are page.fg-subtle (Chakra's gray.500 /
+ * whiteAlpha.400 is 3.6–4:1) — in every variant, the unstyled one of the tag
+ * field included. A field's own borderColor prop still wins; focus and
+ * invalid rings stay Chakra's. `parts`: Input and Select style a `field`
+ * part, Textarea the element itself. Admin-only: AdminThemeScope applies it.
+ */
+export function withAdminFieldContrast<T extends FieldConfig | undefined>(config: T, parts: boolean): T {
+  if (!config) return config
+  const placeholder = { _placeholder: { color: FIELD_BOUNDARY.placeholder } }
+  const outline = config.variants?.outline
+  const boundary = (field: StyleObject = {}) => ({
+    ...field,
+    borderColor: FIELD_BOUNDARY.borderColor,
+    _hover: { ...field._hover, borderColor: FIELD_BOUNDARY.hover },
+  })
+  return {
+    ...config,
+    baseStyle: (props: unknown) => {
+      const base = resolve(config.baseStyle, props)
+      return parts ? { ...base, field: { ...base.field, ...placeholder } } : { ...base, ...placeholder }
+    },
+    variants: outline
+      ? {
+          ...config.variants,
+          outline: (props: unknown) => {
+            const v = resolve(outline, props)
+            return parts ? { ...v, field: boundary(v.field) } : boundary(v)
+          },
+        }
+      : config.variants,
+  }
 }

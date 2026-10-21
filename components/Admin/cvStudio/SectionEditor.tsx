@@ -37,6 +37,7 @@ import {
   BulletList,
   ColorField,
   FieldShell,
+  HIDDEN_CONTENT_SX,
   HiddenChip,
   MonthField,
   TagInput,
@@ -324,7 +325,7 @@ function EntryCard({
           <MenuItem isDisabled={index === count - 1} onClick={() => onOp({ type: 'move', from: index, to: index + 1 })}>
             Move down
           </MenuItem>
-          <MenuItem icon={<DeleteIcon />} color="red.400" onClick={() => onOp({ type: 'remove', index }, `Deleted ${def.itemNoun}`)}>
+          <MenuItem icon={<DeleteIcon />} color="status.error" onClick={() => onOp({ type: 'remove', index }, `Deleted ${def.itemNoun}`)}>
             Delete
           </MenuItem>
         </MenuList>
@@ -374,7 +375,7 @@ function EntryCard({
                 <HiddenChip label={`${def.itemNoun} hidden`} />
               </Box>
             ) : null}
-            <Box opacity={hidden ? 0.55 : 1} _focusWithin={{ opacity: 1 }}>
+            <Box sx={hidden ? HIDDEN_CONTENT_SX : undefined}>
               <FieldGrid fields={def.fields} node={item} nodePath={path} />
             </Box>
           </Box>
@@ -422,9 +423,16 @@ function EntryCard({
           <Box as="span" color={faint} flexShrink={0}>
             {expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
           </Box>
-          <Box as="span" display="block" flex={1} minW={0} opacity={hidden ? 0.6 : 1}>
+          <Box as="span" display="block" flex={1} minW={0}>
             <HStack as="span" spacing={2} minW={0}>
-              <Text as="span" fontSize="13px" fontWeight={600} noOfLines={1} textDecoration={hidden ? 'line-through' : undefined}>
+              <Text
+                as="span"
+                fontSize="13px"
+                fontWeight={600}
+                noOfLines={1}
+                color={hidden ? dim : undefined}
+                textDecoration={hidden ? 'line-through' : undefined}
+              >
                 {title || (
                   <Text as="span" color={faint} fontStyle="italic">
                     Untitled {def.itemNoun}
@@ -458,7 +466,7 @@ function EntryCard({
         transition={reduceMotion ? { enter: { duration: 0 }, exit: { duration: 0 } } : undefined}
       >
         <Box id={panelId} px={{ base: 3, md: 4 }} pb={4} pt={2} borderTop="1px solid" borderColor={border}>
-          <Box opacity={hidden ? 0.6 : 1} _focusWithin={{ opacity: 1 }}>
+          <Box sx={hidden ? HIDDEN_CONTENT_SX : undefined}>
             <FieldGrid fields={def.fields} node={item} nodePath={path} />
           </Box>
           {(def.lists || []).map((nested) => (
@@ -581,7 +589,7 @@ export function EntryList({ def, parent, parentPath, depth = 0 }: { def: ListDef
         </HStack>
       </Flex>
 
-      <Box opacity={listHidden ? 0.5 : 1} _focusWithin={{ opacity: 1 }} transition="opacity 180ms var(--ease-out-quart)">
+      <Box sx={listHidden ? HIDDEN_CONTENT_SX : undefined}>
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
           <SortableContext items={keys} strategy={verticalListSortingStrategy}>
             <Flex direction="column" gap={def.compact ? 1.5 : 2}>
@@ -621,7 +629,7 @@ export function EntryList({ def, parent, parentPath, depth = 0 }: { def: ListDef
           fontWeight={500}
           fontSize="12px"
           leftIcon={<AddIcon boxSize="9px" />}
-          _hover={{ color: 'var(--accent)', borderColor: 'var(--accent)', bg: 'var(--accent-soft)' }}
+          _hover={{ color: 'accent.text', borderColor: 'var(--accent)', bg: 'var(--accent-soft)' }}
           onClick={() => runOp({ type: 'insert', index: items.length, item: def.blank() })}
         >
           Add {def.itemNoun}
@@ -669,7 +677,7 @@ function UnknownSectionEditor({ section, sectionIdx }: { section: any; sectionId
   return (
     <Box>
       <Text fontSize="13px" mb={2} id={`${textId}-desc`}>
-        <Text as="span" fontFamily={monoFont} color="orange.400">
+        <Text as="span" fontFamily={monoFont} color="status.warning">
           {section.sessionName}
         </Text>{' '}
         has no visual editor — edit it as JSON. It is kept as-is and is not rendered on the CV.
@@ -706,7 +714,7 @@ function UnknownSectionEditor({ section, sectionIdx }: { section: any; sectionId
           Apply JSON
         </Button>
         {error ? (
-          <Text fontSize="12px" color="red.400" role="alert">
+          <Text fontSize="12px" color="status.error" role="alert">
             {error}
           </Text>
         ) : null}

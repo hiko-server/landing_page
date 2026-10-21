@@ -67,7 +67,6 @@ export default function AudienceMenu({
           border="1px solid"
           borderColor={restricted ? 'var(--accent)' : 'transparent'}
           _hover={{ color: 'accent.text', bg: 'var(--accent-soft)' }}
-          _focusVisible={{ boxShadow: '0 0 0 2px var(--accent-ring)' }}
           onClick={(e: React.MouseEvent) => e.stopPropagation()}
           onKeyDown={(e: React.KeyboardEvent) => {
             if (e.key === 'Enter' || e.key === ' ') e.stopPropagation()
@@ -105,7 +104,8 @@ export default function AudienceMenu({
                   <Text as="span" display="block" fontWeight={500}>
                     {SURFACE_LABEL[s]}
                   </Text>
-                  <Text as="span" display="block" fontSize="11px" color={dim} lineHeight="1.4">
+                  {/* The locked row (the one surface left) reads quiet as a whole, hint included. */}
+                  <Text as="span" display="block" fontSize="11px" color={last ? 'inherit' : dim} lineHeight="1.4">
                     {SURFACE_HINT[s]}
                   </Text>
                 </Box>

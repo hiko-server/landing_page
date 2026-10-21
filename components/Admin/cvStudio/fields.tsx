@@ -29,27 +29,47 @@ export const monoFont = 'var(--font-geist-mono), ui-monospace, monospace'
 const useIsoLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
 
 /**
- * Studio colours. Structural colours are the site's semantic tokens (they
- * flip with the colour mode on their own); "hidden" uses an orange that
- * keeps AA contrast in both modes.
+ * Studio colours: the site's semantic tokens and the admin's own
+ * (theme/adminComponents.ts, published by AdminThemeScope), so they flip
+ * with the colour mode on their own and keep WCAG AA on every studio
+ * surface — the toolbar and sidebar (page.bg-elevated), the editor
+ * (page.bg), menus and the hidden stripe (tests/review-r3-studio.test.ts):
+ *   faint       quiet words and icons — counts, indexes, hints, eyes, grips
+ *               (page.fg-subtle: text ≥ 4.5:1; gray.500 was 3.6–4:1)
+ *   accentText  accent-coloured words: a selected toggle, an eyebrow
+ *               (the brand accent is 3.6–4.4:1 for small text)
+ *   hiddenFg    "hidden" chips, counts and eyes (--admin-hidden-fg)
+ *   control     a field's boundary (--control-border, ≥ 3:1)
+ * Hairlines (border, borderStrong) only draw surfaces, never a control's edge.
  */
 export function useStudioTokens() {
   return {
     border: 'page.border',
     borderStrong: 'page.border-strong',
     dim: 'page.fg-secondary',
-    faint: 'gray.500',
+    faint: 'page.fg-subtle',
+    accentText: 'accent.text',
+    control: 'var(--control-border)',
     surface: 'page.bg',
     surfaceAlt: 'page.bg-elevated',
     inputBg: 'page.bg',
-    hiddenFg: useColorModeValue('orange.600', 'orange.300'),
-    hiddenBorder: useColorModeValue('orange.400', 'orange.400'),
+    hiddenFg: 'var(--admin-hidden-fg)',
+    hiddenBorder: 'orange.400',
     hiddenStripe: useColorModeValue(
       'repeating-linear-gradient(135deg, rgba(234,88,12,0.07) 0 8px, transparent 8px 16px)',
       'repeating-linear-gradient(135deg, rgba(251,146,60,0.09) 0 8px, transparent 8px 16px)',
     ),
   }
 }
+
+/**
+ * Hidden content reads as muted through colour — the hidden stripe, the
+ * struck-through label, the "hidden" chip and secondary-grey text in its
+ * fields — never through opacity: at 50–60% its words fell to 2.3–3.7:1 and
+ * its eyes, grips and field edges under 3:1 (WCAG 1.4.3 / 1.4.11), though
+ * the owner still edits it.
+ */
+export const HIDDEN_CONTENT_SX = { '& input, & textarea, & select': { color: 'page.fg-secondary' } } as const
 
 // ── Visibility toggle ─────────────────────────────────────────────────────
 
@@ -82,8 +102,7 @@ export function VisibilityToggle({
         flexShrink={0}
         color={hidden ? hiddenFg : faint}
         bg={hidden ? 'rgba(251,146,60,0.12)' : undefined}
-        _hover={{ color: hidden ? hiddenFg : 'var(--accent)', bg: hidden ? 'rgba(251,146,60,0.18)' : 'var(--accent-soft)' }}
-        _focusVisible={{ boxShadow: '0 0 0 2px var(--accent-ring)' }}
+        _hover={{ color: hidden ? hiddenFg : 'accent.text', bg: hidden ? 'rgba(251,146,60,0.18)' : 'var(--accent-soft)' }}
         onClick={(e) => {
           e.stopPropagation()
           onToggle()
@@ -182,7 +201,7 @@ export function FieldShell({
     <>
       {label}
       {required ? (
-        <Text as="span" color="var(--accent)" ml="3px" aria-hidden>
+        <Text as="span" color="accent.text" ml="3px" aria-hidden>
           •
         </Text>
       ) : null}
@@ -203,11 +222,7 @@ export function FieldShell({
       </HStack>
     </Flex>
   )
-  const body = (
-    <Box opacity={hidden ? 0.5 : 1} transition="opacity 180ms var(--ease-out-quart)" _focusWithin={{ opacity: 1 }}>
-      {children}
-    </Box>
-  )
+  const body = <Box sx={hidden ? HIDDEN_CONTENT_SX : undefined}>{children}</Box>
 
   if (group) {
     return (
@@ -257,7 +272,10 @@ export const inputProps = {
   size: 'sm' as const,
   borderRadius: 'md',
   fontSize: '13px',
-  focusBorderColor: 'var(--accent)',
+  // A palette token: Chakra resolves the focus ring colour through its own
+  // parser, which turns 'var(--accent)' into #000000 — a black ring that
+  // vanished on the dark page (1.03:1). accent.500 is ≥ 4.4:1 on both pages.
+  focusBorderColor: 'accent.500',
 }
 
 /** Textarea that grows with its content (no inner scrollbars). */
@@ -335,7 +353,8 @@ export function MonthField({
 
 export function ColorField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const presets = ['#0059ff', '#111111', '#4f46e5', '#0f766e', '#b91c1c', '#9333ea']
-  const { border } = useStudioTokens()
+  // A swatch's edge is the control border: #111111 on the dark page is 1.1:1 on its own.
+  const { control } = useStudioTokens()
   const current = (value || '').toLowerCase()
   return (
     <HStack spacing={2} wrap="wrap">
@@ -361,7 +380,7 @@ export function ColorField({ value, onChange }: { value: string; onChange: (v: s
           borderRadius="full"
           bg={c}
           border="2px solid"
-          borderColor={current === c ? 'var(--accent)' : border}
+          borderColor={current === c ? 'var(--accent)' : control}
           boxShadow={current === c ? '0 0 0 2px var(--accent-ring)' : undefined}
           onClick={() => onChange(c)}
           transition="transform 120ms var(--ease-out-quart)"
@@ -459,9 +478,7 @@ function SortableBulletRow({
         pt="9px"
         px="2px"
         _active={{ cursor: 'grabbing' }}
-        opacity={0.5}
-        _groupHover={{ opacity: 1 }}
-        _focusVisible={{ opacity: 1, outline: '2px solid var(--accent)', borderRadius: 'sm' }}
+        _focusVisible={{ outline: '2px solid var(--accent)', borderRadius: 'sm' }}
       >
         <FaGripVertical size={10} />
       </Box>
@@ -507,7 +524,7 @@ function SortableBulletRow({
         size="sm"
         variant="ghost"
         color={faint}
-        _hover={{ color: 'red.400' }}
+        _hover={{ color: 'status.error' }}
         onClick={onRemove}
       />
     </Flex>
@@ -654,7 +671,7 @@ export function BulletList({
         px={2}
         py={1}
         borderRadius="md"
-        _hover={{ color: 'var(--accent)', bg: 'var(--accent-soft)' }}
+        _hover={{ color: 'accent.text', bg: 'var(--accent-soft)' }}
         _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '1px' }}
         onClick={() => {
           onOp({ type: 'insert', index: items.length, item: '' })
@@ -690,7 +707,7 @@ export function TagInput({
   onToggleHidden: (index: number) => void
 }) {
   const [draft, setDraft] = useState('')
-  const { border, inputBg, faint, hiddenFg, hiddenBorder } = useStudioTokens()
+  const { border, control, inputBg, faint, hiddenFg, hiddenBorder } = useStudioTokens()
   const commit = (raw: string) => {
     const parts = raw
       .split(/[,，\n]/)
@@ -707,7 +724,7 @@ export function TagInput({
       gap={1.5}
       p={1.5}
       border="1px solid"
-      borderColor={border}
+      borderColor={control}
       borderRadius="md"
       bg={inputBg}
       _focusWithin={{ borderColor: 'var(--accent)', boxShadow: '0 0 0 1px var(--accent)' }}
@@ -755,7 +772,7 @@ export function TagInput({
               py="2px"
               color={faint}
               borderRadius="3px"
-              _hover={{ color: 'red.400' }}
+              _hover={{ color: 'status.error' }}
               _focusVisible={{ outline: '2px solid var(--accent)', outlineOffset: '1px' }}
               onClick={() => onOp({ type: 'remove', index: i })}
             >

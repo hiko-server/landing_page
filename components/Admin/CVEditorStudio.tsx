@@ -54,7 +54,7 @@ import { syncLanguage } from '../../lib/cvSync'
 import { ownerNamesFromSections } from '../../lib/publications/names'
 import { errorFocusPath, validateCvDoc, type CvValidationError } from '../../lib/cvValidate'
 import { useAdminDirty, useDirtyRegistration } from './AdminDirtyContext'
-import { SaveStatus } from './shell/ui'
+import { SaveStatus, primaryButtonProps } from './shell/ui'
 import { useCvDocument } from './cvStudio/useCvDocument'
 import {
   addSection,
@@ -261,7 +261,7 @@ export default function CVEditorStudio() {
   const [readinessLoaded, setReadinessLoaded] = useState(false)
   const cancelRef = useRef<HTMLButtonElement | null>(null)
   const removeCancelRef = useRef<HTMLButtonElement | null>(null)
-  const { border, dim, faint, surfaceAlt, hiddenFg } = useStudioTokens()
+  const { border, dim, faint, accentText, surfaceAlt, hiddenFg } = useStudioTokens()
   const mod = isMac() ? '⌘' : 'Ctrl'
   const other = otherLang(lang)
 
@@ -887,7 +887,7 @@ export default function CVEditorStudio() {
             : cv.loadError}
         </Text>
         {expired ? (
-          <Button size="sm" as="a" href={LOGIN_HREF} bg="var(--accent)" color="white" _hover={{ opacity: 0.92 }}>
+          <Button size="sm" as="a" href={LOGIN_HREF} {...primaryButtonProps}>
             Sign in again
           </Button>
         ) : (
@@ -1001,7 +1001,7 @@ export default function CVEditorStudio() {
                 Reveal all hidden ({hiddenHere})
               </MenuItem>
               <MenuDivider />
-              <MenuItem icon={<DeleteIcon />} color="red.400" onClick={removeDialog.onOpen}>
+              <MenuItem icon={<DeleteIcon />} color="status.error" onClick={removeDialog.onOpen}>
                 Delete section…
               </MenuItem>
             </MenuList>
@@ -1039,6 +1039,7 @@ export default function CVEditorStudio() {
     <StudioContext.Provider value={api}>
       <Flex
         ref={rootRef}
+        data-testid="cv-studio"
         direction="column"
         h={{ base: 'auto', lg: 'var(--admin-workspace-h, calc(100vh - 210px))' }}
         minH={{ lg: '640px' }}
@@ -1080,9 +1081,7 @@ export default function CVEditorStudio() {
               isLoading={cv.saving}
               loadingText="Saving"
               isDisabled={!dirty}
-              bg={dirty ? 'var(--accent)' : undefined}
-              color={dirty ? 'white' : undefined}
-              _hover={dirty ? { opacity: 0.92 } : undefined}
+              {...(dirty ? primaryButtonProps : {})}
               _disabled={{ opacity: 0.55, cursor: 'not-allowed' }}
             >
               Save
@@ -1107,7 +1106,7 @@ export default function CVEditorStudio() {
                 fontFamily={monoFont}
                 borderColor={lang === l ? 'var(--accent)' : border}
                 bg={lang === l ? 'var(--accent-soft)' : undefined}
-                color={lang === l ? 'var(--accent)' : undefined}
+                color={lang === l ? accentText : undefined}
                 zIndex={lang === l ? 1 : undefined}
               >
                 {LANG_LABEL[l]}
@@ -1127,7 +1126,7 @@ export default function CVEditorStudio() {
               size="sm"
               variant="outline"
               borderColor={linked ? 'var(--accent)' : border}
-              color={linked ? 'var(--accent)' : dim}
+              color={linked ? accentText : dim}
               leftIcon={linked ? <FaLink /> : <FaUnlink />}
               iconSpacing={{ base: 0, sm: 2 }}
               aria-pressed={linked}
@@ -1265,7 +1264,7 @@ export default function CVEditorStudio() {
             <Text flex={1} minW="200px">
               Session expired — sign in again. Nothing was saved; your edits are kept on this device as a draft.
             </Text>
-            <Button size="xs" as="a" href={LOGIN_HREF} bg="var(--accent)" color="white" _hover={{ opacity: 0.9 }}>
+            <Button size="xs" as="a" href={LOGIN_HREF} {...primaryButtonProps}>
               Sign in again
             </Button>
           </Flex>
@@ -1355,7 +1354,7 @@ export default function CVEditorStudio() {
                 </Text>
               ) : null}
             </Box>
-            <Button size="xs" onClick={cv.restoreDraft} bg="var(--accent)" color="white" _hover={{ opacity: 0.9 }}>
+            <Button size="xs" onClick={cv.restoreDraft} {...primaryButtonProps}>
               {cv.draft.stale ? 'Open older draft' : 'Restore draft'}
             </Button>
             <Button size="xs" variant="ghost" onClick={cv.discardDraft}>
@@ -1374,7 +1373,7 @@ export default function CVEditorStudio() {
               onClick={() => setMobilePane(p)}
               borderColor={mobilePane === p ? 'var(--accent)' : border}
               bg={mobilePane === p ? 'var(--accent-soft)' : undefined}
-              color={mobilePane === p ? 'var(--accent)' : undefined}
+              color={mobilePane === p ? accentText : undefined}
               zIndex={mobilePane === p ? 1 : undefined}
               textTransform="capitalize"
               fontSize="12px"
