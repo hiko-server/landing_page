@@ -718,10 +718,24 @@ word-level (Chinese segmented with `Intl.Segmenter`).
   browser still signed in from before the passkey update has no session
   row: it is listed after its next page view, and signing out any browser
   (this one included) ends every such browser at once.
+- **Password change** (Admin → Security → Password): the current password
+  (checked like a sign-in, under the same lockout; a wrong one only says
+  "incorrect") plus a new one — 12–256 characters counted after NFKC
+  normalisation, any characters, not common or predictable (a small bundled
+  word list, keyboard runs, repeats, look-alikes), not the e-mail's or the
+  site's name, not the current one; the e-mail reset applies the same rules.
+  It is rehashed with a fresh salt, reset links are burnt, and by default
+  every other browser is signed out while this one gets a fresh session.
+  The sign-in history, the activity log and (with SMTP) a notice to
+  `NOTIFY_EMAIL` record it. The card also says whether `ADMIN_PASS` in the
+  server's environment still equals the password — it is only read while
+  `data/admin.json` is missing, so remove it from `.env` after a change.
 - **Step-up**: restoring a backup, deleting a post or case study, deleting
   an image from the media trash for good, MongoDB
-  restore / target changes and every passkey, code, policy or other-browser
-  change need a sign-in or a re-check within `ADMIN_RECENT_AUTH_MINUTES`
+  restore / target changes, every passkey, code, policy or other-browser
+  change, and a password change while "Require a passkey" is on (otherwise
+  its current-password field is the re-check) need a sign-in or a re-check
+  within `ADMIN_RECENT_AUTH_MINUTES`
   (default 10) — a "Confirm it's you" dialog asks for a passkey or the
   password (+ code) and the action continues.
 - **Sign-in history**: sign-ins and security changes (the newest 40 are
@@ -1225,7 +1239,7 @@ are gated by the proxy (`proxy.ts`).
 | `/admin/publishing` | Scheduled & review links: what publishes or unpublishes on its own, the scheduler's state, every active review link |
 | `/admin/now`, `/admin/uses`, `/admin/about` | One-off page editors (`about` = the bio on /about; empty = no bio section) |
 | `/admin/db-config` | MongoDB connection + manual backup/restore |
-| `/admin/security` | Passkeys, recovery codes, "Require a passkey", signed-in browsers, sign-in history |
+| `/admin/security` | Passkeys, recovery codes, password change, "Require a passkey", signed-in browsers, sign-in history |
 | `/admin/system` | Health (build, disk, databases, backups, restore drill, recent warnings), `?view=content` (content health), `?view=errors` and `?view=activity` (the activity log) |
 
 Press `?` on any admin page for the keyboard shortcuts (searchable). The

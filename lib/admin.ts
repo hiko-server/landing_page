@@ -4,6 +4,7 @@ import crypto from 'crypto'
 import { createLoginGate, type LoginGate } from './security/loginGate'
 import { createLoginThrottle, pairKey, type LockState, type LoginThrottle, type Pressure } from './security/loginThrottle'
 import { toSessionVersion } from './security/session'
+import { normalizePassword } from './adminAuth/passwordPolicy'
 
 /**
  * Local admin record + credential helpers.
@@ -13,9 +14,18 @@ import { toSessionVersion } from './security/session'
  *
  * Hashing: scrypt with random 16-byte salt, 64-byte key (N=16384, r=8,
  * p=1 — Node defaults). Constant-time comparison via crypto.timingSafeEqual.
- * Login verification uses the asynchronous crypto.scrypt (libuv thread
- * pool), so a flood of sign-in attempts cannot block the event loop; only
- * the rare bootstrap / password-change paths hash synchronously.
+ * Login verification and the Admin → Security password change use the
+ * asynchronous crypto.scrypt (libuv thread pool), so a flood of attempts
+ * cannot block the event loop; only the rare bootstrap and e-mail reset
+ * paths hash synchronously.
+ *
+ * Normalisation: a record written by this build hashes the NFKC form of the
+ * password (`passwordNorm: 'NFKC'`, lib/adminAuth/passwordPolicy
+ * normalizePassword — NIST SP 800-63B), and every check of it normalises the
+ * typed password the same way, so "ｐａｓｓ" and "pass", or a composed and a
+ * decomposed "é", are one password on every keyboard. A record from an
+ * older build (no marker) hashed the password as typed and is checked as
+ * typed, until the next change or reset rewrites it normalised.
  *
  * Brute-force defence: per (email, client) lockout with exponential backoff
  * (lib/security/loginThrottle.ts), per-IP and per-/48 limits in the route,
@@ -45,6 +55,10 @@ export type AdminData = {
   resets?: ResetToken[]
   /** Monotonic; admin JWTs carrying a different `sv` claim are rejected. */
   sessionVersion?: number
+  /** 'NFKC' when passwordHash is of the normalised password (absent on records from older builds). */
+  passwordNorm?: 'NFKC'
+  /** When the password was last set (bootstrap, reset or change; ms), when known. */
+  passwordChangedAt?: number
 }
 
 /** Fields older builds stored for the (now removed) file-based lockout. */
@@ -68,6 +82,21 @@ function hashPasswordAsync(password: string, salt: string): Promise<string> {
   return new Promise((resolve, reject) => {
     crypto.scrypt(password, salt, KEY_LEN, (err, key) => (err ? reject(err) : resolve(key.toString('hex'))))
   })
+}
+
+/**
+ * The form of a typed password that `data`'s hash was made from: NFKC for
+ * records written by this build (and for the dummy hash when there is no
+ * record), as typed for a record from before normalisation.
+ */
+export function passwordForRecord(data: AdminData | null, password: string): string {
+  return !data || data.passwordNorm === 'NFKC' ? normalizePassword(password) : password
+}
+
+/** A fresh salt and the async hash of the normalised password — the fields a password write stores. */
+async function hashedFields(password: string, now: number): Promise<Pick<AdminData, 'salt' | 'passwordHash' | 'passwordNorm' | 'passwordChangedAt'>> {
+  const salt = crypto.randomBytes(16).toString('hex')
+  return { salt, passwordHash: await hashPasswordAsync(normalizePassword(password), salt), passwordNorm: 'NFKC', passwordChangedAt: now }
 }
 
 /** Constant-time hex string compare — defends against timing oracles. */
@@ -144,8 +173,10 @@ export function ensureAdminFromEnv(): AdminData | null {
   const salt = crypto.randomBytes(16).toString('hex')
   const data: AdminData = {
     email,
-    passwordHash: hashPassword(pass, salt),
+    passwordHash: hashPassword(normalizePassword(pass), salt),
     salt,
+    passwordNorm: 'NFKC',
+    passwordChangedAt: Date.now(),
     resets: [],
     sessionVersion: 0,
   }
@@ -272,7 +303,7 @@ export async function verifyCredentials(
   if (lock.locked) return { ok: false, reason: 'locked', retryAfterMs: lock.retryAfterMs }
 
   const data = readAdmin() || ensureAdminFromEnv()
-  const candidate = await hashPasswordAsync(password, data?.salt || DUMMY_SALT)
+  const candidate = await hashPasswordAsync(passwordForRecord(data, password), data?.salt || DUMMY_SALT)
   const emailOk = !!data && normalizeEmail(email) === normalizeEmail(data.email)
   const passOk = !!data && timingSafeEqualHex(candidate, data.passwordHash)
 
@@ -289,7 +320,7 @@ export async function verifyCredentials(
 
 // ── Password updates ───────────────────────────────────────────────────
 
-/** Set a new password; also burns every reset link and signs out every device. */
+/** Set a new password (e-mail reset); also burns every reset link and signs out every device. */
 export function updatePassword(newPassword: string) {
   const data = readAdmin() || ensureAdminFromEnv()
   if (!data) throw new Error('admin not configured')
@@ -297,10 +328,52 @@ export function updatePassword(newPassword: string) {
   writeAdmin({
     ...data,
     salt,
-    passwordHash: hashPassword(newPassword, salt),
+    passwordHash: hashPassword(normalizePassword(newPassword), salt),
+    passwordNorm: 'NFKC',
+    passwordChangedAt: Date.now(),
     resets: [],
     sessionVersion: getSessionVersion(data) + 1,
   })
+}
+
+/**
+ * Does `candidate` match the stored password? Async scrypt, constant-time
+ * compare; no lockout bookkeeping — for checks of a value the server itself
+ * holds (the ADMIN_PASS bootstrap hint), never for a typed password (that is
+ * verifyCredentials, which counts failures).
+ */
+export async function passwordMatchesRecord(candidate: string, data: AdminData): Promise<boolean> {
+  if (!data.salt || !data.passwordHash) return false
+  const hash = await hashPasswordAsync(passwordForRecord(data, candidate), data.salt)
+  return timingSafeEqualHex(hash, data.passwordHash)
+}
+
+export type ChangePasswordWrite =
+  | { ok: true; changedAt: number; sessionVersion: number }
+  | { ok: false; reason: 'missing' | 'changed' }
+
+/**
+ * Replace the password from Admin → Security, after the caller verified the
+ * current one against the record whose hash was `expectedHash`: a fresh
+ * salt, the async scrypt hash of the normalised password, every reset link
+ * burnt, and — with `signOutEverywhere` — the session version bumped, which
+ * ends every admin token at once (the caller then re-issues this browser's).
+ * Compare-and-swap: when the stored hash is no longer `expectedHash` (a
+ * reset or another change landed meanwhile) nothing is written.
+ */
+export async function changeAdminPassword(
+  newPassword: string,
+  opts: { expectedHash: string; signOutEverywhere: boolean; now?: number },
+): Promise<ChangePasswordWrite> {
+  const now = opts.now ?? Date.now()
+  const fields = await hashedFields(newPassword, now)
+  // Re-read after the (async) hash: the record may have changed while it ran.
+  const data = readAdminStrict()
+  if (!data) return { ok: false, reason: 'missing' }
+  if (data.passwordHash !== opts.expectedHash) return { ok: false, reason: 'changed' }
+  const sessionVersion = getSessionVersion(data) + (opts.signOutEverywhere ? 1 : 0)
+  writeAdmin({ ...data, ...fields, resets: [], sessionVersion })
+  return { ok: true, changedAt: now, sessionVersion }
 }
 
 // ── Reset tokens ───────────────────────────────────────────────────────

@@ -6,6 +6,8 @@ import { withApi } from '../../../lib/apiHandler'
 import { rateLimit } from '../../../lib/rateLimit'
 import { revokeSessionsExcept } from '../../../lib/adminAuth/sessions'
 import { recordAuthEvent } from '../../../lib/adminAuth/store'
+import { siteHost } from '../../../lib/adminAuth/password'
+import { checkNewPassword, PASSWORD_ISSUE_MESSAGES, passwordIssues } from '../../../lib/adminAuth/passwordPolicy'
 
 /**
  * POST /api/auth/reset-password { token, password }
@@ -16,7 +18,10 @@ import { recordAuthEvent } from '../../../lib/adminAuth/store'
  * (lib/adminAuth/sessions). Passkeys and recovery codes stay: a reset proves
  * control of the mailbox, which is how the password was set in the first
  * place, and with "Require a passkey" on, the password alone still cannot
- * sign in.
+ * sign in. The new password follows the same rules as a change from Admin →
+ * Security (lib/adminAuth/passwordPolicy: 12–256 characters after NFKC, not
+ * common or predictable, not the account's or the site's name); a refused
+ * password answers 400 PASSWORD_POLICY and leaves the link usable.
  */
 export default withApi('auth/reset-password', (req: NextApiRequest, res: NextApiResponse) => {
   if (req.method !== 'POST') {
@@ -34,12 +39,16 @@ export default withApi('auth/reset-password', (req: NextApiRequest, res: NextApi
   }
   // Validate BEFORE consuming the single-use token, so a rejected password
   // doesn't burn the reset link.
-  if (typeof password !== 'string' || password.length < 12 || password.length > 1024) {
-    return res.status(400).json({ error: 'Password must be 12–1024 characters' })
+  if (typeof password !== 'string' || !password || password.length > 1024) {
+    return res.status(400).json({ code: 'PASSWORD_POLICY', error: PASSWORD_ISSUE_MESSAGES.tooShort, issues: ['tooShort'] })
   }
   ensureAdminFromEnv()
   const admin = readAdmin()
   if (!admin) return res.status(500).json({ error: 'Admin not configured' })
+  const issues = passwordIssues(checkNewPassword(password, { email: admin.email, siteHost: siteHost() }))
+  if (issues.length) {
+    return res.status(400).json({ code: 'PASSWORD_POLICY', error: PASSWORD_ISSUE_MESSAGES[issues[0]], issues })
+  }
   const ok = consumeResetToken(token)
   if (!ok) return res.status(400).json({ error: 'Invalid or expired token' })
   updatePassword(password)

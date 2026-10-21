@@ -28,11 +28,18 @@ export function resetRequestErrorMessage(status: number): string {
   return `Request failed (HTTP ${status}).`
 }
 
-export function resetPasswordErrorMessage(status: number, serverError?: unknown): string {
+export function resetPasswordErrorMessage(
+  status: number,
+  serverError?: unknown,
+  code?: unknown
+): string {
   if (status === 429) return THROTTLED
   if (status === 400) {
+    // The password rules (lib/adminAuth/passwordPolicy) explain themselves.
+    if (code === 'PASSWORD_POLICY' && typeof serverError === 'string' && serverError)
+      return serverError
     if (typeof serverError === 'string' && /password/i.test(serverError))
-      return 'Use a password between 12 and 1024 characters.'
+      return 'Use a password between 12 and 256 characters.'
     return 'This reset link is invalid or has expired. Request a new one.'
   }
   if (status >= 500) return SERVER

@@ -44,6 +44,7 @@ import { KeyIcon, ShieldIcon } from './icons'
 import { useStepUp } from './useStepUp'
 import { wasStepUpCancelled } from './stepUpClient'
 import RecoveryCodesDialog from './RecoveryCodesDialog'
+import PasswordCard, { type PasswordInfo } from './PasswordCard'
 import {
   absoluteTime,
   eventLabel,
@@ -115,6 +116,8 @@ type Overview = {
   events: AuthEventRow[]
   failures: FailureSummary
   stepUp: { windowMinutes: number }
+  /** Absent only from a server older than the Password card. */
+  password?: PasswordInfo
 }
 
 const ROW = {
@@ -220,10 +223,12 @@ function FailedAttempts({ summary, now }: { summary: FailureSummary; now: number
 }
 
 /**
- * Admin → Security: passkeys, recovery codes, the "Require a passkey"
- * policy, signed-in browsers and the sign-in history (server:
+ * Admin → Security: passkeys, recovery codes, the password, the "Require a
+ * passkey" policy, signed-in browsers and the sign-in history (server:
  * /api/admin/security/*). Every change that weakens or replaces a way in asks
- * for a recent verification first (useStepUp).
+ * for a recent verification first (useStepUp) — except the password change
+ * while the password may sign in: its current-password field is that check
+ * (PasswordCard).
  */
 export default function SecurityPanel() {
   const toast = useToast()
@@ -776,8 +781,21 @@ export default function SecurityPanel() {
         )}
       </Text>
 
+      {/* Password */}
+      {data.password ? (
+        <PasswordCard
+          index={3}
+          info={data.password}
+          passkeyOnly={data.policy.passkeyRequired && passkeyCount > 0}
+          otherBrowsers={data.sessions.filter((s) => !s.current).length}
+          now={now}
+          fetchWithStepUp={fetchWithStepUp}
+          onChanged={load}
+        />
+      ) : null}
+
       {/* Policy */}
-      <SectionLabel index={3} title="Sign-in policy" id="security-policy" />
+      <SectionLabel index={4} title="Sign-in policy" id="security-policy" />
       <FormControl display="flex" alignItems="flex-start" gap={3}>
         <Switch
           id="passkey-required"
@@ -809,7 +827,7 @@ export default function SecurityPanel() {
 
       {/* Sessions */}
       <SectionLabel
-        index={4}
+        index={5}
         title="Signed-in browsers"
         id="security-sessions"
         hint={
@@ -930,7 +948,7 @@ export default function SecurityPanel() {
 
       {/* History */}
       <SectionLabel
-        index={5}
+        index={6}
         title="Sign-in history"
         id="security-history"
         hint="The last 40 sign-ins and security changes. Failed attempts are only counted (per hour, method and country — no address or device), so they can never push an entry out of this list."

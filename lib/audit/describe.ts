@@ -336,6 +336,13 @@ export function describeAdminWrite(route: string, req: AuditRequest, facts: Audi
           ? { action: 'security.require-passkey', area: 'security', target: null, summary: 'Turned on “Require a passkey”' }
           : { action: 'security.allow-password', area: 'security', target: null, summary: 'Turned off “Require a passkey”' }
         : null
+    case 'admin/security/password':
+      // Never the passwords themselves: only whether other browsers were signed out.
+      return method === 'POST'
+        ? b.signOutOthers === false
+          ? { action: 'security.password-change', area: 'security', target: null, summary: 'Changed the admin password' }
+          : { action: 'security.password-change', area: 'security', target: null, summary: 'Changed the admin password and signed out every other browser' }
+        : null
     case 'admin/security/sessions': {
       if (method !== 'DELETE') return null
       if (b.all === true) return { action: 'security.signout-all', area: 'security', target: null, summary: 'Signed out every browser' }
@@ -372,6 +379,7 @@ export const AUDITED_ROUTES: ReadonlySet<string> = new Set([
   'admin/security/passkeys',
   'admin/security/recovery-codes',
   'admin/security/policy',
+  'admin/security/password',
   'admin/security/sessions',
   'admin/logout',
 ])

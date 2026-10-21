@@ -7,9 +7,15 @@ import CustomHead from '../../components/General-UI/CustomHead'
 import { AuthCard, AuthError, AuthSubmit, PasswordField } from '../../components/Admin/AuthCard'
 import { NETWORK_ERROR, resetPasswordErrorMessage } from '../../components/Admin/shell/authMessages'
 import { primaryButtonProps } from '../../components/Admin/shell/ui'
+import {
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  passwordLength,
+} from '../../lib/adminAuth/passwordPolicy'
 
-const MIN_LENGTH = 12
-const MAX_LENGTH = 1024
+// The server's rules (lib/adminAuth/passwordPolicy) also refuse common and predictable passwords.
+const MIN_LENGTH = PASSWORD_MIN_LENGTH
+const MAX_LENGTH = PASSWORD_MAX_LENGTH
 
 export default function ResetPassword() {
   const router = useRouter()
@@ -32,10 +38,12 @@ export default function ResetPassword() {
     if (ok) doneRef.current?.focus()
   }, [ok])
 
+  // Characters as the server counts them (code points after NFKC).
+  const length = passwordLength(password)
   const passwordError =
-    touched.password && password.length < MIN_LENGTH
-      ? `Use at least ${MIN_LENGTH} characters (${password.length} so far).`
-      : password.length > MAX_LENGTH
+    touched.password && length < MIN_LENGTH
+      ? `Use at least ${MIN_LENGTH} characters (${length} so far).`
+      : length > MAX_LENGTH
         ? `Use at most ${MAX_LENGTH} characters.`
         : ''
   const confirmError = touched.confirm && confirm !== password ? 'The passwords don’t match.' : ''
@@ -45,8 +53,7 @@ export default function ResetPassword() {
     if (submitting) return
     setTouched({ password: true, confirm: true })
     setError('')
-    if (password.length < MIN_LENGTH || password.length > MAX_LENGTH)
-      return passwordRef.current?.focus()
+    if (length < MIN_LENGTH || length > MAX_LENGTH) return passwordRef.current?.focus()
     if (confirm !== password) return confirmRef.current?.focus()
     setSubmitting(true)
     try {
@@ -60,7 +67,7 @@ export default function ResetPassword() {
         return
       }
       const data = await res.json().catch(() => ({}))
-      setError(resetPasswordErrorMessage(res.status, data?.error))
+      setError(resetPasswordErrorMessage(res.status, data?.error, data?.code))
     } catch {
       setError(NETWORK_ERROR)
     } finally {

@@ -54,7 +54,33 @@ What the code actually does today, and where its limits are.
   and until it is repaired (or removed, to bootstrap again) every admin
   session check fails closed and nobody can sign in.
 - **Password hashing** — scrypt (`N=16384, r=8, p=1`, 64-byte key) with a
-  random 16-byte salt; constant-time compare.
+  random 16-byte salt; constant-time compare. The NFKC form of the password
+  is hashed and checked (NIST SP 800-63B), marked `passwordNorm: 'NFKC'` in
+  `data/admin.json`; a record from before that is checked as typed until its
+  next change or reset.
+- **Password change** (Admin → Security → Password,
+  `POST /api/admin/security/password`, `lib/adminAuth/password.ts`) — needs
+  the admin session and the current password, checked exactly like a
+  sign-in (async scrypt, constant time, the same per-(e-mail, client)
+  lockout) and answered only "incorrect" when wrong; failures are counted
+  with the failed sign-ins. 10 attempts per 15 minutes per client. The new
+  password (`lib/adminAuth/passwordPolicy.ts`, shared with the e-mail reset
+  and the page's live checklist): 12–256 code points after NFKC, any
+  characters, not built from very common password words, keyboard or
+  alphabet runs, repeats or years (look-alikes such as `p@ssw0rd`
+  included), not containing the e-mail's local part or the site's name, not
+  the current password. A refused password costs no hash and no lockout
+  attempt. One change at a time, compare-and-swap against the verified hash,
+  fresh salt, atomic write, every reset link burnt. "Sign out other
+  browsers" (on by default) bumps the session version and revokes every
+  other session row (`password-changed`) and every pre-session token; in
+  every case this browser gets a new session (row + cookie, verified now)
+  and its old token ends. Recorded in the sign-in history
+  (`password-changed`) and the activity log (no secrets); with SMTP, a
+  notice (time, browser, country — no address — and what to do if it was
+  not you) goes to `NOTIFY_EMAIL`, else the account address, and a mail
+  failure never fails the change. The page says whether `ADMIN_PASS` in the
+  environment still equals the password (computed server-side, never sent).
 - **Session cookie** — `cv_admin_token`, an HS256 JWT (algorithm pinned on
   verify) valid for 7 days; `httpOnly`, `SameSite=Strict`, `Secure` in
   production, `path=/`.
@@ -106,12 +132,17 @@ What the code actually does today, and where its limits are.
   wrong code get the same `401`, and a wrong code counts for the lockout.
 - **Step-up** (`lib/adminAuth/stepUp.ts`) — restoring a backup, deleting a
   post or case study, deleting an image from the media trash for good,
-  MongoDB restore or target changes, and every passkey,
-  recovery-code, policy or other-browser change require a sign-in or a
+  MongoDB restore or target changes, every passkey,
+  recovery-code, policy or other-browser change, and a password change
+  while "Require a passkey" is on require a sign-in or a
   re-verification on this browser within `ADMIN_RECENT_AUTH_MINUTES`
   (default 10); otherwise the route answers `403 STEP_UP_REQUIRED` and the
   admin asks for a passkey or the password (+ code). A token from before
-  sessions existed never counts as recent.
+  sessions existed never counts as recent. A password change while the
+  password may sign in asks for nothing more: its current-password field is
+  that re-verification (asking twice would add nothing); with "Require a
+  passkey" on, the password alone proves nothing, so the change needs the
+  step-up as well.
 - **Sign-in history** — sign-ins, failures (time, method, country and a
   reason code; no address or device) and security changes, the newest 500
   for at most 180 days.
@@ -405,6 +436,9 @@ its operator. After cloning:
    ```
 2. Set `ADMIN_EMAIL` + `ADMIN_PASS` in `.env`. They're consumed on
    first boot to populate `data/admin.json`, then can be cleared.
+   Change the password later in Admin → Security → Password (it never
+   reads `ADMIN_PASS`); the card says while `ADMIN_PASS` still equals the
+   live password — remove it from `.env` once it has changed.
    To revoke every session without changing the password, use **Sign out
    everywhere** in Admin → Security.
    Then register a passkey on two devices (Admin → Security), store the
