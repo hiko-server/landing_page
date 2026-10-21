@@ -41,7 +41,9 @@ import { normalizePassword } from './adminAuth/passwordPolicy'
  *
  * Reset tokens: 24 random bytes, 30 min TTL, single-use, pruned on every
  * read, at most MAX_LIVE_RESETS outstanding. Token comparison is
- * constant-time.
+ * constant-time. The reset route checks the token (isLiveResetToken) before
+ * anything about the new password, so the password rules — one of which
+ * names the account's e-mail — answer only the holder of a real link.
  */
 
 const adminPath = path.join(process.cwd(), 'data', 'admin.json')
@@ -399,13 +401,12 @@ export function createResetToken(): { token: string; expires: number } | null {
   return { token, expires }
 }
 
-export function consumeResetToken(token: string): boolean {
-  if (typeof token !== 'string' || !/^[0-9a-f]{48}$/.test(token)) return false
-  const data = readAdmin() || ensureAdminFromEnv()
-  if (!data) return false
-  const now = Date.now()
+const RESET_TOKEN_RE = /^[0-9a-f]{48}$/
+
+/** The unexpired reset links of `data`, and whether `token` is one of them (constant-time scan). */
+function scanResetTokens(data: AdminData, token: string, now: number): { live: ResetToken[]; found: boolean } {
   const live = (data.resets || []).filter((t) => t.expires > now)
-  // Constant-time scan so timing doesn't reveal which token matched.
+  // Every live token is compared, so timing doesn't reveal which one matched.
   let found = false
   for (const t of live) {
     if (
@@ -415,6 +416,27 @@ export function consumeResetToken(token: string): boolean {
       found = true
     }
   }
+  return { live, found }
+}
+
+/**
+ * Is `token` an unexpired reset link? Nothing is written: the reset route
+ * asks this before it judges the new password, so that only the holder of a
+ * real link ever learns which password rule failed (a rule mentions the
+ * account's e-mail name) and a refused password keeps the link usable.
+ */
+export function isLiveResetToken(token: string): boolean {
+  if (typeof token !== 'string' || !RESET_TOKEN_RE.test(token)) return false
+  const data = readAdmin() || ensureAdminFromEnv()
+  if (!data) return false
+  return scanResetTokens(data, token, Date.now()).found
+}
+
+export function consumeResetToken(token: string): boolean {
+  if (typeof token !== 'string' || !RESET_TOKEN_RE.test(token)) return false
+  const data = readAdmin() || ensureAdminFromEnv()
+  if (!data) return false
+  const { live, found } = scanResetTokens(data, token, Date.now())
   const remaining = live.filter((t) => t.token !== token)
   writeAdmin({ ...data, resets: remaining })
   return found

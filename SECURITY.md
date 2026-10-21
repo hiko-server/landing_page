@@ -196,7 +196,11 @@ cannot be turned into a lock-out weapon against the owner:
   the same `401 Invalid credentials`, and the same generic `429` message,
   which never confirms an address. Password-reset requests always answer
   `{ ok: true }` without waiting for SMTP, and at most 3 reset links can be
-  outstanding at once (no inbox flooding).
+  outstanding at once (no inbox flooding). Setting the new password checks
+  the link first (without spending it): any token that is not a live link
+  gets `400 Invalid or expired token` whatever the password, so the
+  password rules — one of which names the e-mail's local part — only ever
+  answer the holder of a real link.
 - Throttle and queue state live in process memory and are bounded; a
   restart (which only the operator can trigger) clears them.
 

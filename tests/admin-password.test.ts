@@ -188,7 +188,7 @@ const readRecord = () =>
 
 // ── Policy (pure) ────────────────────────────────────────────────────────
 
-const CTX = { email: 'li.yanpei@example.test', siteHost: 'www.lucian-dev.example' }
+const CTX = { email: 'sam.rivers@example.test', siteHost: 'www.lucian-dev.example' }
 
 test('policy: length counts code points after NFKC, 12 to 256, every character allowed', () => {
   assert.equal(policy.passwordLength('🔐'.repeat(12)), 12)
@@ -238,8 +238,8 @@ test('policy: common and predictable passwords are refused, also through look-al
 
 test('policy: the e-mail name and the site name are refused, separators and look-alikes included', () => {
   assert.deepEqual(
-    policy.personalTokens('li.yanpei@example.test', 'www.lucian-dev.example').sort(),
-    ['liyanpei', 'lucian', 'luciandev', 'yanpei']
+    policy.personalTokens('sam.rivers@example.test', 'www.lucian-dev.example').sort(),
+    ['lucian', 'luciandev', 'rivers', 'samrivers']
   )
   assert.deepEqual(policy.personalTokens('', '127.0.0.1'), [])
   assert.deepEqual(policy.personalTokens('', 'localhost'), [])
@@ -247,7 +247,8 @@ test('policy: the e-mail name and the site name are refused, separators and look
     'my Lucian-Dev passphrase',
     'the lucian_dev quiet harbour',
     'L u c 1 a n morning tide',
-    'yanpei walks the harbour',
+    'rivers walk the harbour',
+    'Sam-Rivers by the harbour',
   ]) {
     assert.equal(policy.checkNewPassword(bad, CTX).personal, true, bad)
   }
@@ -716,6 +717,51 @@ test('the e-mail reset applies the same rules and keeps a refused link usable', 
   assert.equal(ok.statusCode, 200, 'the link survived the refusal')
   live = 'the reset harbour at noon'
   assert.equal((await login(live)).statusCode, 200)
+})
+
+test('the e-mail reset judges the password only for a live link: no rule answers a made-up token (no e-mail oracle)', async () => {
+  admin.ensureAdminFromEnv()
+  const before = readRecord()
+  const forged = '0'.repeat(48)
+  for (const password of [
+    // Contains the e-mail's local part ("owner"): the "personal" rule must not answer.
+    'kestrel harbour owner lantern 93',
+    'alpha bravo owner delta echo',
+    // Breaks other rules too: still only "invalid or expired".
+    'Password1234!',
+    'short',
+    '',
+  ]) {
+    const out = await call(H.reset, { method: 'POST', body: { token: forged, password } })
+    assert.equal(out.statusCode, 400, password)
+    assert.deepEqual(out.body, { error: 'Invalid or expired token' }, `no rule leaks for "${password}"`)
+  }
+  // A link that expired is refused the same way.
+  const issued = admin.createResetToken()!
+  const file = path.join(tmp, 'data', 'admin.json')
+  const rec = readRecord()
+  rec.resets = rec.resets.map((r: { token: string }) =>
+    r.token === issued.token ? { ...r, expires: Date.now() - 1 } : r
+  )
+  fs.writeFileSync(file, JSON.stringify(rec))
+  const expired = await call(H.reset, {
+    method: 'POST',
+    body: { token: issued.token, password: 'kestrel harbour owner lantern 93' },
+  })
+  assert.deepEqual(expired.body, { error: 'Invalid or expired token' })
+  // The check does not consume anything: a live link still gets the rules, and survives them.
+  const live = admin.createResetToken()!
+  assert.equal(admin.isLiveResetToken(live.token), true)
+  assert.equal(admin.isLiveResetToken(forged), false)
+  const personal = await call(H.reset, {
+    method: 'POST',
+    body: { token: live.token, password: 'kestrel harbour owner lantern 93' },
+  })
+  assert.equal(personal.body.code, 'PASSWORD_POLICY')
+  assert.deepEqual(personal.body.issues, ['personal'])
+  assert.equal(admin.isLiveResetToken(live.token), true, 'a refused password keeps the link')
+  // Leave the record as it was (the link unused).
+  fs.writeFileSync(file, JSON.stringify(before))
 })
 
 test('activity log describes the change without the passwords', async () => {

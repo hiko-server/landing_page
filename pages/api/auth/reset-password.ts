@@ -1,6 +1,12 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { deleteCookie } from 'cookies-next'
-import { consumeResetToken, ensureAdminFromEnv, readAdmin, updatePassword } from '../../../lib/admin'
+import {
+  consumeResetToken,
+  ensureAdminFromEnv,
+  isLiveResetToken,
+  readAdmin,
+  updatePassword,
+} from '../../../lib/admin'
 import { ADMIN_COOKIE, clearAdminHint, requestOrigin } from '../../../lib/auth'
 import { withApi } from '../../../lib/apiHandler'
 import { rateLimit } from '../../../lib/rateLimit'
@@ -22,6 +28,14 @@ import { checkNewPassword, PASSWORD_ISSUE_MESSAGES, passwordIssues } from '../..
  * Security (lib/adminAuth/passwordPolicy: 12–256 characters after NFKC, not
  * common or predictable, not the account's or the site's name); a refused
  * password answers 400 PASSWORD_POLICY and leaves the link usable.
+ *
+ * Order matters: the token is checked FIRST (without spending it), and any
+ * token that is not a live link gets the one answer "Invalid or expired
+ * token", whatever the password. Judging the password before that would let
+ * anyone with a made-up token learn whether a guess is part of the admin's
+ * e-mail address (the "personal" rule) — something sign-in and "forgot"
+ * never reveal (lib/admin.ts). Only then the rules, then the single-use
+ * consume and the write.
  */
 export default withApi('auth/reset-password', (req: NextApiRequest, res: NextApiResponse) => {
   if (req.method !== 'POST') {
@@ -34,7 +48,8 @@ export default withApi('auth/reset-password', (req: NextApiRequest, res: NextApi
   res.setHeader('X-RateLimit-Remaining', String(rl.remaining))
   if (!rl.allowed) return res.status(429).json({ error: 'Too many requests, try later' })
   const { token, password } = req.body || {}
-  if (typeof token !== 'string' || !/^[0-9a-f]{48}$/.test(token)) {
+  // A link that is not live answers the same, whatever the password (no rule may leak first).
+  if (typeof token !== 'string' || !isLiveResetToken(token)) {
     return res.status(400).json({ error: 'Invalid or expired token' })
   }
   // Validate BEFORE consuming the single-use token, so a rejected password

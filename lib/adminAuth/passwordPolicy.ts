@@ -320,7 +320,7 @@ function compact(s: string): string {
 
 /**
  * The account's own words a password must not contain: the e-mail's local
- * part (and its parts of four or more characters, "li.yanpei" → "yanpei")
+ * part (and its parts of four or more characters, "sam.rivers" → "rivers")
  * and the site's name from its host ("lucian-dev.com" → "luciandev",
  * "lucian"). Pieces shorter than three / four characters are left out so a
  * short name cannot rule out half the alphabet.
