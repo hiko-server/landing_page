@@ -224,7 +224,8 @@ test('UX-A-6: the control border is ≥ 3:1 on every page and row background; ad
       const ratio = contrast(CONTROL_BORDER[mode], semanticColors[bg][mode])
       assert.ok(ratio >= 3, `control border on ${bg} (${mode}) = ${ratio.toFixed(2)}`)
     }
-  assert.equal(ADMIN_GLOBAL_CSS, ":root{--control-border:#858585}[data-theme='dark'],.chakra-ui-dark{--control-border:#6b6b6b}")
+  // (fix3-E added the admin's hidden-state colour beside it: tests/review-r3-studio.test.ts.)
+  assert.match(ADMIN_GLOBAL_CSS, /^:root\{--control-border:#858585;[^}]*\}\[data-theme='dark'\],\.chakra-ui-dark\{--control-border:#6b6b6b;[^}]*\}$/)
   const checkbox = ADMIN_COMPONENT_STYLES.Checkbox as unknown as { baseStyle: (p: Record<string, unknown>) => { control: Record<string, unknown> } }
   const style = checkbox.baseStyle({ colorScheme: 'purple', colorMode: 'light', theme: {} })
   assert.equal(style.control.borderColor, 'var(--control-border)')
