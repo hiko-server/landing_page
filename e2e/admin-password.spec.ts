@@ -270,10 +270,12 @@ test.describe('admin password', { tag: '@admin' }, () => {
       await expect(f.current).toBeFocused()
       expect(requests).toBe(1)
 
-      // Keyboard only: the show / hide toggle follows the field and says its state.
+      // Keyboard only: the show / hide toggle follows the field, is named after it and says its state.
+      for (const name of ['Show current password', 'Show new password', 'Show confirm new password'])
+        await expect(page.getByRole('button', { name, exact: true })).toHaveCount(1)
       await f.current.focus()
       await page.keyboard.press('Tab')
-      const toggle = page.getByRole('button', { name: 'Show password' }).first()
+      const toggle = page.getByRole('button', { name: 'Show current password', exact: true })
       await expect(toggle).toBeFocused()
       await expect(toggle).toHaveAttribute('aria-pressed', 'false')
       await page.keyboard.press('Space')
