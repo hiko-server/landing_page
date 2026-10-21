@@ -1,6 +1,9 @@
 import { useRef } from 'react'
 import { Box, Flex, Text } from '@chakra-ui/react'
+import BottomBarHost from '../Common/BottomBarHost'
 import { useBottomBarOffset } from '../Common/useBottomBarOffset'
+
+type DraftBarProps = { path: string; pending?: boolean }
 
 /**
  * Fixed bottom bar shown while an article renders in Draft Mode (the
@@ -8,8 +11,22 @@ import { useBottomBarOffset } from '../Common/useBottomBarOffset'
  * Draft Mode through the same endpoint and returns to the public page, as a
  * full navigation so the cookie change takes effect. `pending`: the page
  * shows a live item's unpublished changes (H4), not a draft.
+ *
+ * Hosted like the review link's bar (components/Common/BottomBarHost): on
+ * <body> once mounted, above the footer, which otherwise painted over it, and
+ * with room below the footer, so Tab through the footer never leaves a
+ * focused link under the bar (SC 2.4.11). Only the signed-in owner viewing a
+ * draft gets the bar, so visitors' pages are untouched.
  */
-export default function DraftBar({ path, pending = false }: { path: string; pending?: boolean }) {
+export default function DraftBar(props: DraftBarProps) {
+  return (
+    <BottomBarHost>
+      <DraftBarBody {...props} />
+    </BottomBarHost>
+  )
+}
+
+function DraftBarBody({ path, pending = false }: DraftBarProps) {
   const ref = useRef<HTMLDivElement | null>(null)
   useBottomBarOffset(ref)
   const exitHref = `/api/admin/draft?disable=1&path=${encodeURIComponent(path)}`

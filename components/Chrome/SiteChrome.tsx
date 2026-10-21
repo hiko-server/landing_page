@@ -124,7 +124,8 @@ export default function SiteChrome({
 
   return (
     <ChromeContext.Provider value>
-      <Box display="flex" flexDirection="column" minHeight="100vh" w="full">
+      {/* data-site-chrome: a fixed bottom bar pads this column (components/Common/BottomBarHost). */}
+      <Box display="flex" flexDirection="column" minHeight="100vh" w="full" data-site-chrome="">
         <a className="skip-nav no-print" href="#main" lang={chromeLang}>
           {t.skip}
         </a>
