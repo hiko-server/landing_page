@@ -186,6 +186,19 @@ Fixes for defects the final review found in the final batch before it shipped.
   and the page keeps room below the footer for it, so Tab through the
   footer never leaves a link under the bar. The review link's "Preview"
   bar now reserves its room the same way.
+- **Field rings in the intended colour (ERROR-BORDER)**: a past or missing
+  time in the schedule dialog rings its fields in the warning colour of
+  each theme (the ring was black, invisible in dark mode); every admin
+  field reached by keyboard shows the accent ring — some were blue, and a
+  read-only field such as a saved post's slug had none. A test keeps ring
+  colours to palette tokens Chakra can draw.
+- **Admin fields you can find (FIELD-BORDERS)**: every admin text field,
+  select and number field has a ≥ 3:1 edge in both themes that darkens on
+  hover (the shared field style's hairline was about 1.4:1). The
+  availability fields, hidden home sections and locked backup / restore
+  panels are no longer faded below contrast, and caps-lock, error and
+  over-limit messages, the publish checklist's marks and the sign-in pages'
+  links read at ≥ 4.5:1.
 
 ### patch-2b1
 
