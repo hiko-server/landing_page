@@ -205,7 +205,16 @@ const sizes = (page: Page) =>
   page.evaluate(() => {
     const layer = Array.from(document.querySelectorAll<HTMLElement>('.lightbox-layer')).find((l) => !l.closest('[aria-hidden="true"]'))!
     const stage = document.querySelector('.lightbox-stage')!.getBoundingClientRect()
-    return { w: layer.offsetWidth, h: layer.offsetHeight, stageW: stage.width, stageH: stage.height }
+    return {
+      w: layer.offsetWidth,
+      h: layer.offsetHeight,
+      stageW: stage.width,
+      stageH: stage.height,
+      stageLeft: stage.left,
+      stageRight: stage.right,
+      stageTop: stage.top,
+      stageBottom: stage.bottom,
+    }
   })
 
 // ── Desktop: morph, keyboard, mouse, wheel, focus ─────────────────────────
@@ -313,10 +322,13 @@ test.describe('lightbox gestures: desktop', () => {
     await idle(page)
     let v = await view(page)
     expect(v.scale).toBeCloseTo(shot.scale, 2)
-    // The point under the pointer stayed under it (along each axis where the zoomed photo is larger than the stage; where it fits it stays centred).
+    // The point under the pointer stayed under it, as far as the photo's edges allow: along each axis where the
+    // zoomed photo is larger than the stage it never pulls an edge inside the stage (lib/lightboxGestures panBounds),
+    // so a photo only a little larger than the stage moves only that little; where it fits it stays centred.
     const box = await sizes(page)
-    if (box.w * v.scale > box.stageW + 1) expect(Math.abs(v.cx + 40 * v.scale - p.x)).toBeLessThan(2)
-    if (box.h * v.scale > box.stageH + 1) expect(Math.abs(v.cy + 20 * v.scale - p.y)).toBeLessThan(2)
+    const kept = (desired: number, size: number, lo: number, hi: number) => Math.min(Math.max(desired, hi - size / 2), lo + size / 2)
+    if (box.w * v.scale > box.stageW + 1) expect(Math.abs(v.cx - kept(p.x - 40 * v.scale, box.w * v.scale, box.stageLeft, box.stageRight))).toBeLessThan(2)
+    if (box.h * v.scale > box.stageH + 1) expect(Math.abs(v.cy - kept(p.y - 20 * v.scale, box.h * v.scale, box.stageTop, box.stageBottom))).toBeLessThan(2)
     expect(box.w * v.scale > box.stageW + 1 || box.h * v.scale > box.stageH + 1, 'zoomed past the stage on one axis at least').toBe(true)
     await page.mouse.click(p.x, p.y)
     await idle(page)
