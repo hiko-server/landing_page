@@ -366,6 +366,23 @@ test('the checklist and wait labels of the Password card', () => {
     cardRules.passwordRules(policy.checkNewPassword('short', CTX), 12, 256)[0].label,
     'At least 12 characters (5)'
   )
+  // The status read once typing pauses names what is missing.
+  const typed = cardRules.passwordRules(
+    policy.checkNewPassword('owner tide 1234', { ...CTX, email: OWNER }),
+    12,
+    256
+  )
+  assert.equal(
+    cardRules.checklistAnnouncement(typed, 'too weak'),
+    '2 of 4 password requirements met. Missing: leave out your e-mail name and the site’s name; different from your current password. Strength: too weak.'
+  )
+  assert.equal(
+    cardRules.checklistAnnouncement(
+      cardRules.passwordRules(policy.checkNewPassword('quiet harbour lantern', { ...CTX, current: 'x' }), 12, 256),
+      'good'
+    ),
+    '4 of 4 password requirements met. Strength: good.'
+  )
   assert.equal(cardRules.waitLabel(0, 0), '1 min')
   assert.equal(cardRules.waitLabel(4 * 60_000 + 1, 0), '5 min')
   assert.equal(cardRules.waitLabel(65 * 60_000, 0), '1 h 5 min')

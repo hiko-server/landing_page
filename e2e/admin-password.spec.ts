@@ -56,13 +56,15 @@ async function signedInPage(
   browser: Browser,
   env: Env,
   problems: string[],
-  colorScheme: 'light' | 'dark' = 'dark'
+  colorScheme: 'light' | 'dark' = 'dark',
+  viewport: { width: number; height: number } = { width: 1280, height: 720 }
 ): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({
     baseURL: env.baseURL,
     storageState: SIGNED_OUT,
     extraHTTPHeaders: env.headers,
     colorScheme,
+    viewport,
     locale: 'en-US',
     timezoneId: 'Asia/Hong_Kong',
   })
@@ -256,9 +258,11 @@ test.describe('admin password', { tag: '@admin' }, () => {
       const describedBy = (await f.next.getAttribute('aria-describedby')) || ''
       const rulesId = await f.rules.getAttribute('id')
       expect(describedBy.split(' ')).toContain(rulesId)
-      // …and read out once typing pauses.
+      // …and read out once typing pauses, naming what is missing.
       await expect(
-        page.getByRole('status').filter({ hasText: /of 4 password requirements met/ })
+        page
+          .getByRole('status')
+          .filter({ hasText: /of 4 password requirements met\. Missing: a less common, less predictable password/ })
       ).toHaveCount(1, { timeout: 5000 })
 
       // Submitting with problems: errors on the fields, focus on the first one, no request.
@@ -274,6 +278,33 @@ test.describe('admin password', { tag: '@admin' }, () => {
       await f.submit.click()
       await expect(f.next).toBeFocused()
       await expect(page.getByText(/too common or predictable/)).toBeVisible()
+
+      // After a submit, typing never swaps the field's error for another message (it is a
+      // live region) nor moves the checklist under it (phone layout): it only clears once
+      // the password passes.
+      await page.setViewportSize({ width: 375, height: 812 })
+      const nextError = () =>
+        f.next.evaluate((el) => {
+          const ids = (el.getAttribute('aria-describedby') || '').split(' ')
+          const id = ids.find((x) => x.endsWith('-feedback'))
+          return (id && document.getElementById(id)?.textContent) || ''
+        })
+      const rulesTop = () =>
+        f.rules.evaluate((el) => Math.round(el.getBoundingClientRect().top + window.scrollY))
+      const before = await nextError()
+      expect(before).toMatch(/too common or predictable/)
+      await f.next.fill('')
+      const messages = new Set<string>()
+      const tops = new Set<number>()
+      for (const ch of 'Password1234!xq tide') {
+        await f.next.press(ch === ' ' ? 'Space' : ch)
+        messages.add(await nextError())
+        tops.add(await rulesTop())
+      }
+      expect([...messages].filter(Boolean), 'only the message of the submit').toEqual([before])
+      expect(await nextError(), 'cleared once the password passes').toBe('')
+      expect(tops.size, 'the checklist moved at most once (when the error cleared)').toBeLessThanOrEqual(2)
+      await page.setViewportSize({ width: 1280, height: 720 })
       const temp = `e2e harbour ${crypto.randomBytes(6).toString('base64url')} lights`
       await f.next.fill(temp)
       await f.confirm.fill(`${temp}!`)
@@ -334,7 +365,11 @@ test.describe('admin password', { tag: '@admin' }, () => {
     test.skip(!isLocal(baseURL || ''), 'local builds only')
     const problems: string[] = []
     const env = { baseURL: baseURL as string, headers: { ...(extraHTTPHeaders || {}) } }
-    const { context, page } = await signedInPage(browser, env, problems)
+    // A phone: the message must not land behind the sticky bars, far from the focused button.
+    const { context, page } = await signedInPage(browser, env, problems, 'dark', {
+      width: 375,
+      height: 812,
+    })
     try {
       await page.goto('/admin/security')
       const f = fields(page)
@@ -359,12 +394,25 @@ test.describe('admin password', { tag: '@admin' }, () => {
         })
       )
       await fill()
-      await f.submit.click()
-      await expect(
-        page.getByRole('alert').filter({ hasText: /Too many attempts\. Try again in 5 min/ })
-      ).toBeVisible()
+      // By keyboard, as the review did: focus the button, press Enter.
+      await f.submit.focus()
+      await page.keyboard.press('Enter')
+      const throttled = page
+        .getByRole('alert')
+        .filter({ hasText: /Too many attempts\. Try again in 5 min/ })
+      await expect(throttled).toBeVisible()
       await expect(f.submit).toBeEnabled()
       await expect(f.submit).toBeFocused()
+      // On screen, uncovered, right by the button that has focus.
+      await expect
+        .poll(() =>
+          throttled.evaluate((el) => {
+            const r = el.getBoundingClientRect()
+            const hit = document.elementFromPoint(r.left + r.width / 2, r.top + Math.min(r.height / 2, 12))
+            return r.top >= 0 && r.bottom <= window.innerHeight && !!hit && el.contains(hit)
+          })
+        )
+        .toBe(true)
       await page.unroute(`**${CHANGE_URL}`)
 
       // "Require a passkey" turned on elsewhere: the route asks for a step-up; closing the dialog keeps everything.
@@ -402,7 +450,11 @@ test.describe('admin password', { tag: '@admin' }, () => {
       await expect(dialog).toBeVisible()
       await page.keyboard.press('Escape')
       await expect(dialog).toBeHidden()
-      await expect(page.getByText(/Not changed — the confirmation was closed/)).toBeVisible()
+      // Announced (a polite status by the button that gets focus back), not just shown.
+      await expect(
+        page.getByRole('status').filter({ hasText: /Not changed — the confirmation was closed/ })
+      ).toBeVisible()
+      await expect(f.submit).toBeFocused()
       await expect(f.next).toHaveValue(temp)
       expect(problems).toEqual([])
     } finally {
@@ -433,6 +485,14 @@ test.describe('admin password', { tag: '@admin' }, () => {
       await f.next.fill(temp)
       await f.confirm.fill(temp)
       await f.signOutOthers.uncheck({ force: true })
+      // Record every toast shown from here on (they leave after a few seconds).
+      await page.evaluate(() => {
+        const w = window as unknown as { __toasts: string[] }
+        w.__toasts = []
+        new MutationObserver(() => {
+          document.querySelectorAll('.chakra-toast').forEach((t) => w.__toasts.push(t.textContent || ''))
+        }).observe(document.body, { childList: true, subtree: true, characterData: true })
+      })
       await f.submit.click()
 
       const done = page.getByTestId('password-changed')
@@ -444,6 +504,13 @@ test.describe('admin password', { tag: '@admin' }, () => {
       await expect(
         page.getByRole('status').filter({ hasText: 'Password changed' }).first()
       ).toBeVisible()
+      // Said once: the focused confirmation, no toast repeating it.
+      await page.waitForTimeout(500)
+      expect(
+        (await page.evaluate(() => (window as unknown as { __toasts: string[] }).__toasts)).filter(
+          (t) => /Password changed/.test(t)
+        )
+      ).toEqual([])
       // The form is empty again, and back to signing other browsers out.
       await expect(f.current).toHaveValue('')
       await expect(f.signOutOthers).toBeChecked()
@@ -470,6 +537,17 @@ test.describe('admin password', { tag: '@admin' }, () => {
       expect(
         activity.items.some((i: { action: string }) => i.action === 'security.password-change')
       ).toBe(true)
+      // While ADMIN_PASS is set on the server, the note about it reads as a sentence — right
+      // after the change and on every later visit.
+      const overview = (await pageJson(page, 'GET', '/api/admin/security')).json
+      if (overview.password.bootstrap.envSet) {
+        const note = page.getByRole('note').filter({ hasText: 'ADMIN_PASS' })
+        await expect(note).toHaveText(/^Next: remove ADMIN_PASS from the server’s \.env/)
+        await page.reload()
+        await expect(note).toHaveText(
+          /^Remove ADMIN_PASS from the server’s \.env — it no longer matches this password\./
+        )
+      }
       expect(problems).toEqual([])
     } finally {
       await other.context.close()

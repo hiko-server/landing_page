@@ -10,8 +10,6 @@ import {
   Flex,
   Spinner,
   Text,
-  VisuallyHidden,
-  useToast,
 } from '@chakra-ui/react'
 import { AuthError, PasswordField } from '../AuthCard'
 import { MONO, SectionLabel, primaryButtonProps } from '../shell/ui'
@@ -22,12 +20,12 @@ import {
   normalizePassword,
   PASSWORD_ISSUE_MESSAGES,
   passwordIssues,
-  type PasswordStrength,
 } from '../../../lib/adminAuth/passwordPolicy'
 import { clearOfHeader } from '../../../lib/anchorOffset'
 import { parseStepUpChallenge, wasStepUpCancelled } from './stepUpClient'
 import { absoluteTime, relativeTime } from './securityFormat'
-import { passwordRules, waitLabel, type PasswordRule as Rule } from './passwordRules'
+import { passwordRules, waitLabel } from './passwordRules'
+import PasswordChecklist from './PasswordChecklist'
 
 /** The Password part of GET /api/admin/security (lib/adminAuth/password.ts PasswordOverview). */
 export type PasswordInfo = {
@@ -46,57 +44,6 @@ type Done = {
   bootstrap: PasswordInfo['bootstrap']
 }
 
-const STRENGTH: Record<
-  Exclude<PasswordStrength, 'none'>,
-  { label: string; bars: number; color: string }
-> = {
-  'too-weak': { label: 'too weak', bars: 1, color: 'status.error' },
-  fair: { label: 'fair', bars: 2, color: 'status.warning' },
-  good: { label: 'good', bars: 3, color: 'accent.text' },
-  strong: { label: 'strong', bars: 4, color: 'status.open' },
-}
-
-function RuleIcon({ state }: { state: Rule['state'] }) {
-  // Shape differs per state (tick, cross, ring), so colour is never the only cue.
-  const common = {
-    width: 14,
-    height: 14,
-    viewBox: '0 0 16 16',
-    'aria-hidden': true,
-    focusable: false,
-  } as const
-  if (state === 'met')
-    return (
-      <svg {...common}>
-        <path
-          d="M3 8.5l3.2 3L13 4.5"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    )
-  if (state === 'unmet')
-    return (
-      <svg {...common}>
-        <path
-          d="M4.5 4.5l7 7M11.5 4.5l-7 7"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
-      </svg>
-    )
-  return (
-    <svg {...common}>
-      <circle cx="8" cy="8" r="5" fill="none" stroke="currentColor" strokeWidth="1.6" />
-    </svg>
-  )
-}
-
 /**
  * Scroll margin for what this card focuses: the sticky site header, the
  * sticky admin title bar under it (52px and up) and some air — the global
@@ -104,16 +51,9 @@ function RuleIcon({ state }: { state: Rule['state'] }) {
  */
 const CLEAR_OF_BARS = clearOfHeader('72px')
 
-const RULE_COLOR: Record<Rule['state'], string> = {
-  met: 'status.open',
-  unmet: 'status.error',
-  pending: 'page.fg-secondary',
-}
-const RULE_SR: Record<Rule['state'], string> = {
-  met: 'done',
-  unmet: 'not yet',
-  pending: 'not checked yet',
-}
+/** "Fill this in" errors: they stop applying at the first character typed. */
+const EMPTY_NEXT = 'Enter a new password.'
+const EMPTY_CONFIRM = 'Type the new password again.'
 
 /**
  * Admin → Security → Password: change the admin password in place
@@ -122,12 +62,19 @@ const RULE_SR: Record<Rule['state'], string> = {
  * One form that password managers understand: a hidden username field with
  * the account address, then current-password / new-password /
  * new-password. Live checklist and a rough strength from the same rules the
- * server enforces (lib/adminAuth/passwordPolicy); errors are tied to their
- * fields (aria-describedby) and the first one gets focus; a polite status
- * reads the checklist out once typing pauses; the submit button never
- * disables itself silently. With "Require a passkey" on, the request goes
- * through the step-up flow (a passkey, or the password plus a recovery
- * code); otherwise the current password is the re-authentication.
+ * server enforces (PasswordChecklist, lib/adminAuth/passwordPolicy).
+ *
+ * Errors are tied to their fields (aria-describedby) and the first one gets
+ * focus. A field's error is set when the form is submitted and only ever
+ * cleared — once that field passes — never swapped for another message
+ * while you type: the checklist and its one polite status (read when typing
+ * pauses, naming what is missing) are the live feedback. Form-level errors
+ * (429, network, HTTP) appear right above the button that keeps focus, and
+ * notices beside it in a polite status; success is one focused, polite
+ * confirmation (no toast as well). The submit button never disables itself
+ * silently. With "Require a passkey" on, the request goes through the
+ * step-up flow (a passkey, or the password plus a recovery code); otherwise
+ * the current password is the re-authentication.
  */
 export default function PasswordCard({
   index,
@@ -147,83 +94,67 @@ export default function PasswordCard({
   fetchWithStepUp: (input: string, init?: RequestInit, reason?: string) => Promise<Response>
   onChanged: () => Promise<void> | void
 }) {
-  const toast = useToast()
   const id = useId()
   const rulesId = `${id}-rules`
-  const strengthId = `${id}-strength`
+  const strengthId = `${rulesId}-strength`
   const signOutHelpId = `${id}-signout-help`
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const [confirm, setConfirm] = useState('')
   const [signOutOthers, setSignOutOthers] = useState(true)
-  // Field errors show from the first submit on, never on blur: an error that
-  // appears as a field loses focus would push the button away between the
-  // press and the release of a click (the live checklist guides until then).
-  const [submitted, setSubmitted] = useState(false)
-  const [currentServerError, setCurrentServerError] = useState('')
-  const [nextServerError, setNextServerError] = useState('')
+  // Field errors are set on submit (never on blur: an error that appears as a
+  // field loses focus would push the button away between the press and the
+  // release of a click) and then only cleared, once the field passes — never
+  // swapped while typing, so they are neither re-announced (an error message
+  // is a live region) nor shifting the checklist under the field.
+  const [currentError, setCurrentError] = useState('')
+  const [nextError, setNextError] = useState('')
+  const [confirmError, setConfirmError] = useState('')
   const [formError, setFormError] = useState('')
   const [notice, setNotice] = useState('')
   const [throttledUntil, setThrottledUntil] = useState<number | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [done, setDone] = useState<Done | null>(null)
-  const [announcement, setAnnouncement] = useState('')
   const currentRef = useRef<HTMLInputElement>(null)
   const nextRef = useRef<HTMLInputElement>(null)
   const confirmRef = useRef<HTMLInputElement>(null)
   const submitRef = useRef<HTMLButtonElement>(null)
   const doneRef = useRef<HTMLDivElement>(null)
+  const formErrorRef = useRef<HTMLDivElement>(null)
 
   const check = useMemo(
     () => checkNewPassword(next, { email: info.email, siteHost: info.siteHost, current }),
     [next, current, info.email, info.siteHost]
   )
   const rules = passwordRules(check, info.minLength, info.maxLength)
-  const metCount = rules.filter((r) => r.state === 'met').length
-  const strength = check.strength === 'none' ? null : STRENGTH[check.strength]
+  const nextOk = !!next && check.ok
+  const confirmOk = !!confirm && normalizePassword(confirm) === normalizePassword(next)
 
-  // Read the checklist out once typing pauses (not on every key).
+  // An error goes away once its field passes (and is never replaced while typing).
   useEffect(() => {
-    if (!next) {
-      setAnnouncement('')
-      return
-    }
-    const t = window.setTimeout(() => {
-      setAnnouncement(
-        `${metCount} of ${rules.length} password requirements met${strength ? `. Strength: ${strength.label}` : ''}.`
-      )
-    }, 1200)
-    return () => window.clearTimeout(t)
-  }, [next, metCount, rules.length, strength])
+    if (nextOk) setNextError('')
+  }, [nextOk])
+  useEffect(() => {
+    if (confirmOk) setConfirmError('')
+  }, [confirmOk])
 
   useEffect(() => {
     if (done) doneRef.current?.focus()
   }, [done])
 
-  const currentError =
-    currentServerError || (submitted && !current ? 'Enter your current password.' : '')
-  const firstIssue = passwordIssues(check)[0]
-  const nextError =
-    nextServerError ||
-    (submitted && !next
-      ? 'Enter a new password.'
-      : submitted && next && firstIssue
-        ? PASSWORD_ISSUE_MESSAGES[firstIssue]
-        : '')
-  const confirmError =
-    submitted && confirm && normalizePassword(confirm) !== normalizePassword(next)
-      ? 'The new passwords don’t match.'
-      : submitted && !confirm
-        ? 'Type the new password again.'
-        : ''
+  // A form-level error sits right above the button, which keeps focus; on a
+  // phone make sure it is not left behind the sticky bars either.
+  useEffect(() => {
+    if (formError) formErrorRef.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [formError])
 
   const reset = () => {
     setCurrent('')
     setNext('')
     setConfirm('')
-    setSubmitted(false)
-    setCurrentServerError('')
-    setNextServerError('')
+    setCurrentError('')
+    setNextError('')
+    setConfirmError('')
     setFormError('')
     setNotice('')
     // Back to the safe default for the next change.
@@ -233,17 +164,29 @@ export default function PasswordCard({
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (submitting) return
-    setSubmitted(true)
     setFormError('')
     setNotice('')
-    setCurrentServerError('')
-    setNextServerError('')
-    // Field problems first, in reading order.
-    const nextOk = !!next && check.ok
-    const confirmOk = !!confirm && normalizePassword(confirm) === normalizePassword(next)
-    if (!current) return currentRef.current?.focus()
-    if (!nextOk) return nextRef.current?.focus()
-    if (!confirmOk) return confirmRef.current?.focus()
+    // Every field's problem, as of now; focus goes to the first, in reading order.
+    const firstIssue = passwordIssues(check)[0]
+    const errors = {
+      current: current ? '' : 'Enter your current password.',
+      next: !next
+        ? EMPTY_NEXT
+        : firstIssue
+          ? PASSWORD_ISSUE_MESSAGES[firstIssue]
+          : '',
+      confirm: !confirm
+        ? EMPTY_CONFIRM
+        : confirmOk
+          ? ''
+          : 'The new passwords don’t match.',
+    }
+    setCurrentError(errors.current)
+    setNextError(errors.next)
+    setConfirmError(errors.confirm)
+    if (errors.current) return currentRef.current?.focus()
+    if (errors.next) return nextRef.current?.focus()
+    if (errors.confirm) return confirmRef.current?.focus()
     if (throttledUntil && throttledUntil > Date.now()) {
       setFormError(
         `Too many attempts. Try again in ${waitLabel(throttledUntil, Date.now())} (at ${absoluteTime(throttledUntil)}).`
@@ -290,12 +233,7 @@ export default function PasswordCard({
           window.location.href = loginHref('/admin/security')
           return
         }
-        toast({
-          status: 'success',
-          title: 'Password changed',
-          description: othersLine(result),
-        })
-        // The confirmation takes focus (useEffect on `done`).
+        // The confirmation takes focus (useEffect on `done`) and is read once — no toast as well.
         focusSubmit = false
         setDone(result)
         setThrottledUntil(null)
@@ -309,16 +247,17 @@ export default function PasswordCard({
         return
       }
       if (code === 'CURRENT_PASSWORD_INCORRECT') {
-        setCurrentServerError('That isn’t your current password.')
+        setCurrentError('That isn’t your current password.')
         focusSubmit = false
         currentRef.current?.focus()
         currentRef.current?.select()
         return
       }
       if (code === 'PASSWORD_POLICY') {
-        setNextServerError(message || 'Choose a different password.')
+        setNextError(message || 'Choose a different password.')
         focusSubmit = false
         nextRef.current?.focus()
+        nextRef.current?.select()
         return
       }
       if (res.status === 429) {
@@ -420,7 +359,6 @@ export default function PasswordCard({
         // Fields focused after an error land below the site header AND the admin title bar.
         sx={{ '& :is(input, button, [tabindex])': { scrollMarginTop: CLEAR_OF_BARS } }}
       >
-        <AuthError>{formError}</AuthError>
         <form onSubmit={(e) => void submit(e)} noValidate aria-labelledby="security-password">
           {/* For password managers: which account this password belongs to. */}
           <input
@@ -451,7 +389,8 @@ export default function PasswordCard({
                 value={current}
                 onChange={(e) => {
                   setCurrent(e.target.value)
-                  setCurrentServerError('')
+                  // "Enter…" or "That isn’t your current password": either no longer applies.
+                  setCurrentError('')
                 }}
                 error={currentError}
                 isRequired
@@ -466,7 +405,14 @@ export default function PasswordCard({
                 value={next}
                 onChange={(e) => {
                   setNext(e.target.value)
-                  setNextServerError('')
+                  // Cleared once the edited password passes (a server refusal then no longer
+                  // applies either); otherwise kept, unchanged, until the next submit.
+                  const v = e.target.value
+                  if (
+                    (v && nextError === EMPTY_NEXT) ||
+                    (v && checkNewPassword(v, { email: info.email, siteHost: info.siteHost, current }).ok)
+                  )
+                    setNextError('')
                 }}
                 error={nextError}
                 aria-describedby={`${rulesId} ${strengthId}`}
@@ -478,65 +424,7 @@ export default function PasswordCard({
               />
             </Box>
             <Box gridArea="rules" pt={{ lg: 6 }}>
-              <Text id={`${rulesId}-title`} fontSize="12px" fontWeight={500} mb={1.5}>
-                Requirements
-              </Text>
-              <Box
-                as="ul"
-                id={rulesId}
-                aria-labelledby={`${rulesId}-title`}
-                listStyleType="none"
-                display="grid"
-                rowGap={1}
-              >
-                {rules.map((r) => (
-                  <Flex
-                    as="li"
-                    key={r.key}
-                    align="center"
-                    gap={2}
-                    fontSize="13px"
-                    data-state={r.state}
-                  >
-                    <Box as="span" color={RULE_COLOR[r.state]} display="inline-flex" flexShrink={0}>
-                      <RuleIcon state={r.state} />
-                    </Box>
-                    <Text as="span" color={r.state === 'pending' ? 'page.fg-secondary' : 'page.fg'}>
-                      {r.label}
-                      <VisuallyHidden>{` — ${RULE_SR[r.state]}`}</VisuallyHidden>
-                    </Text>
-                  </Flex>
-                ))}
-              </Box>
-              <Flex
-                id={strengthId}
-                align="center"
-                gap={3}
-                mt={3}
-                fontSize="12px"
-                color="page.fg-secondary"
-              >
-                <Flex gap={1} aria-hidden="true">
-                  {[1, 2, 3, 4].map((n) => (
-                    <Box
-                      key={n}
-                      w="28px"
-                      h="6px"
-                      borderRadius="full"
-                      bg={strength && n <= strength.bars ? strength.color : 'page.border-strong'}
-                    />
-                  ))}
-                </Flex>
-                <Text as="span">
-                  Strength:{' '}
-                  <Box as="span" fontWeight={600} color={strength ? strength.color : undefined}>
-                    {strength ? strength.label : '—'}
-                  </Box>
-                </Text>
-              </Flex>
-              <Text fontSize="12px" color="page.fg-secondary" mt={2} maxW="46ch">
-                Any characters work, spaces and emoji included. The strength is a rough estimate.
-              </Text>
+              <PasswordChecklist id={rulesId} value={next} rules={rules} strength={check.strength} />
             </Box>
             <Box gridArea="confirm">
               <PasswordField
@@ -545,7 +433,10 @@ export default function PasswordCard({
                 autoComplete="new-password"
                 inputRef={confirmRef}
                 value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
+                onChange={(e) => {
+                  setConfirm(e.target.value)
+                  if (e.target.value && confirmError === EMPTY_CONFIRM) setConfirmError('')
+                }}
                 error={confirmError}
                 isRequired
               />
@@ -567,30 +458,36 @@ export default function PasswordCard({
                   : 'Ends every other session, should one exist. This browser stays signed in.'}
               </Text>
             </Box>
-            <Flex gridArea="actions" align="center" gap={3} flexWrap="wrap">
-              {/* Never disabled: while it works it says so (and keeps focus). */}
-              <Button
-                ref={submitRef}
-                type="submit"
-                size="sm"
-                {...primaryButtonProps}
-                aria-busy={submitting || undefined}
-                leftIcon={submitting ? <Spinner size="xs" /> : undefined}
-              >
-                {submitting ? 'Changing…' : 'Change password'}
-              </Button>
-              {notice ? (
-                <Text fontSize="12px" color="page.fg-secondary">
-                  {notice}
-                </Text>
-              ) : null}
-            </Flex>
+            <Box gridArea="actions">
+              {/* Right above the button that keeps focus (one assertive live region). */}
+              <Box ref={formErrorRef} scrollMarginTop={CLEAR_OF_BARS} scrollMarginBottom={4}>
+                <AuthError>{formError}</AuthError>
+              </Box>
+              <Flex align="center" gap={3} flexWrap="wrap">
+                {/* Never disabled: while it works it says so (and keeps focus). */}
+                <Button
+                  ref={submitRef}
+                  type="submit"
+                  size="sm"
+                  {...primaryButtonProps}
+                  aria-busy={submitting || undefined}
+                  leftIcon={submitting ? <Spinner size="xs" /> : undefined}
+                >
+                  {submitting ? 'Changing…' : 'Change password'}
+                </Button>
+                {/* Always mounted, so a notice ("Not changed — …") is announced when it appears. */}
+                <Box role="status" aria-live="polite" aria-atomic="true" minW={0}>
+                  {notice ? (
+                    <Text fontSize="12px" color="page.fg-secondary">
+                      {notice}
+                    </Text>
+                  ) : null}
+                </Box>
+              </Flex>
+            </Box>
           </Box>
         </form>
       </Box>
-      <VisuallyHidden role="status" aria-live="polite">
-        {announcement}
-      </VisuallyHidden>
     </>
   )
 }
@@ -629,7 +526,7 @@ function bootstrapCopy(
     tone: 'info',
     body: (
       <>
-        {justChanged ? 'Next: ' : ''}remove {env} from the server’s <Code fontSize="xs">.env</Code>
+        {justChanged ? 'Next: remove' : 'Remove'} {env} from the server’s <Code fontSize="xs">.env</Code>
         {b.matchesCurrent === false ? ' — it no longer matches this password' : ''}. It is only read
         when {file} is missing, and would set up a new server with that value; keep it only if you
         update it to the new password.
