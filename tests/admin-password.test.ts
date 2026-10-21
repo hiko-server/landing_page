@@ -68,6 +68,7 @@ before(async () => {
   await load('login', '../pages/api/auth/email-login')
   await load('security', '../pages/api/admin/security/index')
   await load('reset', '../pages/api/auth/reset-password')
+  await load('verify', '../pages/api/admin/security/verify')
   policy = await import('../lib/adminAuth/passwordPolicy')
   pw = await import('../lib/adminAuth/password')
   admin = await import('../lib/admin')
@@ -562,34 +563,110 @@ test('route: 10 attempts per 15 minutes per client, then 429 with Retry-After', 
   assert.ok(Number(out.headers['retry-after']) > 0)
 })
 
-test('route: wrong current passwords share the sign-in lockout of that client', async () => {
-  const cookie = await signIn(live)
+const changeFailures = () =>
+  store.authFailureSummary().byMethod.find((m) => m.type === 'password-change-failed')?.count ?? 0
+
+test('route: wrong current passwords share the sign-in lockout of that client; a wait is not counted as a failure', async () => {
   const ip = '198.51.100.88'
+  // Two sessions on one network: the lockout is per (e-mail, network), not per session.
+  const a = await signIn(live)
+  const b = await signIn(live)
+  const wrong = (cookie: string, i: number) =>
+    change(cookie, { currentPassword: `wrong guess ${i}`, newPassword: 'a quiet harbour at dawn' }, ip)
+  const before = changeFailures()
   const statuses: number[] = []
-  for (let i = 0; i < 6; i++) {
-    statuses.push(
-      (
-        await change(
-          cookie,
-          { currentPassword: `wrong guess ${i}`, newPassword: 'a quiet harbour at dawn' },
-          ip
-        )
-      ).statusCode
-    )
-  }
-  assert.deepEqual(statuses, [401, 401, 401, 401, 429, 429])
-  const locked = await change(
-    cookie,
-    { currentPassword: live, newPassword: 'a quiet harbour at dawn' },
-    ip
-  )
+  for (let i = 0; i < 4; i++) statuses.push((await wrong(a, i)).statusCode)
+  // The fifth wrong password from that network locks it (and was checked: it counts).
+  statuses.push((await wrong(b, 4)).statusCode)
+  assert.deepEqual(statuses, [401, 401, 401, 401, 429])
+  assert.equal(changeFailures(), before + 5, 'five passwords were checked and wrong')
+
+  // While locked nothing is checked — and nothing is counted as a failed change.
+  assert.equal((await wrong(b, 5)).statusCode, 429)
+  const locked = await change(b, { currentPassword: live, newPassword: 'a quiet harbour at dawn' }, ip)
   assert.equal(locked.statusCode, 429, 'even the right password waits')
   assert.ok(Number(locked.headers['retry-after']) > 0)
+  assert.equal(changeFailures(), before + 5, 'requests turned away by the lockout are not failures')
+  assert.ok(readCtx(b), 'waiting does not use up the session’s budget')
   assert.equal(
     (await login(live, ip)).statusCode,
     429,
     'the sign-in form of that client is locked too'
   )
+})
+
+test('route: a session that types five wrong current passwords is signed out — from any network', async () => {
+  const cookie = await signIn(live)
+  const sid = claimsOf(cookie).sid as string
+  const guess = (c: string, i: number, ip: string) =>
+    change(c, { currentPassword: `stolen guess ${i}`, newPassword: 'a quiet harbour at dawn' }, ip)
+  // A new /64 every time (one /48): no network lockout ever applies.
+  const statuses: number[] = []
+  for (let i = 0; i < pw.WRONG_PASSWORDS_PER_SESSION - 1; i++)
+    statuses.push((await guess(cookie, i, `2001:db8:77:${i}::1`)).statusCode)
+  assert.deepEqual(statuses, [401, 401, 401, 401])
+  const last = await guess(cookie, 4, '2001:db8:77:99::1')
+  assert.equal(last.statusCode, 401)
+  assert.deepEqual(last.body, {
+    code: 'SIGNED_OUT',
+    error: 'Too many wrong passwords: this browser was signed out. Sign in again to continue.',
+  })
+  assert.ok(
+    setCookies(last).some((c) => /^cv_admin_token=;/.test(c)),
+    'the session cookie is cleared'
+  )
+  assert.equal(readCtx(cookie), null, 'the session no longer works')
+  assert.equal(sessions.getSession(sid)?.revokedReason, 'too many wrong passwords')
+  assert.equal((await guess(cookie, 5, '2001:db8:77:100::1')).body.code, 'NO_SESSION')
+  const event = store.listAuthEvents(5).find((e) => e.type === 'session-revoked')
+  assert.equal(event?.sessionId, sid)
+  assert.equal(event?.detail, 'too many wrong passwords')
+
+  // The owner signs in again; a right current password starts the count over.
+  const fresh = await signIn(live)
+  for (let i = 0; i < 4; i++) await guess(fresh, i, `2001:db8:78:${i}::1`)
+  const same = await change(fresh, { currentPassword: live, newPassword: live }, '2001:db8:78:50::1')
+  assert.deepEqual(same.body.issues, ['sameAsCurrent'], 'checked, and right')
+  for (let i = 0; i < 4; i++)
+    assert.equal((await guess(fresh, i, `2001:db8:78:${60 + i}::1`)).statusCode, 401)
+  assert.ok(readCtx(fresh), 'still signed in')
+})
+
+test('route: wrong passwords in a step-up and in a change share the session’s budget', async () => {
+  const cookie = await signIn(live)
+  const stepUp = (password: string, ip: string) =>
+    call(H.verify, {
+      method: 'POST',
+      body: { method: 'password', password },
+      cookie,
+      ip,
+      url: '/api/admin/security/verify',
+    })
+  for (let i = 0; i < 3; i++)
+    assert.equal((await stepUp(`step-up guess ${i}`, `2001:db8:79:${i}::1`)).statusCode, 401)
+  assert.equal(
+    (
+      await change(
+        cookie,
+        { currentPassword: 'change guess 0', newPassword: 'a quiet harbour at dawn' },
+        '2001:db8:79:10::1'
+      )
+    ).statusCode,
+    401
+  )
+  const fifth = await stepUp('step-up guess 4', '2001:db8:79:11::1')
+  assert.equal(fifth.statusCode, 401)
+  assert.equal(fifth.body.code, 'SIGNED_OUT')
+  assert.equal(readCtx(cookie), null)
+})
+
+test('route: one IPv6 /48 gets 30 attempts per 15 minutes across its /64s', async () => {
+  const cookie = await signIn(live)
+  const statuses: number[] = []
+  for (let i = 0; i < 31; i++)
+    statuses.push((await change(cookie, {}, `2001:db8:48:${i.toString(16)}::1`)).statusCode)
+  assert.deepEqual(statuses.slice(0, 30), Array(30).fill(400), 'each /64 is under its own limit')
+  assert.equal(statuses[30], 429)
 })
 
 test('route: with "Require a passkey" on, a change needs a recent verification (and only then)', async () => {
@@ -785,4 +862,34 @@ test('activity log describes the change without the passwords', async () => {
     describeAdminWrite('admin/security/password', { method: 'GET', query: {}, body: undefined }),
     null
   )
+})
+
+test('route: at most 30 current-password checks an hour for the whole site, then everyone waits', async () => {
+  // The API limits are process memory shared by every route: start this one from fresh counters.
+  const resetApiLimits = () =>
+    delete (globalThis as Record<symbol, unknown>)[Symbol.for('lucian-dev.rateLimit.api')]
+  resetApiLimits()
+  try {
+    const cookie = await signIn(live)
+    const statuses: number[] = []
+    for (let i = 0; i <= pw.SITE_CHECKS_PER_HOUR; i++) {
+      // Right current password, same new one: checked, then refused — a fresh network each time.
+      const out = await change(cookie, { currentPassword: live, newPassword: live }, `203.0.113.${i + 1}`)
+      statuses.push(out.statusCode)
+    }
+    assert.deepEqual(statuses.slice(0, pw.SITE_CHECKS_PER_HOUR), Array(pw.SITE_CHECKS_PER_HOUR).fill(400))
+    assert.equal(statuses[pw.SITE_CHECKS_PER_HOUR], 429)
+    // Another session on another network waits too.
+    const other = await signIn(live)
+    const out = await change(
+      other,
+      { currentPassword: live, newPassword: 'a quiet harbour at dawn' },
+      '203.0.113.200'
+    )
+    assert.equal(out.statusCode, 429)
+    assert.equal(out.body.code, 'THROTTLED')
+    assert.ok(Number(out.headers['retry-after']) > 0)
+  } finally {
+    resetApiLimits()
+  }
 })

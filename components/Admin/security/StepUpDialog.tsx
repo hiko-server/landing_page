@@ -15,7 +15,7 @@ import {
 } from '@chakra-ui/react'
 import { AuthError, AuthField, PasswordField } from '../AuthCard'
 import { MONO, primaryButtonProps } from '../shell/ui'
-import { readJsonObject } from '../shell/http'
+import { loginHref, readJsonObject } from '../shell/http'
 import { NETWORK_ERROR } from '../shell/authMessages'
 import { KeyIcon } from './icons'
 import type { StepUpChallenge } from './stepUpClient'
@@ -58,6 +58,11 @@ export default function StepUpDialog({
     })
     const json = await readJsonObject(res)
     if (res.ok && json.ok) return true
+    // Too many wrong passwords ended this session: sign in again, then come back here.
+    if (res.status === 401 && json.code === 'SIGNED_OUT') {
+      window.location.href = loginHref(`${window.location.pathname}${window.location.search}`)
+      return false
+    }
     setError(
       typeof json.error === 'string' ? json.error : `Verification failed (HTTP ${res.status}).`
     )

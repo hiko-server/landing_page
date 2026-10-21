@@ -280,7 +280,13 @@ export function recordLoginFailure(email: string, clientBucket: string): LockSta
 export type VerifyOutcome =
   | { ok: true }
   | { ok: false; reason: 'invalid' }
-  | { ok: false; reason: 'locked'; retryAfterMs: number }
+  /**
+   * `checked`: this call hashed the password, found it wrong, and that
+   * failure locked the pair — a real wrong attempt. False when the pair was
+   * already locked and nothing was checked (a waiting request, which must
+   * not be counted as a failure).
+   */
+  | { ok: false; reason: 'locked'; retryAfterMs: number; checked: boolean }
 
 /**
  * Constant-time, lockout-aware credential check.
@@ -302,7 +308,7 @@ export async function verifyCredentials(
   const t = throttle()
   const key = pairKey(normalizeEmail(email), clientBucket)
   const lock = t.check(key)
-  if (lock.locked) return { ok: false, reason: 'locked', retryAfterMs: lock.retryAfterMs }
+  if (lock.locked) return { ok: false, reason: 'locked', retryAfterMs: lock.retryAfterMs, checked: false }
 
   const data = readAdmin() || ensureAdminFromEnv()
   const candidate = await hashPasswordAsync(passwordForRecord(data, password), data?.salt || DUMMY_SALT)
@@ -316,7 +322,7 @@ export async function verifyCredentials(
     return { ok: true }
   }
   const after = t.fail(key)
-  if (after.locked) return { ok: false, reason: 'locked', retryAfterMs: after.retryAfterMs }
+  if (after.locked) return { ok: false, reason: 'locked', retryAfterMs: after.retryAfterMs, checked: true }
   return { ok: false, reason: 'invalid' }
 }
 

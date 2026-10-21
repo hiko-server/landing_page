@@ -63,7 +63,15 @@ What the code actually does today, and where its limits are.
   the admin session and the current password, checked exactly like a
   sign-in (async scrypt, constant time, the same per-(e-mail, client)
   lockout) and answered only "incorrect" when wrong; failures are counted
-  with the failed sign-ins. 10 attempts per 15 minutes per client. The new
+  with the failed sign-ins (a request turned away by the lockout before any
+  check is not). Because that lockout is per network, the session is a
+  budget of its own: after 5 wrong passwords — current passwords here and
+  password step-ups together (`lib/adminAuth/wrongPasswords.ts`) — the
+  session is signed out (`too many wrong passwords`, in the sign-in history)
+  and the answer is `401 SIGNED_OUT`; a right password resets the count. So
+  a stolen session gets at most 5 guesses, from any number of networks.
+  Also 10 attempts per 15 minutes per client, 30 per IPv6 /48, and at most
+  30 current-password checks an hour for the whole site. The new
   password (`lib/adminAuth/passwordPolicy.ts`, shared with the e-mail reset
   and the page's live checklist): 12–256 code points after NFKC, any
   characters, not built from very common password words, keyboard or
@@ -142,7 +150,9 @@ What the code actually does today, and where its limits are.
   password may sign in asks for nothing more: its current-password field is
   that re-verification (asking twice would add nothing); with "Require a
   passkey" on, the password alone proves nothing, so the change needs the
-  step-up as well.
+  step-up as well. A password step-up shares the sign-in lockout, has 10
+  attempts per 10 minutes per client and 30 per IPv6 /48, and its wrong
+  passwords count against the session's budget of 5 (above).
 - **Sign-in history** — sign-ins, failures (time, method, country and a
   reason code; no address or device) and security changes, the newest 500
   for at most 180 days.

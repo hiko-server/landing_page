@@ -10,14 +10,26 @@ import {
   verifyCredentials,
   type AdminData,
 } from '../admin'
-import { knownDeviceIdOf, requestOrigin, startAdminSession, type AdminContext } from '../auth'
-import { clientKey } from '../rateLimit'
+import {
+  clearAdminCookies,
+  knownDeviceIdOf,
+  requestOrigin,
+  startAdminSession,
+  type AdminContext,
+} from '../auth'
+import { clientKey, rateLimitSite } from '../rateLimit'
 import { log } from '../log'
 import { sendMail, siteUrl } from '../mailer'
 import { formatSiteTime } from '../schedule/time'
 import { revokeSession, revokeSessionsExcept } from './sessions'
 import { stepUpMethods } from './stepUp'
 import { endLegacyTokens, recordAuthEvent } from './store'
+import {
+  clearWrongPasswords,
+  noteWrongPassword,
+  SIGNED_OUT_MESSAGE,
+  WRONG_PASSWORDS_PER_SESSION,
+} from './wrongPasswords'
 import {
   checkNewPassword,
   normalizePassword,
@@ -39,11 +51,17 @@ import {
  *      lockout attempt.
  *   2. The current password is verified exactly like a sign-in
  *      (lib/admin verifyCredentials: async scrypt, constant-time compare,
- *      NFKC as sign-in does) under the SAME per-(e-mail, client) lockout, so
- *      a stolen session cannot be used to guess it any faster than the
- *      sign-in form; a wrong one is answered "incorrect" and nothing more, and
- *      counted with the failed sign-ins (auth_failures, kind
- *      'password-change-failed').
+ *      NFKC as sign-in does) under the SAME per-(e-mail, client) lockout.
+ *      That lockout is per client network, so the session is a budget of its
+ *      own as well: after WRONG_PASSWORDS_PER_SESSION wrong passwords
+ *      (together with password step-ups) it is signed out
+ *      (lib/adminAuth/wrongPasswords) — a stolen session gets at most that
+ *      many guesses, from any number of networks. Beside it: 10 attempts /
+ *      15 min per client and 30 per IPv6 /48 (the route), and at most
+ *      SITE_CHECKS_PER_HOUR current-password checks an hour site-wide. A
+ *      wrong one is answered "incorrect" and nothing more, and counted with
+ *      the failed sign-ins (auth_failures, kind 'password-change-failed'); a
+ *      request turned away by the lockout without any check is not counted.
  *   3. The new password may not equal the current one (compared normalised).
  *   4. It is hashed with a fresh salt and written atomically, with every
  *      e-mailed reset link burnt; compare-and-swap against the hash that was
@@ -193,11 +211,16 @@ export type ChangePasswordResult =
     }
   | { status: 400; body: { code: 'PASSWORD_POLICY'; error: string; issues: PasswordIssue[] } }
   | { status: 401; body: { code: 'CURRENT_PASSWORD_INCORRECT'; error: string } }
+  /** Too many wrong current passwords in this session: it was signed out (cookies cleared). */
+  | { status: 401; body: { code: 'SIGNED_OUT'; error: string } }
   | { status: 409; body: { code: 'PASSWORD_CHANGED_ELSEWHERE'; error: string } }
   | { status: 429; body: { code: 'THROTTLED'; error: string; retryAfterSeconds: number } }
   | { status: 503; body: { code: 'NOT_CONFIGURED'; error: string } }
 
 export const INCORRECT_CURRENT = 'The current password is incorrect.'
+/** Current-password checks per hour for the whole site (a backstop; only signed-in sessions reach it). */
+export const SITE_CHECKS_PER_HOUR = 30
+export { WRONG_PASSWORDS_PER_SESSION }
 
 function policyRefusal(issues: PasswordIssue[]): ChangePasswordResult {
   return {
@@ -258,16 +281,27 @@ export async function changePassword(
   )
   if (issues.length) return policyRefusal(issues)
 
+  // A site-wide backstop on current-password checks (beside the route's per-client and per-/48 limits).
+  const site = rateLimitSite(SITE_CHECKS_PER_HOUR, 60 * 60_000, 'admin:password-change:checks')
+  if (!site.allowed) return throttled(site.resetAt - Date.now())
+
   const bucket = clientKey(req)
   const written = await withPasswordLock(async () => {
     const before = readAdminStrict()
     if (!before) return { kind: 'missing' as const }
     // 2. The current password, exactly as sign-in checks it (same lockout).
     const outcome = await verifyCredentials(before.email, input.currentPassword, bucket)
-    if (!outcome.ok)
-      return outcome.reason === 'locked'
-        ? { kind: 'locked' as const, retryAfterMs: outcome.retryAfterMs }
-        : { kind: 'wrong' as const }
+    if (!outcome.ok) {
+      // Already locked: nothing was checked — a wait, not a failure.
+      if (outcome.reason === 'locked' && !outcome.checked)
+        return { kind: 'locked' as const, retryAfterMs: outcome.retryAfterMs }
+      // Wrong (and, when `locked`, this very attempt locked the pair).
+      return {
+        kind: 'wrong' as const,
+        lockedForMs: outcome.reason === 'locked' ? outcome.retryAfterMs : 0,
+      }
+    }
+    clearWrongPasswords(ctx)
     // 3. Not the same password again.
     if (normalizePassword(input.currentPassword) === normalizePassword(input.newPassword))
       return { kind: 'same' as const }
@@ -283,11 +317,16 @@ export async function changePassword(
 
   switch (written.kind) {
     case 'locked':
-      recordFailure(req)
       return throttled(written.retryAfterMs)
-    case 'wrong':
+    case 'wrong': {
       recordFailure(req)
+      if (noteWrongPassword(ctx, requestOrigin(req)).signedOut) {
+        clearAdminCookies(req, res)
+        return { status: 401, body: { code: 'SIGNED_OUT', error: SIGNED_OUT_MESSAGE } }
+      }
+      if (written.lockedForMs) return throttled(written.lockedForMs)
       return { status: 401, body: { code: 'CURRENT_PASSWORD_INCORRECT', error: INCORRECT_CURRENT } }
+    }
     case 'same':
       return policyRefusal(['sameAsCurrent'])
     case 'missing':

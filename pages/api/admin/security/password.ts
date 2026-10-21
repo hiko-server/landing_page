@@ -1,6 +1,6 @@
 import { withApi } from '../../../../lib/apiHandler'
 import { readAdminContext } from '../../../../lib/auth'
-import { rateLimit } from '../../../../lib/rateLimit'
+import { rateLimit, rateLimitNetwork } from '../../../../lib/rateLimit'
 import { changePassword, parseChangePasswordBody } from '../../../../lib/adminAuth/password'
 import { requireRecentAuth, stepUpMethods } from '../../../../lib/adminAuth/stepUp'
 
@@ -9,14 +9,18 @@ import { requireRecentAuth, stepUpMethods } from '../../../../lib/adminAuth/step
  *   { currentPassword, newPassword, signOutOthers? = true }
  *   → 200 { ok, changedAt, signedOutOthers, revoked, signedIn, bootstrap }
  *   → 400 PASSWORD_POLICY { error, issues }   the new password breaks a rule
- *   → 401 CURRENT_PASSWORD_INCORRECT          (NO_SESSION: not signed in)
+ *   → 401 CURRENT_PASSWORD_INCORRECT          (NO_SESSION: not signed in;
+ *                                             SIGNED_OUT: too many wrong current
+ *                                             passwords — this session was ended)
  *   → 403 STEP_UP_REQUIRED                    "Require a passkey" is on and this
  *                                             browser has not verified recently
  *   → 409 PASSWORD_CHANGED_ELSEWHERE · 429 THROTTLED (Retry-After)
  *
  * Admin session required; the proxy refuses cross-site and non-JSON writes
  * (lib/security/csrf.ts) before this runs. 10 attempts per 15 minutes per
- * client, on top of the sign-in lockout the current-password check shares
+ * client and 30 per IPv6 /48, on top of the sign-in lockout the
+ * current-password check shares, a per-session limit of wrong current
+ * passwords (the session is signed out) and a site-wide cap on checks
  * (lib/adminAuth/password.ts has the whole sequence).
  *
  * Step-up: the current password IS the re-authentication, so with the
@@ -36,10 +40,16 @@ export default withApi('admin/security/password', async (req, res) => {
   let ctx = readAdminContext(req, res)
   if (!ctx) return res.status(401).json({ code: 'NO_SESSION', error: 'Unauthorized' })
 
-  const rl = rateLimit(req, 10, 15 * 60_000, 'admin:password-change')
-  res.setHeader('X-RateLimit-Remaining', String(rl.remaining))
-  if (!rl.allowed) {
-    const retryAfterSeconds = Math.max(1, Math.ceil((rl.resetAt - Date.now()) / 1000))
+  const hits = [
+    rateLimit(req, 10, 15 * 60_000, 'admin:password-change'),
+    // One IPv6 allocation must not multiply its budget across its /64s.
+    rateLimitNetwork(req, 30, 15 * 60_000, 'admin:password-change:net48'),
+  ]
+  res.setHeader('X-RateLimit-Remaining', String(Math.min(...hits.map((h) => h.remaining))))
+  const refused = hits.filter((h) => !h.allowed)
+  if (refused.length) {
+    const resetAt = Math.max(...refused.map((h) => h.resetAt))
+    const retryAfterSeconds = Math.max(1, Math.ceil((resetAt - Date.now()) / 1000))
     res.setHeader('Retry-After', String(retryAfterSeconds))
     return res
       .status(429)

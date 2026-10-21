@@ -71,6 +71,19 @@ export function rateLimit(
 }
 
 /**
+ * One budget for the whole site, whatever the client: a backstop for
+ * actions only a signed-in admin can reach (an anonymous visitor can never
+ * spend it), beside the per-client limits.
+ */
+export function rateLimitSite(
+  limit: number,
+  windowMs: number,
+  scope: string,
+): { allowed: boolean; remaining: number; resetAt: number } {
+  return limiter().hit(`${scope}|site`, limit, windowMs)
+}
+
+/**
  * Like rateLimit, keyed by the client's IPv6 /48 instead of its /64. IPv4
  * clients (already limited per address) are always allowed here.
  */

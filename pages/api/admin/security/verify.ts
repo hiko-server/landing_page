@@ -7,9 +7,14 @@ import {
   recordLoginFailure,
   verifyCredentials,
 } from '../../../../lib/admin'
-import { readAdminContext, requestOrigin, startAdminSession } from '../../../../lib/auth'
+import {
+  clearAdminCookies,
+  readAdminContext,
+  requestOrigin,
+  startAdminSession,
+} from '../../../../lib/auth'
 import { withApi } from '../../../../lib/apiHandler'
-import { clientKey, rateLimit } from '../../../../lib/rateLimit'
+import { clientKey, rateLimit, rateLimitNetwork } from '../../../../lib/rateLimit'
 import {
   authenticationOptions,
   passkeyCount,
@@ -25,6 +30,11 @@ import {
   recordAuthEvent,
   type AuthMethod,
 } from '../../../../lib/adminAuth/store'
+import {
+  clearWrongPasswords,
+  noteWrongPassword,
+  SIGNED_OUT_MESSAGE,
+} from '../../../../lib/adminAuth/wrongPasswords'
 
 /**
  * Step-up: prove it is still you on this browser (lib/adminAuth/stepUp.ts).
@@ -36,9 +46,13 @@ import {
  *        (with "Require a passkey" on, the password needs a recovery code too)
  *
  * Password checks share the sign-in lockout (lib/admin verifyCredentials);
- * 10 attempts per 10 minutes per client on top. Success stamps the session's
+ * 10 attempts per 10 minutes per client and 30 per IPv6 /48 on top. Wrong
+ * passwords also count against this session (lib/adminAuth/wrongPasswords,
+ * shared with the password change): at the limit the session is signed out
+ * and the answer is 401 SIGNED_OUT. Success stamps the session's
  * verified_at; a session from before sessions existed is replaced by a new
- * one. Every attempt goes to the sign-in history.
+ * one. Every attempt goes to the sign-in history, except one turned away by
+ * the lockout before any check.
  */
 const MAX_RESPONSE_CHARS = 16_384
 
@@ -95,7 +109,8 @@ export default withApi('admin/security/verify', async (req, res, apiCtx) => {
   }
 
   const rl = rateLimit(req, 10, 10 * 60_000, 'admin:step-up')
-  if (!rl.allowed)
+  const net = rateLimitNetwork(req, 30, 10 * 60_000, 'admin:step-up:net48')
+  if (!rl.allowed || !net.allowed)
     return res.status(429).json({ error: 'Too many attempts — try again in a few minutes.' })
   ensureAdminFromEnv()
   const admin = readAdmin()
@@ -148,10 +163,22 @@ export default withApi('admin/security/verify', async (req, res, apiCtx) => {
       secondStepFollows: recoveryRequired,
     })
     if (!outcome.ok) {
-      if (outcome.reason === 'locked') {
-        res.setHeader('Retry-After', String(Math.max(1, Math.ceil(outcome.retryAfterMs / 1000))))
-        return fail('password', 429, { error: 'Too many attempts — try again later.' })
+      const lockedMs = outcome.reason === 'locked' ? outcome.retryAfterMs : 0
+      const tooMany = () => {
+        res.setHeader('Retry-After', String(Math.max(1, Math.ceil(lockedMs / 1000))))
+        return { error: 'Too many attempts — try again later.' }
       }
+      // Already locked: nothing was checked, so nothing is counted.
+      if (outcome.reason === 'locked' && !outcome.checked) return res.status(429).json(tooMany())
+      // A wrong password (this one may also have locked the pair): it counts against the session.
+      if (noteWrongPassword(ctx, origin).signedOut) {
+        clearAdminCookies(req, res)
+        return fail(recoveryRequired ? 'recovery' : 'password', 401, {
+          code: 'SIGNED_OUT',
+          error: SIGNED_OUT_MESSAGE,
+        })
+      }
+      if (lockedMs) return fail('password', 429, tooMany())
       return fail(recoveryRequired ? 'recovery' : 'password', 401, {
         error: recoveryRequired
           ? 'The password or the recovery code is not right.'
@@ -177,6 +204,7 @@ export default withApi('admin/security/verify', async (req, res, apiCtx) => {
     return res.status(400).json({ error: 'Send { method: "passkey" | "password" }' })
   }
 
+  clearWrongPasswords(ctx)
   const now = Date.now()
   let sessionId = ctx.session?.id ?? null
   if (ctx.session) markVerified(ctx.session.id, now)
