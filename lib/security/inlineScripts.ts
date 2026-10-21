@@ -2,6 +2,7 @@ import { createHash } from 'crypto'
 import { TAG_PREPAINT_SCRIPT } from '../tagFilter'
 import { THEME_COLOR_PREPAINT_SCRIPT, THEME_PREPAINT_SCRIPT } from '../themePrepaint'
 import { TRUSTED_TYPES_DEFAULT_POLICY_SCRIPT } from '../trustedTypesDefault'
+import { VIEW_TRANSITION_GUARD_SCRIPT } from '../viewTransitionGuard'
 
 /**
  * Every inline (executable) script the app renders — the only inline code
@@ -36,6 +37,7 @@ export const INLINE_SCRIPTS: readonly InlineScript[] = [
   { id: 'theme-prepaint', source: THEME_PREPAINT_SCRIPT, renderedBy: 'pages/_document.tsx' },
   { id: 'theme-color-prepaint', source: THEME_COLOR_PREPAINT_SCRIPT, renderedBy: 'pages/_document.tsx' },
   { id: 'tag-prepaint', source: TAG_PREPAINT_SCRIPT, renderedBy: 'components/Article/TagFilter.tsx' },
+  { id: 'view-transition-guard', source: VIEW_TRANSITION_GUARD_SCRIPT, renderedBy: 'pages/_document.tsx' },
 ]
 
 /** CSP hash source of a script: `'sha256-<base64 of SHA-256 over its UTF-8 text>'`. */

@@ -20,6 +20,7 @@ import { applySecurityHeaders, contentSecurityPolicy } from '../lib/security/res
 import { THEME_COLOR_PREPAINT_SCRIPT, THEME_PREPAINT_SCRIPT } from '../lib/themePrepaint'
 import { TAG_PREPAINT_SCRIPT } from '../lib/tagFilter'
 import { TRUSTED_TYPES_DEFAULT_POLICY_SCRIPT } from '../lib/trustedTypesDefault'
+import { VIEW_TRANSITION_GUARD_SCRIPT } from '../lib/viewTransitionGuard'
 
 const ROOT = path.join(import.meta.dirname, '..')
 const require = createRequire(import.meta.url)
@@ -103,7 +104,7 @@ test('buildCsp refuses anything but sha256 hash sources as script hashes', () =>
 
 test('the hashes are computed from the exported script constants (they cannot drift)', () => {
   const sha = (s: string) => `'sha256-${crypto.createHash('sha256').update(Buffer.from(s, 'utf8')).digest('base64')}'`
-  const sources = [TRUSTED_TYPES_DEFAULT_POLICY_SCRIPT, THEME_PREPAINT_SCRIPT, THEME_COLOR_PREPAINT_SCRIPT, TAG_PREPAINT_SCRIPT]
+  const sources = [TRUSTED_TYPES_DEFAULT_POLICY_SCRIPT, THEME_PREPAINT_SCRIPT, THEME_COLOR_PREPAINT_SCRIPT, TAG_PREPAINT_SCRIPT, VIEW_TRANSITION_GUARD_SCRIPT]
   assert.deepEqual(
     INLINE_SCRIPTS.map((s) => s.source),
     sources,
@@ -124,6 +125,7 @@ test('no page or component renders an inline script that is not in INLINE_SCRIPT
     ['THEME_PREPAINT_SCRIPT', THEME_PREPAINT_SCRIPT],
     ['THEME_COLOR_PREPAINT_SCRIPT', THEME_COLOR_PREPAINT_SCRIPT],
     ['TAG_PREPAINT_SCRIPT', TAG_PREPAINT_SCRIPT],
+    ['VIEW_TRANSITION_GUARD_SCRIPT', VIEW_TRANSITION_GUARD_SCRIPT],
   ])
   // The allow-list is exactly the hashed list.
   assert.deepEqual([...allowed.values()].sort(), INLINE_SCRIPTS.map((s) => s.source).sort())

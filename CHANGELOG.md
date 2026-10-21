@@ -76,6 +76,12 @@ The gaps the final batch left (before release).
 
 Fixes for defects the final review found in the final batch before it shipped.
 
+- **No console error when the browser drops a page transition**: when
+  Chromium gives up the cross-page fade (a slow sign-in redirect, a slow
+  network), its promises rejected with nobody listening — an uncaught
+  "Transition was aborted" error in the console and in the admin's
+  Errors panel. A tiny hashed script in `<head>` now holds both sides'
+  promises and marks the browser's own aborted transition handled.
 - **Downloaded CV without an introduction**: the PDF no longer draws the
   heavy rule under the header when Personal Info has no introduction
   (it stood right above the first section's own rule — two lines in a

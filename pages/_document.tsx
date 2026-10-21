@@ -3,6 +3,7 @@ import { resolveHtmlLang } from '../components/Chrome/chrome'
 import { serverColorMode } from '../lib/themePreference'
 import { THEME_COLOR_PREPAINT_SCRIPT, THEME_PREPAINT_SCRIPT } from '../lib/themePrepaint'
 import { TRUSTED_TYPES_DEFAULT_POLICY_SCRIPT } from '../lib/trustedTypesDefault'
+import { VIEW_TRANSITION_GUARD_SCRIPT } from '../lib/viewTransitionGuard'
 import { themeColorFor } from '../theme/color'
 
 /**
@@ -39,6 +40,8 @@ class MyDocument extends Document {
       <Html lang={lang}>
         <Head>
           <meta name="theme-color" content={themeColorFor(initialColorMode)} />
+          {/* First in <head>: registered before any rendering opportunity, where `pagereveal` fires (lib/viewTransitionGuard.ts). */}
+          <script dangerouslySetInnerHTML={{ __html: VIEW_TRANSITION_GUARD_SCRIPT }} />
         </Head>
         <body>
           <script dangerouslySetInnerHTML={{ __html: TRUSTED_TYPES_DEFAULT_POLICY_SCRIPT }} />

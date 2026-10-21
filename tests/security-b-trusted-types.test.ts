@@ -177,7 +177,7 @@ test('no inline script contains "<" (safe to inline, and it passes createHTML wh
 test('dangerouslySetInnerHTML only where the value passes the default policy', () => {
   // file → why its value is approved (markup-free, or a hashed inline script).
   const allowed = new Map<string, RegExp>([
-    ['pages/_document.tsx', /__html: (TRUSTED_TYPES_DEFAULT_POLICY_SCRIPT|THEME_PREPAINT_SCRIPT|THEME_COLOR_PREPAINT_SCRIPT) /],
+    ['pages/_document.tsx', /__html: (TRUSTED_TYPES_DEFAULT_POLICY_SCRIPT|THEME_PREPAINT_SCRIPT|THEME_COLOR_PREPAINT_SCRIPT|VIEW_TRANSITION_GUARD_SCRIPT) /],
     ['pages/_app.tsx', /__html: FONT_VARIABLES_CSS /], // CSS custom properties, no markup
     ['components/General-UI/CustomHead.tsx', /__html: serializeJsonLd\(jsonLd\) /], // JSON with < escaped (lib/schema.ts)
     ['components/Article/TagFilter.tsx', /__html: TAG_PREPAINT_SCRIPT /],

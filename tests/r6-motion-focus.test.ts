@@ -559,3 +559,42 @@ test('every single-character shortcut checks the preference and IME composition'
   assert.match(pill, /isImeComposing\(e\)/)
   assert.match(pill, /if \(!getShortcutsEnabled\(\)\) return/)
 })
+
+test('cross-document view transitions the browser gives up never surface as uncaught errors (pageswap / pagereveal guard)', async () => {
+  const { VIEW_TRANSITION_GUARD_SCRIPT } = await import('../lib/viewTransitionGuard')
+  const vm = await import('node:vm')
+  const listeners: Record<string, (e: unknown) => void> = {}
+  vm.runInNewContext(VIEW_TRANSITION_GUARD_SCRIPT, { DOMException, addEventListener: (type: string, fn: (e: unknown) => void) => (listeners[type] = fn) })
+  assert.deepEqual(Object.keys(listeners).sort(), ['pagereveal', 'pageswap', 'unhandledrejection'])
+  // A transition Chromium aborted before pagereveal (no transition on the event): its rejection is marked handled
+  // before the error reporter sees it; anything else is left alone.
+  const settle = (reason: unknown) => {
+    const calls: string[] = []
+    listeners.unhandledrejection({ reason, preventDefault: () => calls.push('preventDefault'), stopImmediatePropagation: () => calls.push('stop') })
+    return calls
+  }
+  assert.deepEqual(settle(new DOMException('Transition was aborted because of invalid state. ViewTransition opt-in disabled', 'InvalidStateError')), ['preventDefault', 'stop'])
+  assert.deepEqual(settle(new DOMException('Transition was skipped', 'AbortError')), ['preventDefault', 'stop'])
+  assert.deepEqual(settle(new DOMException('The operation was aborted.', 'AbortError')), [])
+  assert.deepEqual(settle(new Error('Transition was aborted')), [])
+  assert.deepEqual(settle(undefined), [])
+  const unhandled: unknown[] = []
+  const onUnhandled = (reason: unknown) => unhandled.push(reason)
+  process.on('unhandledRejection', onUnhandled)
+  try {
+    for (const type of ['pagereveal', 'pageswap']) {
+      const aborted = () => Promise.reject(new Error('Transition was aborted because of invalid state. ViewTransition opt-in disabled'))
+      listeners[type]({ viewTransition: { ready: aborted(), finished: aborted(), updateCallbackDone: aborted() } })
+      listeners[type]({ viewTransition: null }) // no transition (not supported, or none started)
+      listeners[type]({})
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  } finally {
+    process.off('unhandledRejection', onUnhandled)
+  }
+  assert.deepEqual(unhandled, [])
+  // Rendered before the first rendering opportunity, and hashed for the CSP.
+  const doc = read('pages/_document.tsx')
+  assert.ok(doc.indexOf('VIEW_TRANSITION_GUARD_SCRIPT }}') > 0 && doc.indexOf('VIEW_TRANSITION_GUARD_SCRIPT }}') < doc.indexOf('<Main />'))
+  assert.match(read('lib/security/inlineScripts.ts'), /source: VIEW_TRANSITION_GUARD_SCRIPT, renderedBy: 'pages\/_document.tsx'/)
+})
