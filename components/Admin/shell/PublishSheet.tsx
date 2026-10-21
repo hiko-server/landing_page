@@ -68,9 +68,10 @@ type Props = {
 const MAX_SIBLING_PAGES = 50
 
 const LEVEL_COPY: Record<PublishCheck['level'], { mark: string; color: string; sr: string }> = {
-  ok: { mark: '✓', color: 'green.400', sr: 'Passed' },
-  warning: { mark: '!', color: 'orange.400', sr: 'Warning' },
-  error: { mark: '×', color: 'red.400', sr: 'Blocking' },
+  // Status tokens: ≥ 4.5:1 on every admin surface in both modes (the 400 shades were 2–3:1 on paper).
+  ok: { mark: '✓', color: 'status.open', sr: 'Passed' },
+  warning: { mark: '!', color: 'status.warning', sr: 'Warning' },
+  error: { mark: '×', color: 'status.error', sr: 'Blocking' },
 }
 
 const FIELD_LABEL: Record<CheckField, string> = {
@@ -284,14 +285,14 @@ export default function PublishSheet({
                   </>
                 ) : compile.state === 'ok' ? (
                   <>
-                    <Text as="span" color="green.400" fontWeight={700} aria-hidden>
+                    <Text as="span" color="status.open" fontWeight={700} aria-hidden>
                       ✓
                     </Text>
                     <Text>The body compiles.</Text>
                   </>
                 ) : compile.state === 'error' ? (
                   <>
-                    <Text as="span" color="red.400" fontWeight={700} aria-hidden>
+                    <Text as="span" color="status.error" fontWeight={700} aria-hidden>
                       ×
                     </Text>
                     <Box>
@@ -315,7 +316,7 @@ export default function PublishSheet({
                   </>
                 ) : (
                   <>
-                    <Text as="span" color="orange.400" fontWeight={700} aria-hidden>
+                    <Text as="span" color="status.warning" fontWeight={700} aria-hidden>
                       !
                     </Text>
                     <Text>{compile.reason}</Text>

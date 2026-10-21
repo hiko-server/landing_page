@@ -176,7 +176,7 @@ export default function ItemHistoryDrawer({ isOpen, onClose, kind, itemRef, curr
         </DrawerHeader>
         <DrawerBody>
           {listError ? (
-            <Text role="alert" fontSize="sm" color="red.400">
+            <Text role="alert" fontSize="sm" color="status.error">
               Couldn’t load the history ({listError}).{' '}
               <Button size="xs" variant="link" onClick={() => void loadList()}>
                 Retry
@@ -255,7 +255,7 @@ export default function ItemHistoryDrawer({ isOpen, onClose, kind, itemRef, curr
                   :
                 </Text>
                 {snapError ? (
-                  <Text role="alert" fontSize="sm" color="red.400">
+                  <Text role="alert" fontSize="sm" color="status.error">
                     Couldn’t load this version ({snapError}).
                   </Text>
                 ) : !diff ? (

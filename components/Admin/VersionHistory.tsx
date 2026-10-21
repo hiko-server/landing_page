@@ -399,7 +399,7 @@ export default function VersionHistory() {
             textAlign="center"
             role="alert"
           >
-            <Text color="red.400" fontSize="sm">
+            <Text color="status.error" fontSize="sm">
               {listError}
             </Text>
             <Button size="sm" {...outlineButtonProps} onClick={() => void fetchVersions()}>
@@ -529,7 +529,7 @@ export default function VersionHistory() {
             ) : (
               <Stack spacing={3}>
                 {compareError ? (
-                  <Text fontSize="sm" color="red.400" role="alert">
+                  <Text fontSize="sm" color="status.error" role="alert">
                     Couldn’t build the comparison: {compareError}
                   </Text>
                 ) : null}
@@ -570,7 +570,6 @@ export default function VersionHistory() {
                       fontSize="xs"
                       resize="vertical"
                       bg="page.bg-elevated"
-                      borderColor="page.border"
                       aria-label="Snapshot JSON"
                     />
                   ) : diff ? (

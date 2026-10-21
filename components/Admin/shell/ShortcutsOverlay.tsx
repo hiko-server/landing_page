@@ -198,7 +198,6 @@ export default function ShortcutsOverlay({ showTrigger = true }: { showTrigger?:
                 placeholder="Search shortcuts — “archive”, “G”, “reply”"
                 aria-label="Search keyboard shortcuts"
                 focusBorderColor="accent.500"
-                borderColor="page.border-strong"
                 maxLength={60}
               />
             </InputGroup>

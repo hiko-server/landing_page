@@ -26,6 +26,7 @@ import { useAdminDirty, useDirtyRegistration } from './AdminDirtyContext'
 import { LOGIN_HREF, readAdminCv, saveCv } from './cvStudio/cvApi'
 import { validateCvDoc, type CvValidationError } from '../../lib/cvValidate'
 import { monoFont, useStudioTokens } from './cvStudio/fields'
+import { primaryButtonProps } from './shell/ui'
 
 /**
  * Raw JSON editor for the CV ({ en: Section[], zh: Section[] }).
@@ -91,7 +92,7 @@ export default function CVEditor() {
   const fileRef = useRef<HTMLInputElement | null>(null)
   const tabLeaves = useRef(false)
   const [invalid, setInvalid] = useState<CvValidationError[]>([])
-  const { border, dim, inputBg: editorBg } = useStudioTokens()
+  const { dim, inputBg: editorBg } = useStudioTokens()
 
   const load = useCallback(async () => {
     setLoadState('loading')
@@ -208,7 +209,7 @@ export default function CVEditor() {
           {expired ? 'The JSON editor only opens the full CV for a signed-in admin, so nothing was loaded.' : loadError}
         </Text>
         {expired ? (
-          <Button size="sm" as="a" href={LOGIN_HREF} bg="var(--accent)" color="white" _hover={{ opacity: 0.92 }}>
+          <Button size="sm" as="a" href={LOGIN_HREF} {...primaryButtonProps}>
             Sign in again
           </Button>
         ) : (
@@ -232,8 +233,11 @@ export default function CVEditor() {
         onChange={(e) => onChange(e.target.value)}
         spellCheck={false}
         bg={editorBg}
-        borderColor={parsed.ok ? border : 'red.400'}
-        // Palette tokens (Chakra turns 'var(--accent)' into a black ring): ≥ 3:1 on both pages.
+        // Unparseable JSON: Chakra's invalid ring (red.500 / red.300), and the reason below names it.
+        // The edge otherwise is the admin's control border. Palette tokens for the focus ring
+        // (Chakra turns 'var(--accent)' into a black ring): ≥ 3:1 on both pages.
+        isInvalid={!parsed.ok}
+        aria-describedby={`cv-json-${label}-status`}
         focusBorderColor={parsed.ok ? 'accent.500' : 'red.500'}
         sx={{ tabSize: 2 }}
         onKeyDown={(e) => {
@@ -258,7 +262,7 @@ export default function CVEditor() {
         }}
       />
       <Flex mt={1.5} gap={3} justify="space-between" wrap="wrap" fontFamily={monoFont} fontSize="11px">
-        <Text color={parsed.ok ? dim : 'red.400'} aria-live="polite">
+        <Text id={`cv-json-${label}-status`} color={parsed.ok ? dim : 'status.error'} aria-live="polite">
           {parsed.ok ? `✓ valid · ${parsed.value.length} section(s)` : parsed.error}
         </Text>
         <Text color={dim}>Tab indents · Esc then Tab leaves the editor</Text>
@@ -274,9 +278,7 @@ export default function CVEditor() {
           onClick={() => void save(false)}
           isLoading={saving}
           isDisabled={!dirty || !valid}
-          bg={dirty && valid ? 'var(--accent)' : undefined}
-          color={dirty && valid ? 'white' : undefined}
-          _hover={dirty && valid ? { opacity: 0.92 } : undefined}
+          {...(dirty && valid ? primaryButtonProps : {})}
         >
           Save
         </Button>
@@ -326,7 +328,7 @@ export default function CVEditor() {
           <Text flex={1} minW="200px">
             Session expired — sign in again. Nothing was saved; copy your JSON somewhere safe before leaving this page.
           </Text>
-          <Button size="xs" as="a" href={LOGIN_HREF} target="_blank" rel="noopener" bg="var(--accent)" color="white" _hover={{ opacity: 0.9 }}>
+          <Button size="xs" as="a" href={LOGIN_HREF} target="_blank" rel="noopener" {...primaryButtonProps}>
             Sign in again
           </Button>
         </Flex>

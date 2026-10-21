@@ -59,8 +59,9 @@ function SectionRow({
         colorScheme="purple"
         mx={1}
       />
-      <Box flex={1} minW={0} opacity={visible ? 1 : 0.7}>
-        <Text fontSize="sm" fontWeight={600}>
+      {/* A hidden section reads quiet by colour (and its "hidden" badge), not by opacity — its words keep ≥ 4.5:1. */}
+      <Box flex={1} minW={0}>
+        <Text fontSize="sm" fontWeight={600} color={visible ? undefined : 'page.fg-secondary'}>
           {position ? (
             <Text as="span" fontFamily={MONO} fontSize="11px" color="page.fg-secondary" mr={2} className="tnum" aria-hidden>
               {position}

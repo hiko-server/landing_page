@@ -364,13 +364,12 @@ export default function CvVariantsPanel() {
           fontWeight={600}
           h="44px"
           variant="flushed"
-          borderColor="page.border"
         />
         <Menu isLazy placement="bottom-end">
           <MenuButton as={IconButton} aria-label="Variant actions" icon={<ChevronDownIcon />} size="sm" variant="ghost" />
           <MenuList fontSize="13px" zIndex={40}>
             <MenuItem onClick={() => addVariant(current)}>Duplicate</MenuItem>
-            <MenuItem color="red.500" onClick={deleteDialog.onOpen}>
+            <MenuItem color="status.error" onClick={deleteDialog.onOpen}>
               Delete variant…
             </MenuItem>
           </MenuList>

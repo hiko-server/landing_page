@@ -180,7 +180,7 @@ export function PasswordField({
         </InputRightElement>
       </InputGroup>
       {capsLock ? (
-        <Text id={capsId} mt={1.5} fontSize="12px" color="orange.400" role="status">
+        <Text id={capsId} mt={1.5} fontSize="12px" color="status.warning" role="status">
           Caps Lock is on.
         </Text>
       ) : null}

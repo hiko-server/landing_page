@@ -254,7 +254,6 @@ export default function ImageView({ node, editor, getPos, updateAttributes, dele
               aria-describedby={`${id}-alt-hint`}
               autoComplete="off"
               bg="page.bg"
-              borderColor="page.border-strong"
             />
             <Text id={`${id}-alt-hint`} fontSize="11px" color={fileNameAlt ? 'status.warning' : 'page.fg-secondary'} mt={1}>
               {fileNameAlt ? 'That looks like a file name — describe the picture instead.' : 'Read aloud by screen readers; shown if the image cannot load.'}

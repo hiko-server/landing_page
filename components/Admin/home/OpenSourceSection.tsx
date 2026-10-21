@@ -87,6 +87,8 @@ export default function OpenSourceSection({ value, onChange }: SectionProps<Open
   const typed = query.trim()
   const canAddTyped = isRepoName(typed) && !chosen.has(typed.toLowerCase()) && !repos.some((r) => r.name.toLowerCase() === typed.toLowerCase())
   const full = value.featured.length >= HOME_LIMITS.featuredMax
+  // The search controls the list of matches only while there is one (aria-controls must name an element on the page).
+  const listShown = (matches.length > 0 || canAddTyped) && !full
 
   const add = (name: string) => {
     if (full || chosen.has(name.toLowerCase())) return
@@ -113,7 +115,7 @@ export default function OpenSourceSection({ value, onChange }: SectionProps<Open
             else if (canAddTyped) add(typed)
           }}
           placeholder={state === 'unavailable' ? 'GitHub is unreachable — type a repository name' : 'Search your repositories'}
-          aria-controls={listId}
+          aria-controls={listShown ? listId : undefined}
           isDisabled={full}
         />
       </FormControl>
@@ -127,7 +129,7 @@ export default function OpenSourceSection({ value, onChange }: SectionProps<Open
               : `${repos.length} public repositories. Featured ones come first on the home page, then the rest by stars and recency.`}
       </Text>
       {state === 'loading' ? <Spinner size="sm" mt={2} /> : null}
-      {(matches.length || canAddTyped) && !full ? (
+      {listShown ? (
         <List id={listId} mt={2} border="1px solid" borderColor="page.border" borderRadius="md" maxH="260px" overflowY="auto" aria-label="Matching repositories">
           {matches.map((r) => (
             <ListItem key={r.name} borderBottom="1px solid" borderColor="page.border" _last={{ borderBottom: 'none' }}>

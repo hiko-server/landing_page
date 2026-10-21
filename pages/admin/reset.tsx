@@ -106,7 +106,8 @@ export default function ResetPassword() {
               <AlertIcon />
               <AlertDescription>
                 This reset link is incomplete.{' '}
-                <Link as={NextLink} href="/admin/forgot" color="accent.500">
+                {/* Underlined: inside a sentence, colour alone does not set a link apart (WCAG 1.4.1). */}
+                <Link as={NextLink} href="/admin/forgot" color="accent.text" textDecoration="underline" textUnderlineOffset="2px">
                   Request a new one
                 </Link>
                 .

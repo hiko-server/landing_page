@@ -239,7 +239,6 @@ export default function VideoView({ node, updateAttributes, selected, editor }: 
                 isInvalid={!!urlError}
                 aria-describedby={urlError ? `${id}-url-err` : undefined}
                 bg="page.bg"
-                borderColor="page.border-strong"
                 autoComplete="off"
               />
               <Button size="sm" {...primaryButtonProps} onClick={applyUrl} flexShrink={0}>

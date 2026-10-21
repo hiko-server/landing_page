@@ -55,7 +55,7 @@ export default function Forgot() {
           title="Reset your password"
           subtitle="We’ll email a single-use link that expires in 30 minutes."
           footer={
-            <Link as={NextLink} href="/admin/login" color="accent.500">
+            <Link as={NextLink} href="/admin/login" color="accent.text">
               ← Back to sign in
             </Link>
           }
