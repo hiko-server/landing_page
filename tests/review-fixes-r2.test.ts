@@ -272,6 +272,16 @@ test('UX-A-8: a table wider than its box is a focusable, labelled region — and
     assert.match(src, /useScrollRegion\(/, file)
     assert.match(src, /<TableContainer ref=\{\w+\} \{\.\.\.\w+\}/, file)
   }
+  // Every admin table container and the line diff (long lines) follow the same rule (axe scrollable-region-focusable).
+  const walk = (dir: string): string[] =>
+    fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(`${dir}/${e.name}`) : /\.tsx$/.test(e.name) ? [`${dir}/${e.name}`] : []))
+  const tables = walk('components/Admin').filter((f) => /<TableContainer\b/.test(read(f)))
+  assert.ok(tables.includes('components/Admin/shell/CollectionIndex.tsx'), 'the blog / work lists are found')
+  for (const file of [...tables, 'components/Admin/shell/LineDiffView.tsx']) {
+    const src = read(file)
+    assert.match(src, /useScrollRegion\(/, file)
+    assert.match(src, /ref=\{\w+\}\s+\{\.\.\.\w+\}/, `${file}: the box takes the hook's ref and region attributes`)
+  }
 })
 
 // ── VISU-1 / VISU-2 ─────────────────────────────────────────────────────────

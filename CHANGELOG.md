@@ -208,6 +208,10 @@ The gaps the final batch left (before release).
 
 Fixes for defects the final review found in the final batch before it shipped.
 
+- **Admin lists on phones**: the posts and case studies tables and the
+  line-by-line diff, when wider than a phone screen, are named regions
+  Tab can reach and ← / → scroll (they could only be scrolled by touch
+  or mouse).
 - **No console error when the browser drops a page transition**: when
   Chromium gives up the cross-page fade (a slow sign-in redirect, a slow
   network), its promises rejected with nobody listening — an uncaught

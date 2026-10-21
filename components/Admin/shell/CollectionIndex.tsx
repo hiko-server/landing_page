@@ -43,6 +43,7 @@ import { wasStepUpCancelled } from '../security/stepUpClient'
 import { Collapse } from '../../General-UI/Collapse'
 import { relativeTime } from './ItemHistoryDrawer'
 import { useListKeyboard } from './useListKeyboard'
+import { SCROLL_REGION_FOCUS, useScrollRegion } from './scrollRegion'
 import { parseItemSchedule, scheduleSummary, type ItemScheduleView } from './itemSchedule'
 
 export type CollectionRow = {
@@ -122,6 +123,8 @@ export default function CollectionIndex({
   const [optimizing, setOptimizing] = useState(false)
   const cancelRef = useRef<HTMLButtonElement>(null)
   const deletedId = useId()
+  // On a phone the table is wider than the screen: while it overflows it is a named region Tab can reach (scroll with ← / →).
+  const [tableRef, tableRegion] = useScrollRegion(`${title} table`)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -360,10 +363,13 @@ export default function CollectionIndex({
           <LoadErrorNotice what={`the ${noun} list`} error={error} onRetry={() => void load()} />
         ) : (
           <TableContainer
+            ref={tableRef}
+            {...tableRegion}
             border="1px solid"
             borderColor="page.border"
             borderRadius="xl"
             bg="page.bg"
+            _focusVisible={SCROLL_REGION_FOCUS}
           >
             <Table
               size="sm"

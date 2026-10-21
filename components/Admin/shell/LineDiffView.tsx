@@ -4,6 +4,7 @@ import { collapseContext, type DiffLine } from './textDiff'
 import { intralineHighlights, type WordSegment } from '../../../lib/wordDiff'
 import WordDiffText from './WordDiffText'
 import { MONO } from './ui'
+import { SCROLL_REGION_FOCUS, useScrollRegion } from './scrollRegion'
 
 /**
  * Unified line diff (components/Admin/shell/textDiff) with word-level
@@ -22,9 +23,14 @@ export default function LineDiffView({ lines, context = 3 }: { lines: DiffLine[]
     })
     return { rows: collapseContext(lines, context), words: map }
   }, [lines, context])
+  // Long lines scroll sideways: while they do, the diff is a named region Tab can reach (← / → scroll it).
+  const [ref, region] = useScrollRegion('Changes, line by line')
 
   return (
     <Box
+      ref={ref}
+      {...region}
+      _focusVisible={SCROLL_REGION_FOCUS}
       as="pre"
       fontFamily={MONO}
       fontSize="12px"
